@@ -4,7 +4,8 @@ module TAC {
     TopLevel = Function(identifier name, bool global, bool variadic, bool noret, Type? typ,
                         Symbol* params, Symbol* locals,
                         StaticLocal* static_locals, Instruction* body)
-             | StaticVariable(identifier name, bool global, Type typ, StaticInit* init_list)
+             | StaticVariable(identifier name, bool global, Type typ, StaticInit* init_list,
+                              int alignment)
              | StaticConstant(identifier name, Type typ, StaticInit init)
              | Extern(identifier name, Type typ) -- referenced here, defined elsewhere
 
@@ -13,7 +14,7 @@ module TAC {
     Symbol = (identifier name, Type? typ)
 
     -- A block-scope static variable, emitted inside its owning function's module.
-    StaticLocal = (identifier name, Type typ, StaticInit* init_list)
+    StaticLocal = (identifier name, Type typ, StaticInit* init_list, int alignment)
 
     -- The integer-width conversions carry the destination's ConstKind (or -1 when not
     -- supplied) so the constant folder labels a folded result with the conversion's true

@@ -144,7 +144,8 @@ void gen_instr(Gen *g, const Tac_Instruction *in);
 //
 // Static data (data.c)
 //
+// `alignment` (from _Alignas) is used when stricter than the type's.
 void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
-                          const Tac_StaticInit *init, bool readonly);
+                          const Tac_StaticInit *init, bool readonly, int alignment);
 
 #endif // RISCV_INTERNAL_H

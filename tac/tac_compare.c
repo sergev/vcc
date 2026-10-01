@@ -155,6 +155,8 @@ static bool tac_compare_static_local(const Tac_StaticLocal *a, const Tac_StaticL
         return false;
     if (!tac_compare_static_init(a->init_list, b->init_list))
         return false;
+    if (a->alignment != b->alignment)
+        return false;
     return tac_compare_static_local(a->next, b->next);
 }
 
@@ -358,12 +360,9 @@ bool tac_compare_instruction(const Tac_Instruction *a, const Tac_Instruction *b)
 }
 
 // Compare two Tac_TopLevel structures recursively
-bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
+// Compare one toplevel, not the ones after it.
+static bool tac_compare_one_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
 {
-    if (a == b)
-        return true;
-    if (!a || !b)
-        return false;
     if (a->kind != b->kind)
         return false;
     switch (a->kind) {
@@ -390,7 +389,8 @@ bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
         if (a->u.static_variable.name &&
             strcmp(a->u.static_variable.name, b->u.static_variable.name) != 0)
             return false;
-        if (a->u.static_variable.global != b->u.static_variable.global)
+        if (a->u.static_variable.global != b->u.static_variable.global ||
+            a->u.static_variable.alignment != b->u.static_variable.alignment)
             return false;
         return tac_compare_type(a->u.static_variable.type, b->u.static_variable.type) &&
                tac_compare_static_init(a->u.static_variable.init_list,
@@ -410,7 +410,16 @@ bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
             return false;
         return tac_compare_type(a->u.extern_.type, b->u.extern_.type);
     }
-    return tac_compare_toplevel(a->next, b->next);
+    return false;
+}
+
+// Compare two TopLevel lists.
+bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
+{
+    for (; a && b; a = a->next, b = b->next)
+        if (a != b && !tac_compare_one_toplevel(a, b))
+            return false;
+    return a == b;
 }
 
 bool tac_compare_program(const Tac_Program *a, const Tac_Program *b)

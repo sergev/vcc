@@ -97,10 +97,10 @@ static bool all_zero(const Tac_StaticInit *init)
 }
 
 void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
-                          const Tac_StaticInit *init, bool readonly)
+                          const Tac_StaticInit *init, bool readonly, int alignment)
 {
     int size  = rv_size(type);
-    int align = rv_align(type);
+    int align = rv_align(type) > alignment ? rv_align(type) : alignment;
     int log2  = 0;
     while ((1 << log2) < align)
         log2++;

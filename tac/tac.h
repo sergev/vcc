@@ -45,6 +45,7 @@ typedef struct Tac_StaticLocal {
     char *name;
     Tac_Type *type;
     Tac_StaticInit *init_list; // optional; NULL ⇒ zero-initialized (bss)
+    int alignment;             // bytes from _Alignas; 0 ⇒ the type's own
 } Tac_StaticLocal;
 
 //
@@ -79,6 +80,7 @@ typedef struct Tac_TopLevel {
             bool global;
             Tac_Type *type;
             Tac_StaticInit *init_list; // Linked list of initializers
+            int alignment;             // bytes from _Alignas; 0 ⇒ the type's own
         } static_variable;
         struct {
             char *name;

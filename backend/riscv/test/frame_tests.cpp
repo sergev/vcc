@@ -123,3 +123,25 @@ ret
               Code(CompileToRiscv("long g(long);\nlong f(long a) { return g(g(a) + 1); }")));
 }
 
+// An _Alignas local keeps its alignment; the slots then move up into the unused
+// header only as far as that alignment allows.  Statics are aligned too.
+TEST_F(RiscvTest, FrameAlignedSlot)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+long id(long x) { return x; }
+char pad1;
+_Alignas(64) char g[3];
+int main(void)
+{
+    _Alignas(16) char buf[16];
+    static char pad2;
+    static _Alignas(32) char s;
+    if (id((long)buf) % 16 != 0) return 1;
+    if ((long)g % 64 != 0) return 2;
+    if ((long)&s % 32 != 0) return 3;
+    return pad1 + pad2;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}

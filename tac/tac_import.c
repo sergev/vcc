@@ -270,7 +270,9 @@ static Tac_StaticLocal *import_static_local(WFILE *in)
     check_input(in, "static local name");
     sl->type      = import_type(in);
     sl->init_list = import_static_init(in);
-    sl->next      = import_static_local(in);
+    sl->alignment = (int)wgetw(in);
+    check_input(in, "static local alignment");
+    sl->next = import_static_local(in);
     return sl;
 }
 
@@ -449,6 +451,8 @@ Tac_TopLevel *tac_import_toplevel(WFILE *in)
         check_input(in, "static_variable global");
         tl->u.static_variable.type      = import_type(in);
         tl->u.static_variable.init_list = import_static_init(in);
+        tl->u.static_variable.alignment = (int)wgetw(in);
+        check_input(in, "static_variable alignment");
         break;
     case TAC_TOPLEVEL_STATIC_CONSTANT:
         tl->u.static_constant.name = wgetstr(in);
@@ -477,7 +481,7 @@ Tac_Program *tac_import_program(WFILE *in)
 {
     Tac_Program *prog = tac_new_program();
     if (!tac_import_begin_stream(in)) {
-        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC3')\n");
+        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC4')\n");
         exit(1);
     }
     for (Tac_TopLevel **p = &prog->decls;; p = &(*p)->next) {

@@ -117,6 +117,34 @@ TEST_F(TacBinaryTest, FunctionNoreturnFlag)
     tac_free_program(copy);
 }
 
+// _Alignas alignments of a static variable and a static local survive the round trip.
+TEST_F(TacBinaryTest, StaticAlignment)
+{
+    Tac_Program *orig                     = tac_new_program();
+    orig->decls                           = make_empty_function("f", true);
+    Tac_StaticLocal *sl                   = tac_new_static_local();
+    sl->name                              = xstrdup("s");
+    sl->type                              = tac_new_type(TAC_TYPE_INT);
+    sl->alignment                         = 32;
+    orig->decls->u.function.static_locals = sl;
+    Tac_TopLevel *sv                      = tac_new_toplevel(TAC_TOPLEVEL_STATIC_VARIABLE);
+    sv->u.static_variable.name            = xstrdup("g");
+    sv->u.static_variable.type            = tac_new_type(TAC_TYPE_INT);
+    sv->u.static_variable.alignment       = 16;
+    orig->decls->next                     = sv;
+    Tac_Program *copy                     = roundtrip(orig);
+
+    ASSERT_NE(nullptr, copy);
+    EXPECT_EQ(32, copy->decls->u.function.static_locals->alignment);
+    EXPECT_EQ(16, copy->decls->next->u.static_variable.alignment);
+    EXPECT_TRUE(tac_compare_program(orig, copy));
+    sv->u.static_variable.alignment = 8;
+    EXPECT_FALSE(tac_compare_program(orig, copy));
+
+    tac_free_program(orig);
+    tac_free_program(copy);
+}
+
 TEST_F(TacBinaryTest, FunctionWithParams)
 {
     Tac_Program *orig = tac_new_program();

@@ -947,6 +947,8 @@ void tac_export_yaml(FILE *fd, const Tac_TopLevel *tl)
                 fprintf(fd, "  - name: %s\n", sl->name ? sl->name : "");
                 fprintf(fd, "    type:\n");
                 export_yaml_type(fd, sl->type, 3);
+                if (sl->alignment)
+                    fprintf(fd, "    alignment: %d\n", sl->alignment);
                 if (sl->init_list) {
                     fprintf(fd, "    init_list:\n");
                     export_yaml_static_init_list(fd, sl->init_list, 3);
@@ -964,6 +966,8 @@ void tac_export_yaml(FILE *fd, const Tac_TopLevel *tl)
         fprintf(fd, "  global: %s\n", tl->u.static_variable.global ? "true" : "false");
         fprintf(fd, "  type:\n");
         export_yaml_type(fd, tl->u.static_variable.type, 2);
+        if (tl->u.static_variable.alignment)
+            fprintf(fd, "  alignment: %d\n", tl->u.static_variable.alignment);
         if (tl->u.static_variable.init_list) {
             fprintf(fd, "  init_list:\n");
             export_yaml_static_init_list(fd, tl->u.static_variable.init_list, 2);

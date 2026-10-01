@@ -33,6 +33,95 @@ static bool is_noreturn(const DeclSpec *spec)
     return false;
 }
 
+// An alignment the target can give: a power of two, or a multiple of its strictest
+// scalar alignment (BESM-6 aligns to its 6-byte word).
+static bool valid_alignment(long a)
+{
+    size_t max = target_config->ldouble_align;
+    const size_t aligns[] = { target_config->int_align,    target_config->long_align,
+                              target_config->llong_align,  target_config->double_align,
+                              target_config->pointer_align };
+    for (size_t i = 0; i < sizeof(aligns) / sizeof(aligns[0]); i++)
+        if (aligns[i] > max)
+            max = aligns[i];
+    return a > 0 && ((a & (a - 1)) == 0 || a % (long)max == 0);
+}
+
+// The value of a declaration's _Alignas, in bytes: 0 for none or _Alignas(0).  The
+// specifier is left as an integer literal for alignas_bytes(): typedef names in it may
+// be out of scope by the time the translator reads it.
+static int alignas_value(DeclSpec *spec)
+{
+    if (!spec || !spec->align_spec)
+        return 0;
+    AlignmentSpec *as = spec->align_spec;
+    long a;
+    if (as->kind == ALIGN_SPEC_EXPR && as->u.expr->kind == EXPR_LITERAL &&
+        as->u.expr->u.literal->kind == LITERAL_INT) {
+        a = (long)as->u.expr->u.literal->u.int_val;
+        if (a != 0 && !valid_alignment(a))
+            fatal_error("Invalid alignment %ld in _Alignas", a);
+        return (int)a;
+    } else if (as->kind == ALIGN_SPEC_TYPE) {
+        as->u.type = resolve_typedef_names(as->u.type);
+        validate_type(as->u.type);
+        if (!is_complete(as->u.type) || unalias(as->u.type)->kind == TYPE_FUNCTION)
+            fatal_error("_Alignas of an incomplete or function type");
+        a = (long)get_alignment(as->u.type);
+        free_type(as->u.type);
+    } else {
+        as->u.expr = typecheck_and_decay(as->u.expr);
+        if (!is_integer(as->u.expr->type) || !try_eval_const_int(as->u.expr, &a))
+            fatal_error("_Alignas requires an integer constant expression");
+        free_expression(as->u.expr);
+    }
+    if (a != 0 && !valid_alignment(a))
+        fatal_error("Invalid alignment %ld in _Alignas", a);
+    as->kind                           = ALIGN_SPEC_EXPR;
+    as->u.expr                         = new_expression(EXPR_LITERAL);
+    as->u.expr->u.literal              = new_literal(LITERAL_INT);
+    as->u.expr->u.literal->u.int_val   = a;
+    return (int)a;
+}
+
+int alignas_bytes(const DeclSpec *spec)
+{
+    if (!spec || !spec->align_spec || spec->align_spec->kind != ALIGN_SPEC_EXPR)
+        return 0;
+    const Expr *e = spec->align_spec->u.expr;
+    return e->kind == EXPR_LITERAL && e->u.literal->kind == LITERAL_INT
+               ? (int)e->u.literal->u.int_val
+               : 0;
+}
+
+// The alignment a declaration asks of its variable of type `t` beyond the type's own,
+// or 0 (C11 §6.7.5).
+static int declared_alignment(DeclSpec *spec, const Type *t)
+{
+    int a = alignas_value(spec);
+    if (a == 0 || !is_complete(t))
+        return 0;
+    int natural = (int)get_alignment(t);
+    if (a < natural)
+        fatal_error("_Alignas(%d) is less strict than the alignment of the type", a);
+    return a > natural ? a : 0;
+}
+
+// Raise the recorded alignment of static variable `name` to `a`.
+static void note_alignment(const char *name, int a)
+{
+    Symbol *sym = symtab_get(name);
+    if (sym->kind == SYM_STATIC && a > sym->u.static_var.alignment)
+        sym->u.static_var.alignment = a;
+}
+
+// _Alignas is not allowed on a typedef, a function, or a register variable.
+static void reject_alignas(const DeclSpec *spec, const char *what)
+{
+    if (spec && spec->align_spec)
+        fatal_error("_Alignas on %s", what);
+}
+
 // Reject two parameters with the same name in a function declaration or
 // definition (C11 §6.7.6.3p9, §6.9.1p6).  Param lists are short, so a simple
 // O(n^2) name comparison is fine.  The f(void) sentinel has no name and so is
@@ -71,6 +160,7 @@ static void adjust_function_params(Type *fn_type)
         return;
     }
     for (; p; p = p->next) {
+        reject_alignas(p->specifiers, "a parameter");
         const Type *pt = unalias(p->type);
         if (pt->kind == TYPE_ARRAY) {
             Type *ptr = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
@@ -349,6 +439,7 @@ static void typecheck_local_var_decl(const Declaration *d)
         printf("--- %s()\n", __func__);
     }
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
+        reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
@@ -364,6 +455,7 @@ static void typecheck_local_var_decl(const Declaration *d)
         // external linkage; register it like a file-scope prototype so later
         // definitions and sibling-scope declarations resolve against it.
         if (unalias(var_type)->kind == TYPE_FUNCTION) {
+            reject_alignas(d->u.var.specifiers, "a function");
             register_function_declaration(decl, d->u.var.specifiers);
             continue;
         }
@@ -398,6 +490,7 @@ static void typecheck_local_var_decl(const Declaration *d)
                 symtab_add_static_var_scoped(decl->name, var_type, true, INIT_NONE, NULL,
                                              scope_level);
             }
+            note_alignment(decl->name, declared_alignment(d->u.var.specifiers, var_type));
             continue;
         }
         if (!is_complete(var_type)) {
@@ -417,6 +510,7 @@ static void typecheck_local_var_decl(const Declaration *d)
             // name so in-scope references still resolve, while its display name carries the
             // (possibly suffixed) backend name that typecheck_var propagates to references.
             const char *backend = static_locals_add(decl->name, var_type, static_init);
+            static_locals_head()->alignment = declared_alignment(d->u.var.specifiers, var_type);
             symtab_add_static_var_scoped(decl->name, var_type, false, INIT_INITIALIZED, NULL,
                                          scope_level);
             Symbol *sym = symtab_get(decl->name);
@@ -436,6 +530,9 @@ static void typecheck_local_var_decl(const Declaration *d)
             decl->init = NULL;
             continue;
         }
+        if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_REGISTER)
+            reject_alignas(d->u.var.specifiers, "a register variable");
+        declared_alignment(d->u.var.specifiers, var_type); // the translator reads it
         const Symbol *dup = symtab_get_opt(decl->name);
         if (dup && (!dup->has_linkage || dup->kind == SYM_FUNC)) {
             // A no-linkage variable clashing with another no-linkage variable
@@ -754,6 +851,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
         print_declaration(stdout, d, 4);
     }
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
+        reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
@@ -772,6 +870,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
         // resolve() can find it when it later processes the definition, and so
         // has_linkage is set correctly to allow the redeclaration.
         if (unalias(var_type)->kind == TYPE_FUNCTION) {
+            reject_alignas(d->u.var.specifiers, "a function");
             register_function_declaration(decl, d->u.var.specifiers);
             continue;
         }
@@ -826,7 +925,10 @@ static void typecheck_file_scope_var_decl(Declaration *d)
                 global    = is_extern(d->u.var.specifiers) ? existing->u.static_var.global : global;
             }
         }
+        int alignment = existing && existing->kind == SYM_STATIC ? existing->u.static_var.alignment : 0;
         symtab_add_static_var(decl->name, var_type, global, init_kind, init_list);
+        note_alignment(decl->name, alignment);
+        note_alignment(decl->name, declared_alignment(d->u.var.specifiers, var_type));
 
         // Drop initializer
         free_initializer(decl->init);

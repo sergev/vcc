@@ -57,6 +57,8 @@ double literal_to_double(const Literal *lit);
 //
 size_t get_size(const Type *t);
 size_t get_alignment(const Type *t);
+// The alignment a declaration's _Alignas asks, once type-checked: 0 for none.
+int alignas_bytes(const DeclSpec *spec);
 bool is_complete(const Type *t);
 bool is_scalar(const Type *t);
 bool is_arithmetic(const Type *t);

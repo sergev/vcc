@@ -420,3 +420,77 @@ TEST_F(TranslateTestRiscv, BlockScopeExterns)
     EXPECT_EQ(order, "q:long g:fn(int) -> int f h ");
     tac_free_toplevel(tac);
 }
+
+// _Alignas: a stricter alignment reaches TAC for automatic, static and global
+// variables; an over-aligned scalar local is allocated to carry it.
+TEST_F(TranslateTestRiscv, Alignas)
+{
+    std::string yaml = CompileUnitToTypedYaml(R"(
+        _Alignas(64) char g;
+        _Alignas(4) int same;
+        int f(void)
+        {
+            _Alignas(16) int x = 1;
+            _Alignas(long) char c[3];
+            _Alignas(0) int z = 2;
+            static _Alignas(32) char s;
+            c[0] = s;
+            return x + c[0] + z + g + same;
+        }
+    )");
+    EXPECT_TRUE(Has(yaml, R"(
+      kind: allocate_local
+      name: %x
+      size: 4
+      alignment: 16
+)")) << yaml;
+    EXPECT_TRUE(Has(yaml, R"(
+      kind: allocate_local
+      name: %c
+      size: 3
+      alignment: 8
+)")) << yaml;
+    EXPECT_FALSE(Has(yaml, "name: %z\n      size")) << yaml;
+    EXPECT_TRUE(Has(yaml, "  - name: s\n    type:\n      kind: uchar\n    alignment: 32\n")) << yaml;
+    EXPECT_TRUE(Has(yaml, "  name: g\n  global: true\n  type:\n    kind: uchar\n  alignment: 64\n"))
+        << yaml;
+    // No stricter than the type's own: nothing recorded.
+    EXPECT_TRUE(Has(yaml, "  name: same\n  global: true\n  type:\n    kind: int\n- toplevel"))
+        << yaml;
+}
+
+TEST_F(TranslateTestRiscv, AlignasLessStrict)
+{
+    EXPECT_DEATH(CompileUnit("_Alignas(2) int x;"), "less strict");
+}
+
+TEST_F(TranslateTestRiscv, AlignasNotPowerOfTwo)
+{
+    EXPECT_DEATH(CompileUnit("_Alignas(3) char c;"), "Invalid alignment 3");
+}
+
+TEST_F(TranslateTestRiscv, AlignasNotConstant)
+{
+    EXPECT_DEATH(CompileUnit("int n; _Alignas(n) char c;"), "constant expression");
+}
+
+TEST_F(TranslateTestRiscv, AlignasTypedef)
+{
+    EXPECT_DEATH(CompileUnit("typedef _Alignas(8) int T;"), "_Alignas on a typedef");
+}
+
+TEST_F(TranslateTestRiscv, AlignasFunction)
+{
+    EXPECT_DEATH(CompileUnit("_Alignas(8) int f(void);"), "_Alignas on a function");
+}
+
+TEST_F(TranslateTestRiscv, AlignasRegister)
+{
+    EXPECT_DEATH(CompileUnit("void f(void) { register _Alignas(8) int r = 0; }"),
+                 "_Alignas on a register variable");
+}
+
+TEST_F(TranslateTestRiscv, AlignasParameter)
+{
+    EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"), "_Alignas on a parameter");
+}

@@ -48,6 +48,7 @@ typedef struct Symbol {
             InitKind init_kind;        // Initialization state
             Tac_StaticInit *init_list; // For INIT_INITIALIZED
             bool literal;              // A file-scope compound literal (_clN), emitted on use
+            int alignment;             // bytes from _Alignas, beyond the type's own; else 0
             // No data needed for INIT_TENTATIVE or INIT_NONE
         } static_var; // For SYM_STATIC
 
@@ -101,6 +102,7 @@ typedef struct StaticLocalRec {
     char *name;                // backend (possibly suffixed) name (owned)
     const Type *type;          // AST type (borrowed; the AST outlives lowering of this unit)
     Tac_StaticInit *init_list; // owned until the translator transfers it (then NULL)
+    int alignment;             // bytes from _Alignas, beyond the type's own; else 0
 } StaticLocalRec;
 
 // Set the function whose body is being type-checked (NULL when outside any function body).

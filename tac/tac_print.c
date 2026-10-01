@@ -845,6 +845,10 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth)
             print_indent(fd, depth + 1);
             fprintf(fd, "StaticLocal: %s\n", sl->name ? sl->name : "(null)");
             tac_print_type(fd, sl->type, depth + 2);
+            if (sl->alignment) {
+                print_indent(fd, depth + 2);
+                fprintf(fd, "Alignment: %d\n", sl->alignment);
+            }
             tac_print_static_init(fd, sl->init_list, depth + 2);
         }
         print_indent(fd, depth + 1);
@@ -860,6 +864,10 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth)
         print_indent(fd, depth + 1);
         fprintf(fd, "Type:\n");
         tac_print_type(fd, toplevel->u.static_variable.type, depth + 2);
+        if (toplevel->u.static_variable.alignment) {
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Alignment: %d\n", toplevel->u.static_variable.alignment);
+        }
         print_indent(fd, depth + 1);
         fprintf(fd, "Init_list:\n");
         tac_print_static_init(fd, toplevel->u.static_variable.init_list, depth + 2);

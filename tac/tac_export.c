@@ -218,6 +218,7 @@ static void export_static_local(WFILE *out, const Tac_StaticLocal *sl)
     wputstr(sl->name ? sl->name : "", out);
     export_type(out, sl->type);
     export_static_init(out, sl->init_list);
+    wputw((size_t)sl->alignment, out);
     export_static_local(out, sl->next);
 }
 
@@ -245,6 +246,7 @@ void tac_export_toplevel(WFILE *out, const Tac_TopLevel *tl)
         wputw(tl->u.static_variable.global ? 1 : 0, out);
         export_type(out, tl->u.static_variable.type);
         export_static_init(out, tl->u.static_variable.init_list);
+        wputw((size_t)tl->u.static_variable.alignment, out);
         break;
     case TAC_TOPLEVEL_STATIC_CONSTANT:
         wputstr(tl->u.static_constant.name ? tl->u.static_constant.name : "", out);

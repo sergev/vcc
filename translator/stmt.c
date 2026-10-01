@@ -315,14 +315,19 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
         // can emit the array-decay GET_ADDRESS (symtab locals are gone by then).
         if (idt && idt->kind == TYPE_ARRAY)
             tac_record_array_local(ctx, id->name);
-        if (idt && (idt->kind == TYPE_ARRAY || idt->kind == TYPE_STRUCT ||
-                    idt->kind == TYPE_UNION)) {
+        // An over-aligned (_Alignas) scalar is allocated the same way, to carry its
+        // alignment.
+        int align   = (int)get_alignment(id->type);
+        int alignas = alignas_bytes(decl->u.var.specifiers);
+        if ((idt && (idt->kind == TYPE_ARRAY || idt->kind == TYPE_STRUCT ||
+                     idt->kind == TYPE_UNION)) ||
+            alignas > align) {
             int bytes = (int)get_size(id->type);
             if (bytes > 0) {
                 Tac_Instruction *in       = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
                 in->u.allocate_local.name = xstrdup(id->name);
                 in->u.allocate_local.size = bytes;
-                in->u.allocate_local.alignment = (int)get_alignment(id->type);
+                in->u.allocate_local.alignment = alignas > align ? alignas : align;
                 tac_append(ctx, in);
             }
         }

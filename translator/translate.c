@@ -948,6 +948,7 @@ static void emit_referenced_string_constants(const Tac_StaticInit *inits, Tac_To
             sv->u.static_variable.global    = false;
             sv->u.static_variable.type      = ast_type_to_tac_type(sym->type);
             sv->u.static_variable.init_list = sym->u.static_var.init_list;
+            sv->u.static_variable.alignment = sym->u.static_var.alignment;
             sym->u.static_var.init_list     = NULL; // transfer ownership to TAC
             **ctailp                        = sv;
             *ctailp                         = &sv->next;
@@ -1021,6 +1022,7 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
             sl->name            = xstrdup(r->name);
             sl->type            = ast_type_to_tac_type(r->type);
             sl->init_list       = r->init_list;
+            sl->alignment       = r->alignment;
             r->init_list        = NULL; // transferred
             sl->next            = tl->u.function.static_locals;
             tl->u.function.static_locals = sl;
@@ -1083,6 +1085,7 @@ static Tac_TopLevel *translate_decl(const Declaration *decl)
             tl->u.static_variable.global    = sym->u.static_var.global;
             tl->u.static_variable.type      = ast_type_to_tac_type(sym->type);
             tl->u.static_variable.init_list = sym->u.static_var.init_list;
+            tl->u.static_variable.alignment = sym->u.static_var.alignment;
             sym->u.static_var.init_list     = NULL; // transfer ownership to TAC
         }
         *tail = tl;

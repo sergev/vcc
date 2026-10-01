@@ -149,7 +149,7 @@ Tests: `decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `
 | `tac_print.c` | Human-readable TAC printing |
 | `tac_compare.c` | Structural comparison |
 | `tac_export.c`, `tac_import.c` | Binary wire format (read/write via `wio`) |
-| `tags.h` | 4-letter ASCII tag constants for binary wire format; a stream starts with the magic `TAC3` |
+| `tags.h` | 4-letter ASCII tag constants for binary wire format; a stream starts with the magic `TAC4` |
 | `tac_yaml.c` | YAML listing (debug/test; not re-importable) |
 | `tac_graphviz.c` | Graphviz DOT output |
 
@@ -215,6 +215,7 @@ then shrinks the stack frame to the slots still in use. See
   global: true
   type:
     kind: int
+  alignment: 16         # from _Alignas; omitted when no stricter than the type's
   init_list:            # omitted when absent (tentative definition)
     - init:
       kind: i32
@@ -239,6 +240,10 @@ then shrinks the stack frame to the slots still in use. See
   type:
     kind: int
 ```
+
+A function's `static_locals:` entries have the same `alignment:` field. An
+`allocate_local` carries the alignment of an automatic object, `_Alignas` included;
+an over-aligned scalar local gets one too.
 
 A `structure` type also carries `alignment`, `union: true` for a union, and, held
 by value (not behind a pointer), its `members:` with byte offsets and types — what a
