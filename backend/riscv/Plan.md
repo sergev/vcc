@@ -74,7 +74,9 @@ and `printf` with the string, memory and math routines runs on RISC-V.
   the zero register for a zero constant, scratch moves folded, a doubleword
   reload after its store, a byte load's mask; the RISC-V libc shrinks by 17%.
   `genriscv --no-peephole` skips it. A leaf function that needs no stack has no
-  frame at all.
+  frame at all. A function without calls allocates `a0`–`a7`/`fa0`–`fa7` first, a
+  parameter staying in the register it arrives in (incoming registers are moved as
+  one parallel move); 23 of the 39 libc functions now have no frame.
 
 ## Phase 7 — `long double`
 

@@ -179,11 +179,67 @@ static bool in_int_regs(const ArgLoc *a)
     return true;
 }
 
+void param_hints(const Gen *g, StringMap *hints)
+{
+    ArgState s = { 0 };
+    for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
+        ArgLoc a = classify(&s, p->type, false);
+        if (!rv_is_aggregate(p->type) && a.piece[0].reg >= 0 &&
+            is_freg(a.piece[0].reg) == rv_is_fp(p->type))
+            map_insert(hints, p->name, a.piece[0].reg, 0);
+    }
+}
+
+// A move of a parameter from its incoming register to its allocated one.
+typedef struct {
+    int dst, src;
+    const Tac_Type *type;
+} Move;
+
+static void emit_move(Gen *g, const Move *m)
+{
+    if (is_freg(m->dst) && !is_freg(m->src))
+        int_to_fp(g, m->type, m->dst, m->src);
+    else
+        move_reg(g, m->dst, m->src, m->type);
+}
+
+// Make all moves as if at once: a move goes when no other still reads its
+// destination; a cycle is broken through a scratch register.
+static void parallel_move(Gen *g, Move *m, int n)
+{
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            bool blocked = false;
+            for (int j = 0; j < n && !blocked; j++)
+                blocked = j != i && m[j].src == m[i].dst;
+            if (!blocked)
+                pick = i;
+        }
+        if (pick < 0) {
+            int tmp = is_freg(m[0].src) ? RV_F0 : RV_T0;
+            if (is_freg(tmp))
+                emit2(g, RV_FMVD, rv_reg(tmp), rv_reg(m[0].src));
+            else
+                emit2(g, RV_MV, rv_reg(tmp), rv_reg(m[0].src));
+            m[0].src = tmp;
+            continue;
+        }
+        emit_move(g, &m[pick]);
+        m[pick] = m[--n];
+    }
+}
+
 // A variadic function stores a0-a7 just below the incoming stack arguments, so that
 // all arguments passed in integer registers or on the stack are contiguous.  A named
-// parameter passed so lives there too: va_start steps on from its address.
+// parameter passed so lives there too: va_start steps on from its address.  The
+// incoming registers are stored to memory first, then moved to allocated registers,
+// which may be other argument registers; parameters on the stack are loaded last.
 void gen_params(Gen *g)
 {
+    Move moves[16];
+    int nmoves = 0;
     bool variadic = gen_variadic(g);
     if (variadic)
         for (int i = 0; i < 8; i++)
@@ -199,12 +255,8 @@ void gen_params(Gen *g)
             // A scalar, into its register.
             const Piece *pc = &a.piece[0];
             place_reg(g, p->name, t, preg);
-            if (pc->reg < 0)
-                load_mem(g, preg, t, RV_S0, pc->stack);
-            else if (is_freg(preg) && !is_freg(pc->reg))
-                int_to_fp(g, t, preg, pc->reg);
-            else
-                move_reg(g, preg, pc->reg, t);
+            if (pc->reg >= 0)
+                moves[nmoves++] = (Move){ preg, pc->reg, t };
             continue;
         }
         if (!a.by_ref && a.piece[0].reg < 0) {
@@ -241,6 +293,15 @@ void gen_params(Gen *g)
         } else {
             store_mem(g, a.piece[0].reg, t, RV_S0, off);
         }
+    }
+    parallel_move(g, moves, nmoves);
+
+    s = (ArgState){ 0 };
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
+        ArgLoc a = classify(&s, p->type, false);
+        int preg = assigned_reg(g, p->name);
+        if (preg && a.piece[0].reg < 0)
+            load_mem(g, preg, p->type, RV_S0, a.piece[0].stack);
     }
 }
 

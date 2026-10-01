@@ -3,7 +3,9 @@
 // coalescing of copies, and optimistic spilling.  A candidate is a scalar parameter or
 // local that is never in memory.  Candidates get callee-saved registers, s1-s11 or
 // fs0-fs11, so they survive calls and keep clear of the scratch registers; a spilled
-// one stays in its frame slot.
+// one stays in its frame slot.  A function that makes no call first uses the argument
+// registers a0-a7 and fa0-fa7, which selection never uses as scratch; a parameter
+// prefers the register it arrives in, a returned value a0 or fa0.
 //
 #include <string.h>
 
@@ -11,14 +13,19 @@
 #include "internal.h"
 #include "xalloc.h"
 
-static const int int_pool[] = { RV_S1,     RV_S2,     RV_S2 + 1, RV_S2 + 2, RV_S2 + 3, RV_S2 + 4,
-                                RV_S2 + 5, RV_S2 + 6, RV_S2 + 7, RV_S2 + 8, RV_S11 };
-static const int fp_pool[]  = { RV_F0 + 8,  RV_F0 + 9,  RV_F0 + 18, RV_F0 + 19,
-                                RV_F0 + 20, RV_F0 + 21, RV_F0 + 22, RV_F0 + 23,
-                                RV_F0 + 24, RV_F0 + 25, RV_F0 + 26, RV_F0 + 27 };
+// Argument registers, then callee-saved; a function with calls starts at index 8.
+static const int int_pool[] = { RV_A0,     RV_A0 + 1, RV_A0 + 2, RV_A0 + 3, RV_A0 + 4,
+                                RV_A0 + 5, RV_A0 + 6, RV_A7,     RV_S1,     RV_S2,
+                                RV_S2 + 1, RV_S2 + 2, RV_S2 + 3, RV_S2 + 4, RV_S2 + 5,
+                                RV_S2 + 6, RV_S2 + 7, RV_S2 + 8, RV_S11 };
+static const int fp_pool[]  = { RV_FA0,     RV_FA0 + 1, RV_FA0 + 2, RV_FA0 + 3, RV_FA0 + 4,
+                                RV_FA0 + 5, RV_FA0 + 6, RV_FA0 + 7, RV_F0 + 8,  RV_F0 + 9,
+                                RV_F0 + 18, RV_F0 + 19, RV_F0 + 20, RV_F0 + 21, RV_F0 + 22,
+                                RV_F0 + 23, RV_F0 + 24, RV_F0 + 25, RV_F0 + 26, RV_F0 + 27 };
 
 #define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))
 #define NFP  ((int)(sizeof(fp_pool) / sizeof(fp_pool[0])))
+#define NARG 8
 
 typedef struct {
     Gen *g;
@@ -30,6 +37,8 @@ typedef struct {
     int *alias;
     double *cost;
     int *color; // register, or 0
+    int *hint;  // preferred register, or 0
+    int first;  // pool index to start at: 0 in a function without calls, else NARG
 } Alloc;
 
 static Flow_Set *row(const Alloc *a, int v)
@@ -62,7 +71,7 @@ static int find(const Alloc *a, int v)
 
 static int k_of(const Alloc *a, int v)
 {
-    return a->fp[v] ? NFP : NINT;
+    return (a->fp[v] ? NFP : NINT) - a->first;
 }
 
 static void exclude_name(Alloc *a, const char *name)
@@ -191,6 +200,8 @@ static void merge(Alloc *a, int x, int y)
     memset(row(a, y), 0, a->flow->words * sizeof(Flow_Set));
     a->alias[y] = x;
     a->cost[x] += a->cost[y];
+    if (!a->hint[x])
+        a->hint[x] = a->hint[y];
 }
 
 // Briggs: the merged node has fewer than K neighbours of significant degree.
@@ -225,6 +236,14 @@ static void coalesce(Alloc *a)
             changed = true;
         }
     }
+}
+
+static bool in_pool(const int *pool, int k, int reg)
+{
+    for (int i = 0; i < k; i++)
+        if (pool[i] == reg)
+            return true;
+    return false;
 }
 
 static void color(Alloc *a)
@@ -264,20 +283,60 @@ static void color(Alloc *a)
             if (flow_has(row(a, pick), v))
                 deg[v]--;
     }
+    // Parameters first (or what they were coalesced into), in the registers they
+    // arrive in, unless two coalesced parameters want different ones.
+    for (const Tac_Param *p = a->flow->fn->u.function.params; p; p = p->next) {
+        int v = flow_var(a->flow, p->name), r = v >= 0 ? find(a, v) : -1;
+        if (v < 0 || !a->cand[v] || a->color[r] ||
+            !in_pool((a->fp[v] ? fp_pool : int_pool) + a->first, k_of(a, v), a->hint[v]))
+            continue;
+        bool ok = true;
+        for (int u = 0; u < n && ok; u++)
+            ok = !(flow_has(row(a, r), u) && a->color[u] == a->hint[v]);
+        if (ok)
+            a->color[r] = a->hint[v];
+    }
     while (nstack > 0) {
-        int v          = stack[--nstack];
-        const int *pool = a->fp[v] ? fp_pool : int_pool;
-        for (int c = 0; c < k_of(a, v) && !a->color[v]; c++) {
-            bool used = false;
-            for (int u = 0; u < n && !used; u++)
-                used = flow_has(row(a, v), u) && a->color[u] == pool[c];
-            if (!used)
-                a->color[v] = pool[c];
+        int v           = stack[--nstack];
+        const int *pool = (a->fp[v] ? fp_pool : int_pool) + a->first;
+        for (int c = -1; c < k_of(a, v) && !a->color[v]; c++) {
+            int reg = c < 0 ? a->hint[v] : pool[c];
+            bool ok = c >= 0 || in_pool(pool, k_of(a, v), reg);
+            for (int u = 0; u < n && ok; u++)
+                ok = !(flow_has(row(a, v), u) && a->color[u] == reg);
+            if (ok)
+                a->color[v] = reg;
         }
     }
     xfree(gone);
     xfree(stack);
     xfree(deg);
+}
+
+// Hints: a parameter's incoming register, a0/fa0 for a returned variable.
+static void find_hints(Alloc *a)
+{
+    const Flow *f = a->flow;
+    StringMap params;
+    map_init(&params);
+    param_hints(a->g, &params);
+    for (int v = 0; v < a->n; v++) {
+        intptr_t r;
+        if (map_get(&params, f->names[v], &r))
+            a->hint[v] = (int)r;
+    }
+    map_destroy(&params);
+    for (int i = 0; i < f->ninstrs; i++) {
+        const Tac_Instruction *in = f->instrs[i];
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN)
+            a->first = NARG;
+        if (in->kind == TAC_INSTRUCTION_RETURN && in->u.return_.src &&
+            in->u.return_.src->kind == TAC_VAL_VAR) {
+            int v = flow_var(f, in->u.return_.src->u.var_name);
+            if (v >= 0 && a->cand[v] && !a->hint[v])
+                a->hint[v] = a->fp[v] ? RV_FA0 : RV_A0;
+        }
+    }
 }
 
 static void *zalloc(size_t size)
@@ -297,10 +356,12 @@ void gen_regalloc(Gen *g)
     a.alias = zalloc(n * sizeof(int));
     a.cost  = zalloc(n * sizeof(double));
     a.color = zalloc(n * sizeof(int));
+    a.hint  = zalloc(n * sizeof(int));
     for (int v = 0; v < n; v++)
         a.alias[v] = v;
 
     find_candidates(&a);
+    find_hints(&a);
     build(&a);
     coalesce(&a);
     color(&a);
@@ -314,9 +375,11 @@ void gen_regalloc(Gen *g)
         }
     }
     for (int r = 0; r < RV_VREG; r++)
-        if (used[r])
+        if (used[r] && (r == RV_S1 || (r >= RV_S2 && r <= RV_S11) || r == RV_F0 + 8 ||
+                        r == RV_F0 + 9 || (r >= RV_F0 + 18 && r <= RV_F0 + 27)))
             g->saved_reg[g->nsaved++] = r;
 
+    xfree(a.hint);
     xfree(a.color);
     xfree(a.cost);
     xfree(a.alias);

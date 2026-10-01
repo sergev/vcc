@@ -1,8 +1,8 @@
 //
 // RISC-V code generator internals.
 //
-// A scalar `%` name that is never in memory may get a callee-saved register
-// (regalloc.c); any other `%` name lives in a slot at a fixed offset from the frame
+// A scalar `%` name that is never in memory may get a register (regalloc.c): an
+// argument register in a function without calls, else a callee-saved one; any other `%` name lives in a slot at a fixed offset from the frame
 // pointer s0, any other name at its symbol.  An instruction works on registers
 // directly, and goes through scratch registers for operands in memory.
 //
@@ -123,6 +123,8 @@ void gen_regalloc(Gen *g);
 // Calls and parameters (call.c)
 //
 void gen_params(Gen *g);
+// The incoming register of each scalar parameter passed in one of its own class.
+void param_hints(const Gen *g, StringMap *hints);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 

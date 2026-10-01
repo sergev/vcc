@@ -1,12 +1,25 @@
 //
-// Register allocation: variables in callee-saved registers, saved only when used,
-// copies coalesced, the rest spilled to their slots.
+// Register allocation: variables in argument registers in a function without calls,
+// else in callee-saved registers saved only when used; copies coalesced, the rest
+// spilled to their slots.
 //
 #include <regex>
 
 #include "riscv_test.h"
 
-TEST_F(RiscvTest, RegallocGolden)
+// A function without calls keeps its values in the argument registers, a parameter
+// in the one it arrives in: no frame at all.
+TEST_F(RiscvTest, RegallocLeaf)
+{
+    EXPECT_EQ(R"(mul a1, a0, a1
+add a0, a1, a0
+ret
+)",
+              Code(CompileToRiscv("long f(long a, long b) { return a * b + a; }")));
+}
+
+// Across a call values need callee-saved registers, saved only when used.
+TEST_F(RiscvTest, RegallocCalls)
 {
     EXPECT_EQ(R"(addi sp, sp, -16
 sd ra, 8(sp)
@@ -15,10 +28,12 @@ addi s0, sp, 16
 addi sp, sp, -16
 sd s1, -24(s0)
 sd s2, -32(s0)
-mv s2, a0
-mv s1, a1
-mul s1, s2, s1
-add s1, s1, s2
+mv s1, a0
+mv s2, a1
+mv a0, s1
+call g
+mv s1, a0
+mul s1, s1, s2
 mv a0, s1
 ld s1, -24(s0)
 ld s2, -32(s0)
@@ -28,16 +43,49 @@ ld s0, 0(sp)
 addi sp, sp, 16
 ret
 )",
-              Code(CompileToRiscv("long f(long a, long b) { return a * b + a; }")));
+              Code(CompileToRiscv("long g(long x);\n"
+                                  "long f(long a, long b) { return g(a) * b; }")));
 }
 
-// Doubles go to fs registers, saved with fsd.
 TEST_F(RiscvTest, RegallocFloat)
 {
-    std::string s = Code(CompileToRiscv("double g(double x) { double y = x * x; return y + x; }"));
+    EXPECT_EQ("fmul.d fa1, fa0, fa1\nfadd.d fa0, fa1, fa0\nret\n",
+              Code(CompileToRiscv("double f(double x, double y) { return x * y + x; }")));
+}
+
+// With a call: fs registers, saved with fsd.
+TEST_F(RiscvTest, RegallocFloatCalls)
+{
+    std::string s = Code(CompileToRiscv(
+        "double h(double);\ndouble g(double x) { double y = h(x); return y + x; }"));
     EXPECT_NE(std::string::npos, s.find("fsd fs0, -24(s0)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("fmul.d fs0, fs1, fs1\nfadd.d fs0, fs0, fs1\n")) << s;
     EXPECT_NE(std::string::npos, s.find("fld fs0, -24(s0)\n")) << s;
+}
+
+// Parameters rotated through each other in a loop, all in argument registers.
+TEST_F(RiscvTest, RegallocLeafRun)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+long rot(long a, long b, long c, int n)
+{
+    for (int i = 0; i < n; i++) {
+        long t = a;
+        a = b;
+        b = c;
+        c = t;
+    }
+    return a * 100 + b * 10 + c;
+}
+double mix(double x, long k, double y) { return x * k - y; }
+int main(void)
+{
+    if (rot(1, 2, 3, 4) != 231) return 1;
+    if (mix(1.5, 4, 0.5) != 5.5) return 2;
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
 }
 
 // Unoptimized TAC copies each value through temporaries; coalescing gives the ends of
@@ -46,7 +94,7 @@ TEST_F(RiscvTest, RegallocCoalesce)
 {
     DisableOptimization();
     std::string s = Code(CompileToRiscv("long f(long a) { long b = a; long c = b; return c + 1; }"));
-    EXPECT_FALSE(std::regex_search(s, std::regex("mv s[0-9]+, s[0-9]+\n"))) << s;
+    EXPECT_EQ(std::string::npos, s.find("mv ")) << s;
 }
 
 // More values live at once than there are registers: some stay in slots.
