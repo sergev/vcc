@@ -564,6 +564,23 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dname, int doff, Expr
     tac_free_val(src_material);
 }
 
+// A struct/union value read from memory (*p, a[i], s.m, p->m) that does not fit a scalar
+// temporary (type_needs_slot): copy it into a fresh frame slot and yield the slot, the
+// way a call result or a compound literal is held.  A LOAD would carry one word only.
+static Tac_Val *gen_aggregate_rvalue(TacCtx *ctx, Expr *e)
+{
+    char *slot                     = new_typed_temp(ctx, ast_type_to_tac_type(e->type));
+    Tac_Instruction *al            = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
+    al->u.allocate_local.name      = xstrdup(slot);
+    al->u.allocate_local.size      = (int)get_size(e->type);
+    al->u.allocate_local.alignment = (int)get_alignment(e->type);
+    tac_append(ctx, al);
+    gen_aggregate_init_from_expr(ctx, slot, 0, e, e->type);
+    Tac_Val *val = val_var(slot);
+    xfree(slot);
+    return val;
+}
+
 static Tac_Val *gen_logical_and(TacCtx *ctx, Expr *l, Expr *r)
 {
     Tac_Val *left  = gen_cond_val(ctx, l);
@@ -1050,6 +1067,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             return gen_lval(ctx, operand);
         }
         if (e->u.unary_op.op == UNARY_DEREF) {
+            if (type_needs_slot(e->type))
+                return gen_aggregate_rvalue(ctx, e);
             Tac_Val *addr = gen_lval(ctx, e);
             // Dereferencing a pointer-to-array yields a sub-array whose value is
             // its own address (array-to-pointer decay), not a scalar to load.
@@ -1499,6 +1518,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         }
     }
     case EXPR_SUBSCRIPT: {
+        if (type_needs_slot(e->type))
+            return gen_aggregate_rvalue(ctx, e);
         Tac_Val *addr = gen_lval(ctx, e);
         // If the subscript selects a sub-array of a multi-dimensional array, its
         // value is the address of that sub-array (array-to-pointer decay), not a
@@ -1534,6 +1555,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             if (mt && mt->kind == TYPE_ARRAY)
                 return gen_lval(ctx, e);
         }
+        if (type_needs_slot(e->type))
+            return gen_aggregate_rvalue(ctx, e);
         if (base->kind == EXPR_VAR) {
             Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(e->type));
             Tac_Instruction *in = tac_new_instruction(
@@ -1564,6 +1587,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             if (mt && mt->kind == TYPE_ARRAY)
                 return gen_lval(ctx, e);
         }
+        if (type_needs_slot(e->type))
+            return gen_aggregate_rvalue(ctx, e);
         Tac_Val *addr       = gen_lval(ctx, e);
         Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(e->type));
         Tac_Instruction *in = tac_new_instruction(

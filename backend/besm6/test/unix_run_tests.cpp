@@ -408,3 +408,28 @@ TEST_F(CodegenTest, UnixRunZeroRuns)
     )");
     EXPECT_EQ("1030 1 0 0 5 0 6\n", result);
 }
+
+// A multi-word struct value read through memory (*p, s.m, a[i], p->m) and used as a
+// value — returned, passed, or a ?: arm — is copied whole, not loaded as one word.
+TEST_F(CodegenTest, UnixRunStructValueThroughMemory)
+{
+    SKIP_IF_NO_UNIX_RUN_TOOLS();
+    std::string result = CompileAndRunUnix(R"(
+        #include <stdio.h>
+        struct T { long a, b, c; };
+        struct S { long pad; struct T in; } gs = { 9, { 4, 5, 6 } };
+        struct T arr[2] = { { 7, 8, 9 }, { 1, 1, 1 } };
+        struct T id(struct T *p) { return *p; }
+        long get(struct T t) { return t.a * 100 + t.b * 10 + t.c; }
+        int main(void) {
+            struct T x = { 1, 2, 3 };
+            struct S *ps = &gs;
+            struct T y = id(&x);
+            printf("%ld %ld %ld\n", y.a, y.b, y.c);
+            printf("%ld %ld %ld %ld\n", get(*&x), get(gs.in), get(arr[0]), get(ps->in));
+            printf("%ld\n", get(y.a ? arr[0] : gs.in));
+            return 0;
+        }
+    )");
+    EXPECT_EQ("1 2 3\n123 456 789 456\n789\n", result);
+}

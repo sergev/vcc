@@ -144,6 +144,12 @@ Phase 1 adds this. It is the prerequisite for everything else.
 - **T7. Verifier.** A `tac_verify` check, run in debug builds and by tests: every
   variable has a type, operand types agree with the operator.
 
+Defects found along the way, fixed in the shared code:
+
+- A struct wider than a word read through memory (`*p`, `a[i]`, `s.m`, `p->m`) and
+  used as a value was loaded as one word: a BESM-6 miscompile of `return *p;` and
+  `f(*p)`. Such a value is now copied into a slot (`gen_aggregate_rvalue`).
+
 BESM-6 ignores the new information; its tests and generated code stay identical.
 
 ## Phase 2 — backend skeleton
