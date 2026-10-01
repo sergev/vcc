@@ -105,3 +105,23 @@ call f
 sw a0, -20(s0)
 )")) << s;
 }
+
+// Doubles go through ft registers; a comparison lands in t0; double → int truncates.
+TEST_F(InstrTest, FloatingPoint)
+{
+    std::string s = Code(CompileToRiscv(R"(
+double add(double a, double b) { return a + b; }
+int less(float a, float b) { return a < b; }
+long trunc(double d) { return (long)d; }
+double widen(unsigned u) { return u; }
+)"));
+    EXPECT_TRUE(Has(s, R"(fsd fa0, -24(s0)
+fsd fa1, -32(s0)
+fld ft0, -24(s0)
+fld ft1, -32(s0)
+fadd.d ft0, ft0, ft1
+)")) << s;
+    EXPECT_TRUE(Has(s, "flt.s t0, ft0, ft1\n")) << s;
+    EXPECT_TRUE(Has(s, "fcvt.l.d t1, ft0, rtz\n")) << s;
+    EXPECT_TRUE(Has(s, "fcvt.d.wu ft1, t0\n")) << s;
+}

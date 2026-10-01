@@ -14,13 +14,13 @@ protected:
     {
         RiscvTest::SetUp();
         // Chapters the backend handles so far; the list grows with Phase 3.
-        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
         const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
         int chapter      = strncmp(name, "Chapter", 7) == 0 ? atoi(name + 7) : 0;
         if (!chapters.count(chapter))
             GTEST_SKIP() << "chapter " << chapter << " not yet supported by the RISC-V backend";
-        // Programs whose expected values are BESM-6's (41-bit int, 48-bit unsigned).
-        // On RV64 each gives what clang gives.
+        // Programs whose expected values are BESM-6's (41-bit int, 48-bit unsigned; on
+        // RV64 each gives what clang gives), and programs needing a missing library.
 #define W "expects BESM-6 integer widths"
         static const SkippedTest skipped[] = {
             { "Chapter11_Bitshift", W },
@@ -47,6 +47,8 @@ protected:
             { "Chapter12_SameSizeConversion", W },
             { "Chapter12_StaticInitializers", W },
             { "Chapter12_UnsignedIncrDecr", W },
+            { "Chapter13_StandardLibraryCall", "needs fma and ldexp (R17)" },
+            { "Chapter13_DoubleParamsAndResultLibrary", "needs fmax (R17)" },
             { nullptr, nullptr },
         };
 #undef W

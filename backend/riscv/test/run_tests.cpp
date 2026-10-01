@@ -147,3 +147,29 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Float and double arithmetic, conversions both ways, FP arguments past fa7 and
+// mixed with integers, NaN comparisons.
+TEST_F(RiscvTest, RunFloatingPoint)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+double sum(double a, int i, double b, double c, double d, double e, double f, double g,
+           double h, double k, float x)
+{
+    return a + i + b + c + d + e + f + g + h + k + x;
+}
+int main(void) {
+    double zero = 0.0;
+    double nan = zero / zero;
+    float f = 1.5f;
+    unsigned long big = 18446744073709551615ul;
+    double d = big;
+    return (sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0.5f) != 55.5) |
+           ((int)-2.7 != -2) << 1 | ((unsigned)3e9 != 3000000000u) << 2 |
+           (d != 18446744073709551616.0) << 3 | (f * 2 != 3.0f) << 4 |
+           (nan == nan) << 5 | !(nan != nan) << 6 | (nan < 1.0) << 7 |
+           ((unsigned long)1e19 != 10000000000000000000ul) << 8;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

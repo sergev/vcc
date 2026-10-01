@@ -66,9 +66,10 @@ assembly tests pin the selected instructions.
   `Tac_StaticInit` kinds, address materialisation with `la` (medany code model),
   static locals with the existing `name$N` uniqueness, using a legal symbol
   spelling.
-- **R10. Floating point** (ch. 13): `float`/`double` in `fa0`–`fa7`, all
+- **R10. Floating point** (ch. 13): *Done.* `float`/`double` in `fa0`–`fa7`, all
   conversions (`fcvt.*` with `rtz` for C truncation), comparisons into integer
-  registers, FP constants from `.rodata`.
+  registers, FP constants through an integer register (`li` + `fmv`). crt0 enables
+  the FPU (`mstatus.FS`).
 - **R11. Pointers, arrays, chars, strings** (ch. 14–16): `LOAD`/`STORE` by width,
   `ADD_PTR`, and the byte-pointer TAC kinds as plain operations: `GET_ADDRESS_BYTE`/
   `GET_ADDRESS_DECAY` = address, `LOAD_BYTE` = `lb`/`lbu`, `PTR_DIFF` = `sub`,

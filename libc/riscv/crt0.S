@@ -1,6 +1,6 @@
-# C startup for bare-metal qemu `virt`: set gp and sp, clear .bss, call main and pass
-# its result to exit.  Built with -DPRINT_STATUS it first prints main's result as
-# "%d\n" (the book run tests compare it).
+# C startup for bare-metal qemu `virt`: set gp and sp, enable the FPU, catch traps,
+# clear .bss, call main and pass its result to exit.  Built with -DPRINT_STATUS it
+# first prints main's result as "%d\n" (the book run tests compare it).
 
     .section .text.start, "ax"
     .globl  _start
@@ -10,6 +10,10 @@ _start:
     la      gp, __global_pointer$
     .option pop
     la      sp, __stack_top
+    li      t0, 0x2000          # mstatus.FS = initial: FP instructions do not trap
+    csrs    mstatus, t0
+    la      t0, trap
+    csrw    mtvec, t0
     la      t0, __bss_start
     la      t1, __bss_end
 1:  bgeu    t0, t1, 2f
@@ -41,4 +45,11 @@ _start:
     call    putbyte
     mv      a0, s0
 #endif
+    call    exit
+
+# Any trap (an illegal instruction, a misaligned or faulting access) ends the run with
+# exit status 255 rather than hanging.
+    .p2align 2
+trap:
+    li      a0, 255
     call    exit

@@ -41,7 +41,17 @@ static void gen_jump(Gen *g, Rv_Op op, int reg, const char *tac)
 // Branch to `target` when `cond` is zero (or nonzero).
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
-    load_val(g, RV_T0, cond);
+    const Tac_Type *t = val_type(g, cond);
+    if (rv_is_fp(t)) {
+        // t0 = (cond == 0.0), so a zero condition is a nonzero t0.
+        load_val(g, RV_F0, cond);
+        emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
+        emit3(g, rv_is_double(t) ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(RV_F0),
+              rv_reg(RV_F0 + 1));
+        if_zero = !if_zero;
+    } else {
+        load_val(g, RV_T0, cond);
+    }
     gen_jump(g, if_zero ? RV_BEQZ : RV_BNEZ, RV_T0, target);
 }
 
@@ -96,10 +106,30 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, bool
     store_val(g, RV_T0, dst);
 }
 
+static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
+{
+    bool d = rv_is_double(t);
+    load_val(g, RV_F0, in->u.unary.src);
+    if (in->u.unary.op == TAC_UNARY_NOT) {
+        emit2(g, d ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
+        emit3(g, d ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(RV_F0), rv_reg(RV_F0 + 1));
+        store_val(g, RV_T0, in->u.unary.dst);
+        return;
+    }
+    if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
+        fatal_error("riscv: %s: bad floating-point unary operator", gen_name(g));
+    emit2(g, d ? RV_FNEGD : RV_FNEGS, rv_reg(RV_F0), rv_reg(RV_F0));
+    store_val(g, RV_F0, in->u.unary.dst);
+}
+
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    bool word         = rv_size(t) <= 4;
+    if (rv_is_fp(t)) {
+        gen_fp_unary(g, in, t);
+        return;
+    }
+    bool word = rv_size(t) <= 4;
     load_val(g, RV_T0, in->u.unary.src);
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
@@ -114,7 +144,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         emit2(g, RV_SEQZ, rv_reg(RV_T0), rv_reg(RV_T0));
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
-        fatal_error("riscv: %s: floating point not implemented", gen_name(g));
+        fatal_error("riscv: %s: NEGATE_DOUBLE of an integer", gen_name(g));
     }
     store_val(g, RV_T0, in->u.unary.dst);
 }
@@ -196,7 +226,7 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsi
         emit3(g, RV_XORI, d, d, rv_imm(1));
         break;
     default:
-        fatal_error("riscv: %s: floating point not implemented", gen_name(g));
+        fatal_error("riscv: %s: floating-point operator on integers", gen_name(g));
     }
 }
 
@@ -216,14 +246,102 @@ static bool is_unsigned_op(Tac_BinaryOperator op)
     }
 }
 
+// A floating-point operator; a comparison leaves 0/1 in t0, arithmetic its result in ft0.
+static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
+{
+    bool d       = rv_is_double(t);
+    Rv_Operand a = rv_reg(RV_F0), b = rv_reg(RV_F0 + 1), r = rv_reg(RV_T0);
+    load_val(g, RV_F0, in->u.binary.src1);
+    load_val(g, RV_F0 + 1, in->u.binary.src2);
+    switch (in->u.binary.op) {
+    case TAC_BINARY_ADD:
+    case TAC_BINARY_ADD_DOUBLE:
+        emit3(g, d ? RV_FADDD : RV_FADDS, a, a, b);
+        break;
+    case TAC_BINARY_SUBTRACT:
+    case TAC_BINARY_SUBTRACT_DOUBLE:
+        emit3(g, d ? RV_FSUBD : RV_FSUBS, a, a, b);
+        break;
+    case TAC_BINARY_MULTIPLY:
+    case TAC_BINARY_MULTIPLY_DOUBLE:
+        emit3(g, d ? RV_FMULD : RV_FMULS, a, a, b);
+        break;
+    case TAC_BINARY_DIVIDE:
+    case TAC_BINARY_DIVIDE_DOUBLE:
+        emit3(g, d ? RV_FDIVD : RV_FDIVS, a, a, b);
+        break;
+    case TAC_BINARY_EQUAL:
+        emit3(g, d ? RV_FEQD : RV_FEQS, r, a, b);
+        break;
+    case TAC_BINARY_NOT_EQUAL:
+        emit3(g, d ? RV_FEQD : RV_FEQS, r, a, b);
+        emit3(g, RV_XORI, r, r, rv_imm(1));
+        break;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        emit3(g, d ? RV_FLTD : RV_FLTS, r, a, b);
+        break;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
+        emit3(g, d ? RV_FLED : RV_FLES, r, a, b);
+        break;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        emit3(g, d ? RV_FLTD : RV_FLTS, r, b, a);
+        break;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
+        emit3(g, d ? RV_FLED : RV_FLES, r, b, a);
+        break;
+    default:
+        fatal_error("riscv: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+    }
+    store_val(g, rv_is_fp(val_type(g, in->u.binary.dst)) ? RV_F0 : RV_T0, in->u.binary.dst);
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
+    if (rv_is_fp(t)) {
+        gen_fp_binary(g, in, t);
+        return;
+    }
     load_val(g, RV_T0, in->u.binary.src1);
     load_val(g, RV_T1, in->u.binary.src2);
     gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4,
                   rv_is_unsigned(t) || is_unsigned_op(in->u.binary.op));
     store_val(g, RV_T0, in->u.binary.dst);
+}
+
+// An int/FP or float/double conversion.
+static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst)
+{
+    const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
+    bool sfp = rv_is_fp(st), dfp = rv_is_fp(dt);
+    Rv_Op op;
+    if (sfp && dfp) {
+        op = rv_is_double(dt) ? RV_FCVTDS : RV_FCVTSD;
+    } else if (dfp) {
+        bool w = rv_size(st) <= 4, u = rv_is_unsigned(st);
+        if (rv_is_double(dt))
+            op = w ? (u ? RV_FCVTDWU : RV_FCVTDW) : (u ? RV_FCVTDLU : RV_FCVTDL);
+        else
+            op = w ? (u ? RV_FCVTSWU : RV_FCVTSW) : (u ? RV_FCVTSLU : RV_FCVTSL);
+    } else {
+        // To an integer: truncate toward zero, into the destination's width.
+        bool w = rv_size(dt) <= 4, u = rv_is_unsigned(dt);
+        if (rv_is_double(st))
+            op = w ? (u ? RV_FCVTWUD : RV_FCVTWD) : (u ? RV_FCVTLUD : RV_FCVTLD);
+        else
+            op = w ? (u ? RV_FCVTWUS : RV_FCVTWS) : (u ? RV_FCVTLUS : RV_FCVTLS);
+    }
+    int sreg = sfp ? RV_F0 : RV_T0;
+    int dreg = dfp ? RV_F0 + 1 : RV_T1;
+    load_val(g, sreg, src);
+    Rv_Instr *cv = emit2(g, op, rv_reg(dreg), rv_reg(sreg));
+    if (!dfp)
+        cv->opnd[2] = rv_sym("rtz", 0);
+    store_val(g, dreg, dst);
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)
@@ -253,6 +371,27 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_ZERO_EXTEND:
         gen_int_convert(g, in->u.zero_extend.src, in->u.zero_extend.dst, true);
         break;
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst);
+        break;
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        fatal_error("riscv: long double is not implemented");
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);
         break;
