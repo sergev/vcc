@@ -5,58 +5,58 @@
 
 TEST_F(RiscvTest, EmptyFunction)
 {
-    EXPECT_EQ("\t.text\n"
-              "\t.globl\tf\n"
-              "\t.p2align\t2\n"
-              "\t.type\tf, @function\n"
+    EXPECT_EQ("    .text\n"
+              "    .globl  f\n"
+              "    .p2align 2\n"
+              "    .type   f, @function\n"
               "f:\n"
-              "\taddi\tsp, sp, -16\n"
-              "\tsd\tra, 8(sp)\n"
-              "\tsd\ts0, 0(sp)\n"
-              "\taddi\ts0, sp, 16\n"
-              "\taddi\tsp, s0, -16\n"
-              "\tld\tra, 8(sp)\n"
-              "\tld\ts0, 0(sp)\n"
-              "\taddi\tsp, sp, 16\n"
-              "\tret\n"
-              "\t.size\tf, .-f\n",
+              "    addi    sp, sp, -16\n"
+              "    sd      ra, 8(sp)\n"
+              "    sd      s0, 0(sp)\n"
+              "    addi    s0, sp, 16\n"
+              "    addi    sp, s0, -16\n"
+              "    ld      ra, 8(sp)\n"
+              "    ld      s0, 0(sp)\n"
+              "    addi    sp, sp, 16\n"
+              "    ret\n"
+              "    .size   f, .-f\n",
               CompileToRiscv("void f(void) {}"));
 }
 
 // A static function is not .globl; an extern declaration emits nothing.
 TEST_F(RiscvTest, StaticFunctionAndExtern)
 {
-    EXPECT_EQ("\t.text\n"
-              "\t.p2align\t2\n"
-              "\t.type\tg, @function\n"
+    EXPECT_EQ("    .text\n"
+              "    .p2align 2\n"
+              "    .type   g, @function\n"
               "g:\n"
-              "\taddi\tsp, sp, -16\n"
-              "\tsd\tra, 8(sp)\n"
-              "\tsd\ts0, 0(sp)\n"
-              "\taddi\ts0, sp, 16\n"
+              "    addi    sp, sp, -16\n"
+              "    sd      ra, 8(sp)\n"
+              "    sd      s0, 0(sp)\n"
+              "    addi    s0, sp, 16\n"
               ".L2:\n"
-              "\tj\t.L2\n"
-              "\t.size\tg, .-g\n",
+              "    j       .L2\n"
+              "    .size   g, .-g\n",
               CompileToRiscv("extern int x; static void g(void) { for (;;) ; }"));
 }
 
 TEST_F(RiscvTest, ReturnConstant)
 {
-    EXPECT_EQ("\t.text\n"
-              "\t.globl\tmain\n"
-              "\t.p2align\t2\n"
-              "\t.type\tmain, @function\n"
+    EXPECT_EQ("    .text\n"
+              "    .globl  main\n"
+              "    .p2align 2\n"
+              "    .type   main, @function\n"
               "main:\n"
-              "\taddi\tsp, sp, -16\n"
-              "\tsd\tra, 8(sp)\n"
-              "\tsd\ts0, 0(sp)\n"
-              "\taddi\ts0, sp, 16\n"
-              "\tli\ta0, -2\n"
-              "\taddi\tsp, s0, -16\n"
-              "\tld\tra, 8(sp)\n"
-              "\tld\ts0, 0(sp)\n"
-              "\taddi\tsp, sp, 16\n"
-              "\tret\n"
-              "\t.size\tmain, .-main\n",
+              "    addi    sp, sp, -16\n"
+              "    sd      ra, 8(sp)\n"
+              "    sd      s0, 0(sp)\n"
+              "    addi    s0, sp, 16\n"
+              "    li      a0, -2\n"
+              "    addi    sp, s0, -16\n"
+              "    ld      ra, 8(sp)\n"
+              "    ld      s0, 0(sp)\n"
+              "    addi    sp, sp, 16\n"
+              "    ret\n"
+              "    .size   main, .-main\n",
               CompileToRiscv("int main(void) { return -2; }"));
 }

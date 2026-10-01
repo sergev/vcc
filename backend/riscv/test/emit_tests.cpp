@@ -66,17 +66,17 @@ TEST_F(EmitTest, Operands)
     rv_append(fn, RV_RET);
     std::string s = Capture([&](FILE *f) { rv_emit_func(f, fn); });
     rv_free_func(fn);
-    EXPECT_EQ("\t.text\n"
-              "\t.p2align\t2\n"
-              "\t.type\tf, @function\n"
+    EXPECT_EQ("    .text\n"
+              "    .p2align 2\n"
+              "    .type   f, @function\n"
               "f:\n"
-              "\tli\ta0, -5\n"
-              "\tmv\tv3, fa1\n"
+              "    li      a0, -5\n"
+              "    mv      v3, fa1\n"
               ".L7:\n"
-              "\tj\tg+8\n"
-              "\tfld\tft0, -24(s0)\n"
-              "\tret\n"
-              "\t.size\tf, .-f\n",
+              "    j       g+8\n"
+              "    fld     ft0, -24(s0)\n"
+              "    ret\n"
+              "    .size   f, .-f\n",
               s);
 }
 
@@ -94,17 +94,17 @@ TEST_F(EmitTest, LabelsAndJumps)
     tl->u.function.body   = l;
     std::string s = Capture([&](FILE *f) { riscv_codegen(tl, tl, f); });
     tac_free_toplevel(tl);
-    EXPECT_EQ("\t.text\n"
-              "\t.globl\tloop\n"
-              "\t.p2align\t2\n"
-              "\t.type\tloop, @function\n"
+    EXPECT_EQ("    .text\n"
+              "    .globl  loop\n"
+              "    .p2align 2\n"
+              "    .type   loop, @function\n"
               "loop:\n"
-              "\taddi\tsp, sp, -16\n"
-              "\tsd\tra, 8(sp)\n"
-              "\tsd\ts0, 0(sp)\n"
-              "\taddi\ts0, sp, 16\n"
+              "    addi    sp, sp, -16\n"
+              "    sd      ra, 8(sp)\n"
+              "    sd      s0, 0(sp)\n"
+              "    addi    s0, sp, 16\n"
               ".LL1:\n"
-              "\tj\t.LL1\n"
-              "\t.size\tloop, .-loop\n",
+              "    j       .LL1\n"
+              "    .size   loop, .-loop\n",
               s);
 }

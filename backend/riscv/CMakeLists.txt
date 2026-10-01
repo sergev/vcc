@@ -20,6 +20,7 @@ add_executable(riscv-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
+    test/instr_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )

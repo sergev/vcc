@@ -164,8 +164,10 @@ TEST_F(BookTest, Chapter3_BitwiseVariableShiftCount)
 
 // return -5 >> 30; — on BESM-6 a signed right shift is logical (the shift unit does no
 // sign extension), so the optimizer folds it to match the backend at runtime: the 41-bit
-// pattern of -5 (2^41 - 5) shifted right by 30 is 2047, not the arithmetic -1.
+// pattern of -5 (2^41 - 5) shifted right by 30 is 2047, not the arithmetic -1 of other
+// targets.
 TEST_F(BookTest, Chapter3_BitwiseShiftrNegative)
 {
-    EXPECT_EQ("2047\n", CompileAndRunBook("int main(void) { return -5 >> 30; }"));
+    EXPECT_EQ(IsTarget("besm6") ? "2047\n" : "-1\n",
+              CompileAndRunBook("int main(void) { return -5 >> 30; }"));
 }

@@ -62,6 +62,9 @@ protected:
         xfree_all();
     }
 
+    // True when the fixture compiles for target `name`, for per-target expectations.
+    bool IsTarget(const char *name) const { return strcmp(target_name, name) == 0; }
+
     // Disable optimization.
     void DisableOptimization() { opt_flags = {}; }
 

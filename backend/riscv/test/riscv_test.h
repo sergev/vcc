@@ -46,19 +46,23 @@ protected:
         return s;
     }
 
-    // Instruction lines of `asm_text` without the leading tabs, one per line, so a
-    // test can look for a sequence: Code(s).find("lw\ta0, -20(s0)\nret\n").
+    // Instruction lines of `asm_text`, unindented and with one space after the
+    // mnemonic, so a test can look for a sequence: Code(s).find("lw a0, -20(s0)\nret\n").
     static std::string Code(const std::string &asm_text)
     {
-        std::string out, line;
-        for (size_t i = 0; i < asm_text.size(); i++) {
-            if (asm_text[i] != '\n') {
-                line += asm_text[i];
+        std::string out;
+        size_t pos = 0;
+        while (pos < asm_text.size()) {
+            size_t nl        = asm_text.find('\n', pos);
+            std::string line = asm_text.substr(pos, nl - pos);
+            pos              = nl == std::string::npos ? asm_text.size() : nl + 1;
+            if (line.compare(0, 4, "    ") != 0 || line[4] == '.')
                 continue;
-            }
-            if (line.size() > 1 && line[0] == '\t' && line[1] != '.')
-                out += line.substr(1) + "\n";
-            line.clear();
+            line      = line.substr(4);
+            size_t sp = line.find(' ');
+            if (sp != std::string::npos)
+                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+            out += line + "\n";
         }
         return out;
     }

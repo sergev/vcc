@@ -54,7 +54,7 @@ assembly tests pin the selected instructions.
 - **R5. Frame.** *Done.* Slot layout from typed symbols (size/alignment), `ALLOCATE_LOCAL`,
   prologue/epilogue (`ra`, `s0` frame pointer, 16-byte `sp` alignment).
   Large-offset handling beyond the 12-bit immediate.
-- **R6. Integer ops** (ch. 2–4, 11, 12): unary, binary, comparisons via
+- **R6. Integer ops** *Done.* (ch. 2–4, 11, 12): unary, binary, comparisons via
   `slt`/`sltu`/`xor`+`seqz`, `W`-suffixed 32-bit ops with re-extension, shifts,
   `mul`/`div`/`rem` and their unsigned forms, width conversions.
 - **R7. Control flow** (ch. 5–8): labels, jumps, `beqz`/`bnez`, switch lowering

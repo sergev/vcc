@@ -2,6 +2,7 @@
 // RISC-V IR → GNU assembler syntax.
 //
 #include <inttypes.h>
+#include <string.h>
 
 #include "rv.h"
 
@@ -43,11 +44,25 @@ static void emit_operand(FILE *out, const Rv_Operand *o)
     }
 }
 
+// An instruction or directive: 4-space indent, mnemonic padded to 8 columns.
+static void emit_op(FILE *out, const char *op, const char *args)
+{
+    if (args && *args)
+        fprintf(out, "    %-7s %s\n", op, args);
+    else
+        fprintf(out, "    %s\n", op);
+}
+
 static void emit_instr(FILE *out, const Rv_Instr *in)
 {
-    fprintf(out, "\t%s", rv_mnemonic[in->op]);
+    fprintf(out, "    %s", rv_mnemonic[in->op]);
     for (int i = 0; i < 3 && in->opnd[i].kind != RV_OPND_NONE; i++) {
-        fputs(i ? ", " : "\t", out);
+        if (i == 0) {
+            int pad = 8 - (int)strlen(rv_mnemonic[in->op]);
+            fprintf(out, "%*s", pad > 1 ? pad : 1, "");
+        } else {
+            fputs(", ", out);
+        }
         emit_operand(out, &in->opnd[i]);
     }
     fputc('\n', out);
@@ -55,11 +70,11 @@ static void emit_instr(FILE *out, const Rv_Instr *in)
 
 void rv_emit_func(FILE *out, const Rv_Func *fn)
 {
-    fprintf(out, "\t.text\n");
+    emit_op(out, ".text", NULL);
     if (fn->global)
-        fprintf(out, "\t.globl\t%s\n", fn->name);
-    fprintf(out, "\t.p2align\t2\n");
-    fprintf(out, "\t.type\t%s, @function\n", fn->name);
+        emit_op(out, ".globl", fn->name);
+    emit_op(out, ".p2align", "2");
+    fprintf(out, "    %-7s %s, @function\n", ".type", fn->name);
     fprintf(out, "%s:\n", fn->name);
     for (const Rv_Block *b = fn->blocks; b; b = b->next) {
         if (b->label)
@@ -67,5 +82,5 @@ void rv_emit_func(FILE *out, const Rv_Func *fn)
         for (const Rv_Instr *in = b->head; in; in = in->next)
             emit_instr(out, in);
     }
-    fprintf(out, "\t.size\t%s, .-%s\n", fn->name, fn->name);
+    fprintf(out, "    %-7s %s, .-%s\n", ".size", fn->name, fn->name);
 }
