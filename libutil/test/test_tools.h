@@ -4,6 +4,7 @@
 #pragma once
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -136,6 +137,45 @@ inline int RunTool(const std::vector<std::string> &argv, const std::string &log_
     if (waitpid(pid, &status, 0) < 0)
         return -1;
     return WEXITSTATUS(status);
+}
+
+// Run argv (argv[0] resolved on PATH) with stdout to out_path and stderr to err_path,
+// killing it after `seconds`.  Returns its exit code, -1 if it could not be run or was
+// killed by a signal, or -2 on timeout.
+inline int RunWithTimeout(const std::vector<std::string> &argv, const std::string &out_path,
+                          const std::string &err_path, int seconds)
+{
+    pid_t pid = fork();
+    if (pid < 0)
+        return -1;
+    if (pid == 0) {
+        int out_fd = open(out_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int err_fd = open(err_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (out_fd < 0 || err_fd < 0)
+            _exit(127);
+        dup2(out_fd, STDOUT_FILENO);
+        dup2(err_fd, STDERR_FILENO);
+        close(out_fd);
+        close(err_fd);
+        std::vector<const char *> cargv;
+        std::transform(argv.begin(), argv.end(), std::back_inserter(cargv),
+                       [](const std::string &s) { return s.c_str(); });
+        cargv.push_back(nullptr);
+        execvp(cargv[0], const_cast<char *const *>(cargv.data()));
+        _exit(127);
+    }
+    int status;
+    for (int ms = 0; ms < seconds * 1000; ms += 10) {
+        pid_t r = waitpid(pid, &status, WNOHANG);
+        if (r == pid)
+            return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        if (r < 0)
+            return -1;
+        usleep(10000);
+    }
+    kill(pid, SIGKILL);
+    waitpid(pid, &status, 0);
+    return -2;
 }
 
 // Read an entire file into a string (empty string if it cannot be opened).

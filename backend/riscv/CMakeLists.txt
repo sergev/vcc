@@ -10,12 +10,29 @@ target_include_directories(riscv PUBLIC .)
 target_link_libraries(riscv tac libutil)
 
 #
-# Tests for the RISC-V backend
+# Tests for the RISC-V backend: golden assembly, run tests on qemu, and the shared
+# book suite.  Run tests skip themselves when the RISC-V tools are absent.
 #
 add_executable(riscv-tests
     test/emit_tests.cpp
+    test/codegen_tests.cpp
+    ${BOOK_TEST_SOURCES}
 )
-target_link_libraries(riscv-tests riscv GTest::gtest_main)
-target_compile_definitions(riscv-tests PRIVATE TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(riscv-tests riscv parser translator semantic GTest::gtest_main test_util
+    backend_test_util)
+if(RISCV_TOOLS_FOUND)
+    add_dependencies(riscv-tests riscv-libc)
+endif()
+target_compile_definitions(riscv-tests PRIVATE
+    TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    TEST_CPP="${SystemCpp}"
+    TEST_INCLUDE_DIR="${BESM6_INCLUDE_DIR}" # until RISC-V has its own headers (R18)
+    RISCV_TOOLS_FOUND=$<BOOL:${RISCV_TOOLS_FOUND}>
+    RISCV_CLANG="${RISCV_CLANG}"
+    RISCV_LD="${RISCV_LD}"
+    RISCV_QEMU="${RISCV_QEMU}"
+    RISCV_LIB_DIR="${RISCV_LIB_DIR}"
+    RISCV_LINK_SCRIPT="${RISCV_LINK_SCRIPT}")
+target_include_directories(riscv-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(riscv-tests)
 gtest_discover_tests(riscv-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)

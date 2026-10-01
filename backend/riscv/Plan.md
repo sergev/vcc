@@ -48,11 +48,11 @@ can rely on:
 - **R2. Runtime stub.** *Done.* `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call
   `main`, pass its result to the finisher), `link.ld`, and `putbyte`/`flush`/`exit`
   over the UART and finisher. Assembled with clang, archived with `llvm-ar`.
-- **R3. Run harness.** `backend/riscv/test/` fixture with `CompileToRiscv` (golden
+- **R3. Run harness.** *Done.* `backend/riscv/test/` fixture with `CompileToRiscv` (golden
   assembly) and `CompileAndRunRiscv` (assemble, link with crt0 + runtime, run qemu
   with `-display none -serial stdio -monitor none` and a timeout, decode the
   finisher's exit status), plus its `book_test.h` for the shared `BookTest` suite
-  (skip list, per-target expectations such as chapter 17 `sizeof`). CMake finds a
+  (a set of enabled chapters that Phase 3 grows, and a skip list). CMake finds a
   RISC-V-capable clang (hint `/opt/homebrew/opt/llvm/bin`), `ld.lld`, `llvm-ar` and
   qemu; tests guard with `SKIP_IF_NO_RISCV_TOOLS()` so `make run` stays green
   without them.
@@ -89,6 +89,8 @@ assembly tests pin the selected instructions.
   `PTR_TO_CHAR_PTR`/`CHAR_PTR_TO_PTR` = copy.
 - **R12. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
   copies, by-value and returned structs (whole, or through the hidden pointer).
+  The chapter 17–18 `sizeof` checks, written for BESM-6, get per-target
+  expectations.
 
 ## Phase 4 — psABI conformance
 
