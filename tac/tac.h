@@ -195,6 +195,8 @@ typedef enum {
     TAC_BINARY_GREATER_OR_EQUAL_DOUBLE  // >=, floating-point operands
 } Tac_BinaryOperator;
 
+enum { TAC_DST_KIND_UNKNOWN = -1, TAC_DST_KIND_NO_FOLD = -2 };
+
 typedef struct Tac_Instruction {
     struct Tac_Instruction *next; // Linked list
     Tac_InstructionKind kind;
@@ -207,7 +209,8 @@ typedef struct Tac_Instruction {
             Tac_Val *src;
         } return_;
         // The three integer-width conversions carry the destination's Tac_ConstKind
-        // (or -1 = "unknown / not supplied") so the constant folder can label a folded
+        // (or TAC_DST_KIND_UNKNOWN = -1 = "not supplied", or TAC_DST_KIND_NO_FOLD for a
+        // destination with no constant kind, e.g. a 16-bit short: never folded) so the constant folder can label a folded
         // result with the conversion's true result type — a promotion `unsigned char →
         // int` and an explicit cast `unsigned char → unsigned int` both lower to the
         // same ZERO_EXTEND, and only the destination kind distinguishes them. The shared

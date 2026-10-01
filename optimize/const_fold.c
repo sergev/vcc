@@ -695,6 +695,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
 {
     Tac_Const *rc = NULL;
 
+    if (dst_kind == TAC_DST_KIND_NO_FOLD)
+        return NULL;
     switch (kind) {
         /* ---- integer width conversions ---- */
 

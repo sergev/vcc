@@ -422,7 +422,10 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
             Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_TRUNCATE);
             in->u.truncate.src      = src;
             in->u.truncate.dst      = dst;
-            in->u.truncate.dst_kind = const_kind_of_int_type(to);
+            // A truncation to a type with no constant kind (a short narrower than
+            // int) must not fold as the folder's legacy int→char.
+            int kind                = const_kind_of_int_type(to);
+            in->u.truncate.dst_kind = kind >= 0 ? kind : TAC_DST_KIND_NO_FOLD;
             tac_append(ctx, in);
         } else if (to_size == from_size) {
             // Same C size (e.g. int↔unsigned, long↔unsigned long): a bare COPY.
