@@ -41,6 +41,7 @@ class PipelineTest : public ::testing::Test {
 
 protected:
     Program *program{};
+    std::string locals; // "name:type ..." of the functions' locals, after OptimizeYaml
 
     void SetUp() override
     {
@@ -137,6 +138,12 @@ protected:
                 for (const Tac_TopLevel *t = tac; t; t = t->next) {
                     if (t->kind == TAC_TOPLEVEL_FUNCTION && t->u.function.body)
                         result += capture_instructions(t->u.function.body);
+                    if (t->kind == TAC_TOPLEVEL_FUNCTION)
+                        for (const Tac_Param *p = t->u.function.locals; p; p = p->next) {
+                            char *ts = tac_type_str(p->type);
+                            locals += std::string(locals.empty() ? "" : " ") + p->name + ":" + ts;
+                            xfree(ts);
+                        }
                 }
                 tac_free_toplevel(tac);
             }

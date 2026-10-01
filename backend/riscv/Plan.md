@@ -115,6 +115,9 @@ Phase 1 adds this. It is the prerequisite for everything else.
 - **T3. Optimizer keeps types consistent.** Any pass that creates or renames a
   variable updates the symbol list; `percent_locals_in_function` renames the
   symbol list along with the body.
+  *Done.* No pass creates or renames a variable; `optimize_prune_locals` drops
+  locals the optimized body no longer mentions. `percent_locals_in_function`
+  renames the lists with the body (T2), leaving temporaries alone.
 - **T4. Struct layout in TAC types.** `TAC_TYPE_STRUCTURE` carries byte size,
   alignment, and member `(offset, type)` list — enough for psABI classification.
 - **T5. Aggregate copy granularity.** `gen_aggregate_assign`/`gen_struct_assign`

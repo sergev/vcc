@@ -1303,6 +1303,7 @@ Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
         if (t->kind == TAC_TOPLEVEL_FUNCTION) {
             percent_locals_in_function(t);
             t->u.function.body = optimize_function(t->u.function.body, flags, t);
+            optimize_prune_locals(t);
         }
         if (unit_active)
             note_toplevel(t);

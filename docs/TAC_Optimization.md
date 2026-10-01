@@ -311,6 +311,14 @@ Equality of instruction lists is tested with `tac_compare_instruction` (declared
 
 Within one iteration, constant folding runs first on the flat list because it is the only pass that does not need a CFG. The remaining three passes operate on the CFG representation and run in the order shown: unreachable code elimination, copy propagation, dead store elimination. This ordering ensures that each pass can take advantage of what the previous pass produced within the same iteration.
 
+### Types
+
+No pass creates or renames a variable, and copy propagation substitutes only across
+a `COPY`, which the translator emits only between types of the same size, so every
+operand keeps its width. After the loop, `optimize_prune_locals` drops from the
+function's `locals` every name the body no longer mentions, so `params` + `locals`
+stay exactly the typed symbols of the optimized body.
+
 ### Command-line control
 
 By default all four passes are enabled. Individual passes can be disabled for debugging, except constant folding.

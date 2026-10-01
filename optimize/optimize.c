@@ -26,6 +26,7 @@
 #include "optimize.h"
 
 #include "cfg.h"
+#include "string_map.h"
 
 // Pass entry points, implemented in the sibling translation units.
 Tac_Instruction *constant_fold(Tac_Instruction *body);
@@ -138,4 +139,30 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
         }
         body = new_body;
     }
+}
+
+static void note_used(const char *name, void *arg)
+{
+    map_insert((StringMap *)arg, name, 1, 0);
+}
+
+void optimize_prune_locals(Tac_TopLevel *fn)
+{
+    StringMap used;
+    map_init(&used);
+    for (const Tac_Instruction *in = fn->u.function.body; in; in = in->next)
+        tac_visit_names(in, note_used, &used);
+
+    Tac_Param **pp = &fn->u.function.locals;
+    while (*pp) {
+        Tac_Param *p = *pp;
+        if (map_get(&used, p->name, NULL)) {
+            pp = &p->next;
+            continue;
+        }
+        *pp     = p->next;
+        p->next = NULL;
+        tac_free_param(p);
+    }
+    map_destroy(&used);
 }

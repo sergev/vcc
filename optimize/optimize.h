@@ -36,3 +36,8 @@ void opt_trace_instr(const char *prefix, const Tac_Instruction *ins);
 // CFG passes tell private locals from observable globals. Pass NULL when no such
 // context is available (the optimizer then makes no global-vs-local distinction).
 Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const Tac_TopLevel *fn);
+
+// Drop from fn's locals every name its body no longer mentions (temporaries and
+// variables whose last use a pass removed), so params + locals stay exactly the
+// typed symbols of the body.  Run after optimize_function.
+void optimize_prune_locals(Tac_TopLevel *fn);

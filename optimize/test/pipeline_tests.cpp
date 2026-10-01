@@ -312,3 +312,17 @@ TEST_F(PipelineTest, DeadLocalRemovedAlongsideGlobalWrite)
               "    kind: var\n"
               "    name: g\n");
 }
+
+// The symbol list follows the optimized body: a temporary or variable whose last
+// use was folded or eliminated is dropped, the rest keep their types.
+TEST_F(PipelineTest, LocalsPrunedToOptimizedBody)
+{
+    std::string yaml = OptimizeYaml("int f(int a) { int x = a + 1; int y = 7; x = y; return x * a; }");
+    EXPECT_EQ(locals, "%1:int") << yaml;
+}
+
+TEST_F(PipelineTest, LocalsKeptWithoutOptimization)
+{
+    OptimizeYaml("int f(int a) { int x = a + 1; int y = 7; x = y; return x * a; }", OptFlags{});
+    EXPECT_EQ(locals, "%x:int %0:int %y:int %1:int");
+}
