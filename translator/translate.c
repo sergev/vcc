@@ -597,25 +597,84 @@ bool type_is_byval_sret(const Type *t)
     return (int)get_size(t) > target_word_bytes();
 }
 
-void gen_struct_assign(TacCtx *ctx, const char *dst_name, int dst_off, const char *src_name,
-                       int nbytes)
+int aggregate_chunk(const Type *t)
 {
-    int w      = target_word_bytes();
-    int nwords = (nbytes + w - 1) / w;
-    for (int i = 0; i < nwords; i++) {
-        Tac_Val *t          = new_var_val(ctx, tac_type_word());
-        Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-        ld->u.copy_from_offset.src    = xstrdup(src_name);
-        ld->u.copy_from_offset.offset = i * w;
-        ld->u.copy_from_offset.dst    = t;
-        tac_append(ctx, ld);
+    int align = (int)get_alignment(t);
+    int w     = target_word_bytes();
+    return align < w ? align : w;
+}
 
-        Tac_Instruction *st         = tac_new_instruction(TAC_INSTRUCTION_COPY_TO_OFFSET);
-        st->u.copy_to_offset.src    = val_var(t->u.var_name);
-        st->u.copy_to_offset.dst    = xstrdup(dst_name);
-        st->u.copy_to_offset.offset = dst_off + i * w;
-        tac_append(ctx, st);
+// The unsigned integer type of `bytes` bytes, the carrier of one copy chunk.
+static Tac_Type *tac_type_unsigned(int bytes)
+{
+    if (bytes == (int)target_config->long_size)
+        return tac_new_type(TAC_TYPE_ULONG);
+    if (bytes == (int)target_config->int_size)
+        return tac_new_type(TAC_TYPE_UINT);
+    if (bytes == (int)target_config->short_size)
+        return tac_new_type(TAC_TYPE_USHORT);
+    if (bytes == 1)
+        return tac_new_type(TAC_TYPE_UCHAR);
+    return tac_new_type(TAC_TYPE_ULONG_LONG);
+}
+
+// Address of chunk `index` (of `chunk` bytes) of the object `ptr` points to.
+static Tac_Val *chunk_address(TacCtx *ctx, const char *ptr, int index, int chunk)
+{
+    Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_unsigned(chunk)));
+    Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+    ap->u.add_ptr.ptr   = val_var(ptr);
+    ap->u.add_ptr.index = val_int(index);
+    ap->u.add_ptr.scale = chunk;
+    ap->u.add_ptr.dst   = p;
+    tac_append(ctx, ap);
+    return val_var(p->u.var_name);
+}
+
+void gen_aggregate_copy(TacCtx *ctx, const AggPlace *dst, const AggPlace *src, const Type *type)
+{
+    int chunk = aggregate_chunk(type);
+    int size  = (int)get_size(type);
+    bool byte = chunk == 1;
+    for (int i = 0; i * chunk < size; i++) {
+        Tac_Val *t = new_var_val(ctx, tac_type_unsigned(chunk));
+        if (src->name) {
+            Tac_Instruction *ld           = tac_new_instruction(
+                byte ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET : TAC_INSTRUCTION_COPY_FROM_OFFSET);
+            ld->u.copy_from_offset.src    = xstrdup(src->name);
+            ld->u.copy_from_offset.offset = src->offset + i * chunk;
+            ld->u.copy_from_offset.dst    = t;
+            tac_append(ctx, ld);
+        } else {
+            Tac_Instruction *ld =
+                tac_new_instruction(byte ? TAC_INSTRUCTION_LOAD_BYTE : TAC_INSTRUCTION_LOAD);
+            ld->u.load.src_ptr = chunk_address(ctx, src->ptr, i, chunk);
+            ld->u.load.dst     = t;
+            tac_append(ctx, ld);
+        }
+        if (dst->name) {
+            Tac_Instruction *st         = tac_new_instruction(
+                byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET : TAC_INSTRUCTION_COPY_TO_OFFSET);
+            st->u.copy_to_offset.src    = val_var(t->u.var_name);
+            st->u.copy_to_offset.dst    = xstrdup(dst->name);
+            st->u.copy_to_offset.offset = dst->offset + i * chunk;
+            tac_append(ctx, st);
+        } else {
+            Tac_Instruction *st =
+                tac_new_instruction(byte ? TAC_INSTRUCTION_STORE_BYTE : TAC_INSTRUCTION_STORE);
+            st->u.store.src     = val_var(t->u.var_name);
+            st->u.store.dst_ptr = chunk_address(ctx, dst->ptr, i, chunk);
+            tac_append(ctx, st);
+        }
     }
+}
+
+void gen_struct_assign(TacCtx *ctx, const char *dst_name, int dst_off, const char *src_name,
+                       const Type *type)
+{
+    AggPlace dst = { dst_name, dst_off, NULL };
+    AggPlace src = { src_name, 0, NULL };
+    gen_aggregate_copy(ctx, &dst, &src, type);
 }
 
 //

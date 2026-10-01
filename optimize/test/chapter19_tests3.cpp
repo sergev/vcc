@@ -343,6 +343,20 @@ int main(void) {
   dst: s1
   offset: 0
 - instruction:
+  kind: copy_from_offset
+  src: %s2
+  offset: 4
+  dst:
+    kind: var
+    name: %1
+- instruction:
+  kind: copy_to_offset
+  src:
+    kind: var
+    name: %1
+  dst: s1
+  offset: 4
+- instruction:
   kind: copy_to_offset
   src:
     kind: constant
@@ -357,12 +371,12 @@ int main(void) {
   offset: 0
   dst:
     kind: var
-    name: %2
+    name: %3
 - instruction:
   kind: return
   src:
     kind: var
-    name: %2
+    name: %3
 )OPT");
 }
 

@@ -2617,7 +2617,7 @@ int target(void) {
     return callee(s1, s2);
 }
 )SRC")),
-              "allocate_local=2 binary=4 copy_from_offset=5 copy_to_offset=5 fun_call=1 jump_if_zero=4 label=4 return=6");
+              "allocate_local=2 binary=4 copy_from_offset=6 copy_to_offset=6 fun_call=1 jump_if_zero=4 label=4 return=6");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_AllTypes_FuncallKillsAliased)

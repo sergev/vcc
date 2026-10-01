@@ -497,79 +497,36 @@ static bool aggregate_named_base(const Expr *e, const char **name, int *off)
 }
 
 // Lower a whole-aggregate assignment `target = value` (struct/union, simple assignment) by
-// copying it word by word.  Each side is either a named base (COPY_FROM_OFFSET /
-// COPY_TO_OFFSET) or, for a pointer/subscript/nested lvalue, an address reached by ADD_PTR +
-// LOAD / STORE.  A non-lvalue source (a function-call return or compound literal) is first
-// materialised into a named temporary via gen_expr.  This generalises gen_struct_assign to
-// the cases where either operand is reached through a pointer.  If addr_out is given, it
-// gets the destination's address when one was computed, else NULL (a named base).
+// copying it chunk by chunk (gen_aggregate_copy).  Each side is either a named base
+// (COPY_FROM_OFFSET / COPY_TO_OFFSET) or, for a pointer/subscript/nested lvalue, an address
+// reached by ADD_PTR + LOAD / STORE.  A non-lvalue source (a function-call return or compound
+// literal) is first materialised into a named temporary via gen_expr.  If addr_out is given,
+// it gets the destination's address when one was computed, else NULL (a named base).
 static Tac_Val *gen_aggregate_assign(TacCtx *ctx, Expr *target, Expr *value, Tac_Val **addr_out)
 {
-    int w      = target_word_bytes();
-    int nbytes = (int)get_size(target->type);
-    int nwords = (nbytes + w - 1) / w;
+    AggPlace dst  = { NULL, 0, NULL };
+    Tac_Val *dptr = NULL;
+    if (!aggregate_named_base(target, &dst.name, &dst.offset)) {
+        dptr    = gen_lval(ctx, target);
+        dst.ptr = dptr->u.var_name;
+    }
 
-    const char *dname = NULL;
-    int doff          = 0;
-    Tac_Val *dptr     = NULL;
-    if (!aggregate_named_base(target, &dname, &doff))
-        dptr = gen_lval(ctx, target);
-
-    const char *sname     = NULL;
-    int soff              = 0;
+    AggPlace src          = { NULL, 0, NULL };
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL; // owned materialised rvalue (freed below)
-    if (!aggregate_named_base(value, &sname, &soff)) {
+    if (!aggregate_named_base(value, &src.name, &src.offset)) {
         if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND) {
             // An rvalue aggregate: gen_expr leaves it in a named temporary.
             src_material = gen_expr(ctx, value);
-            sname        = src_material->u.var_name;
+            src.name     = src_material->u.var_name;
         } else {
-            sptr = gen_lval(ctx, value); // through a pointer / subscript / nested member
+            sptr    = gen_lval(ctx, value); // through a pointer / subscript / nested member
+            src.ptr = sptr->u.var_name;
         }
     }
 
-    for (int i = 0; i < nwords; i++) {
-        Tac_Val *word = new_var_val(ctx, tac_type_word());
-        if (sname) {
-            Tac_Instruction *ld           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-            ld->u.copy_from_offset.src    = xstrdup(sname);
-            ld->u.copy_from_offset.offset = soff + i * w;
-            ld->u.copy_from_offset.dst    = word;
-            tac_append(ctx, ld);
-        } else {
-            Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_word()));
-            Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-            ap->u.add_ptr.ptr   = val_var(sptr->u.var_name);
-            ap->u.add_ptr.index = val_int(i);
-            ap->u.add_ptr.scale = w;
-            ap->u.add_ptr.dst   = p;
-            tac_append(ctx, ap);
-            Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_LOAD);
-            ld->u.load.src_ptr  = val_var(p->u.var_name);
-            ld->u.load.dst      = word;
-            tac_append(ctx, ld);
-        }
-        if (dname) {
-            Tac_Instruction *st         = tac_new_instruction(TAC_INSTRUCTION_COPY_TO_OFFSET);
-            st->u.copy_to_offset.src    = val_var(word->u.var_name);
-            st->u.copy_to_offset.dst    = xstrdup(dname);
-            st->u.copy_to_offset.offset = doff + i * w;
-            tac_append(ctx, st);
-        } else {
-            Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_word()));
-            Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-            ap->u.add_ptr.ptr   = val_var(dptr->u.var_name);
-            ap->u.add_ptr.index = val_int(i);
-            ap->u.add_ptr.scale = w;
-            ap->u.add_ptr.dst   = p;
-            tac_append(ctx, ap);
-            Tac_Instruction *st = tac_new_instruction(TAC_INSTRUCTION_STORE);
-            st->u.store.src     = val_var(word->u.var_name);
-            st->u.store.dst_ptr = val_var(p->u.var_name);
-            tac_append(ctx, st);
-        }
-    }
+    gen_aggregate_copy(ctx, &dst, &src, target->type);
+
     // The address/materialised-value Tac_Vals are consumed only by name above; free them.
     if (addr_out)
         *addr_out = dptr;
@@ -584,54 +541,25 @@ static Tac_Val *gen_aggregate_assign(TacCtx *ctx, Expr *target, Expr *value, Tac
 // expression.  Unlike gen_struct_assign (which assumes the source is itself a named
 // aggregate base), this reads the source the same way gen_aggregate_assign does: a named
 // base via COPY_FROM_OFFSET, a call/compound rvalue materialised by gen_expr, or — the case
-// gen_struct_assign got wrong for `agg = *ptr` — a pointer/subscript lvalue loaded word by
-// word through ADD_PTR + LOAD.
+// gen_struct_assign got wrong for `agg = *ptr` — a pointer/subscript lvalue loaded through
+// ADD_PTR + LOAD.
 void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dname, int doff, Expr *value,
-                                  int nbytes)
+                                  const Type *type)
 {
-    int w      = target_word_bytes();
-    int nwords = (nbytes + w - 1) / w;
-
-    const char *sname     = NULL;
-    int soff              = 0;
+    AggPlace dst          = { dname, doff, NULL };
+    AggPlace src          = { NULL, 0, NULL };
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL;
-    if (!aggregate_named_base(value, &sname, &soff)) {
+    if (!aggregate_named_base(value, &src.name, &src.offset)) {
         if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND) {
             src_material = gen_expr(ctx, value);
-            sname        = src_material->u.var_name;
+            src.name     = src_material->u.var_name;
         } else {
-            sptr = gen_lval(ctx, value); // through a pointer / subscript / nested member
+            sptr    = gen_lval(ctx, value); // through a pointer / subscript / nested member
+            src.ptr = sptr->u.var_name;
         }
     }
-
-    for (int i = 0; i < nwords; i++) {
-        Tac_Val *word = new_var_val(ctx, tac_type_word());
-        if (sname) {
-            Tac_Instruction *ld           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-            ld->u.copy_from_offset.src    = xstrdup(sname);
-            ld->u.copy_from_offset.offset = soff + i * w;
-            ld->u.copy_from_offset.dst    = word;
-            tac_append(ctx, ld);
-        } else {
-            Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_word()));
-            Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-            ap->u.add_ptr.ptr   = val_var(sptr->u.var_name);
-            ap->u.add_ptr.index = val_int(i);
-            ap->u.add_ptr.scale = w;
-            ap->u.add_ptr.dst   = p;
-            tac_append(ctx, ap);
-            Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_LOAD);
-            ld->u.load.src_ptr  = val_var(p->u.var_name);
-            ld->u.load.dst      = word;
-            tac_append(ctx, ld);
-        }
-        Tac_Instruction *st         = tac_new_instruction(TAC_INSTRUCTION_COPY_TO_OFFSET);
-        st->u.copy_to_offset.src    = val_var(word->u.var_name);
-        st->u.copy_to_offset.dst    = xstrdup(dname);
-        st->u.copy_to_offset.offset = doff + i * w;
-        tac_append(ctx, st);
-    }
+    gen_aggregate_copy(ctx, &dst, &src, type);
     tac_free_val(sptr);
     tac_free_val(src_material);
 }
@@ -1352,13 +1280,13 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             tac_append(ctx, jz);
 
             Tac_Val *then_val = gen_expr(ctx, e->u.cond.then_expr);
-            gen_struct_assign(ctx, slot, 0, then_val->u.var_name, size);
+            gen_struct_assign(ctx, slot, 0, then_val->u.var_name, e->type);
             tac_free_val(then_val);
             emit_jump(ctx, end_l);
 
             emit_label(ctx, else_l);
             Tac_Val *else_val = gen_expr(ctx, e->u.cond.else_expr);
-            gen_struct_assign(ctx, slot, 0, else_val->u.var_name, size);
+            gen_struct_assign(ctx, slot, 0, else_val->u.var_name, e->type);
             tac_free_val(else_val);
 
             emit_label(ctx, end_l);

@@ -128,6 +128,11 @@ Phase 1 adds this. It is the prerequisite for everything else.
   copy in pointer-size chunks, which over-copies a 12-byte, 4-aligned struct on a
   64-bit target. Copy in chunks of the aggregate's alignment, or emit a tail of
   narrower copies.
+  *Done.* `gen_aggregate_copy` copies in chunks of `aggregate_chunk()` = min(alignment,
+  word), typed by an unsigned integer of that size (byte kinds for 1-byte chunks);
+  assignment, initialization, `?:` and the sret return copy all use it. Struct
+  arguments are still split into words for BESM-6 (T6). `gen_zero_fill` was already
+  exact (word loop plus byte tail).
 - **T6. By-value struct threshold.** `type_is_byval_sret` uses one pointer size; the
   psABI passes up to 2×XLEN in registers. Make the threshold (and whether to lower
   to sret in the frontend at all) a target property.

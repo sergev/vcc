@@ -1013,7 +1013,7 @@ int main(void) {
 - instruction:
   kind: copy_from_offset
   src: glob
-  offset: 8
+  offset: 4
   dst:
     kind: var
     name: %1
@@ -1022,6 +1022,20 @@ int main(void) {
   src:
     kind: var
     name: %1
+  dst: %my_struct
+  offset: 4
+- instruction:
+  kind: copy_from_offset
+  src: glob
+  offset: 8
+  dst:
+    kind: var
+    name: %2
+- instruction:
+  kind: copy_to_offset
+  src:
+    kind: var
+    name: %2
   dst: %my_struct
   offset: 8
 - instruction:
@@ -1039,13 +1053,13 @@ int main(void) {
   offset: 8
   dst:
     kind: var
-    name: %2
+    name: %3
 - instruction:
   kind: binary
   op: not_equal
   src1:
     kind: var
-    name: %2
+    name: %3
   src2:
     kind: constant
     const:
@@ -1053,13 +1067,13 @@ int main(void) {
       value: 100
   dst:
     kind: var
-    name: %3
+    name: %4
 - instruction:
   kind: jump_if_zero
   condition:
     kind: var
-    name: %3
-  target: %4
+    name: %4
+  target: %5
 - instruction:
   kind: return
   src:
@@ -1069,20 +1083,20 @@ int main(void) {
       value: 1
 - instruction:
   kind: label
-  name: %4
+  name: %5
 - instruction:
   kind: copy_from_offset
   src: %my_struct
   offset: 0
   dst:
     kind: var
-    name: %6
+    name: %7
 - instruction:
   kind: binary
   op: not_equal
   src1:
     kind: var
-    name: %6
+    name: %7
   src2:
     kind: constant
     const:
@@ -1090,13 +1104,13 @@ int main(void) {
       value: 1
   dst:
     kind: var
-    name: %7
+    name: %8
 - instruction:
   kind: jump_if_zero
   condition:
     kind: var
-    name: %7
-  target: %8
+    name: %8
+  target: %9
 - instruction:
   kind: return
   src:
@@ -1106,20 +1120,20 @@ int main(void) {
       value: 2
 - instruction:
   kind: label
-  name: %8
+  name: %9
 - instruction:
   kind: copy_from_offset
   src: glob
   offset: 8
   dst:
     kind: var
-    name: %10
+    name: %11
 - instruction:
   kind: binary
   op: not_equal
   src1:
     kind: var
-    name: %10
+    name: %11
   src2:
     kind: constant
     const:
@@ -1127,13 +1141,13 @@ int main(void) {
       value: 3
   dst:
     kind: var
-    name: %11
+    name: %12
 - instruction:
   kind: jump_if_zero
   condition:
     kind: var
-    name: %11
-  target: %12
+    name: %12
+  target: %13
 - instruction:
   kind: return
   src:
@@ -1143,7 +1157,7 @@ int main(void) {
       value: 3
 - instruction:
   kind: label
-  name: %12
+  name: %13
 - instruction:
   kind: return
   src:

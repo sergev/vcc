@@ -96,16 +96,28 @@ int target_word_bytes(void);
 // True when `t` is a struct/union too large to return in a single word, so it uses the
 // hidden-pointer (sret) calling convention.
 bool type_is_byval_sret(const Type *t);
-// Copy a whole struct/union value, word by word, from named aggregate `src_name`
-// into `dst_name` at byte offset `dst_off`.  Both names denote frame-resident or
-// global aggregates (the bases accepted by COPY_TO_OFFSET / COPY_FROM_OFFSET).
+// One side of an aggregate copy: a named frame/global aggregate `name` at byte `offset`
+// (reached by COPY_*_OFFSET), or else the address held in variable `ptr` (ADD_PTR +
+// LOAD/STORE).
+typedef struct {
+    const char *name;
+    int offset;
+    const char *ptr;
+} AggPlace;
+// The unit of an aggregate copy: the type's alignment, at most one machine word.  A size
+// is a multiple of the alignment, so the chunks cover the object exactly.
+int aggregate_chunk(const Type *t);
+// Copy a whole object of `type` from `src` to `dst`, chunk by chunk.
+void gen_aggregate_copy(TacCtx *ctx, const AggPlace *dst, const AggPlace *src, const Type *type);
+// Copy a whole struct/union value from named aggregate `src_name` into `dst_name` at
+// byte offset `dst_off`.
 void gen_struct_assign(TacCtx *ctx, const char *dst_name, int dst_off, const char *src_name,
-                       int nbytes);
+                       const Type *type);
 // Initialize a whole aggregate (named destination base `dst_name`+`dst_off`) from a value
-// expression, reading a pointer/subscript source word by word (unlike gen_struct_assign,
+// expression, which may also be reached through a pointer (unlike gen_struct_assign,
 // which assumes the source is a named aggregate base).  Lives in expr.c.
 void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dst_name, int dst_off, Expr *value,
-                                  int nbytes);
+                                  const Type *type);
 
 //
 // Type conversion (translate.c)

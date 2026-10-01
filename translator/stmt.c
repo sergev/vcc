@@ -208,8 +208,7 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         const Type *it0 = init->type ? unalias(init->type) : NULL;
         if (it0 && (it0->kind == TYPE_STRUCT || it0->kind == TYPE_UNION)) {
             // A whole struct/union value (not a scalar leaf) — copy it word by word.
-            gen_struct_assign(ctx, var_name, base_offset, src->u.var_name,
-                              (int)get_size(init->type));
+            gen_struct_assign(ctx, var_name, base_offset, src->u.var_name, init->type);
             tac_free_val(src);
             return;
         }
@@ -338,8 +337,7 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
                 // union u = *ptr;): copy every word from the source into the new local.
                 // The source may be a named aggregate, a call/compound rvalue, or — the
                 // case gen_struct_assign mishandled — an lvalue reached through a pointer.
-                gen_aggregate_init_from_expr(ctx, id->name, 0, id->init->u.expr,
-                                             (int)get_size(id->type));
+                gen_aggregate_init_from_expr(ctx, id->name, 0, id->init->u.expr, id->type);
             } else {
                 Tac_Val *src        = gen_expr(ctx, id->init->u.expr);
                 Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
@@ -376,32 +374,12 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         break;
     case STMT_RETURN: {
         if (ctx->sret_name && stmt->u.expr) {
-            // Multi-word struct return: copy the result, word by word, into the caller's
-            // slot through the hidden return pointer, then return the pointer itself.
+            // Multi-word struct return: copy the result into the caller's slot through the
+            // hidden return pointer, then return the pointer itself.
             Tac_Val *src = gen_expr(ctx, stmt->u.expr); // VAR naming the source aggregate
-            int w        = target_word_bytes();
-            int nwords   = ((int)get_size(stmt->u.expr->type) + w - 1) / w;
-            for (int i = 0; i < nwords; i++) {
-                Tac_Val *t          = new_var_val(ctx, tac_type_word());
-                Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-                ld->u.copy_from_offset.src    = xstrdup(src->u.var_name);
-                ld->u.copy_from_offset.offset = i * w;
-                ld->u.copy_from_offset.dst    = t;
-                tac_append(ctx, ld);
-
-                Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_word()));
-                Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-                ap->u.add_ptr.ptr   = val_var(ctx->sret_name);
-                ap->u.add_ptr.index = val_int(i); // word index
-                ap->u.add_ptr.scale = w;          // one word per element → plain add
-                ap->u.add_ptr.dst   = p;
-                tac_append(ctx, ap);
-
-                Tac_Instruction *st = tac_new_instruction(TAC_INSTRUCTION_STORE);
-                st->u.store.src     = val_var(t->u.var_name);
-                st->u.store.dst_ptr = val_var(p->u.var_name);
-                tac_append(ctx, st);
-            }
+            AggPlace dst = { NULL, 0, ctx->sret_name };
+            AggPlace from = { src->u.var_name, 0, NULL };
+            gen_aggregate_copy(ctx, &dst, &from, stmt->u.expr->type);
             tac_free_val(src);
             Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
             in->u.return_.src   = val_var(ctx->sret_name);

@@ -178,3 +178,73 @@ TEST_F(TranslateTestX86, NestedBlockScopeStruct)
     EXPECT_EQ(Members(t->u.structure.members->type), "x@0:int");
     tac_free_toplevel(tac);
 }
+
+// ---------------------------------------------------------------------------
+// Aggregate copies go in chunks of the aggregate's alignment, at most one word
+// ---------------------------------------------------------------------------
+
+// "kind@offset:type" of each chunk store into an aggregate, in order: COPY_*_TO_OFFSET
+// gives its offset, STORE/STORE_BYTE through a pointer gives "ptr".
+static std::string ChunkStores(const Tac_TopLevel *tac, const char *fn)
+{
+    std::string out;
+    for (; tac; tac = tac->next) {
+        if (tac->kind != TAC_TOPLEVEL_FUNCTION || strcmp(tac->u.function.name, fn) != 0)
+            continue;
+        for (const Tac_Instruction *in = tac->u.function.body; in; in = in->next) {
+            const Tac_Val *src;
+            std::string where;
+            if (in->kind == TAC_INSTRUCTION_COPY_TO_OFFSET ||
+                in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET) {
+                src   = in->u.copy_to_offset.src;
+                where = std::to_string(in->u.copy_to_offset.offset);
+            } else if (in->kind == TAC_INSTRUCTION_STORE || in->kind == TAC_INSTRUCTION_STORE_BYTE) {
+                src   = in->u.store.src;
+                where = "ptr";
+            } else {
+                continue;
+            }
+            if (src->kind != TAC_VAL_VAR)
+                continue;
+            const Tac_Type *t = nullptr;
+            for (const Tac_Param *p = tac->u.function.locals; p; p = p->next)
+                if (strcmp(p->name, src->u.var_name) == 0)
+                    t = p->type;
+            char *ts = tac_type_str(t);
+            out += std::string(out.empty() ? "" : " ") + where + ":" + ts;
+            xfree(ts);
+        }
+    }
+    return out;
+}
+
+TEST_F(TranslateTestX86, AggregateCopyByAlignment)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct I { int a, b, c; } gi;
+        void f(void) { struct I x; x = gi; }
+    )");
+    EXPECT_EQ(ChunkStores(tac, "f"), "0:uint 4:uint 8:uint");
+    tac_free_toplevel(tac);
+}
+
+TEST_F(TranslateTestX86, AggregateCopyThroughPointerByBytes)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct C { char c[3]; };
+        void f(struct C *p, struct C *q) { *p = *q; }
+    )");
+    EXPECT_EQ(ChunkStores(tac, "f"), "ptr:uchar ptr:uchar ptr:uchar");
+    tac_free_toplevel(tac);
+}
+
+// An alignment above one word still copies by words.
+TEST_F(TranslateTestX86, AggregateCopyCappedAtWord)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct L { long double x; } gl;
+        void f(void) { struct L y = gl; }
+    )");
+    EXPECT_EQ(ChunkStores(tac, "f"), "0:ulong 8:ulong");
+    tac_free_toplevel(tac);
+}
