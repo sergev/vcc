@@ -27,8 +27,9 @@ protected:
     {
         // The translator backend of record is BESM-6 (6-byte word); pin the target so
         // sizes/offsets/alignments in the expected YAML match that machine.
-        target_config = target_lookup("besm6");
-        input_file    = tmpfile();
+        target_config  = target_lookup("besm6");
+        tac_yaml_types = false; // expected output shows the instructions only
+        input_file     = tmpfile();
         ASSERT_NE(nullptr, input_file);
     }
 

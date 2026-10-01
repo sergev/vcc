@@ -956,3 +956,65 @@ TEST_F(TacYamlTest, StructureType)
     EXPECT_NE(out.find("kind: structure"), std::string::npos);
     EXPECT_NE(out.find("tag: Point"), std::string::npos);
 }
+
+// ---------------------------------------------------------------------------
+// Typed TAC
+// ---------------------------------------------------------------------------
+
+TEST_F(TacYamlTest, TypedFunction)
+{
+    Tac_TopLevel *tl                         = make_empty_function("f", true);
+    tl->u.function.type                      = tac_new_type(TAC_TYPE_FUN_TYPE);
+    tl->u.function.type->u.fun_type.param_types = tac_new_type(TAC_TYPE_LONG);
+    tl->u.function.type->u.fun_type.ret_type = tac_new_type(TAC_TYPE_DOUBLE);
+    Tac_Param *p                             = tac_new_param();
+    p->name                                  = xstrdup("%n");
+    p->type                                  = tac_new_type(TAC_TYPE_LONG);
+    tl->u.function.params                    = p;
+    Tac_Param *l                             = tac_new_param();
+    l->name                                  = xstrdup("%1");
+    l->type                                  = tac_new_type(TAC_TYPE_DOUBLE);
+    tl->u.function.locals                    = l;
+
+    std::string out = capture(tl);
+    EXPECT_EQ(out, R"(- toplevel:
+  kind: function
+  name: f
+  global: true
+  type: fn(long) -> double
+  params:
+    - param: %n
+      type: long
+  locals:
+    - local: %1
+      type: double
+)");
+
+    tac_yaml_types = false;
+    out            = capture(tl);
+    tac_yaml_types = true;
+    EXPECT_EQ(out, R"(- toplevel:
+  kind: function
+  name: f
+  global: true
+  params:
+    - param: %n
+)");
+    tac_free_toplevel(tl);
+}
+
+TEST_F(TacYamlTest, Extern)
+{
+    Tac_TopLevel *tl   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    tl->u.extern_.name = xstrdup("errno");
+    tl->u.extern_.type = tac_new_type(TAC_TYPE_INT);
+
+    std::string out = capture(tl);
+    tac_free_toplevel(tl);
+    EXPECT_EQ(out, R"(- toplevel:
+  kind: extern
+  name: errno
+  type:
+    kind: int
+)");
+}

@@ -1,10 +1,16 @@
 module TAC {
     Program = (TopLevel* decls)
 
-    TopLevel = Function(identifier name, bool global, identifier* params,
+    TopLevel = Function(identifier name, bool global, bool variadic, bool noret, Type? typ,
+                        Symbol* params, Symbol* locals,
                         StaticLocal* static_locals, Instruction* body)
              | StaticVariable(identifier name, bool global, Type typ, StaticInit* init_list)
              | StaticConstant(identifier name, Type typ, StaticInit init)
+             | Extern(identifier name, Type typ) -- referenced here, defined elsewhere
+
+    -- A frame-resident name and its type.  params and locals (automatic locals and
+    -- temporaries) together cover every frame-resident name of the body.
+    Symbol = (identifier name, Type? typ)
 
     -- A block-scope static variable, emitted inside its owning function's module.
     StaticLocal = (identifier name, Type typ, StaticInit* init_list)
@@ -57,8 +63,8 @@ module TAC {
                 | JumpIfZero(Val condition, identifier target)
                 | JumpIfNotZero(Val condition, identifier target)
                 | Label(identifier name)
-                | FunCall(identifier fun_name, bool indirect, Val* args, Val? dst) -- indirect: fun_name is an object holding the callee's address
-                | FunCallNoreturn(identifier fun_name, Val* args, Val? dst) -- call to a _Noreturn function; always direct
+                | FunCall(identifier fun_name, bool indirect, Val* args, Val? dst, Type? fun_type) -- indirect: fun_name is an object holding the callee's address
+                | FunCallNoreturn(identifier fun_name, Val* args, Val? dst, Type? fun_type) -- call to a _Noreturn function; always direct
                 | AllocateLocal(identifier name, int size, int alignment) -- size/alignment in target bytes
 
     Val = Constant(Const val)
@@ -78,10 +84,10 @@ module TAC {
 
     Type = SChar | UChar | Short | UShort | Int | Long | LongLong | UInt | ULong | ULongLong
          | Float | Double | LongDouble | Void
-         | FunType(Type* params, Type ret)
+         | FunType(Type* params, Type ret, bool variadic)
          | Pointer(Type referenced)
          | Array(Type element, int size)
-         | Structure(identifier tag)
+         | Structure(identifier tag, int size)
 
     StaticInit = CharInit(int val) | UCharInit(int val)
                | ShortInit(int val) | UShortInit(int val)

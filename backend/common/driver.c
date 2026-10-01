@@ -181,7 +181,14 @@ static void process_file(const Args *args, const Backend *backend)
     open_output(args);
 
     WFILE input;
-    wopen(&input, args->input_file, "r");
+    if (wopen(&input, args->input_file, "r") < 0) {
+        perror(args->input_file);
+        exit(1);
+    }
+    if (!tac_import_begin_stream(&input)) {
+        fprintf(stderr, "%s: not a TAC stream of this compiler version\n", args->input_file);
+        exit(1);
+    }
 
     // Phase 1: read all toplevels into a linked chain for global-name resolution.
     Tac_TopLevel *head = NULL, **tail_ptr = &head;

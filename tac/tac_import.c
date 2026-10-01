@@ -122,6 +122,8 @@ static Tac_Type *import_type(WFILE *in)
     case TAC_TYPE_FUN_TYPE:
         t->u.fun_type.param_types = import_type(in);
         t->u.fun_type.ret_type    = import_type(in);
+        t->u.fun_type.variadic    = (bool)wgetw(in);
+        check_input(in, "fun_type variadic");
         break;
     case TAC_TYPE_POINTER:
         t->u.pointer.target_type = import_type(in);
@@ -234,6 +236,7 @@ static Tac_Param *import_param(WFILE *in)
     Tac_Param *p = tac_new_param();
     p->name      = wgetstr(in);
     check_input(in, "param name");
+    p->type = import_type(in);
     p->next = import_param(in);
     return p;
 }
@@ -374,8 +377,9 @@ static Tac_Instruction *import_instr(WFILE *in)
         check_input(in, "fun_call fun_name");
         instr->u.fun_call.indirect = (bool)wgetw(in);
         check_input(in, "fun_call indirect");
-        instr->u.fun_call.args = import_val(in);
-        instr->u.fun_call.dst  = import_val(in);
+        instr->u.fun_call.args     = import_val(in);
+        instr->u.fun_call.dst      = import_val(in);
+        instr->u.fun_call.fun_type = import_type(in);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         instr->u.allocate_local.name = wgetstr(in);
@@ -399,7 +403,7 @@ Tac_TopLevel *tac_import_toplevel(WFILE *in)
     if (tag == TAG_EOL) {
         return NULL;
     }
-    if (tag < TAG_TAC_TOPLEVEL || tag > TAG_TAC_TOPLEVEL + TAC_TOPLEVEL_STATIC_CONSTANT) {
+    if (tag < TAG_TAC_TOPLEVEL || tag > TAG_TAC_TOPLEVEL + TAC_TOPLEVEL_EXTERN) {
         fprintf(stderr, "Error: bad TAC tag 0x%zx (expected 0x%x)\n", tag, TAG_TAC_TOPLEVEL);
         return NULL;
     }
@@ -414,7 +418,9 @@ Tac_TopLevel *tac_import_toplevel(WFILE *in)
         check_input(in, "function variadic");
         tl->u.function.noret = (bool)wgetw(in);
         check_input(in, "function noret");
+        tl->u.function.type          = import_type(in);
         tl->u.function.params        = import_param(in);
+        tl->u.function.locals        = import_param(in);
         tl->u.function.static_locals = import_static_local(in);
         tl->u.function.body          = import_instr(in);
         break;
@@ -432,15 +438,30 @@ Tac_TopLevel *tac_import_toplevel(WFILE *in)
         tl->u.static_constant.type = import_type(in);
         tl->u.static_constant.init = import_static_init(in);
         break;
+    case TAC_TOPLEVEL_EXTERN:
+        tl->u.extern_.name = wgetstr(in);
+        check_input(in, "extern name");
+        tl->u.extern_.type = import_type(in);
+        break;
     default:
         break;
     }
     return tl;
 }
 
+bool tac_import_begin_stream(WFILE *in)
+{
+    size_t magic = wgetw(in);
+    return !weof(in) && !werror(in) && magic == TAG_TAC_MAGIC;
+}
+
 Tac_Program *tac_import_program(WFILE *in)
 {
     Tac_Program *prog = tac_new_program();
+    if (!tac_import_begin_stream(in)) {
+        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC3')\n");
+        exit(1);
+    }
     for (Tac_TopLevel **p = &prog->decls;; p = &(*p)->next) {
         *p = tac_import_toplevel(in);
         if (*p == NULL)

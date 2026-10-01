@@ -1036,3 +1036,101 @@ TEST_F(TacBinaryTest, AllocateLocal)
     tac_free_program(orig);
     tac_free_program(copy);
 }
+
+// ---------------------------------------------------------------------------
+// Typed TAC: symbol types, function and callee types, externs
+// ---------------------------------------------------------------------------
+
+static Tac_Type *fun_type_int_variadic()
+{
+    Tac_Type *ft                 = tac_new_type(TAC_TYPE_FUN_TYPE);
+    ft->u.fun_type.param_types   = tac_new_type(TAC_TYPE_INT);
+    ft->u.fun_type.ret_type      = tac_new_type(TAC_TYPE_VOID);
+    ft->u.fun_type.variadic      = true;
+    return ft;
+}
+
+TEST_F(TacBinaryTest, TypedFunctionRoundTrip)
+{
+    Tac_Program *orig = tac_new_program();
+    Tac_TopLevel *fn  = make_empty_function("f", true);
+    fn->u.function.type = fun_type_int_variadic();
+
+    Tac_Param *p                     = tac_new_param();
+    p->name                          = xstrdup("%x");
+    p->type                          = tac_new_type(TAC_TYPE_INT);
+    fn->u.function.params            = p;
+    Tac_Param *l                     = tac_new_param();
+    l->name                          = xstrdup("%1");
+    l->type                          = tac_new_type(TAC_TYPE_POINTER);
+    l->type->u.pointer.target_type   = tac_new_type(TAC_TYPE_UCHAR);
+    fn->u.function.locals            = l;
+
+    Tac_Instruction *call          = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    call->u.fun_call.fun_name      = xstrdup("printf");
+    call->u.fun_call.args          = make_var("%x");
+    call->u.fun_call.fun_type      = fun_type_int_variadic();
+    fn->u.function.body            = call;
+    orig->decls                    = fn;
+
+    Tac_TopLevel *ext     = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    ext->u.extern_.name   = xstrdup("errno");
+    ext->u.extern_.type   = tac_new_type(TAC_TYPE_INT);
+    fn->next              = ext;
+
+    Tac_Program *result = roundtrip(orig);
+    EXPECT_TRUE(tac_compare_program(orig, result));
+    EXPECT_TRUE(tac_compare_toplevel(ext, result->decls->next));
+    ASSERT_NE(result->decls->u.function.locals, nullptr);
+    EXPECT_EQ(result->decls->u.function.locals->type->kind, TAC_TYPE_POINTER);
+    EXPECT_TRUE(result->decls->u.function.body->u.fun_call.fun_type->u.fun_type.variadic);
+
+    tac_free_program(orig);
+    tac_free_program(result);
+}
+
+TEST_F(TacBinaryTest, CloneTypeIsDeepAndEqual)
+{
+    Tac_Type *a = fun_type_int_variadic();
+    Tac_Type *b = tac_clone_type(a);
+    EXPECT_NE(a, b);
+    EXPECT_NE(a->u.fun_type.param_types, b->u.fun_type.param_types);
+    EXPECT_TRUE(tac_compare_type(a, b));
+    b->u.fun_type.variadic = false;
+    EXPECT_FALSE(tac_compare_type(a, b));
+    tac_free_type(a);
+    tac_free_type(b);
+}
+
+TEST_F(TacBinaryTest, TypeStr)
+{
+    Tac_Type *ft = fun_type_int_variadic();
+    char *s      = tac_type_str(ft);
+    EXPECT_STREQ(s, "fn(int, ...) -> void");
+    xfree(s);
+    tac_free_type(ft);
+
+    Tac_Type *arr                = tac_new_type(TAC_TYPE_ARRAY);
+    arr->u.array.size            = 4;
+    arr->u.array.elem_type       = tac_new_type(TAC_TYPE_POINTER);
+    arr->u.array.elem_type->u.pointer.target_type = tac_new_type(TAC_TYPE_STRUCTURE);
+    arr->u.array.elem_type->u.pointer.target_type->u.structure.tag  = xstrdup("S");
+    arr->u.array.elem_type->u.pointer.target_type->u.structure.size = 12;
+    s = tac_type_str(arr);
+    EXPECT_STREQ(s, "[4]*struct S(12)");
+    xfree(s);
+    tac_free_type(arr);
+}
+
+TEST_F(TacBinaryTest, RejectsStreamWithoutMagic)
+{
+    WFILE wout;
+    wopen(&wout, tmppath, "w");
+    wputw(0x54414332, &wout); // 'TAC2'
+    wclose(&wout);
+
+    WFILE win;
+    wopen(&win, tmppath, "r");
+    EXPECT_FALSE(tac_import_begin_stream(&win));
+    wclose(&win);
+}

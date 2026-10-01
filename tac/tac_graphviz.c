@@ -689,6 +689,12 @@ void tac_export_dot(FILE *fd, const Tac_TopLevel *tl)
             int pid = gen_node_id();
             fprintf(fd, "  n%d [label=\"Param: ", pid);
             emit_string(fd, p->name);
+            if (p->type) {
+                char *ts = tac_type_str(p->type);
+                fprintf(fd, " : ");
+                emit_string(fd, ts);
+                xfree(ts);
+            }
             fprintf(fd, "\", shape=box];\n");
             fprintf(fd, "  n%d -> n%d [label=\"param\"];\n", root, pid);
         }
@@ -718,6 +724,12 @@ void tac_export_dot(FILE *fd, const Tac_TopLevel *tl)
         emit_type(fd, tl->u.static_constant.type, root, "type");
         if (tl->u.static_constant.init)
             emit_static_init(fd, tl->u.static_constant.init, root);
+        break;
+    case TAC_TOPLEVEL_EXTERN:
+        fprintf(fd, "  n%d [label=\"Extern: ", root);
+        emit_string(fd, tl->u.extern_.name);
+        fprintf(fd, "\", shape=box];\n");
+        emit_type(fd, tl->u.extern_.type, root, "type");
         break;
     }
     fprintf(fd, "}\n");

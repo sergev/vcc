@@ -101,6 +101,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
   toplevel kind for referenced-but-undefined externals (`extern` objects, called
   functions) with their types; a `Tac_Type *fun_type` on `FUN_CALL`. Bump the
   stream magic to `TAC3`. Update `tac/tacky.asdl`, `tac.h`, export/import, YAML, DOT.
+  *Done.* `Tac_Param` carries a type; a function's `params` and `locals` (now
+  serialized) form its symbol list; the function toplevel and `FUN_CALL` carry a
+  `FUN_TYPE` (with a `variadic` flag); new toplevel `TAC_TOPLEVEL_EXTERN`; streams
+  start with `TAC3`. `tac_yaml_types = false` hides the annotations in YAML.
 - **T2. Typed temporaries in the translator.** Every `new_var_val`/`new_temp` site
   (about 55) records the type of the value it holds. The translator already knows
   it at each site; this is plumbing.

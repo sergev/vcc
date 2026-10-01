@@ -32,6 +32,9 @@ void codegen_program(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *
         // String constants are no longer emitted as standalone global modules;
         // each is folded into the (single) module that references it.
         break;
+    case TAC_TOPLEVEL_EXTERN:
+        // A referenced name is declared where it is used (SUBP).
+        break;
     }
 }
 

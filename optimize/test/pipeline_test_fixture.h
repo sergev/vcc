@@ -44,7 +44,8 @@ protected:
 
     void SetUp() override
     {
-        input_file = tmpfile();
+        tac_yaml_types = false; // expected output shows the instructions only
+        input_file     = tmpfile();
         ASSERT_NE(nullptr, input_file);
     }
 

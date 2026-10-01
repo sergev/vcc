@@ -358,7 +358,7 @@ immediately update the corresponding `.h` file. One-step changes prevent one-off
 ### The Binary IR Design Is Unusually Thoughtful
 
 Most toy compilers just pass AST pointers in memory or dump to text and re-parse. This project
-uses a proper binary format (wio) with a magic number (`TAC2`), size_t-wide words, and
+uses a proper binary format (wio) with a magic number (`TAC3`), size_t-wide words, and
 readable 4-letter ASCII tags. An expert would recognize this as production compiler technique —
 it allows offline debugging, binary diffs of IR, and piping between tools. It's the kind of
 thing you find in LLVM's bitcode format, just smaller and simpler.

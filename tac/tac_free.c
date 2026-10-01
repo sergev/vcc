@@ -142,6 +142,7 @@ void tac_free_instruction(Tac_Instruction *instr)
         }
         tac_free_val(instr->u.fun_call.args);
         tac_free_val(instr->u.fun_call.dst);
+        tac_free_type(instr->u.fun_call.fun_type);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         if (instr->u.allocate_local.name) {
@@ -189,6 +190,7 @@ void tac_free_param(Tac_Param *param)
     if (param->name) {
         xfree(param->name);
     }
+    tac_free_type(param->type);
     tac_free_param(param->next);
     xfree(param);
 }
@@ -233,6 +235,7 @@ void tac_free_toplevel(Tac_TopLevel *toplevel)
         if (toplevel->u.function.name) {
             xfree(toplevel->u.function.name);
         }
+        tac_free_type(toplevel->u.function.type);
         tac_free_param(toplevel->u.function.params);
         tac_free_param(toplevel->u.function.locals);
         tac_free_static_local(toplevel->u.function.static_locals);
@@ -251,6 +254,12 @@ void tac_free_toplevel(Tac_TopLevel *toplevel)
         }
         tac_free_type(toplevel->u.static_constant.type);
         tac_free_static_init(toplevel->u.static_constant.init);
+        break;
+    case TAC_TOPLEVEL_EXTERN:
+        if (toplevel->u.extern_.name) {
+            xfree(toplevel->u.extern_.name);
+        }
+        tac_free_type(toplevel->u.extern_.type);
         break;
     }
     tac_free_toplevel(toplevel->next);

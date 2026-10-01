@@ -183,6 +183,7 @@ static void export_instr(WFILE *out, const Tac_Instruction *instr)
         wputw(instr->u.fun_call.indirect ? 1 : 0, out);
         export_val(out, instr->u.fun_call.args);
         export_val(out, instr->u.fun_call.dst);
+        export_type(out, instr->u.fun_call.fun_type);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         wputstr(instr->u.allocate_local.name ? instr->u.allocate_local.name : "", out);
@@ -203,6 +204,7 @@ static void export_param(WFILE *out, const Tac_Param *p)
     }
     wputw(TAG_TAC_PARAM, out);
     wputstr(p->name ? p->name : "", out);
+    export_type(out, p->type);
     export_param(out, p->next);
 }
 
@@ -232,7 +234,9 @@ void tac_export_toplevel(WFILE *out, const Tac_TopLevel *tl)
         wputw(tl->u.function.global ? 1 : 0, out);
         wputw(tl->u.function.variadic ? 1 : 0, out);
         wputw(tl->u.function.noret ? 1 : 0, out);
+        export_type(out, tl->u.function.type);
         export_param(out, tl->u.function.params);
+        export_param(out, tl->u.function.locals);
         export_static_local(out, tl->u.function.static_locals);
         export_instr(out, tl->u.function.body);
         break;
@@ -247,9 +251,18 @@ void tac_export_toplevel(WFILE *out, const Tac_TopLevel *tl)
         export_type(out, tl->u.static_constant.type);
         export_static_init(out, tl->u.static_constant.init);
         break;
+    case TAC_TOPLEVEL_EXTERN:
+        wputstr(tl->u.extern_.name ? tl->u.extern_.name : "", out);
+        export_type(out, tl->u.extern_.type);
+        break;
     default:
         break;
     }
+}
+
+void tac_export_begin_stream(WFILE *out)
+{
+    wputw(TAG_TAC_MAGIC, out);
 }
 
 void tac_export_end_stream(WFILE *out)
@@ -284,6 +297,7 @@ static void export_type(WFILE *out, const Tac_Type *t)
     case TAC_TYPE_FUN_TYPE:
         export_type(out, t->u.fun_type.param_types);
         export_type(out, t->u.fun_type.ret_type);
+        wputw(t->u.fun_type.variadic ? 1 : 0, out);
         break;
     case TAC_TYPE_POINTER:
         export_type(out, t->u.pointer.target_type);
@@ -368,6 +382,7 @@ static void export_static_init(WFILE *out, const Tac_StaticInit *si)
 
 void tac_export_program(WFILE *out, const Tac_Program *prog)
 {
+    tac_export_begin_stream(out);
     if (prog) {
         for (const Tac_TopLevel *tl = prog->decls; tl; tl = tl->next)
             tac_export_toplevel(out, tl);

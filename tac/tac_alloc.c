@@ -36,6 +36,35 @@ Tac_Type *tac_new_type(Tac_TypeKind kind)
     return type;
 }
 
+Tac_Type *tac_clone_type(const Tac_Type *type)
+{
+    if (!type)
+        return NULL;
+    Tac_Type *t = tac_new_type(type->kind);
+    switch (type->kind) {
+    case TAC_TYPE_FUN_TYPE:
+        t->u.fun_type.param_types = tac_clone_type(type->u.fun_type.param_types);
+        t->u.fun_type.ret_type    = tac_clone_type(type->u.fun_type.ret_type);
+        t->u.fun_type.variadic    = type->u.fun_type.variadic;
+        break;
+    case TAC_TYPE_POINTER:
+        t->u.pointer.target_type = tac_clone_type(type->u.pointer.target_type);
+        break;
+    case TAC_TYPE_ARRAY:
+        t->u.array.elem_type = tac_clone_type(type->u.array.elem_type);
+        t->u.array.size      = type->u.array.size;
+        break;
+    case TAC_TYPE_STRUCTURE:
+        t->u.structure.tag  = type->u.structure.tag ? xstrdup(type->u.structure.tag) : NULL;
+        t->u.structure.size = type->u.structure.size;
+        break;
+    default:
+        break;
+    }
+    t->next = tac_clone_type(type->next);
+    return t;
+}
+
 // Allocate a new Tac_Const with the specified kind
 Tac_Const *tac_new_const(Tac_ConstKind kind)
 {

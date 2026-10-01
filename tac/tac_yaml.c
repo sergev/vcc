@@ -177,6 +177,10 @@ static void export_yaml_type(FILE *fd, const Tac_Type *type, int level)
         print_indent(fd, level);
         fprintf(fd, "ret_type:\n");
         export_yaml_type(fd, type->u.fun_type.ret_type, level + 1);
+        if (type->u.fun_type.variadic) {
+            print_indent(fd, level);
+            fprintf(fd, "variadic: true\n");
+        }
         break;
     case TAC_TYPE_POINTER:
         fprintf(fd, "pointer\n");
@@ -202,11 +206,24 @@ static void export_yaml_type(FILE *fd, const Tac_Type *type, int level)
     }
 }
 
-static void export_yaml_param_list(FILE *fd, const Tac_Param *param, int level)
+bool tac_yaml_types = true;
+
+// "<key>: <type>" on one line, in the compact tac_type_str spelling.
+static void export_yaml_type_str(FILE *fd, const char *key, const Tac_Type *type, int level)
+{
+    char *ts = tac_type_str(type);
+    print_indent(fd, level);
+    fprintf(fd, "%s: %s\n", key, ts);
+    xfree(ts);
+}
+
+static void export_yaml_param_list(FILE *fd, const char *key, const Tac_Param *param, int level)
 {
     while (param) {
         print_indent(fd, level);
-        fprintf(fd, "- param: %s\n", param->name ? param->name : "");
+        fprintf(fd, "- %s: %s\n", key, param->name ? param->name : "");
+        if (tac_yaml_types && param->type)
+            export_yaml_type_str(fd, "type", param->type, level + 1);
         param = param->next;
     }
 }
@@ -856,6 +873,8 @@ static void export_yaml_instruction(FILE *fd, const Tac_Instruction *instr, int 
             fprintf(fd, "dst:\n");
             export_yaml_val(fd, instr->u.fun_call.dst, level + 1);
         }
+        if (tac_yaml_types && instr->u.fun_call.fun_type)
+            export_yaml_type_str(fd, "fun_type", instr->u.fun_call.fun_type, level);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         fprintf(fd, "allocate_local\n");
@@ -891,9 +910,15 @@ void tac_export_yaml(FILE *fd, const Tac_TopLevel *tl)
         fprintf(fd, "  global: %s\n", tl->u.function.global ? "true" : "false");
         if (tl->u.function.noret)
             fprintf(fd, "  noret: true\n");
+        if (tac_yaml_types && tl->u.function.type)
+            export_yaml_type_str(fd, "type", tl->u.function.type, 1);
         if (tl->u.function.params) {
             fprintf(fd, "  params:\n");
-            export_yaml_param_list(fd, tl->u.function.params, 2);
+            export_yaml_param_list(fd, "param", tl->u.function.params, 2);
+        }
+        if (tac_yaml_types && tl->u.function.locals) {
+            fprintf(fd, "  locals:\n");
+            export_yaml_param_list(fd, "local", tl->u.function.locals, 2);
         }
         if (tl->u.function.static_locals) {
             fprintf(fd, "  static_locals:\n");
@@ -932,6 +957,12 @@ void tac_export_yaml(FILE *fd, const Tac_TopLevel *tl)
             fprintf(fd, "  init:\n");
             export_yaml_static_init(fd, tl->u.static_constant.init, 2);
         }
+        break;
+    case TAC_TOPLEVEL_EXTERN:
+        fprintf(fd, "  kind: extern\n");
+        fprintf(fd, "  name: %s\n", tl->u.extern_.name ? tl->u.extern_.name : "");
+        fprintf(fd, "  type:\n");
+        export_yaml_type(fd, tl->u.extern_.type, 2);
         break;
     }
 }

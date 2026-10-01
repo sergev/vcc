@@ -149,7 +149,7 @@ Tests: `decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `
 | `tac_print.c` | Human-readable TAC printing |
 | `tac_compare.c` | Structural comparison |
 | `tac_export.c`, `tac_import.c` | Binary wire format (read/write via `wio`) |
-| `tags.h` | 4-letter ASCII tag constants for binary wire format (`TAC2`) |
+| `tags.h` | 4-letter ASCII tag constants for binary wire format; a stream starts with the magic `TAC3` |
 | `tac_yaml.c` | YAML listing (debug/test; not re-importable) |
 | `tac_graphviz.c` | Graphviz DOT output |
 
@@ -198,8 +198,13 @@ then shrinks the stack frame to the slots still in use. See
   kind: function
   name: f
   global: true          # false for static
+  type: fn(int) -> int  # the function's type, one line (tac_type_str)
   params:               # omitted when empty
-    - param: x
+    - param: %x
+      type: int
+  locals:               # automatic locals and temporaries; omitted when empty
+    - local: %1
+      type: *int
   body:                 # omitted for prototypes
     - instruction:
       kind: ...
@@ -227,7 +232,17 @@ then shrinks the stack frame to the slots still in use. See
     kind: string
     value: hello
     null_terminated: true
+
+- toplevel:
+  kind: extern          # referenced in this unit, defined elsewhere
+  name: errno
+  type:
+    kind: int
 ```
+
+The `type:` lines, `locals:` and a call's `fun_type:` are the type annotations;
+setting `tac_yaml_types = false` leaves them out (the translator and optimizer test
+fixtures do, so their expected output shows only the instructions).
 
 #### Values — appear under `src:`, `dst:`, `condition:`, `args:`
 
@@ -243,8 +258,7 @@ const:
 ```
 
 **Variable name convention.** A `var` name encodes its storage class by its first
-character, so a backend can classify it from the name alone (the in-memory `locals`
-list is not serialized):
+character, so a backend can classify it from the name alone:
 
 | First char | Meaning | Examples |
 |------------|---------|----------|
@@ -285,7 +299,7 @@ The BESM-6 frame allocator (`backend/besm6/frame.c`) then assigns a stack slot t
 | `jump_if_zero` | `condition:` `target: label` |
 | `jump_if_not_zero` | `condition:` `target: label` |
 | `label` | `name: label` |
-| `fun_call` | `fun_name: f` `indirect: true` (omitted when false) `args:` list (omitted when none) `dst:` (omitted for void) |
+| `fun_call` | `fun_name: f` `indirect: true` (omitted when false) `args:` list (omitted when none) `dst:` (omitted for void) `fun_type:` the callee's type |
 | `fun_call_noreturn` | same fields as `fun_call`; a direct call to a `_Noreturn` function — the BESM-6 backend tail-jumps to it and drops the dead post-call path |
 
 Unary ops: `complement`, `negate`, `not`.

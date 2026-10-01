@@ -26,11 +26,12 @@ typedef struct {
 } Tac_Program;
 
 //
-// Identifier for identifier* sequences
+// A named frame-resident value: a parameter, an automatic local or a temporary.
 //
 typedef struct Tac_Param {
     struct Tac_Param *next; // Linked list
     char *name;
+    Tac_Type *type; // NULL when unknown (hand-built TAC)
 } Tac_Param;
 
 //
@@ -46,12 +47,13 @@ typedef struct Tac_StaticLocal {
 } Tac_StaticLocal;
 
 //
-// TopLevel: Function | StaticVariable | StaticConstant
+// TopLevel: Function | StaticVariable | StaticConstant | Extern
 //
 typedef enum {
     TAC_TOPLEVEL_FUNCTION,
     TAC_TOPLEVEL_STATIC_VARIABLE,
-    TAC_TOPLEVEL_STATIC_CONSTANT
+    TAC_TOPLEVEL_STATIC_CONSTANT,
+    TAC_TOPLEVEL_EXTERN
 } Tac_TopLevelKind;
 
 typedef struct Tac_TopLevel {
@@ -63,10 +65,10 @@ typedef struct Tac_TopLevel {
             bool global;
             bool variadic;
             bool noret;            // True if declared/defined _Noreturn
-            Tac_Param *params;     // Linked list of identifiers
-            Tac_Param *locals;     // Automatic local names (in-memory only; the
-                                   // optimizer uses these to tell locals from
-                                   // observable globals). Not serialized.
+            Tac_Type *type;        // Function type (FUN_TYPE); NULL when unknown
+            Tac_Param *params;     // Parameters, in order
+            Tac_Param *locals;     // Automatic locals and temporaries; with params,
+                                   // every frame-resident name of the body
             Tac_StaticLocal *static_locals; // Block-scope static variables, emitted
                                             // inside this function's module.
             Tac_Instruction *body; // Linked list of instructions
@@ -82,6 +84,10 @@ typedef struct Tac_TopLevel {
             Tac_Type *type;
             Tac_StaticInit *init;
         } static_constant;
+        struct {
+            char *name;     // object or function referenced but not defined in this unit
+            Tac_Type *type; // its declared type
+        } extern_;
     } u;
 } Tac_TopLevel;
 
@@ -371,8 +377,9 @@ typedef struct Tac_Instruction {
             // which (a global `f` may be either), and a backend that guesses from frame
             // residency calls the pointer's own storage.  FUN_CALL_NORETURN is always direct.
             bool indirect;
-            Tac_Val *args; // Linked list of values
+            Tac_Val *args;      // Linked list of values
             Tac_Val *dst;
+            Tac_Type *fun_type; // Callee's type (FUN_TYPE); NULL when unknown
         } fun_call;
         struct {
             char *name;    // frame-resident local aggregate name
@@ -461,6 +468,7 @@ typedef struct Tac_Type {
         struct {
             Tac_Type *param_types; // Linked list of types
             Tac_Type *ret_type;
+            bool variadic;
         } fun_type;
         struct {
             Tac_Type *target_type;
@@ -543,6 +551,8 @@ Tac_StaticLocal *tac_new_static_local(void);
 Tac_TopLevel *tac_new_toplevel(Tac_TopLevelKind kind);
 Tac_StaticInit *tac_new_static_init(Tac_StaticInitKind kind);
 Tac_Program *tac_new_program(void);
+// Deep copy of a type, including its ->next chain.
+Tac_Type *tac_clone_type(const Tac_Type *type);
 
 //
 // Deallocate
@@ -571,6 +581,9 @@ char *tac_escape_string_bytes(const char *s, size_t len);
 void tac_print_const(FILE *fd, const Tac_Const *constant, int depth);
 void tac_print_val(FILE *fd, const Tac_Val *val, int depth);
 void tac_print_type(FILE *fd, const Tac_Type *type, int depth);
+// One-line C-like spelling of a type, e.g. "*int", "[4]uchar", "fn(int, ...) -> void".
+// Returns an xalloc'd string; caller xfree()s it.
+char *tac_type_str(const Tac_Type *type);
 void tac_print_param(FILE *fd, const Tac_Param *param, int depth);
 void tac_print_static_init(FILE *fd, const Tac_StaticInit *init, int depth);
 void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth);
@@ -599,6 +612,8 @@ bool tac_compare_program(const Tac_Program *a, const Tac_Program *b);
 //
 typedef struct _wfile WFILE;
 
+// A stream is the magic word, the toplevels, then the end marker.
+void tac_export_begin_stream(WFILE *out);
 void tac_export_toplevel(WFILE *out, const Tac_TopLevel *tl);
 void tac_export_end_stream(WFILE *out);
 void tac_export_program(WFILE *out, const Tac_Program *prog);
@@ -606,12 +621,17 @@ void tac_export_program(WFILE *out, const Tac_Program *prog);
 //
 // Binary import (wio stream)
 //
+// Read and check the magic word; false if this is not a TAC stream of this version.
+bool tac_import_begin_stream(WFILE *in);
 Tac_TopLevel *tac_import_toplevel(WFILE *in);
 Tac_Program *tac_import_program(WFILE *in);
 
 //
 // YAML export
 //
+// When false, the YAML omits the type annotations (symbol types, callee types,
+// function types), leaving the instruction-level view.  Default true.
+extern bool tac_yaml_types;
 void tac_export_yaml(FILE *fd, const Tac_TopLevel *tl);
 void tac_export_yaml_instruction_list(FILE *fd, const Tac_Instruction *instr, int level);
 

@@ -219,7 +219,7 @@ void tac_print_type(FILE *fd, const Tac_Type *type, int depth)
     }
     if (type->kind == TAC_TYPE_FUN_TYPE) {
         print_indent(fd, depth + 1);
-        fprintf(fd, "Params:\n");
+        fprintf(fd, "Params:%s\n", type->u.fun_type.variadic ? " (variadic)" : "");
         tac_print_type(fd, type->u.fun_type.param_types, depth + 2);
         print_indent(fd, depth + 1);
         fprintf(fd, "Return:\n");
@@ -237,12 +237,95 @@ void tac_print_type(FILE *fd, const Tac_Type *type, int depth)
     } else if (type->kind == TAC_TYPE_STRUCTURE) {
         print_indent(fd, depth + 1);
         fprintf(fd, "Tag: %s\n", type->u.structure.tag ? type->u.structure.tag : "(null)");
+        print_indent(fd, depth + 1);
+        fprintf(fd, "Size: %d\n", type->u.structure.size);
     }
     if (type->next) {
         print_indent(fd, depth + 1);
         fprintf(fd, "Next:\n");
         tac_print_type(fd, type->next, depth + 2);
     }
+}
+
+// Growable string for tac_type_str.
+typedef struct {
+    char *buf;
+    size_t len, cap;
+} TypeStr;
+
+static void ts_puts(TypeStr *ts, const char *s)
+{
+    size_t n = strlen(s);
+    if (ts->len + n + 1 > ts->cap) {
+        size_t cap = (ts->len + n + 1) * 2;
+        char *nb   = xalloc(cap, __func__, __FILE__, __LINE__);
+        if (ts->buf) {
+            memcpy(nb, ts->buf, ts->len);
+            xfree(ts->buf);
+        }
+        ts->buf = nb;
+        ts->cap = cap;
+    }
+    memcpy(ts->buf + ts->len, s, n + 1);
+    ts->len += n;
+}
+
+static void ts_type(TypeStr *ts, const Tac_Type *type)
+{
+    static const char *const scalar[] = {
+        [TAC_TYPE_SCHAR] = "schar",   [TAC_TYPE_UCHAR] = "uchar",
+        [TAC_TYPE_SHORT] = "short",   [TAC_TYPE_INT] = "int",
+        [TAC_TYPE_LONG] = "long",     [TAC_TYPE_LONG_LONG] = "long_long",
+        [TAC_TYPE_USHORT] = "ushort", [TAC_TYPE_UINT] = "uint",
+        [TAC_TYPE_ULONG] = "ulong",   [TAC_TYPE_ULONG_LONG] = "ulong_long",
+        [TAC_TYPE_FLOAT] = "float",   [TAC_TYPE_DOUBLE] = "double",
+        [TAC_TYPE_LONG_DOUBLE] = "long_double", [TAC_TYPE_VOID] = "void",
+    };
+    char num[64];
+
+    if (!type) {
+        ts_puts(ts, "?");
+        return;
+    }
+    switch (type->kind) {
+    case TAC_TYPE_POINTER:
+        ts_puts(ts, "*");
+        ts_type(ts, type->u.pointer.target_type);
+        break;
+    case TAC_TYPE_ARRAY:
+        snprintf(num, sizeof num, "[%d]", type->u.array.size);
+        ts_puts(ts, num);
+        ts_type(ts, type->u.array.elem_type);
+        break;
+    case TAC_TYPE_STRUCTURE:
+        ts_puts(ts, "struct ");
+        ts_puts(ts, type->u.structure.tag ? type->u.structure.tag : "?");
+        snprintf(num, sizeof num, "(%d)", type->u.structure.size);
+        ts_puts(ts, num);
+        break;
+    case TAC_TYPE_FUN_TYPE:
+        ts_puts(ts, "fn(");
+        for (const Tac_Type *p = type->u.fun_type.param_types; p; p = p->next) {
+            ts_type(ts, p);
+            if (p->next || type->u.fun_type.variadic)
+                ts_puts(ts, ", ");
+        }
+        if (type->u.fun_type.variadic)
+            ts_puts(ts, "...");
+        ts_puts(ts, ") -> ");
+        ts_type(ts, type->u.fun_type.ret_type);
+        break;
+    default:
+        ts_puts(ts, scalar[type->kind]);
+        break;
+    }
+}
+
+char *tac_type_str(const Tac_Type *type)
+{
+    TypeStr ts = { 0 };
+    ts_type(&ts, type);
+    return ts.buf;
 }
 
 // Print a Tac_Param recursively to a file
@@ -254,7 +337,13 @@ void tac_print_param(FILE *fd, const Tac_Param *param, int depth)
         return;
     }
     print_indent(fd, depth);
-    fprintf(fd, "Param: %s\n", param->name ? param->name : "(null)");
+    if (param->type) {
+        char *ts = tac_type_str(param->type);
+        fprintf(fd, "Param: %s : %s\n", param->name ? param->name : "(null)", ts);
+        xfree(ts);
+    } else {
+        fprintf(fd, "Param: %s\n", param->name ? param->name : "(null)");
+    }
     if (param->next) {
         print_indent(fd, depth + 1);
         fprintf(fd, "Next:\n");
@@ -692,6 +781,12 @@ void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth)
         print_indent(fd, depth + 1);
         fprintf(fd, "Dst:\n");
         tac_print_val(fd, instr->u.fun_call.dst, depth + 2);
+        if (instr->u.fun_call.fun_type) {
+            char *ts = tac_type_str(instr->u.fun_call.fun_type);
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Fun_type: %s\n", ts);
+            xfree(ts);
+        }
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         print_indent(fd, depth + 1);
@@ -719,6 +814,7 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth)
     fprintf(fd, "TopLevel: %s\n",
             toplevel->kind == TAC_TOPLEVEL_FUNCTION          ? "FUNCTION"
             : toplevel->kind == TAC_TOPLEVEL_STATIC_VARIABLE ? "STATIC_VARIABLE"
+            : toplevel->kind == TAC_TOPLEVEL_EXTERN          ? "EXTERN"
                                                              : "STATIC_CONSTANT");
     switch (toplevel->kind) {
     case TAC_TOPLEVEL_FUNCTION:
@@ -726,9 +822,19 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth)
         fprintf(fd, "Name: %s\n", toplevel->u.function.name ? toplevel->u.function.name : "(null)");
         print_indent(fd, depth + 1);
         fprintf(fd, "Global: %d\n", toplevel->u.function.global);
+        if (toplevel->u.function.type) {
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Type:\n");
+            tac_print_type(fd, toplevel->u.function.type, depth + 2);
+        }
         print_indent(fd, depth + 1);
         fprintf(fd, "Params:\n");
         tac_print_param(fd, toplevel->u.function.params, depth + 2);
+        if (toplevel->u.function.locals) {
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Locals:\n");
+            tac_print_param(fd, toplevel->u.function.locals, depth + 2);
+        }
         for (const Tac_StaticLocal *sl = toplevel->u.function.static_locals; sl; sl = sl->next) {
             print_indent(fd, depth + 1);
             fprintf(fd, "StaticLocal: %s\n", sl->name ? sl->name : "(null)");
@@ -762,6 +868,13 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth)
         print_indent(fd, depth + 1);
         fprintf(fd, "Init:\n");
         tac_print_static_init(fd, toplevel->u.static_constant.init, depth + 2);
+        break;
+    case TAC_TOPLEVEL_EXTERN:
+        print_indent(fd, depth + 1);
+        fprintf(fd, "Name: %s\n", toplevel->u.extern_.name ? toplevel->u.extern_.name : "(null)");
+        print_indent(fd, depth + 1);
+        fprintf(fd, "Type:\n");
+        tac_print_type(fd, toplevel->u.extern_.type, depth + 2);
         break;
     }
     if (toplevel->next) {

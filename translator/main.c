@@ -307,6 +307,7 @@ void process_file(const Args *args)
             exit(1);
         }
         tac_out_ready = 1;
+        tac_export_begin_stream(&tac_out);
     }
 
     symtab_init();

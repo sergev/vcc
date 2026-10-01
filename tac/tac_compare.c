@@ -84,6 +84,8 @@ bool tac_compare_type(const Tac_Type *a, const Tac_Type *b)
             return false;
         if (!tac_compare_type(a->u.fun_type.ret_type, b->u.fun_type.ret_type))
             return false;
+        if (a->u.fun_type.variadic != b->u.fun_type.variadic)
+            return false;
         break;
     case TAC_TYPE_POINTER:
         if (!tac_compare_type(a->u.pointer.target_type, b->u.pointer.target_type))
@@ -99,6 +101,8 @@ bool tac_compare_type(const Tac_Type *a, const Tac_Type *b)
         if ((a->u.structure.tag == NULL) != (b->u.structure.tag == NULL))
             return false;
         if (a->u.structure.tag && strcmp(a->u.structure.tag, b->u.structure.tag) != 0)
+            return false;
+        if (a->u.structure.size != b->u.structure.size)
             return false;
         break;
     default:
@@ -117,6 +121,8 @@ bool tac_compare_param(const Tac_Param *a, const Tac_Param *b)
     if ((a->name == NULL) != (b->name == NULL))
         return false;
     if (a->name && strcmp(a->name, b->name) != 0)
+        return false;
+    if (!tac_compare_type(a->type, b->type))
         return false;
     return tac_compare_param(a->next, b->next);
 }
@@ -321,7 +327,8 @@ bool tac_compare_instruction(const Tac_Instruction *a, const Tac_Instruction *b)
         if (a->u.fun_call.indirect != b->u.fun_call.indirect)
             return false;
         return tac_compare_val(a->u.fun_call.args, b->u.fun_call.args) &&
-               tac_compare_val(a->u.fun_call.dst, b->u.fun_call.dst);
+               tac_compare_val(a->u.fun_call.dst, b->u.fun_call.dst) &&
+               tac_compare_type(a->u.fun_call.fun_type, b->u.fun_call.fun_type);
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         if ((a->u.allocate_local.name == NULL) != (b->u.allocate_local.name == NULL))
             return false;
@@ -358,7 +365,9 @@ bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
             return false;
         if (a->u.function.noret != b->u.function.noret)
             return false;
-        return tac_compare_param(a->u.function.params, b->u.function.params) &&
+        return tac_compare_type(a->u.function.type, b->u.function.type) &&
+               tac_compare_param(a->u.function.params, b->u.function.params) &&
+               tac_compare_param(a->u.function.locals, b->u.function.locals) &&
                tac_compare_static_local(a->u.function.static_locals,
                                         b->u.function.static_locals) &&
                tac_compare_instruction(a->u.function.body, b->u.function.body);
@@ -381,6 +390,12 @@ bool tac_compare_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *b)
             return false;
         return tac_compare_type(a->u.static_constant.type, b->u.static_constant.type) &&
                tac_compare_static_init(a->u.static_constant.init, b->u.static_constant.init);
+    case TAC_TOPLEVEL_EXTERN:
+        if ((a->u.extern_.name == NULL) != (b->u.extern_.name == NULL))
+            return false;
+        if (a->u.extern_.name && strcmp(a->u.extern_.name, b->u.extern_.name) != 0)
+            return false;
+        return tac_compare_type(a->u.extern_.type, b->u.extern_.type);
     }
     return tac_compare_toplevel(a->next, b->next);
 }
