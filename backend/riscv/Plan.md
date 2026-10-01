@@ -22,156 +22,37 @@ Step IDs are stable: a finished step is marked done, never renumbered.
 Verified 2026-09-30: a hand-written `_start`/`main` assembled with Homebrew
 clang, linked by `ld.lld` at `0x80000000`, ran under qemu and printed over the UART.
 
-## The main gap: TAC is untyped
+## What the frontend provides
 
-A TAC variable is a bare name. BESM-6 never needed more, since every scalar is one
-48-bit word. RISC-V needs, for every operand:
+The frontend work (decoupling, typed TAC) is done; see
+[Technical_Reference.md](../../docs/Technical_Reference.md) for the format. The backend
+can rely on:
 
-- **width**: `addw` vs `add`, `lw` vs `ld`, sign/zero extension after 32-bit ops;
-- **int vs float vs double**: which register file, `fadd.s` vs `fadd.d`
-  (`TAC_BINARY_ADD_DOUBLE` is used for all three FP types);
-- **signedness of narrow loads**: `lb` vs `lbu`;
-- **aggregate size/layout**: struct copies and psABI argument classification;
-- **the callee's type at a call**: which arguments are variadic (a variadic
-  `double` travels in an integer register), and the signature of an indirect call.
-
-Phase 1 adds this. It is the prerequisite for everything else.
-
-## Phase 0 — groundwork (decoupling)
-
-- **D1. TAC audit for `riscv64`.** Run the whole test corpus (chapter sources,
-  translator fixtures) through `lower -t riscv64` and check for crashes or BESM-6
-  assumptions: word-sized chunks, `INIT_POINTER` "multiple of 6",
-  `INIT_FAT_POINTER` "word*6 + byte_from_MSB" encoding, `TAC_TYPE_STRUCTURE.size`
-  "word count", 6-byte character-constant limit in `parser/expr.c`. Output: a list
-  of defects, each fixed under D2 or T-steps.
-  *Done.* All 766 programs embedded in `besm-tests` that lower for `besm6` also
-  lower for `riscv64`. Defects found:
-  - static `int`/`unsigned`/`long`/word `_Bool` and integer-to-pointer
-    initializers always use the 64-bit `I64`/`U64` slot (`const_convert.c`,
-    `initializers.c`), wrong where the type is 4 bytes → D2;
-  - a static `char *p = &c` adds byte offset 5 (the BESM-6 low byte of a char's
-    one-word cell) on every target (`initializers.c`) → D2;
-  - character constants are capped at 6 bytes and typed `int` up to 5 bytes, the
-    BESM-6 widths, in the parser, which does not know the target → D2;
-  - `TAC_TYPE_STRUCTURE.size` is in bytes, but documented as a word count → D2;
-  - aggregate copies in pointer-size chunks → T5; one-pointer sret threshold → T6.
-- **D2. Fix the small leaks found by D1.** Character-constant length from the target
-  descriptor; TAC comments and field docs stated per target, not in BESM-6 units.
-  *Done.* Static integer slots follow the object's size (`new_static_init_int`);
-  `&c` adds the low-byte offset only on a word-addressed target
-  (`target_word_addressed()`); the parser packs up to 8 bytes and the semantic pass
-  rejects a character constant that does not fit the target's `int`.
-- **D3. Generic backend driver.** Split `backend/main.c` into a shared
-  `backend/common/driver.c` (argument parsing, TAC import, toplevel loop, output
-  file) and a per-backend descriptor: name, default extension, extra options,
-  `codegen_toplevel` callback. `genbesm` keeps its exact CLI and output.
-  *Done.* `backend_main()` with a `Backend` of flags, `output_ext` and `codegen`
-  callbacks; `backend/besm6/main.c` is the BESM-6 descriptor.
-- **D4. Target-specific intrinsics hook.** Move the `__besm6_*` immediate-argument
-  table out of `semantic/expressions.c` behind a per-target table in the target
-  descriptor, so RISC-V can add its own (`__riscv_csrr`, …) later without editing
-  the semantic pass.
-  *Done.* `Target.immediate_args` (`semantic/target.h`); only `besm6` has one.
-- **D5. Shared test utilities.** Move the target-neutral parts of
-  `backend/besm6/test/codegen_test.h` (`RunExternalProgram`, `RunTool`, `ReadFile`,
-  `tool_available`, the in-process parse/lower front half) into
-  `libutil/test/` or `backend/common/test/`. Rename the `BESM6_CPP` /
-  `BESM6_INCLUDE_DIR` test defines to target-neutral names with a per-target
-  include dir.
-  *Done.* `libutil/test/test_tools.h` (process/file helpers, `FlockGuard`),
-  `backend/common/test/backend_test.h` (`BackendTest`: target selection,
-  `CompileToTac`, `ScratchPath`); the defines are now `TEST_CPP`/`TEST_INCLUDE_DIR`.
-- **D6. Shared book conformance suite.** Extract the "Writing a C Compiler" run
-  programs from `backend/besm6/test/chapter*_tests.cpp` into a target-neutral form
-  (the source and the host-`cc` expected result) driven by a per-backend
-  `CompileAndRunBook`. BESM-6-specific rewrites (`putch` for `putchar`, etc.) become
-  per-target exclusion or substitution lists. `besm-tests` must pass unchanged.
-  *Done.* The 682 programs live in `backend/common/test/book/` as `BookTest`
-  tests; each backend's `test/book_test.h` defines `BookTest` and its skip list
-  (`SkipIfListed`). None needed skipping on BESM-6. Expected values that differ by
-  target (chapter 17 `sizeof`) will be handled when RISC-V first runs them (R3).
-
-`make run` stays green after every D-step.
-
-## Phase 1 — typed TAC
-
-- **T1. Design.** A per-function symbol list `{name, Tac_Type}` covering
-  parameters, locals and temporaries (serialized, unlike today's `locals`); a new
-  toplevel kind for referenced-but-undefined externals (`extern` objects, called
-  functions) with their types; a `Tac_Type *fun_type` on `FUN_CALL`. Bump the
-  stream magic to `TAC3`. Update `tac/tacky.asdl`, `tac.h`, export/import, YAML, DOT.
-  *Done.* `Tac_Param` carries a type; a function's `params` and `locals` (now
-  serialized) form its symbol list; the function toplevel and `FUN_CALL` carry a
-  `FUN_TYPE` (with a `variadic` flag); new toplevel `TAC_TOPLEVEL_EXTERN`; streams
-  start with `TAC3`. `tac_yaml_types = false` hides the annotations in YAML.
-- **T2. Typed temporaries in the translator.** Every `new_var_val`/`new_temp` site
-  (about 55) records the type of the value it holds. The translator already knows
-  it at each site; this is plumbing.
-  *Done.* `new_typed_temp`/`new_var_val` take the value's type; locals, params,
-  the function type and each call's `fun_type` are filled in; `translate_unit_end()`
-  emits the extern list. All 800 corpus programs give byte-identical BESM-6
-  assembly, and every `%` name in their `riscv64` TAC has a typed symbol.
-- **T3. Optimizer keeps types consistent.** Any pass that creates or renames a
-  variable updates the symbol list; `percent_locals_in_function` renames the
-  symbol list along with the body.
-  *Done.* No pass creates or renames a variable; `optimize_prune_locals` drops
-  locals the optimized body no longer mentions. `percent_locals_in_function`
-  renames the lists with the body (T2), leaving temporaries alone.
-- **T4. Struct layout in TAC types.** `TAC_TYPE_STRUCTURE` carries byte size,
-  alignment, and member `(offset, type)` list — enough for psABI classification.
-  *Done.* Plus `is_union`; members are listed by value, not behind a pointer.
-  Typecheck caches each node's `StructDef` (`cached_def`) and `structtab` retires
-  purged definitions instead of freeing them, so block-scope tags, even reused in
-  sibling scopes, keep their layout until lowering.
-- **T5. Aggregate copy granularity.** `gen_aggregate_assign`/`gen_struct_assign`
-  copy in pointer-size chunks, which over-copies a 12-byte, 4-aligned struct on a
-  64-bit target. Copy in chunks of the aggregate's alignment, or emit a tail of
-  narrower copies.
-  *Done.* `gen_aggregate_copy` copies in chunks of `aggregate_chunk()` = min(alignment,
-  word), typed by an unsigned integer of that size (byte kinds for 1-byte chunks);
-  assignment, initialization, `?:` and the sret return copy all use it. Struct
-  arguments are still split into words for BESM-6 (T6). `gen_zero_fill` was already
-  exact (word loop plus byte tail).
-- **T6. By-value struct threshold.** `type_is_byval_sret` uses one pointer size; the
-  psABI passes up to 2×XLEN in registers. Make the threshold (and whether to lower
-  to sret in the frontend at all) a target property.
-  *Done.* `Target.struct_return_max` (0 = two pointers: 16 bytes on RV64; BESM-6 one
-  word) and `Target.struct_args_split` (BESM-6 only). On RV64 the frontend lowers
-  only a return wider than 16 bytes to a hidden first-argument pointer, as the psABI
-  does, and passes struct arguments whole for the backend to classify. A struct `?:`
-  on a byte-addressed target merges in a slot (`type_needs_slot`).
-- **T7. Verifier.** A `tac_verify` check, run in debug builds and by tests: every
-  variable has a type, operand types agree with the operator.
-  *Done.* `tac/tac_verify.c`, `lower --verify`, on in the test fixtures. It found
-  `&&`/`||` testing a floating operand against an integer 0, untyped block-scope
-  externs (now `EXTERN` toplevels ahead of the function), and BESM-6 `p += n`
-  results typed as the integer.
-
-Defects found along the way, fixed in the shared code:
-
-- A struct wider than a word read through memory (`*p`, `a[i]`, `s.m`, `p->m`) and
-  used as a value was loaded as one word: a BESM-6 miscompile of `return *p;` and
-  `f(*p)`. Such a value is now copied into a slot (`gen_aggregate_rvalue`).
-- `p ± n`, `++p` and `p - q` on a non-char pointer with a pointee of a word or less
-  were a plain add/subtract, right only on a word-addressed machine. On a
-  byte-addressed target they are now `ADD_PTR` scaled by the pointee size, and a
-  difference is divided by it (`wide_ptr_scale`).
-
-BESM-6 ignores the new information; its tests and generated code stay identical.
+- a type for every name: `params` + `locals` of a function, its `type`, a call's
+  `fun_type`, and `static_variable`/`static_constant`/`extern` toplevels;
+- struct types with size, alignment and members (by value);
+- aggregate copies in chunks of the alignment, at most one word;
+- pointer arithmetic already scaled to bytes (`ADD_PTR`, divided differences);
+- a struct return wider than 16 bytes lowered to a hidden first-argument pointer;
+  narrower returns and all struct arguments come whole, for the backend to classify;
+- `tac_verify_program` to check imported TAC, and `lower --verify`;
+- the shared driver (`backend/common/driver.c`), test fixture
+  (`backend/common/test/backend_test.h`) and book suite
+  (`backend/common/test/book/`, `BookTest` with a per-backend skip list).
 
 ## Phase 2 — backend skeleton
 
 - **R1. Skeleton.** `backend/riscv/` with `CMakeLists.txt`, `rv.h` (IR: function,
   block, instruction over virtual registers), `codegen.c`, `emit.c`, its own
-  `main.c` on the D3 driver, and `genriscv`. Emits `.text`/`.globl`/labels.
+  `main.c` on the shared driver, and `genriscv`. Emits `.text`/`.globl`/labels.
 - **R2. Runtime stub.** `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call
   `main`, pass its result to the finisher), `link.ld`, and `putbyte`/`flush`/`exit`
   over the UART and finisher. Assembled with clang, archived with `llvm-ar`.
 - **R3. Run harness.** `backend/riscv/test/` fixture with `CompileToRiscv` (golden
   assembly) and `CompileAndRunRiscv` (assemble, link with crt0 + runtime, run qemu
   with `-display none -serial stdio -monitor none` and a timeout, decode the
-  finisher's exit status), plus the D6 `CompileAndRunBook`. CMake finds a
+  finisher's exit status), plus its `book_test.h` for the shared `BookTest` suite
+  (skip list, per-target expectations such as chapter 17 `sizeof`). CMake finds a
   RISC-V-capable clang (hint `/opt/homebrew/opt/llvm/bin`), `ld.lld`, `llvm-ar` and
   qemu; tests guard with `SKIP_IF_NO_RISCV_TOOLS()` so `make run` stays green
   without them.
@@ -207,7 +88,7 @@ assembly tests pin the selected instructions.
   `GET_ADDRESS_DECAY` = address, `LOAD_BYTE` = `lb`/`lbu`, `PTR_DIFF` = `sub`,
   `PTR_TO_CHAR_PTR`/`CHAR_PTR_TO_PTR` = copy.
 - **R12. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
-  copies, by-value and returned structs with the internal ABI from T6.
+  copies, by-value and returned structs (whole, or through the hidden pointer).
 
 ## Phase 4 — psABI conformance
 
@@ -266,15 +147,13 @@ assembly tests pin the selected instructions.
 
 ## Risks
 
-- **Typed TAC touches everything upstream.** Mitigation: T7's verifier, and the
-  BESM-6 golden tests as a regression net — BESM-6 output must not change.
-- **BESM-6 assumptions hidden in the translator** beyond those already known (word
-  chunking, sret threshold). D1 exists to find them before the backend depends on
-  them.
+- **BESM-6 assumptions still hidden in the translator.** Two surfaced late (wide
+  struct values read through memory, unscaled pointer arithmetic). Mitigation: the
+  TAC verifier, RISC-V run tests, and the BESM-6 tests as a regression net.
 - **qemu on macOS is system-mode only**: the harness owns its crt0/linker script;
   no libc from the host toolchain is used.
-- **The book suite is BESM-6-tuned today.** D6 must not weaken the BESM-6 tests
-  while making them shareable.
+- **The book suite is BESM-6-adapted** (`putch`, chapter 17 `sizeof`). Per-target
+  expectations must not weaken the BESM-6 tests.
 
 ## Open questions
 
