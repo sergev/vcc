@@ -343,3 +343,32 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// The C library: ldexp/frexp at the edges of binary64, and some of libc/common.
+TEST_F(RiscvTest, RunLibc)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("hello\n", CompileAndRunRiscv(R"PROG(
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    int e;
+    double tiny = ldexp(1.0, -1074);         // the smallest subnormal
+    double m    = frexp(tiny, &e);
+    char buf[16] = "abcdef";
+    memmove(buf + 2, buf, 4);                // overlapping: "ababcd"
+    char words[] = "one, two";
+    char *w1 = strtok(words, ", ");
+    char *w2 = strtok(0, ", ");
+    puts("hello");
+    return (ldexp(3.0, 4) != 48.0) | (ldexp(1.0, 1024) != ldexp(2.0, 1023)) << 1 |
+           (tiny == 0 || tiny * 0.5 != 0) << 2 | (m != 0.5 || e != -1073) << 3 |
+           (frexp(-12.0, &e) != -0.75 || e != 4) << 4 | (strcmp(buf, "ababcd") != 0) << 5 |
+           (strcmp(w1, "one") || strcmp(w2, "two")) << 6 |
+           (atoi("  -42x") != -42) << 7 | (strcmp(strstr("haystack", "st"), "stack") != 0) << 8 |
+           (fma(2.0, 3.0, 1.0) != 7.0 || fmax(1.0, 2.0) != 2.0) << 9;
+})PROG"));
+    EXPECT_EQ(0, exit_status);
+}

@@ -49,12 +49,13 @@ endmacro()
 
 # The portable C routines shared by every BESM-6 assembler backend (printf/doprnt,
 # sprintf/snprintf, string/mem/math, atoi, the putchar/putch stdout wrappers).  Compiled from
-# the parent dir (libc/besm6), exactly as the Madlen build does.  malloc is dropped here for
+# libc/common or libc/besm6, exactly as the Madlen build does.  malloc is dropped here for
 # the same reason the Madlen libc.bin drops it — the dubna monitor supplies no heap memory map.
 set(BEMSH_C_PORTABLE ${LIBC_C_PORTABLE})
 list(REMOVE_ITEM BEMSH_C_PORTABLE malloc)
 foreach(name ${BEMSH_C_PORTABLE})
-    besm6_compile_libc_c_bemsh(${name} ${BEMSH_DIR}/..)
+    libc_c_dir(${name} dir)
+    besm6_compile_libc_c_bemsh(${name} ${dir})
 endforeach()
 
 # The Dubna-monitor stdout leaves (shared with the Madlen build, compiled from ../madlen).

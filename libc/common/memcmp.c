@@ -3,7 +3,7 @@
  *
  * Returns <0, 0, or >0 according to whether the first differing byte in s1 is
  * less than, equal to, or greater than the corresponding byte in s2, with the
- * bytes interpreted as unsigned char.  s1/s2 are fat char* cursors.
+ * bytes interpreted as unsigned char.
  */
 #include <string.h>
 

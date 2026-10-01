@@ -2,7 +2,7 @@
  * memchr — locate the byte c within the first n bytes of s (C11 §7.24.5.1).
  *
  * c is converted to unsigned char.  Returns a pointer to the first matching
- * byte, or NULL if c does not occur.  s is a fat char* cursor.
+ * byte, or NULL if c does not occur.
  */
 #include <string.h>
 

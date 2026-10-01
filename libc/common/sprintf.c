@@ -3,7 +3,8 @@
  *
  * Equivalent to snprintf with no size limit: writes the formatted string plus a
  * terminating NUL into buf and returns its length.  Shares the engine __doprnt
- * with printf (see doprnt.c).  A large nominal size stands in for "unbounded".
+ * with printf (the target's doprnt.c).  A large nominal size stands in for
+ * "unbounded".
  */
 #include <stdio.h>
 

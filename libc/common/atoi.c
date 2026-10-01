@@ -3,9 +3,7 @@
  *
  * Equivalent to (int)strtol(nptr, NULL, 10) except for error behaviour: skip
  * leading white space, take an optional '+'/'-' sign, then accumulate decimal
- * digits.  nptr is a fat char* cursor, so the scan crosses word boundaries on
- * its own (b/pinc); the digit and white-space characters are ASCII-stable
- * under KOI-7.
+ * digits.
  */
 #include <stdlib.h>
 

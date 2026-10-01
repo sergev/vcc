@@ -3,7 +3,7 @@
  *
  * Unlike memcpy, the regions may overlap.  When dest precedes src the copy
  * runs forward; otherwise it runs backward (high index to low) so a byte is
- * read before it is overwritten.  d/s are fat char* cursors.
+ * read before it is overwritten.
  */
 #include <string.h>
 

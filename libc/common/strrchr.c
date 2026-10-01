@@ -3,7 +3,7 @@
  *
  * c is converted to char.  The terminating '\0' is part of the string, so
  * strrchr(s, 0) returns a pointer to it.  Returns NULL if c is not found.
- * Scans forward, remembering the last hit, to avoid backward fat-pointer walks.
+ * Scans forward, remembering the last hit.
  */
 #include <string.h>
 

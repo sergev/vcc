@@ -53,7 +53,7 @@ set(UNIX_ASM_LIBC exit frexp ldexp)
 # Shipped standard headers the portable C sources #include; an edit to any of them rebuilds.
 file(GLOB BESM6_HEADERS ${PORTABLE_DIR}/include/*.h)
 
-# Compile one NAME.c (portable from ${PORTABLE_DIR}, or a leaf from here) through
+# Compile one NAME.c (portable from libc/common or ${PORTABLE_DIR}, or a leaf from here) through
 # cpp -> parse -> lower -> genbesm --unix -> b6as into NAME.o, and record it in the
 # ${objlist} variable (LIBC0_OBJS or RUNTIME_OBJS).
 set(LIBC0_OBJS "")
@@ -90,7 +90,8 @@ macro(besm6_unix_assemble name objlist)
 endmacro()
 
 foreach(name ${LIBC_C_PORTABLE})
-    besm6_unix_compile_c(${name} ${PORTABLE_DIR} LIBC0_OBJS)
+    libc_c_dir(${name} dir)
+    besm6_unix_compile_c(${name} ${dir} LIBC0_OBJS)
 endforeach()
 foreach(name ${UNIX_LEAVES})
     besm6_unix_compile_c(${name} ${UNIX_DIR} LIBC0_OBJS)

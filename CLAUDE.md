@@ -95,8 +95,9 @@ so `libc/besm6/CMakeLists.txt` drops `malloc` from `LIBC_C_MADLEN_SOURCES` and i
 neither `libc.bin` nor `libbem.bin`), `atoi`, and the math helpers
 (`fabs`/`fmin`/`fmax`/`fma`/`modf`, plus the frameless `frexp`/`ldexp`). The C sources are
 split by Dubna dependency: the **portable** routines (everything above the I/O leaves — the
-format engine, allocator, string/mem/math) live in `libc/besm6/*.c` and are shared by every
-BESM-6 assembler backend, while only the three Dubna-monitor **leaves** — `putbyte` (owns the
+format engine, allocator, string/mem/math) are shared by every BESM-6 assembler backend —
+the target-neutral ones in `libc/common/*.c` (also compiled for RISC-V), the BESM-6-specific
+`doprnt`/`modf`/`malloc`/`putch` in `libc/besm6/*.c` — while only the three Dubna-monitor **leaves** — `putbyte` (owns the
 KOI7 stdout buffer), `flush` (`b/tout`), `getch` (`moncard_`/`monread_`) — stay in
 `libc/besm6/madlen/*.c` alongside the hand-written Madlen helpers; the sibling
 `libc/besm6/unix` target reimplements those three over Unix v7 syscalls (`write.s`/`read.s`

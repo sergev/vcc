@@ -3,7 +3,7 @@
  *
  * Returns a pointer to a static, read-only message for errnum.  The error set
  * matches <errno.h> (EDOM=1 .. EIO=6); unknown codes yield a generic message.
- * Messages are UPPERCASE so they round-trip through the KOI-7 output charset.
+ * Messages are upper case, which the BESM-6 output charset (KOI-7) can print.
  */
 #include <string.h>
 

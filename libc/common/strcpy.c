@@ -2,7 +2,7 @@
  * strcpy — copy the NUL-terminated string src into dest (C11 §7.24.2.3).
  *
  * Copies up to and including the terminating '\0'.  The objects must not
- * overlap.  dest/src are fat char* cursors advancing across word boundaries.
+ * overlap.
  */
 #include <string.h>
 

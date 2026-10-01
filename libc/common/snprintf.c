@@ -3,8 +3,8 @@
  *
  * Writes at most size-1 characters plus a terminating NUL into buf, and returns
  * the number of characters that would have been written had the buffer been
- * large enough.  Shares the engine __doprnt with printf (see doprnt.c); the
- * variadic arguments are reached via <stdarg.h>.
+ * large enough.  Shares the engine __doprnt with printf (the target's
+ * doprnt.c); the variadic arguments are reached via <stdarg.h>.
  */
 #include <stdio.h>
 

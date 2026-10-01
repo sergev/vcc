@@ -47,8 +47,7 @@ and `riscv-tests` with `CompileToRiscv`, `CompileAndRunRiscv` and `CompileAndRun
 Instruction selection (R5–R12) is done: every TAC variable lives in a stack slot,
 and all of ch. 1–20 run. The 72 book programs whose results depend on integer
 widths or sizes are shared in their generic LP64 form; BESM-6 runs its own versions
-from `backend/besm6/test/book_besm6_tests.cpp`. Three wait for library routines
-(R17).
+from `backend/besm6/test/book_besm6_tests.cpp`.
 
 psABI conformance (R13–R16) is done: the full LP64D calling convention including
 FP-register structs, variadic functions, interop tests against clang in both
@@ -56,10 +55,11 @@ directions, and every book program compared with clang.
 
 ## Phase 5 — runtime library and headers
 
-- **R17. Portable libc shared.** Move the target-neutral sources of
-  `libc/besm6/*.c` to `libc/common/` after checking each for BESM-6 assumptions;
-  compile them with our toolchain for both targets. The RISC-V library is
-  `libc/riscv` leaves + common sources.
+- **R17. Portable libc shared.** *Done.* The target-neutral sources of
+  `libc/besm6/*.c` are in `libc/common/`, compiled with our toolchain for both
+  targets; `doprnt`, `modf`, `malloc` and `putch` stay BESM-6-specific. The RISC-V
+  library is `libc/riscv` leaves (console, bump `malloc`, C `ldexp`/`frexp`) +
+  common sources; `printf` waits for a portable `doprnt` (R19).
 - **R18. Headers.** Freestanding headers for LP64 (`limits.h`, `stdint.h`,
   `float.h`, `stdarg.h`, `stddef.h`) in `libc/riscv/include/`; hosted headers shared
   from a common include dir where they are target-neutral. A `riscv-headers`

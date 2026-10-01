@@ -3,7 +3,7 @@
  *
  * Copies characters from src up to n.  If src is shorter than n, the remainder
  * of dest is padded with '\0'.  If src is n or longer, no terminating '\0' is
- * written.  dest/src are fat char* cursors.
+ * written.
  */
 #include <string.h>
 

@@ -35,8 +35,9 @@ file(GLOB BESM6_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
 # in the build directory via cpp -> parse -> lower -> genbesm --madlen.  genbesm now
 # defaults to Unix (b6as) output, so the Madlen dialect is requested explicitly;
 # besmc only recognizes the .madlen extension, so genbesm writes there.
-# Portable routines shared by every BESM-6 assembler backend, compiled from this
-# directory (libc/besm6).  Most have no Dubna dependency — they build on the
+# Portable routines shared by every BESM-6 assembler backend, compiled from
+# libc/common (LIBC_C_COMMON) or, for the BESM-6-specific ones, this directory
+# (libc_c_dir picks).  Most have no Dubna dependency — they build on the
 # putbyte/flush/getch seam or are pure computation — so libc/besm6/unix and
 # libc/besm6/bemsh will reuse them once each supplies its own leaves below.  The
 # lone exception is malloc: its heap is provisioned between the linker `end` symbol
@@ -51,6 +52,16 @@ set(LIBC_C_PORTABLE
     strcmp strncmp strchr strrchr strstr
     strtok strerror
     atoi)
+
+# The source directory of portable routine `name`.
+set(LIBC_BESM6_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+macro(libc_c_dir name outvar)
+    if(${name} IN_LIST LIBC_C_COMMON)
+        set(${outvar} ${LIBC_COMMON_DIR})
+    else()
+        set(${outvar} ${LIBC_BESM6_DIR})
+    endif()
+endmacro()
 
 # Dubna monitor glue: the byte-emission/reading leaves, compiled from madlen/.
 # A different assembler target reimplements just these three (plus the .madlen
@@ -87,7 +98,8 @@ endmacro()
 set(LIBC_C_MADLEN_SOURCES ${LIBC_C_PORTABLE})
 list(REMOVE_ITEM LIBC_C_MADLEN_SOURCES malloc)
 foreach(name ${LIBC_C_MADLEN_SOURCES})
-    besm6_compile_libc_c(${name} ${CMAKE_CURRENT_SOURCE_DIR})
+    libc_c_dir(${name} dir)
+    besm6_compile_libc_c(${name} ${dir})
 endforeach()
 foreach(name ${LIBC_C_DUBNA})
     besm6_compile_libc_c(${name} ${LIBC_DIR})

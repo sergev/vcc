@@ -9,13 +9,6 @@ protected:
     void SetUp() override
     {
         RiscvTest::SetUp();
-        static const SkippedTest skipped[] = {
-            { "Chapter13_StandardLibraryCall", "needs fma and ldexp (R17)" },
-            { "Chapter13_DoubleParamsAndResultLibrary", "needs fmax (R17)" },
-            { "Chapter16_StandardLibraryCalls", "needs atoi (R17)" },
-            { nullptr, nullptr },
-        };
-        SkipIfListed(skipped);
         SKIP_IF_NO_RISCV_TOOLS();
     }
 
