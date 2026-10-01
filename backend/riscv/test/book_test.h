@@ -14,7 +14,7 @@ protected:
     {
         RiscvTest::SetUp();
         // Chapters the backend handles so far; the list grows with Phase 3.
-        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 };
+        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
         const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
         int chapter      = strncmp(name, "Chapter", 7) == 0 ? atoi(name + 7) : 0;
         if (!chapters.count(chapter))
@@ -47,8 +47,23 @@ protected:
             { "Chapter12_SameSizeConversion", W },
             { "Chapter12_StaticInitializers", W },
             { "Chapter12_UnsignedIncrDecr", W },
+            { "Chapter14_BitshiftDereferencedPtrs", W },
+            { "Chapter14_CompoundBitwiseDereferencedPtrs", W },
+            { "Chapter14_IncrAndDecrThroughPointer", W },
+            { "Chapter15_Automatic", W },
+            { "Chapter15_CompoundAssignToSubscriptedVal", W },
+            { "Chapter15_CompoundBitwiseSubscript", W },
+            { "Chapter15_CompoundPointerAssignment", W },
+            { "Chapter15_ImplicitAndExplicitConversions", W },
+            { "Chapter16_AccessThroughCharPointer", W },
+            { "Chapter16_BitshiftChars", W },
+            { "Chapter16_BitwiseOpsChars", W },
+            { "Chapter16_CommonType", W },
+            { "Chapter16_ConvertByAssignment", W },
+            { "Chapter16_ExplicitCasts", W },
             { "Chapter13_StandardLibraryCall", "needs fma and ldexp (R17)" },
             { "Chapter13_DoubleParamsAndResultLibrary", "needs fmax (R17)" },
+            { "Chapter16_StandardLibraryCalls", "needs atoi (R17)" },
             { nullptr, nullptr },
         };
 #undef W

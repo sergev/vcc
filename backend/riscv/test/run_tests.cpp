@@ -173,3 +173,30 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Arrays of each width, pointer arithmetic and differences, chars, strings.
+TEST_F(RiscvTest, RunPointersAndArrays)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("hello\nhi\n", CompileAndRunRiscv(R"(
+#include <stdio.h>
+#include <string.h>
+char *msg = "hi";
+long sum(long *a, int n) { long s = 0; for (int i = 0; i < n; i++) s += a[i]; return s; }
+int main(void) {
+    long a[5] = { 1, 2, 3, 4, 5 };
+    short s[3] = { -1, 2, -3 };
+    unsigned char bytes[4] = "abc";
+    int m[2][3] = { { 1, 2, 3 }, { 4, 5, 6 } };
+    int *p = &m[1][0];
+    long *q = a + 4;
+    double d[2] = { 0.5, 1.5 };
+    puts("hello");
+    puts(msg);
+    return (sum(a, 5) != 15) | (s[0] + s[2] != -4) << 1 | (bytes[2] != 'c') << 2 |
+           (bytes[3] != 0) << 3 | (p[2] != 6) << 4 | (q - a != 4) << 5 |
+           (*--q != 4) << 6 | (d[0] + d[1] != 2.0) << 7 | (strlen(msg) != 2) << 8 |
+           (strcmp(msg, "hi") != 0) << 9 | (strcmp("a", "b") >= 0) << 10;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

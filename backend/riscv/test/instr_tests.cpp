@@ -125,3 +125,16 @@ fadd.d ft0, ft0, ft1
     EXPECT_TRUE(Has(s, "fcvt.l.d t1, ft0, rtz\n")) << s;
     EXPECT_TRUE(Has(s, "fcvt.d.wu ft1, t0\n")) << s;
 }
+
+// Loads and stores through a pointer take the pointee's width; indexing scales by a
+// shift.
+TEST_F(InstrTest, PointerAccess)
+{
+    std::string s = Code(CompileToRiscv(R"(
+void put(short *p, long i) { p[i] = 7; }
+unsigned char get(unsigned char *p) { return *p; }
+)"));
+    EXPECT_TRUE(Has(s, "slli t1, t1, 1\nadd t0, t0, t1\n")) << s;
+    EXPECT_TRUE(Has(s, "lh t0, -34(s0)\nsh t0, 0(t4)\n")) << s;
+    EXPECT_TRUE(Has(s, "lbu t0, 0(t3)\n")) << s;
+}

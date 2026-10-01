@@ -83,6 +83,162 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     store_val(g, RV_T0, dst);
 }
 
+// The type stored through pointer value `ptr`, or NULL when not known.
+static const Tac_Type *pointee(Gen *g, const Tac_Val *ptr)
+{
+    const Tac_Type *t = val_type(g, ptr);
+    return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
+}
+
+// dst = *src_ptr.
+static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
+{
+    const Tac_Type *t = val_type(g, dst);
+    load_val(g, RV_T3, src_ptr);
+    if (rv_is_aggregate(t)) {
+        int base;
+        int64_t off;
+        name_addr(g, dst->u.var_name, RV_T4, &base, &off);
+        gen_memcopy(g, base, off, RV_T3, 0, rv_size(t), rv_align(t));
+        return;
+    }
+    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
+    load_mem(g, reg, t, RV_T3, 0);
+    store_val(g, reg, dst);
+}
+
+// *dst_ptr = src, in the width of the pointee (or of src when that is not known).
+static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
+{
+    const Tac_Type *t = pointee(g, dst_ptr);
+    if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
+        (rv_is_aggregate(t) && !rv_is_aggregate(val_type(g, src))))
+        t = val_type(g, src);
+    load_val(g, RV_T4, dst_ptr);
+    if (rv_is_aggregate(t)) {
+        int base;
+        int64_t off;
+        name_addr(g, src->u.var_name, RV_T3, &base, &off);
+        gen_memcopy(g, RV_T4, 0, base, off, rv_size(t), rv_align(t));
+        return;
+    }
+    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
+    load_val(g, reg, src);
+    store_mem(g, reg, t, RV_T4, 0);
+}
+
+// dst = ptr + index * scale (bytes).
+static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
+{
+    int scale = in->u.add_ptr.scale;
+    load_val(g, RV_T0, in->u.add_ptr.ptr);
+    load_val(g, RV_T1, in->u.add_ptr.index);
+    const Tac_Type *it = val_type(g, in->u.add_ptr.index);
+    if (rv_size(it) == 4 && rv_is_unsigned(it)) {
+        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
+        emit3(g, RV_SRLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
+    }
+    if (scale > 1 && (scale & (scale - 1)) == 0) {
+        int shift = 0;
+        while ((1 << shift) < scale)
+            shift++;
+        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(shift));
+    } else if (scale != 1) {
+        gen_li(g, RV_T2, scale);
+        emit3(g, RV_MUL, rv_reg(RV_T1), rv_reg(RV_T1), rv_reg(RV_T2));
+    }
+    emit3(g, RV_ADD, rv_reg(RV_T0), rv_reg(RV_T0), rv_reg(RV_T1));
+    store_val(g, RV_T0, in->u.add_ptr.dst);
+}
+
+// dst = a - b, a byte count.
+static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
+{
+    load_val(g, RV_T0, in->u.ptr_diff.ptr_a);
+    load_val(g, RV_T1, in->u.ptr_diff.ptr_b);
+    emit3(g, RV_SUB, rv_reg(RV_T0), rv_reg(RV_T0), rv_reg(RV_T1));
+    store_val(g, RV_T0, in->u.ptr_diff.dst);
+}
+
+// The scalar type at byte `offset` of aggregate type `t`, or NULL.
+static const Tac_Type *scalar_at(const Tac_Type *t, int offset)
+{
+    while (t) {
+        if (t->kind == TAC_TYPE_ARRAY) {
+            int esize = rv_size(t->u.array.elem_type);
+            if (esize <= 0)
+                return NULL;
+            offset %= esize;
+            t = t->u.array.elem_type;
+        } else if (t->kind == TAC_TYPE_STRUCTURE) {
+            const Tac_Member *found = NULL;
+            for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
+                if (m->offset <= offset && offset < m->offset + rv_size(m->type))
+                    found = m;
+            if (!found)
+                return NULL;
+            offset -= found->offset;
+            t = found->type;
+        } else {
+            return offset == 0 ? t : NULL;
+        }
+    }
+    return NULL;
+}
+
+// Member store: aggregate `dst` at byte `offset` = src.  A constant takes the width of
+// the member there (its own kind may be wider); a byte copy is one byte.
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int offset,
+                               bool byte)
+{
+    static const Tac_Type uchar = { .kind = TAC_TYPE_UCHAR };
+    const Tac_Type *t = val_type(g, src);
+    if (byte) {
+        t = &uchar;
+    } else if (src->kind == TAC_VAL_CONSTANT) {
+        const Tac_Type *m = scalar_at(name_type(g, dst), offset);
+        if (m && rv_is_fp(m) == rv_is_fp(t))
+            t = m;
+    }
+    int base;
+    int64_t off;
+    name_addr(g, dst, RV_T4, &base, &off);
+    off += offset;
+    if (rv_is_aggregate(t)) {
+        int sbase;
+        int64_t soff;
+        name_addr(g, src->u.var_name, RV_T3, &sbase, &soff);
+        gen_memcopy(g, base, off, sbase, soff, rv_size(t), rv_align(t));
+        return;
+    }
+    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
+    load_val(g, reg, src);
+    store_mem(g, reg, t, base, off);
+}
+
+// Member load: dst = aggregate `src` at byte `offset`.
+static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_Val *dst,
+                                 bool byte)
+{
+    const Tac_Type *t = val_type(g, dst);
+    if (byte && rv_size(t) != 1)
+        fatal_error("riscv: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+    int base;
+    int64_t off;
+    name_addr(g, src, RV_T3, &base, &off);
+    off += offset;
+    if (rv_is_aggregate(t)) {
+        int dbase;
+        int64_t doff;
+        name_addr(g, dst->u.var_name, RV_T4, &dbase, &doff);
+        gen_memcopy(g, dbase, doff, base, off, rv_size(t), rv_align(t));
+        return;
+    }
+    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
+    load_mem(g, reg, t, base, off);
+    store_val(g, reg, dst);
+}
+
 // Zero-extend `reg` from `size` bytes.
 static void gen_zext(Gen *g, int reg, int size)
 {
@@ -402,6 +558,36 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         gen_get_address(g, in->u.get_address.src, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_LOAD:
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        gen_load(g, in->u.load.src_ptr, in->u.load.dst);
+        break;
+    case TAC_INSTRUCTION_STORE:
+    case TAC_INSTRUCTION_STORE_BYTE:
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr);
+        break;
+    case TAC_INSTRUCTION_ADD_PTR:
+        gen_add_ptr(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_DIFF:
+        gen_ptr_diff(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:
+    case TAC_INSTRUCTION_CHAR_PTR_TO_PTR:
+        gen_copy(g, in->u.ptr_to_char_ptr.src, in->u.ptr_to_char_ptr.dst);
+        break;
+    case TAC_INSTRUCTION_COPY_TO_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+        gen_copy_to_offset(g, in->u.copy_to_offset.src, in->u.copy_to_offset.dst,
+                           in->u.copy_to_offset.offset,
+                           in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET);
+        break;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        gen_copy_from_offset(g, in->u.copy_from_offset.src, in->u.copy_from_offset.offset,
+                             in->u.copy_from_offset.dst,
+                             in->kind == TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET);
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

@@ -41,9 +41,12 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
 add_custom_command(OUTPUT ${out}/console.o
     COMMAND ${RISCV_CLANG} ${RISCV_ASFLAGS} -o ${out}/console.o ${src}/console.s
     DEPENDS ${src}/console.s)
+add_custom_command(OUTPUT ${out}/string.o
+    COMMAND ${RISCV_CLANG} ${RISCV_ASFLAGS} -o ${out}/string.o ${src}/string.s
+    DEPENDS ${src}/string.s)
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
-    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${out}/console.o
-    DEPENDS ${out}/console.o)
+    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${out}/console.o ${out}/string.o
+    DEPENDS ${out}/console.o ${out}/string.o)
 add_custom_target(riscv-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)

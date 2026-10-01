@@ -33,6 +33,27 @@ putch:
     andi    a0, a0, 0xff
     ret
 
+# int puts(const char *s): the string and a newline.
+    .globl  puts
+    .p2align 2
+puts:
+    li      t0, UART
+1:  lbu     t2, 0(a0)
+    beqz    t2, 3f
+2:  lbu     t1, UART_LSR(t0)
+    andi    t1, t1, LSR_THRE
+    beqz    t1, 2b
+    sb      t2, 0(t0)
+    addi    a0, a0, 1
+    j       1b
+3:  lbu     t1, UART_LSR(t0)
+    andi    t1, t1, LSR_THRE
+    beqz    t1, 3b
+    li      t2, '\n'
+    sb      t2, 0(t0)
+    li      a0, 0
+    ret
+
 # void flush(void): output is unbuffered.
     .globl  flush
     .p2align 2

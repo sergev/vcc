@@ -70,7 +70,7 @@ assembly tests pin the selected instructions.
   conversions (`fcvt.*` with `rtz` for C truncation), comparisons into integer
   registers, FP constants through an integer register (`li` + `fmv`). crt0 enables
   the FPU (`mstatus.FS`).
-- **R11. Pointers, arrays, chars, strings** (ch. 14–16): `LOAD`/`STORE` by width,
+- **R11. Pointers, arrays, chars, strings** (ch. 14–16): *Done.* `LOAD`/`STORE` by width,
   `ADD_PTR`, and the byte-pointer TAC kinds as plain operations: `GET_ADDRESS_BYTE`/
   `GET_ADDRESS_DECAY` = address, `LOAD_BYTE` = `lb`/`lbu`, `PTR_DIFF` = `sub`,
   `PTR_TO_CHAR_PTR`/`CHAR_PTR_TO_PTR` = copy.
