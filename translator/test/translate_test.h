@@ -65,6 +65,8 @@ protected:
         std::string result;
         ExternalDecl *decls = program->decls;
         program->decls      = nullptr;
+        if (whole_unit)
+            translate_unit_begin();
         while (decls) {
             ExternalDecl *next = decls->next;
             decls->next        = nullptr;
@@ -78,21 +80,44 @@ protected:
             Tac_TopLevel *tac = translate(decls, OptFlags{}, &label_seq);
             free_external_decl(decls);
             if (tac) {
-                FILE *f = tmpfile();
-                EXPECT_NE(nullptr, f);
-                for (const Tac_TopLevel *t = tac; t; t = t->next)
-                    tac_export_yaml(f, t);
-                long len = ftell(f);
-                rewind(f);
-                std::string yaml(static_cast<size_t>(len), '\0');
-                EXPECT_TRUE(fread(&yaml[0], 1, static_cast<size_t>(len), f));
-                fclose(f);
-                result += yaml;
+                result += Yaml(tac);
                 tac_free_toplevel(tac);
             }
             decls = next;
         }
+        if (whole_unit) {
+            Tac_TopLevel *externs = translate_unit_end();
+            result += Yaml(externs);
+            tac_free_toplevel(externs);
+        }
         return result;
+    }
+
+    // Like CompileToYaml, but with the type annotations shown and the unit's extern
+    // list appended.
+    std::string CompileUnitToTypedYaml(const char *src)
+    {
+        tac_yaml_types = true;
+        whole_unit     = true;
+        return CompileToYaml(src);
+    }
+
+private:
+    bool whole_unit{};
+
+    static std::string Yaml(const Tac_TopLevel *tac)
+    {
+        FILE *f = tmpfile();
+        EXPECT_NE(nullptr, f);
+        for (const Tac_TopLevel *t = tac; t; t = t->next)
+            tac_export_yaml(f, t);
+        long len = ftell(f);
+        rewind(f);
+        std::string yaml(static_cast<size_t>(len), '\0');
+        if (len)
+            EXPECT_TRUE(fread(&yaml[0], 1, static_cast<size_t>(len), f));
+        fclose(f);
+        return yaml;
     }
 };
 

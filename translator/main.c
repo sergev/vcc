@@ -316,6 +316,7 @@ void process_file(const Args *args)
     // unique within the translation unit (required by the single-file backends —
     // see translate.h).  Reset to 0 once, here, at the start of the unit.
     int label_seq = 0;
+    translate_unit_begin();
     for (;;) {
         ExternalDecl *ast = import_external_decl(&input);
         if (!ast)
@@ -345,6 +346,16 @@ void process_file(const Args *args)
         }
     }
     wclose(&input);
+
+    // Names this unit references but does not define, with their types.
+    Tac_TopLevel *externs = translate_unit_end();
+    for (const Tac_TopLevel *t = externs; t; t = t->next) {
+        if (args->debug)
+            tac_print_toplevel(stdout, t, 0);
+        emit_tac_toplevel(args, tac_out_ready ? &tac_out : NULL, t);
+    }
+    tac_free_toplevel(externs);
+
     if (tac_out_ready) {
         tac_export_end_stream(&tac_out);
         wclose(&tac_out);

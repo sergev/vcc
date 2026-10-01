@@ -23,7 +23,7 @@ typedef struct {
     Tac_Instruction *tail;
     int temp_id;
     Tac_TopLevel *static_constants; // strings accumulated during body lowering
-    Tac_Param *locals;              // automatic local names, for the optimizer
+    Tac_Param *locals;              // automatic locals and temporaries, with their types
     Tac_Param *locals_tail;         // tail of `locals` for O(1) append
     Tac_Param *array_locals;        // names of local arrays (block-scope symbols are
                                     // purged before lowering, so value decay needs this)
@@ -58,8 +58,12 @@ extern int xalloc_debug;
 // Low-level TAC-building helpers (translate.c)
 //
 void tac_append(TacCtx *ctx, Tac_Instruction *instr);
+// A fresh label name.
 char *new_temp(TacCtx *ctx);
-void tac_record_local(TacCtx *ctx, const char *name);
+// A fresh temporary holding a value of `type`, recorded in the function's symbol list
+// (takes ownership of `type`).
+char *new_typed_temp(TacCtx *ctx, Tac_Type *type);
+void tac_record_local(TacCtx *ctx, const char *name, const Type *type);
 void tac_record_array_local(TacCtx *ctx, const char *name);
 bool tac_is_array_local(const TacCtx *ctx, const char *name);
 Tac_Val *val_int(int64_t v);
@@ -72,13 +76,14 @@ Tac_Val *val_float(float v);
 Tac_Val *val_double(double v);
 Tac_Val *val_long_double(long double v);
 Tac_Val *val_var(const char *name);
-Tac_Val *new_var_val(TacCtx *ctx);
+// A Var naming a fresh temporary of `type` (takes ownership of `type`).
+Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type);
 Tac_Val *dup_val(const Tac_Val *v);
 Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to);
 // "src != 0" — the C11 §6.3.1.2 conversion of a scalar to _Bool.  Used by emit_cast for
 // every ordinary conversion, and directly by ++/--, which never builds a cast.  Returns
 // the instruction-owned destination Val (see the definition).
-Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from);
+Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to);
 void emit_jump(TacCtx *ctx, const char *target);
 void emit_label(TacCtx *ctx, const char *name);
 const char *user_label_name(TacCtx *ctx, const char *src);
@@ -106,6 +111,14 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dst_name, int dst_off
 // Type conversion (translate.c)
 //
 Tac_Type *ast_type_to_tac_type(const Type *t);
+// Pointer to `target` (takes ownership).
+Tac_Type *tac_type_ptr(Tac_Type *target);
+// Pointer to the TAC form of AST type `t`.
+Tac_Type *tac_type_ptr_to(const Type *t);
+// Plain char, with the target's signedness.
+Tac_Type *tac_type_char(void);
+// The unsigned integer of one machine word (pointer size): the unit of word copies.
+Tac_Type *tac_type_word(void);
 
 //
 // Expression and statement lowering (translate_expr.c, translate_stmt.c)
@@ -132,6 +145,13 @@ void gen_string_array_init(TacCtx *ctx, const char *var_name, const Expr *str_ex
 // file-scoped labels — a duplicate label silently binds a branch to the wrong
 // function.  Threading one counter across the unit keeps every `%N` unique.
 Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq);
+
+// Bracket a translation unit.  Between the two calls translate() notes every name the
+// unit defines or references; translate_unit_end() returns an EXTERN toplevel for each
+// name referenced but not defined (sorted by name), and must run while the file-scope
+// symbol table is still alive.
+void translate_unit_begin(void);
+Tac_TopLevel *translate_unit_end(void);
 
 #ifdef __cplusplus
 }

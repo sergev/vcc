@@ -591,6 +591,15 @@ void tac_print_toplevel(FILE *fd, const Tac_TopLevel *toplevel, int depth);
 void tac_print_program(FILE *fd, const Tac_Program *program);
 
 //
+// Walk
+//
+// Call fn for every name an instruction mentions: each variable operand, the bare
+// aggregate names of COPY_*_OFFSET and ALLOCATE_LOCAL, and a call's fun_name (the
+// callee, or the pointer variable of an indirect call).  Labels are not names.
+typedef void (*Tac_NameVisitor)(const char *name, void *arg);
+void tac_visit_names(const Tac_Instruction *in, Tac_NameVisitor fn, void *arg);
+
+//
 // Graphviz (instruction-level sketch)
 //
 void tac_export_dot(FILE *fd, const Tac_TopLevel *toplevel);

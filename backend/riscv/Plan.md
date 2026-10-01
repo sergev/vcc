@@ -108,6 +108,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
 - **T2. Typed temporaries in the translator.** Every `new_var_val`/`new_temp` site
   (about 55) records the type of the value it holds. The translator already knows
   it at each site; this is plumbing.
+  *Done.* `new_typed_temp`/`new_var_val` take the value's type; locals, params,
+  the function type and each call's `fun_type` are filled in; `translate_unit_end()`
+  emits the extern list. All 800 corpus programs give byte-identical BESM-6
+  assembly, and every `%` name in their `riscv64` TAC has a typed symbol.
 - **T3. Optimizer keeps types consistent.** Any pass that creates or renames a
   variable updates the symbol list; `percent_locals_in_function` renames the
   symbol list along with the body.

@@ -270,6 +270,11 @@ The translator establishes this in two steps: `new_temp()` mints temporaries alr
 percent-prefixed, and a per-function pass (`percent_locals_in_function` in
 `translator/translate.c`, run just before the optimizer) prefixes every parameter and
 automatic-local name — in the body and in the stored `params`/`locals` lists — with `%`.
+Temporaries are minted already `%`-prefixed and typed (`new_typed_temp`), so
+`params` + `locals` give the type of every frame-resident name in the body; a name
+without `%` is typed by its `static_variable`/`static_constant` toplevel, a static
+local, or an `extern` toplevel, which `translate_unit_end()` emits after the last
+declaration for every name the unit references but does not define.
 The BESM-6 frame allocator (`backend/besm6/frame.c`) then assigns a stack slot to any
 `%`-prefixed name and treats every other referenced name as an external global.
 

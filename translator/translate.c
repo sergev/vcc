@@ -36,13 +36,12 @@ char *new_temp(TacCtx *ctx)
     return xstruniq("%", &ctx->temp_id);
 }
 
-// Record an automatic local variable name on the function being lowered. The
-// optimizer reads this list to distinguish private locals (whose dead stores
-// may be removed) from observable globals (whose stores must be preserved).
-void tac_record_local(TacCtx *ctx, const char *name)
+// Append {name, type} to the function's symbol list (takes ownership of `type`).
+static void record_symbol(TacCtx *ctx, const char *name, Tac_Type *type)
 {
     Tac_Param *p = tac_new_param();
     p->name      = xstrdup(name);
+    p->type      = type;
     p->next      = NULL;
     if (!ctx->locals)
         ctx->locals = ctx->locals_tail = p;
@@ -50,6 +49,21 @@ void tac_record_local(TacCtx *ctx, const char *name)
         ctx->locals_tail->next = p;
         ctx->locals_tail       = p;
     }
+}
+
+char *new_typed_temp(TacCtx *ctx, Tac_Type *type)
+{
+    char *name = new_temp(ctx);
+    record_symbol(ctx, name, type);
+    return name;
+}
+
+// Record an automatic local variable on the function being lowered.  Besides typing
+// it, the list tells the optimizer private locals (whose dead stores may be removed)
+// from observable globals (whose stores must be preserved).
+void tac_record_local(TacCtx *ctx, const char *name, const Type *type)
+{
+    record_symbol(ctx, name, ast_type_to_tac_type(type));
 }
 
 // Record a local array name so a later value use (decay) can be lowered to a GET_ADDRESS
@@ -160,9 +174,9 @@ Tac_Val *val_var(const char *name)
     return tv;
 }
 
-Tac_Val *new_var_val(TacCtx *ctx)
+Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type)
 {
-    char *d       = new_temp(ctx);
+    char *d       = new_typed_temp(ctx, type);
     Tac_Val *v    = tac_new_val(TAC_VAL_VAR);
     v->u.var_name = d;
     return v;
@@ -252,11 +266,11 @@ static int const_kind_of_int_type(const Type *t)
 // convention); a caller that hands the result on as its own value re-wraps it with
 // val_var, as emit_cast does.
 //
-Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from)
+Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
 {
     const Type *f = unalias(from);
     if (is_fat_pointer(f)) {
-        Tac_Val *addr             = new_var_val(ctx);
+        Tac_Val *addr             = new_var_val(ctx, tac_type_ptr(tac_new_type(TAC_TYPE_VOID)));
         Tac_Instruction *in       = tac_new_instruction(TAC_INSTRUCTION_CHAR_PTR_TO_PTR);
         in->u.char_ptr_to_ptr.src = src;
         in->u.char_ptr_to_ptr.dst = addr;
@@ -280,7 +294,7 @@ Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from)
         break;
     }
 
-    Tac_Val *dst        = new_var_val(ctx);
+    Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(to));
     Tac_Instruction *ne = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     ne->u.binary.op     = TAC_BINARY_NOT_EQUAL;
     ne->u.binary.src1   = src;
@@ -314,14 +328,14 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
     if (unalias(to)->kind == TYPE_BOOL) {
         if (unalias(from)->kind == TYPE_BOOL)
             return src;
-        return val_var(emit_bool_normalize(ctx, src, from)->u.var_name);
+        return val_var(emit_bool_normalize(ctx, src, from, to)->u.var_name);
     }
 
     bool from_int = is_integer(from);
     bool to_int   = is_integer(to);
     bool from_ptr = is_pointer(from);
     bool to_ptr   = is_pointer(to);
-    Tac_Val *dst  = new_var_val(ctx);
+    Tac_Val *dst  = new_var_val(ctx, ast_type_to_tac_type(to));
 
     if (from_ptr || to_ptr) {
         size_t from_size = get_size(from);
@@ -454,7 +468,7 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
         // normalize) instead of through the b/utod helper call.
         bool from_signed = is_signed(from) || unalias(from)->kind == TYPE_BOOL;
         if (get_size(from) < target_config->int_size) {
-            Tac_Val *ext = new_var_val(ctx);
+            Tac_Val *ext = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
             // The widening promotes to `int`, so label the folded result signed.
             if (from_signed) {
                 Tac_Instruction *e        = tac_new_instruction(TAC_INSTRUCTION_SIGN_EXTEND);
@@ -589,7 +603,7 @@ void gen_struct_assign(TacCtx *ctx, const char *dst_name, int dst_off, const cha
     int w      = target_word_bytes();
     int nwords = (nbytes + w - 1) / w;
     for (int i = 0; i < nwords; i++) {
-        Tac_Val *t          = new_var_val(ctx);
+        Tac_Val *t          = new_var_val(ctx, tac_type_word());
         Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
         ld->u.copy_from_offset.src    = xstrdup(src_name);
         ld->u.copy_from_offset.offset = i * w;
@@ -620,6 +634,7 @@ static Tac_Param *params_from_type(const Type *fun_type)
             continue; // skip void sentinel and unnamed params
         Tac_Param *tp = tac_new_param();
         tp->name      = xstrdup(p->name);
+        tp->type      = ast_type_to_tac_type(p->type);
         *tail         = tp;
         tail          = &tp->next;
 
@@ -636,6 +651,7 @@ static Tac_Param *params_from_type(const Type *fun_type)
                 char buf[64];
                 snprintf(buf, sizeof(buf), "%s$w%d", p->name, i);
                 fill->name = xstrdup(buf);
+                fill->type = tac_type_word();
                 *tail      = fill;
                 tail       = &fill->next;
             }
@@ -719,18 +735,47 @@ Tac_Type *ast_type_to_tac_type(const Type *t)
             param_tail   = &pt->next;
         }
         tf->u.fun_type.ret_type = ast_type_to_tac_type(t->u.function.return_type);
+        tf->u.fun_type.variadic = t->u.function.variadic;
         return tf;
     }
     case TYPE_STRUCT:
     case TYPE_UNION: {
         Tac_Type *ts         = tac_new_type(TAC_TYPE_STRUCTURE);
         ts->u.structure.tag  = t->u.struct_t.name ? xstrdup(t->u.struct_t.name) : NULL;
-        ts->u.structure.size = (int)get_size(t);
+        // An incomplete type (an extern of an undefined tag) has size 0.  A block-scope
+        // tag is gone from structtab by now, but get_size has its cached size.
+        const StructDef *d   = structtab_find_opt(t->u.struct_t.name);
+        bool sized           = d ? d->complete : t->u.struct_t.cached_size != 0;
+        ts->u.structure.size = sized ? (int)get_size(t) : 0;
         return ts;
     }
     default:
         fatal_error("ast_type_to_tac_type: unsupported type kind %d", (int)t->kind);
     }
+}
+
+Tac_Type *tac_type_ptr(Tac_Type *target)
+{
+    Tac_Type *tp              = tac_new_type(TAC_TYPE_POINTER);
+    tp->u.pointer.target_type = target;
+    return tp;
+}
+
+Tac_Type *tac_type_ptr_to(const Type *t)
+{
+    return tac_type_ptr(ast_type_to_tac_type(t));
+}
+
+Tac_Type *tac_type_char(void)
+{
+    return tac_new_type(target_config->char_signed ? TAC_TYPE_SCHAR : TAC_TYPE_UCHAR);
+}
+
+Tac_Type *tac_type_word(void)
+{
+    return tac_new_type(target_config->long_size == target_config->pointer_size
+                            ? TAC_TYPE_ULONG
+                            : TAC_TYPE_ULONG_LONG);
 }
 
 //
@@ -787,6 +832,8 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
     tl->u.function.variadic = ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION &&
                               ast->u.function.type->u.function.variadic;
     tl->u.function.noret    = sym->u.func.noret;
+    if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION)
+        tl->u.function.type = ast_type_to_tac_type(ast->u.function.type);
 
     // A multi-word struct return uses the hidden-pointer (sret) ABI: the caller passes
     // the address of the result slot as an implicit first argument.  Prepend it to the
@@ -798,6 +845,7 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         sret_name      = ".ret";
         Tac_Param *hp  = tac_new_param();
         hp->name       = xstrdup(sret_name);
+        hp->type       = tac_type_ptr_to(ast->u.function.type->u.function.return_type);
         hp->next       = tl->u.function.params;
         tl->u.function.params = hp;
     }
@@ -1139,10 +1187,10 @@ static void percent_locals_in_function(const Tac_TopLevel *fn)
     StringMap autos;
     map_init(&autos);
     for (const Tac_Param *p = fn->u.function.params; p; p = p->next)
-        if (p->name)
+        if (p->name && p->name[0] != '%')
             map_insert(&autos, p->name, 1, 0);
     for (const Tac_Param *p = fn->u.function.locals; p; p = p->next)
-        if (p->name)
+        if (p->name && p->name[0] != '%')
             map_insert(&autos, p->name, 1, 0);
 
     // Rewrite the body first (matching the still-raw names), then the lists.
@@ -1150,19 +1198,97 @@ static void percent_locals_in_function(const Tac_TopLevel *fn)
         percent_instr(in, &autos);
 
     for (Tac_Param *p = fn->u.function.params; p; p = p->next)
-        if (p->name) {
+        if (p->name && p->name[0] != '%') {
             char *d = percent_name(p->name);
             xfree(p->name);
             p->name = d;
         }
     for (Tac_Param *p = fn->u.function.locals; p; p = p->next)
-        if (p->name) {
+        if (p->name && p->name[0] != '%') {
             char *d = percent_name(p->name);
             xfree(p->name);
             p->name = d;
         }
 
     map_destroy(&autos);
+}
+
+//
+// Names defined and referenced in the current translation unit, for its extern list.
+//
+static bool unit_active;
+static StringMap unit_defined;
+static StringMap unit_referenced;
+
+static void note_referenced(const char *name, void *arg)
+{
+    (void)arg;
+    if (name[0] != '%')
+        map_insert(&unit_referenced, name, 1, 0);
+}
+
+static void note_init_refs(const Tac_StaticInit *init)
+{
+    for (; init; init = init->next)
+        if ((init->kind == TAC_STATIC_INIT_POINTER || init->kind == TAC_STATIC_INIT_FAT_POINTER) &&
+            init->u.pointer.name)
+            note_referenced(init->u.pointer.name, NULL);
+}
+
+static void note_toplevel(const Tac_TopLevel *t)
+{
+    switch (t->kind) {
+    case TAC_TOPLEVEL_FUNCTION:
+        map_insert(&unit_defined, t->u.function.name, 1, 0);
+        for (const Tac_StaticLocal *sl = t->u.function.static_locals; sl; sl = sl->next) {
+            map_insert(&unit_defined, sl->name, 1, 0);
+            note_init_refs(sl->init_list);
+        }
+        for (const Tac_Instruction *in = t->u.function.body; in; in = in->next)
+            tac_visit_names(in, note_referenced, NULL);
+        break;
+    case TAC_TOPLEVEL_STATIC_VARIABLE:
+        map_insert(&unit_defined, t->u.static_variable.name, 1, 0);
+        note_init_refs(t->u.static_variable.init_list);
+        break;
+    case TAC_TOPLEVEL_STATIC_CONSTANT:
+        map_insert(&unit_defined, t->u.static_constant.name, 1, 0);
+        break;
+    case TAC_TOPLEVEL_EXTERN:
+        break;
+    }
+}
+
+void translate_unit_begin(void)
+{
+    map_init(&unit_defined);
+    map_init(&unit_referenced);
+    unit_active = true;
+}
+
+// map_iterate callback: append an EXTERN for a referenced name the unit does not define.
+static void add_extern(const char *name, intptr_t value, const void *arg)
+{
+    (void)value;
+    Tac_TopLevel ***tailp = (Tac_TopLevel ***)arg;
+    const Symbol *sym     = symtab_get_opt(name);
+    if (map_get(&unit_defined, name, NULL) || !sym)
+        return;
+    Tac_TopLevel *ext   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    ext->u.extern_.name = xstrdup(name);
+    ext->u.extern_.type = ast_type_to_tac_type(sym->type);
+    **tailp             = ext;
+    *tailp              = &ext->next;
+}
+
+Tac_TopLevel *translate_unit_end(void)
+{
+    Tac_TopLevel *head = NULL, **tail = &head;
+    map_iterate(&unit_referenced, add_extern, &tail); // ascending name order
+    map_destroy(&unit_defined);
+    map_destroy(&unit_referenced);
+    unit_active = false;
+    return head;
 }
 
 //
@@ -1178,6 +1304,8 @@ Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
             percent_locals_in_function(t);
             t->u.function.body = optimize_function(t->u.function.body, flags, t);
         }
+        if (unit_active)
+            note_toplevel(t);
     }
     return tac;
 }

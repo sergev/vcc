@@ -83,6 +83,7 @@ protected:
         ExternalDecl *decls = program->decls;
         program->decls      = nullptr;
         int label_seq       = 0; // unit-wide temp/label counter (see translate.h)
+        translate_unit_begin();
         while (decls) {
             ExternalDecl *next = decls->next;
             decls->next        = nullptr;
@@ -98,6 +99,7 @@ protected:
             }
             decls = next;
         }
+        *tac_tail = translate_unit_end();
         return all_tac;
     }
 

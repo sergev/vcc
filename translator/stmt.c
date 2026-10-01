@@ -140,13 +140,13 @@ static void gen_zero_fill(TacCtx *ctx, const char *var_name, int bytes)
         bytes = (bytes + w - 1) / w * w;
     int nwords = bytes / w;
 
-    char *ptr             = new_temp(ctx);
+    char *ptr             = new_typed_temp(ctx, tac_type_ptr(tac_type_word()));
     Tac_Instruction *ga   = tac_new_instruction(TAC_INSTRUCTION_GET_ADDRESS);
     ga->u.get_address.src = val_var(var_name);
     ga->u.get_address.dst = val_var(ptr);
     tac_append(ctx, ga);
 
-    char *count         = new_temp(ctx);
+    char *count         = new_typed_temp(ctx, tac_new_type(TAC_TYPE_INT));
     Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
     cp->u.copy.src      = val_int(nwords);
     cp->u.copy.dst      = val_var(count);
@@ -301,7 +301,7 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
                 tac_record_array_local(ctx, id->name);
             continue;
         }
-        tac_record_local(ctx, id->name);
+        tac_record_local(ctx, id->name, id->type);
         // Aggregate locals (arrays, structs, unions) occupy contiguous frame slots;
         // emit an AllocateLocal so the backend reserves the full size instead of a
         // single slot. Scalars keep their implicit one-slot allocation. Size and
@@ -382,14 +382,14 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
             int w        = target_word_bytes();
             int nwords   = ((int)get_size(stmt->u.expr->type) + w - 1) / w;
             for (int i = 0; i < nwords; i++) {
-                Tac_Val *t          = new_var_val(ctx);
+                Tac_Val *t          = new_var_val(ctx, tac_type_word());
                 Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
                 ld->u.copy_from_offset.src    = xstrdup(src->u.var_name);
                 ld->u.copy_from_offset.offset = i * w;
                 ld->u.copy_from_offset.dst    = t;
                 tac_append(ctx, ld);
 
-                Tac_Val *p          = new_var_val(ctx);
+                Tac_Val *p          = new_var_val(ctx, tac_type_ptr(tac_type_word()));
                 Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
                 ap->u.add_ptr.ptr   = val_var(ctx->sret_name);
                 ap->u.add_ptr.index = val_int(i); // word index
@@ -510,7 +510,7 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         collect_cases(ctx, stmt->u.switch_stmt.body, &cases);
 
         Tac_Val *ctrl_raw     = gen_expr(ctx, stmt->u.switch_stmt.expr);
-        Tac_Val *ctrl_dst     = new_var_val(ctx);
+        Tac_Val *ctrl_dst     = new_var_val(ctx, ast_type_to_tac_type(stmt->u.switch_stmt.expr->type));
         const char *ctrl_name = ctrl_dst->u.var_name; // save before ownership transfer
         Tac_Instruction *cp   = tac_new_instruction(TAC_INSTRUCTION_COPY);
         cp->u.copy.src        = ctrl_raw;
@@ -519,7 +519,7 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
 
         for (CaseEntry *e = cases.head; e; e = e->next) {
             Tac_Val *cval        = gen_expr(ctx, e->expr);
-            Tac_Val *cmp_dst     = new_var_val(ctx);
+            Tac_Val *cmp_dst     = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
             const char *cmp_name = cmp_dst->u.var_name;
             Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
             bin->u.binary.op     = TAC_BINARY_EQUAL;
