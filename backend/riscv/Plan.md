@@ -53,23 +53,9 @@ psABI conformance (R13–R16) is done: the full LP64D calling convention includi
 FP-register structs, variadic functions, interop tests against clang in both
 directions, and every book program compared with clang.
 
-## Phase 5 — runtime library and headers
-
-- **R17. Portable libc shared.** *Done.* The target-neutral sources of
-  `libc/besm6/*.c` are in `libc/common/`, compiled with our toolchain for both
-  targets; `doprnt`, `modf`, `malloc` and `putch` stay BESM-6-specific. The RISC-V
-  library is `libc/riscv` leaves (console, bump `malloc`, C `ldexp`/`frexp`) +
-  common sources.
-- **R18. Headers.** *Done.* The headers that depend on the data model (`float.h`,
-  `inttypes.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`,
-  `stdint.h`) are per target, in `libc/riscv/include/` for LP64; the rest are
-  shared from `libc/common/include/`, searched second. The RISC-V `va_arg` takes
-  structs. A `riscv-headers` CTest like `besm-headers`.
-- **R19. `printf` and friends run on RISC-V**: *Done.* A byte-addressed `__doprnt`
-  (`libc/riscv/doprnt.c`: case-preserving conversions, length modifiers, 64-bit
-  values, inf/nan, round-half-even ties) and an IEEE `modf`. The BESM-6
-  `printf_tests`/`str_tests`/`mem_tests`/`math_tests` are ported, with the host C
-  library's output as the expectation.
+The runtime library and headers (R17–R19) are done: target-neutral libc sources
+and headers are shared from `libc/common/`, the data-model headers are per target,
+and `printf` with the string, memory and math routines runs on RISC-V.
 
 ## Phase 6 — code quality
 
