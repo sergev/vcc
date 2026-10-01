@@ -8,6 +8,7 @@ add_library(riscv STATIC
     instr.c
     call.c
     regalloc.c
+    peephole.c
     data.c
     codegen.c
 )
@@ -24,6 +25,7 @@ add_executable(riscv-tests
     test/frame_tests.cpp
     test/instr_tests.cpp
     test/regalloc_tests.cpp
+    test/peephole_tests.cpp
     test/data_tests.cpp
     test/run_tests.cpp
     test/interop_tests.cpp

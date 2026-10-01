@@ -6,6 +6,7 @@
 #include "internal.h"
 
 bool riscv_regalloc = true;
+bool riscv_peephole = true;
 
 // Save slots for the callee-saved registers in use, then a register or a slot for
 // every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment
@@ -60,6 +61,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);
+    if (riscv_peephole)
+        rv_peephole(g.fn);
     rv_emit_func(out, g.fn);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)

@@ -6,13 +6,16 @@
 
 static const BackendFlag flags[] = {
     { "no-regalloc", "keep every variable in memory" },
+    { "no-peephole", "skip the peephole pass" },
     { NULL, NULL },
 };
 
 static void flag(int index)
 {
-    (void)index;
-    riscv_regalloc = false;
+    if (index == 0)
+        riscv_regalloc = false;
+    else
+        riscv_peephole = false;
 }
 
 static const char *output_ext(void)

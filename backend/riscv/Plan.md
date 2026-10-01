@@ -70,7 +70,10 @@ and `printf` with the string, memory and math routines runs on RISC-V.
   extended by the declared type as the psABI asks. `genriscv --no-regalloc` keeps
   everything in memory, for the selection tests.
 - **R22. Peephole pass** for what allocation leaves: redundant moves, branch over
-  jump, jump to next label, `li`+op into immediate forms.
+  jump, jump to next label, `li`+op into immediate forms. *Done:* `peephole.c`, also
+  the zero register for a zero constant, scratch moves folded, a doubleword
+  reload after its store, a byte load's mask; the RISC-V libc shrinks by 17%.
+  `genriscv --no-peephole` skips it.
 
 ## Phase 7 — `long double`
 

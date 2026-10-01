@@ -57,6 +57,8 @@ typedef struct {
 // Opcode and mnemonic.
 #define RV_OPS(X)                                                                          \
     X(LI, "li") X(LA, "la") X(MV, "mv") X(ADD, "add") X(ADDI, "addi") X(ADDW, "addw")     \
+    X(ADDIW, "addiw") X(ORI, "ori") X(SLTI, "slti") X(SLTIU, "sltiu") X(SLLIW, "slliw")  \
+    X(SRLIW, "srliw") X(SRAIW, "sraiw")                                                   \
     X(SUB, "sub") X(SUBW, "subw") X(MUL, "mul") X(MULW, "mulw") X(DIV, "div")             \
     X(DIVW, "divw") X(DIVU, "divu") X(DIVUW, "divuw") X(REM, "rem") X(REMW, "remw")       \
     X(REMU, "remu") X(REMUW, "remuw") X(AND, "and") X(ANDI, "andi") X(OR, "or")           \
@@ -123,6 +125,10 @@ Rv_Operand rv_imm(int64_t imm);
 Rv_Operand rv_sym(const char *sym, int64_t offset);
 Rv_Operand rv_mem(int base, int64_t offset);
 const char *rv_reg_name(int reg);
+bool rv_is_freg(int reg); // f0-f31
+
+// Peephole optimization (peephole.c).
+void rv_peephole(Rv_Func *fn);
 
 // GNU assembler output.
 void rv_emit_func(FILE *out, const Rv_Func *fn);

@@ -72,6 +72,11 @@ void rv_free_func(Rv_Func *fn)
     xfree(fn);
 }
 
+bool rv_is_freg(int reg)
+{
+    return reg >= RV_F0 && reg < RV_VREG;
+}
+
 Rv_Operand rv_reg(int reg)
 {
     return (Rv_Operand){ .kind = RV_OPND_REG, .reg = reg };

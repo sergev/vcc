@@ -12,6 +12,8 @@ extern "C" {
 
 // Allocate registers to variables (true by default); else every variable is in memory.
 extern bool riscv_regalloc;
+// Run the peephole pass (true by default).
+extern bool riscv_peephole;
 
 // Translate one TAC toplevel to RISC-V assembly on `out`.  `program` heads the whole
 // translation unit.

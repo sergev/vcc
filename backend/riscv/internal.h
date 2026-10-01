@@ -100,7 +100,6 @@ void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
 void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
 // Load integer constant `c` converted to type `t`.
 void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
-bool rv_is_freg(int reg);
 // Copy `size` bytes; the bases are registers other than t2 and t6.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
 // Load `size` (1..8) bytes at base + off into `reg`, or store them, byte by byte when

@@ -9,6 +9,7 @@ TEST_F(RiscvTest, FrameSlots)
 {
     DisableOptimization();
     riscv_regalloc = false;
+    riscv_peephole = false;
     std::string s = CompileToRiscv(
         "int main(void) { char c = 1; long l = 2; int i = 3; double d = 0.5; return i; }");
     EXPECT_EQ(R"(addi sp, sp, -16

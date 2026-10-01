@@ -288,11 +288,6 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
     *off  = 0;
 }
 
-bool rv_is_freg(int reg)
-{
-    return reg >= RV_F0 && reg < RV_VREG;
-}
-
 #define is_freg rv_is_freg
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
