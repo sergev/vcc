@@ -40,23 +40,9 @@ can rely on:
   (`backend/common/test/backend_test.h`) and book suite
   (`backend/common/test/book/`, `BookTest` with a per-backend skip list).
 
-## Phase 2 — backend skeleton
-
-- **R1. Skeleton.** *Done.* `backend/riscv/` with `CMakeLists.txt`, `rv.h` (IR: function,
-  block, instruction over virtual registers), `codegen.c`, `emit.c`, its own
-  `main.c` on the shared driver, and `genriscv`. Emits `.text`/`.globl`/labels.
-- **R2. Runtime stub.** *Done.* `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call
-  `main`, pass its result to the finisher), `link.ld`, and `putbyte`/`flush`/`exit`
-  over the UART and finisher. Assembled with clang, archived with `llvm-ar`.
-- **R3. Run harness.** *Done.* `backend/riscv/test/` fixture with `CompileToRiscv` (golden
-  assembly) and `CompileAndRunRiscv` (assemble, link with crt0 + runtime, run qemu
-  with `-display none -serial stdio -monitor none` and a timeout, decode the
-  finisher's exit status), plus its `book_test.h` for the shared `BookTest` suite
-  (a set of enabled chapters that Phase 3 grows, and a skip list). CMake finds a
-  RISC-V-capable clang (hint `/opt/homebrew/opt/llvm/bin`), `ld.lld`, `llvm-ar` and
-  qemu; tests guard with `SKIP_IF_NO_RISCV_TOOLS()` so `make run` stays green
-  without them.
-- **R4. First program.** *Done.* `int main(void) { return 2; }` runs and returns 2.
+The backend skeleton is in place: `genriscv`, the bare-metal runtime in `libc/riscv/`,
+and `riscv-tests` with `CompileToRiscv`, `CompileAndRunRiscv` and `CompileAndRunBook`
+(the book suite runs the chapters enabled in `test/book_test.h`).
 
 ## Phase 3 — instruction selection, book order
 
