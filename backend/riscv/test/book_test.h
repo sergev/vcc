@@ -14,7 +14,7 @@ protected:
     {
         RiscvTest::SetUp();
         // Chapters the backend handles so far; the list grows with Phase 3.
-        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8 };
+        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
         const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
         int chapter      = strncmp(name, "Chapter", 7) == 0 ? atoi(name + 7) : 0;
         if (!chapters.count(chapter))

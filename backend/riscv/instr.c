@@ -62,6 +62,17 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     store_val(g, reg, dst);
 }
 
+// dst = &src, of a named object or function.
+static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
+{
+    const Slot *slot = find_slot(g, src->u.var_name);
+    if (slot)
+        gen_addr(g, RV_T0, RV_S0, slot->offset);
+    else
+        emit2(g, RV_LA, rv_reg(RV_T0), rv_sym(src->u.var_name, 0));
+    store_val(g, RV_T0, dst);
+}
+
 // Zero-extend `reg` from `size` bytes.
 static void gen_zext(Gen *g, int reg, int size)
 {
@@ -247,6 +258,15 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_INSTRUCTION_BINARY:
         gen_binary(g, in);
+        break;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        gen_get_address(g, in->u.get_address.src, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_FUN_CALL:
+    case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+        gen_call(g, in);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame

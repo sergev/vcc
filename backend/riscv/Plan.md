@@ -59,7 +59,7 @@ assembly tests pin the selected instructions.
   `mul`/`div`/`rem` and their unsigned forms, width conversions.
 - **R7. Control flow** *Done.* (ch. 5–8): labels, jumps, `beqz`/`bnez`, switch lowering
   as emitted by the frontend.
-- **R8. Calls, simple ABI** (ch. 9): integer/pointer args in `a0`–`a7`, the rest on
+- **R8. Calls, simple ABI** *Done.* (ch. 9): integer/pointer args in `a0`–`a7`, the rest on
   the stack, result in `a0`; direct and indirect (`jalr`) calls;
   `FUN_CALL_NORETURN`.
 - **R9. Globals and static data** (ch. 10): `.data`/`.bss`/`.rodata`, all

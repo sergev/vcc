@@ -19,6 +19,20 @@ putbyte:
     sb      a0, 0(t0)
     ret
 
+# int putchar(int c), void putch(unsigned c): putbyte, returning c.
+    .globl  putchar
+    .globl  putch
+    .p2align 2
+putchar:
+putch:
+    li      t0, UART
+1:  lbu     t1, UART_LSR(t0)
+    andi    t1, t1, LSR_THRE
+    beqz    t1, 1b
+    sb      a0, 0(t0)
+    andi    a0, a0, 0xff
+    ret
+
 # void flush(void): output is unbuffered.
     .globl  flush
     .p2align 2

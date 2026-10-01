@@ -46,3 +46,41 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Ten arguments: a0-a7, then two on the stack; narrow ones arrive extended.
+TEST_F(RiscvTest, RunCalls)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+long sum(signed char a, int b, long c, unsigned d, short e, long f, int g, long h, int i, long j)
+{
+    return a + b + c + d + e + f + g + h + i * 1000 + j * 100000;
+}
+int fact(int n) { return n <= 1 ? 1 : n * fact(n - 1); }
+int twice(int (*f)(int), int x) { return f(f(x)); }
+int inc(int x) { return x + 1; }
+int main(void) {
+    if (sum(-1, 2, 3, 4u, -5, 6, 7, 8, 9, 10) != 1009024)
+        return 1;
+    if (fact(10) != 3628800)
+        return 2;
+    if (twice(inc, 40) != 42)
+        return 3;
+    return 0;
+})"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// A constant truncated to a 16-bit short is not folded as a char.
+TEST_F(RiscvTest, RunShortTruncation)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+int main(void) {
+    short s = 70000;
+    short t = -5;
+    unsigned short u = -1;
+    return (s != 4464) | (t != -5) << 1 | (u != 65535) << 2;
+})"));
+    EXPECT_EQ(0, exit_status);
+}
