@@ -30,7 +30,8 @@ protected:
     RiscvTest() : BackendTest("riscv64") 
     {
         riscv_regalloc = true;
-        riscv_peephole = true;
+        riscv_peephole      = true;
+        riscv_frame_pointer = false;
     }
 
     // Assembly of every toplevel of the translation unit.

@@ -7,6 +7,7 @@
 
 bool riscv_regalloc = true;
 bool riscv_peephole = true;
+bool riscv_frame_pointer = false;
 
 // Save slots for the callee-saved registers in use, then a register or a slot for
 // every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment

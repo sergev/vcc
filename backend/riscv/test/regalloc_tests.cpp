@@ -22,20 +22,15 @@ ret
 // an argument or a result stays in its argument register.
 TEST_F(RiscvTest, RegallocCalls)
 {
-    EXPECT_EQ(R"(addi sp, sp, -16
-sd ra, 8(sp)
-sd s0, 0(sp)
-addi s0, sp, 16
-addi sp, sp, -16
-sd s1, -24(s0)
+    EXPECT_EQ(R"(addi sp, sp, -32
+sd ra, 24(sp)
+sd s1, 8(sp)
 mv s1, a1
 call g
 mul a0, a0, s1
-ld s1, -24(s0)
-addi sp, s0, -16
-ld ra, 8(sp)
-ld s0, 0(sp)
-addi sp, sp, 16
+ld s1, 8(sp)
+ld ra, 24(sp)
+addi sp, sp, 32
 ret
 )",
               Code(CompileToRiscv("long g(long x);\n"
@@ -90,8 +85,8 @@ TEST_F(RiscvTest, RegallocFloatCalls)
 {
     std::string s = Code(CompileToRiscv(
         "double h(double);\ndouble g(double x) { double y = h(x); return y + x; }"));
-    EXPECT_NE(std::string::npos, s.find("fsd fs0, -24(s0)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("fld fs0, -24(s0)\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("fsd fs0, 8(sp)\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("fld fs0, 8(sp)\n")) << s;
 }
 
 // Parameters rotated through each other in a loop, all in argument registers.
@@ -145,7 +140,7 @@ TEST_F(RiscvTest, RegallocSpillCode)
 {
     std::string s = Code(CompileToRiscv(SpillSource().c_str()));
     EXPECT_NE(std::string::npos, s.find("sd s11, ")) << s;
-    EXPECT_TRUE(std::regex_search(s, std::regex("sd a0, -[0-9]+\\(s0\\)\n"))) << s;
+    EXPECT_TRUE(std::regex_search(s, std::regex("sd a0, [0-9]+\\(sp\\)\n"))) << s;
 }
 
 TEST_F(RiscvTest, RegallocSpill)

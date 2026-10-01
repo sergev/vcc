@@ -15,6 +15,9 @@
 //   sp + 0 ...       outgoing stack arguments
 //
 // A leaf function that never touches s0 or sp, and saves no register, has no frame.
+// Otherwise, when the frame is small enough, every s0-relative operand is rewritten
+// against sp and s0 is not set up (ra is saved only when there are calls); see
+// gen_prologue.
 //
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
 // aggregate copy, t5 the address of a global, t6 a large frame offset or the bits of

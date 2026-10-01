@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "codegen.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -519,27 +520,26 @@ void store_bytes(Gen *g, int reg, int base, int64_t off, int size)
     }
 }
 
-// Save or restore the callee-saved registers in use.
-static void save_regs(Gen *g, Rv_Block *b, bool restore)
+// How the frame is addressed: none at all, from s0, or from sp `size` bytes below s0.
+typedef enum { FRAME_NONE, FRAME_FP, FRAME_SP } FrameKind;
+
+typedef struct {
+    FrameKind kind;
+    int size;   // s0 - sp
+    bool calls; // ra must be saved
+} Frame;
+
+// The base register and offset of frame offset `off` (relative to s0).
+static Rv_Operand frame_mem(const Frame *fr, int off)
 {
-    for (int i = 0; i < g->nsaved; i++) {
-        int reg = g->saved_reg[i];
-        Rv_Op op;
-        if (is_freg(reg))
-            op = restore ? RV_FLD : RV_FSD;
-        else
-            op = restore ? RV_LD : RV_SD;
-        Rv_Instr *in = b ? rv_append_to(b, op) : rv_append(g->fn, op);
-        in->opnd[0]  = rv_reg(reg);
-        in->opnd[1]  = rv_mem(RV_S0, g->saved_off[i]);
-    }
+    return fr->kind == FRAME_SP ? rv_mem(RV_SP, off + fr->size) : rv_mem(RV_S0, off);
 }
 
-// A marker, expanded by gen_prologue once it is known whether there is a frame.
-void gen_epilogue(Gen *g)
+static void append2(Rv_Block *b, Rv_Op op, Rv_Operand x, Rv_Operand y)
 {
-    rv_append(g->fn, RV_EPILOGUE);
-    rv_append(g->fn, RV_RET);
+    Rv_Instr *in = rv_append_to(b, op);
+    in->opnd[0]  = x;
+    in->opnd[1]  = y;
 }
 
 static void append3(Rv_Block *b, Rv_Op op, Rv_Operand x, Rv_Operand y, Rv_Operand z)
@@ -550,8 +550,47 @@ static void append3(Rv_Block *b, Rv_Op op, Rv_Operand x, Rv_Operand y, Rv_Operan
     in->opnd[2]  = z;
 }
 
-// Replace each epilogue marker by the frame teardown, or by nothing.
-static void expand_epilogues(Gen *g, bool frame)
+// Save or restore the callee-saved registers in use.
+static void save_regs(const Gen *g, const Frame *fr, Rv_Block *b, bool restore)
+{
+    for (int i = 0; i < g->nsaved; i++) {
+        int reg = g->saved_reg[i];
+        Rv_Op op;
+        if (is_freg(reg))
+            op = restore ? RV_FLD : RV_FSD;
+        else
+            op = restore ? RV_LD : RV_SD;
+        append2(b, op, rv_reg(reg), frame_mem(fr, g->saved_off[i]));
+    }
+}
+
+// A marker, expanded by gen_prologue once the frame is known.
+void gen_epilogue(Gen *g)
+{
+    rv_append(g->fn, RV_EPILOGUE);
+    rv_append(g->fn, RV_RET);
+}
+
+// The frame teardown.
+static void epilogue(const Gen *g, const Frame *fr, Rv_Block *b)
+{
+    if (fr->kind == FRAME_NONE)
+        return;
+    save_regs(g, fr, b, true);
+    if (fr->kind == FRAME_SP) {
+        if (fr->calls)
+            append2(b, RV_LD, rv_reg(RV_RA), frame_mem(fr, -g->header + 8));
+        append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(fr->size));
+        return;
+    }
+    append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
+    append2(b, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
+    append2(b, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
+    append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
+}
+
+// Replace each epilogue marker by the frame teardown.
+static void expand_epilogues(Gen *g, const Frame *fr)
 {
     for (Rv_Block *b = g->fn->blocks; b; b = b->next) {
         for (Rv_Instr **link = &b->head; *link;) {
@@ -561,13 +600,7 @@ static void expand_epilogues(Gen *g, bool frame)
                 continue;
             }
             Rv_Block seq = { 0 };
-            if (frame) {
-                save_regs(g, &seq, true);
-                append3(&seq, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
-                append3(&seq, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8), (Rv_Operand){ 0 });
-                append3(&seq, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0), (Rv_Operand){ 0 });
-                append3(&seq, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
-            }
+            epilogue(g, fr, &seq);
             if (seq.head) {
                 seq.tail->next = marker->next;
                 *link          = seq.head;
@@ -583,65 +616,106 @@ static void expand_epilogues(Gen *g, bool frame)
     }
 }
 
+static bool has_calls(const Gen *g)
+{
+    for (const Rv_Block *b = g->fn->blocks; b; b = b->next)
+        for (const Rv_Instr *in = b->head; in; in = in->next)
+            if (in->op == RV_CALL || in->op == RV_JALR)
+                return true;
+    return false;
+}
+
+static bool uses_reg(const Rv_Instr *in, int reg)
+{
+    for (int i = 0; i < 3; i++)
+        if ((in->opnd[i].kind == RV_OPND_REG || in->opnd[i].kind == RV_OPND_MEM) &&
+            in->opnd[i].reg == reg)
+            return true;
+    return false;
+}
+
 // Whether the body needs no frame: it makes no call, saves no register, and never
-// uses s0 (no slot, no stack argument, not variadic).
+// uses s0 (no slot, no stack argument, not variadic) or sp.
 static bool is_leaf(const Gen *g)
 {
-    if (g->nsaved > 0 || gen_variadic(g))
+    if (g->nsaved > 0 || gen_variadic(g) || has_calls(g))
         return false;
-    for (const Rv_Block *b = g->fn->blocks; b; b = b->next) {
-        for (const Rv_Instr *in = b->head; in; in = in->next) {
-            if (in->op == RV_CALL || in->op == RV_JALR)
+    for (const Rv_Block *b = g->fn->blocks; b; b = b->next)
+        for (const Rv_Instr *in = b->head; in; in = in->next)
+            if (uses_reg(in, RV_S0) || uses_reg(in, RV_SP))
                 return false;
-            for (int i = 0; i < 3; i++)
-                if ((in->opnd[i].kind == RV_OPND_REG || in->opnd[i].kind == RV_OPND_MEM) &&
-                    (in->opnd[i].reg == RV_S0 || in->opnd[i].reg == RV_SP))
-                    return false;
+    return true;
+}
+
+// Address the body's frame from sp, `size` bytes below s0, when every use of s0 is a
+// memory operand or an addi and the offsets still fit; else change nothing.
+static bool rebase_to_sp(Gen *g, int size)
+{
+    for (int pass = 0; pass < 2; pass++) {
+        for (Rv_Block *b = g->fn->blocks; b; b = b->next) {
+            for (Rv_Instr *in = b->head; in; in = in->next) {
+                for (int i = 0; i < 3; i++) {
+                    Rv_Operand *o = &in->opnd[i];
+                    if (o->reg != RV_S0 || (o->kind != RV_OPND_REG && o->kind != RV_OPND_MEM))
+                        continue;
+                    if (o->kind == RV_OPND_MEM) {
+                        if (pass == 0 && !fits12(o->imm + size))
+                            return false;
+                        if (pass == 1) {
+                            o->reg = RV_SP;
+                            o->imm += size;
+                        }
+                        continue;
+                    }
+                    if (in->op != RV_ADDI || i != 1)
+                        return false;
+                    if (pass == 0 && !fits12(in->opnd[2].imm + size))
+                        return false;
+                    if (pass == 1) {
+                        o->reg = RV_SP;
+                        in->opnd[2].imm += size;
+                    }
+                }
+            }
         }
     }
     return true;
 }
 
 // Fill the prologue block and the epilogues, now that the frame is known.  A leaf
-// function has none.
+// function has none; a frame small enough is addressed from sp, without s0.
 void gen_prologue(Gen *g)
 {
+    Frame fr = { FRAME_NONE, 0, has_calls(g) };
     if (is_leaf(g)) {
-        expand_epilogues(g, false);
+        expand_epilogues(g, &fr);
         return;
     }
-    expand_epilogues(g, true);
-    Rv_Block *b  = g->prologue;
-    Rv_Instr *in = rv_append_to(b, RV_ADDI);
-    in->opnd[0]  = rv_reg(RV_SP);
-    in->opnd[1]  = rv_reg(RV_SP);
-    in->opnd[2]  = rv_imm(-g->header);
-    in           = rv_append_to(b, RV_SD);
-    in->opnd[0]  = rv_reg(RV_RA);
-    in->opnd[1]  = rv_mem(RV_SP, 8);
-    in           = rv_append_to(b, RV_SD);
-    in->opnd[0]  = rv_reg(RV_S0);
-    in->opnd[1]  = rv_mem(RV_SP, 0);
-    in           = rv_append_to(b, RV_ADDI);
-    in->opnd[0]  = rv_reg(RV_S0);
-    in->opnd[1]  = rv_reg(RV_SP);
-    in->opnd[2]  = rv_imm(g->header);
-    int rest     = (g->locals_size + g->outgoing + 15) / 16 * 16;
+    Rv_Block *b = g->prologue;
+    int rest    = (g->locals_size + g->outgoing + 15) / 16 * 16;
+    fr.size     = g->header + rest;
+    if (!riscv_frame_pointer && fits12(-fr.size) && fits12(fr.size) && rebase_to_sp(g, fr.size)) {
+        fr.kind = FRAME_SP;
+        append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-fr.size));
+        if (fr.calls)
+            append2(b, RV_SD, rv_reg(RV_RA), frame_mem(&fr, -g->header + 8));
+        save_regs(g, &fr, b, false);
+        expand_epilogues(g, &fr);
+        return;
+    }
+    fr.kind = FRAME_FP;
+    append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-g->header));
+    append2(b, RV_SD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
+    append2(b, RV_SD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
+    append3(b, RV_ADDI, rv_reg(RV_S0), rv_reg(RV_SP), rv_imm(g->header));
     if (rest == 0) {
         // nothing
     } else if (fits12(-rest)) {
-        in          = rv_append_to(b, RV_ADDI);
-        in->opnd[0] = rv_reg(RV_SP);
-        in->opnd[1] = rv_reg(RV_SP);
-        in->opnd[2] = rv_imm(-rest);
+        append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-rest));
     } else {
-        in          = rv_append_to(b, RV_LI);
-        in->opnd[0] = rv_reg(RV_T0);
-        in->opnd[1] = rv_imm(rest);
-        in          = rv_append_to(b, RV_SUB);
-        in->opnd[0] = rv_reg(RV_SP);
-        in->opnd[1] = rv_reg(RV_SP);
-        in->opnd[2] = rv_reg(RV_T0);
+        append2(b, RV_LI, rv_reg(RV_T0), rv_imm(rest));
+        append3(b, RV_SUB, rv_reg(RV_SP), rv_reg(RV_SP), rv_reg(RV_T0));
     }
-    save_regs(g, b, false);
+    save_regs(g, &fr, b, false);
+    expand_epilogues(g, &fr);
 }

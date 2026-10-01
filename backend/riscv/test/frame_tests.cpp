@@ -8,8 +8,9 @@
 TEST_F(RiscvTest, FrameSlots)
 {
     DisableOptimization();
-    riscv_regalloc = false;
-    riscv_peephole = false;
+    riscv_regalloc      = false;
+    riscv_peephole      = false;
+    riscv_frame_pointer = true;
     std::string s = CompileToRiscv(
         "int main(void) { char c = 1; long l = 2; int i = 3; double d = 0.5; return i; }");
     EXPECT_EQ(R"(addi sp, sp, -16
@@ -68,9 +69,11 @@ sw t0, 0(t6)
 
 
 // A variadic function saves a0-a7 below the incoming stack arguments, its ra and s0
-// below those; the named parameter in a0 lives in its save slot.
+// below those; the named parameter in a0 lives in its save slot.  With the frame
+// pointer kept, all of it is addressed from s0.
 TEST_F(RiscvTest, FrameVariadic)
 {
+    riscv_frame_pointer = true;
     std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
     EXPECT_EQ(0u, s.find(R"(addi sp, sp, -80
 sd ra, 8(sp)
@@ -93,4 +96,29 @@ ld s0, 0(sp)
 addi sp, sp, 80
 ret
 )")) << s;
+}
+
+// Without a frame pointer the same frame is addressed from sp; a function that makes
+// no call does not save ra.
+TEST_F(RiscvTest, FrameVariadicFromSp)
+{
+    std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
+    EXPECT_EQ(0u, s.find("addi sp, sp, -80\nsd a0, 16(sp)\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("sd a7, 72(sp)\naddi a0, sp, 16\n")) << s; // &n
+    EXPECT_NE(std::string::npos, s.find("addi sp, sp, 80\nret\n")) << s;
+}
+
+// A function that makes calls but keeps nothing in its frame saves only ra.
+TEST_F(RiscvTest, FrameOnlyRa)
+{
+    EXPECT_EQ(R"(addi sp, sp, -16
+sd ra, 8(sp)
+call g
+addi a0, a0, 1
+call g
+ld ra, 8(sp)
+addi sp, sp, 16
+ret
+)",
+              Code(CompileToRiscv("long g(long);\nlong f(long a) { return g(g(a) + 1); }")));
 }

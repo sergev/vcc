@@ -14,6 +14,8 @@ extern "C" {
 extern bool riscv_regalloc;
 // Run the peephole pass (true by default).
 extern bool riscv_peephole;
+// Keep the frame pointer s0 in every function with a frame (false by default).
+extern bool riscv_frame_pointer;
 
 // Translate one TAC toplevel to RISC-V assembly on `out`.  `program` heads the whole
 // translation unit.
