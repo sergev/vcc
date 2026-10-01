@@ -75,13 +75,10 @@ macro(riscv_compile_libc_c name srcdir)
     list(APPEND RISCV_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# printf and friends wait for a portable __doprnt (R19).
-set(RISCV_LIBC_C_COMMON ${LIBC_C_COMMON})
-list(REMOVE_ITEM RISCV_LIBC_C_COMMON printf sprintf snprintf)
-foreach(name ${RISCV_LIBC_C_COMMON})
+foreach(name ${LIBC_C_COMMON})
     riscv_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-foreach(name frexp ldexp)
+foreach(name doprnt frexp ldexp modf)
     riscv_compile_libc_c(${name} ${src})
 endforeach()
 

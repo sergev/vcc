@@ -1,9 +1,9 @@
 /*
  * <math.h> — mathematics (C11 §7.12), RISC-V LP64 target.
  *
- * Status: frexp(), ldexp(), fabs(), fmin(), fmax() and fma() are implemented in
- * libc.a; the rest are declared for future implementation (TODO).  The functions
- * are double-typed only.
+ * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax() and fma() are
+ * implemented in libc.a; the rest are declared for future implementation (TODO).
+ * The functions are double-typed only.
  */
 #ifndef _MATH_H
 #define _MATH_H
@@ -21,6 +21,7 @@
 #define M_E  2.71828182845905
 
 /* ---- implemented in libc.a ---- */
+double modf(double x, double *iptr);
 double frexp(double x, int *exp);
 double ldexp(double x, int exp);
 double fabs(double x);
@@ -29,7 +30,6 @@ double fmax(double x, double y);
 double fma(double x, double y, double z);
 
 /* ---- declared for future implementation (TODO) ---- */
-double modf(double x, double *iptr);
 double floor(double x);
 double ceil(double x);
 double round(double x);

@@ -1,9 +1,9 @@
 /*
  * <stdio.h> — input/output (C11 §7.21).
  *
- * Status: puts / putchar are implemented in the runtime, and printf / sprintf /
- * snprintf where the target has a __doprnt (BESM-6); the rest are declared for
- * future implementation (marked TODO).  The extensions block at the bottom
+ * Status: printf / sprintf / snprintf / puts / putchar are implemented in the
+ * runtime (over each target's __doprnt engine); the rest are declared for future
+ * implementation (marked TODO).  The extensions block at the bottom
  * exposes the low-level console primitives of the runtime.
  */
 #ifndef _STDIO_H
@@ -21,7 +21,7 @@ extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
 
-/* ---- implemented in the runtime (printf family: see the status note) ---- */
+/* ---- implemented in the runtime ---- */
 int printf(const char *fmt, ...);
 int sprintf(char *buf, const char *fmt, ...);
 int snprintf(char *buf, int size, const char *fmt, ...);
