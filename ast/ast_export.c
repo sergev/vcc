@@ -161,6 +161,7 @@ void export_field(WFILE *fd, Field *field)
         export_type(fd, field->u.member.type);
         wputstr(field->u.member.name, fd);
         export_expr(fd, field->u.member.bitfield);
+        export_alignment_spec(fd, field->u.member.align_spec);
         break;
     case FIELD_STATIC_ASSERT:
         wputw(TAG_STATIC_ASSERT, fd);

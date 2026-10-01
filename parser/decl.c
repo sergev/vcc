@@ -503,7 +503,7 @@ DeclSpec *parse_declaration_specifiers(Type **base_type_result)
             FunctionSpec *fs = parse_function_specifier();
             append_list(&ds->func_specs, fs);
         } else if (current_token == TOKEN_ALIGNAS) {
-            ds->align_spec = parse_alignment_specifier();
+            parse_one_alignment_specifier(&ds->align_spec);
         } else {
             break;
         }
@@ -773,7 +773,8 @@ Field *parse_struct_declaration()
 
     /* Parse specifier_qualifier_list */
     TypeQualifier *qualifiers = NULL;
-    TypeSpec *type_specs      = parse_specifier_qualifier_list(&qualifiers);
+    AlignmentSpec *align      = NULL;
+    TypeSpec *type_specs      = parse_specifier_qualifier_list(&qualifiers, &align);
 
     /* Construct base Type from type_specs (simplified to first basic type) */
     Type *base_type = fuse_type_specifiers(type_specs);
@@ -783,8 +784,9 @@ Field *parse_struct_declaration()
     /* Parse struct_declarator_list */
     Field *fields = NULL, **fields_tail = &fields;
     for (;;) {
-        Field *field         = new_field(FIELD_MEMBER);
-        field->u.member.type = clone_type(base_type, __func__, __FILE__, __LINE__);
+        Field *field               = new_field(FIELD_MEMBER);
+        field->u.member.type       = clone_type(base_type, __func__, __FILE__, __LINE__);
+        field->u.member.align_spec = clone_alignment_spec(align);
 
         if (current_token != TOKEN_COLON && current_token != TOKEN_SEMICOLON) {
             Declarator *declarator = parse_declarator();
@@ -824,19 +826,21 @@ Field *parse_struct_declaration()
     }
     expect_token(TOKEN_SEMICOLON);
     free_type(base_type);
+    free_alignment_spec(align);
     return fields;
 }
 
 //
 // specifier_qualifier_list
 //     : type_specifier specifier_qualifier_list
+//     | alignment_specifier specifier_qualifier_list   (a member only: `align` non-NULL)
 //     | type_specifier
 //     | type_qualifier specifier_qualifier_list
 //     | type_qualifier
 //     ;
 // Returns non-NULL value.
 //
-TypeSpec *parse_specifier_qualifier_list(TypeQualifier **qualifiers)
+TypeSpec *parse_specifier_qualifier_list(TypeQualifier **qualifiers, AlignmentSpec **align)
 {
     if (parser_debug) {
         printf("--- %s()\n", __func__);
@@ -845,7 +849,9 @@ TypeSpec *parse_specifier_qualifier_list(TypeQualifier **qualifiers)
     *qualifiers          = NULL;
 
     while (1) {
-        if (current_token == TOKEN_CONST || current_token == TOKEN_RESTRICT ||
+        if (current_token == TOKEN_ALIGNAS && align) {
+            parse_one_alignment_specifier(align);
+        } else if (current_token == TOKEN_CONST || current_token == TOKEN_RESTRICT ||
             current_token == TOKEN_VOLATILE ||
             (current_token == TOKEN_ATOMIC && next_token() != TOKEN_LPAREN)) {
             TypeQualifier *q = parse_type_qualifier();
@@ -1011,6 +1017,15 @@ FunctionSpec *parse_function_specifier()
 //     | ALIGNAS '(' constant_expression ')'
 //     ;
 //
+// Parse an _Alignas into *slot.  Several in one declaration are not supported (the
+// strictest would win), and are rejected rather than mishandled.
+void parse_one_alignment_specifier(AlignmentSpec **slot)
+{
+    if (*slot)
+        fatal_error("More than one _Alignas in a declaration is not supported");
+    *slot = parse_alignment_specifier();
+}
+
 AlignmentSpec *parse_alignment_specifier()
 {
     if (parser_debug) {
@@ -1462,7 +1477,7 @@ Type *parse_type_name()
         printf("--- %s()\n", __func__);
     }
     TypeQualifier *qualifiers = NULL;
-    TypeSpec *type_specs      = parse_specifier_qualifier_list(&qualifiers);
+    TypeSpec *type_specs      = parse_specifier_qualifier_list(&qualifiers, NULL);
 
     /* Construct base Type from type_specs (simplified to first basic type) */
     Type *base_type = fuse_type_specifiers(type_specs);

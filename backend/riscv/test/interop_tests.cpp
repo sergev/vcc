@@ -14,6 +14,7 @@ struct DI { double d; int i; };
 struct CD { char c; double d; };
 struct F3 { float a, b, c; };
 struct D1 { double d; };
+struct AL { char c; _Alignas(16) long x; };
 long ext(unsigned char a, signed char b, unsigned short c, short d, unsigned e, int f);
 unsigned char ruc(int x);
 short rs(int x);
@@ -49,6 +50,8 @@ long vsum(int n, ...);
 double vdsum(int n, ...);
 long vmix(const char *s, ...);
 long vstructs(int n, ...);
+long s_al(struct AL s);
+long p_al(struct AL *p);
 )";
 
 static const std::string kCallee = kDecls + R"(
@@ -139,6 +142,8 @@ long vmix(const char *s, ...)
     va_end(ap);
     return r;
 }
+long s_al(struct AL s) { return s.c * 10 + s.x; }
+long p_al(struct AL *p) { return (char *)&p->x - (char *)p + sizeof(struct AL) * 100; }
 long vstructs(int n, ...)
 {
     va_list ap;
@@ -203,6 +208,9 @@ int main(void)
     if (vdsum(3, 0.5, 1.25, (double)2.0f) != 3.75) return 27;
     if (vmix("idpi", 1, 2.5, "3", 4) != 1234) return 28;
     if (vstructs(2, i3, b, i3, b) != 136136) return 29;
+    struct AL al = { 3, 4 };
+    if (s_al(al) != 34) return 30;
+    if (p_al(&al) != 3216) return 31;
     return 0;
 }
 )";

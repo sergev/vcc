@@ -52,6 +52,8 @@ static void export_type_qualifier(FILE *fd, const TypeQualifier *qual, int paren
     }
 }
 
+static void export_alignment_spec(FILE *fd, AlignmentSpec *as, int parent_id);
+
 static void export_field(FILE *fd, Field *field, int parent_id)
 {
     while (field) {
@@ -68,6 +70,7 @@ static void export_field(FILE *fd, Field *field, int parent_id)
                 fprintf(fd, "  n%d -> n%d [label=\"bitfield\"];\n", id, expr_id);
                 export_expr(fd, field->u.member.bitfield, expr_id);
             }
+            export_alignment_spec(fd, field->u.member.align_spec, id);
             break;
         case FIELD_STATIC_ASSERT:
             fprintf(fd, "  n%d [label=\"StaticAssert\", shape=box];\n", id);

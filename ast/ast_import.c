@@ -219,7 +219,8 @@ Field *import_field(WFILE *input)
         field->u.member.type = import_type(input);
         field->u.member.name = wgetstr(input);
         check_input(input, "field name");
-        field->u.member.bitfield = import_expr(input);
+        field->u.member.bitfield   = import_expr(input);
+        field->u.member.align_spec = import_alignment_spec(input);
         return field;
     }
     if (tag == TAG_STATIC_ASSERT) {

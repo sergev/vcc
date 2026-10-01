@@ -132,6 +132,7 @@ struct Field {
             Type *type;
             Ident name;     /* optional */
             Expr *bitfield; /* optional */
+            AlignmentSpec *align_spec; /* optional: _Alignas */
         } member;
         struct {
             Expr *condition;
@@ -590,6 +591,7 @@ Type *clone_type(const Type *type, const char *funcname, const char *filename, u
 TypeQualifier *clone_type_qualifier(const TypeQualifier *qualifier);
 Param *clone_param(const Param *param);
 Expr *clone_expression(const Expr *expression);
+AlignmentSpec *clone_alignment_spec(const AlignmentSpec *as);
 Literal *clone_literal(const Literal *literal);
 GenericAssoc *clone_generic_assoc(const GenericAssoc *assoc);
 InitItem *clone_init_item(const InitItem *item);

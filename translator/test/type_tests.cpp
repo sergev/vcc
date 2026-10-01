@@ -494,3 +494,34 @@ TEST_F(TranslateTestRiscv, AlignasParameter)
 {
     EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"), "_Alignas on a parameter");
 }
+
+// _Alignas on a member: its offset, and the struct's alignment and size, follow it.
+TEST_F(TranslateTestRiscv, AlignasMember)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct T { char a; _Alignas(8) char b, c; int d; };
+        int f(void) { struct T t; t.a = 1; return t.a; }
+    )");
+    const Tac_Type *t = SymbolType(tac, "f", "%t");
+    EXPECT_EQ(TypeStr(t), "struct T(24,8)");
+    std::vector<int> offsets;
+    for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
+        offsets.push_back(m->offset);
+    EXPECT_EQ(offsets, (std::vector<int>{ 0, 8, 16, 20 }));
+    tac_free_toplevel(tac);
+}
+
+TEST_F(TranslateTestRiscv, AlignasBitField)
+{
+    EXPECT_DEATH(CompileUnit("struct B { _Alignas(8) int x : 3; };"), "_Alignas on a bit-field");
+}
+
+TEST_F(TranslateTestRiscv, AlignasMemberLessStrict)
+{
+    EXPECT_DEATH(CompileUnit("struct L { _Alignas(2) int x; };"), "less strict");
+}
+
+TEST_F(TranslateTestRiscv, AlignasTwice)
+{
+    EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"), "More than one _Alignas");
+}

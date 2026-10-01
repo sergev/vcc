@@ -47,14 +47,13 @@ static bool valid_alignment(long a)
     return a > 0 && ((a & (a - 1)) == 0 || a % (long)max == 0);
 }
 
-// The value of a declaration's _Alignas, in bytes: 0 for none or _Alignas(0).  The
-// specifier is left as an integer literal for alignas_bytes(): typedef names in it may
-// be out of scope by the time the translator reads it.
-static int alignas_value(DeclSpec *spec)
+// The value of an _Alignas, in bytes: 0 for none or _Alignas(0).  The specifier is
+// left as an integer literal for alignas_bytes(): typedef names in it may be out of
+// scope by the time the translator reads it.
+static int alignment_spec_value(AlignmentSpec *as)
 {
-    if (!spec || !spec->align_spec)
+    if (!as)
         return 0;
-    AlignmentSpec *as = spec->align_spec;
     long a;
     if (as->kind == ALIGN_SPEC_EXPR && as->u.expr->kind == EXPR_LITERAL &&
         as->u.expr->u.literal->kind == LITERAL_INT) {
@@ -82,6 +81,11 @@ static int alignas_value(DeclSpec *spec)
     as->u.expr->u.literal              = new_literal(LITERAL_INT);
     as->u.expr->u.literal->u.int_val   = a;
     return (int)a;
+}
+
+static int alignas_value(DeclSpec *spec)
+{
+    return spec ? alignment_spec_value(spec->align_spec) : 0;
 }
 
 int alignas_bytes(const DeclSpec *spec)
@@ -354,6 +358,13 @@ static void register_struct_type(const Type *t)
         if (f->kind == FIELD_STATIC_ASSERT)
             continue; /* already evaluated in validate_struct_definition */
         int member_alignment = get_alignment(f->u.member.type);
+        int alignas          = alignment_spec_value(f->u.member.align_spec);
+        if (alignas && f->u.member.bitfield)
+            fatal_error("_Alignas on a bit-field");
+        if (alignas && alignas < member_alignment)
+            fatal_error("_Alignas(%d) is less strict than the alignment of the type", alignas);
+        if (alignas > member_alignment)
+            member_alignment = alignas;
         int offset           = 0;
         if (kind == TYPE_STRUCT)
             offset = round_away_from_zero(member_alignment, current_size);

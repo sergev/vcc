@@ -51,6 +51,8 @@ static void export_type_qualifier(FILE *fd, const TypeQualifier *qual, int level
     }
 }
 
+static void export_alignment_spec(FILE *fd, AlignmentSpec *as, int level);
+
 static void export_field(FILE *fd, Field *field, int level)
 {
     while (field) {
@@ -67,6 +69,7 @@ static void export_field(FILE *fd, Field *field, int level)
                 fprintf(fd, "bitfield:\n");
                 export_expr(fd, field->u.member.bitfield, level + 2);
             }
+            export_alignment_spec(fd, field->u.member.align_spec, level + 1);
             break;
         case FIELD_STATIC_ASSERT:
             fprintf(fd, "- static_assert:\n");

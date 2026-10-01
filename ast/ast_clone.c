@@ -14,7 +14,6 @@ Param *clone_param(const Param *param);
 Declaration *clone_declaration(const Declaration *decl);
 DeclSpec *clone_decl_spec(const DeclSpec *spec);
 FunctionSpec *clone_function_spec(const FunctionSpec *fs);
-AlignmentSpec *clone_alignment_spec(const AlignmentSpec *as);
 InitDeclarator *clone_init_declarator(const InitDeclarator *init_decl);
 Initializer *clone_initializer(const Initializer *init);
 InitItem *clone_init_item(const InitItem *item);
@@ -124,6 +123,7 @@ Field *clone_field(const Field *field)
         result->u.member.type     = clone_type(field->u.member.type, __func__, __FILE__, __LINE__);
         result->u.member.name     = field->u.member.name ? xstrdup(field->u.member.name) : NULL;
         result->u.member.bitfield = clone_expression(field->u.member.bitfield);
+        result->u.member.align_spec = clone_alignment_spec(field->u.member.align_spec);
         break;
     case FIELD_STATIC_ASSERT:
         result->u.static_assrt.condition = clone_expression(field->u.static_assrt.condition);

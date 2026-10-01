@@ -520,3 +520,31 @@ TEST_F(ParserTest, DistinctAnonStructDefsGetDistinctTags)
     ExpectAnonTag(tb);
     EXPECT_STRNE(ta, tb);
 }
+
+//
+// _Alignas on members: each declarator gets its own copy; a clone keeps it, and a
+// different one compares unequal.
+//      struct A { char c; _Alignas(16) char d, e; _Alignas(long) int f; };
+//
+TEST_F(ParserTest, StructMemberAlignas)
+{
+    Type *type = TestType("struct A { char c; _Alignas(16) char d, e; _Alignas(long) int f; };");
+    Field *c = type->u.struct_t.fields;
+    Field *d = c->next, *e = d->next, *f = e->next;
+    EXPECT_EQ(c->u.member.align_spec, nullptr);
+    ASSERT_NE(d->u.member.align_spec, nullptr);
+    ASSERT_NE(e->u.member.align_spec, nullptr);
+    EXPECT_NE(d->u.member.align_spec, e->u.member.align_spec);
+    EXPECT_EQ(d->u.member.align_spec->kind, ALIGN_SPEC_EXPR);
+    EXPECT_EQ(d->u.member.align_spec->u.expr->u.literal->u.int_val, 16);
+    ASSERT_NE(f->u.member.align_spec, nullptr);
+    EXPECT_EQ(f->u.member.align_spec->kind, ALIGN_SPEC_TYPE);
+    EXPECT_EQ(f->u.member.align_spec->u.type->kind, TYPE_LONG);
+
+    Type *copy = clone_type(type, __func__, __FILE__, __LINE__);
+    EXPECT_TRUE(compare_type(type, copy));
+    d->u.member.align_spec->u.expr->u.literal->u.int_val = 32;
+    EXPECT_FALSE(compare_type(type, copy));
+    free_type(copy);
+    free_type(type);
+}

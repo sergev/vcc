@@ -74,6 +74,7 @@ void free_field(Field *field)
             free_type(field->u.member.type);
             xfree(field->u.member.name);
             free_expression(field->u.member.bitfield);
+            free_alignment_spec(field->u.member.align_spec);
             break;
         case FIELD_STATIC_ASSERT:
             free_expression(field->u.static_assrt.condition);

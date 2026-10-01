@@ -84,6 +84,8 @@ bool compare_field(const Field *a, const Field *b)
                 return false;
             if (!compare_ident(a->u.member.name, b->u.member.name))
                 return false;
+            if (!compare_alignment_spec(a->u.member.align_spec, b->u.member.align_spec))
+                return false;
             if (!compare_expr(a->u.member.bitfield, b->u.member.bitfield))
                 return false;
             break;

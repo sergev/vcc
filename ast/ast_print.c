@@ -10,6 +10,22 @@ static void print_indent(FILE *fd, int indent)
     fprintf(fd, "%*s", indent, "");
 }
 
+// Print an _Alignas specifier, if any.
+static void print_alignment_spec(FILE *fd, const AlignmentSpec *as, int indent)
+{
+    if (!as)
+        return;
+    print_indent(fd, indent);
+    fprintf(fd, "AlignSpec: ");
+    if (as->kind == ALIGN_SPEC_TYPE) {
+        fprintf(fd, "type\n");
+        print_type(fd, as->u.type, indent + 2);
+    } else {
+        fprintf(fd, "expr\n");
+        print_expression(fd, as->u.expr, indent + 2);
+    }
+}
+
 // Enum-to-string mappings
 static const char *expr_kind_str[] = {
     [EXPR_LITERAL]      = "Literal",
@@ -112,6 +128,7 @@ void print_field(FILE *fd, const Field *field, int indent)
             fprintf(fd, "Bitfield:\n");
             print_expression(fd, field->u.member.bitfield, indent + 4);
         }
+        print_alignment_spec(fd, field->u.member.align_spec, indent + 2);
         break;
     case FIELD_STATIC_ASSERT:
         fprintf(fd, "StaticAssert:\n");
@@ -670,17 +687,7 @@ static void print_decl_spec(FILE *fd, const DeclSpec *spec, int indent)
             break;
         }
     }
-    if (spec->align_spec) {
-        print_indent(fd, indent + 2);
-        fprintf(fd, "AlignSpec: ");
-        if (spec->align_spec->kind == ALIGN_SPEC_TYPE) {
-            fprintf(fd, "type\n");
-            print_type(fd, spec->align_spec->u.type, indent + 4);
-        } else {
-            fprintf(fd, "expr\n");
-            print_expression(fd, spec->align_spec->u.expr, indent + 4);
-        }
-    }
+    print_alignment_spec(fd, spec->align_spec, indent + 2);
 }
 
 // Print InitDeclarator
