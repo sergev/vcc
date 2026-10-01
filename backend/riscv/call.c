@@ -123,10 +123,7 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
     return a;
 }
 
-static bool is_freg(int reg)
-{
-    return reg >= RV_F0;
-}
+#define is_freg rv_is_freg
 
 // Load a piece of aggregate `name` into `reg`, or store `reg` into a piece at base + off.
 static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
@@ -159,6 +156,18 @@ static void int_to_fp(Gen *g, const Tac_Type *t, int freg, int ireg)
     emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(freg), rv_reg(ireg));
 }
 
+// Bring an integer in `reg`, of type `have`, to the form of type `want` when that is
+// narrower than a word: the psABI extends narrow arguments and results by the declared
+// type, which a value of another type (a cast removed by copy propagation) may not be.
+static void conform(Gen *g, int reg, const Tac_Type *have, const Tac_Type *want)
+{
+    if (!want || !have || want->kind == have->kind || rv_is_aggregate(want) ||
+        want->kind == TAC_TYPE_VOID || want->kind == TAC_TYPE_LONG_DOUBLE || rv_is_fp(want) ||
+        rv_size(want) >= 4)
+        return;
+    gen_canon(g, reg, reg, want);
+}
+
 // Whether a value is passed whole in integer registers, maybe ending on the stack.
 static bool in_int_regs(const ArgLoc *a)
 {
@@ -185,6 +194,19 @@ void gen_params(Gen *g)
         if (!t)
             fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t, false);
+        int preg = assigned_reg(g, p->name);
+        if (preg) {
+            // A scalar, into its register.
+            const Piece *pc = &a.piece[0];
+            place_reg(g, p->name, t, preg);
+            if (pc->reg < 0)
+                load_mem(g, preg, t, RV_S0, pc->stack);
+            else if (is_freg(preg) && !is_freg(pc->reg))
+                int_to_fp(g, t, preg, pc->reg);
+            else
+                move_reg(g, preg, pc->reg, t);
+            continue;
+        }
         if (!a.by_ref && a.piece[0].reg < 0) {
             place_slot(g, p->name, t, a.piece[0].stack); // entirely on the stack
             continue;
@@ -222,7 +244,8 @@ void gen_params(Gen *g)
     }
 }
 
-static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a)
+// Pass `v` as a parameter of type `want` (NULL when unknown or variadic).
+static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a, const Tac_Type *want)
 {
     const Tac_Type *t = val_type(g, v);
     if (a->by_ref) {
@@ -245,10 +268,11 @@ static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a)
         if (rv_is_aggregate(t)) {
             load_piece(g, reg, v->u.var_name, pc);
         } else if (rv_is_fp(t) && !is_freg(reg)) {
-            load_val(g, RV_F0, v);
-            fp_to_int(g, t, reg, RV_F0);
+            fp_to_int(g, t, reg, use_val(g, RV_F0, v));
         } else {
             load_val(g, reg, v);
+            if (!is_freg(reg))
+                conform(g, reg, t, want);
         }
         if (pc->reg < 0)
             emit2(g, RV_SD, rv_reg(reg), mem(g, RV_SP, pc->stack));
@@ -262,11 +286,13 @@ static ArgLoc classify_result(const Tac_Type *t)
     return classify(&s, t, false);
 }
 
-// Store a returned value into `dst`.
-static void store_result(Gen *g, const Tac_Val *dst)
+// Store a value returned as type `ret` into `dst`.
+static void store_result(Gen *g, const Tac_Val *dst, const Tac_Type *ret)
 {
     const Tac_Type *t = val_type(g, dst);
     if (!rv_is_aggregate(t)) {
+        if (!rv_is_fp(t))
+            conform(g, RV_A0, ret, t);
         store_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, dst);
         return;
     }
@@ -287,24 +313,27 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
             nfixed++;
 
-    ArgState s = { 0 };
-    int i      = 0;
+    ArgState s           = { 0 };
+    int i                = 0;
+    const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
         ArgLoc a = classify(&s, val_type(g, v), variadic && i >= nfixed);
-        gen_arg(g, v, &a);
+        gen_arg(g, v, &a, want);
+        if (want)
+            want = want->next;
     }
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
 
     if (in->u.fun_call.indirect) {
         Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
-        load_val(g, RV_T1, &fp);
-        rv_append(g->fn, RV_JALR)->opnd[0] = rv_reg(RV_T1);
+        int reg = use_val(g, RV_T1, &fp);
+        rv_append(g->fn, RV_JALR)->opnd[0] = rv_reg(reg);
     } else {
         rv_append(g->fn, RV_CALL)->opnd[0] = rv_sym(in->u.fun_call.fun_name, 0);
     }
     if (in->u.fun_call.dst)
-        store_result(g, in->u.fun_call.dst);
+        store_result(g, in->u.fun_call.dst, ft ? ft->u.fun_type.ret_type : NULL);
 }
 
 void gen_return(Gen *g, const Tac_Val *v)
@@ -315,8 +344,12 @@ void gen_return(Gen *g, const Tac_Val *v)
             ArgLoc a = classify_result(t);
             for (int i = 0; i < a.npieces; i++)
                 load_piece(g, a.piece[i].reg, v->u.var_name, &a.piece[i]);
+        } else if (rv_is_fp(t)) {
+            load_val(g, RV_FA0, v);
         } else {
-            load_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, v);
+            const Tac_Type *ft = g->tl->u.function.type;
+            load_val(g, RV_A0, v);
+            conform(g, RV_A0, t, ft ? ft->u.fun_type.ret_type : NULL);
         }
     }
     gen_epilogue(g);

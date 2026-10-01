@@ -5,10 +5,16 @@
 
 #include "internal.h"
 
-// Give every parameter and local a slot.  An ALLOCATE_LOCAL may ask for more room or
-// alignment than the type.
+bool riscv_regalloc = true;
+
+// Save slots for the callee-saved registers in use, then a register or a slot for
+// every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment
+// than the type.
 static void layout_frame(Gen *g)
 {
+    for (int i = 0; i < g->nsaved; i++)
+        g->saved_off[i] = alloc_slot(g, NULL, NULL, 8, 8);
+
     StringMap allocs;
     map_init(&allocs);
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)
@@ -19,6 +25,11 @@ static void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
+        int reg = assigned_reg(g, p->name);
+        if (reg) {
+            place_reg(g, p->name, p->type, reg);
+            continue;
+        }
         int size  = rv_size(p->type);
         int align = rv_align(p->type);
         intptr_t v;
@@ -38,6 +49,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    if (riscv_regalloc)
+        gen_regalloc(&g);
     layout_frame(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {

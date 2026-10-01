@@ -99,6 +99,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     rv_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->regs);
     g->header = gen_variadic(g) ? 80 : 16;
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
@@ -129,6 +130,7 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->regs);
     rv_free_func(g->fn);
 }
 
@@ -143,11 +145,12 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
     s->offset = offset;
+    s->reg    = reg;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -158,19 +161,38 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->header - g->locals_size;
     if (name)
-        insert_slot(g, name, type, offset);
+        insert_slot(g, name, type, offset, 0);
     return offset;
 }
 
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
 {
-    insert_slot(g, name, type, offset);
+    insert_slot(g, name, type, offset, 0);
+}
+
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg)
+{
+    insert_slot(g, name, type, 0, reg);
+}
+
+int assigned_reg(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->regs, name, &v) ? (int)v : 0;
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
 {
     intptr_t v;
     return map_get(&g->frame, name, &v) ? (const Slot *)v : NULL;
+}
+
+int var_reg(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return 0;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->reg : 0;
 }
 
 const Tac_Type *name_type(const Gen *g, const char *name)
@@ -252,6 +274,8 @@ void gen_addr(Gen *g, int reg, int base, int64_t off)
 void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->reg)
+        fatal_error("riscv: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = RV_S0;
         *off  = s->offset;
@@ -264,10 +288,12 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
     *off  = 0;
 }
 
-static bool is_freg(int reg)
+bool rv_is_freg(int reg)
 {
     return reg >= RV_F0 && reg < RV_VREG;
 }
+
+#define is_freg rv_is_freg
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
@@ -363,8 +389,56 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
     }
 }
 
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    if (dst == src)
+        return;
+    if (is_freg(dst))
+        emit2(g, rv_is_double(t) ? RV_FMVD : RV_FMVS, rv_reg(dst), rv_reg(src));
+    else
+        emit2(g, RV_MV, rv_reg(dst), rv_reg(src));
+}
+
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    int size = rv_size(t);
+    if (size >= 8) {
+        move_reg(g, dst, src, t);
+    } else if (size == 4) {
+        emit2(g, RV_SEXTW, rv_reg(dst), rv_reg(src));
+    } else if (size == 1 && rv_is_unsigned(t)) {
+        emit3(g, RV_ANDI, rv_reg(dst), rv_reg(src), rv_imm(255));
+    } else {
+        int shift = 64 - 8 * size;
+        emit3(g, RV_SLLI, rv_reg(dst), rv_reg(src), rv_imm(shift));
+        emit3(g, rv_is_unsigned(t) ? RV_SRLI : RV_SRAI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
+    }
+}
+
+void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t)
+{
+    int64_t v = const_int(g, c);
+    switch (rv_size(t)) {
+    case 1:
+        v = rv_is_unsigned(t) ? (int64_t)(uint8_t)v : (int64_t)(int8_t)v;
+        break;
+    case 2:
+        v = rv_is_unsigned(t) ? (int64_t)(uint16_t)v : (int64_t)(int16_t)v;
+        break;
+    case 4:
+        v = (int32_t)v;
+        break;
+    }
+    gen_li(g, reg, v);
+}
+
 void load_val(Gen *g, int reg, const Tac_Val *v)
 {
+    int r = var_reg(g, v);
+    if (r) {
+        move_reg(g, reg, r, val_type(g, v));
+        return;
+    }
     if (v->kind == TAC_VAL_CONSTANT) {
         if (is_freg(reg))
             load_fp_const(g, reg, v->u.constant);
@@ -379,8 +453,28 @@ void load_val(Gen *g, int reg, const Tac_Val *v)
     load_mem(g, reg, t, base, off);
 }
 
+int use_val(Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    if (r)
+        return r;
+    load_val(g, scratch, v);
+    return scratch;
+}
+
+int def_reg(const Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    return r ? r : scratch;
+}
+
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
+    int r = var_reg(g, v);
+    if (r) {
+        move_reg(g, r, reg, val_type(g, v));
+        return;
+    }
     int base;
     int64_t off;
     const Tac_Type *t = name_type(g, v->u.var_name);
@@ -430,8 +524,25 @@ void store_bytes(Gen *g, int reg, int base, int64_t off, int size)
     }
 }
 
+// Save or restore the callee-saved registers in use.
+static void save_regs(Gen *g, Rv_Block *b, bool restore)
+{
+    for (int i = 0; i < g->nsaved; i++) {
+        int reg = g->saved_reg[i];
+        Rv_Op op;
+        if (is_freg(reg))
+            op = restore ? RV_FLD : RV_FSD;
+        else
+            op = restore ? RV_LD : RV_SD;
+        Rv_Instr *in = b ? rv_append_to(b, op) : rv_append(g->fn, op);
+        in->opnd[0]  = rv_reg(reg);
+        in->opnd[1]  = rv_mem(RV_S0, g->saved_off[i]);
+    }
+}
+
 void gen_epilogue(Gen *g)
 {
+    save_regs(g, NULL, true);
     emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
     emit2(g, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
     emit2(g, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
@@ -458,9 +569,9 @@ void gen_prologue(Gen *g)
     in->opnd[1]  = rv_reg(RV_SP);
     in->opnd[2]  = rv_imm(g->header);
     int rest     = (g->locals_size + g->outgoing + 15) / 16 * 16;
-    if (rest == 0)
-        return;
-    if (fits12(-rest)) {
+    if (rest == 0) {
+        // nothing
+    } else if (fits12(-rest)) {
         in          = rv_append_to(b, RV_ADDI);
         in->opnd[0] = rv_reg(RV_SP);
         in->opnd[1] = rv_reg(RV_SP);
@@ -474,4 +585,5 @@ void gen_prologue(Gen *g)
         in->opnd[1] = rv_reg(RV_SP);
         in->opnd[2] = rv_reg(RV_T0);
     }
+    save_regs(g, b, false);
 }

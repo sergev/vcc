@@ -8,6 +8,7 @@
 TEST_F(RiscvTest, FrameSlots)
 {
     DisableOptimization();
+    riscv_regalloc = false;
     std::string s = CompileToRiscv(
         "int main(void) { char c = 1; long l = 2; int i = 3; double d = 0.5; return i; }");
     EXPECT_EQ(R"(addi sp, sp, -16
@@ -50,6 +51,7 @@ static std::string ManyLocals()
 TEST_F(RiscvTest, FrameLargeOffsets)
 {
     DisableOptimization();
+    riscv_regalloc = false;
     std::string s = Code(CompileToRiscv(ManyLocals().c_str()));
     EXPECT_NE(std::string::npos, s.find(R"(addi s0, sp, 16
 li t0, 2400
@@ -83,7 +85,7 @@ sd a5, -24(s0)
 sd a6, -16(s0)
 sd a7, -8(s0)
 )")) << s;
-    EXPECT_NE(std::string::npos, s.find("addi t0, s0, -64\n")) << s; // &n
+    EXPECT_NE(std::string::npos, s.find(", s0, -64\n")) << s; // &n
     EXPECT_NE(std::string::npos, s.find(R"(addi sp, s0, -80
 ld ra, 8(sp)
 ld s0, 0(sp)

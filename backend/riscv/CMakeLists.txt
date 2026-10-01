@@ -7,11 +7,12 @@ add_library(riscv STATIC
     frame.c
     instr.c
     call.c
+    regalloc.c
     data.c
     codegen.c
 )
 target_include_directories(riscv PUBLIC .)
-target_link_libraries(riscv tac libutil)
+target_link_libraries(riscv backend_common tac libutil)
 
 #
 # Tests for the RISC-V backend: golden assembly, run tests on qemu, and the shared
@@ -22,6 +23,7 @@ add_executable(riscv-tests
     test/codegen_tests.cpp
     test/frame_tests.cpp
     test/instr_tests.cpp
+    test/regalloc_tests.cpp
     test/data_tests.cpp
     test/run_tests.cpp
     test/interop_tests.cpp

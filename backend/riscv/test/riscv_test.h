@@ -27,7 +27,7 @@ class RiscvTest : public BackendTest {
 protected:
     int exit_status = -1; // of the last run: main's result, modulo 256
 
-    RiscvTest() : BackendTest("riscv64") {}
+    RiscvTest() : BackendTest("riscv64") { riscv_regalloc = true; }
 
     // Assembly of every toplevel of the translation unit.
     std::string CompileToRiscv(const char *src)

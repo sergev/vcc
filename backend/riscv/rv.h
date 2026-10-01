@@ -78,6 +78,7 @@ typedef struct {
     X(FCVTWD, "fcvt.w.d") X(FCVTWUD, "fcvt.wu.d") X(FCVTLD, "fcvt.l.d")                   \
     X(FCVTLUD, "fcvt.lu.d") X(FCVTSD, "fcvt.s.d") X(FCVTDS, "fcvt.d.s")                   \
     X(FMVXW, "fmv.x.w") X(FMVWX, "fmv.w.x") X(FMVXD, "fmv.x.d") X(FMVDX, "fmv.d.x")       \
+    X(FMVS, "fmv.s") X(FMVD, "fmv.d")                                                     \
     X(J, "j") X(BEQZ, "beqz") X(BNEZ, "bnez") X(CALL, "call") X(JALR, "jalr")             \
     X(RET, "ret")
 

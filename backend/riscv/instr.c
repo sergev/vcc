@@ -1,6 +1,6 @@
 //
-// Instruction selection: one TAC instruction at a time, operands through scratch
-// registers.
+// Instruction selection: one TAC instruction at a time, on the allocated registers
+// of its operands, or scratch registers for those in memory.
 //
 #include <stdlib.h>
 #include <string.h>
@@ -42,17 +42,18 @@ static void gen_jump(Gen *g, Rv_Op op, int reg, const char *tac)
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
+    int reg;
     if (rv_is_fp(t)) {
         // t0 = (cond == 0.0), so a zero condition is a nonzero t0.
-        load_val(g, RV_F0, cond);
+        int f = use_val(g, RV_F0, cond);
         emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
-        emit3(g, rv_is_double(t) ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(RV_F0),
-              rv_reg(RV_F0 + 1));
+        emit3(g, rv_is_double(t) ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(f), rv_reg(RV_F0 + 1));
         if_zero = !if_zero;
+        reg     = RV_T0;
     } else {
-        load_val(g, RV_T0, cond);
+        reg = use_val(g, RV_T0, cond);
     }
-    gen_jump(g, if_zero ? RV_BEQZ : RV_BNEZ, RV_T0, target);
+    gen_jump(g, if_zero ? RV_BEQZ : RV_BNEZ, reg, target);
 }
 
 // dst = src, for any type.
@@ -67,20 +68,25 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
         gen_memcopy(g, dbase, doff, sbase, soff, rv_size(t), rv_align(t));
         return;
     }
-    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
-    load_val(g, reg, src);
-    store_val(g, reg, dst);
+    int d = var_reg(g, dst);
+    if (d && src->kind == TAC_VAL_CONSTANT && !rv_is_fp(t))
+        load_const_as(g, d, src->u.constant, t);
+    else if (d)
+        load_val(g, d, src);
+    else
+        store_val(g, use_val(g, rv_is_fp(t) ? RV_F0 : RV_T0, src), dst);
 }
 
 // dst = &src, of a named object or function.
 static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Slot *slot = find_slot(g, src->u.var_name);
+    int d            = def_reg(g, RV_T0, dst);
     if (slot)
-        gen_addr(g, RV_T0, RV_S0, slot->offset);
+        gen_addr(g, d, RV_S0, slot->offset);
     else
-        emit2(g, RV_LA, rv_reg(RV_T0), rv_sym(src->u.var_name, 0));
-    store_val(g, RV_T0, dst);
+        emit2(g, RV_LA, rv_reg(d), rv_sym(src->u.var_name, 0));
+    store_val(g, d, dst);
 }
 
 // The type stored through pointer value `ptr`, or NULL when not known.
@@ -94,17 +100,17 @@ static const Tac_Type *pointee(Gen *g, const Tac_Val *ptr)
 static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    load_val(g, RV_T3, src_ptr);
+    int p             = use_val(g, RV_T3, src_ptr);
     if (rv_is_aggregate(t)) {
         int base;
         int64_t off;
         name_addr(g, dst->u.var_name, RV_T4, &base, &off);
-        gen_memcopy(g, base, off, RV_T3, 0, rv_size(t), rv_align(t));
+        gen_memcopy(g, base, off, p, 0, rv_size(t), rv_align(t));
         return;
     }
-    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
-    load_mem(g, reg, t, RV_T3, 0);
-    store_val(g, reg, dst);
+    int d = def_reg(g, rv_is_fp(t) ? RV_F0 : RV_T0, dst);
+    load_mem(g, d, t, p, 0);
+    store_val(g, d, dst);
 }
 
 // *dst_ptr = src, in the width of the pointee (or of src when that is not known).
@@ -114,50 +120,53 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
     if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
         (rv_is_aggregate(t) && !rv_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
-    load_val(g, RV_T4, dst_ptr);
+    int p = use_val(g, RV_T4, dst_ptr);
     if (rv_is_aggregate(t)) {
         int base;
         int64_t off;
         name_addr(g, src->u.var_name, RV_T3, &base, &off);
-        gen_memcopy(g, RV_T4, 0, base, off, rv_size(t), rv_align(t));
+        gen_memcopy(g, p, 0, base, off, rv_size(t), rv_align(t));
         return;
     }
-    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
-    load_val(g, reg, src);
-    store_mem(g, reg, t, RV_T4, 0);
+    store_mem(g, use_val(g, rv_is_fp(t) ? RV_F0 : RV_T0, src), t, p, 0);
 }
 
 // dst = ptr + index * scale (bytes).
 static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
 {
-    int scale = in->u.add_ptr.scale;
-    load_val(g, RV_T0, in->u.add_ptr.ptr);
-    load_val(g, RV_T1, in->u.add_ptr.index);
+    int scale          = in->u.add_ptr.scale;
+    int p              = use_val(g, RV_T0, in->u.add_ptr.ptr);
+    int i              = use_val(g, RV_T1, in->u.add_ptr.index);
     const Tac_Type *it = val_type(g, in->u.add_ptr.index);
     if (rv_size(it) == 4 && rv_is_unsigned(it)) {
-        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
+        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(i), rv_imm(32));
         emit3(g, RV_SRLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
+        i = RV_T1;
     }
     if (scale > 1 && (scale & (scale - 1)) == 0) {
         int shift = 0;
         while ((1 << shift) < scale)
             shift++;
-        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(shift));
+        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(i), rv_imm(shift));
+        i = RV_T1;
     } else if (scale != 1) {
         gen_li(g, RV_T2, scale);
-        emit3(g, RV_MUL, rv_reg(RV_T1), rv_reg(RV_T1), rv_reg(RV_T2));
+        emit3(g, RV_MUL, rv_reg(RV_T1), rv_reg(i), rv_reg(RV_T2));
+        i = RV_T1;
     }
-    emit3(g, RV_ADD, rv_reg(RV_T0), rv_reg(RV_T0), rv_reg(RV_T1));
-    store_val(g, RV_T0, in->u.add_ptr.dst);
+    int d = def_reg(g, RV_T0, in->u.add_ptr.dst);
+    emit3(g, RV_ADD, rv_reg(d), rv_reg(p), rv_reg(i));
+    store_val(g, d, in->u.add_ptr.dst);
 }
 
 // dst = a - b, a byte count.
 static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
 {
-    load_val(g, RV_T0, in->u.ptr_diff.ptr_a);
-    load_val(g, RV_T1, in->u.ptr_diff.ptr_b);
-    emit3(g, RV_SUB, rv_reg(RV_T0), rv_reg(RV_T0), rv_reg(RV_T1));
-    store_val(g, RV_T0, in->u.ptr_diff.dst);
+    int a = use_val(g, RV_T0, in->u.ptr_diff.ptr_a);
+    int b = use_val(g, RV_T1, in->u.ptr_diff.ptr_b);
+    int d = def_reg(g, RV_T0, in->u.ptr_diff.dst);
+    emit3(g, RV_SUB, rv_reg(d), rv_reg(a), rv_reg(b));
+    store_val(g, d, in->u.ptr_diff.dst);
 }
 
 // The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
@@ -210,9 +219,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
         gen_memcopy(g, base, off, sbase, soff, rv_size(t), rv_align(t));
         return;
     }
-    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
-    load_val(g, reg, src);
-    store_mem(g, reg, t, base, off);
+    store_mem(g, use_val(g, rv_is_fp(t) ? RV_F0 : RV_T0, src), t, base, off);
 }
 
 // Member load: dst = aggregate `src` at byte `offset`.
@@ -233,48 +240,71 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
         gen_memcopy(g, dbase, doff, base, off, rv_size(t), rv_align(t));
         return;
     }
-    int reg = rv_is_fp(t) ? RV_F0 : RV_T0;
-    load_mem(g, reg, t, base, off);
-    store_val(g, reg, dst);
+    int d = def_reg(g, rv_is_fp(t) ? RV_F0 : RV_T0, dst);
+    load_mem(g, d, t, base, off);
+    store_val(g, d, dst);
 }
 
-// Zero-extend `reg` from `size` bytes.
-static void gen_zext(Gen *g, int reg, int size)
+// dst = src zero-extended from `size` bytes.
+static void gen_zext(Gen *g, int dst, int src, int size)
 {
-    if (size >= 8)
+    static const Tac_Type ulong = { .kind = TAC_TYPE_ULONG };
+    if (size >= 8) {
+        move_reg(g, dst, src, &ulong);
         return;
+    }
     if (size == 1) {
-        emit3(g, RV_ANDI, rv_reg(reg), rv_reg(reg), rv_imm(255));
+        emit3(g, RV_ANDI, rv_reg(dst), rv_reg(src), rv_imm(255));
         return;
     }
     int shift = 64 - 8 * size;
-    emit3(g, RV_SLLI, rv_reg(reg), rv_reg(reg), rv_imm(shift));
-    emit3(g, RV_SRLI, rv_reg(reg), rv_reg(reg), rv_imm(shift));
+    emit3(g, RV_SLLI, rv_reg(dst), rv_reg(src), rv_imm(shift));
+    emit3(g, RV_SRLI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
 }
 
-// An integer conversion: load by the source type, store by the destination's.
-static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, bool zext)
+// An integer conversion.  In memory the store truncates; a register is brought to
+// the destination's form.  A sign extension keeps the value.
+static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
+                            Tac_InstructionKind kind)
 {
-    load_val(g, RV_T0, src);
-    if (zext)
-        gen_zext(g, RV_T0, rv_size(val_type(g, src)));
-    store_val(g, RV_T0, dst);
+    int s = use_val(g, RV_T0, src);
+    int d = def_reg(g, RV_T0, dst);
+    if (kind == TAC_INSTRUCTION_ZERO_EXTEND) {
+        gen_zext(g, d, s, rv_size(val_type(g, src)));
+        s = d;
+    } else if (kind == TAC_INSTRUCTION_TRUNCATE && var_reg(g, dst)) {
+        gen_canon(g, d, s, val_type(g, dst));
+        s = d;
+    }
+    store_val(g, s, dst);
 }
 
 static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
     bool d = rv_is_double(t);
-    load_val(g, RV_F0, in->u.unary.src);
+    int s  = use_val(g, RV_F0, in->u.unary.src);
     if (in->u.unary.op == TAC_UNARY_NOT) {
+        int r = def_reg(g, RV_T0, in->u.unary.dst);
         emit2(g, d ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
-        emit3(g, d ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(RV_F0), rv_reg(RV_F0 + 1));
-        store_val(g, RV_T0, in->u.unary.dst);
+        emit3(g, d ? RV_FEQD : RV_FEQS, rv_reg(r), rv_reg(s), rv_reg(RV_F0 + 1));
+        store_val(g, r, in->u.unary.dst);
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("riscv: %s: bad floating-point unary operator", gen_name(g));
-    emit2(g, d ? RV_FNEGD : RV_FNEGS, rv_reg(RV_F0), rv_reg(RV_F0));
-    store_val(g, RV_F0, in->u.unary.dst);
+    int r = def_reg(g, RV_F0, in->u.unary.dst);
+    emit2(g, d ? RV_FNEGD : RV_FNEGS, rv_reg(r), rv_reg(s));
+    store_val(g, r, in->u.unary.dst);
+}
+
+// Store integer result `d` into `dst`; a register narrower than a word is brought to
+// its type's form, as a store and reload would.
+static void store_int_result(Gen *g, int d, const Tac_Val *dst)
+{
+    const Tac_Type *t = val_type(g, dst);
+    if (var_reg(g, dst) && rv_size(t) < 4)
+        gen_canon(g, d, d, t);
+    store_val(g, d, dst);
 }
 
 static void gen_unary(Gen *g, const Tac_Instruction *in)
@@ -284,30 +314,32 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_fp_unary(g, in, t);
         return;
     }
-    bool word = rv_size(t) <= 4;
-    load_val(g, RV_T0, in->u.unary.src);
+    bool word    = rv_size(t) <= 4;
+    Rv_Operand s = rv_reg(use_val(g, RV_T0, in->u.unary.src));
+    int d        = def_reg(g, RV_T0, in->u.unary.dst);
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED:
-        emit2(g, word ? RV_NEGW : RV_NEG, rv_reg(RV_T0), rv_reg(RV_T0));
+        emit2(g, word ? RV_NEGW : RV_NEG, rv_reg(d), s);
         break;
     case TAC_UNARY_COMPLEMENT:
     case TAC_UNARY_COMPLEMENT_UNSIGNED:
-        emit2(g, RV_NOT, rv_reg(RV_T0), rv_reg(RV_T0));
+        emit2(g, RV_NOT, rv_reg(d), s);
         break;
     case TAC_UNARY_NOT:
-        emit2(g, RV_SEQZ, rv_reg(RV_T0), rv_reg(RV_T0));
+        emit2(g, RV_SEQZ, rv_reg(d), s);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
         fatal_error("riscv: %s: NEGATE_DOUBLE of an integer", gen_name(g));
     }
-    store_val(g, RV_T0, in->u.unary.dst);
+    store_int_result(g, d, in->u.unary.dst);
 }
 
-// t0 = t0 op t1 for an integer operator; `word` selects the 32-bit forms.
-static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsigned)
+// d = a op b for an integer operator; `word` selects the 32-bit forms.  The sources
+// are read before d is written.
+static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsigned,
+                          Rv_Operand d, Rv_Operand a, Rv_Operand b)
 {
-    Rv_Operand d = rv_reg(RV_T0), a = rv_reg(RV_T0), b = rv_reg(RV_T1);
     switch (op) {
     case TAC_BINARY_ADD:
     case TAC_BINARY_ADD_UNSIGNED:
@@ -404,26 +436,28 @@ static bool is_unsigned_op(Tac_BinaryOperator op)
 // A floating-point operator; a comparison leaves 0/1 in t0, arithmetic its result in ft0.
 static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
-    bool d       = rv_is_double(t);
-    Rv_Operand a = rv_reg(RV_F0), b = rv_reg(RV_F0 + 1), r = rv_reg(RV_T0);
-    load_val(g, RV_F0, in->u.binary.src1);
-    load_val(g, RV_F0 + 1, in->u.binary.src2);
+    bool d          = rv_is_double(t);
+    const Tac_Val *dst = in->u.binary.dst;
+    Rv_Operand a    = rv_reg(use_val(g, RV_F0, in->u.binary.src1));
+    Rv_Operand b    = rv_reg(use_val(g, RV_F0 + 1, in->u.binary.src2));
+    int dreg        = def_reg(g, rv_is_fp(val_type(g, dst)) ? RV_F0 : RV_T0, dst);
+    Rv_Operand r = rv_reg(dreg), f = r;
     switch (in->u.binary.op) {
     case TAC_BINARY_ADD:
     case TAC_BINARY_ADD_DOUBLE:
-        emit3(g, d ? RV_FADDD : RV_FADDS, a, a, b);
+        emit3(g, d ? RV_FADDD : RV_FADDS, f, a, b);
         break;
     case TAC_BINARY_SUBTRACT:
     case TAC_BINARY_SUBTRACT_DOUBLE:
-        emit3(g, d ? RV_FSUBD : RV_FSUBS, a, a, b);
+        emit3(g, d ? RV_FSUBD : RV_FSUBS, f, a, b);
         break;
     case TAC_BINARY_MULTIPLY:
     case TAC_BINARY_MULTIPLY_DOUBLE:
-        emit3(g, d ? RV_FMULD : RV_FMULS, a, a, b);
+        emit3(g, d ? RV_FMULD : RV_FMULS, f, a, b);
         break;
     case TAC_BINARY_DIVIDE:
     case TAC_BINARY_DIVIDE_DOUBLE:
-        emit3(g, d ? RV_FDIVD : RV_FDIVS, a, a, b);
+        emit3(g, d ? RV_FDIVD : RV_FDIVS, f, a, b);
         break;
     case TAC_BINARY_EQUAL:
         emit3(g, d ? RV_FEQD : RV_FEQS, r, a, b);
@@ -451,7 +485,7 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     default:
         fatal_error("riscv: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
-    store_val(g, rv_is_fp(val_type(g, in->u.binary.dst)) ? RV_F0 : RV_T0, in->u.binary.dst);
+    store_val(g, dreg, dst);
 }
 
 static void gen_binary(Gen *g, const Tac_Instruction *in)
@@ -461,11 +495,12 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         gen_fp_binary(g, in, t);
         return;
     }
-    load_val(g, RV_T0, in->u.binary.src1);
-    load_val(g, RV_T1, in->u.binary.src2);
+    Rv_Operand a = rv_reg(use_val(g, RV_T0, in->u.binary.src1));
+    Rv_Operand b = rv_reg(use_val(g, RV_T1, in->u.binary.src2));
+    int d        = def_reg(g, RV_T0, in->u.binary.dst);
     gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4,
-                  rv_is_unsigned(t) || is_unsigned_op(in->u.binary.op));
-    store_val(g, RV_T0, in->u.binary.dst);
+                  rv_is_unsigned(t) || is_unsigned_op(in->u.binary.op), rv_reg(d), a, b);
+    store_int_result(g, d, in->u.binary.dst);
 }
 
 // An int/FP or float/double conversion.
@@ -490,12 +525,14 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst)
         else
             op = w ? (u ? RV_FCVTWUS : RV_FCVTWS) : (u ? RV_FCVTLUS : RV_FCVTLS);
     }
-    int sreg = sfp ? RV_F0 : RV_T0;
-    int dreg = dfp ? RV_F0 + 1 : RV_T1;
-    load_val(g, sreg, src);
+    int sreg     = use_val(g, sfp ? RV_F0 : RV_T0, src);
+    int dreg     = def_reg(g, dfp ? RV_F0 + 1 : RV_T1, dst);
     Rv_Instr *cv = emit2(g, op, rv_reg(dreg), rv_reg(sreg));
-    if (!dfp)
+    if (!dfp) {
         cv->opnd[2] = rv_sym("rtz", 0);
+        if (rv_size(dt) < 4 && var_reg(g, dst))
+            gen_canon(g, dreg, dreg, dt);
+    }
     store_val(g, dreg, dst);
 }
 
@@ -521,10 +558,8 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_INSTRUCTION_SIGN_EXTEND:
     case TAC_INSTRUCTION_TRUNCATE:
-        gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, false);
-        break;
     case TAC_INSTRUCTION_ZERO_EXTEND:
-        gen_int_convert(g, in->u.zero_extend.src, in->u.zero_extend.dst, true);
+        gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, in->kind);
         break;
     case TAC_INSTRUCTION_INT_TO_DOUBLE:
     case TAC_INSTRUCTION_UINT_TO_DOUBLE:

@@ -64,7 +64,11 @@ and `printf` with the string, memory and math routines runs on RISC-V.
   by `backend-tests`).
 - **R21. Register allocation** — graph colouring with coalescing (book ch. 20),
   callee-saved `s1`–`s11` and `fs0`–`fs11` saved only when used; spill to the R5
-  slots. The ch. 20 tests pass.
+  slots. The ch. 20 tests pass. *Done:* `regalloc.c` over the R20 liveness (Briggs
+  coalescing of copies, optimistic spilling, costs weighted by loop depth);
+  narrow integers in registers are kept extended, and arguments and results are
+  extended by the declared type as the psABI asks. `genriscv --no-regalloc` keeps
+  everything in memory, for the selection tests.
 - **R22. Peephole pass** for what allocation leaves: redundant moves, branch over
   jump, jump to next label, `li`+op into immediate forms.
 

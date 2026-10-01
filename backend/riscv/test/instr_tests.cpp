@@ -7,8 +7,11 @@
 #include "riscv_test.h"
 
 
+// Selection over operands in memory: register allocation off.
 class InstrTest : public RiscvTest {
 protected:
+    InstrTest() { riscv_regalloc = false; }
+
     // The code of functions `T fN(void) { T a = 7; T b = 2; return a OP b; }`, one per
     // {type, op} pair, compiled unoptimized in one unit.
     std::string Ops(std::initializer_list<std::pair<const char *, const char *>> ops)
