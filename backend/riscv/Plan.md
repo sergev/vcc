@@ -42,7 +42,7 @@ can rely on:
 
 ## Phase 2 — backend skeleton
 
-- **R1. Skeleton.** `backend/riscv/` with `CMakeLists.txt`, `rv.h` (IR: function,
+- **R1. Skeleton.** *Done.* `backend/riscv/` with `CMakeLists.txt`, `rv.h` (IR: function,
   block, instruction over virtual registers), `codegen.c`, `emit.c`, its own
   `main.c` on the shared driver, and `genriscv`. Emits `.text`/`.globl`/labels.
 - **R2. Runtime stub.** `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call

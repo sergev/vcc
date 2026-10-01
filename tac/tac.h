@@ -633,6 +633,8 @@ int tac_verify_function(const Tac_TopLevel *fn, const Tac_Layout *layout, Tac_Gl
                         void *arg, FILE *err);
 // Check every function of a program chain, resolving globals against its toplevels.
 int tac_verify_program(const Tac_TopLevel *program, const Tac_Layout *layout, FILE *err);
+// The YAML spelling of an instruction kind, e.g. "add_ptr".
+const char *tac_instruction_name(Tac_InstructionKind kind);
 
 //
 // Graphviz (instruction-level sketch)

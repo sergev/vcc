@@ -32,13 +32,18 @@ static const char *const instr_names[] = {
     "label", "fun_call", "fun_call_noreturn", "allocate_local",
 };
 
+const char *tac_instruction_name(Tac_InstructionKind kind)
+{
+    return instr_names[kind];
+}
+
 static void problem(Verifier *v, const char *fmt, ...)
 {
     v->errors++;
     if (!v->err)
         return;
     fprintf(v->err, "verify: %s: #%d %s: ", v->fn->u.function.name, v->index,
-            v->in ? instr_names[v->in->kind] : "symbols");
+            v->in ? tac_instruction_name(v->in->kind) : "symbols");
     va_list ap;
     va_start(ap, fmt);
     vfprintf(v->err, fmt, ap);
