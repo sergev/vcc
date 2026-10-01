@@ -29,7 +29,7 @@ list(TRANSFORM LIBC_SOURCES APPEND .madlen)
 # a C preprocessor before our front end.
 
 # Standard headers consumed by the libc sources; an edit to any of them rebuilds.
-file(GLOB BESM6_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
+file(GLOB BESM6_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 
 # C runtime routines compiled by our own pipeline.  Each NAME.c becomes NAME.madlen
 # in the build directory via cpp -> parse -> lower -> genbesm --madlen.  genbesm now
@@ -82,7 +82,7 @@ macro(besm6_compile_libc_c name srcdir)
     add_custom_command(
         OUTPUT  ${c_mad}
         COMMAND ${SystemCpp} -E -nostdinc -I${CMAKE_CURRENT_SOURCE_DIR}/include
-                ${c_src} -o ${c_pre}
+                -I${LIBC_COMMON_INCLUDE_DIR} ${c_src} -o ${c_pre}
         COMMAND parse   ${c_pre} ${c_ast}
         COMMAND lower   ${c_ast} ${c_tac}
         COMMAND genbesm --madlen ${c_tac} ${c_mad}
@@ -139,14 +139,14 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libc.bin DESTINATION share/besm6/lib)
 install(FILES
     include/besm6.h
     include/float.h
-    include/iso646.h
+    ${LIBC_COMMON_INCLUDE_DIR}/iso646.h
     include/limits.h
-    include/stdalign.h
+    ${LIBC_COMMON_INCLUDE_DIR}/stdalign.h
     include/stdarg.h
-    include/stdbool.h
+    ${LIBC_COMMON_INCLUDE_DIR}/stdbool.h
     include/stddef.h
     include/stdint.h
-    include/stdnoreturn.h
+    ${LIBC_COMMON_INCLUDE_DIR}/stdnoreturn.h
     DESTINATION share/besm6/include)
 
 # The Unix (b6as) runtime archives (libruntime.a, libc0.a).  A child scope so it inherits
@@ -163,8 +163,8 @@ add_subdirectory(bemsh)
 # all consume them directly.
 
 #
-# Standard-library header check: every header in include/ must preprocess (via the
-# system cpp, located in the root CMakeLists) and parse.
+# Standard-library header check: every header in include/ and the shared ones must
+# preprocess (via the system cpp, located in the root CMakeLists) and parse.
 #
 add_test(
     NAME besm-headers
@@ -172,5 +172,6 @@ add_test(
             ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
             ${SystemCpp}
             $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${CMAKE_CURRENT_BINARY_DIR}/header-check)
+            ${LIBC_COMMON_INCLUDE_DIR})

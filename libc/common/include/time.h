@@ -1,8 +1,8 @@
 /*
- * <time.h> — date and time (C11 §7.27), BESM-6 target.
+ * <time.h> — date and time (C11 §7.27).
  *
- * TODO: implement the clock/time entry points in libc.bin against the Dubna
- * monitor's timer services.  time_t and clock_t are one signed word each.
+ * TODO: implement the clock/time entry points against the environment's timer
+ * services.
  */
 #ifndef _TIME_H
 #define _TIME_H

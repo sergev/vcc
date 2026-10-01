@@ -1,5 +1,5 @@
 /*
- * <stdnoreturn.h> — _Noreturn convenience macro (C11 §7.23), BESM-6 target.
+ * <stdnoreturn.h> — _Noreturn convenience macro (C11 §7.23).
  */
 #ifndef _STDNORETURN_H
 #define _STDNORETURN_H

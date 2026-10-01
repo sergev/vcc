@@ -25,6 +25,17 @@ set(RISCV_TOOLS_FOUND ${RISCV_TOOLS_FOUND} CACHE INTERNAL "")
 set(RISCV_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(RISCV_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
 
+# Standard-library header check, like besm-headers: the RISC-V headers and the shared
+# ones must preprocess and parse.  Needs no RISC-V tools.
+add_test(
+    NAME riscv-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            ${SystemCpp}
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
+            ${RISCV_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
 if(NOT RISCV_TOOLS_FOUND)
     message(STATUS "No RISC-V clang/llvm-ar: the RISC-V runtime is not built")
     return()
@@ -49,13 +60,12 @@ foreach(name console malloc)
     list(APPEND RISCV_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genriscv -> clang.  The BESM-6 headers
-# serve until RISC-V has its own (R18).
-file(GLOB RISCV_LIBC_HEADERS ${BESM6_INCLUDE_DIR}/*.h)
+# C sources, through cpp -> parse -> lower -> genriscv -> clang.
+file(GLOB RISCV_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(riscv_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${BESM6_INCLUDE_DIR} ${srcdir}/${name}.c
-                -o ${out}/${name}.i
+        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
         COMMAND lower -t riscv64 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genriscv ${out}/${name}.tac ${out}/${name}.s

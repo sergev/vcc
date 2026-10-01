@@ -1,11 +1,10 @@
 /*
- * <stdlib.h> — general utilities (C11 §7.22), BESM-6 target.
+ * <stdlib.h> — general utilities (C11 §7.22).
  *
- * Status: exit() and atoi() are implemented in the runtime library (Madlen
- * libc.bin and Unix libc0.a).  The dynamic allocator (malloc/calloc/realloc/
- * free) is implemented in the Unix libc0.a only — it depends on the b6ld/b6sim
- * memory map and is absent from the Madlen libc.bin.  The rest are declared for
- * future implementation (TODO).
+ * Status: exit() and atoi() are implemented in the runtime.  malloc/calloc/
+ * realloc/free are in the BESM-6 Unix libc0.a (not the Madlen libc.bin, which
+ * has no heap) and in the RISC-V libc.a (a bump allocator; free does nothing).
+ * The rest are declared for future implementation (TODO).
  */
 #ifndef _STDLIB_H
 #define _STDLIB_H
@@ -15,8 +14,7 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
-/* RAND_MAX is bounded by the signed integer ceiling (2^40-1). */
-#define RAND_MAX 1099511627775L
+#define RAND_MAX 2147483647
 
 typedef struct {
     int quot;
@@ -28,11 +26,11 @@ typedef struct {
     long rem;
 } ldiv_t;
 
-/* ---- implemented in libc.bin ---- */
+/* ---- implemented in the runtime ---- */
 _Noreturn void exit(int status);
 int   atoi(const char *nptr);
 
-/* ---- implemented in the Unix libc0.a only (absent from Madlen libc.bin) ---- */
+/* ---- implemented where the runtime has a heap (see above) ---- */
 void *malloc(size_t size);
 void *calloc(size_t nmemb, size_t size);
 void *realloc(void *ptr, size_t size);

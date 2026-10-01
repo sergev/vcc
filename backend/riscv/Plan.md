@@ -60,10 +60,11 @@ directions, and every book program compared with clang.
   targets; `doprnt`, `modf`, `malloc` and `putch` stay BESM-6-specific. The RISC-V
   library is `libc/riscv` leaves (console, bump `malloc`, C `ldexp`/`frexp`) +
   common sources; `printf` waits for a portable `doprnt` (R19).
-- **R18. Headers.** Freestanding headers for LP64 (`limits.h`, `stdint.h`,
-  `float.h`, `stdarg.h`, `stddef.h`) in `libc/riscv/include/`; hosted headers shared
-  from a common include dir where they are target-neutral. A `riscv-headers`
-  CTest like `besm-headers`.
+- **R18. Headers.** *Done.* The headers that depend on the data model (`float.h`,
+  `inttypes.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`,
+  `stdint.h`) are per target, in `libc/riscv/include/` for LP64; the rest are
+  shared from `libc/common/include/`, searched second. The RISC-V `va_arg` takes
+  structs. A `riscv-headers` CTest like `besm-headers`.
 - **R19. `printf` and friends run on RISC-V**: port the BESM-6
   `printf_tests`/`str_tests`/`mem_tests`/`math_tests` run tests.
 

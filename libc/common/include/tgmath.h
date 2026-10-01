@@ -1,13 +1,10 @@
 /*
- * <tgmath.h> — type-generic math (C11 §7.25), BESM-6 target.
+ * <tgmath.h> — type-generic math (C11 §7.25).
  *
- * On BESM-6 float, double and long double are the same one-word native format,
- * and there is no <complex.h>, so type-generic dispatch is degenerate: every
- * real type maps to the single double-typed function in <math.h>.  The macros
- * below therefore just promote the argument(s) to double and call that one
- * function (a _Generic that selected among float/double/long double would name
- * the identical function in every association).  Integer arguments promote to
- * double exactly as the standard requires.
+ * The <math.h> functions are double-typed only and there is no <complex.h>, so
+ * type-generic dispatch is degenerate: the macros below promote the argument(s)
+ * to double and call the one function.  Integer arguments promote to double
+ * exactly as the standard requires.
  *
  * The function names below are self-referential macros; per the C preprocessor's
  * no-recursive-expansion rule the inner name resolves to the real <math.h>

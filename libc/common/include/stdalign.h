@@ -1,8 +1,5 @@
 /*
- * <stdalign.h> — alignment (C11 §7.15), BESM-6 target.
- *
- * BESM-6 is word-addressed; every type is 1-word aligned, so alignment is
- * largely a formality here, but the keywords are provided for portability.
+ * <stdalign.h> — alignment (C11 §7.15).
  */
 #ifndef _STDALIGN_H
 #define _STDALIGN_H

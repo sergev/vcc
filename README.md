@@ -80,7 +80,8 @@ print its output as readable YAML text (`--yaml`) or as a diagram for
 [Graphviz](https://graphviz.org/) (`--dot`).
 
 There is no preprocessor in this repository. If your program uses `#include` or `#define`,
-run it through your system compiler's preprocessor first: `cc -E -nostdinc -Ilibc/besm6/include prog.c`.
+run it through your system compiler's preprocessor first: `cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c` (for RISC-V,
+`-Ilibc/riscv/include` in place of the BESM-6 directory).
 
 ## Getting started
 

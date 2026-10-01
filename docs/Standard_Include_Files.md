@@ -1,7 +1,9 @@
 # Standard Include Files
 
 This article is a guided tour of the C11 standard-library headers that ship with the
-BESM-6 toolchain, found in [`libc/besm6/include/`](../libc/besm6/include/). It
+BESM-6 toolchain, found in [`libc/besm6/include/`](../libc/besm6/include/) (the
+headers that depend on the target) and [`libc/common/include/`](../libc/common/include/)
+(those shared with the RISC-V target, searched second). It
 explains what each header is *for*, what it *declares*, how the headers *relate* to one
 another, and — most importantly — how the peculiarities of the BESM-6 machine shape every
 one of them.
@@ -65,7 +67,7 @@ which translation phases 1–4 are already done: it understands `#`-line markers
 preprocessor first, and the preprocessed result fed to the toolchain:
 
 ```sh
-cc -E -nostdinc -Ilibc/besm6/include prog.c prog.i
+cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c prog.i
 parse  prog.i  prog.ast
 lower  prog.ast prog.tac
 genbesm prog.tac prog.mad

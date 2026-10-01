@@ -132,7 +132,7 @@ applies only to *literals*, not to runtime values), so the simulator's printer r
 
 ```sh
 cd <repo>
-cc -E -nostdinc -Ilibc/besm6/include koi7probe.c > koi7probe.i
+cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include koi7probe.c > koi7probe.i
 ./build/parse        koi7probe.i   koi7probe.ast
 ./build/lower        koi7probe.ast koi7probe.tac
 ./build/backend/genbesm koi7probe.tac koi7probe.mad

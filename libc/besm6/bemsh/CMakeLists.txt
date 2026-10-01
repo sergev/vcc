@@ -38,7 +38,8 @@ macro(besm6_compile_libc_c_bemsh name srcdir)
     set(c_bem ${CMAKE_CURRENT_BINARY_DIR}/${name}.bemsh)
     add_custom_command(
         OUTPUT  ${c_bem}
-        COMMAND ${SystemCpp} -E -nostdinc -I${BEMSH_DIR}/../include ${c_src} -o ${c_pre}
+        COMMAND ${SystemCpp} -E -nostdinc -I${BEMSH_DIR}/../include -I${LIBC_COMMON_INCLUDE_DIR}
+                ${c_src} -o ${c_pre}
         COMMAND parse   ${c_pre} ${c_ast}
         COMMAND lower   ${c_ast} ${c_tac}
         COMMAND genbesm --bemsh ${c_tac} ${c_bem}

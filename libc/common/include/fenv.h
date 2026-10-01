@@ -1,11 +1,9 @@
 /*
- * <fenv.h> — floating-point environment (C11 §7.6), BESM-6 target.
+ * <fenv.h> — floating-point environment (C11 §7.6).
  *
- * BESM-6 floating point has no IEEE exception flags, rounding-mode register, or
- * traps that this library exposes, so the floating-point environment is
- * degenerate: there is a single mode and no sticky flags.  The surface is
- * provided for source portability; a future implementation may map FE_* onto
- * the hardware's arithmetic-condition register if useful (TODO).
+ * The floating-point environment is degenerate: a single mode and no sticky
+ * flags (BESM-6 has no IEEE flags or rounding-mode register; on RISC-V they are
+ * not exposed yet).  The surface is provided for source portability (TODO).
  */
 #ifndef _FENV_H
 #define _FENV_H
@@ -16,7 +14,7 @@ typedef struct {
     int __mode;
 } fenv_t;
 
-/* No exception flags are raised on BESM-6. */
+/* No exception flags are raised. */
 #define FE_ALL_EXCEPT 0
 
 /* Single rounding mode: round to nearest. */

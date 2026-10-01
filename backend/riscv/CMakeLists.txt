@@ -35,7 +35,8 @@ endif()
 target_compile_definitions(riscv-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
-    TEST_INCLUDE_DIR="${BESM6_INCLUDE_DIR}" # until RISC-V has its own headers (R18)
+    TEST_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
+    TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     RISCV_TOOLS_FOUND=$<BOOL:${RISCV_TOOLS_FOUND}>
     RISCV_CLANG="${RISCV_CLANG}"
     RISCV_LD="${RISCV_LD}"

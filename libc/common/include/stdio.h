@@ -1,17 +1,10 @@
 /*
- * <stdio.h> — input/output (C11 §7.21), BESM-6 target.
+ * <stdio.h> — input/output (C11 §7.21).
  *
- * Status: printf / sprintf / snprintf are implemented in libc.bin; the rest are
- * declared for future implementation (marked TODO).  The BESM-6 extensions block
- * at the bottom exposes the real low-level console primitives in the runtime.
- *
- * NOTE on the printf family.  The libc *definitions* read their variadic data
- * through an explicit `int args` slot (a holdover from before <stdarg.h>), but
- * callers use the ordinary ISO variadic signatures below: on the BESM-6 ABI the
- * first variadic argument simply lands in that `args` slot, so the two are
- * binary-compatible (this is how every existing run-test calls printf).
- *
- * Remember: char* / void* are FAT pointers on BESM-6 (see Besm6_Data_Representation).
+ * Status: puts / putchar are implemented in the runtime, and printf / sprintf /
+ * snprintf where the target has a __doprnt (BESM-6); the rest are declared for
+ * future implementation (marked TODO).  The extensions block at the bottom
+ * exposes the low-level console primitives of the runtime.
  */
 #ifndef _STDIO_H
 #define _STDIO_H
@@ -28,7 +21,7 @@ extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
 
-/* ---- implemented in libc.bin ---- */
+/* ---- implemented in the runtime (printf family: see the status note) ---- */
 int printf(const char *fmt, ...);
 int sprintf(char *buf, const char *fmt, ...);
 int snprintf(char *buf, int size, const char *fmt, ...);
@@ -60,10 +53,11 @@ int   fclose(FILE *stream);
 int   fflush(FILE *stream);
 void  perror(const char *s);
 
-/* ---- BESM-6 runtime extensions (implemented in libc.bin) ---- */
+/* ---- runtime extensions ---- */
 /*
- * Low-level console I/O.  putbyte buffers a KOI7 byte; putch folds a character
- * for the device; getch reads one byte; flush forces the output buffer out.
+ * Low-level console I/O.  putbyte writes a byte (on BESM-6 into a KOI7 buffer);
+ * putch writes a character (on BESM-6 the bytes packed in a word); getch reads
+ * one byte (BESM-6 only); flush forces the output buffer out.
  */
 void putbyte(int b);
 void putch(unsigned ch);

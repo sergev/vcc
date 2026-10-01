@@ -208,20 +208,25 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`).** C11 standard-library headers for
-programs compiled for the BESM-6 (the freestanding subset is complete; the hosted subset
-declares the few implemented libc routines plus future ones — see the dir's `README.md`).
+**Target standard headers (`libc/besm6/include/`, `libc/riscv/include/`, `libc/common/include/`).**
+C11 standard-library headers: each target's directory holds the headers that depend on its
+data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
+`setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`), and `libc/common/include/` the target-neutral
+rest, searched second (the freestanding subset is complete; the hosted subset declares the
+few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 The compiler has no preprocessor, so these are consumed by an external preprocessor first.
 Use the C compiler's preprocessor (`cc -E`), not a standalone `cpp`: a traditional `cpp`
 (e.g. Apple's `/usr/bin/cpp`) only recognizes a `#` directive in column 1, so indented
 `#include` lines silently fail to expand. No `-P` is needed — `parse`'s scanner consumes
 `# line` markers and keeping them preserves original line numbers in diagnostics:
-`cc -E -nostdinc -Ilibc/besm6/include prog.c | parse -`. The `besm-headers` CTest
-(`scripts/check_headers.sh`, run under `make run`) preprocesses and parses every header to
-catch syntax errors. The unit-test fixtures preprocess their C snippets automatically via
-`libutil/test/test_preprocess.h` (using the CMake `TEST_CPP`/`TEST_INCLUDE_DIR` defines), so
+`cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -`. The
+`besm-headers` and `riscv-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
+preprocess and parse every header to catch syntax errors. The unit-test fixtures preprocess
+their C snippets automatically via `libutil/test/test_preprocess.h` (using the CMake
+`TEST_CPP`/`TEST_INCLUDE_DIR`/`TEST_COMMON_INCLUDE_DIR` defines), so
 tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>` is
-functional (word-pointer `va_list`); its runtime behaviour is covered by `stdarg_tests.cpp`.
+functional (BESM-6: word-pointer `va_list`, covered by `stdarg_tests.cpp`; RISC-V: a byte
+pointer over the register save area, covered by the RISC-V run and interop tests).
 
 Static analysis (requires cppcheck):
 ```sh

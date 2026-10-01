@@ -1,9 +1,9 @@
 /*
- * <signal.h> — signal handling (C11 §7.14), BESM-6 target.
+ * <signal.h> — signal handling (C11 §7.14).
  *
- * TODO: implement signal()/raise() in libc.bin.  The Dubna environment has no
- * POSIX signal delivery, so a real implementation may support only raise() of
- * synchronous conditions; the surface is provided for source portability.
+ * TODO: implement signal()/raise().  Neither runtime environment delivers POSIX
+ * signals, so a real implementation may support only raise() of synchronous
+ * conditions; the surface is provided for source portability.
  */
 #ifndef _SIGNAL_H
 #define _SIGNAL_H

@@ -1,10 +1,8 @@
 /*
- * <wchar.h> — extended multibyte and wide character utilities (C11 §7.29),
- * BESM-6 target.
+ * <wchar.h> — extended multibyte and wide character utilities (C11 §7.29).
  *
- * TODO: implement the wide-character routines in libc.bin.  wchar_t/wint_t are
- * one signed word each and hold any KOI7/Unicode code point.  This header is the
- * canonical home for wint_t, mbstate_t and WEOF.
+ * TODO: implement the wide-character routines.  This header is the canonical
+ * home for wint_t, mbstate_t and WEOF.
  */
 #ifndef _WCHAR_H
 #define _WCHAR_H

@@ -48,6 +48,7 @@ long twice(long x);
 long vsum(int n, ...);
 double vdsum(int n, ...);
 long vmix(const char *s, ...);
+long vstructs(int n, ...);
 )";
 
 static const std::string kCallee = kDecls + R"(
@@ -138,6 +139,19 @@ long vmix(const char *s, ...)
     va_end(ap);
     return r;
 }
+long vstructs(int n, ...)
+{
+    va_list ap;
+    va_start(ap, n);
+    long r = 0;
+    for (int i = 0; i < n; i++) {
+        struct I3 small = va_arg(ap, struct I3);
+        struct B big    = va_arg(ap, struct B);
+        r = r * 1000 + small.a * 100 + small.c * 10 + big.c;
+    }
+    va_end(ap);
+    return r;
+}
 )";
 
 static const std::string kCaller = kDecls + R"(
@@ -188,6 +202,7 @@ int main(void)
     if (vsum(10, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L) != 55) return 26;
     if (vdsum(3, 0.5, 1.25, (double)2.0f) != 3.75) return 27;
     if (vmix("idpi", 1, 2.5, "3", 4) != 1234) return 28;
+    if (vstructs(2, i3, b, i3, b) != 136136) return 29;
     return 0;
 }
 )";

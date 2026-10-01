@@ -54,10 +54,13 @@ endif()
 # rather than a standalone `cpp`: a traditional cpp (e.g. Apple's /usr/bin/cpp)
 # only recognises a '#' directive in column 1, whereas `cc -E` accepts directives
 # anywhere on the line.  Exposed to all subdirectories as SystemCpp (always
-# invoked with -E); BESM6_INCLUDE_DIR points at the shipped headers.
+# invoked with -E).  A target's headers are its own directory (BESM6_INCLUDE_DIR,
+# RISCV_INCLUDE_DIR) followed by the target-neutral LIBC_COMMON_INCLUDE_DIR.
 #
 set(SystemCpp ${CMAKE_C_COMPILER})
 set(BESM6_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/besm6/include)
+set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv/include)
+set(LIBC_COMMON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/common/include)
 
 # Download GoogleTest
 include(FetchContent)

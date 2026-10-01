@@ -1,7 +1,9 @@
 # BESM-6 standard library headers
 
 C11 standard-library headers for programs compiled with this toolchain for the
-BESM-6 target.  Types and macros match the BESM-6 data model
+BESM-6 target: the ones that depend on the target are here, the target-neutral
+ones in [libc/common/include](../../common/include), which is searched second.
+Types and macros match the BESM-6 data model
 ([docs/Besm6_Data_Representation.md](../../../docs/Besm6_Data_Representation.md)).
 
 For the full narrative reference — the role of each header, the functions it
@@ -15,7 +17,7 @@ markers only, not `#include`/`#define`, and has no `-I` flag).  Run an external
 preprocessor first, then feed the result to `parse`:
 
 ```sh
-cc -E -nostdinc -I libc/besm6/include prog.c prog.i
+cc -E -nostdinc -I libc/besm6/include -I libc/common/include prog.c prog.i
 ./build/parse prog.i prog.ast
 ./build/lower  prog.ast prog.tac
 ./build/genbesm prog.tac prog.mad
@@ -24,7 +26,7 @@ cc -E -nostdinc -I libc/besm6/include prog.c prog.i
 Use the compiler's preprocessor (`cc -E`), not a standalone `cpp`: a traditional
 `cpp` (e.g. Apple's `/usr/bin/cpp`) only honors a `#` directive in column 1, so
 indented `#include` lines silently fail to expand.  `-nostdinc` keeps the host's
-system headers out so only these BESM-6 headers are seen.  No `-P` is needed —
+system headers out so only these headers are seen.  No `-P` is needed —
 `parse` consumes the `# line` markers and they keep the original line numbers.
 
 ## Freestanding subset (C11 §4)
@@ -32,7 +34,8 @@ system headers out so only these BESM-6 headers are seen.  No `-P` is needed —
 A freestanding implementation needs only these — types and macros, no runtime:
 
 `float.h` · `iso646.h` · `limits.h` · `stdalign.h` · `stdarg.h` · `stdbool.h` ·
-`stddef.h` · `stdint.h` · `stdnoreturn.h`
+`stddef.h` · `stdint.h` · `stdnoreturn.h` (`iso646.h`, `stdalign.h`, `stdbool.h`
+and `stdnoreturn.h` are the shared ones)
 
 `stdarg.h` is fully functional: the BESM-6 ABI puts every argument in one word,
 so `va_list` is a word pointer and `va_arg` steps one word (the same walk

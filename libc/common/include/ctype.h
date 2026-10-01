@@ -1,10 +1,10 @@
 /*
- * <ctype.h> — character handling (C11 §7.4), BESM-6 target.
+ * <ctype.h> — character handling (C11 §7.4).
  *
- * All functions are declared for future implementation (TODO).  The runtime
- * console uses KOI7; a future implementation should classify against KOI7 and
- * fold case accordingly.  Arguments and results follow ISO C: the argument is
- * an int representable as unsigned char or EOF.
+ * All functions are declared for future implementation (TODO).  On BESM-6 the
+ * console uses KOI7; an implementation there should classify against KOI7.
+ * Arguments and results follow ISO C: the argument is an int representable as
+ * unsigned char or EOF.
  */
 #ifndef _CTYPE_H
 #define _CTYPE_H

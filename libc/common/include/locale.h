@@ -1,8 +1,8 @@
 /*
- * <locale.h> — localization (C11 §7.11), BESM-6 target.
+ * <locale.h> — localization (C11 §7.11).
  *
- * TODO: implement setlocale/localeconv in libc.bin.  Only the "C" locale is
- * meaningful here; the surface is provided for source portability.
+ * TODO: implement setlocale/localeconv.  Only the "C" locale is meaningful here;
+ * the surface is provided for source portability.
  */
 #ifndef _LOCALE_H
 #define _LOCALE_H

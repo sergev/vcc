@@ -71,7 +71,7 @@ The compiler has no preprocessor, so the header is consumed by an external one f
 compiler's preprocessor, not a traditional standalone `cpp`:
 
 ```sh
-cc -E -nostdinc -Ilibc/besm6/include prog.c | parse -
+cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -
 ```
 
 This repo is the authoritative source of the header, and `make install` puts it in

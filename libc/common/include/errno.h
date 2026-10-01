@@ -1,7 +1,7 @@
 /*
- * <errno.h> — errors (C11 §7.5), BESM-6 target.
+ * <errno.h> — errors (C11 §7.5).
  *
- * TODO: provide the errno object in libc.bin.  The error numbers below are a
+ * TODO: provide the errno object in the runtime.  The error numbers below are a
  * small, non-POSIX set sufficient for the C library.
  */
 #ifndef _ERRNO_H

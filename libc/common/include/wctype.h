@@ -1,7 +1,7 @@
 /*
- * <wctype.h> — wide character classification (C11 §7.30), BESM-6 target.
+ * <wctype.h> — wide character classification (C11 §7.30).
  *
- * TODO: implement against the KOI7/Unicode character set.
+ * TODO: implement.
  */
 #ifndef _WCTYPE_H
 #define _WCTYPE_H

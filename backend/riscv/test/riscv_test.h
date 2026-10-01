@@ -89,7 +89,8 @@ protected:
     // Run a book program compiled by clang -O0 with the target headers.
     std::string ClangRunBook(const std::string &src)
     {
-        return Run("", "crt0-status.o", &src, { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR },
+        return Run("", "crt0-status.o", &src, { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
+                     TEST_COMMON_INCLUDE_DIR },
                    ".clang");
     }
 

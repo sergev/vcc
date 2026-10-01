@@ -51,7 +51,7 @@ list(REMOVE_ITEM UNIX_RUNTIME_HELPERS b_tout exit frexp ldexp)
 set(UNIX_ASM_LIBC exit frexp ldexp)
 
 # Shipped standard headers the portable C sources #include; an edit to any of them rebuilds.
-file(GLOB BESM6_HEADERS ${PORTABLE_DIR}/include/*.h)
+file(GLOB BESM6_HEADERS ${PORTABLE_DIR}/include/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 
 # Compile one NAME.c (portable from libc/common or ${PORTABLE_DIR}, or a leaf from here) through
 # cpp -> parse -> lower -> genbesm --unix -> b6as into NAME.o, and record it in the
@@ -67,7 +67,8 @@ macro(besm6_unix_compile_c name srcdir objlist)
     set(c_obj ${CMAKE_CURRENT_BINARY_DIR}/${name}.o)
     add_custom_command(
         OUTPUT  ${c_obj}
-        COMMAND ${SystemCpp} -E -nostdinc -I${PORTABLE_DIR}/include ${c_src} -o ${c_pre}
+        COMMAND ${SystemCpp} -E -nostdinc -I${PORTABLE_DIR}/include -I${LIBC_COMMON_INCLUDE_DIR}
+                ${c_src} -o ${c_pre}
         COMMAND parse   ${c_pre} ${c_ast}
         COMMAND lower   ${c_ast} ${c_tac}
         COMMAND genbesm --unix ${c_tac} ${c_asm}
