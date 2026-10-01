@@ -99,13 +99,13 @@ ret
 }
 
 // Without a frame pointer the same frame is addressed from sp; a function that makes
-// no call does not save ra.
+// no call saves neither ra nor s0, so the frame is just the save area.
 TEST_F(RiscvTest, FrameVariadicFromSp)
 {
     std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
-    EXPECT_EQ(0u, s.find("addi sp, sp, -80\nsd a0, 16(sp)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("sd a7, 72(sp)\naddi a0, sp, 16\n")) << s; // &n
-    EXPECT_NE(std::string::npos, s.find("addi sp, sp, 80\nret\n")) << s;
+    EXPECT_EQ(0u, s.find("addi sp, sp, -64\nsd a0, 0(sp)\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("sd a7, 56(sp)\nmv a0, sp\n")) << s; // &n
+    EXPECT_NE(std::string::npos, s.find("addi sp, sp, 64\nret\n")) << s;
 }
 
 // A function that makes calls but keeps nothing in its frame saves only ra.
@@ -122,3 +122,4 @@ ret
 )",
               Code(CompileToRiscv("long g(long);\nlong f(long a) { return g(g(a) + 1); }")));
 }
+

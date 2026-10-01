@@ -45,6 +45,7 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int header;        // bytes above the slots: saved registers and a0-a7
     int locals_size;   // bytes of slots below the saved registers
+    int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
     StringMap regs;    // name → allocated register
     int nsaved;        // callee-saved registers in use

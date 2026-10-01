@@ -159,6 +159,8 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
 {
     if (align < 1)
         align = 1;
+    if (align > g->max_align)
+        g->max_align = align;
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->header - g->locals_size;
     if (name)
@@ -525,14 +527,22 @@ typedef enum { FRAME_NONE, FRAME_FP, FRAME_SP } FrameKind;
 
 typedef struct {
     FrameKind kind;
-    int size;   // s0 - sp
+    int size;   // s0 - sp: where s0 would point
     bool calls; // ra must be saved
+    int header; // as in Gen
+    int gap;    // from sp: how far the slots move up into the unused header
 } Frame;
+
+// The sp offset of frame offset `off` (relative to s0).
+static int sp_offset(const Frame *fr, int off)
+{
+    return off + fr->size + (off < -fr->header ? fr->gap : 0);
+}
 
 // The base register and offset of frame offset `off` (relative to s0).
 static Rv_Operand frame_mem(const Frame *fr, int off)
 {
-    return fr->kind == FRAME_SP ? rv_mem(RV_SP, off + fr->size) : rv_mem(RV_S0, off);
+    return fr->kind == FRAME_SP ? rv_mem(RV_SP, sp_offset(fr, off)) : rv_mem(RV_S0, off);
 }
 
 static void append2(Rv_Block *b, Rv_Op op, Rv_Operand x, Rv_Operand y)
@@ -647,9 +657,9 @@ static bool is_leaf(const Gen *g)
     return true;
 }
 
-// Address the body's frame from sp, `size` bytes below s0, when every use of s0 is a
-// memory operand or an addi and the offsets still fit; else change nothing.
-static bool rebase_to_sp(Gen *g, int size)
+// Address the body's frame from sp, as `fr` says, when every use of s0 is a memory
+// operand or an addi and the offsets still fit; else change nothing.
+static bool rebase_to_sp(Gen *g, const Frame *fr)
 {
     for (int pass = 0; pass < 2; pass++) {
         for (Rv_Block *b = g->fn->blocks; b; b = b->next) {
@@ -658,22 +668,14 @@ static bool rebase_to_sp(Gen *g, int size)
                     Rv_Operand *o = &in->opnd[i];
                     if (o->reg != RV_S0 || (o->kind != RV_OPND_REG && o->kind != RV_OPND_MEM))
                         continue;
-                    if (o->kind == RV_OPND_MEM) {
-                        if (pass == 0 && !fits12(o->imm + size))
-                            return false;
-                        if (pass == 1) {
-                            o->reg = RV_SP;
-                            o->imm += size;
-                        }
-                        continue;
-                    }
-                    if (in->op != RV_ADDI || i != 1)
+                    int64_t *off = o->kind == RV_OPND_MEM ? &o->imm : &in->opnd[2].imm;
+                    if (o->kind == RV_OPND_REG && (in->op != RV_ADDI || i != 1))
                         return false;
-                    if (pass == 0 && !fits12(in->opnd[2].imm + size))
+                    if (pass == 0 && !fits12(sp_offset(fr, (int)*off)))
                         return false;
                     if (pass == 1) {
                         o->reg = RV_SP;
-                        in->opnd[2].imm += size;
+                        *off   = sp_offset(fr, (int)*off);
                     }
                 }
             }
@@ -686,15 +688,21 @@ static bool rebase_to_sp(Gen *g, int size)
 // function has none; a frame small enough is addressed from sp, without s0.
 void gen_prologue(Gen *g)
 {
-    Frame fr = { FRAME_NONE, 0, has_calls(g) };
+    Frame fr = { FRAME_NONE, 0, has_calls(g), g->header, 0 };
     if (is_leaf(g)) {
         expand_epilogues(g, &fr);
         return;
     }
     Rv_Block *b = g->prologue;
     int rest    = (g->locals_size + g->outgoing + 15) / 16 * 16;
-    fr.size     = g->header + rest;
-    if (!riscv_frame_pointer && fits12(-fr.size) && fits12(fr.size) && rebase_to_sp(g, fr.size)) {
+
+    // Without s0 its save slot is free, and ra's too when there are no calls: the
+    // slots move up by as much as their alignment allows.
+    fr.gap = fr.calls ? 8 : 16;
+    if (g->max_align > 8 && fr.gap % g->max_align != 0)
+        fr.gap = 0;
+    fr.size = (g->header - fr.gap + g->locals_size + g->outgoing + 15) / 16 * 16;
+    if (!riscv_frame_pointer && fits12(-fr.size) && fits12(fr.size) && rebase_to_sp(g, &fr)) {
         fr.kind = FRAME_SP;
         append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-fr.size));
         if (fr.calls)
@@ -704,6 +712,8 @@ void gen_prologue(Gen *g)
         return;
     }
     fr.kind = FRAME_FP;
+    fr.size = g->header + rest;
+    fr.gap  = 0;
     append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-g->header));
     append2(b, RV_SD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
     append2(b, RV_SD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
