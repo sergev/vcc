@@ -352,3 +352,52 @@ TEST_F(TranslateTestRiscv, StructConditionalMergedInSlot)
     EXPECT_NE(yaml.find("kind: allocate_local"), std::string::npos) << yaml;
     EXPECT_EQ(yaml.find("kind: copy\n"), std::string::npos) << yaml;
 }
+
+// ---------------------------------------------------------------------------
+// On a byte-addressed target pointer arithmetic scales by the pointee size
+// ---------------------------------------------------------------------------
+
+// "kind[:scale|:divisor]" of each ADD_PTR, SUBTRACT and DIVIDE in function `fn`.
+static std::string PointerOps(const Tac_TopLevel *tac, const char *fn)
+{
+    std::string out;
+    for (const Tac_Instruction *in = Function(tac, fn)->u.function.body; in; in = in->next) {
+        std::string op;
+        if (in->kind == TAC_INSTRUCTION_ADD_PTR)
+            op = "add_ptr:" + std::to_string(in->u.add_ptr.scale);
+        else if (in->kind == TAC_INSTRUCTION_BINARY && in->u.binary.op == TAC_BINARY_SUBTRACT)
+            op = "sub";
+        else if (in->kind == TAC_INSTRUCTION_BINARY && in->u.binary.op == TAC_BINARY_DIVIDE)
+            op = "div:" + std::to_string(in->u.binary.src2->u.constant->u.int_val);
+        else if (in->kind == TAC_INSTRUCTION_BINARY && in->u.binary.op == TAC_BINARY_ADD)
+            op = "add";
+        if (!op.empty())
+            out += (out.empty() ? "" : " ") + op;
+    }
+    return out;
+}
+
+TEST_F(TranslateTestRiscv, PointerArithmeticScales)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        int *step(int *p, long n) { p = p + n; return p - 1; }
+        void inc(short *s, long **pp) { ++s; s += 2; (*pp)++; }
+        long diff(int *p, int *q) { return q - p; }
+    )");
+    EXPECT_EQ(PointerOps(tac, "step"), "add_ptr:4 add_ptr:4");
+    EXPECT_EQ(PointerOps(tac, "inc"), "add_ptr:2 add_ptr:2 add_ptr:8");
+    EXPECT_EQ(PointerOps(tac, "diff"), "sub div:4");
+    tac_free_toplevel(tac);
+}
+
+// BESM-6 is word-addressed: a one-word pointee needs no scaling.
+TEST_F(TranslateTest, WordPointerArithmeticUnscaled)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        int *step(int *p, long n) { return p + n; }
+        long diff(int *p, int *q) { return q - p; }
+    )");
+    EXPECT_EQ(PointerOps(tac, "step"), "add");
+    EXPECT_EQ(PointerOps(tac, "diff"), "sub");
+    tac_free_toplevel(tac);
+}

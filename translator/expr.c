@@ -9,6 +9,7 @@
 
 #include "c_escape.h"
 #include "semantic.h"
+#include "target.h"
 #include "translate.h"
 #include "typecheck.h"
 #include "xalloc.h"
@@ -124,17 +125,19 @@ static bool is_floating_type(const Type *t)
     return is_arithmetic(t) && !is_integer(t);
 }
 
-// For a word (non-byte) pointer whose pointee is larger than one machine word —
-// a pointer-to-array or pointer-to-struct — return the element size in bytes
-// (the ADD_PTR scale).  Returns 0 when plain one-word arithmetic suffices (a
-// single-word pointee, or not such a pointer): the machine is word-addressed, so
-// a one-word element already advances by exactly one word.
+// For a non-byte pointer whose arithmetic must be scaled, return the element size in
+// bytes (the ADD_PTR scale); 0 when a plain BINARY add/subtract suffices.  On a
+// word-addressed target that is a pointee of one word or less, which already advances
+// by exactly one word; only a wider one (pointer-to-array / -struct) scales.  On a
+// byte-addressed target every pointee scales.
 static int wide_ptr_scale(const Type *t)
 {
     t = unalias(t);
     if (t->kind != TYPE_POINTER || is_byte_pointer(t))
         return 0;
     int sz = (int)get_size(t->u.pointer.target);
+    if (!target_word_addressed())
+        return sz;
     return sz > target_word_bytes() ? sz : 0;
 }
 
@@ -785,8 +788,12 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
             sub->u.binary.src2   = vr;
             sub->u.binary.dst    = vd;
             tac_append(ctx, sub);
-            int elem_words = wide_ptr_scale(l->type) / target_word_bytes();
-            return gen_div_const(ctx, val_var(vd->u.var_name), elem_words);
+            // The difference is in addressing units: words, or bytes.
+            int unit = target_word_addressed() ? target_word_bytes() : 1;
+            int elems = wide_ptr_scale(l->type) / unit;
+            if (elems == 1)
+                return val_var(vd->u.var_name);
+            return gen_div_const(ctx, val_var(vd->u.var_name), elems);
         }
         // Word pointer with a multi-word element (pointer-to-array / -struct):
         // ptr ± int must scale by the element size, not advance a single word.

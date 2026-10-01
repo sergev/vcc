@@ -149,6 +149,10 @@ Defects found along the way, fixed in the shared code:
 - A struct wider than a word read through memory (`*p`, `a[i]`, `s.m`, `p->m`) and
   used as a value was loaded as one word: a BESM-6 miscompile of `return *p;` and
   `f(*p)`. Such a value is now copied into a slot (`gen_aggregate_rvalue`).
+- `p ± n`, `++p` and `p - q` on a non-char pointer with a pointee of a word or less
+  were a plain add/subtract, right only on a word-addressed machine. On a
+  byte-addressed target they are now `ADD_PTR` scaled by the pointee size, and a
+  difference is divided by it (`wide_ptr_scale`).
 
 BESM-6 ignores the new information; its tests and generated code stay identical.
 
