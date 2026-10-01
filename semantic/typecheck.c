@@ -603,6 +603,16 @@ static double const_as_real(const ConstVal *v)
     return kind_is_unsigned(v->kind) ? (double)v->u : (double)cv_int64(v);
 }
 
+// Round a folded real of float type to float precision where float is narrower than
+// double, as the target computes it (FLT_EVAL_METHOD 0).  BESM-6 float is the double
+// format and keeps the value.
+static void round_float(TypeKind kind, ConstVal *v)
+{
+    if (v->is_real && kind == TYPE_FLOAT && target_config &&
+        target_config->float_size < target_config->double_size)
+        v->d = (float)v->d;
+}
+
 // Fold a binary operator whose operands underwent the usual arithmetic conversions to a
 // real type.  Arithmetic yields a real; the comparisons and the logical operators yield
 // an int.  The remaining operators require integer operands and do not fold.
@@ -711,6 +721,8 @@ static bool eval_const(const Expr *e, ConstVal *out)
         case LITERAL_LONG_DOUBLE:
             out->is_real = true;
             out->d       = literal_to_double(e->u.literal);
+            if (e->u.literal->kind == LITERAL_FLOAT)
+                round_float(TYPE_FLOAT, out);
             return true;
         default:
             return false;
@@ -794,8 +806,13 @@ static bool eval_const(const Expr *e, ConstVal *out)
         ConstVal l, r;
         if (!eval_const(e->u.binary_op.left, &l) || !eval_const(e->u.binary_op.right, &r))
             return false;
-        if (l.is_real || r.is_real)
-            return fold_real_binop(e->u.binary_op.op, const_as_real(&l), const_as_real(&r), out);
+        if (l.is_real || r.is_real) {
+            if (!fold_real_binop(e->u.binary_op.op, const_as_real(&l), const_as_real(&r), out))
+                return false;
+            if (e->type)
+                round_float(unalias(e->type)->kind, out);
+            return true;
+        }
 
         // Both operands convert to the usual-arithmetic-conversions result kind; that
         // kind's signedness picks signed or unsigned division, remainder and comparison

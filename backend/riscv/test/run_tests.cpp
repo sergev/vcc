@@ -372,3 +372,21 @@ int main(void) {
 })PROG"));
     EXPECT_EQ(0, exit_status);
 }
+
+// float constant expressions are folded in float precision: 1e30f * 1e30f overflows
+// to infinity, and infinity * 0 is NaN, in a static initializer and in code.
+TEST_F(RiscvTest, RunFloatFolding)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+float g = (1e30f * 1e30f) * 0.0f;
+float h = 1e30f * 1e30f;
+int main(void) {
+    float d = (1e30f * 1e30f) * 0.0f;
+    float a = 1e30f;
+    float b = a * a;
+    float c = b * 0.0f;
+    return (g == g) | (h != b) << 1 | (d == d) << 2 | (c == c) << 3 | (h < 1e300) << 4;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

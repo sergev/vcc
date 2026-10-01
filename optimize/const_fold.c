@@ -377,6 +377,15 @@ static Tac_Val *make_int_const_val(Tac_ConstKind kind, uint64_t bits)
     return rv;
 }
 
+// A float result, rounded to float precision where float is narrower than double, as
+// the target computes it (FLT_EVAL_METHOD 0).  BESM-6 float is the double format.
+static double round_float(double d)
+{
+    if (!target_config || target_config->float_size < target_config->double_size)
+        return (float)d;
+    return d;
+}
+
 // Fold a binary operator on two floating-point constants of the *same* kind.
 // Arithmetic operators produce a constant of that kind; the relational and
 // equality operators produce an int 0/1 (the C comparison result type). Returns
@@ -476,7 +485,7 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
     }
     Tac_Const *rc = tac_new_const(c1->kind);
     if (c1->kind == TAC_CONST_FLOAT)
-        rc->u.float_val = dr;
+        rc->u.float_val = round_float(dr);
     else
         rc->u.double_val = dr;
     Tac_Val *rv    = tac_new_val(TAC_VAL_CONSTANT);
@@ -892,7 +901,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (src->kind != TAC_CONST_DOUBLE)
             return NULL;
         rc              = tac_new_const(TAC_CONST_FLOAT);
-        rc->u.float_val = src->u.double_val;
+        rc->u.float_val = round_float(src->u.double_val);
         break;
 
     case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
@@ -906,7 +915,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
         rc              = tac_new_const(TAC_CONST_FLOAT);
-        rc->u.float_val = (double)src->u.long_double_val;
+        rc->u.float_val = round_float((double)src->u.long_double_val);
         break;
 
     case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
