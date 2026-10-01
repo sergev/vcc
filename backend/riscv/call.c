@@ -8,7 +8,9 @@
 // may follow on the stack when only a7 is left); a larger one by reference.  Return
 // values use the same rules with a0/a1 and fa0/fa1.
 //
+#include "flow.h"
 #include "internal.h"
+#include "xalloc.h"
 
 // One register-sized part of an argument: where it goes, and what it holds.
 typedef struct {
@@ -190,18 +192,23 @@ void param_hints(const Gen *g, StringMap *hints)
     }
 }
 
-// A move of a parameter from its incoming register to its allocated one.
+// A move of a value of type `type` between registers, converted to the form of type
+// `want` (or NULL) in an integer register.
 typedef struct {
     int dst, src;
-    const Tac_Type *type;
+    const Tac_Type *type, *want;
 } Move;
 
 static void emit_move(Gen *g, const Move *m)
 {
     if (is_freg(m->dst) && !is_freg(m->src))
         int_to_fp(g, m->type, m->dst, m->src);
+    else if (!is_freg(m->dst) && is_freg(m->src))
+        fp_to_int(g, m->type, m->dst, m->src);
     else
         move_reg(g, m->dst, m->src, m->type);
+    if (!is_freg(m->dst))
+        conform(g, m->dst, m->type, m->want);
 }
 
 // Make all moves as if at once: a move goes when no other still reads its
@@ -256,7 +263,7 @@ void gen_params(Gen *g)
             const Piece *pc = &a.piece[0];
             place_reg(g, p->name, t, preg);
             if (pc->reg >= 0)
-                moves[nmoves++] = (Move){ preg, pc->reg, t };
+                moves[nmoves++] = (Move){ preg, pc->reg, t, NULL };
             continue;
         }
         if (!a.by_ref && a.piece[0].reg < 0) {
@@ -305,39 +312,108 @@ void gen_params(Gen *g)
     }
 }
 
-// Pass `v` as a parameter of type `want` (NULL when unknown or variadic).
-static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a, const Tac_Type *want)
+// One argument: its value, where it goes, and its declared type (NULL when unknown
+// or variadic).
+typedef struct {
+    const Tac_Val *v;
+    const Tac_Type *type, *want;
+    ArgLoc loc;
+    int copy; // frame offset of the copy passed by reference
+} Arg;
+
+// Put the parts of argument `a` that go on the stack there.  Only reads registers.
+static void arg_to_stack(Gen *g, Arg *a)
 {
-    const Tac_Type *t = val_type(g, v);
-    if (a->by_ref) {
+    const Tac_Type *t = a->type;
+    if (a->loc.by_ref) {
         int size = rv_size(t);
-        int copy = alloc_slot(g, NULL, NULL, size, rv_align(t) > 8 ? rv_align(t) : 8);
+        a->copy  = alloc_slot(g, NULL, NULL, size, rv_align(t) > 8 ? rv_align(t) : 8);
         int base;
         int64_t off;
-        name_addr(g, v->u.var_name, RV_T3, &base, &off);
-        gen_memcopy(g, RV_S0, copy, base, off, size, rv_align(t));
-        const Piece *pc = &a->piece[0];
-        int reg         = pc->reg >= 0 ? pc->reg : RV_T0;
-        gen_addr(g, reg, RV_S0, copy);
-        if (pc->reg < 0)
-            emit2(g, RV_SD, rv_reg(reg), mem(g, RV_SP, pc->stack));
+        name_addr(g, a->v->u.var_name, RV_T3, &base, &off);
+        gen_memcopy(g, RV_S0, a->copy, base, off, size, rv_align(t));
+        const Piece *pc = &a->loc.piece[0];
+        if (pc->reg < 0) {
+            gen_addr(g, RV_T0, RV_S0, a->copy);
+            emit2(g, RV_SD, rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
+        }
         return;
     }
-    for (int i = 0; i < a->npieces; i++) {
-        const Piece *pc = &a->piece[i];
-        int reg         = pc->reg >= 0 ? pc->reg : RV_T0;
+    for (int i = 0; i < a->loc.npieces; i++) {
+        const Piece *pc = &a->loc.piece[i];
+        if (pc->reg >= 0)
+            continue;
         if (rv_is_aggregate(t)) {
-            load_piece(g, reg, v->u.var_name, pc);
-        } else if (rv_is_fp(t) && !is_freg(reg)) {
-            fp_to_int(g, t, reg, use_val(g, RV_F0, v));
+            load_piece(g, RV_T0, a->v->u.var_name, pc);
+        } else if (rv_is_fp(t)) {
+            fp_to_int(g, t, RV_T0, use_val(g, RV_F0, a->v));
         } else {
-            load_val(g, reg, v);
-            if (!is_freg(reg))
-                conform(g, reg, t, want);
+            load_val(g, RV_T0, a->v);
+            conform(g, RV_T0, t, a->want);
         }
-        if (pc->reg < 0)
-            emit2(g, RV_SD, rv_reg(reg), mem(g, RV_SP, pc->stack));
+        emit2(g, RV_SD, rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
     }
+}
+
+// A scalar argument in a register, already in a register: a move.
+static bool arg_move(const Gen *g, const Arg *a, Move *m)
+{
+    int src = var_reg(g, a->v);
+    if (!src || a->loc.by_ref || rv_is_aggregate(a->type) || a->loc.piece[0].reg < 0)
+        return false;
+    *m = (Move){ a->loc.piece[0].reg, src, a->type, a->want };
+    return true;
+}
+
+// Load argument `a`'s register parts from memory or a constant.
+static void arg_to_regs(Gen *g, const Arg *a)
+{
+    const Tac_Type *t = a->type;
+    if (a->loc.by_ref) {
+        if (a->loc.piece[0].reg >= 0)
+            gen_addr(g, a->loc.piece[0].reg, RV_S0, a->copy);
+        return;
+    }
+    for (int i = 0; i < a->loc.npieces; i++) {
+        const Piece *pc = &a->loc.piece[i];
+        int reg         = pc->reg;
+        if (reg < 0)
+            continue;
+        if (rv_is_aggregate(t)) {
+            load_piece(g, reg, a->v->u.var_name, pc);
+        } else if (rv_is_fp(t) && !is_freg(reg)) {
+            fp_to_int(g, t, reg, use_val(g, RV_F0, a->v));
+        } else {
+            load_val(g, reg, a->v);
+            if (!is_freg(reg))
+                conform(g, reg, t, a->want);
+        }
+    }
+}
+
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+{
+    const Tac_Type *ft = in->u.fun_call.fun_type;
+    int nfixed         = 0;
+    if (ft)
+        for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
+            nfixed++;
+    ArgState s = { 0 };
+    int i      = 0;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
+        int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
+        const Tac_Type *t = var >= 0 ? f->types[var] : val_type(g, v);
+        if (!t)
+            return;
+        ArgLoc a = classify(&s, t, ft && ft->u.fun_type.variadic && i >= nfixed);
+        if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && a.piece[0].reg >= 0 &&
+            is_freg(a.piece[0].reg) == rv_is_fp(t))
+            hint[var] = a.piece[0].reg;
+    }
+    const Tac_Val *dst = in->u.fun_call.dst;
+    int var            = dst ? flow_var(f, dst->u.var_name) : -1;
+    if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]))
+        hint[var] = rv_is_fp(f->types[var]) ? RV_FA0 : RV_A0;
 }
 
 // Where a value of type `t` is returned.
@@ -374,22 +450,54 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
             nfixed++;
 
+    // The callee's address first: an argument register holding it may be overwritten.
+    int fpreg = 0;
+    if (in->u.fun_call.indirect) {
+        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
+        fpreg      = use_val(g, RV_T1, &fp);
+        if (fpreg >= RV_A0 && fpreg <= RV_A7) {
+            emit2(g, RV_MV, rv_reg(RV_T1), rv_reg(fpreg));
+            fpreg = RV_T1;
+        }
+    }
+
+    // Arguments may already be in argument registers: the stack parts first, then the
+    // register-to-register moves at once, then loads from memory.
+    int nargs = 0;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next)
+        nargs++;
+    Arg *args            = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
+    Move moves[16];
+    int nmoves           = 0;
     ArgState s           = { 0 };
-    int i                = 0;
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
+    int i                = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
-        ArgLoc a = classify(&s, val_type(g, v), variadic && i >= nfixed);
-        gen_arg(g, v, &a, want);
+        Arg *a  = &args[i];
+        a->v    = v;
+        a->type = val_type(g, v);
+        a->want = want;
+        a->loc  = classify(&s, a->type, variadic && i >= nfixed);
+        a->copy = 0;
         if (want)
             want = want->next;
+        arg_to_stack(g, a);
     }
+    for (i = 0; i < nargs; i++)
+        if (arg_move(g, &args[i], &moves[nmoves]))
+            nmoves++;
+    parallel_move(g, moves, nmoves);
+    for (i = 0; i < nargs; i++) {
+        Move m;
+        if (!arg_move(g, &args[i], &m))
+            arg_to_regs(g, &args[i]);
+    }
+    xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
 
     if (in->u.fun_call.indirect) {
-        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
-        int reg = use_val(g, RV_T1, &fp);
-        rv_append(g->fn, RV_JALR)->opnd[0] = rv_reg(reg);
+        rv_append(g->fn, RV_JALR)->opnd[0] = rv_reg(fpreg);
     } else {
         rv_append(g->fn, RV_CALL)->opnd[0] = rv_sym(in->u.fun_call.fun_name, 0);
     }

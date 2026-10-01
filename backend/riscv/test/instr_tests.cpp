@@ -88,8 +88,8 @@ beqz t0, .LL0
     EXPECT_TRUE(Has(s, "j .LL1\n")) << s;
 }
 
-// Arguments go straight into a-registers, the ninth to the outgoing area at 0(sp);
-// the result comes back in a0.
+// The ninth argument goes to the outgoing area at 0(sp) first, the others straight
+// into a-registers; the result comes back in a0.
 TEST_F(InstrTest, Call)
 {
     std::string s = Code(CompileToRiscv(R"(
@@ -98,12 +98,12 @@ int main(void) { return f(1, 2, 3, 4, 5, 6, 7, 8, 9); }
 )"));
     EXPECT_TRUE(Has(s, R"(addi s0, sp, 16
 addi sp, sp, -16
+li t0, 9
+sd t0, 0(sp)
 li a0, 1
 li a1, 2
 )")) << s;
     EXPECT_TRUE(Has(s, R"(li a7, 8
-li t0, 9
-sd t0, 0(sp)
 call f
 sw a0, -20(s0)
 )")) << s;

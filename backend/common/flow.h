@@ -33,7 +33,7 @@ typedef struct {
     Flow_Set *live_out; // live on exit
 } Flow_Block;
 
-typedef struct {
+typedef struct Flow {
     const Tac_TopLevel *fn;
     int ninstrs;
     const Tac_Instruction **instrs; // the body, in order

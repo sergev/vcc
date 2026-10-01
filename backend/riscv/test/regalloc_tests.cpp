@@ -18,7 +18,8 @@ ret
               Code(CompileToRiscv("long f(long a, long b) { return a * b + a; }")));
 }
 
-// Across a call values need callee-saved registers, saved only when used.
+// Only a value live across a call needs a callee-saved register, saved when used;
+// an argument or a result stays in its argument register.
 TEST_F(RiscvTest, RegallocCalls)
 {
     EXPECT_EQ(R"(addi sp, sp, -16
@@ -27,16 +28,10 @@ sd s0, 0(sp)
 addi s0, sp, 16
 addi sp, sp, -16
 sd s1, -24(s0)
-sd s2, -32(s0)
-mv s1, a0
-mv s2, a1
-mv a0, s1
+mv s1, a1
 call g
-mv s1, a0
-mul s1, s1, s2
-mv a0, s1
+mul a0, a0, s1
 ld s1, -24(s0)
-ld s2, -32(s0)
 addi sp, s0, -16
 ld ra, 8(sp)
 ld s0, 0(sp)
@@ -45,6 +40,43 @@ ret
 )",
               Code(CompileToRiscv("long g(long x);\n"
                                   "long f(long a, long b) { return g(a) * b; }")));
+}
+
+// Arguments already in argument registers are moved at once: a swap goes through t0,
+// and the callee's address is taken out first.
+TEST_F(RiscvTest, RegallocArgumentSwap)
+{
+    std::string s = Code(CompileToRiscv(
+        "long f(long a, long b, long (*h)(long, long)) { return h(b, a); }"));
+    EXPECT_NE(std::string::npos, s.find(R"(mv t1, a2
+mv t0, a1
+mv a1, a0
+mv a0, t0
+jalr t1
+)")) << s;
+}
+
+// The same, run: arguments rotated through three calls, values live across them.
+TEST_F(RiscvTest, RegallocArgumentsRun)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+long f3(long a, long b, long c) { return a * 100 + b * 10 + c; }
+double fd(double x, long k, double y) { return x * k - y; }
+long rot(long a, long b, long c, long (*h)(long, long, long))
+{
+    long r = h(b, c, a);
+    return r + h(c, a, b) * 1000;
+}
+int main(void)
+{
+    if (rot(1, 2, 3, f3) != 312231) return 1;
+    double x = 1.5, y = 0.5;
+    if (fd(fd(x, 4, y), 2, x) != 9.5) return 2;
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
 }
 
 TEST_F(RiscvTest, RegallocFloat)
