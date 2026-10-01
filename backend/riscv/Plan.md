@@ -60,6 +60,8 @@ and `printf` with the string, memory and math routines runs on RISC-V.
 ## Phase 6 — code quality
 
 - **R20. Liveness and CFG over TAC** in `backend/common/`, usable by any backend.
+  *Done:* `flow.c` (blocks, successors, live-in/out, per-instruction step; tested
+  by `backend-tests`).
 - **R21. Register allocation** — graph colouring with coalescing (book ch. 20),
   callee-saved `s1`–`s11` and `fs0`–`fs11` saved only when used; spill to the R5
   slots. The ch. 20 tests pass.
