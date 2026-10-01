@@ -45,7 +45,7 @@ can rely on:
 - **R1. Skeleton.** *Done.* `backend/riscv/` with `CMakeLists.txt`, `rv.h` (IR: function,
   block, instruction over virtual registers), `codegen.c`, `emit.c`, its own
   `main.c` on the shared driver, and `genriscv`. Emits `.text`/`.globl`/labels.
-- **R2. Runtime stub.** `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call
+- **R2. Runtime stub.** *Done.* `libc/riscv/`: `crt0.s` (set `sp`, clear `.bss`, call
   `main`, pass its result to the finisher), `link.ld`, and `putbyte`/`flush`/`exit`
   over the UART and finisher. Assembled with clang, archived with `llvm-ar`.
 - **R3. Run harness.** `backend/riscv/test/` fixture with `CompileToRiscv` (golden

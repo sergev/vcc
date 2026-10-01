@@ -4,3 +4,4 @@
 # an assembled runtime that programs compiled by this toolchain link against.
 #
 add_subdirectory(besm6)
+add_subdirectory(riscv)
