@@ -51,7 +51,7 @@ instruction loads operands into scratch registers, computes, stores. Each step i
 done when its book chapters pass through `CompileAndRunBook` and a few golden
 assembly tests pin the selected instructions.
 
-- **R5. Frame.** Slot layout from typed symbols (size/alignment), `ALLOCATE_LOCAL`,
+- **R5. Frame.** *Done.* Slot layout from typed symbols (size/alignment), `ALLOCATE_LOCAL`,
   prologue/epilogue (`ra`, `s0` frame pointer, 16-byte `sp` alignment).
   Large-offset handling beyond the 12-bit immediate.
 - **R6. Integer ops** (ch. 2–4, 11, 12): unary, binary, comparisons via

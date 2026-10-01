@@ -60,6 +60,9 @@ TEST_F(EmitTest, Operands)
     in->opnd[1]  = rv_reg(RV_FA0 + 1);
     rv_new_block(fn, ".L7");
     rv_append(fn, RV_J)->opnd[0] = rv_sym("g", 8);
+    in          = rv_append(fn, RV_FLD);
+    in->opnd[0] = rv_reg(RV_F0);
+    in->opnd[1] = rv_mem(RV_S0, -24);
     rv_append(fn, RV_RET);
     std::string s = Capture([&](FILE *f) { rv_emit_func(f, fn); });
     rv_free_func(fn);
@@ -71,6 +74,7 @@ TEST_F(EmitTest, Operands)
               "\tmv\tv3, fa1\n"
               ".L7:\n"
               "\tj\tg+8\n"
+              "\tfld\tft0, -24(s0)\n"
               "\tret\n"
               "\t.size\tf, .-f\n",
               s);
@@ -95,9 +99,12 @@ TEST_F(EmitTest, LabelsAndJumps)
               "\t.p2align\t2\n"
               "\t.type\tloop, @function\n"
               "loop:\n"
+              "\taddi\tsp, sp, -16\n"
+              "\tsd\tra, 8(sp)\n"
+              "\tsd\ts0, 0(sp)\n"
+              "\taddi\ts0, sp, 16\n"
               ".LL1:\n"
               "\tj\t.LL1\n"
-              "\tret\n"
               "\t.size\tloop, .-loop\n",
               s);
 }

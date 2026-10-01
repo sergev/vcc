@@ -3,120 +3,59 @@
 //
 #include "codegen.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include "internal.h"
 
-#include "rv.h"
-#include "xalloc.h"
-
-typedef struct {
-    Rv_Func *fn;
-    const Tac_TopLevel *tl;
-} Gen;
-
-// Local label for TAC label `%N`: `.LN`.
-static char *label_name(const char *tac)
+// Give every parameter and local a slot.  An ALLOCATE_LOCAL may ask for more room or
+// alignment than the type.
+static void layout_frame(Gen *g)
 {
-    size_t len = strlen(tac);
-    char *s    = xalloc(len + 3, __func__, __FILE__, __LINE__);
-    strcpy(s, ".L");
-    strcat(s, tac[0] == '%' ? tac + 1 : tac);
-    return s;
+    StringMap allocs;
+    map_init(&allocs);
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_ALLOCATE_LOCAL)
+            map_insert(&allocs, in->u.allocate_local.name, (intptr_t)in, 0);
+
+    gen_params(g);
+    for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
+        if (!p->type)
+            fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
+        int size  = rv_size(p->type);
+        int align = rv_align(p->type);
+        intptr_t v;
+        if (map_get(&allocs, p->name, &v)) {
+            const Tac_Instruction *in = (const Tac_Instruction *)v;
+            if (in->u.allocate_local.size > size)
+                size = in->u.allocate_local.size;
+            if (in->u.allocate_local.alignment > align)
+                align = in->u.allocate_local.alignment;
+        }
+        alloc_slot(g, p->name, p->type, size, align);
+    }
+    map_destroy(&allocs);
 }
 
-// Load a value into integer register `reg`.
-static void gen_load(Gen *g, int reg, const Tac_Val *v)
+static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
-    if (v->kind != TAC_VAL_CONSTANT)
-        fatal_error("riscv: %s: variable %s not implemented", g->tl->u.function.name,
-                    v->u.var_name);
-    const Tac_Const *c = v->u.constant;
-    int64_t imm;
-    switch (c->kind) {
-    case TAC_CONST_INT:
-        imm = c->u.int_val;
-        break;
-    case TAC_CONST_LONG:
-        imm = c->u.long_val;
-        break;
-    case TAC_CONST_LONG_LONG:
-        imm = c->u.long_long_val;
-        break;
-    case TAC_CONST_UINT:
-        imm = (int64_t)c->u.uint_val;
-        break;
-    case TAC_CONST_ULONG:
-        imm = (int64_t)c->u.ulong_val;
-        break;
-    case TAC_CONST_ULONG_LONG:
-        imm = (int64_t)c->u.ulong_long_val;
-        break;
-    case TAC_CONST_SCHAR:
-        imm = c->u.char_val;
-        break;
-    case TAC_CONST_UCHAR:
-        imm = c->u.uchar_val;
-        break;
-    default:
-        fatal_error("riscv: %s: constant kind %d not implemented", g->tl->u.function.name,
-                    c->kind);
-    }
-    Rv_Instr *li = rv_append(g->fn, RV_LI);
-    li->opnd[0]  = rv_reg(reg);
-    li->opnd[1]  = rv_imm(imm);
-}
-
-static void gen_epilogue(Gen *g)
-{
-    rv_append(g->fn, RV_RET);
-}
-
-static void gen_instr(Gen *g, const Tac_Instruction *in)
-{
-    switch (in->kind) {
-    case TAC_INSTRUCTION_LABEL: {
-        char *l = label_name(in->u.label.name);
-        rv_new_block(g->fn, l);
-        xfree(l);
-        break;
-    }
-    case TAC_INSTRUCTION_JUMP: {
-        char *l = label_name(in->u.jump.target);
-        rv_append(g->fn, RV_J)->opnd[0] = rv_sym(l, 0);
-        xfree(l);
-        break;
-    }
-    case TAC_INSTRUCTION_RETURN:
-        if (in->u.return_.src)
-            gen_load(g, RV_A0, in->u.return_.src);
-        gen_epilogue(g);
-        break;
-    default:
-        fatal_error("riscv: %s: %s not implemented", g->tl->u.function.name,
-                    tac_instruction_name(in->kind));
-    }
-}
-
-static void gen_function(const Tac_TopLevel *tl, FILE *out)
-{
-    Gen g = { rv_new_func(tl->u.function.name, tl->u.function.global), tl };
+    Gen g;
+    gen_init(&g, program, tl);
+    layout_frame(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
         gen_instr(&g, in);
         last = in;
     }
-    if (!last || last->kind != TAC_INSTRUCTION_RETURN)
+    if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
+    gen_prologue(&g);
     rv_emit_func(out, g.fn);
-    rv_free_func(g.fn);
+    gen_done(&g);
 }
 
 void riscv_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
-    (void)program;
     switch (tl->kind) {
     case TAC_TOPLEVEL_FUNCTION:
-        gen_function(tl, out);
+        gen_function(program, tl, out);
         break;
     case TAC_TOPLEVEL_EXTERN:
         break; // the assembler resolves undefined names at link time

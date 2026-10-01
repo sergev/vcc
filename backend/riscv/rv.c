@@ -8,10 +8,9 @@
 #include "xalloc.h"
 
 const char *const rv_mnemonic[RV_NUM_OPS] = {
-    [RV_LI] = "li",
-    [RV_MV] = "mv",
-    [RV_J]  = "j",
-    [RV_RET] = "ret",
+#define RV_MNEM(op, mnem) [RV_##op] = mnem,
+    RV_OPS(RV_MNEM)
+#undef RV_MNEM
 };
 
 Rv_Func *rv_new_func(const char *name, bool global)
@@ -35,17 +34,21 @@ Rv_Block *rv_new_block(Rv_Func *fn, const char *label)
     return b;
 }
 
-Rv_Instr *rv_append(Rv_Func *fn, Rv_Op op)
+Rv_Instr *rv_append_to(Rv_Block *b, Rv_Op op)
 {
     Rv_Instr *in = xalloc(sizeof(Rv_Instr), __func__, __FILE__, __LINE__);
     in->op       = op;
-    Rv_Block *b  = fn->tail;
     if (b->tail)
         b->tail->next = in;
     else
         b->head = in;
     b->tail = in;
     return in;
+}
+
+Rv_Instr *rv_append(Rv_Func *fn, Rv_Op op)
+{
+    return rv_append_to(fn->tail, op);
 }
 
 void rv_free_func(Rv_Func *fn)

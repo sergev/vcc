@@ -46,6 +46,23 @@ protected:
         return s;
     }
 
+    // Instruction lines of `asm_text` without the leading tabs, one per line, so a
+    // test can look for a sequence: Code(s).find("lw\ta0, -20(s0)\nret\n").
+    static std::string Code(const std::string &asm_text)
+    {
+        std::string out, line;
+        for (size_t i = 0; i < asm_text.size(); i++) {
+            if (asm_text[i] != '\n') {
+                line += asm_text[i];
+                continue;
+            }
+            if (line.size() > 1 && line[0] == '\t' && line[1] != '.')
+                out += line.substr(1) + "\n";
+            line.clear();
+        }
+        return out;
+    }
+
     // Run a program; returns its output, with main's result in exit_status.
     std::string CompileAndRunRiscv(const std::string &src)
     {

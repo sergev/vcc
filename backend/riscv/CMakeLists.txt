@@ -4,6 +4,9 @@
 add_library(riscv STATIC
     rv.c
     emit.c
+    frame.c
+    instr.c
+    call.c
     codegen.c
 )
 target_include_directories(riscv PUBLIC .)
@@ -16,6 +19,7 @@ target_link_libraries(riscv tac libutil)
 add_executable(riscv-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
