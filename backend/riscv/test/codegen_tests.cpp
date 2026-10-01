@@ -5,58 +5,61 @@
 
 TEST_F(RiscvTest, EmptyFunction)
 {
-    EXPECT_EQ("    .text\n"
-              "    .globl  f\n"
-              "    .p2align 2\n"
-              "    .type   f, @function\n"
-              "f:\n"
-              "    addi    sp, sp, -16\n"
-              "    sd      ra, 8(sp)\n"
-              "    sd      s0, 0(sp)\n"
-              "    addi    s0, sp, 16\n"
-              "    addi    sp, s0, -16\n"
-              "    ld      ra, 8(sp)\n"
-              "    ld      s0, 0(sp)\n"
-              "    addi    sp, sp, 16\n"
-              "    ret\n"
-              "    .size   f, .-f\n",
+    EXPECT_EQ(R"(    .text
+    .globl  f
+    .p2align 2
+    .type   f, @function
+f:
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
+    addi    s0, sp, 16
+    addi    sp, s0, -16
+    ld      ra, 8(sp)
+    ld      s0, 0(sp)
+    addi    sp, sp, 16
+    ret
+    .size   f, .-f
+)",
               CompileToRiscv("void f(void) {}"));
 }
 
 // A static function is not .globl; an extern declaration emits nothing.
 TEST_F(RiscvTest, StaticFunctionAndExtern)
 {
-    EXPECT_EQ("    .text\n"
-              "    .p2align 2\n"
-              "    .type   g, @function\n"
-              "g:\n"
-              "    addi    sp, sp, -16\n"
-              "    sd      ra, 8(sp)\n"
-              "    sd      s0, 0(sp)\n"
-              "    addi    s0, sp, 16\n"
-              ".L2:\n"
-              "    j       .L2\n"
-              "    .size   g, .-g\n",
+    EXPECT_EQ(R"(    .text
+    .p2align 2
+    .type   g, @function
+g:
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
+    addi    s0, sp, 16
+.L2:
+    j       .L2
+    .size   g, .-g
+)",
               CompileToRiscv("extern int x; static void g(void) { for (;;) ; }"));
 }
 
 TEST_F(RiscvTest, ReturnConstant)
 {
-    EXPECT_EQ("    .text\n"
-              "    .globl  main\n"
-              "    .p2align 2\n"
-              "    .type   main, @function\n"
-              "main:\n"
-              "    addi    sp, sp, -16\n"
-              "    sd      ra, 8(sp)\n"
-              "    sd      s0, 0(sp)\n"
-              "    addi    s0, sp, 16\n"
-              "    li      a0, -2\n"
-              "    addi    sp, s0, -16\n"
-              "    ld      ra, 8(sp)\n"
-              "    ld      s0, 0(sp)\n"
-              "    addi    sp, sp, 16\n"
-              "    ret\n"
-              "    .size   main, .-main\n",
+    EXPECT_EQ(R"(    .text
+    .globl  main
+    .p2align 2
+    .type   main, @function
+main:
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
+    addi    s0, sp, 16
+    li      a0, -2
+    addi    sp, s0, -16
+    ld      ra, 8(sp)
+    ld      s0, 0(sp)
+    addi    sp, sp, 16
+    ret
+    .size   main, .-main
+)",
               CompileToRiscv("int main(void) { return -2; }"));
 }

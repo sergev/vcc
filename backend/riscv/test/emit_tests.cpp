@@ -66,17 +66,18 @@ TEST_F(EmitTest, Operands)
     rv_append(fn, RV_RET);
     std::string s = Capture([&](FILE *f) { rv_emit_func(f, fn); });
     rv_free_func(fn);
-    EXPECT_EQ("    .text\n"
-              "    .p2align 2\n"
-              "    .type   f, @function\n"
-              "f:\n"
-              "    li      a0, -5\n"
-              "    mv      v3, fa1\n"
-              ".L7:\n"
-              "    j       g+8\n"
-              "    fld     ft0, -24(s0)\n"
-              "    ret\n"
-              "    .size   f, .-f\n",
+    EXPECT_EQ(R"(    .text
+    .p2align 2
+    .type   f, @function
+f:
+    li      a0, -5
+    mv      v3, fa1
+.L7:
+    j       g+8
+    fld     ft0, -24(s0)
+    ret
+    .size   f, .-f
+)",
               s);
 }
 
@@ -94,17 +95,18 @@ TEST_F(EmitTest, LabelsAndJumps)
     tl->u.function.body   = l;
     std::string s = Capture([&](FILE *f) { riscv_codegen(tl, tl, f); });
     tac_free_toplevel(tl);
-    EXPECT_EQ("    .text\n"
-              "    .globl  loop\n"
-              "    .p2align 2\n"
-              "    .type   loop, @function\n"
-              "loop:\n"
-              "    addi    sp, sp, -16\n"
-              "    sd      ra, 8(sp)\n"
-              "    sd      s0, 0(sp)\n"
-              "    addi    s0, sp, 16\n"
-              ".LL1:\n"
-              "    j       .LL1\n"
-              "    .size   loop, .-loop\n",
+    EXPECT_EQ(R"(    .text
+    .globl  loop
+    .p2align 2
+    .type   loop, @function
+loop:
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
+    addi    s0, sp, 16
+.LL1:
+    j       .LL1
+    .size   loop, .-loop
+)",
               s);
 }

@@ -53,9 +53,13 @@ TEST_F(InstrTest, Comparisons)
 {
     std::string s = Ops({ { "int", "<" }, { "int", "<=" }, { "unsigned", ">" }, { "long", "==" } });
     EXPECT_TRUE(Has(s, "slt t0, t0, t1\n"));
-    EXPECT_TRUE(Has(s, "slt t0, t1, t0\nxori t0, t0, 1\n"));
+    EXPECT_TRUE(Has(s, R"(slt t0, t1, t0
+xori t0, t0, 1
+)"));
     EXPECT_TRUE(Has(s, "sltu t0, t1, t0\n"));
-    EXPECT_TRUE(Has(s, "xor t0, t0, t1\nseqz t0, t0\n"));
+    EXPECT_TRUE(Has(s, R"(xor t0, t0, t1
+seqz t0, t0
+)"));
 }
 
 // unsigned → unsigned long zero-extends the sign-extended 32-bit register.
@@ -64,5 +68,19 @@ TEST_F(InstrTest, ZeroExtend)
     DisableOptimization();
     std::string s = Code(CompileToRiscv(
         "unsigned long f(void) { unsigned u = 4000000000u; return u; }"));
-    EXPECT_TRUE(Has(s, "lw t0, -20(s0)\nslli t0, t0, 32\nsrli t0, t0, 32\n")) << s;
+    EXPECT_TRUE(Has(s, R"(lw t0, -20(s0)
+slli t0, t0, 32
+srli t0, t0, 32
+)")) << s;
+}
+
+// A loop condition loads into t0 and branches on zero; the back edge is a j.
+TEST_F(InstrTest, Branches)
+{
+    DisableOptimization();
+    std::string s = Code(CompileToRiscv("int main(void) { int a = 3; while (a) a = a - 1; return a; }"));
+    EXPECT_TRUE(Has(s, R"(lw t0, -20(s0)
+beqz t0, .LL0
+)")) << s;
+    EXPECT_TRUE(Has(s, "j .LL1\n")) << s;
 }

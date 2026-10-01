@@ -57,7 +57,7 @@ assembly tests pin the selected instructions.
 - **R6. Integer ops** *Done.* (ch. 2–4, 11, 12): unary, binary, comparisons via
   `slt`/`sltu`/`xor`+`seqz`, `W`-suffixed 32-bit ops with re-extension, shifts,
   `mul`/`div`/`rem` and their unsigned forms, width conversions.
-- **R7. Control flow** (ch. 5–8): labels, jumps, `beqz`/`bnez`, switch lowering
+- **R7. Control flow** *Done.* (ch. 5–8): labels, jumps, `beqz`/`bnez`, switch lowering
   as emitted by the frontend.
 - **R8. Calls, simple ABI** (ch. 9): integer/pointer args in `a0`–`a7`, the rest on
   the stack, result in `a0`; direct and indirect (`jalr`) calls;

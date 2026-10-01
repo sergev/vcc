@@ -38,6 +38,13 @@ static void gen_jump(Gen *g, Rv_Op op, int reg, const char *tac)
     xfree(l);
 }
 
+// Branch to `target` when `cond` is zero (or nonzero).
+static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
+{
+    load_val(g, RV_T0, cond);
+    gen_jump(g, if_zero ? RV_BEQZ : RV_BNEZ, RV_T0, target);
+}
+
 // dst = src, for any type.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
@@ -216,6 +223,11 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_INSTRUCTION_JUMP:
         gen_jump(g, RV_J, 0, in->u.jump.target);
+        break;
+    case TAC_INSTRUCTION_JUMP_IF_ZERO:
+    case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
+        gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
+                      in->u.jump_if_zero.target);
         break;
     case TAC_INSTRUCTION_RETURN:
         gen_return(g, in->u.return_.src);
