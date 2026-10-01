@@ -500,8 +500,13 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         cp->u.copy.dst        = ctrl_dst;
         tac_append(ctx, cp);
 
+        const Type *ctrl_type = stmt->u.switch_stmt.expr->type;
         for (CaseEntry *e = cases.head; e; e = e->next) {
-            Tac_Val *cval        = gen_expr(ctx, e->expr);
+            // C11 §6.8.4.2p5: a case constant is converted to the promoted type of the
+            // controlling expression.  Only a width change can alter the comparison.
+            Tac_Val *cval = gen_expr(ctx, e->expr);
+            if (get_size(e->expr->type) != get_size(ctrl_type))
+                cval = emit_cast(ctx, cval, e->expr->type, ctrl_type);
             Tac_Val *cmp_dst     = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
             const char *cmp_name = cmp_dst->u.var_name;
             Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
