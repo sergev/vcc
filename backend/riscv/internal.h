@@ -7,9 +7,10 @@
 //
 // Frame (s0 = sp at entry, 16-byte aligned):
 //   s0 + 0 ...       incoming stack arguments
-//   s0 - 8           saved ra
-//   s0 - 16          saved s0
-//   s0 - 16 - ...    slots
+//   s0 - 64 ...      a0-a7, in a variadic function only
+//   s0 - H + 8       saved ra (H = 16, or 80 when variadic)
+//   s0 - H           saved s0
+//   s0 - H - ...     slots
 //   sp + 0 ...       outgoing stack arguments
 //
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
@@ -35,6 +36,7 @@ typedef struct {
     Rv_Block *prologue;
     StringMap frame;   // name → Slot *
     StringMap globals; // name → const Tac_Type *
+    int header;        // bytes above the slots: saved registers and a0-a7
     int locals_size;   // bytes of slots below the saved registers
     int outgoing;      // bytes of the outgoing argument area
 } Gen;
@@ -48,6 +50,7 @@ bool rv_is_fp(const Tac_Type *t); // float or double; long double is fatal
 bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);
+bool gen_variadic(const Gen *g);
 
 //
 // Frame and value access (frame.c)

@@ -280,3 +280,66 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// <stdarg.h>: integer, FP and pointer arguments, named parameters filling the
+// registers, and variadic ones spilling to the stack.
+TEST_F(RiscvTest, RunStdarg)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+#include <stdarg.h>
+long isum(int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    long s = 0;
+    for (int i = 0; i < n; i++)
+        s += va_arg(ap, int);
+    va_end(ap);
+    return s;
+}
+double dsum(int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    double s = 0;
+    for (int i = 0; i < n; i++)
+        s += va_arg(ap, double);
+    va_end(ap);
+    return s;
+}
+long mix(char c, ...) {
+    va_list ap;
+    va_start(ap, c);
+    long a = va_arg(ap, long);
+    double d = va_arg(ap, double);
+    char *p = va_arg(ap, char *);
+    int i = va_arg(ap, int);
+    va_end(ap);
+    return c + a + (long)d + p[1] + i;
+}
+long late(long a, long b, long c, long d, long e, long f, long g, long h, long k, ...) {
+    va_list ap;
+    va_start(ap, k);
+    long x = va_arg(ap, long);
+    long y = va_arg(ap, long);
+    va_end(ap);
+    return a + b + c + d + e + f + g + h + k + x * 100 + y * 1000;
+}
+double fnamed(double q, int n, ...) {
+    va_list ap;
+    va_start(ap, n);
+    double s = q;
+    for (int i = 0; i < n; i++)
+        s += va_arg(ap, double);
+    va_end(ap);
+    return s;
+}
+int main(void) {
+    float f = 1.25f;
+    return (isum(4, 1, 2, -3, 40) != 40) | (dsum(3, 1.5, 2.25, 4.0) != 7.75) << 1 |
+           (mix(1, 20L, 3.5, "xyz", 5) != 1 + 20 + 3 + 'y' + 5) << 2 |
+           (late(1, 1, 1, 1, 1, 1, 1, 1, 1, 2L, 3L) != 3209) << 3 |
+           (fnamed(0.5, 2, 1.0, 2.0) != 3.5) << 4 |
+           (dsum(9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, f) != 9.25) << 5;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

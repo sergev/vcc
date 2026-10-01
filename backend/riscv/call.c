@@ -123,6 +123,11 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
     return a;
 }
 
+static bool is_freg(int reg)
+{
+    return reg >= RV_F0;
+}
+
 // Load a piece of aggregate `name` into `reg`, or store `reg` into a piece at base + off.
 static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
 {
@@ -143,11 +148,6 @@ static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
         store_bytes(g, reg, base, off + pc->offset, pc->size);
 }
 
-static bool is_freg(int reg)
-{
-    return reg >= RV_F0;
-}
-
 // Move an FP value between an FP register and an integer register.
 static void fp_to_int(Gen *g, const Tac_Type *t, int ireg, int freg)
 {
@@ -159,8 +159,26 @@ static void int_to_fp(Gen *g, const Tac_Type *t, int freg, int ireg)
     emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(freg), rv_reg(ireg));
 }
 
+// Whether a value is passed whole in integer registers, maybe ending on the stack.
+static bool in_int_regs(const ArgLoc *a)
+{
+    if (a->by_ref)
+        return false;
+    for (int i = 0; i < a->npieces; i++)
+        if (is_freg(a->piece[i].reg))
+            return false;
+    return true;
+}
+
+// A variadic function stores a0-a7 just below the incoming stack arguments, so that
+// all arguments passed in integer registers or on the stack are contiguous.  A named
+// parameter passed so lives there too: va_start steps on from its address.
 void gen_params(Gen *g)
 {
+    bool variadic = gen_variadic(g);
+    if (variadic)
+        for (int i = 0; i < 8; i++)
+            emit2(g, RV_SD, rv_reg(RV_A0 + i), rv_mem(RV_S0, -64 + 8 * i));
     ArgState s = { 0 };
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
@@ -169,6 +187,10 @@ void gen_params(Gen *g)
         ArgLoc a = classify(&s, t, false);
         if (!a.by_ref && a.piece[0].reg < 0) {
             place_slot(g, p->name, t, a.piece[0].stack); // entirely on the stack
+            continue;
+        }
+        if (variadic && in_int_regs(&a)) {
+            place_slot(g, p->name, t, -64 + 8 * (a.piece[0].reg - RV_A0));
             continue;
         }
         int size = rv_size(t);

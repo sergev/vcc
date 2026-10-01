@@ -55,10 +55,13 @@ more wait for library routines (R17).
   two registers, using FP registers for float-member structs; larger by reference;
   sret in `a0`. Variadic arguments always in integer registers. Checked against
   clang in both directions.
-- **R14. `<stdarg.h>`.** A variadic callee saves `a0`–`a7` into the 64-byte save
-  area directly below the incoming stack arguments, so the arguments are
+- **R14. `<stdarg.h>`.** *Done.* A variadic callee saves `a0`–`a7` into the 64-byte
+  save area directly below the incoming stack arguments, so the arguments are
   contiguous and `va_list` can stay a plain pointer stepping 8 bytes, as in the
-  BESM-6 header.
+  BESM-6 header. A named parameter passed in integer registers lives in its save
+  slot, so `va_start` steps on from its address; the last named parameter must not
+  be one passed in an FP register. `va_arg` of a struct waits for the RISC-V
+  header (R18).
 - **R15. Interop tests.** Link our objects against clang-compiled objects in both
   directions (we call clang code, clang code calls us) over a table of signatures:
   mixed int/FP, small/large structs, variadics.

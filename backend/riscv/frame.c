@@ -99,6 +99,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     rv_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
     map_init(&g->globals);
+    g->header = gen_variadic(g) ? 80 : 16;
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -131,6 +132,12 @@ void gen_done(Gen *g)
     rv_free_func(g->fn);
 }
 
+bool gen_variadic(const Gen *g)
+{
+    const Tac_Type *t = g->tl->u.function.type;
+    return t && t->kind == TAC_TYPE_FUN_TYPE && t->u.fun_type.variadic;
+}
+
 const char *gen_name(const Gen *g)
 {
     return g->tl->u.function.name;
@@ -149,7 +156,7 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     if (align < 1)
         align = 1;
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
-    int offset     = -16 - g->locals_size;
+    int offset     = -g->header - g->locals_size;
     if (name)
         insert_slot(g, name, type, offset);
     return offset;
@@ -425,10 +432,10 @@ void store_bytes(Gen *g, int reg, int base, int64_t off, int size)
 
 void gen_epilogue(Gen *g)
 {
-    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-16));
+    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
     emit2(g, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
     emit2(g, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
-    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(16));
+    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
     rv_append(g->fn, RV_RET);
 }
 
@@ -439,7 +446,7 @@ void gen_prologue(Gen *g)
     Rv_Instr *in = rv_append_to(b, RV_ADDI);
     in->opnd[0]  = rv_reg(RV_SP);
     in->opnd[1]  = rv_reg(RV_SP);
-    in->opnd[2]  = rv_imm(-16);
+    in->opnd[2]  = rv_imm(-g->header);
     in           = rv_append_to(b, RV_SD);
     in->opnd[0]  = rv_reg(RV_RA);
     in->opnd[1]  = rv_mem(RV_SP, 8);
@@ -449,7 +456,7 @@ void gen_prologue(Gen *g)
     in           = rv_append_to(b, RV_ADDI);
     in->opnd[0]  = rv_reg(RV_S0);
     in->opnd[1]  = rv_reg(RV_SP);
-    in->opnd[2]  = rv_imm(16);
+    in->opnd[2]  = rv_imm(g->header);
     int rest     = (g->locals_size + g->outgoing + 15) / 16 * 16;
     if (rest == 0)
         return;

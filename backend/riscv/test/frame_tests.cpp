@@ -63,3 +63,31 @@ sw t0, 0(t6)
 )"));
 }
 
+
+// A variadic function saves a0-a7 below the incoming stack arguments, its ra and s0
+// below those; the named parameter in a0 lives in its save slot.
+TEST_F(RiscvTest, FrameVariadic)
+{
+    std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
+    EXPECT_EQ(0u, s.find(R"(addi sp, sp, -80
+sd ra, 8(sp)
+sd s0, 0(sp)
+addi s0, sp, 80
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(sd a0, -64(s0)
+sd a1, -56(s0)
+sd a2, -48(s0)
+sd a3, -40(s0)
+sd a4, -32(s0)
+sd a5, -24(s0)
+sd a6, -16(s0)
+sd a7, -8(s0)
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find("addi t0, s0, -64\n")) << s; // &n
+    EXPECT_NE(std::string::npos, s.find(R"(addi sp, s0, -80
+ld ra, 8(sp)
+ld s0, 0(sp)
+addi sp, sp, 80
+ret
+)")) << s;
+}
