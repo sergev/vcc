@@ -42,8 +42,9 @@ protected:
     {
         target_config = target_lookup(target_name);
         ASSERT_NE(nullptr, target_config);
-        opt_flags  = opt_flags_default();
-        input_file = tmpfile();
+        opt_flags        = opt_flags_default();
+        translate_verify = 1;
+        input_file       = tmpfile();
         ASSERT_NE(nullptr, input_file);
     }
 
@@ -100,6 +101,10 @@ protected:
             decls = next;
         }
         *tac_tail = translate_unit_end();
+
+        Tac_Layout layout;
+        tac_layout_of_target(&layout);
+        EXPECT_EQ(0, tac_verify_program(all_tac, &layout, stderr));
         return all_tac;
     }
 

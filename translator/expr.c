@@ -600,7 +600,7 @@ static Tac_Val *gen_logical_and(TacCtx *ctx, Expr *l, Expr *r)
     Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     bin->u.binary.op     = TAC_BINARY_NOT_EQUAL;
     bin->u.binary.src1   = right;
-    bin->u.binary.src2   = val_int(0);
+    bin->u.binary.src2   = val_zero(r->type);
     bin->u.binary.dst    = val_var(dst_name);
     tac_append(ctx, bin);
     emit_jump(ctx, end_l);
@@ -634,7 +634,7 @@ static Tac_Val *gen_logical_or(TacCtx *ctx, Expr *l, Expr *r)
     Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     bin->u.binary.op     = TAC_BINARY_NOT_EQUAL;
     bin->u.binary.src1   = right;
-    bin->u.binary.src2   = val_int(0);
+    bin->u.binary.src2   = val_zero(r->type);
     bin->u.binary.dst    = val_var(dst_name);
     tac_append(ctx, bin);
     emit_jump(ctx, end_l);
@@ -1179,7 +1179,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                 bool widen = unalias(op_type)->kind != unalias(target->type)->kind;
                 Tac_Val *opnd =
                     widen ? emit_cast(ctx, val_var(dst), target->type, op_type) : val_var(dst);
-                Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(op_type));
+                Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
                 Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
                 bin->u.binary.op   = map_assign_op(e->u.assign.op, op_type);
                 bin->u.binary.src1 = opnd;
@@ -1259,7 +1259,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                     Tac_Val *opnd = widen ? emit_cast(ctx, val_var(loaded->u.var_name),
                                                       target->type, op_type)
                                           : val_var(loaded->u.var_name);
-                    Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(op_type));
+                    Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
                     Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
                     bin->u.binary.op   = map_assign_op(e->u.assign.op, op_type);
                     bin->u.binary.src1 = opnd;

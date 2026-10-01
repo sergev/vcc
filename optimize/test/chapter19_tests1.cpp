@@ -886,18 +886,12 @@ int target_remove_jnz(void) {
       kind: int
       value: 0
 - instruction:
-  kind: binary
-  op: not_equal
-  src1:
-    kind: constant
-    const:
-      kind: double
-      value: 0x1p+0
-  src2:
+  kind: copy
+  src:
     kind: constant
     const:
       kind: int
-      value: 0
+      value: 1
   dst:
     kind: var
     name: %2

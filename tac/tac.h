@@ -616,6 +616,25 @@ typedef void (*Tac_NameVisitor)(const char *name, void *arg);
 void tac_visit_names(const Tac_Instruction *in, Tac_NameVisitor fn, void *arg);
 
 //
+// Verify
+//
+// Byte sizes on the target: of each scalar kind (indexed by Tac_TypeKind, up to
+// TAC_TYPE_LONG_DOUBLE) and of a pointer.
+typedef struct {
+    int scalar[TAC_TYPE_VOID];
+    int pointer;
+} Tac_Layout;
+// The type of a name that is not frame-resident (a global, function, string constant),
+// or NULL when unknown.
+typedef const Tac_Type *(*Tac_GlobalType)(const char *name, void *arg);
+// Check one function: every name has a type and operand types agree with the operator.
+// Prints each problem to `err` (when not NULL) and returns how many were found.
+int tac_verify_function(const Tac_TopLevel *fn, const Tac_Layout *layout, Tac_GlobalType global,
+                        void *arg, FILE *err);
+// Check every function of a program chain, resolving globals against its toplevels.
+int tac_verify_program(const Tac_TopLevel *program, const Tac_Layout *layout, FILE *err);
+
+//
 // Graphviz (instruction-level sketch)
 //
 void tac_export_dot(FILE *fd, const Tac_TopLevel *toplevel);

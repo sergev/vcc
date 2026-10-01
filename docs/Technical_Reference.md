@@ -279,8 +279,16 @@ automatic-local name â€” in the body and in the stored `params`/`locals` lists â
 Temporaries are minted already `%`-prefixed and typed (`new_typed_temp`), so
 `params` + `locals` give the type of every frame-resident name in the body; a name
 without `%` is typed by its `static_variable`/`static_constant` toplevel, a static
-local, or an `extern` toplevel, which `translate_unit_end()` emits after the last
-declaration for every name the unit references but does not define.
+local, or an `extern` toplevel: one ahead of a function for each block-scope `extern`
+or function declaration in it, and one from `translate_unit_end()`, after the last
+declaration, for every other name the unit references but does not define. A name
+declared `extern` in a block and defined later in the unit has both.
+
+`tac_verify_function` (`tac/tac_verify.c`) checks that every name has a type and that
+operand types agree with the operator: conversion classes and directions, equal widths
+for arithmetic and copies (a constant carries its value over), one floating kind per
+`*_DOUBLE` operation, memory through pointers, `COPY_*_OFFSET` inside the aggregate.
+`lower --verify` runs it on every function; a build without `NDEBUG` always does.
 The BESM-6 frame allocator (`backend/besm6/frame.c`) then assigns a stack slot to any
 `%`-prefixed name and treats every other referenced name as an external global.
 

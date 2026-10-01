@@ -143,6 +143,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
   on a byte-addressed target merges in a slot (`type_needs_slot`).
 - **T7. Verifier.** A `tac_verify` check, run in debug builds and by tests: every
   variable has a type, operand types agree with the operator.
+  *Done.* `tac/tac_verify.c`, `lower --verify`, on in the test fixtures. It found
+  `&&`/`||` testing a floating operand against an integer 0, untyped block-scope
+  externs (now `EXTERN` toplevels ahead of the function), and BESM-6 `p += n`
+  results typed as the integer.
 
 Defects found along the way, fixed in the shared code:
 

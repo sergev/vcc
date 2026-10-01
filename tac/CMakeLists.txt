@@ -11,6 +11,7 @@ add_library(tac STATIC
     tac_export.c
     tac_graphviz.c
     tac_walk.c
+    tac_verify.c
 )
 target_include_directories(tac PUBLIC .)
 target_link_libraries(tac libutil)
@@ -22,6 +23,7 @@ add_executable(tac-tests
     test/binary_tests.cpp
     test/yaml_tests.cpp
     test/graphviz_tests.cpp
+    test/verify_tests.cpp
 )
 target_link_libraries(tac-tests tac GTest::gtest_main)
 test_chdir_to_bindir(tac-tests)

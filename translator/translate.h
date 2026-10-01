@@ -23,6 +23,7 @@ typedef struct {
     Tac_Instruction *tail;
     int temp_id;
     Tac_TopLevel *static_constants; // strings accumulated during body lowering
+    Tac_TopLevel *externs;          // block-scope extern declarations, as EXTERN toplevels
     Tac_Param *locals;              // automatic locals and temporaries, with their types
     Tac_Param *locals_tail;         // tail of `locals` for O(1) append
     Tac_Param *array_locals;        // names of local arrays (block-scope symbols are
@@ -49,6 +50,9 @@ typedef struct {
 
 // Enable debug output
 extern int translator_debug;
+// Nonzero: check every translated function with tac_verify_function and stop on a
+// problem.  Always on in a build without NDEBUG.
+extern int translate_verify;
 extern int import_debug;
 extern int export_debug;
 extern int wio_debug;
@@ -66,6 +70,9 @@ char *new_typed_temp(TacCtx *ctx, Tac_Type *type);
 void tac_record_local(TacCtx *ctx, const char *name, const Type *type);
 void tac_record_array_local(TacCtx *ctx, const char *name);
 bool tac_is_array_local(const TacCtx *ctx, const char *name);
+// Record a block-scope declaration of an external object or function.  Its symbol is
+// purged before lowering, so it travels as an EXTERN toplevel ahead of the function.
+void tac_record_extern(TacCtx *ctx, const char *name, const Type *type);
 Tac_Val *val_int(int64_t v);
 Tac_Val *val_long(long v);
 Tac_Val *val_long_long(long long v);
@@ -79,6 +86,8 @@ Tac_Val *val_var(const char *name);
 // A Var naming a fresh temporary of `type` (takes ownership of `type`).
 Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type);
 Tac_Val *dup_val(const Tac_Val *v);
+// A zero constant of scalar type `t`: floating-point for a floating type.
+Tac_Val *val_zero(const Type *t);
 Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to);
 // "src != 0" — the C11 §6.3.1.2 conversion of a scalar to _Bool.  Used by emit_cast for
 // every ordinary conversion, and directly by ++/--, which never builds a cast.  Returns
@@ -134,6 +143,8 @@ Tac_Type *ast_type_to_tac_type(const Type *t);
 Tac_Type *tac_type_ptr(Tac_Type *target);
 // Pointer to the TAC form of AST type `t`.
 Tac_Type *tac_type_ptr_to(const Type *t);
+// Byte sizes of the active target, for tac_verify.
+void tac_layout_of_target(Tac_Layout *layout);
 // Plain char, with the target's signedness.
 Tac_Type *tac_type_char(void);
 // The unsigned integer of one machine word (pointer size): the unit of word copies.

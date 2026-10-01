@@ -290,8 +290,12 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
         // A block-scope function declaration (int f(void);) is not an automatic:
         // it names an external-linkage function with no frame slot, so it must
         // not be percent-prefixed like a local.
-        if (idt && idt->kind == TYPE_FUNCTION)
+        if (idt && idt->kind == TYPE_FUNCTION) {
+            tac_record_extern(ctx, id->name, id->type);
             continue;
+        }
+        if (storage == STORAGE_CLASS_EXTERN)
+            tac_record_extern(ctx, id->name, id->type);
         if (!is_automatic) {
             // A static/extern local array has no frame slot — its storage is the
             // module-local static datum, addressed by its label like a global — but it

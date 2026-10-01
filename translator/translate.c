@@ -16,6 +16,12 @@
 // Enable debug output
 int translator_debug;
 
+#ifdef NDEBUG
+int translate_verify;
+#else
+int translate_verify = 1;
+#endif
+
 //
 // Low-level TAC-building helpers
 //
@@ -76,6 +82,18 @@ void tac_record_array_local(TacCtx *ctx, const char *name)
     p->name             = xstrdup(name);
     p->next             = ctx->array_locals;
     ctx->array_locals   = p;
+}
+
+void tac_record_extern(TacCtx *ctx, const char *name, const Type *type)
+{
+    Tac_TopLevel **tail = &ctx->externs;
+    for (; *tail; tail = &(*tail)->next)
+        if (strcmp((*tail)->u.extern_.name, name) == 0)
+            return;
+    Tac_TopLevel *ext   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    ext->u.extern_.name = xstrdup(name);
+    ext->u.extern_.type = ast_type_to_tac_type(type);
+    *tail               = ext;
 }
 
 bool tac_is_array_local(const TacCtx *ctx, const char *name)
@@ -190,6 +208,20 @@ Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type)
 // itself would have tac_free() release it twice.  Tac_Const is plain data (no pointers,
 // see tac.h), so a constant copies by value.
 //
+Tac_Val *val_zero(const Type *t)
+{
+    switch (unalias(t)->kind) {
+    case TYPE_FLOAT:
+        return val_float(0.0f);
+    case TYPE_DOUBLE:
+        return val_double(0.0);
+    case TYPE_LONG_DOUBLE:
+        return val_long_double(0.0L);
+    default:
+        return val_int(0); // integers, enums and word pointers: a zero word
+    }
+}
+
 Tac_Val *dup_val(const Tac_Val *v)
 {
     Tac_Val *tv;
@@ -278,27 +310,11 @@ Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from, const 
         src = val_var(addr->u.var_name);
     }
 
-    Tac_Val *zero;
-    switch (f->kind) {
-    case TYPE_FLOAT:
-        zero = val_float(0.0f);
-        break;
-    case TYPE_DOUBLE:
-        zero = val_double(0.0);
-        break;
-    case TYPE_LONG_DOUBLE:
-        zero = val_long_double(0.0L);
-        break;
-    default:
-        zero = val_int(0); // integers, enums and word pointers: a zero word
-        break;
-    }
-
     Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(to));
     Tac_Instruction *ne = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     ne->u.binary.op     = TAC_BINARY_NOT_EQUAL;
     ne->u.binary.src1   = src;
-    ne->u.binary.src2   = zero;
+    ne->u.binary.src2   = val_zero(f);
     ne->u.binary.dst    = dst;
     tac_append(ctx, ne);
     return dst;
@@ -872,6 +888,25 @@ Tac_Type *tac_type_ptr_to(const Type *t)
     return tac_type_ptr(ast_type_to_tac_type(t));
 }
 
+void tac_layout_of_target(Tac_Layout *l)
+{
+    const Target *t                  = target_config;
+    l->scalar[TAC_TYPE_SCHAR]        = 1;
+    l->scalar[TAC_TYPE_UCHAR]        = 1;
+    l->scalar[TAC_TYPE_SHORT]        = (int)t->short_size;
+    l->scalar[TAC_TYPE_USHORT]       = (int)t->short_size;
+    l->scalar[TAC_TYPE_INT]          = (int)t->int_size;
+    l->scalar[TAC_TYPE_UINT]         = (int)t->int_size;
+    l->scalar[TAC_TYPE_LONG]         = (int)t->long_size;
+    l->scalar[TAC_TYPE_ULONG]        = (int)t->long_size;
+    l->scalar[TAC_TYPE_LONG_LONG]    = (int)t->llong_size;
+    l->scalar[TAC_TYPE_ULONG_LONG]   = (int)t->llong_size;
+    l->scalar[TAC_TYPE_FLOAT]        = (int)t->float_size;
+    l->scalar[TAC_TYPE_DOUBLE]       = (int)t->double_size;
+    l->scalar[TAC_TYPE_LONG_DOUBLE]  = (int)t->ldouble_size;
+    l->pointer                       = (int)t->pointer_size;
+}
+
 Tac_Type *tac_type_char(void)
 {
     return tac_new_type(target_config->char_signed ? TAC_TYPE_SCHAR : TAC_TYPE_UCHAR);
@@ -995,13 +1030,16 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         for (const Tac_StaticLocal *sl = tl->u.function.static_locals; sl; sl = sl->next)
             emit_referenced_string_constants(sl->init_list, &ctail);
 
-        if (ctx.static_constants) {
-            Tac_TopLevel *last = ctx.static_constants;
+        // Emit order: block-scope externs, string constants, the function.
+        *ctail = tl;
+        if (ctx.externs) {
+            Tac_TopLevel *last = ctx.externs;
             while (last->next)
                 last = last->next;
-            last->next = tl;
-            return ctx.static_constants;
+            last->next = ctx.static_constants;
+            return ctx.externs;
         }
+        return ctx.static_constants;
     }
     return tl;
 }
@@ -1326,6 +1364,12 @@ static void percent_locals_in_function(const Tac_TopLevel *fn)
 static bool unit_active;
 static StringMap unit_defined;
 static StringMap unit_referenced;
+static StringMap unit_externs; // names already given an EXTERN toplevel -> its type (owned)
+
+static void free_type_value(intptr_t v)
+{
+    tac_free_type((Tac_Type *)v);
+}
 
 static void note_referenced(const char *name, void *arg)
 {
@@ -1362,6 +1406,8 @@ static void note_toplevel(const Tac_TopLevel *t)
         map_insert(&unit_defined, t->u.static_constant.name, 1, 0);
         break;
     case TAC_TOPLEVEL_EXTERN:
+        map_insert_free(&unit_externs, t->u.extern_.name,
+                        (intptr_t)tac_clone_type(t->u.extern_.type), 0, free_type_value);
         break;
     }
 }
@@ -1370,6 +1416,7 @@ void translate_unit_begin(void)
 {
     map_init(&unit_defined);
     map_init(&unit_referenced);
+    map_init(&unit_externs);
     unit_active = true;
 }
 
@@ -1379,7 +1426,7 @@ static void add_extern(const char *name, intptr_t value, const void *arg)
     (void)value;
     Tac_TopLevel ***tailp = (Tac_TopLevel ***)arg;
     const Symbol *sym     = symtab_get_opt(name);
-    if (map_get(&unit_defined, name, NULL) || !sym)
+    if (map_get(&unit_defined, name, NULL) || map_get(&unit_externs, name, NULL) || !sym)
         return;
     Tac_TopLevel *ext   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
     ext->u.extern_.name = xstrdup(name);
@@ -1394,8 +1441,45 @@ Tac_TopLevel *translate_unit_end(void)
     map_iterate(&unit_referenced, add_extern, &tail); // ascending name order
     map_destroy(&unit_defined);
     map_destroy(&unit_referenced);
+    map_destroy_free(&unit_externs, free_type_value);
     unit_active = false;
     return head;
+}
+
+// tac_verify resolver for global names: the EXTERN toplevels translated with the
+// function (its block-scope declarations), else the file-scope symbol table.
+typedef struct {
+    const Tac_TopLevel *chain;
+    Tac_Type *owned; // types built from symbols, freed after the check
+} GlobalTypes;
+
+static const Tac_Type *symtab_global_type(const char *name, void *arg)
+{
+    GlobalTypes *g = arg;
+    for (const Tac_TopLevel *t = g->chain; t; t = t->next)
+        if (t->kind == TAC_TOPLEVEL_EXTERN && strcmp(t->u.extern_.name, name) == 0)
+            return t->u.extern_.type;
+    intptr_t v;
+    if (unit_active && map_get(&unit_externs, name, &v))
+        return (const Tac_Type *)v;
+    const Symbol *sym = symtab_get_opt(name);
+    if (!sym)
+        return NULL;
+    Tac_Type *t = ast_type_to_tac_type(sym->type);
+    t->next     = g->owned;
+    g->owned    = t;
+    return t;
+}
+
+static void verify_function(const Tac_TopLevel *chain, const Tac_TopLevel *fn)
+{
+    Tac_Layout layout;
+    tac_layout_of_target(&layout);
+    GlobalTypes g = { chain, NULL };
+    int errors    = tac_verify_function(fn, &layout, symtab_global_type, &g, stderr);
+    tac_free_type(g.owned);
+    if (errors)
+        fatal_error("TAC of %s fails verification (%d problems)", fn->u.function.name, errors);
 }
 
 //
@@ -1404,6 +1488,21 @@ Tac_TopLevel *translate_unit_end(void)
 Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
 {
     Tac_TopLevel *tac = translate_external_decl(ast, label_seq);
+    if (unit_active) {
+        // One EXTERN per name in a unit, and none for a name it defines.
+        for (Tac_TopLevel **pp = &tac; *pp;) {
+            Tac_TopLevel *t = *pp;
+            if (t->kind == TAC_TOPLEVEL_EXTERN &&
+                (map_get(&unit_externs, t->u.extern_.name, NULL) ||
+                 map_get(&unit_defined, t->u.extern_.name, NULL))) {
+                *pp     = t->next;
+                t->next = NULL;
+                tac_free_toplevel(t);
+                continue;
+            }
+            pp = &t->next;
+        }
+    }
     for (Tac_TopLevel *t = tac; t; t = t->next) {
         // Each function is optimized against its own toplevel, which carries the
         // params + automatic locals needed to tell private locals from globals.
@@ -1411,6 +1510,8 @@ Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
             percent_locals_in_function(t);
             t->u.function.body = optimize_function(t->u.function.body, flags, t);
             optimize_prune_locals(t);
+            if (translate_verify)
+                verify_function(tac, t);
         }
         if (unit_active)
             note_toplevel(t);

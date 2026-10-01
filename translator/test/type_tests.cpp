@@ -401,3 +401,22 @@ TEST_F(TranslateTest, WordPointerArithmeticUnscaled)
     EXPECT_EQ(PointerOps(tac, "diff"), "sub");
     tac_free_toplevel(tac);
 }
+
+// A block-scope extern object or function declaration is purged with its block, so it
+// travels as an EXTERN toplevel ahead of the function; once per unit.
+TEST_F(TranslateTestRiscv, BlockScopeExterns)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        long f(void) { extern long q; int g(int); return q + g(1); }
+        long h(void) { extern long q; return q; }
+    )");
+    std::string order;
+    for (const Tac_TopLevel *t = tac; t; t = t->next) {
+        if (t->kind == TAC_TOPLEVEL_EXTERN)
+            order += std::string(t->u.extern_.name) + ":" + TypeStr(t->u.extern_.type) + " ";
+        else if (t->kind == TAC_TOPLEVEL_FUNCTION)
+            order += std::string(t->u.function.name) + " ";
+    }
+    EXPECT_EQ(order, "q:long g:fn(int) -> int f h ");
+    tac_free_toplevel(tac);
+}
