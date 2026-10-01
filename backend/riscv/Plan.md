@@ -72,6 +72,7 @@ Phase 1 adds this. It is the prerequisite for everything else.
   table out of `semantic/expressions.c` behind a per-target table in the target
   descriptor, so RISC-V can add its own (`__riscv_csrr`, …) later without editing
   the semantic pass.
+  *Done.* `Target.immediate_args` (`semantic/target.h`); only `besm6` has one.
 - **D5. Shared test utilities.** Move the target-neutral parts of
   `backend/besm6/test/codegen_test.h` (`RunExternalProgram`, `RunTool`, `ReadFile`,
   `tool_available`, the in-process parse/lower front half) into

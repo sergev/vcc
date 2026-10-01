@@ -7,6 +7,18 @@ extern "C" {
 #endif
 
 //
+// An intrinsic whose FIRST argument is an immediate field of the instruction word rather
+// than a value: it must be a compile-time constant in [lo, hi].  The semantic pass folds
+// it to a literal, so the back end can encode it.
+//
+typedef struct {
+    const char *name;  // the intrinsic, e.g. "__besm6_stop"
+    const char *what;  // names the argument in the diagnostic
+    const char *range; // completes "<name>: <what> <value> ..." when out of range
+    long lo, hi;
+} ImmediateArg;
+
+//
 // Target descriptor: size and alignment of primitive scalar types for one
 // supported architecture.  All values are in bytes (C addressable units,
 // i.e. in the same unit as sizeof() returns).  sizeof(char) == 1 always
@@ -48,6 +60,8 @@ typedef struct {
     // to a whole word (BESM-6 = 6); otherwise this is 1 (natural C packing).  This keeps
     // array element strides a word multiple, so &arr[i] never lands mid-word.
     size_t aggregate_align;
+    // Intrinsics with an immediate first argument, terminated by a NULL name; NULL if none.
+    const ImmediateArg *immediate_args;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

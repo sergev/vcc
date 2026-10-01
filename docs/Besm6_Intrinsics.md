@@ -583,7 +583,9 @@ hard errors:
 | `__besm6_maskpsw(0100000)` | `__besm6_maskpsw: mask 100000 does not fit the 15-bit address field` |
 
 All three immediate arguments are evaluated, range-checked and folded to a literal in the **front
-end** ([semantic/expressions.c](../semantic/expressions.c), `fold_immediate_arg0`), so they reach
+end** ([semantic/expressions.c](../semantic/expressions.c), `fold_immediate_arg0`, driven by
+the BESM-6 target descriptor's `immediate_args` table in
+[semantic/target.c](../semantic/target.c)), so they reach
 the back end as constants whatever the optimizer does. That is where the recursive
 constant-expression evaluator lives, which is why nesting depth does not matter (§2.3).
 Instruction selection re-tests each one, but only as a backstop — those messages are unreachable

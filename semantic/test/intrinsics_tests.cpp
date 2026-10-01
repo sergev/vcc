@@ -9,8 +9,27 @@
 //
 #include "typecheck_fixture.h"
 
+#include "target.h"
+
+// The immediate-argument checks belong to the BESM-6 target descriptor.
+class Besm6IntrinsicsTest : public PipelineTest {
+protected:
+    const Target *saved = nullptr;
+    void SetUp() override
+    {
+        PipelineTest::SetUp();
+        saved         = target_config;
+        target_config = target_lookup("besm6");
+    }
+    void TearDown() override
+    {
+        target_config = saved;
+        PipelineTest::TearDown();
+    }
+};
+
 // Every intrinsic, called once.
-TEST_F(PipelineTest, Besm6IntrinsicsCallAll)
+TEST_F(Besm6IntrinsicsTest, Besm6IntrinsicsCallAll)
 {
     RunPipeline(R"(#include <besm6.h>
 unsigned poke(unsigned a, unsigned m)
@@ -52,7 +71,7 @@ unsigned poke(unsigned a, unsigned m)
 
 // A machine word is carried as unsigned, never as int: a signed int on this
 // target holds only 41 of the 48 bits, so ГРП bit 48 would not survive it.
-TEST_F(PipelineTest, Besm6IntrinsicWordIsUnsigned)
+TEST_F(Besm6IntrinsicsTest, Besm6IntrinsicWordIsUnsigned)
 {
     RunPipeline(R"(#include <besm6.h>
 unsigned grp(void)
@@ -80,7 +99,7 @@ unsigned grp(void)
 // `int`, because what they carry is not a 48-bit machine word but a 15-bit address-field
 // value — PSW is read and written through `ita`/`ati`/`vtm`, all of which are 15-bit paths.
 // __besm6_getpsw is also the one intrinsic that takes no arguments at all.
-TEST_F(PipelineTest, Besm6PswIsInt)
+TEST_F(Besm6IntrinsicsTest, Besm6PswIsInt)
 {
     RunPipeline(R"(#include <besm6.h>
 int level(void)
@@ -120,7 +139,7 @@ int level(void)
 // machine goes on at the next instruction.  So __besm6_stop is deliberately NOT
 // _Noreturn — it is an ordinary void call, the code after it is reachable, and a
 // non-void function containing one still has to return a value.
-TEST_F(PipelineTest, Besm6StopIsResumable)
+TEST_F(Besm6IntrinsicsTest, Besm6StopIsResumable)
 {
     RunPipeline(R"(#include <besm6.h>
 int panic(int code)
@@ -136,7 +155,7 @@ int panic(int code)
 }
 
 // The prototype is enforced: the front end checks arity against it.
-TEST_F(PipelineTest, Besm6IntrinsicWrongArity_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6IntrinsicWrongArity_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 unsigned f(unsigned a)
@@ -149,7 +168,7 @@ unsigned f(unsigned a)
 // __besm6_extracode's opcode *is* the instruction's opcode, so it must be a compile-time
 // constant — the one intrinsic argument the front end has to look at.  A non-constant is
 // diagnosed here rather than left to miscompile in the back end.
-TEST_F(PipelineTest, Besm6ExtracodeOpNotConstant_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6ExtracodeOpNotConstant_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 unsigned trap(int op, unsigned ea)
@@ -160,7 +179,7 @@ unsigned trap(int op, unsigned ea)
 }
 
 // Only 050..077 are extracodes; anything else names a different instruction entirely.
-TEST_F(PipelineTest, Besm6ExtracodeOpOutOfRange_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6ExtracodeOpOutOfRange_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 unsigned trap(unsigned ea)
@@ -172,7 +191,7 @@ unsigned trap(unsigned ea)
 
 // A constant *expression* is fine, and is folded at typecheck: the argument reaches the back
 // end as a literal whatever the optimizer does with it.  (The v7 write syscall is $77 4.)
-TEST_F(PipelineTest, Besm6ExtracodeOpConstantExpr)
+TEST_F(Besm6IntrinsicsTest, Besm6ExtracodeOpConstantExpr)
 {
     RunPipeline(R"(#include <besm6.h>
 enum { SYSCALL = 070 };
@@ -191,7 +210,7 @@ unsigned wr(unsigned n)
 // only ONE level, so a three-term OR arrived as a live node and was rejected as "not a
 // constant".  Two terms folded, three did not, which made the rule look arbitrary at the call
 // site.  eval_const() is recursive, so nesting depth is no longer a property anyone has to know.
-TEST_F(PipelineTest, Besm6MaskpswNestedConstantExpr)
+TEST_F(Besm6IntrinsicsTest, Besm6MaskpswNestedConstantExpr)
 {
     RunPipeline(R"(#include <besm6.h>
 #define PSW_MMAP_DISABLE 00001
@@ -218,7 +237,7 @@ void halt(void)
 
 // The constant requirement itself still holds: the mask is part of the encoding, and there is
 // no register to put it in.
-TEST_F(PipelineTest, Besm6MaskpswNotConstant_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6MaskpswNotConstant_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 void spl(int mask)
@@ -229,7 +248,7 @@ void spl(int mask)
 }
 
 // ... and so does the 15-bit range of the address field it rides in.
-TEST_F(PipelineTest, Besm6MaskpswOutOfRange_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6MaskpswOutOfRange_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 void spl(void)
@@ -239,7 +258,7 @@ void spl(void)
                  "does not fit the 15-bit address field");
 }
 
-TEST_F(PipelineTest, Besm6StopCodeNotConstant_Neg)
+TEST_F(Besm6IntrinsicsTest, Besm6StopCodeNotConstant_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(#include <besm6.h>
 void die(int code)
@@ -247,4 +266,11 @@ void die(int code)
     __besm6_stop(code);
 })"),
                  "compile-time constant");
+}
+
+// Another target has no immediate-argument intrinsics: the same call is an ordinary one.
+TEST_F(PipelineTest, Besm6ImmediateArgsAreTargetSpecific)
+{
+    RunPipeline(R"(void __besm6_stop(unsigned code);
+void f(unsigned x) { __besm6_stop(x); })");
 }

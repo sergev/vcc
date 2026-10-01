@@ -3,6 +3,21 @@
 #include <stdio.h>
 #include <string.h>
 
+//
+// The <besm6.h> intrinsics with an immediate first argument (docs/Besm6_Intrinsics.md
+// §3.3, §3.4, §5).
+//
+static const ImmediateArg besm6_immediate_args[] = {
+    // `op` *is* the extracode's opcode; only 050..077 are extracodes, anything else names a
+    // different instruction entirely.
+    { "__besm6_extracode", "opcode", "is not an extracode (050..077)", 050, 077 },
+    // The mask of the register-0 `vtm` mode write, and the halt code of `033`: both ride in
+    // the instruction's own 15-bit address field.
+    { "__besm6_maskpsw", "mask", "does not fit the 15-bit address field", 0, 077777 },
+    { "__besm6_stop", "halt code", "does not fit the 15-bit address field", 0, 077777 },
+    {},
+};
+
 // clang-format off
 static const Target targets[] = {
     // name
@@ -158,7 +173,8 @@ static const Target targets[] = {
       41, 41, 41, 41, // signed bits
       0,   // plain char unsigned
       1,   // signed >> logical (BESM-6 shift unit does no sign extension)
-      6 }, // aggregate_align (6)
+      6,   // aggregate_align (6)
+      besm6_immediate_args },
 };
 // clang-format on
 

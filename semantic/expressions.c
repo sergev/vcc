@@ -9,6 +9,7 @@
 #include "semantic.h"
 #include "structtab.h"
 #include "symtab.h"
+#include "target.h"
 #include "typecheck.h"
 #include "typetab.h"
 #include "xalloc.h"
@@ -191,31 +192,8 @@ static Expr *typecheck_literal(Expr *e)
 }
 
 //
-// The <besm6.h> intrinsics whose FIRST argument is an immediate field of the instruction word
-// rather than a value (docs/Besm6_Intrinsics.md §3.3, §3.4, §5).  There is no register to put
-// such an argument in: it is part of the encoding, so it must be a compile-time constant, and
-// the back end can only emit the instruction once it has one.
-//
-// The other nine intrinsics need nothing here and are lowered from an ordinary call.
-//
-static const struct {
-    const char *name;
-    const char *what;  // names the argument in the diagnostic
-    const char *range; // completes "<name>: <what> <value> ..." when out of range
-    long lo, hi;
-} immediate_arg0[] = {
-    // `op` *is* the extracode's opcode; only 050..077 are extracodes, anything else names a
-    // different instruction entirely.
-    { "__besm6_extracode", "opcode", "is not an extracode (050..077)", 050, 077 },
-    // The mask of the register-0 `vtm` mode write, and the halt code of `033`: both ride in
-    // the instruction's own 15-bit address field.
-    { "__besm6_maskpsw", "mask", "does not fit the 15-bit address field", 0, 077777 },
-    { "__besm6_stop", "halt code", "does not fit the 15-bit address field", 0, 077777 },
-};
-
-//
-// Evaluate such an argument, diagnose a non-constant or out-of-range one, and replace it with
-// the folded literal.
+// Evaluate an immediate first argument of a target intrinsic (Target.immediate_args), diagnose
+// a non-constant or out-of-range one, and replace it with the folded literal.
 //
 // THE FOLD HAS TO HAPPEN HERE, not at instruction selection.  eval_const() is the language's
 // own constant-expression evaluator and is fully recursive, so it sees through an arbitrarily
@@ -227,22 +205,21 @@ static const struct {
 // the contract independent of the optimizer flags.
 //
 // Returns the new argument list head; `args` must be non-NULL (arity is checked by the
-// prototype in <besm6.h> before this runs).
+// prototype in the target's header before this runs).
 //
 static Expr *fold_immediate_arg0(Expr *args, const char *name)
 {
-    unsigned i;
-    for (i = 0; i < sizeof(immediate_arg0) / sizeof(immediate_arg0[0]); i++)
-        if (strcmp(name, immediate_arg0[i].name) == 0)
-            break;
-    if (i == sizeof(immediate_arg0) / sizeof(immediate_arg0[0]))
+    const ImmediateArg *imm = target_config->immediate_args;
+    while (imm && imm->name && strcmp(name, imm->name) != 0)
+        imm++;
+    if (!imm || !imm->name)
         return args; // not one of them
 
     long val = 0;
     if (!try_eval_const_int(args, &val))
-        fatal_error("%s: the %s must be a compile-time constant", name, immediate_arg0[i].what);
-    if (val < immediate_arg0[i].lo || val > immediate_arg0[i].hi)
-        fatal_error("%s: %s %lo %s", name, immediate_arg0[i].what, val, immediate_arg0[i].range);
+        fatal_error("%s: the %s must be a compile-time constant", name, imm->what);
+    if (val < imm->lo || val > imm->hi)
+        fatal_error("%s: %s %lo %s", name, imm->what, val, imm->range);
 
     Expr *lit                 = new_expression(EXPR_LITERAL);
     lit->u.literal            = new_literal(LITERAL_INT);
