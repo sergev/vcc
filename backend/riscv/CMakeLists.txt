@@ -16,6 +16,7 @@ target_link_libraries(riscv tac libutil)
 add_executable(riscv-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(riscv-tests riscv parser translator semantic GTest::gtest_main test_util

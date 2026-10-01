@@ -56,7 +56,7 @@ can rely on:
   RISC-V-capable clang (hint `/opt/homebrew/opt/llvm/bin`), `ld.lld`, `llvm-ar` and
   qemu; tests guard with `SKIP_IF_NO_RISCV_TOOLS()` so `make run` stays green
   without them.
-- **R4. First program.** `int main(void) { return 2; }` runs and returns 2.
+- **R4. First program.** *Done.* `int main(void) { return 2; }` runs and returns 2.
 
 ## Phase 3 — instruction selection, book order
 

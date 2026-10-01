@@ -28,3 +28,16 @@ TEST_F(RiscvTest, StaticFunctionAndExtern)
               "\t.size\tg, .-g\n",
               CompileToRiscv("extern int x; static void g(void) { for (;;) ; }"));
 }
+
+TEST_F(RiscvTest, ReturnConstant)
+{
+    EXPECT_EQ("\t.text\n"
+              "\t.globl\tmain\n"
+              "\t.p2align\t2\n"
+              "\t.type\tmain, @function\n"
+              "main:\n"
+              "\tli\ta0, -2\n"
+              "\tret\n"
+              "\t.size\tmain, .-main\n",
+              CompileToRiscv("int main(void) { return -2; }"));
+}

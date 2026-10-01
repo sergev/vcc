@@ -24,6 +24,48 @@ static char *label_name(const char *tac)
     return s;
 }
 
+// Load a value into integer register `reg`.
+static void gen_load(Gen *g, int reg, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_CONSTANT)
+        fatal_error("riscv: %s: variable %s not implemented", g->tl->u.function.name,
+                    v->u.var_name);
+    const Tac_Const *c = v->u.constant;
+    int64_t imm;
+    switch (c->kind) {
+    case TAC_CONST_INT:
+        imm = c->u.int_val;
+        break;
+    case TAC_CONST_LONG:
+        imm = c->u.long_val;
+        break;
+    case TAC_CONST_LONG_LONG:
+        imm = c->u.long_long_val;
+        break;
+    case TAC_CONST_UINT:
+        imm = (int64_t)c->u.uint_val;
+        break;
+    case TAC_CONST_ULONG:
+        imm = (int64_t)c->u.ulong_val;
+        break;
+    case TAC_CONST_ULONG_LONG:
+        imm = (int64_t)c->u.ulong_long_val;
+        break;
+    case TAC_CONST_SCHAR:
+        imm = c->u.char_val;
+        break;
+    case TAC_CONST_UCHAR:
+        imm = c->u.uchar_val;
+        break;
+    default:
+        fatal_error("riscv: %s: constant kind %d not implemented", g->tl->u.function.name,
+                    c->kind);
+    }
+    Rv_Instr *li = rv_append(g->fn, RV_LI);
+    li->opnd[0]  = rv_reg(reg);
+    li->opnd[1]  = rv_imm(imm);
+}
+
 static void gen_epilogue(Gen *g)
 {
     rv_append(g->fn, RV_RET);
@@ -46,7 +88,7 @@ static void gen_instr(Gen *g, const Tac_Instruction *in)
     }
     case TAC_INSTRUCTION_RETURN:
         if (in->u.return_.src)
-            fatal_error("riscv: %s: return of a value not implemented", g->tl->u.function.name);
+            gen_load(g, RV_A0, in->u.return_.src);
         gen_epilogue(g);
         break;
     default:
