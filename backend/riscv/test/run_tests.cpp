@@ -129,3 +129,21 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Globals of each width, and a static local.
+TEST_F(RiscvTest, RunGlobals)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+signed char sc = -3;
+unsigned short us = 65535;
+long big = -8589934592l;
+int counter(void) { static int n; return ++n; }
+int main(void) {
+    counter();
+    counter();
+    return (sc != -3) | (us != 65535) << 1 | (big / 2 != -4294967296l) << 2 |
+           (counter() != 3) << 3;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

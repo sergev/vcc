@@ -426,37 +426,6 @@ static bool static_init_all_zero(const Tac_StaticInit *init)
     return true;
 }
 
-// A tentative (no-init) top-level static variable is redundant when the same name has another
-// top-level static variable that is a real definition (carries an init_list), or an earlier
-// tentative of the same name (collapse repeated tentatives to the first).  The streaming
-// frontend typechecks and translates one declaration at a time, so a tentative "static int
-// foo;" and a later "static int foo = 4;" arrive as two separate toplevels; only one storage
-// definition may reach the assembler (in the Unix dialect two strong labels of the same name
-// are a duplicate-symbol error).  Typecheck guarantees at most one initialized definition per
-// name, so the winner is unambiguous.
-static bool static_var_superseded(const Tac_TopLevel *program, const Tac_TopLevel *tl)
-{
-    if (tl->u.static_variable.init_list != NULL)
-        return false; // a real definition is always emitted
-    const char *name = tl->u.static_variable.name;
-    bool seen_self   = false;
-    for (const Tac_TopLevel *o = program; o; o = o->next) {
-        if (o == tl) {
-            seen_self = true;
-            continue;
-        }
-        if (o->kind != TAC_TOPLEVEL_STATIC_VARIABLE)
-            continue;
-        if (strcmp(o->u.static_variable.name, name) != 0)
-            continue;
-        if (o->u.static_variable.init_list != NULL)
-            return true; // a real definition wins over this tentative
-        if (!seen_self)
-            return true; // an earlier tentative of the same name wins
-    }
-    return false;
-}
-
 // Build the chain of data directives for a static object of the given type and init list.
 // `init == NULL` reserves zeroed storage.  The returned items carry no label; callers
 // attach one as needed (a data section's `,name,`, or the first item for a static local
@@ -537,10 +506,10 @@ void codegen_static_variable(const Tac_TopLevel *program, const Tac_TopLevel *tl
                              Besm_Dialect dialect)
 {
     // Skip a tentative definition when another toplevel defines (or already tentatively
-    // reserves) the same name — see static_var_superseded.  Without this, the streaming
+    // reserves) the same name — see tac_static_superseded.  Without this, the streaming
     // frontend's separate tentative + initialized toplevels emit two strong labels of the
     // same name, which the Unix assembler rejects as a duplicate symbol.
-    if (static_var_superseded(program, tl))
+    if (tac_static_superseded(program, tl))
         return;
 
     const char *name           = tl->u.static_variable.name;

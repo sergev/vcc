@@ -7,6 +7,7 @@ add_library(riscv STATIC
     frame.c
     instr.c
     call.c
+    data.c
     codegen.c
 )
 target_include_directories(riscv PUBLIC .)
@@ -21,6 +22,7 @@ add_executable(riscv-tests
     test/codegen_tests.cpp
     test/frame_tests.cpp
     test/instr_tests.cpp
+    test/data_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )

@@ -49,6 +49,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     gen_prologue(&g);
     rv_emit_func(out, g.fn);
     gen_done(&g);
+    for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)
+        emit_static_variable(out, s->name, false, s->type, s->init_list, false);
 }
 
 void riscv_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
@@ -60,8 +62,14 @@ void riscv_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *ou
     case TAC_TOPLEVEL_EXTERN:
         break; // the assembler resolves undefined names at link time
     case TAC_TOPLEVEL_STATIC_VARIABLE:
-        fatal_error("riscv: static variable %s not implemented", tl->u.static_variable.name);
+        if (tac_static_superseded(program, tl))
+            break;
+        emit_static_variable(out, tl->u.static_variable.name, tl->u.static_variable.global,
+                             tl->u.static_variable.type, tl->u.static_variable.init_list, false);
+        break;
     case TAC_TOPLEVEL_STATIC_CONSTANT:
-        fatal_error("riscv: static constant %s not implemented", tl->u.static_constant.name);
+        emit_static_variable(out, tl->u.static_constant.name, false, tl->u.static_constant.type,
+                             tl->u.static_constant.init, true);
+        break;
     }
 }

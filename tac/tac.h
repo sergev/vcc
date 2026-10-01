@@ -617,6 +617,9 @@ void tac_print_program(FILE *fd, const Tac_Program *program);
 // callee, or the pointer variable of an indirect call).  Labels are not names.
 typedef void (*Tac_NameVisitor)(const char *name, void *arg);
 void tac_visit_names(const Tac_Instruction *in, Tac_NameVisitor fn, void *arg);
+// True when static variable `tl` emits no storage: it is a tentative definition and
+// `program` has a real definition of the name, or an earlier tentative one.
+bool tac_static_superseded(const Tac_TopLevel *program, const Tac_TopLevel *tl);
 
 //
 // Verify

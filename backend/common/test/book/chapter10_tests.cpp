@@ -215,10 +215,10 @@ int main(void) {
 // Bitwise operations on file-scope variables.  The "y = ((y & -5) ^ 12) >> 2"
 // step right-shifts a negative value: BESM-6 shifts logically (impl-defined,
 // C11 §6.5.7p5), so y becomes 2^39 - 3 rather than -3, the "y != -3" guard
-// fires, and the program returns 2 (the x86 result would be 0).
+// fires, and the program returns 2 (0 on targets with an arithmetic shift).
 TEST_F(BookTest, Chapter10_BitwiseOpsFileScopeVars)
 {
-    EXPECT_EQ("2\n", CompileAndRunBook(R"(int x = 1;
+    EXPECT_EQ(IsTarget("besm6") ? "2\n" : "0\n", CompileAndRunBook(R"(int x = 1;
 int y = 0;
 
 int main(void) {

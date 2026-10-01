@@ -62,7 +62,7 @@ assembly tests pin the selected instructions.
 - **R8. Calls, simple ABI** *Done.* (ch. 9): integer/pointer args in `a0`–`a7`, the rest on
   the stack, result in `a0`; direct and indirect (`jalr`) calls;
   `FUN_CALL_NORETURN`.
-- **R9. Globals and static data** (ch. 10): `.data`/`.bss`/`.rodata`, all
+- **R9. Globals and static data** *Done.* (ch. 10): `.data`/`.bss`/`.rodata`, all
   `Tac_StaticInit` kinds, address materialisation with `la` (medany code model),
   static locals with the existing `name$N` uniqueness, using a legal symbol
   spelling.
