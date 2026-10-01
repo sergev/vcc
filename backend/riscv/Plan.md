@@ -42,7 +42,7 @@ can rely on:
 
 The backend skeleton is in place: `genriscv`, the bare-metal runtime in `libc/riscv/`,
 and `riscv-tests` with `CompileToRiscv`, `CompileAndRunRiscv` and `CompileAndRunBook`
-(the book suite runs the chapters enabled in `test/book_test.h`).
+(and the shared book suite).
 
 ## Phase 3 — instruction selection, book order
 
@@ -50,6 +50,10 @@ Naive and correct first: every TAC variable lives in a stack slot; each
 instruction loads operands into scratch registers, computes, stores. Each step is
 done when its book chapters pass through `CompileAndRunBook` and a few golden
 assembly tests pin the selected instructions.
+
+Done: all of ch. 1–20 run. 72 book programs expect BESM-6 integer widths or sizes;
+each was checked to give on RV64 exactly what clang gives, and is on the RISC-V skip
+list. Four more wait for library routines (R17).
 
 - **R5. Frame.** *Done.* Slot layout from typed symbols (size/alignment), `ALLOCATE_LOCAL`,
   prologue/epilogue (`ra`, `s0` frame pointer, 16-byte `sp` alignment).
@@ -74,10 +78,9 @@ assembly tests pin the selected instructions.
   `ADD_PTR`, and the byte-pointer TAC kinds as plain operations: `GET_ADDRESS_BYTE`/
   `GET_ADDRESS_DECAY` = address, `LOAD_BYTE` = `lb`/`lbu`, `PTR_DIFF` = `sub`,
   `PTR_TO_CHAR_PTR`/`CHAR_PTR_TO_PTR` = copy.
-- **R12. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
-  copies, by-value and returned structs (whole, or through the hidden pointer).
-  The chapter 17–18 `sizeof` checks, written for BESM-6, get per-target
-  expectations.
+- **R12. Structs** (ch. 17–18): *Done.* member access via `COPY_*_OFFSET`,
+  whole-aggregate copies, by-value and returned structs (whole, or through the
+  hidden pointer).
 
 ## Phase 4 — psABI conformance
 
@@ -141,8 +144,9 @@ assembly tests pin the selected instructions.
   TAC verifier, RISC-V run tests, and the BESM-6 tests as a regression net.
 - **qemu on macOS is system-mode only**: the harness owns its crt0/linker script;
   no libc from the host toolchain is used.
-- **The book suite is BESM-6-adapted** (`putch`, chapter 17 `sizeof`). Per-target
-  expectations must not weaken the BESM-6 tests.
+- **The book suite is BESM-6-adapted** (`putch`, 41-bit values, BESM-6 `sizeof`).
+  Per-target expectations must not weaken the BESM-6 tests; where a program cannot
+  be shared, RISC-V skips it and R16 compares it against clang instead.
 
 ## Open questions
 

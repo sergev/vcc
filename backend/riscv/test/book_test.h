@@ -2,10 +2,6 @@
 // (backend/common/test/book/): programs run on bare-metal qemu.
 #pragma once
 
-#include <cstdlib>
-#include <cstring>
-#include <set>
-
 #include "riscv_test.h"
 
 class BookTest : public RiscvTest {
@@ -13,15 +9,10 @@ protected:
     void SetUp() override
     {
         RiscvTest::SetUp();
-        // Chapters the backend handles so far; the list grows with Phase 3.
-        static const std::set<int> chapters = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-        const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        int chapter      = strncmp(name, "Chapter", 7) == 0 ? atoi(name + 7) : 0;
-        if (!chapters.count(chapter))
-            GTEST_SKIP() << "chapter " << chapter << " not yet supported by the RISC-V backend";
-        // Programs whose expected values are BESM-6's (41-bit int, 48-bit unsigned; on
-        // RV64 each gives what clang gives), and programs needing a missing library.
-#define W "expects BESM-6 integer widths"
+        // Programs whose expected values are BESM-6's (41-bit int, 48-bit unsigned,
+        // 6-byte words; on RV64 each gives what clang gives), and programs needing a
+        // missing library.
+#define W "expects BESM-6 integer widths or sizes"
         static const SkippedTest skipped[] = {
             { "Chapter11_Bitshift", W },
             { "Chapter11_CompoundAssignToInt", W },
@@ -61,6 +52,40 @@ protected:
             { "Chapter16_CommonType", W },
             { "Chapter16_ConvertByAssignment", W },
             { "Chapter16_ExplicitCasts", W },
+            { "Chapter17_SizeofArray", W },
+            { "Chapter17_SizeofBasicTypes", W },
+            { "Chapter17_SizeofBitwise", W },
+            { "Chapter17_SizeofCompound", W },
+            { "Chapter17_SizeofCompoundBitwise", W },
+            { "Chapter17_SizeofConsts", W },
+            { "Chapter17_SizeofDerivedTypes", W },
+            { "Chapter17_SizeofExpressions", W },
+            { "Chapter17_SizeofExtern", W },
+            { "Chapter17_SizeofIncr", W },
+            { "Chapter17_SizeofNotEvaluated", W },
+            { "Chapter17_SizeofResultIsUlong", W },
+            { "Chapter17_SizeofSimple", W },
+            { "Chapter18_CopyThruPointer", W },
+            { "Chapter18_IncrStructMembers", W },
+            { "Chapter18_MemberOffsets", W },
+            { "Chapter18_NestedStaticStructInitializers", W },
+            { "Chapter18_NestedUnionAccess", W },
+            { "Chapter18_SizeofExps", W },
+            { "Chapter18_SizeofType", W },
+            { "Chapter18_StaticStructInitializers", W },
+            { "Chapter18_StaticUnionAccess", W },
+            { "Chapter18_StaticUnionInits", W },
+            { "Chapter18_UnionInitAndMemberAccess", W },
+            { "Chapter18_UnionSizes", W },
+            { "Chapter18_UnionTempLifetime", W },
+            { "Chapter18_UnionsInConditionals", W },
+            { "Chapter19_WP_AllTypes_FoldCompoundAssignAllTypes", W },
+            { "Chapter19_WP_AllTypes_FoldExtensionAndTruncation", W },
+            { "Chapter19_WP_AllTypes_FoldIncrDecrUnsigned", W },
+            { "Chapter19_WP_AllTypes_FoldNegativeLongBitshift", W },
+            { "Chapter19_WP_AllTypes_SignedUnsignedConversion", W },
+            { "Chapter19_WP_IntOnly_FoldNegativeBitshift", W },
+            { "Chapter20_AllNoCoal_TypeConversionInterference", W },
             { "Chapter13_StandardLibraryCall", "needs fma and ldexp (R17)" },
             { "Chapter13_DoubleParamsAndResultLibrary", "needs fmax (R17)" },
             { "Chapter16_StandardLibraryCalls", "needs atoi (R17)" },

@@ -160,30 +160,29 @@ static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
     store_val(g, RV_T0, in->u.ptr_diff.dst);
 }
 
-// The scalar type at byte `offset` of aggregate type `t`, or NULL.
-static const Tac_Type *scalar_at(const Tac_Type *t, int offset)
+// The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
+// members there, one of `size` bytes is preferred, else the first.
+static const Tac_Type *scalar_at(const Tac_Type *t, int offset, int size)
 {
-    while (t) {
-        if (t->kind == TAC_TYPE_ARRAY) {
-            int esize = rv_size(t->u.array.elem_type);
-            if (esize <= 0)
-                return NULL;
-            offset %= esize;
-            t = t->u.array.elem_type;
-        } else if (t->kind == TAC_TYPE_STRUCTURE) {
-            const Tac_Member *found = NULL;
-            for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
-                if (m->offset <= offset && offset < m->offset + rv_size(m->type))
-                    found = m;
-            if (!found)
-                return NULL;
-            offset -= found->offset;
-            t = found->type;
-        } else {
-            return offset == 0 ? t : NULL;
-        }
+    if (!t)
+        return NULL;
+    if (t->kind == TAC_TYPE_ARRAY) {
+        int esize = rv_size(t->u.array.elem_type);
+        return esize > 0 ? scalar_at(t->u.array.elem_type, offset % esize, size) : NULL;
     }
-    return NULL;
+    if (t->kind != TAC_TYPE_STRUCTURE)
+        return offset == 0 ? t : NULL;
+    const Tac_Type *first = NULL;
+    for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+        if (offset < m->offset || offset >= m->offset + rv_size(m->type))
+            continue;
+        const Tac_Type *s = scalar_at(m->type, offset - m->offset, size);
+        if (s && rv_size(s) == size)
+            return s;
+        if (!first)
+            first = s;
+    }
+    return first;
 }
 
 // Member store: aggregate `dst` at byte `offset` = src.  A constant takes the width of
@@ -196,7 +195,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
     if (byte) {
         t = &uchar;
     } else if (src->kind == TAC_VAL_CONSTANT) {
-        const Tac_Type *m = scalar_at(name_type(g, dst), offset);
+        const Tac_Type *m = scalar_at(name_type(g, dst), offset, rv_size(t));
         if (m && rv_is_fp(m) == rv_is_fp(t))
             t = m;
     }

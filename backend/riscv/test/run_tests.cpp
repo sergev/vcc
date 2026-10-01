@@ -200,3 +200,41 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Structs by value: up to 8 and 16 bytes in registers, larger by reference; returned
+// in a0/a1 or through the hidden pointer; copied whole and member by member.
+TEST_F(RiscvTest, RunStructs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+struct small { char c; int i; };
+struct pair { long a; double d; };
+struct odd { char c[13]; };
+struct big { long x, y, z; };
+union u { long l; char c; };
+struct small mk_small(int i) { struct small s = { 'x', i }; return s; }
+struct pair swap(struct pair p) { struct pair r = { (long)p.d, (double)p.a }; return r; }
+struct odd shift(struct odd o) { for (int i = 0; i < 12; i++) o.c[i] = o.c[i + 1]; return o; }
+struct big twice(struct big b) { b.x *= 2; b.y *= 2; b.z *= 2; return b; }
+long many(long a, long b, long c, long d, long e, long f, long g, struct pair p, struct big q)
+{
+    return a + b + c + d + e + f + g + p.a + q.z;
+}
+int main(void) {
+    struct small s = mk_small(7);
+    struct pair p = { 3, 4.5 };
+    struct pair q = swap(p);
+    struct odd o = { "abcdefghijkl" };
+    struct odd o2 = shift(o);
+    struct big b = { 1, 2, 3 };
+    struct big b2 = twice(b);
+    struct big *bp = &b2;
+    union u un;
+    un.l = 0x4142;
+    return (s.c != 'x' || s.i != 7) | (q.a != 4 || q.d != 3.0) << 1 |
+           (o2.c[0] != 'b' || o2.c[10] != 'l' || o2.c[11] != 0) << 2 |
+           (b2.z != 6 || b.z != 3) << 3 | (bp->y != 4) << 4 | (un.c != 0x42) << 5 |
+           (many(1, 2, 3, 4, 5, 6, 7, p, b) != 34) << 6;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

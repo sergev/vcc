@@ -44,9 +44,12 @@ add_custom_command(OUTPUT ${out}/console.o
 add_custom_command(OUTPUT ${out}/string.o
     COMMAND ${RISCV_CLANG} ${RISCV_ASFLAGS} -o ${out}/string.o ${src}/string.s
     DEPENDS ${src}/string.s)
+add_custom_command(OUTPUT ${out}/malloc.o
+    COMMAND ${RISCV_CLANG} ${RISCV_ASFLAGS} -o ${out}/malloc.o ${src}/malloc.s
+    DEPENDS ${src}/malloc.s)
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
-    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${out}/console.o ${out}/string.o
-    DEPENDS ${out}/console.o ${out}/string.o)
+    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${out}/console.o ${out}/string.o ${out}/malloc.o
+    DEPENDS ${out}/console.o ${out}/string.o ${out}/malloc.o)
 add_custom_target(riscv-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)

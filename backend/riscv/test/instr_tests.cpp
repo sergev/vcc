@@ -138,3 +138,26 @@ unsigned char get(unsigned char *p) { return *p; }
     EXPECT_TRUE(Has(s, "lh t0, -34(s0)\nsh t0, 0(t4)\n")) << s;
     EXPECT_TRUE(Has(s, "lbu t0, 0(t3)\n")) << s;
 }
+
+// A 16-byte struct argument goes in two registers; a 24-byte one by reference to a
+// copy; a 16-byte result comes back in a0/a1.
+TEST_F(InstrTest, StructArguments)
+{
+    std::string s = Code(CompileToRiscv(R"(
+struct pair { long a, b; };
+struct big { long x, y, z; };
+struct pair f(struct pair p, struct big q);
+long g(void) {
+    struct pair p = { 1, 2 };
+    struct big q = { 3, 4, 5 };
+    struct pair r = f(p, q);
+    return r.b;
+}
+)"));
+    EXPECT_TRUE(Has(s, R"(ld a0, -32(s0)
+ld a1, -24(s0)
+)")) << s;
+    EXPECT_TRUE(Has(s, R"(addi a2, s0, )")) << s;
+    EXPECT_TRUE(Has(s, R"(call f
+sd a0, )")) << s;
+}
