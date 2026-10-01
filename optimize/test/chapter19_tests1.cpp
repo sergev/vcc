@@ -715,14 +715,14 @@ unsigned long target_implicit(void) {
   src:
     kind: constant
     const:
-      kind: int
+      kind: char
       value: 126
 - instruction:
   kind: return
   src:
     kind: constant
     const:
-      kind: uint
+      kind: uchar
       value: 254
 - instruction:
   kind: return
@@ -743,22 +743,22 @@ unsigned long target_implicit(void) {
   src:
     kind: constant
     const:
-      kind: int
-      value: -1024
+      kind: long
+      value: 9223372036854774784
 - instruction:
   kind: return
   src:
     kind: constant
     const:
-      kind: uint
-      value: 0
+      kind: ulong
+      value: 13835058055282163712
 - instruction:
   kind: return
   src:
     kind: constant
     const:
-      kind: uint
-      value: 1048576
+      kind: ulong
+      value: 3458764513821589504
 )OPT");
 }
 

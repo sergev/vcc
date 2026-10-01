@@ -840,6 +840,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             d = src->u.double_val;
         else
             return NULL;
+        if (dst_kind >= 0)
+            return make_int_const_val((Tac_ConstKind)dst_kind, (uint64_t)(int64_t)d);
         rc            = tac_new_const(TAC_CONST_INT);
         rc->u.int_val = sign_narrow((uint64_t)(int64_t)d, target_signed_bits(TAC_CONST_INT));
         break;
@@ -854,6 +856,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             d = src->u.double_val;
         else
             return NULL;
+        if (dst_kind >= 0)
+            return make_int_const_val((Tac_ConstKind)dst_kind, (uint64_t)d);
         rc             = tac_new_const(TAC_CONST_UINT);
         rc->u.uint_val = unsigned_narrow((uint64_t)d, target_unsigned_bits(TAC_CONST_UINT));
         break;
@@ -1010,11 +1014,15 @@ Tac_Instruction *constant_fold(Tac_Instruction *body)
         // Any conversion of a constant source → Copy of the new constant.
         // All 14 conversions share the sign_extend {src, dst} layout.
         if (is_conversion(cur->kind) && cur->u.sign_extend.src->kind == TAC_VAL_CONSTANT) {
-            // dst_kind is meaningful only for the three integer-width conversions; the
-            // float conversions ignore it (their result kind is fixed by the op).
+            // dst_kind is meaningful only for the integer-width and float→integer
+            // conversions; the others' result kind is fixed by the op.
             int dst_kind = (cur->kind == TAC_INSTRUCTION_SIGN_EXTEND ||
                             cur->kind == TAC_INSTRUCTION_TRUNCATE ||
-                            cur->kind == TAC_INSTRUCTION_ZERO_EXTEND)
+                            cur->kind == TAC_INSTRUCTION_ZERO_EXTEND ||
+                            cur->kind == TAC_INSTRUCTION_DOUBLE_TO_INT ||
+                            cur->kind == TAC_INSTRUCTION_DOUBLE_TO_UINT ||
+                            cur->kind == TAC_INSTRUCTION_FLOAT_TO_INT ||
+                            cur->kind == TAC_INSTRUCTION_FLOAT_TO_UINT)
                                ? cur->u.sign_extend.dst_kind
                                : -1;
             Tac_Val *folded =

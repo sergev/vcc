@@ -233,10 +233,12 @@ typedef struct Tac_Instruction {
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } double_to_int;
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } double_to_uint;
         struct {
             Tac_Val *src;
@@ -265,18 +267,22 @@ typedef struct Tac_Instruction {
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } float_to_int;
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } float_to_uint;
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } long_double_to_int;
         struct {
             Tac_Val *src;
             Tac_Val *dst;
+            int dst_kind; // as for sign_extend
         } long_double_to_uint;
         struct {
             Tac_Val *src;

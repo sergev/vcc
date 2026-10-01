@@ -465,6 +465,7 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
             Tac_Instruction *in     = tac_new_instruction(op);
             in->u.double_to_int.src = src;
             in->u.double_to_int.dst = dst;
+            in->u.double_to_int.dst_kind = const_kind_of_int_type(to);
             tac_append(ctx, in);
         } else {
             Tac_InstructionKind op   = from_float         ? TAC_INSTRUCTION_FLOAT_TO_UINT
@@ -473,6 +474,7 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
             Tac_Instruction *in      = tac_new_instruction(op);
             in->u.double_to_uint.src = src;
             in->u.double_to_uint.dst = dst;
+            in->u.double_to_uint.dst_kind = const_kind_of_int_type(to);
             tac_append(ctx, in);
         }
     } else if (from_int && !to_int) {

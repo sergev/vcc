@@ -17,14 +17,26 @@ Tac_Instruction *tac_new_instruction(Tac_InstructionKind kind)
     Tac_Instruction *instr =
         (Tac_Instruction *)xalloc(sizeof(Tac_Instruction), __func__, __FILE__, __LINE__);
     instr->kind = kind;
-    // Integer-width conversions default to "no destination kind supplied" (-1); the
+    // Integer-width and floating→integer conversions default to "no destination kind supplied" (-1); the
     // calloc above would otherwise leave dst_kind == 0 (TAC_CONST_INT, a valid kind),
     // which would change folding for conversions built without an explicit dst_kind
     // (e.g. unit-test fixtures and imported TAC). emit_cast overrides it with the real
     // destination kind.
-    if (kind == TAC_INSTRUCTION_SIGN_EXTEND || kind == TAC_INSTRUCTION_TRUNCATE ||
-        kind == TAC_INSTRUCTION_ZERO_EXTEND)
-        instr->u.sign_extend.dst_kind = -1;
+    switch (kind) {
+    case TAC_INSTRUCTION_SIGN_EXTEND:
+    case TAC_INSTRUCTION_TRUNCATE:
+    case TAC_INSTRUCTION_ZERO_EXTEND:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+        instr->u.sign_extend.dst_kind = TAC_DST_KIND_UNKNOWN;
+        break;
+    default:
+        break;
+    }
     return instr;
 }
 
