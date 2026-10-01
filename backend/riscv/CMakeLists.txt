@@ -24,6 +24,7 @@ add_executable(riscv-tests
     test/instr_tests.cpp
     test/data_tests.cpp
     test/run_tests.cpp
+    test/interop_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(riscv-tests riscv parser translator semantic GTest::gtest_main test_util

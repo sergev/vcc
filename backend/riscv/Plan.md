@@ -62,9 +62,9 @@ more wait for library routines (R17).
   slot, so `va_start` steps on from its address; the last named parameter must not
   be one passed in an FP register. `va_arg` of a struct waits for the RISC-V
   header (R18).
-- **R15. Interop tests.** Link our objects against clang-compiled objects in both
-  directions (we call clang code, clang code calls us) over a table of signatures:
-  mixed int/FP, small/large structs, variadics.
+- **R15. Interop tests.** *Done.* Link our objects against clang-compiled objects in
+  both directions (we call clang code, clang code calls us) over a table of
+  signatures: mixed int/FP, small/large structs, variadics (`interop_tests.cpp`).
 - **R16. Differential testing.** Compile the same programs with clang for RV64,
   run both under qemu, compare output.
 

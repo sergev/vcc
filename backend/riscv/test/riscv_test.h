@@ -4,6 +4,7 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "backend_test.h"
 #include "codegen.h"
@@ -79,9 +80,16 @@ protected:
         return Run(CompileToRiscv(src.c_str()), "crt0-status.o");
     }
 
+    // Run a program of two parts: `ours` compiled by us, `theirs` by clang -O1.
+    std::string CompileAndRunWithClang(const std::string &ours, const std::string &theirs)
+    {
+        return Run(CompileToRiscv(ours.c_str()), "crt0.o", &theirs);
+    }
+
 private:
     // Assemble, link and run under qemu.  Returns the UART output, or "ERROR".
-    std::string Run(const std::string &asm_text, const char *crt0)
+    std::string Run(const std::string &asm_text, const char *crt0,
+                    const std::string *clang_src = nullptr)
     {
         exit_status          = -1;
         std::string base     = ScratchPath("");
@@ -107,10 +115,29 @@ private:
         EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
+        std::vector<std::string> objs = { o_path };
+        if (clang_src) {
+            std::string c_path = base + "-clang.c";
+            std::string co_path = base + "-clang.o";
+            {
+                std::ofstream c(c_path);
+                c << *clang_src;
+            }
+            rc = RunTool({ RISCV_CLANG, "--target=riscv64", "-march=rv64imfd", "-mabi=lp64d",
+                           "-mcmodel=medany", "-O1", "-ffreestanding", "-fno-builtin", "-c",
+                           "-o", co_path, c_path },
+                         log_path);
+            EXPECT_EQ(0, rc) << "clang failed on " << c_path << ":\n" << ReadFile(log_path);
+            if (rc != 0)
+                return "ERROR";
+            objs.push_back(co_path);
+        }
         std::string lib = RISCV_LIB_DIR;
-        rc = RunTool({ RISCV_LD, "-T", RISCV_LINK_SCRIPT, "-o", exe_path, lib + "/" + crt0, o_path,
-                       lib + "/libc.a" },
-                     log_path);
+        std::vector<std::string> link = { RISCV_LD, "-T", RISCV_LINK_SCRIPT, "-o", exe_path,
+                                          lib + "/" + crt0 };
+        link.insert(link.end(), objs.begin(), objs.end());
+        link.push_back(lib + "/libc.a");
+        rc = RunTool(link, log_path);
         EXPECT_EQ(0, rc) << "ld.lld failed on " << o_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
