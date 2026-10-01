@@ -1,19 +1,14 @@
-#include <fcntl.h>
+#include "driver.h"
+
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
-#include "codegen.h"
 #include "tac.h"
 #include "wio.h"
 #include "xalloc.h"
-
-#ifndef STDOUT_FILENO
-#define STDOUT_FILENO 1
-#endif
 
 static FILE *output_file;
 
@@ -21,40 +16,31 @@ static FILE *output_file;
 // Structure to hold parsed arguments
 //
 typedef struct {
-    int verbose;          // -v or --verbose
-    int help;             // -h or --help
-    int debug;            // -D or --debug
-    Besm_Dialect dialect; // --madlen / --unix / --bemsh
-    char *input_file;     // Input filename
-    char *output_file;    // Output filename (optional)
+    int verbose;       // -v or --verbose
+    int help;          // -h or --help
+    int debug;         // -D or --debug
+    char *input_file;  // Input filename
+    char *output_file; // Output filename (optional)
 } Args;
 
-// Long-option values for the dialect flags (outside the ASCII range so they do not
-// collide with the short options).
-enum {
-    OPT_MADLEN = 1000,
-    OPT_UNIX,
-    OPT_BEMSH,
-};
+// Long-option values for the backend flags start here (outside the ASCII range so
+// they do not collide with the short options).
+enum { OPT_BACKEND = 1000 };
 
-// Default output-file extension for each dialect.
-static const char *dialect_ext(Besm_Dialect d)
+static int num_flags(const Backend *backend)
 {
-    switch (d) {
-    case BESM_UNIX:
-        return ".s";
-    case BESM_BEMSH:
-        return ".bemsh";
-    case BESM_MADLEN:
-    default:
-        return ".mad";
+    int n = 0;
+    if (backend->flags) {
+        while (backend->flags[n].name)
+            n++;
     }
+    return n;
 }
 
 //
 // Function to print usage information
 //
-static void print_usage(const char *prog_name)
+static void print_usage(const char *prog_name, const Backend *backend)
 {
     const char *p = strrchr(prog_name, '/');
     if (p) {
@@ -63,40 +49,23 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "    %s [options] input-filename [output-filename]\n", prog_name);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "        --madlen        Emit Madlen assembly for Dubna\n");
-    fprintf(stderr, "        --unix          Emit Unix (b6as) assembly (default)\n");
-    fprintf(stderr, "        --bemsh         Emit Bemsh autocode for Dubna\n");
+    for (int i = 0; i < num_flags(backend); i++) {
+        fprintf(stderr, "        --%-14s%s\n", backend->flags[i].name, backend->flags[i].help);
+    }
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug         Print debug information\n");
     fprintf(stderr, "    -h, --help          Show this help message\n");
 }
 
 //
-// Initialize Args structure with default values
-//
-static void init_args(Args *args)
-{
-    args->verbose     = 0;
-    args->help        = 0;
-    args->debug       = 0;
-    // Unix (b6as) is the default dialect; Madlen stays reachable via --madlen (the
-    // libc.bin build and the behavioral run tests request it explicitly). See
-    // backend/besm6/TODO.md task U4.
-    args->dialect     = BESM_UNIX;
-    args->input_file  = NULL;
-    args->output_file = NULL;
-}
-
-//
 // Generate output filename from input filename
 //
-static char *generate_output_filename(const char *input_file, Besm_Dialect dialect)
+static char *generate_output_filename(const char *input_file, const char *new_ext)
 {
     // Find the last '.' in input_file to replace extension
-    const char *ext     = strrchr(input_file, '.');
-    size_t base_len     = ext ? (size_t)(ext - input_file) : strlen(input_file);
-    const char *new_ext = dialect_ext(dialect);
-    size_t new_ext_len  = strlen(new_ext);
+    const char *ext    = strrchr(input_file, '.');
+    size_t base_len    = ext ? (size_t)(ext - input_file) : strlen(input_file);
+    size_t new_ext_len = strlen(new_ext);
 
     // Allocate memory for new filename
     char *filename = malloc(base_len + new_ext_len + 1);
@@ -114,25 +83,30 @@ static char *generate_output_filename(const char *input_file, Besm_Dialect diale
 //
 // Parse command-line arguments using getopt_long
 //
-static int parse_args(int argc, char *argv[], Args *args)
+static int parse_args(int argc, char *argv[], Args *args, const Backend *backend)
 {
-    static struct option long_options[] = {
-        { "verbose", no_argument, 0, 'v' },        //
-        { "help", no_argument, 0, 'h' },           //
-        { "debug", no_argument, 0, 'D' },          //
-        { "madlen", no_argument, 0, OPT_MADLEN },  //
-        { "unix", no_argument, 0, OPT_UNIX },      //
-        { "bemsh", no_argument, 0, OPT_BEMSH },    //
-        {},                                        //
-    };
+    int nflags = num_flags(backend);
+    struct option *long_options = calloc(nflags + 4, sizeof(struct option));
+    if (!long_options) {
+        fprintf(stderr, "Error: Memory allocation failed for options\n");
+        return -1;
+    }
+    long_options[0] = (struct option){ "verbose", no_argument, 0, 'v' };
+    long_options[1] = (struct option){ "help", no_argument, 0, 'h' };
+    long_options[2] = (struct option){ "debug", no_argument, 0, 'D' };
+    for (int i = 0; i < nflags; i++) {
+        long_options[3 + i] =
+            (struct option){ backend->flags[i].name, no_argument, 0, OPT_BACKEND + i };
+    }
 
     int opt;
     int option_index = 0;
+    int status       = 0;
 
     if (argc < 2) {
         // Show usage.
         args->help = 1;
-        return 0;
+        goto done;
     }
     while ((opt = getopt_long(argc, argv, "vhD", long_options, &option_index)) != -1) {
         switch (opt) {
@@ -141,21 +115,16 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 'h':
             args->help = 1;
-            return 0;
+            goto done;
         case 'D':
             args->debug = 1;
             break;
-        case OPT_MADLEN:
-            args->dialect = BESM_MADLEN;
-            break;
-        case OPT_UNIX:
-            args->dialect = BESM_UNIX;
-            break;
-        case OPT_BEMSH:
-            args->dialect = BESM_BEMSH;
-            break;
         case '?': // Unknown option
-            return -1;
+            status = -1;
+            goto done;
+        default:
+            backend->flag(opt - OPT_BACKEND);
+            break;
         }
     }
 
@@ -164,7 +133,8 @@ static int parse_args(int argc, char *argv[], Args *args)
         args->input_file = argv[optind++];
     } else {
         fprintf(stderr, "Error: Input filename is required\n");
-        return -1;
+        status = -1;
+        goto done;
     }
 
     // Check for output filename (optional)
@@ -172,13 +142,14 @@ static int parse_args(int argc, char *argv[], Args *args)
         args->output_file = argv[optind];
     } else {
         // Generate output filename based on input
-        args->output_file = generate_output_filename(args->input_file, args->dialect);
+        args->output_file = generate_output_filename(args->input_file, backend->output_ext());
         if (!args->output_file) {
-            return -1;
+            status = -1;
         }
     }
-
-    return 0;
+done:
+    free(long_options);
+    return status;
 }
 
 static void open_output(const Args *args)
@@ -189,9 +160,8 @@ static void open_output(const Args *args)
     }
 }
 
-static void close_output(const Args *args)
+static void close_output(void)
 {
-    (void)args;
     if (output_file != stdout) {
         fclose(output_file);
     }
@@ -200,17 +170,13 @@ static void close_output(const Args *args)
 //
 // Main processing function
 //
-void process_file(const Args *args)
+static void process_file(const Args *args, const Backend *backend)
 {
     if (args->verbose) {
         printf("Processing %s in verbose mode\n", args->input_file);
     }
     if (args->debug) {
         printf("Debug: Input = %s, Output = %s\n", args->input_file, args->output_file);
-        // import_debug     = 1;
-        // export_debug     = 1;
-        // wio_debug        = 1;
-        // xalloc_debug     = 1;
     }
     open_output(args);
 
@@ -232,10 +198,10 @@ void process_file(const Args *args)
     for (const Tac_TopLevel *tl = head; tl; tl = tl->next) {
         if (args->debug)
             tac_print_toplevel(stdout, tl, 0);
-        codegen_program(head, tl, output_file, args->dialect);
+        backend->codegen(head, tl, output_file);
     }
     tac_free_toplevel(head);
-    close_output(args);
+    close_output();
 
     if (args->debug) {
         xreport_lost_memory();
@@ -259,23 +225,20 @@ void _Noreturn fatal_error(const char *message, ...)
     exit(1);
 }
 
-int main(int argc, char *argv[])
+int backend_main(int argc, char *argv[], const Backend *backend)
 {
-    Args args;
-    init_args(&args);
+    Args args = { 0 };
 
-    if (parse_args(argc, argv, &args) != 0) {
-        print_usage(argv[0]);
+    if (parse_args(argc, argv, &args, backend) != 0) {
+        print_usage(argv[0], backend);
         return 1;
     }
 
     if (args.help) {
-        print_usage(argv[0]);
+        print_usage(argv[0], backend);
         return 0;
     }
 
-    // Pass args to backend for processing
-    process_file(&args);
-
+    process_file(&args, backend);
     return 0;
 }

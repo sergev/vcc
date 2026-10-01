@@ -66,6 +66,8 @@ Phase 1 adds this. It is the prerequisite for everything else.
   `backend/common/driver.c` (argument parsing, TAC import, toplevel loop, output
   file) and a per-backend descriptor: name, default extension, extra options,
   `codegen_toplevel` callback. `genbesm` keeps its exact CLI and output.
+  *Done.* `backend_main()` with a `Backend` of flags, `output_ext` and `codegen`
+  callbacks; `backend/besm6/main.c` is the BESM-6 descriptor.
 - **D4. Target-specific intrinsics hook.** Move the `__besm6_*` immediate-argument
   table out of `semantic/expressions.c` behind a per-target table in the target
   descriptor, so RISC-V can add its own (`__riscv_csrr`, …) later without editing

@@ -10,9 +10,10 @@ The project is complete: the compiler was used to port [Unix v7 to the BESM-6](h
 c-compiler/
 ├── ast/            # AST: types, alloc, import/export, YAML, Graphviz, print, clone, compare, free
 ├── backend/
+│   ├── common/     # Shared by every backend: the command-line driver (driver.h)
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), b6as/Madlen/Bemsh emitters, tests
 │   ├── x86/        # x86_64: never implemented — x86_64.asdl, notes, TODO.md
-│   └── ...         # aarch64/, arm32/, riscv/ — ISA ASDL specs, never implemented
+│   └── ...         # aarch64/, arm32/ — ISA ASDL specs, never implemented; riscv/ — in progress (Plan.md)
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md
 ├── libc/           # Target C runtime + C11 headers: besm6/{include, madlen (libc.bin), unix (libruntime.a, libc0.a, crt0.o)}
