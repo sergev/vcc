@@ -1,8 +1,8 @@
-#include "codegen_test.h"
+#include "book_test.h"
 
 // BESM-6: the arrow case uses static objects instead of calloc (no heap dependency); all
 // member reads here are same-type, so no punning-value changes are needed.
-TEST_F(CodegenTest, Chapter18_CopyNonScalarMembers)
+TEST_F(BookTest, Chapter18_CopyNonScalarMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 union simple {
@@ -126,7 +126,7 @@ int main(void) {
 // uses a local object instead of malloc; punned bytes read big-endian (byte #0 = MSB);
 // the 64-bit long is brought into the 41-bit range and strcmp strings are UPPERCASE so the
 // automatic (ASCII) char data matches the KOI-7-repacked string constants.
-TEST_F(CodegenTest, Chapter18_CopyThruPointer)
+TEST_F(BookTest, Chapter18_CopyThruPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 union simple {
@@ -272,7 +272,7 @@ int main(void) {
 // range, helper names are shortened to stay distinct within Madlen's 8-char limit, and the
 // strcmp strings are UPPERCASE so the automatic (ASCII) char data matches the KOI-7-repacked
 // constants. No heap: every value is an initializer or stack object.
-TEST_F(CodegenTest, Chapter18_ClassifyUnions)
+TEST_F(BookTest, Chapter18_ClassifyUnions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 int strcmp(char* s1, char* s2);
@@ -445,7 +445,7 @@ int t_carr(union char_arr u) {
 // so the automatic (ASCII) char data matches the KOI-7-repacked constant, validator names are
 // shortened to stay distinct within Madlen's 8-char limit, and there is no heap — every value
 // is an initializer or stack object.
-TEST_F(CodegenTest, Chapter18_ParamPassing)
+TEST_F(BookTest, Chapter18_ParamPassing)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 int strcmp(char* s1, char* s2);
@@ -583,7 +583,7 @@ int p_strct(int i1, int i2, int i3, int i4, int i5, union char_arr ca) {
 // BESM-6: validate helpers renamed to stay distinct within 8 chars; char members read
 // byte #0 (MSB), so a small int written through the union reads back 0 there; strcmp
 // strings and the struct char member use UPPERCASE so source/KOI-7 encodings agree.
-TEST_F(CodegenTest, Chapter18_StaticUnionInits)
+TEST_F(BookTest, Chapter18_StaticUnionInits)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 int strcmp(char* s1, char* s2);
@@ -763,7 +763,7 @@ int vpadarr(void) {
 // BESM-6: helper names shortened to stay distinct within 8 chars; the converted-init value
 // is brought into range, the negative char-array init reads back as unsigned (255-i), the
 // 64-bit long is reduced to the 41-bit range, and the strcmp string is UPPERCASE.
-TEST_F(CodegenTest, Chapter18_UnionInits)
+TEST_F(BookTest, Chapter18_UnionInits)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // library functions
@@ -895,7 +895,7 @@ int vnestp(union nested* ptr) {
 // is brought into the unsigned-char range, strcmp strings are UPPERCASE so the automatic
 // (ASCII) char data matches the KOI-7-repacked constant, the return-function names are
 // shortened to stay distinct within Madlen's 8-char limit, and there is no heap.
-TEST_F(CodegenTest, Chapter18_UnionRetvals)
+TEST_F(BookTest, Chapter18_UnionRetvals)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 int strcmp(char* s1, char* s2);
@@ -1135,7 +1135,7 @@ struct has_uneven_union r_swu(void) {
 }
 // BESM-6: the accept_params parameter `l` was renamed to `lval` (no identifier
 // shadowing of the file-scope static `l`); block-scope static storage is supported.
-TEST_F(CodegenTest, Chapter18_ScalarMemberAccessDot)
+TEST_F(BookTest, Chapter18_ScalarMemberAccessDot)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test the . operator.

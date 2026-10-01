@@ -12,9 +12,9 @@
 // depend on those are DISABLED_ with a one-line reason.  Host-only "#if/#pragma"
 // lines are stripped (our scanner has no preprocessor).
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_DeadCondition)
+TEST_F(BookTest, Chapter19_WP_IntOnly_DeadCondition)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"WP(
 /* If a variable is only used as the controlling condition for an empty branch
@@ -48,7 +48,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_ElimAndCopyProp)
+TEST_F(BookTest, Chapter19_WP_IntOnly_ElimAndCopyProp)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"WP(
 /* If we can replace every use of a variabe with its value,
@@ -65,7 +65,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_IntMin)
+TEST_F(BookTest, Chapter19_WP_IntOnly_IntMin)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant-folding with INT_MIN */
@@ -82,7 +82,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_Listing195)
+TEST_F(BookTest, Chapter19_WP_IntOnly_Listing195)
 {
     EXPECT_EQ("9\n", CompileAndRunBook(R"WP(
 /* Test case that produces TACKY similar to Listing 19-5;
@@ -112,7 +112,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_RemainderTest)
+TEST_F(BookTest, Chapter19_WP_IntOnly_RemainderTest)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we evaluate the % operator correctly for negative numbers.
@@ -148,7 +148,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_CompoundAssignExceptions)
+TEST_F(BookTest, Chapter19_WP_IntOnly_CompoundAssignExceptions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we don't throw an error when constant folding /= or %=
@@ -193,7 +193,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_EvaluateSwitch)
+TEST_F(BookTest, Chapter19_WP_IntOnly_EvaluateSwitch)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* If we can determine the value of a switch's controlling expression at
@@ -232,7 +232,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_FoldBitwiseCompoundAssignment)
+TEST_F(BookTest, Chapter19_WP_IntOnly_FoldBitwiseCompoundAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test that we can evaluate bitwise compound assignment expressions at compile time */
@@ -264,7 +264,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_FoldCompoundAssignment)
+TEST_F(BookTest, Chapter19_WP_IntOnly_FoldCompoundAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test that we can evaluate compound assignment expressions at compile time */
@@ -296,7 +296,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_FoldIncrAndDecr)
+TEST_F(BookTest, Chapter19_WP_IntOnly_FoldIncrAndDecr)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 // Make sure we can track the results and side effects of ++ and -- through copy propagation
@@ -325,7 +325,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_IntOnly_FoldNegativeBitshift)
+TEST_F(BookTest, Chapter19_WP_IntOnly_FoldNegativeBitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant folding >> with a negative source value.  On BESM-6 a signed right
@@ -347,7 +347,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_AliasAnalysisChange)
+TEST_F(BookTest, Chapter19_WP_AllTypes_AliasAnalysisChange)
 {
     EXPECT_EQ("A0\n", CompileAndRunBook(R"WP(
 /* Test that we rerun alias analysis with each pipeline iteration */
@@ -384,7 +384,7 @@ int main(void) {
 }
 
 // double->int casts; the 64-bit-long sub-check replaced with an in-range value.
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldCastFromDouble)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCastFromDouble)
 {
     CompileAndRunBook(R"WP(
 /* Constant-folding tests for conversions from negative doubles to integer
@@ -423,7 +423,7 @@ int main(void) {
 
 // Conversions to double; the 64-bit-long sub-check replaced with an in-range
 // value and the libc-copysign sub-check dropped (not in BESM-6 libc; -0 == 0).
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldCastToDouble)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCastToDouble)
 {
     CompileAndRunBook(R"WP(
 /* Constant-folding tests for conversions to double from chars and negative
@@ -511,7 +511,7 @@ int main(void) {
 }
 
 // DISABLED: char constant truncation (char x=256 -> 0) not folded on BESM-6
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldCharCondition)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCharCondition)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant folding of Not, JumpIfZero, and JumpIfNotZero with char
@@ -596,7 +596,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldExtensionAndTruncation)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldExtensionAndTruncation)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant folding of sign extension, zero extension, and truncation.
@@ -704,7 +704,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldNegativeValues)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldNegativeValues)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant folding with negative numbers (including double and long);
@@ -780,7 +780,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_IntegerPromotions)
+TEST_F(BookTest, Chapter19_WP_AllTypes_IntegerPromotions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we promote characters to integers before constant folding */
@@ -813,7 +813,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_Listing195MoreTypes)
+TEST_F(BookTest, Chapter19_WP_AllTypes_Listing195MoreTypes)
 {
     EXPECT_EQ("9\n", CompileAndRunBook(R"WP(
 /* A variation on listing_19_5.c with types other than int */
@@ -863,7 +863,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_PropagateIntoCopyfromoffset)
+TEST_F(BookTest, Chapter19_WP_AllTypes_PropagateIntoCopyfromoffset)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we can propagate copies into CopyFromOffset instruction.
@@ -902,7 +902,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_PropagateIntoCopytooffset)
+TEST_F(BookTest, Chapter19_WP_AllTypes_PropagateIntoCopytooffset)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we can propagate copies into CopyToOffset instruction */
@@ -939,7 +939,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_PropagateIntoLoad)
+TEST_F(BookTest, Chapter19_WP_AllTypes_PropagateIntoLoad)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we can propagate copies into Load instruction.
@@ -967,7 +967,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_PropagateIntoStore)
+TEST_F(BookTest, Chapter19_WP_AllTypes_PropagateIntoStore)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we can propagate copies into Store instruction */
@@ -1002,7 +1002,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_SignedUnsignedConversion)
+TEST_F(BookTest, Chapter19_WP_AllTypes_SignedUnsignedConversion)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant-folding of conversions between signed and unsigned integers,
@@ -1061,7 +1061,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldCompoundAssignAllTypes)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCompoundAssignAllTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test copy prop/constant folding of compound assignment with non-integer
@@ -1215,7 +1215,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test copy prop/constant folding of compound bitwise assignment with non-int
@@ -1381,7 +1381,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldIncrDecrChars)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldIncrDecrChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Evaluate ++/-- with character types; make sure we handle integer promotions correctly */
@@ -1412,7 +1412,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldIncrDecrDoubles)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldIncrDecrDoubles)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Make sure we can constant fold ++/-- operations on doubles.
@@ -1441,7 +1441,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldIncrDecrUnsigned)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldIncrDecrUnsigned)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Propagate ++/-- with unsigned integers (make sure they wrap around correctly).
@@ -1474,7 +1474,7 @@ int main(void) {
 )WP"));
 }
 
-TEST_F(CodegenTest, Chapter19_WP_AllTypes_FoldNegativeLongBitshift)
+TEST_F(BookTest, Chapter19_WP_AllTypes_FoldNegativeLongBitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
 /* Test constant folding >> with a negative long source value.  On BESM-6 a signed right

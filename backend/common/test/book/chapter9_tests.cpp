@@ -21,12 +21,12 @@
 //     here).  putch emits a value as its packed bytes — a single small ASCII
 //     code emits exactly one byte.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 // --- arguments_in_registers -------------------------------------------------
 
 // twice(3) == 6.
-TEST_F(CodegenTest, Chapter9_SingleArg)
+TEST_F(BookTest, Chapter9_SingleArg)
 {
     EXPECT_EQ("6\n", CompileAndRunBook(R"(int twice(int x){
     return 2 * x;
@@ -38,7 +38,7 @@ int main(void) {
 }
 
 // Arguments are evaluated and passed left-to-right: sub(1+2, 1) == 2.
-TEST_F(CodegenTest, Chapter9_ExpressionArgs)
+TEST_F(BookTest, Chapter9_ExpressionArgs)
 {
     EXPECT_EQ("2\n", CompileAndRunBook(R"(int sub(int a, int b) {
     return a - b;
@@ -51,7 +51,7 @@ int main(void) {
 }
 
 // Recursive fibonacci: fib(6) == 8.
-TEST_F(CodegenTest, Chapter9_Fibonacci)
+TEST_F(BookTest, Chapter9_Fibonacci)
 {
     EXPECT_EQ("8\n", CompileAndRunBook(R"(int fib(int n) {
     if (n == 0 || n == 1) {
@@ -68,7 +68,7 @@ int main(void) {
 }
 
 // A forward declaration may use different parameter names than the definition.
-TEST_F(CodegenTest, Chapter9_ForwardDeclMultiArg)
+TEST_F(BookTest, Chapter9_ForwardDeclMultiArg)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int foo(int a, int b);
 
@@ -83,7 +83,7 @@ int foo(int x, int y){
 
 // A function declaration is its own scope, so the prototype parameter 'a' does
 // not conflict with the local 'a'.  f(10) == 20.
-TEST_F(CodegenTest, Chapter9_ParamShadowsLocalVar)
+TEST_F(BookTest, Chapter9_ParamShadowsLocalVar)
 {
     EXPECT_EQ("20\n", CompileAndRunBook(R"(int main(void) {
     int a = 10;
@@ -97,7 +97,7 @@ int f(int a) {
 }
 
 // Calling another function must not clobber this function's own arguments.
-TEST_F(CodegenTest, Chapter9_ParametersArePreserved)
+TEST_F(BookTest, Chapter9_ParametersArePreserved)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int g(int w, int x, int y, int z) {
     if (w == 2 && x == 4 && y == 6 && z == 8)
@@ -116,7 +116,7 @@ int main(void) {
 }
 
 // A division (book: uses EDX on x86) must not clobber the third argument.
-TEST_F(CodegenTest, Chapter9_DontClobberArgInDivision)
+TEST_F(BookTest, Chapter9_DontClobberArgInDivision)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int x(int a, int b, int c, int d, int e, int f) {
     return a == 1 && b == 2 && c == 3 && d == 4 && e == 5 && f == 6;
@@ -131,7 +131,7 @@ int main(void) {
 // --- no_arguments -----------------------------------------------------------
 
 // Forward declaration then later definition: foo() == 3.
-TEST_F(CodegenTest, Chapter9_ForwardDecl)
+TEST_F(BookTest, Chapter9_ForwardDecl)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int foo(void);
 
@@ -145,7 +145,7 @@ int foo(void) {
 }
 
 // The same function may be declared more than once.
-TEST_F(CodegenTest, Chapter9_MultipleDeclarations)
+TEST_F(BookTest, Chapter9_MultipleDeclarations)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int main(void) {
     int f(void);
@@ -161,7 +161,7 @@ int f(void) {
 // A void function may fall off the end; the caller ignores it and main returns 3.
 // (A *non-void* function falling off the end is now a compile error — see the
 // missing-return diagnostic in semantic/declarations.c.)
-TEST_F(CodegenTest, Chapter9_NoReturnValue)
+TEST_F(BookTest, Chapter9_NoReturnValue)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(void foo(void) {
     int x = 1;
@@ -174,7 +174,7 @@ int main(void) {
 }
 
 // The call operator binds tighter than unary !: !three() == !3 == 0.
-TEST_F(CodegenTest, Chapter9_Precedence)
+TEST_F(BookTest, Chapter9_Precedence)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int three(void) {
     return 3;
@@ -186,7 +186,7 @@ int main(void) {
 }
 
 // Several calls in one expression: foo() + bar() / 3 == 18 + 3 == 21.
-TEST_F(CodegenTest, Chapter9_UseFunctionInExpression)
+TEST_F(BookTest, Chapter9_UseFunctionInExpression)
 {
     EXPECT_EQ("21\n", CompileAndRunBook(R"(int bar(void) {
     return 9;
@@ -204,7 +204,7 @@ int main(void) {
 // --- stack_arguments --------------------------------------------------------
 
 // Eight arguments, all read in the callee.
-TEST_F(CodegenTest, Chapter9_LotsOfArguments)
+TEST_F(BookTest, Chapter9_LotsOfArguments)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int foo(int a, int b, int c, int d, int e, int f, int g, int h) {
     return (a == 1 && b == 2 && c == 3 && d == 4 && e == 5
@@ -219,7 +219,7 @@ int main(void) {
 // Manage the callee side (read params) and caller side (call putch) together.
 // Book uses putchar; we substitute libc putch.  foo prints 'A' and returns
 // a + g == 1 + 7 == 8, so output is "A8\n".
-TEST_F(CodegenTest, Chapter9_CallPutch)
+TEST_F(BookTest, Chapter9_CallPutch)
 {
     EXPECT_EQ("A8\n", CompileAndRunBook(R"(void putch(int c);
 int foo(int a, int b, int c, int d, int e, int f, int g, int h) {
@@ -237,7 +237,7 @@ int main(void) {
 // 10s ctest timeout on Dubna).  Shrunk to 100 iterations: each call returns
 // l + o = ret + 15, so ret == 15 * 100 == 1500, still exercising the multi-arg
 // call and stack-frame restore.
-TEST_F(CodegenTest, Chapter9_TestForMemoryLeaks)
+TEST_F(BookTest, Chapter9_TestForMemoryLeaks)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int lots_of_args(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l, int m, int n, int o) {
     return l + o;
@@ -255,7 +255,7 @@ int main(void) {
 // --- libraries (multi-file programs concatenated into one TU) ---------------
 
 // addition_client.c + addition.c : add(1, 2) == 3.
-TEST_F(CodegenTest, Chapter9_LibraryAddition)
+TEST_F(BookTest, Chapter9_LibraryAddition)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int add(int x, int y);
 
@@ -269,7 +269,7 @@ int add(int x, int y) {
 }
 
 // many_args_client.c + many_args.c : x == 3, y == 589680, return 3 + 589680%256.
-TEST_F(CodegenTest, Chapter9_LibraryManyArgs)
+TEST_F(BookTest, Chapter9_LibraryManyArgs)
 {
     EXPECT_EQ("115\n", CompileAndRunBook(R"(int fib(int a);
 
@@ -305,7 +305,7 @@ int multiply_many_args(int a, int b, int c, int d, int e, int f, int g, int h) {
 // system_call_client.c + system_call.c : prints 'H' (= putch(70+2)), main == 0,
 // so output is "H0\n".  Book's incr_and_print returns putchar(b+2); putch is
 // void, so we ignore the result and return 0 (the caller ignores it anyway).
-TEST_F(CodegenTest, Chapter9_LibrarySystemCall)
+TEST_F(BookTest, Chapter9_LibrarySystemCall)
 {
     EXPECT_EQ("H0\n", CompileAndRunBook(R"(void putch(int c);
 int incr_and_print(int c);
@@ -323,7 +323,7 @@ int incr_and_print(int b) {
 }
 
 // no_function_calls/division_client.c + division.c : f(10,2,100,4) == 1.
-TEST_F(CodegenTest, Chapter9_LibraryDivision)
+TEST_F(BookTest, Chapter9_LibraryDivision)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int f(int a, int b, int c, int d);
 
@@ -341,7 +341,7 @@ int f(int a, int b, int c, int d) {
 
 // no_function_calls/local_stack_variables_client.c + local_stack_variables.c :
 // the callee reads its stack arguments and updates one, returning 100.
-TEST_F(CodegenTest, Chapter9_LibraryLocalStackVariables)
+TEST_F(BookTest, Chapter9_LibraryLocalStackVariables)
 {
     EXPECT_EQ("100\n", CompileAndRunBook(R"(int f(int reg1, int reg2, int reg3, int reg4, int reg5, int reg6,
     int stack1, int stack2, int stack3);
@@ -369,7 +369,7 @@ int f(int reg1, int reg2, int reg3, int reg4, int reg5, int reg6,
 // text via putch and falls off the end, implicitly returning 0 (§5.1.2.2.3), so
 // --status appends "0\n" after the text.  The BESM-6 GOST output charset renders
 // lowercase Latin as Cyrillic, so we print uppercase letters ("HELLO, WORLD!").
-TEST_F(CodegenTest, Chapter9_HelloWorld)
+TEST_F(BookTest, Chapter9_HelloWorld)
 {
     EXPECT_EQ("HELLO, WORLD!\n0\n", CompileAndRunBook(R"(void putch(int c);
 
@@ -393,7 +393,7 @@ int main(void) {
 }
 
 // A function result may be the right operand of a compound assignment.
-TEST_F(CodegenTest, Chapter9_CompoundAssignFunctionResult)
+TEST_F(BookTest, Chapter9_CompoundAssignFunctionResult)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int foo(void) {
     return 2;
@@ -407,7 +407,7 @@ int main(void) {
 }
 
 // A bitwise shift (book: uses ECX on x86) must not clobber the sixth argument.
-TEST_F(CodegenTest, Chapter9_DontClobberArgInShift)
+TEST_F(BookTest, Chapter9_DontClobberArgInShift)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int x(int a, int b, int c, int d, int e, int f) {
     return a == 1 && b == 2 && c == 3 && d == 4 && e == 5 && f == 6;
@@ -421,7 +421,7 @@ int main(void) {
 
 // The same label name may appear in multiple functions: main jumps to its own
 // label, which calls foo, which jumps to its own label and returns 5.
-TEST_F(CodegenTest, Chapter9_GotoLabelMultipleFunctions)
+TEST_F(BookTest, Chapter9_GotoLabelMultipleFunctions)
 {
     EXPECT_EQ("5\n", CompileAndRunBook(R"(int foo(void) {
     goto label;
@@ -439,7 +439,7 @@ int main(void) {
 }
 
 // An identifier may be both a function name and a label in the same scope.
-TEST_F(CodegenTest, Chapter9_GotoSharedName)
+TEST_F(BookTest, Chapter9_GotoSharedName)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int foo(void) {
     goto foo;
@@ -454,7 +454,7 @@ int main(void) {
 }
 
 // Labels in different functions must not collide after name mangling.
-TEST_F(CodegenTest, Chapter9_LabelNamingScheme)
+TEST_F(BookTest, Chapter9_LabelNamingScheme)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     _label:

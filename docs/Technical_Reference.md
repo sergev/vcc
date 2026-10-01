@@ -461,8 +461,8 @@ Run a single binary from `build/`:
 
 ### Chapter (book) tests
 
-The "Writing a C Compiler" chapter tests (`*/test/chapter*_tests.cpp`,
-`backend/besm6/test/chapter*_tests.cpp`) are compiled **into the regular per-module test
+The "Writing a C Compiler" chapter tests (`*/test/chapter*_tests.cpp`, and the run programs
+shared by every backend in `backend/common/test/book/`) are compiled **into the regular per-module test
 binaries** — the chapter sources are listed in the same `add_executable(<module>-tests …)`
 as the unit tests. So `parser-tests` contains `chapter1..18_tests.cpp` alongside its unit
 tests, `besm-tests` contains `chapter1..20_tests.cpp`, etc. There are no separate

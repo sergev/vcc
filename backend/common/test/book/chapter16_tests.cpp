@@ -31,14 +31,14 @@
 // on mismatch, so a BESM-6-valued expectation would just encode a meaningless
 // failure code; DISABLED_ is the honest call.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 
 
 // --- char_constants ----------------------------------------------------------
 
 // char_constants/return_char_constant: simplest character constant ('c' == 99).
-TEST_F(CodegenTest, Chapter16_ReturnCharConstant)
+TEST_F(BookTest, Chapter16_ReturnCharConstant)
 {
     EXPECT_EQ("99\n", CompileAndRunBook(R"(/* Simplest possible test case for using a character constant */
 int main(void) {
@@ -48,7 +48,7 @@ int main(void) {
 
 
 // char_constants/escape_sequences: parse escape sequences to the correct value.
-TEST_F(CodegenTest, Chapter16_EscapeSequences)
+TEST_F(BookTest, Chapter16_EscapeSequences)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we parse escape sequences to the correct value */
 int main(void) {
@@ -93,7 +93,7 @@ int main(void) {
 // char_constants/control_characters: control chars in the source set.
 // Raw VT/FF/TAB source bytes rewritten as \v/\f/\t escapes (same runtime value;
 // raw-byte scanning is covered by scanner tests).
-TEST_F(CodegenTest, Chapter16_ControlCharacters)
+TEST_F(BookTest, Chapter16_ControlCharacters)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can handle control characters that are in the source character set */
 int main(void)
@@ -120,7 +120,7 @@ int main(void)
 // --- chars -------------------------------------------------------------------
 
 // chars/char_arguments: pass arguments of character type.
-TEST_F(CodegenTest, Chapter16_CharArguments)
+TEST_F(BookTest, Chapter16_CharArguments)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can pass arguments of character type */
 int check_args(char a, signed char b, char c, unsigned char d, char e, char f, signed char g, char h) {
@@ -185,7 +185,7 @@ int main(void) {
 
 
 // chars/char_expressions: chars in arithmetic, comparison, pointer arith, logic.
-TEST_F(CodegenTest, Chapter16_CharExpressions)
+TEST_F(BookTest, Chapter16_CharExpressions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can use chars in the same expressions as other integers */
 
@@ -282,7 +282,7 @@ int main(void) {
 
 
 // chars/integer_promotion: character types promoted to int where required.
-TEST_F(CodegenTest, Chapter16_IntegerPromotion)
+TEST_F(BookTest, Chapter16_IntegerPromotion)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we promote character types to integers when we're required to */
 
@@ -353,7 +353,7 @@ int main(void) {
 
 
 // chars/partial_initialization: unspecified char-array elements are zeroed.
-TEST_F(CodegenTest, Chapter16_PartialInitialization)
+TEST_F(BookTest, Chapter16_PartialInitialization)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that in arrays of character type, elements that aren't explicitly
  * initialized are zeroed out */
@@ -393,7 +393,7 @@ int main(void)
 
 
 // chars/return_char: character return values don't clobber the stack.
-TEST_F(CodegenTest, Chapter16_ReturnChar)
+TEST_F(BookTest, Chapter16_ReturnChar)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can call functions with return values of character type */
 
@@ -448,7 +448,7 @@ int main(void) {
 
 
 // chars/type_specifiers: different ways to spell signed & unsigned char.
-TEST_F(CodegenTest, Chapter16_TypeSpecifiers)
+TEST_F(BookTest, Chapter16_TypeSpecifiers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// make sure we can parse different ways to specify signed & unsigned char
 
@@ -489,7 +489,7 @@ int main(void)
 
 
 // chars/chained_casts: chain multiple explicit casts together.
-TEST_F(CodegenTest, Chapter16_ChainedCasts)
+TEST_F(BookTest, Chapter16_ChainedCasts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test chaining multiple explicit casts together*/
 
@@ -513,7 +513,7 @@ int main(void) {
 
 
 // chars/rewrite_movz_regression: pure int arithmetic (movz angle is x86 only).
-TEST_F(CodegenTest, Chapter16_RewriteMovzRegression)
+TEST_F(BookTest, Chapter16_RewriteMovzRegression)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
@@ -633,7 +633,7 @@ int check_12_ints(int a, int b, int c, int d, int e, int f, int g, int h, int i,
 // --- strings_as_initializers -------------------------------------------------
 
 // strings_as_lvalues/empty_string: terminating null byte on the empty string.
-TEST_F(CodegenTest, Chapter16_EmptyString)
+TEST_F(BookTest, Chapter16_EmptyString)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we add a terminating null byte to the empty string */
 int main(void) {
@@ -644,7 +644,7 @@ int main(void) {
 
 
 // strings_as_lvalues/array_of_strings: array of pointers to strings (inline strcmp).
-TEST_F(CodegenTest, Chapter16_ArrayOfStrings)
+TEST_F(BookTest, Chapter16_ArrayOfStrings)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test declaring and operating on an array of pointers to strings */
 
@@ -679,7 +679,7 @@ int main(void) {
 // --- extra_credit ------------------------------------------------------------
 
 // extra_credit/incr_decr_unsigned_chars: ++/-- on unsigned char lvalues.
-TEST_F(CodegenTest, Chapter16_IncrDecrUnsignedChars)
+TEST_F(BookTest, Chapter16_IncrDecrUnsignedChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Increment and decrement lvalues of unsigned character type
 int main(void) {
@@ -727,7 +727,7 @@ int main(void) {
 
 
 // extra_credit/switch_on_char_const: character constant as switch controller.
-TEST_F(CodegenTest, Chapter16_SwitchOnCharConst)
+TEST_F(BookTest, Chapter16_SwitchOnCharConst)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we can use character constant in switch statement
 int main(void) {
@@ -746,7 +746,7 @@ int main(void) {
 
 
 // extra_credit/promote_switch_cond: switch controller promoted char -> int.
-TEST_F(CodegenTest, Chapter16_PromoteSwitchCond)
+TEST_F(BookTest, Chapter16_PromoteSwitchCond)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Make sure we promote the controlling condition in a switch statement from
 // character type to int
@@ -769,7 +769,7 @@ int main(void) {
 
 
 // extra_credit/promote_switch_cond_2: case labels stay int, not truncated to char.
-TEST_F(CodegenTest, Chapter16_PromoteSwitchCond2)
+TEST_F(BookTest, Chapter16_PromoteSwitchCond2)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Another test that we promote switch controlling condition to integer type
 int main(void) {
@@ -790,7 +790,7 @@ int main(void) {
 // --- libraries (two files merged, client first) ------------------------------
 
 // libraries/char_arguments: pass character-type arguments across translation units.
-TEST_F(CodegenTest, Chapter16_LibCharArguments)
+TEST_F(BookTest, Chapter16_LibCharArguments)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_args(char a, signed char b, char c, unsigned char d, char e, char f, signed char g, char h);
 
@@ -856,7 +856,7 @@ int check_args(char a, signed char b, char c, unsigned char d, char e, char f, s
 
 
 // libraries/global_char: access global objects of character type across TUs.
-TEST_F(CodegenTest, Chapter16_LibGlobalChar)
+TEST_F(BookTest, Chapter16_LibGlobalChar)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(extern char c;
 extern unsigned char uc;
@@ -908,7 +908,7 @@ int update_global_chars(void) {
 
 
 // libraries/return_char: character return values across translation units.
-TEST_F(CodegenTest, Chapter16_LibReturnChar)
+TEST_F(BookTest, Chapter16_LibReturnChar)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(signed char return_char(void);
 signed char return_schar(void);
@@ -967,7 +967,7 @@ unsigned char return_uchar(void) {
 
 // char_constants/char_constant_operations: local `double d` shadowed file-scope `d`
 // (renamed the local to `d2`).
-TEST_F(CodegenTest, Chapter16_CharConstantOperations)
+TEST_F(BookTest, Chapter16_CharConstantOperations)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we treat character constants like integers */
 
@@ -1038,7 +1038,7 @@ int main(void) {
 // ===========================================================================
 
 // strings_as_initializers/simple: chars[2] of "ABC" is 'C' == 67.
-TEST_F(CodegenTest, Chapter16_StringInitSimple)
+TEST_F(BookTest, Chapter16_StringInitSimple)
 {
     EXPECT_EQ("67\n", CompileAndRunBook(R"(int main(void) {
     // simple test of initializing and subscripting char array
@@ -1048,7 +1048,7 @@ TEST_F(CodegenTest, Chapter16_StringInitSimple)
 }
 
 // strings_as_lvalues/simple: "HELLO, WORLD!"[2] is 'L' == 76.
-TEST_F(CodegenTest, Chapter16_StringLvalueSimple)
+TEST_F(BookTest, Chapter16_StringLvalueSimple)
 {
     EXPECT_EQ("76\n", CompileAndRunBook(R"(int main(void) {
     char *x = "HELLO, WORLD!";
@@ -1057,7 +1057,7 @@ TEST_F(CodegenTest, Chapter16_StringLvalueSimple)
 }
 
 // strings_as_lvalues/pointer_operations: pointer arithmetic and subscripting.
-TEST_F(CodegenTest, Chapter16_PointerOperations)
+TEST_F(BookTest, Chapter16_PointerOperations)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test standard pointer operations on string literals
  * including pointer arithmetic and subscripting.
@@ -1088,7 +1088,7 @@ int main(void) {
 }
 
 // strings_as_lvalues/cast_string_pointer: casts from char * to other char pointers.
-TEST_F(CodegenTest, Chapter16_CastStringPointer)
+TEST_F(BookTest, Chapter16_CastStringPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test casts from char * to other character pointer types */
 
@@ -1107,7 +1107,7 @@ int main(void) {
 }
 
 // strings_as_lvalues/strings_in_function_calls: strings as args/return values (libc strlen).
-TEST_F(CodegenTest, Chapter16_StringsInFunctionCalls)
+TEST_F(BookTest, Chapter16_StringsInFunctionCalls)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can use strings literals as function arguments/return values */
 
@@ -1170,7 +1170,7 @@ int main(void) {
 // Escape sequences round-trip through KOI-7 unchanged, and local char-array
 // initialization from a string literal now emits per-byte stores, so this needs
 // no value change — it was blocked only by the (now-fixed) translator gap.
-TEST_F(CodegenTest, Chapter16_ArrayInitSpecialChars)
+TEST_F(BookTest, Chapter16_ArrayInitSpecialChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can handle escape sequences in string literals */
 int main(void) {
@@ -1204,7 +1204,7 @@ int main(void) {
 }
 
 // strings_as_initializers/write_to_array: write to a flat and a nested char array.
-TEST_F(CodegenTest, Chapter16_WriteToArray)
+TEST_F(BookTest, Chapter16_WriteToArray)
 {
     EXPECT_EQ("ABC\nABX\nHELLO\nWORLD\nJELLO\n0\n", CompileAndRunBook(R"(// Test writing to a char array
 
@@ -1235,7 +1235,7 @@ int main(void) {
 // The book's backslash and caret cases are dropped: KOI-7 does not round-trip
 // '\\' (0x5C->0x1D) or '^' (0x5E->0x5C), so neither the byte compare nor the
 // printed output could match.
-TEST_F(CodegenTest, Chapter16_StringSpecialCharacters)
+TEST_F(BookTest, Chapter16_StringSpecialCharacters)
 {
     EXPECT_EQ("HELLO\"WORLD\nLINE\nBREAK!\nTESTING, 123.\n0\n",
               CompileAndRunBook(R"(/* Test that we can handle special characters in string literals
@@ -1286,7 +1286,7 @@ int main(void) {
 }
 
 // strings_as_lvalues/addr_of_string: take the address of a string literal.
-TEST_F(CodegenTest, Chapter16_AddrOfString)
+TEST_F(BookTest, Chapter16_AddrOfString)
 {
     EXPECT_EQ("SAMPLE\tSTRING!\n\n0\n", CompileAndRunBook(R"(/* Test that we can take the address of a string literal and annotate it with the correct type */
 
@@ -1317,7 +1317,7 @@ int main(void) {
 // strings_as_initializers/literals_and_compound_initializers: signed char[3][4].
 // Uppercase Latin: an automatic char array keeps its source ASCII bytes while a string
 // constant repacks to KOI-7, and the two encodings coincide only for uppercase.
-TEST_F(CodegenTest, Chapter16_LiteralsAndCompoundInitializers)
+TEST_F(BookTest, Chapter16_LiteralsAndCompoundInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* make sure we can use a mix of string literals and compound initializers to
  * initialize a single nested array */
@@ -1348,7 +1348,7 @@ int main(void) {
 // strings_as_initializers/adjacent_strings_in_initializer: char[2][3] nested.
 // Uppercase Latin: a static char array repacks to KOI-7 while the comparison
 // string literals stay ASCII, and the two encodings coincide only for uppercase.
-TEST_F(CodegenTest, Chapter16_AdjacentStringsInInitializer)
+TEST_F(BookTest, Chapter16_AdjacentStringsInInitializer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure the parser concatenates adjacent string literals */
 
@@ -1378,7 +1378,7 @@ int main(void) {
 // strings_as_initializers/transfer_by_eightbyte: char[2][13].
 // Uppercase Latin: an automatic char array keeps its source ASCII bytes while a string
 // constant repacks to KOI-7, and the two encodings coincide only for uppercase.
-TEST_F(CodegenTest, Chapter16_TransferByEightbyte)
+TEST_F(BookTest, Chapter16_TransferByEightbyte)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that when we initialize an array whose size isn't divisible by 4 or 8,
  * we don't overrun neighboring memory
@@ -1415,7 +1415,7 @@ int main(void) {
 // task #14; the `static long *null_ptr` cast works).  The `(double)(unsigned char)` bit-7
 // conversion bug (task #30) is fixed: a sub-word integer source is now promoted to a full
 // word before the int->FP conversion.
-TEST_F(CodegenTest, Chapter16_ExplicitCasts)
+TEST_F(BookTest, Chapter16_ExplicitCasts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test explicit conversions to and from character types */
 
@@ -1506,7 +1506,7 @@ int main(void) {
 // 8-char-distinct `rxt_uc`/`rxt_sc`/`rtrunc`.  The `check_uint` expectation uses the
 // BESM-6 41-bit unsigned value (2^41-10) instead of x86's 2^32-10 (task #14).  Plain
 // char is unsigned on BESM-6, so the negative-valued `array` is declared `signed char`.
-TEST_F(CodegenTest, Chapter16_ConvertByAssignment)
+TEST_F(BookTest, Chapter16_ConvertByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test implicit conversions to and from character types as if by assignment. */
 
@@ -1586,7 +1586,7 @@ int main(void) {
 // folds lowercase Latin to uppercase codes while char literals stay ASCII, so lowercase
 // `arr[i] == 'a'` would compare unequal (see docs/KOI7_Encoding.md); the file-scope
 // `nested` shadow was already resolved by renaming the locals.
-TEST_F(CodegenTest, Chapter16_TerminatingNullBytes)
+TEST_F(BookTest, Chapter16_TerminatingNullBytes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 /* When we initialize an array from a string literal,
@@ -1675,7 +1675,7 @@ int main(void) {
 // strings_as_initializers/partial_initialize_via_string: static arrays in fns.  Enabled
 // with task #5 (multi-dim char arrays); the book's lowercase letters were upper-cased so the
 // KOI-7-packed static data matches the ASCII char literals (see docs/KOI7_Encoding.md).
-TEST_F(CodegenTest, Chapter16_PartialInitializeViaString)
+TEST_F(BookTest, Chapter16_PartialInitializeViaString)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 /* Test that when we initialize an array from a string literal,
@@ -1750,7 +1750,7 @@ int main(void) {
 }
 
 // extra_credit/incr_decr_chars: static char chars[5].
-TEST_F(CodegenTest, Chapter16_IncrDecrChars)
+TEST_F(BookTest, Chapter16_IncrDecrChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Increment and decrement lvalues of character type
 int main(void) {
@@ -1803,7 +1803,7 @@ int main(void) {
 }
 
 // extra_credit/char_consts_as_cases: static int i.
-TEST_F(CodegenTest, Chapter16_CharConstsAsCases)
+TEST_F(BookTest, Chapter16_CharConstsAsCases)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we can use character constants as cases in switch statements
 int main(void) {
@@ -1830,7 +1830,7 @@ int main(void) {
 // `unsigned char uc=200; uc /= (char)-100` is (unsigned char)((int)200 / (int)-100) = 254.
 // Fixed by typecheck promoting the rhs to the common type plus the translator widening the
 // lvalue and narrowing the result around the op (task #29).
-TEST_F(CodegenTest, Chapter16_CompoundAssignChars)
+TEST_F(BookTest, Chapter16_CompoundAssignChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test compound assignment with characters; make sure we perform integer promotions
 
@@ -1871,7 +1871,7 @@ int main(void) {
 }
 
 // extra_credit/compound_bitwise_ops_chars: static long x.
-TEST_F(CodegenTest, Chapter16_CompoundBitwiseOpsChars)
+TEST_F(BookTest, Chapter16_CompoundBitwiseOpsChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test bitwise compound assignment operators with character types
 
@@ -1907,7 +1907,7 @@ int main(void) {
 }
 
 // extra_credit/bitwise_ops_character_constants: static char/ulong (also 9.2e18).
-TEST_F(CodegenTest, Chapter16_BitwiseOpsCharacterConstants)
+TEST_F(BookTest, Chapter16_BitwiseOpsCharacterConstants)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we can use character constants in bitwise operations
 int main(void) {
@@ -1950,7 +1950,7 @@ int main(void) {
 // wraps at 2^48 instead of int's 2^41 (yields 8796093021953, not 68719476481).  The integer
 // promotion of `unsigned char` is to `int`, not `unsigned int` (the test's own comment), so the
 // fix belongs in const-fold's ZERO_EXTEND result-kind handling, not here.
-TEST_F(CodegenTest, Chapter16_BitshiftChars)
+TEST_F(BookTest, Chapter16_BitshiftChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test << and >> operators with chars (or mix of chars and other types)
 
@@ -1994,7 +1994,7 @@ int main(void) {
 // distinct within Madlen's 8-char identifier limit (schar_from_* all collapse
 // to SCHAR*FR, uchar_from_* to UCHAR*FR). Plain char is unsigned on BESM-6, so
 // from_uint's low byte 129 stays 129 (not -127 as on a signed-char target).
-TEST_F(CodegenTest, Chapter16_StaticInitializers)
+TEST_F(BookTest, Chapter16_StaticInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that initializers for static objects with character type are correctly
  * converted to the correct type */
@@ -2034,7 +2034,7 @@ int main(void) {
 // chars/common_type: the ternary's unsigned-int common type, narrowed to the long
 // return, wraps back to -10 on BESM-6 (41-bit long). char_lt_int/char_lt_uchar are
 // renamed c_lt_int/c_lt_uchar so they stay distinct within Madlen's 8-char limit.
-TEST_F(CodegenTest, Chapter16_CommonType)
+TEST_F(BookTest, Chapter16_CommonType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly find the common type of character types and other
  * types (it's always the other type - or, if both are character types, it's int) */
@@ -2098,7 +2098,7 @@ int main(void) {
 }
 
 // extra_credit/bitwise_ops_chars: the 48-bit unsigned analogue of 2^32-659 is 2^48-659.
-TEST_F(CodegenTest, Chapter16_BitwiseOpsChars)
+TEST_F(BookTest, Chapter16_BitwiseOpsChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// make sure we perform integer promotions when performing bitwise operations on chars
 
@@ -2126,7 +2126,7 @@ int main(void) {
 
 // strings_as_lvalues/standard_library_calls: strcmp/puts/strlen/atoi (atoi added — task #22).
 // Printed text is UPPERCASE so it survives the run-test charset (lowercase → Cyrillic).
-TEST_F(CodegenTest, Chapter16_StandardLibraryCalls)
+TEST_F(BookTest, Chapter16_StandardLibraryCalls)
 {
     EXPECT_EQ("HELLO, WORLD!\n0\n", CompileAndRunBook(R"(/* Test calling string manipulation functions from the standard library */
 
@@ -2162,7 +2162,7 @@ int main(void) {
 
 // strings_as_lvalues/adjacent_strings: puts("HELLO," " WORLD").
 // The parser concatenates adjacent string-literal tokens (C11 §5.1.1.2 phase 6).
-TEST_F(CodegenTest, Chapter16_AdjacentStrings)
+TEST_F(BookTest, Chapter16_AdjacentStrings)
 {
     EXPECT_EQ("HELLO, WORLD\n0\n", CompileAndRunBook(R"(/* Test that we concatenate adjacent string literal tokens */
 
@@ -2180,7 +2180,7 @@ int main(void) {
 // chars/access_through_char_pointer (adapted for BESM-6): an int occupies one
 // 48-bit word = 6 bytes in big-endian order (byte #0 = MSB, byte #5 = LSB), so
 // reading it through a char* inspects those six bytes rather than x86's four.
-TEST_F(CodegenTest, Chapter16_AccessThroughCharPointer)
+TEST_F(BookTest, Chapter16_AccessThroughCharPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can read an object through a pointer to a character type */
 

@@ -27,14 +27,14 @@
 //     reasons: one global array too large for BESM-6 core and one loop that
 //     exceeds the ctest timeout.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 
 
 // --- void --------------------------------------------------------------------
 
 // void/cast_to_void: cast expressions (variable, call, void call) to void.
-TEST_F(CodegenTest, Chapter17_CastToVoid)
+TEST_F(BookTest, Chapter17_CastToVoid)
 {
     EXPECT_EQ("12\n", CompileAndRunBook(R"(/* Test that we can cast expressions to void */
 
@@ -63,7 +63,7 @@ int main(void) {
 
 
 // void/ternary: ternary expressions where both sides are void.
-TEST_F(CodegenTest, Chapter17_VoidTernary)
+TEST_F(BookTest, Chapter17_VoidTernary)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test ternary expressions where both sides are void */
 
@@ -105,7 +105,7 @@ int main(void) {
 
 
 // void/void_function: functions with void return values, incl. early return.
-TEST_F(CodegenTest, Chapter17_VoidFunction)
+TEST_F(BookTest, Chapter17_VoidFunction)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test our support for functions with void return values */
 int foo = 0;
@@ -142,7 +142,7 @@ int main(void) {
 // void/void_for_loop: void expressions in a for-loop header.  putchar -> libc
 // putch; prints the uppercase alphabet Z..A, A..Z, Z..A (uppercase Latin renders
 // as ASCII), then b6sim --status prints main()'s 0.
-TEST_F(CodegenTest, Chapter17_VoidForLoop)
+TEST_F(BookTest, Chapter17_VoidForLoop)
 {
     EXPECT_EQ("ZYXWVUTSRQPONMLKJIHGFEDCBAABCDEFGHIJKLMNOPQRSTUVWXYZZYXWVUTSRQPONMLKJIHGFEDCBA0\n",
               CompileAndRunBook(R"(/* Test for void expressions in for loop header */
@@ -182,7 +182,7 @@ int main(void) {
 // --- sizeof (x86 size literals rewritten to BESM-6 sizes) --------------------
 
 // sizeof/simple: two forms of sizeof (type names and expressions).
-TEST_F(CodegenTest, Chapter17_SizeofSimple)
+TEST_F(BookTest, Chapter17_SizeofSimple)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
 
@@ -201,7 +201,7 @@ int main(void) {
 
 
 // sizeof/sizeof_basic_types: size of all basic types (char==1, word types==6).
-TEST_F(CodegenTest, Chapter17_SizeofBasicTypes)
+TEST_F(BookTest, Chapter17_SizeofBasicTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can get the size of all basic type */
 
@@ -243,7 +243,7 @@ int main(void) {
 
 // sizeof/sizeof_consts: the type, and size, of all constants (char const has
 // int type; word types are 6 bytes).
-TEST_F(CodegenTest, Chapter17_SizeofConsts)
+TEST_F(BookTest, Chapter17_SizeofConsts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly determine the type, and size, of all constants */
 
@@ -285,7 +285,7 @@ int main(void) {
 
 // sizeof/sizeof_result_is_ulong: sizeof yields an unsigned long (size 6 here);
 // second check exercises its unsignedness, independent of the size value.
-TEST_F(CodegenTest, Chapter17_SizeofResultIsUlong)
+TEST_F(BookTest, Chapter17_SizeofResultIsUlong)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
 
@@ -312,7 +312,7 @@ int main(void) {
 // sizeof/sizeof_array: arrays keep their type under sizeof (no decay), array
 // parameters are adjusted to pointers, and sizeof of a string literal is its
 // decoded byte length incl. NUL (sizeof "Hello, World!" == 14).
-TEST_F(CodegenTest, Chapter17_SizeofArray)
+TEST_F(BookTest, Chapter17_SizeofArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that arrays don't decay to pointers
  * when they're the operands of sizeof expression */
@@ -355,7 +355,7 @@ int main(void) {
 
 // sizeof/sizeof_derived_types: sizes of derived (pointer and array) types,
 // including the nested abstract declarator double(*([3][4]))[2].
-TEST_F(CodegenTest, Chapter17_SizeofDerivedTypes)
+TEST_F(BookTest, Chapter17_SizeofDerivedTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we accurately calculate the size of derived (pointer and array)
  * types */
@@ -403,7 +403,7 @@ int main(void) {
 
 // sizeof/sizeof_not_evaluated: sizeof does not evaluate its operand (foo, which
 // would call exit, is never run).  sizeof(int) == 6 on BESM-6.
-TEST_F(CodegenTest, Chapter17_SizeofNotEvaluated)
+TEST_F(BookTest, Chapter17_SizeofNotEvaluated)
 {
     EXPECT_EQ("6\n", CompileAndRunBook(R"(#include <stdlib.h>
 int foo(void) { exit(10); }
@@ -419,7 +419,7 @@ int main(void) {
 
 // extra_credit/sizeof_bitwise: size of bitwise/bitshift expressions (common
 // type / promoted left operand; all word types are 6 here).
-TEST_F(CodegenTest, Chapter17_SizeofBitwise)
+TEST_F(BookTest, Chapter17_SizeofBitwise)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of bitwise and bitshift expression
 int main(void) {
@@ -462,7 +462,7 @@ int main(void) {
 
 // extra_credit/sizeof_compound: size of compound-assignment expressions, which
 // are not evaluated (the type of the left operand; uc %= 2 stays char size 1).
-TEST_F(CodegenTest, Chapter17_SizeofCompound)
+TEST_F(BookTest, Chapter17_SizeofCompound)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get size of compound expressions (and don't evaluate
 // them)
@@ -517,7 +517,7 @@ int main(void) {
 
 // extra_credit/sizeof_compound_bitwise: size of compound bitwise expressions
 // (not evaluated; left-operand type, signed-char results stay 1).
-TEST_F(CodegenTest, Chapter17_SizeofCompoundBitwise)
+TEST_F(BookTest, Chapter17_SizeofCompoundBitwise)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of compound bitwise operations
 // (and don't evaluate them)
@@ -563,7 +563,7 @@ int main(void) {
 
 // extra_credit/sizeof_incr: size of ++/-- expressions (not evaluated; operand
 // type, char results stay 1).  `static` dropped on arr.
-TEST_F(CodegenTest, Chapter17_SizeofIncr)
+TEST_F(BookTest, Chapter17_SizeofIncr)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
 
@@ -622,7 +622,7 @@ int main(void) {
 // =============================================================================
 
 // BESM-6: static array instead of malloc (no heap).
-TEST_F(CodegenTest, Chapter17_VoidPointerSimple)
+TEST_F(BookTest, Chapter17_VoidPointerSimple)
 {
     EXPECT_EQ("100\n", CompileAndRunBook(R"(/* A simple test of using statically allocated memory */
 
@@ -636,7 +636,7 @@ int main(void) {
 
 
 // BESM-6: static zeroed array instead of calloc.
-TEST_F(CodegenTest, Chapter17_ArrayOfPointersToVoid)
+TEST_F(BookTest, Chapter17_ArrayOfPointersToVoid)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test using complex types derived from void
  * arrays of void are illegal, but arrays of pointer to void are allowed */
@@ -679,7 +679,7 @@ int main(void) {
 
 
 // BESM-6: static buffer instead of calloc.
-TEST_F(CodegenTest, Chapter17_CommonPointerType)
+TEST_F(BookTest, Chapter17_CommonPointerType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test finding the common type of void * and other pointer types (it's always
  * void *) */
@@ -720,7 +720,7 @@ int main(void) {
 
 // BESM-6: static storage replaces malloc; pointer-byte aliasing and the memcmp
 // sign check hold under the big-endian byte-#0 layout (memcmp returns *a-*b).
-TEST_F(CodegenTest, Chapter17_ConversionByAssignment)
+TEST_F(BookTest, Chapter17_ConversionByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* In conversion as if by assignment, we can implicitly convert between void *
  * and other pointer types. */
@@ -840,7 +840,7 @@ int main(void) {
 
 // BESM-6: static double[4] replaces malloc; the x86 `% 8` alignment check is
 // removed (pointers are word addresses, not byte addresses).
-TEST_F(CodegenTest, Chapter17_VoidPointerExplicitCast)
+TEST_F(BookTest, Chapter17_VoidPointerExplicitCast)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* test explicit casts between void * and other pointer types,
  * and between void * and integer types
@@ -877,7 +877,7 @@ int main(void) {
 // BESM-6: static buffers replace malloc/realloc/calloc; the realloc "grow" is a
 // no-op since the static buffer is already the larger size, and aligned_alloc +
 // its `% 256` check are removed (no BESM-6 analogue — pointers are word addresses).
-TEST_F(CodegenTest, Chapter17_MemoryManagementFunctions)
+TEST_F(BookTest, Chapter17_MemoryManagementFunctions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can write, grow, and read back statically allocated buffers */
 
@@ -912,7 +912,7 @@ int main(void) {
 
 
 // BESM-6: static buffer instead of malloc; sizeof checks use BESM-6 word sizes.
-TEST_F(CodegenTest, Chapter17_SizeofExpressions)
+TEST_F(BookTest, Chapter17_SizeofExpressions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly get the size of a range of expressions */
 
@@ -954,7 +954,7 @@ int main(void) {
 
 
 // BESM-6: static zeroed buffer instead of calloc; memset is in libc.
-TEST_F(CodegenTest, Chapter17_PassAllocedMemory)
+TEST_F(BookTest, Chapter17_PassAllocedMemory)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(void *memset(void *s, int c, unsigned long n);
 
@@ -995,7 +995,7 @@ int main(void) {
 // libraries/sizeof_extern, shrunk to fit BESM-6 core: the book's double[1000][2000]
 // is 12M words (core is only 32K), so use double[10][20] == 200 words; sizeof is
 // 200 elements * 6 bytes/word == 1200.
-TEST_F(CodegenTest, Chapter17_SizeofExtern)
+TEST_F(BookTest, Chapter17_SizeofExtern)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(double large_array[10][20];
 
@@ -1010,7 +1010,7 @@ int main(void) {
 // libraries/test_for_memory_leaks: the textbook 10M-iteration loop is over the
 // 10s timeout (void function call exercises stack-frame restore).  Shrunk to 100
 // iterations: sum accumulates i over 0..99, so sum == 100*99/2 == 4950.
-TEST_F(CodegenTest, Chapter17_TestForMemoryLeaks)
+TEST_F(BookTest, Chapter17_TestForMemoryLeaks)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(#include <stdlib.h>
 

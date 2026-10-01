@@ -59,29 +59,7 @@ add_executable(besm-tests
     test/str_tests.cpp
     test/typedef_tests.cpp
     test/math_tests.cpp
-    test/chapter1_tests.cpp
-    test/chapter2_tests.cpp
-    test/chapter3_tests.cpp
-    test/chapter4_tests.cpp
-    test/chapter5_tests.cpp
-    test/chapter6_tests.cpp
-    test/chapter7_tests.cpp
-    test/chapter8_tests.cpp
-    test/chapter9_tests.cpp
-    test/chapter10_tests.cpp
-    test/chapter11_tests.cpp
-    test/chapter12_tests.cpp
-    test/chapter13_tests.cpp
-    test/chapter14_tests.cpp
-    test/chapter15_tests.cpp
-    test/chapter16_tests.cpp
-    test/chapter17_tests.cpp
-    test/chapter18_tests1.cpp
-    test/chapter18_tests2.cpp
-    test/chapter18_tests3.cpp
-    test/chapter18_tests4.cpp
-    test/chapter19_tests.cpp
-    test/chapter20_tests.cpp
+    ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(besm-tests besm parser translator semantic GTest::gtest_main test_util
     backend_test_util)
@@ -90,6 +68,7 @@ add_definitions(-DTEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_definitions(besm-tests PRIVATE
     TEST_CPP="${SystemCpp}"
     TEST_INCLUDE_DIR="${BESM6_INCLUDE_DIR}")
+target_include_directories(besm-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(besm-tests)
 gtest_discover_tests(besm-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)
 

@@ -1,7 +1,7 @@
-#include "codegen_test.h"
+#include "book_test.h"
 
 // BESM-6: rewritten to use a local struct instead of calloc (no heap dependency).
-TEST_F(CodegenTest, Chapter18_MemberComparisons)
+TEST_F(BookTest, Chapter18_MemberComparisons)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test comparisons between pointers to structures and structure members:
@@ -49,7 +49,7 @@ int main(void) {
 }
 
 // malloc + pointer-to-integer byte-address arithmetic.
-TEST_F(CodegenTest, Chapter18_MemberOffsets)
+TEST_F(BookTest, Chapter18_MemberOffsets)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // struct declarations for size/layout tests
@@ -473,7 +473,7 @@ int main(void) {
 // Passes structs by value as parameters and verifies the stack is not clobbered.  strcmp
 // strings uppercased (KOI-7) and the irregular take_/pass_ helpers renamed to stay distinct
 // within the Madlen 8-char identifier limit.
-TEST_F(CodegenTest, Chapter18_ParametersStackClobber)
+TEST_F(BookTest, Chapter18_ParametersStackClobber)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that passing structures as parameters doesn't clobber the stack.
@@ -700,7 +700,7 @@ int main(void) {
 // Passes and returns multi-word structs by value and verifies the stack is not clobbered.
 // The validate_/return_/test_ helper families collided within the Madlen 8-char identifier
 // limit, so they were renamed to short distinct names; the stack-bytes string was uppercased.
-TEST_F(CodegenTest, Chapter18_ParamsAndReturnsStackClobber)
+TEST_F(BookTest, Chapter18_ParamsAndReturnsStackClobber)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that returning a struct doesn't clobber the stack.
@@ -1018,7 +1018,7 @@ int main(void) {
 // equal.  The doubles (2e12, 2999.0, 150.0, 123.4) are each compared only against
 // the compiler's own representation of the same constant, so equality is exact.
 // FIXME: this test currently loops forever at run time — disabled until fixed.
-TEST_F(CodegenTest, Chapter18_AutoStructInitializers)
+TEST_F(BookTest, Chapter18_AutoStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test initialization of non-nested structs with automatic storage duration,
@@ -1210,7 +1210,7 @@ int vtwo(struct s *ptr1, struct s *ptr2) {
 // Residual blocker (not libc; strcmp available, validation is by-pointer):
 // nested-struct initialization with mixed long/double/unsigned-char-array
 // members validates wrong (struct-init representation codegen), returns 1.
-TEST_F(CodegenTest, Chapter18_NestedAutoStructInitializers)
+TEST_F(BookTest, Chapter18_NestedAutoStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test initialization of nested structs with automatic storage duration,
@@ -1461,7 +1461,7 @@ int check_array(struct outer *struct_array) {
 )PROG"));
 }
 
-TEST_F(CodegenTest, Chapter18_NestedStaticStructInitializers)
+TEST_F(BookTest, Chapter18_NestedStaticStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test initialization of nested static structs, including:
@@ -1746,7 +1746,7 @@ int test_array_of_structs(void) {
 )PROG"));
 }
 
-TEST_F(CodegenTest, Chapter18_StaticStructInitializers)
+TEST_F(BookTest, Chapter18_StaticStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test initialization of non-nested static structs, including:
@@ -1910,7 +1910,7 @@ int test_implicit_conversion(void) {
 // BESM-6: static struct instead of malloc; strcmp/puts strings uppercased for
 // KOI-7; puts is kept (prints each struct's message) so expected includes them.
 // FIXME: this test currently loops forever at run time — disabled until fixed.
-TEST_F(CodegenTest, Chapter18_OpaqueStruct)
+TEST_F(BookTest, Chapter18_OpaqueStruct)
 {
     EXPECT_EQ("NEW STRUCT\nSTATIC STRUCT\nGLOBAL STRUCT\n0\n", CompileAndRunBook(R"PROG(
 /* Test working with a structure whose type is completed in the library but not
@@ -2027,7 +2027,7 @@ struct s incomplete_var = {3, 4.0, "GLOBAL STRUCT"};
 // t_updmem/t_updnst) so they stay distinct within Madlen's 8-char identifier
 // limit — make_struct_inner/outer/outermost all truncate to "make_str" and would
 // otherwise alias into mutual recursion at runtime.
-TEST_F(CodegenTest, Chapter18_ReturnStructPointer)
+TEST_F(BookTest, Chapter18_ReturnStructPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test returning struct pointers from functions

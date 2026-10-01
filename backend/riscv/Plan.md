@@ -87,6 +87,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
   (the source and the host-`cc` expected result) driven by a per-backend
   `CompileAndRunBook`. BESM-6-specific rewrites (`putch` for `putchar`, etc.) become
   per-target exclusion or substitution lists. `besm-tests` must pass unchanged.
+  *Done.* The 682 programs live in `backend/common/test/book/` as `BookTest`
+  tests; each backend's `test/book_test.h` defines `BookTest` and its skip list
+  (`SkipIfListed`). None needed skipping on BESM-6. Expected values that differ by
+  target (chapter 17 `sizeof`) will be handled when RISC-V first runs them (R3).
 
 `make run` stays green after every D-step.
 

@@ -34,12 +34,12 @@
 //     mismatch, so a BESM-6-valued expectation would just encode a meaningless
 //     failure code; DISABLED_ is the honest call.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 // --- valid (run) ------------------------------------------------------------
 
 // floating_expressions/simple: 2.0 * 2.0 == 4.0, all exact.
-TEST_F(CodegenTest, Chapter13_Simple)
+TEST_F(BookTest, Chapter13_Simple)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     double x = 2.0;
@@ -48,7 +48,7 @@ TEST_F(CodegenTest, Chapter13_Simple)
 }
 
 // floating_expressions/comparisons: <, >, <=, >=, ==, != on in-range doubles.
-TEST_F(CodegenTest, Chapter13_Comparisons)
+TEST_F(BookTest, Chapter13_Comparisons)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double fifty_fiveE5 = 55e5;
 double fifty_fourE4 = 54e4;
@@ -102,7 +102,7 @@ int main(void) {
 
 // floating_expressions/loop_controlling_expression: count 100 down by 1.0;
 // every integer 0..100 is exact, returns 100.
-TEST_F(CodegenTest, Chapter13_LoopControllingExpression)
+TEST_F(BookTest, Chapter13_LoopControllingExpression)
 {
     EXPECT_EQ("100\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -114,7 +114,7 @@ TEST_F(CodegenTest, Chapter13_LoopControllingExpression)
 }
 
 // constants/constant_doubles: several spellings of 1 and of .125, all exact.
-TEST_F(CodegenTest, Chapter13_ConstantDoubles)
+TEST_F(BookTest, Chapter13_ConstantDoubles)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     double a = 1.0;
@@ -139,7 +139,7 @@ TEST_F(CodegenTest, Chapter13_ConstantDoubles)
 
 // function_calls/double_and_int_parameters: calling convention for mixed
 // double/int parameters; all values exact small.
-TEST_F(CodegenTest, Chapter13_DoubleAndIntParameters)
+TEST_F(BookTest, Chapter13_DoubleAndIntParameters)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double d1, double d2, int i1, double d3, double d4, int i2, int i3,
                     int i4, double d5, double d6, double d7, int i5, double d8) {
@@ -166,7 +166,7 @@ int main(void) {
 
 // function_calls/double_and_int_params_recursive: doubles and ints passed in
 // registers and on the stack across recursive calls; values 1..18 exact.
-TEST_F(CodegenTest, Chapter13_DoubleAndIntParamsRecursive)
+TEST_F(BookTest, Chapter13_DoubleAndIntParamsRecursive)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
         int i4, double d4, int i5, double d5, int i6, double d6,
@@ -202,7 +202,7 @@ int main(void) {
 }
 
 // function_calls/double_parameters: 8 double parameters passed in registers.
-TEST_F(CodegenTest, Chapter13_DoubleParameters)
+TEST_F(BookTest, Chapter13_DoubleParameters)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
 
@@ -224,7 +224,7 @@ int check_arguments(double a, double b, double c, double d, double e, double f, 
 }
 
 // function_calls/push_xmm: 11 double arguments, some passed on the stack.
-TEST_F(CodegenTest, Chapter13_PushXmm)
+TEST_F(BookTest, Chapter13_PushXmm)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int callee(double a, double b, double c, double d, double e, double f, double g,
            double h, double i, double j, double k) {
@@ -253,7 +253,7 @@ int main(void) {
 
 // function_calls/use_arg_after_fun_call: parameter preserved across recursive
 // call; fun(1.0) returns 4.0, truncated to int 4 by main.
-TEST_F(CodegenTest, Chapter13_UseArgAfterFunCall)
+TEST_F(BookTest, Chapter13_UseArgAfterFunCall)
 {
     EXPECT_EQ("4\n", CompileAndRunBook(R"(double fun(double x) {
     if (x > 2)
@@ -270,7 +270,7 @@ int main(void) {
 }
 
 // explicit_casts/cvttsd2si_rewrite: (int)3.0 == 3, with other live locals.
-TEST_F(CodegenTest, Chapter13_CvttsdRewrite)
+TEST_F(BookTest, Chapter13_CvttsdRewrite)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double glob = 3.0;
 
@@ -289,7 +289,7 @@ int main(void) {
 
 // explicit_casts/double_to_signed: truncation toward zero; 2148429099 fits in a
 // 41-bit long, -200000.9999 truncates to -200000.
-TEST_F(CodegenTest, Chapter13_DoubleToSigned)
+TEST_F(BookTest, Chapter13_DoubleToSigned)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int double_to_int(double d) {
     return (int) d;
@@ -310,7 +310,7 @@ int main(void) {
 
 // explicit_casts/rewrite_cvttsd2si_regression: (long)5000. == 5000 plus a large
 // clique of small-int locals; semantically simple.
-TEST_F(CodegenTest, Chapter13_CvttsdRegression)
+TEST_F(BookTest, Chapter13_CvttsdRegression)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
@@ -382,7 +382,7 @@ int check_12_ints(int a, int b, int c, int d, int e, int f, int g, int h, int i,
 }
 
 // extra_credit/compound_assign: /= and *= on in-range doubles.
-TEST_F(CodegenTest, Chapter13_CompoundAssign)
+TEST_F(BookTest, Chapter13_CompoundAssign)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     double d = 10.0;
@@ -396,7 +396,7 @@ TEST_F(CodegenTest, Chapter13_CompoundAssign)
 
 // libraries/double_and_int_params_recursive (client + lib merged): fun returns 0
 // on success so client's d == 78.00 is false, returns 0.
-TEST_F(CodegenTest, Chapter13_DoubleAndIntParamsRecursiveLibrary)
+TEST_F(BookTest, Chapter13_DoubleAndIntParamsRecursiveLibrary)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
         int i4, double d4, int i5, double d5, int i6, double d6,
@@ -436,7 +436,7 @@ int fun(int i1, double d1, int i2, double d2, int i3, double d3,
 }
 
 // libraries/double_parameters (client + lib merged).
-TEST_F(CodegenTest, Chapter13_DoubleParametersLibrary)
+TEST_F(BookTest, Chapter13_DoubleParametersLibrary)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
 
@@ -458,7 +458,7 @@ int check_arguments(double a, double b, double c, double d, double e, double f, 
 }
 
 // libraries/use_arg_after_fun_call (client + lib merged): fun(1.0) -> 4.0 -> 4.
-TEST_F(CodegenTest, Chapter13_UseArgAfterFunCallLibrary)
+TEST_F(BookTest, Chapter13_UseArgAfterFunCallLibrary)
 {
     EXPECT_EQ("4\n", CompileAndRunBook(R"(double fun(double x);
 
@@ -479,7 +479,7 @@ double fun(double x) {
 // --- value substituted to fit BESM-6 exponent range (DBL_MAX ~9.2e18) --------
 
 // return_double: original 1234e75 (~1.2e78) overflows; use 1.234e15.
-TEST_F(CodegenTest, Chapter13_ReturnDouble)
+TEST_F(BookTest, Chapter13_ReturnDouble)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(double d(void) {
     return 1.234e15;
@@ -494,7 +494,7 @@ int main(void) {
 // arithmetic_ops: original twelveE30 (1.2e31) overflows; in-range 12e15.
 // Decimal fractions replaced with exact binary fractions so == holds at 40 bits;
 // dropped the 17-digit 0.1+0.2 == 0.30000000000000004 precision artifact.
-TEST_F(CodegenTest, Chapter13_ArithmeticOps)
+TEST_F(BookTest, Chapter13_ArithmeticOps)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double point_one = 0.25;
 double point_two = 0.5;
@@ -537,7 +537,7 @@ int main(void) {
 }
 
 // libraries/extern_double: original d = 1e20 (> 9.2e18) overflows; use 1e15.
-TEST_F(CodegenTest, Chapter13_ExternDoubleLibrary)
+TEST_F(BookTest, Chapter13_ExternDoubleLibrary)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(double d = 1e15;
 
@@ -552,7 +552,7 @@ int main(void) {
 // (and subtract truncates, never rounding to nearest), so a sub-ULP increment such
 // as 1e-15 is never absorbed into 1.0 -- it always bumps the low mantissa bit, and
 // FP == compares raw words, so d would not compare equal to the literal 1.0.
-TEST_F(CodegenTest, Chapter13_IncrAndDecr)
+TEST_F(BookTest, Chapter13_IncrAndDecr)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     static double d = 0.75;
@@ -574,7 +574,7 @@ TEST_F(CodegenTest, Chapter13_IncrAndDecr)
 // signed_to_double: original -9007199254751227l (~9e15) overflows 41-bit long;
 // use -100000000000l (1e11, exact as double). Dropped the 2^60+1 round-on-
 // conversion sub-check (no clean 41-bit/40-bit-boundary analogue on BESM-6).
-TEST_F(CodegenTest, Chapter13_SignedToDouble)
+TEST_F(BookTest, Chapter13_SignedToDouble)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double int_to_double(int i) {
     return (double) i;
@@ -592,7 +592,7 @@ int main(void) {
 
 // double_to_unsigned: original 3458764513821589504 (~3.4e18) overflows 48-bit
 // ulong; use 100000000000 (1e11).
-TEST_F(CodegenTest, Chapter13_DoubleToUnsigned)
+TEST_F(BookTest, Chapter13_DoubleToUnsigned)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int double_to_uint(double d) {
     return (unsigned int) d;
@@ -614,7 +614,7 @@ int main(void) {
 // unsigned_to_double: kept the in-range conversions; dropped the four 2^63/2^64
 // round-to-odd tie sub-checks (ulong is 48-bit, cannot reach them; they test
 // 64-bit round-to-even).
-TEST_F(CodegenTest, Chapter13_UnsignedToDouble)
+TEST_F(BookTest, Chapter13_UnsignedToDouble)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double uint_to_double(unsigned int ui) {
     return (double) ui;
@@ -637,7 +637,7 @@ int main(void) {
 // (BESM-6's negative-int->unsigned conversion is a separate backend issue).
 // The original tern_double_flag/tern_double_result collide in Madlen's first 8
 // chars (both -> TERN*DOU), so renamed to tern_flag/tern_result.
-TEST_F(CodegenTest, Chapter13_CommonType)
+TEST_F(BookTest, Chapter13_CommonType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int lt(double d, long l) {
     return d < l;
@@ -669,7 +669,7 @@ int main(void) {
 
 // implicit_casts/convert_for_assignment: original 18446744073709551586ul
 // (~1.8e19) out of range; use 100000000000ul (1e11).
-TEST_F(CodegenTest, Chapter13_ConvertForAssignment)
+TEST_F(BookTest, Chapter13_ConvertForAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_args(long l, double d) {
     return l == 2 && d == -6.0;
@@ -700,7 +700,7 @@ int main(void) {
 // negative-int 64-bit wrap is x86-specific). The multiplier is a power of two:
 // Madlen rounds the decimal 3.125 by 1 ULP, but 2.0 and the integer product
 // 20100.0 round-trip exactly, so the equality is robust.
-TEST_F(CodegenTest, Chapter13_ComplexArithmeticCommonType)
+TEST_F(BookTest, Chapter13_ComplexArithmeticCommonType)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(unsigned long ul = 10000ul;
 int main(void) {
@@ -712,7 +712,7 @@ int main(void) {
 
 // extra_credit/compound_assign_implicit_cast: original 1.8e19/1.5e19 out of
 // range; use 1e11 ulong with a 1e10 double subtrahend (both < 2^40, exact).
-TEST_F(CodegenTest, Chapter13_CompoundAssignImplicitCast)
+TEST_F(BookTest, Chapter13_CompoundAssignImplicitCast)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     double d = 1000.5;
@@ -734,7 +734,7 @@ TEST_F(CodegenTest, Chapter13_CompoundAssignImplicitCast)
 // literal is not compilable for this target, so the variable is renamed `fp_zero`
 // and initialized to an explicit 0.0 — it is simply a floating-point zero, and
 // every logical-operator assertion that references it is preserved unchanged.
-TEST_F(CodegenTest, Chapter13_Logical)
+TEST_F(BookTest, Chapter13_Logical)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double zero = 0.0;
 double non_zero = 1E-15;
@@ -769,7 +769,7 @@ int main(void) {
 // --- Static locals (now supported) ------------------------------------------
 
 // static_initialized_double: local static double.
-TEST_F(CodegenTest, Chapter13_StaticInitializedDouble)
+TEST_F(BookTest, Chapter13_StaticInitializedDouble)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double return_static_variable(void) {
     static double d = 0.5;
@@ -796,7 +796,7 @@ int main(void) {
 // rejects by design (unix_real_word in emit_unix.c calls fatal_error).  The integer
 // initializers (i, u, l, ul) fold to integer words, so ul's ~2^64 literal is fine.
 // The remaining in-range initializers still exercise the static-init conversions.
-TEST_F(CodegenTest, Chapter13_StaticInitializers)
+TEST_F(BookTest, Chapter13_StaticInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double d1 = 2147483647;
 double d2 = 4294967295u;
@@ -833,7 +833,7 @@ int main(void) {
 // standard_library_call: fma/ldexp from libm.  The book's literals (1E22, 92E73,
 // result 2.944E76) are far outside BESM-6's ~+-9.2e18 FP range, so they are scaled
 // into range here while still exercising both calls.
-TEST_F(CodegenTest, Chapter13_StandardLibraryCall)
+TEST_F(BookTest, Chapter13_StandardLibraryCall)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(double fma(double x, double y, double z);
 double ldexp(double x, int exp);
@@ -848,7 +848,7 @@ int main(void) {
 }
 
 // libraries/double_params_and_result: fmax from libm.
-TEST_F(CodegenTest, Chapter13_DoubleParamsAndResultLibrary)
+TEST_F(BookTest, Chapter13_DoubleParamsAndResultLibrary)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(double fmax(double x, double y);
 

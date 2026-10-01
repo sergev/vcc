@@ -35,14 +35,14 @@
 // BESM-6-valued expectation would just encode a meaningless failure code;
 // DISABLED_ is the honest call.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 
 
 // --- casts -------------------------------------------------------------------
 
 // casts/cast_array_of_pointers: round-trip cast between pointer-to-array types.
-TEST_F(CodegenTest, Chapter15_CastArrayOfPointers)
+TEST_F(BookTest, Chapter15_CastArrayOfPointers)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(/* Test that we can convert between different pointer types, including pointers to arrays */
 
@@ -66,7 +66,7 @@ int main(void) {
 
 
 // casts/multi_dim_casts: cast to pointers of different dimensions.
-TEST_F(CodegenTest, Chapter15_MultiDimCasts)
+TEST_F(BookTest, Chapter15_MultiDimCasts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can cast to pointers to different dimensions in a multi-dimensional array */
 
@@ -117,7 +117,7 @@ int main(void) {
 // --- declarators -------------------------------------------------------------
 
 // declarators/big_array: parse an array declarator with size > UINT_MAX (extern, never allocated).
-TEST_F(CodegenTest, Chapter15_BigArray)
+TEST_F(BookTest, Chapter15_BigArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can parse an array declarator with a size greater than UINT_MAX
  * Note that we don't actually allocate space for this array!
@@ -132,7 +132,7 @@ int main(void) {
 
 
 // declarators/for_loop_array: array declared and used in a for loop.
-TEST_F(CodegenTest, Chapter15_ForLoopArray)
+TEST_F(BookTest, Chapter15_ForLoopArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can declare arrays in for loop initializers */
 int main(void) {
@@ -154,7 +154,7 @@ int main(void) {
 // --- extra_credit ------------------------------------------------------------
 
 // extra_credit/bitwise_subscript: bitwise ops on subscripted values.
-TEST_F(CodegenTest, Chapter15_BitwiseSubscript)
+TEST_F(BookTest, Chapter15_BitwiseSubscript)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test bitwise operations on array elements
 int main(void) {
@@ -186,7 +186,7 @@ int main(void) {
 
 
 // extra_credit/compound_assign_and_increment: compound assignment + ++/-- on array elements.
-TEST_F(CodegenTest, Chapter15_CompoundAssignAndIncrement)
+TEST_F(BookTest, Chapter15_CompoundAssignAndIncrement)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Combination of compound assignment and increment/decrement with subscript expressions
 int main(void) {
@@ -221,7 +221,7 @@ int main(void) {
 
 
 // extra_credit/compound_assign_to_nested_subscript: compound assign through a 2D subscript.
-TEST_F(CodegenTest, Chapter15_CompoundAssignToNestedSubscript)
+TEST_F(BookTest, Chapter15_CompoundAssignToNestedSubscript)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// test compound assignment where LHS is nested subscripted expression
 
@@ -277,7 +277,7 @@ int main(void) {
 
 
 // extra_credit/compound_nested_pointer_assignment: compound assign through pointers into a file-scope nested array.
-TEST_F(CodegenTest, Chapter15_CompoundNestedPointerAssignment)
+TEST_F(BookTest, Chapter15_CompoundNestedPointerAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Nested pointer assignment with +=/-=
 
@@ -318,7 +318,7 @@ int main(void) {
 
 
 // extra_credit/incr_and_decr_nested_pointers: ++/-- on pointers into a 3D array.
-TEST_F(CodegenTest, Chapter15_IncrAndDecrNestedPointers)
+TEST_F(BookTest, Chapter15_IncrAndDecrNestedPointers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Array arithmetic with prefix and postfix ++/--
 int main(void) {
@@ -371,7 +371,7 @@ int main(void) {
 
 
 // extra_credit/incr_and_decr_pointers: ++/-- on pointers into a 1D array.
-TEST_F(CodegenTest, Chapter15_IncrAndDecrPointers)
+TEST_F(BookTest, Chapter15_IncrAndDecrPointers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Array arithmetic with prefix and postfix ++/--
 int main(void) {
@@ -421,7 +421,7 @@ int main(void) {
 
 
 // extra_credit/incr_decr_subscripted_vals: ++/-- on subscripted values.
-TEST_F(CodegenTest, Chapter15_IncrDecrSubscriptedVals)
+TEST_F(BookTest, Chapter15_IncrDecrSubscriptedVals)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Apply ++ and -- to subscript expressions, which are lvalues
 
@@ -459,7 +459,7 @@ int main(void) {
 
 
 // extra_credit/postfix_prefix_precedence: precedence of postfix/prefix with subscripts.
-TEST_F(CodegenTest, Chapter15_PostfixPrefixPrecedence)
+TEST_F(BookTest, Chapter15_PostfixPrefixPrecedence)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Postfix ++/-- and subscript have higher precedence than prefix ++/--
 int idx = 3;
@@ -517,7 +517,7 @@ int main(void) {
 // --- initialization ----------------------------------------------------------
 
 // initialization/trailing_comma_initializer: array initializer with a trailing comma.
-TEST_F(CodegenTest, Chapter15_TrailingCommaInitializer)
+TEST_F(BookTest, Chapter15_TrailingCommaInitializer)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int foo(int a, int b, int c);
 int main(void) {
@@ -535,7 +535,7 @@ int main(void) {
 // --- pointer_arithmetic ------------------------------------------------------
 
 // pointer_arithmetic/add_dereference_and_assign: assign through dereferenced pointer arithmetic.
-TEST_F(CodegenTest, Chapter15_AddDereferenceAndAssign)
+TEST_F(BookTest, Chapter15_AddDereferenceAndAssign)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that you can assign to any dereferenced pointer,
  * including pointers resulting from pointer arithmetic */
@@ -558,7 +558,7 @@ int main(void) {
 
 
 // pointer_arithmetic/compare: compare pointers to elements of the same (nested) array.
-TEST_F(CodegenTest, Chapter15_Compare)
+TEST_F(BookTest, Chapter15_Compare)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test comparison of elements of the same array, including multi-dimensional arrays */
 
@@ -661,7 +661,7 @@ int main(void)
 // --- subscripting ------------------------------------------------------------
 
 // subscripting/addition_subscript_equivalence: x[i] equals *(x+i) for a 2D array.
-TEST_F(CodegenTest, Chapter15_AdditionSubscriptEquivalence)
+TEST_F(BookTest, Chapter15_AdditionSubscriptEquivalence)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we treat x[i] and *(x + i) as equivalent
 
@@ -705,7 +705,7 @@ int main(void)
 
 
 // subscripting/array_of_pointers_to_arrays: subscripts mixing pointers and decayed arrays.
-TEST_F(CodegenTest, Chapter15_ArrayOfPointersToArrays)
+TEST_F(BookTest, Chapter15_ArrayOfPointersToArrays)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can correcty handle subscript expressions that involve
  * a mix of pointers and arrays that decay to pointers
@@ -752,7 +752,7 @@ int main(void) {
 
 
 // subscripting/simple: return arr[2] of a 1D array.
-TEST_F(CodegenTest, Chapter15_Simple)
+TEST_F(BookTest, Chapter15_Simple)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(/* A very simple subscripting test case */
 
@@ -764,7 +764,7 @@ int main(void) {
 
 
 // subscripting/subscript_pointer: subscript a pointer.
-TEST_F(CodegenTest, Chapter15_SubscriptPointer)
+TEST_F(BookTest, Chapter15_SubscriptPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can apply subscript expressions to all pointers,
  * not just pointers that decayed from arrays */
@@ -801,7 +801,7 @@ int main(void) {
 
 
 // subscripting/subscript_precedence: subscript operator precedence.
-TEST_F(CodegenTest, Chapter15_SubscriptPrecedence)
+TEST_F(BookTest, Chapter15_SubscriptPrecedence)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int arr[3] = {1, 2, 3};
@@ -814,7 +814,7 @@ TEST_F(CodegenTest, Chapter15_SubscriptPrecedence)
 // --- libraries (two files merged, client first) ------------------------------
 
 // libraries/global_array: access an array defined in another translation unit.
-TEST_F(CodegenTest, Chapter15_GlobalArray)
+TEST_F(BookTest, Chapter15_GlobalArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can access an array declared in another translation unit */
 extern long arr[4];
@@ -854,7 +854,7 @@ int double_each_element(void) {
 
 
 // libraries/return_pointer_to_array: define/call functions returning pointers to arrays.
-TEST_F(CodegenTest, Chapter15_ReturnPointerToArray)
+TEST_F(BookTest, Chapter15_ReturnPointerToArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can define/call functions that return pointers to arrays */
 long (*return_row(long (*arr)[3][4], int idx))[4];
@@ -895,7 +895,7 @@ long (*return_row(long (*arr)[3][4], int idx))[4] {
 
 
 // libraries/set_array_val: pass pointers to (nested) array elements as arguments.
-TEST_F(CodegenTest, Chapter15_SetArrayVal)
+TEST_F(BookTest, Chapter15_SetArrayVal)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can pass pointers to array elements,
  * including nested array elements, as function arguments. */
@@ -994,7 +994,7 @@ int set_nested_element(int (*arr)[2], int i, int j) {
 // `long int(arr)[4] = {1,2,3,4};` no longer re-emits a zero-init that clobbers the
 // initializer.  The `test_array_of_pointers` helper was shortened to `test_aop` so it stays
 // distinct from `test_arr` within the Madlen 8-char label limit (both truncate to `test*arr`).
-TEST_F(CodegenTest, Chapter15_EquivalentDeclarators)
+TEST_F(BookTest, Chapter15_EquivalentDeclarators)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Declare the same global array multiple times w/ equivalent declarators */
 
@@ -1091,7 +1091,7 @@ int main(void)
 
 
 // extra_credit/compound_assign_array_of_pointers: uses a `static` array of pointers local.
-TEST_F(CodegenTest, Chapter15_CompoundAssignArrayOfPointers)
+TEST_F(BookTest, Chapter15_CompoundAssignArrayOfPointers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Compound assignment where lval is a subscript expression with pointer type
 int main(void) {
@@ -1127,7 +1127,7 @@ int main(void) {
 
 
 // extra_credit/compound_lval_evaluated_once: uses a `static int count` local.
-TEST_F(CodegenTest, Chapter15_CompoundLvalEvaluatedOnce)
+TEST_F(BookTest, Chapter15_CompoundLvalEvaluatedOnce)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Make sure the left side of a compound expression is evaluated only once
 
@@ -1159,7 +1159,7 @@ int main(void) {
 
 
 // initialization/automatic_nested: uses a `static int x` local.
-TEST_F(CodegenTest, Chapter15_AutomaticNested)
+TEST_F(BookTest, Chapter15_AutomaticNested)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initializing nested arrays with automatic storage duration */
 
@@ -1302,7 +1302,7 @@ int main(void) {
 // 1000-element `long` arrays were shrunk to 100 so the program fits in BESM-6 memory
 // (the originals overflowed the short address field — "ДЛИHHЫЙ AДPEC"); the construct
 // under test (static-duration init + zero-fill) is unchanged.
-TEST_F(CodegenTest, Chapter15_Static)
+TEST_F(BookTest, Chapter15_Static)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initializing one-dimensional arrays with static storage duration */
 
@@ -1463,7 +1463,7 @@ int main(void) {
 // The book's `long[30][50][40]` (60000 words) was shrunk to `[3][5][4]` so the program fits
 // in BESM-6 memory; the partially-initialized `unsigned long[4][6][2]` exercises the static-
 // local zero-fill fixed in backend/besm6/static.c (explicit `,log, 0` words, not `,bss,`).
-TEST_F(CodegenTest, Chapter15_StaticNested)
+TEST_F(BookTest, Chapter15_StaticNested)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initializing multi-dimensional arrays with static storage duration */
 
@@ -1604,7 +1604,7 @@ int main(void) {
 
 
 // pointer_arithmetic/pointer_add: many `static` locals (also `static int flag;` zero-init).
-TEST_F(CodegenTest, Chapter15_PointerAdd)
+TEST_F(BookTest, Chapter15_PointerAdd)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test pointer addition and subtraction to specify array indices
  * (but not subtracting two pointers to get the distance between them)
@@ -1813,7 +1813,7 @@ int main(void) {
 // The book's helper names (`get_multidim_ptr_diff` / `..._2`) are shortened here because
 // Madlen identifiers truncate to 8 chars: the originals both collapse to `get*mult` and
 // would alias each other.  `pdiff_m` / `pdiff_m2` stay distinct after truncation.
-TEST_F(CodegenTest, Chapter15_PointerDiff)
+TEST_F(BookTest, Chapter15_PointerDiff)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test subtracting two pointers to find the number of elements between them */
 
@@ -1870,7 +1870,7 @@ int main(void) {
 
 
 // subscripting/simple_subscripts: uses a `static int arr[4]` local.
-TEST_F(CodegenTest, Chapter15_SimpleSubscripts)
+TEST_F(BookTest, Chapter15_SimpleSubscripts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test out simple cases involving constant indices and one-dimensional arrays */
 
@@ -2020,7 +2020,7 @@ int main(void) {
 // --- No identifier shadowing (permanent design decision) ---------------------
 
 // declarators/return_nested_array: local `arr` shadows file-scope `arr`.
-TEST_F(CodegenTest, Chapter15_ReturnNestedArray)
+TEST_F(BookTest, Chapter15_ReturnNestedArray)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Declare a function that returns a pointer to an array */
 
@@ -2051,7 +2051,7 @@ int main(void) {
 // subscripting/subscript_nested: parameter `nested_arr` shadowed file-scope `nested_arr`
 // (renamed to `s_nested`); `read_nested`/`read_nested_negated` and
 // `write_nested`/`write_nested_complex` collided in the first 8 Madlen chars (renamed).
-TEST_F(CodegenTest, Chapter15_SubscriptNested)
+TEST_F(BookTest, Chapter15_SubscriptNested)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test subscripting multi-dimensional arrays */
 
@@ -2143,7 +2143,7 @@ int main(void) {
 
 // subscripting/complex_operands: `subscript_inception`/`subscript_function_result`
 // collided in the first 8 Madlen chars (`subscrip`); renamed to `sub_incept`/`sub_funcres`.
-TEST_F(CodegenTest, Chapter15_ComplexOperands)
+TEST_F(BookTest, Chapter15_ComplexOperands)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test subscript expressions where both operands are complex sub-expressions,
  * not just variables and constants. This test program only includes 1D arrays. */
@@ -2263,7 +2263,7 @@ int main(void) {
 // --- Array->pointer parameter adjustment not performed -----------------------
 
 // declarators/array_as_argument: `int a[2][3]` vs `int (*a)[3]` param forms read as conflicting declarations.
-TEST_F(CodegenTest, Chapter15_ArrayAsArgument)
+TEST_F(BookTest, Chapter15_ArrayAsArgument)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that array types in parameters are converted to pointer types */
 
@@ -2337,7 +2337,7 @@ int array_param(int *a);)"));
 
 // casts/implicit_and_explicit_conversions: reading the long elements -1 and -4
 // through an unsigned long lvalue yields their 41-bit patterns (2^41-1, 2^41-4).
-TEST_F(CodegenTest, Chapter15_ImplicitAndExplicitConversions)
+TEST_F(BookTest, Chapter15_ImplicitAndExplicitConversions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly track both implicit type conversions via array decay
  * and explicit casts
@@ -2378,7 +2378,7 @@ int main(void) {
 
 // initialization/automatic: out-of-range unsigned/double initializers replaced
 // with in-range ones; conversions recomputed for 41/48-bit widths.
-TEST_F(CodegenTest, Chapter15_Automatic)
+TEST_F(BookTest, Chapter15_Automatic)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initialzing one-dimensional arrays with automatic storage duration */
 
@@ -2498,7 +2498,7 @@ int main(void) {
 
 // extra_credit/compound_bitwise_subscript: 48-bit-fitting masks substituted for
 // the 2^63 / 0xffffffff00000000 patterns; results recomputed (<<= wraps mod 2^48).
-TEST_F(CodegenTest, Chapter15_CompoundBitwiseSubscript)
+TEST_F(BookTest, Chapter15_CompoundBitwiseSubscript)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// compound bitwise assignment on subscript expressions
 int main(void) {
@@ -2547,7 +2547,7 @@ int main(void) {
 // extra_credit/compound_pointer_assignment: the 2^63 longs (whose difference is
 // 1) are replaced with in-range longs; the `4294967295U + i` that wrapped to 3
 // at 32 bits uses the 48-bit UINT_MAX so it still wraps to 3.
-TEST_F(CodegenTest, Chapter15_CompoundPointerAssignment)
+TEST_F(BookTest, Chapter15_CompoundPointerAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Pointer arithmetic with +=/-=
 
@@ -2689,7 +2689,7 @@ int main(void) {
 
 // extra_credit/compound_assign_to_subscripted_val: 48-bit unsigned wrap — element [1] is
 // set to 2^48-2 so += 2 wraps to 0, and the multiply wraps mod 2^48 (not 13).
-TEST_F(CodegenTest, Chapter15_CompoundAssignToSubscriptedVal)
+TEST_F(BookTest, Chapter15_CompoundAssignToSubscriptedVal)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test compound assignment where LHS is a subscript expression
 

@@ -9,12 +9,12 @@
 // so they are semantic-negative tests in semantic/chapter8_tests.cpp instead
 // (for_shadow, for_nested_shadow, case_block, switch_decl).
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 // --- valid ------------------------------------------------------------------
 
 // while ((a = 1)) break; — body runs once, leaving a == 1.
-TEST_F(CodegenTest, Chapter8_BreakImmediate)
+TEST_F(BookTest, Chapter8_BreakImmediate)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 10;
@@ -25,7 +25,7 @@ TEST_F(CodegenTest, Chapter8_BreakImmediate)
 }
 
 // break out of a for loop when a hits 0.
-TEST_F(CodegenTest, Chapter8_Break)
+TEST_F(BookTest, Chapter8_Break)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 10;
@@ -40,7 +40,7 @@ TEST_F(CodegenTest, Chapter8_Break)
 }
 
 // continue with an empty post clause.
-TEST_F(CodegenTest, Chapter8_ContinueEmptyPost)
+TEST_F(BookTest, Chapter8_ContinueEmptyPost)
 {
     EXPECT_EQ("30\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
@@ -55,7 +55,7 @@ TEST_F(CodegenTest, Chapter8_ContinueEmptyPost)
 }
 
 // continue skips odd iterations of a for loop.
-TEST_F(CodegenTest, Chapter8_Continue)
+TEST_F(BookTest, Chapter8_Continue)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
@@ -71,7 +71,7 @@ TEST_F(CodegenTest, Chapter8_Continue)
 }
 
 // do break; while(...) — body runs once, condition never re-evaluated.
-TEST_F(CodegenTest, Chapter8_DoWhileBreakImmediate)
+TEST_F(BookTest, Chapter8_DoWhileBreakImmediate)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"(int main(void) {
     int a = 10;
@@ -83,7 +83,7 @@ TEST_F(CodegenTest, Chapter8_DoWhileBreakImmediate)
 }
 
 // basic do-while loop.
-TEST_F(CodegenTest, Chapter8_DoWhile)
+TEST_F(BookTest, Chapter8_DoWhile)
 {
     EXPECT_EQ("16\n", CompileAndRunBook(R"(int main(void) {
     int a = 1;
@@ -95,7 +95,7 @@ TEST_F(CodegenTest, Chapter8_DoWhile)
 }
 
 // empty (null) statements.
-TEST_F(CodegenTest, Chapter8_EmptyExpression)
+TEST_F(BookTest, Chapter8_EmptyExpression)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     return 0;;;
@@ -106,7 +106,7 @@ TEST_F(CodegenTest, Chapter8_EmptyExpression)
 // from 2147483642 by 5 to 252 (~430M iterations, ~60s on Dubna — far over the
 // 10s ctest timeout).  Start i at 302 instead: still ≡ 2 (mod 5) and > 256, so
 // the loop still exits at 252, but in only 10 iterations of the empty body.
-TEST_F(CodegenTest, Chapter8_EmptyLoopBody)
+TEST_F(BookTest, Chapter8_EmptyLoopBody)
 {
     EXPECT_EQ("252\n", CompileAndRunBook(R"(int main(void) {
     int i = 302;
@@ -116,7 +116,7 @@ TEST_F(CodegenTest, Chapter8_EmptyLoopBody)
 }
 
 // for with no condition clause — exits via an inner return.
-TEST_F(CodegenTest, Chapter8_ForAbsentCondition)
+TEST_F(BookTest, Chapter8_ForAbsentCondition)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     for (int i = 400; ; i = i - 100)
@@ -126,7 +126,7 @@ TEST_F(CodegenTest, Chapter8_ForAbsentCondition)
 }
 
 // for with no post clause.
-TEST_F(CodegenTest, Chapter8_ForAbsentPost)
+TEST_F(BookTest, Chapter8_ForAbsentPost)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     int a = -2147483647;
@@ -138,7 +138,7 @@ TEST_F(CodegenTest, Chapter8_ForAbsentPost)
 }
 
 // for with a declaration in the init clause.
-TEST_F(CodegenTest, Chapter8_ForDecl)
+TEST_F(BookTest, Chapter8_ForDecl)
 {
     EXPECT_EQ("101\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -149,7 +149,7 @@ TEST_F(CodegenTest, Chapter8_ForDecl)
 }
 
 // for with an expression (non-declaration) init clause.
-TEST_F(CodegenTest, Chapter8_For)
+TEST_F(BookTest, Chapter8_For)
 {
     EXPECT_EQ("16\n", CompileAndRunBook(R"(int main(void) {
     int a = 12345;
@@ -161,7 +161,7 @@ TEST_F(CodegenTest, Chapter8_For)
 }
 
 // two sequential while loops.
-TEST_F(CodegenTest, Chapter8_MultiBreak)
+TEST_F(BookTest, Chapter8_MultiBreak)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int i = 0;
@@ -182,7 +182,7 @@ TEST_F(CodegenTest, Chapter8_MultiBreak)
 }
 
 // multiple continues in the same do-while loop.
-TEST_F(CodegenTest, Chapter8_MultiContinueSameLoop)
+TEST_F(BookTest, Chapter8_MultiContinueSameLoop)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int x = 10;
@@ -202,7 +202,7 @@ TEST_F(CodegenTest, Chapter8_MultiContinueSameLoop)
 }
 
 // break in the inner of two nested for loops.
-TEST_F(CodegenTest, Chapter8_NestedBreak)
+TEST_F(BookTest, Chapter8_NestedBreak)
 {
     EXPECT_EQ("250\n", CompileAndRunBook(R"(int main(void) {
     int ans = 0;
@@ -217,7 +217,7 @@ TEST_F(CodegenTest, Chapter8_NestedBreak)
 }
 
 // continue in the inner of two nested while loops.
-TEST_F(CodegenTest, Chapter8_NestedContinue)
+TEST_F(BookTest, Chapter8_NestedContinue)
 {
     EXPECT_EQ("24\n", CompileAndRunBook(R"(int main(void) {
     int x = 5;
@@ -237,7 +237,7 @@ TEST_F(CodegenTest, Chapter8_NestedContinue)
 }
 
 // nested while loops accumulating a count.
-TEST_F(CodegenTest, Chapter8_NestedLoop)
+TEST_F(BookTest, Chapter8_NestedLoop)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int acc = 0;
@@ -255,7 +255,7 @@ TEST_F(CodegenTest, Chapter8_NestedLoop)
 }
 
 // for (;;) with a break.
-TEST_F(CodegenTest, Chapter8_NullForHeader)
+TEST_F(BookTest, Chapter8_NullForHeader)
 {
     EXPECT_EQ("4\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -269,7 +269,7 @@ TEST_F(CodegenTest, Chapter8_NullForHeader)
 }
 
 // basic while loop.
-TEST_F(CodegenTest, Chapter8_While)
+TEST_F(BookTest, Chapter8_While)
 {
     EXPECT_EQ("6\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -282,7 +282,7 @@ TEST_F(CodegenTest, Chapter8_While)
 // --- extra_credit -----------------------------------------------------------
 
 // compound assignment as a do-while controlling expression.
-TEST_F(CodegenTest, Chapter8_CompoundAssignmentControllingExpression)
+TEST_F(BookTest, Chapter8_CompoundAssignmentControllingExpression)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int i = 100;
@@ -294,7 +294,7 @@ TEST_F(CodegenTest, Chapter8_CompoundAssignmentControllingExpression)
 }
 
 // compound assignment in for-init and for-post.
-TEST_F(CodegenTest, Chapter8_CompoundAssignmentForLoop)
+TEST_F(BookTest, Chapter8_CompoundAssignmentForLoop)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int i = 1;
@@ -305,7 +305,7 @@ TEST_F(CodegenTest, Chapter8_CompoundAssignmentForLoop)
 }
 
 // Duff's device — switch fallthrough interleaved with a do-while loop.
-TEST_F(CodegenTest, Chapter8_DuffsDevice)
+TEST_F(BookTest, Chapter8_DuffsDevice)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int count = 37;
@@ -329,7 +329,7 @@ TEST_F(CodegenTest, Chapter8_DuffsDevice)
 }
 
 // goto jumps past a do-while controlling condition.
-TEST_F(CodegenTest, Chapter8_GotoBypassCondition)
+TEST_F(BookTest, Chapter8_GotoBypassCondition)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"(int main(void) {
     int i = 1;
@@ -344,7 +344,7 @@ TEST_F(CodegenTest, Chapter8_GotoBypassCondition)
 }
 
 // goto jumps into the middle of a for loop, skipping the init clause.
-TEST_F(CodegenTest, Chapter8_GotoBypassInitExp)
+TEST_F(BookTest, Chapter8_GotoBypassInitExp)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int i = 0;
@@ -358,7 +358,7 @@ TEST_F(CodegenTest, Chapter8_GotoBypassInitExp)
 }
 
 // goto jumps backward within a for loop, skipping the post clause.
-TEST_F(CodegenTest, Chapter8_GotoBypassPostExp)
+TEST_F(BookTest, Chapter8_GotoBypassPostExp)
 {
     EXPECT_EQ("11\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
@@ -375,7 +375,7 @@ TEST_F(CodegenTest, Chapter8_GotoBypassPostExp)
 }
 
 // a loop body may be a labeled statement.
-TEST_F(CodegenTest, Chapter8_LabelLoopBody)
+TEST_F(BookTest, Chapter8_LabelLoopBody)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int result = 0;
@@ -387,7 +387,7 @@ TEST_F(CodegenTest, Chapter8_LabelLoopBody)
 }
 
 // do/while/for may each be labeled; goto threads between them.
-TEST_F(CodegenTest, Chapter8_LabelLoopsBreaksAndContinues)
+TEST_F(BookTest, Chapter8_LabelLoopsBreaksAndContinues)
 {
     EXPECT_EQ("12\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
@@ -425,7 +425,7 @@ for_label:
 }
 
 // postfix-- and prefix-- as while controlling expressions.
-TEST_F(CodegenTest, Chapter8_LoopHeaderPostfixAndPrefix)
+TEST_F(BookTest, Chapter8_LoopHeaderPostfixAndPrefix)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int i = 100;
@@ -443,7 +443,7 @@ TEST_F(CodegenTest, Chapter8_LoopHeaderPostfixAndPrefix)
 }
 
 // break inside a switch inside a for breaks the loop only via 'return'.
-TEST_F(CodegenTest, Chapter8_LoopInSwitch)
+TEST_F(BookTest, Chapter8_LoopInSwitch)
 {
     EXPECT_EQ("123\n", CompileAndRunBook(R"(int main(void) {
     int cond = 10;
@@ -465,7 +465,7 @@ TEST_F(CodegenTest, Chapter8_LoopInSwitch)
 }
 
 // postfix ++ as a for post-expression.
-TEST_F(CodegenTest, Chapter8_PostExpIncr)
+TEST_F(BookTest, Chapter8_PostExpIncr)
 {
     EXPECT_EQ("21\n", CompileAndRunBook(R"(int main(void) {
     int product = 1;
@@ -477,7 +477,7 @@ TEST_F(CodegenTest, Chapter8_PostExpIncr)
 }
 
 // an assignment as the switch controlling expression.
-TEST_F(CodegenTest, Chapter8_SwitchAssignInCondition)
+TEST_F(BookTest, Chapter8_SwitchAssignInCondition)
 {
     EXPECT_EQ("2\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -495,7 +495,7 @@ TEST_F(CodegenTest, Chapter8_SwitchAssignInCondition)
 }
 
 // basic switch with break.
-TEST_F(CodegenTest, Chapter8_SwitchBreak)
+TEST_F(BookTest, Chapter8_SwitchBreak)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"(int main(void) {
     int a = 5;
@@ -512,7 +512,7 @@ TEST_F(CodegenTest, Chapter8_SwitchBreak)
 }
 
 // fall through from a non-last default into a following case.
-TEST_F(CodegenTest, Chapter8_SwitchDefaultFallthrough)
+TEST_F(BookTest, Chapter8_SwitchDefaultFallthrough)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     int a = 5;
@@ -527,7 +527,7 @@ TEST_F(CodegenTest, Chapter8_SwitchDefaultFallthrough)
 }
 
 // default before case in the body.
-TEST_F(CodegenTest, Chapter8_SwitchDefaultNotLast)
+TEST_F(BookTest, Chapter8_SwitchDefaultNotLast)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     int a;
@@ -540,7 +540,7 @@ TEST_F(CodegenTest, Chapter8_SwitchDefaultNotLast)
 }
 
 // a switch whose body is a single default (unbraced).
-TEST_F(CodegenTest, Chapter8_SwitchDefaultOnly)
+TEST_F(BookTest, Chapter8_SwitchDefaultOnly)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 1;
@@ -550,7 +550,7 @@ TEST_F(CodegenTest, Chapter8_SwitchDefaultOnly)
 }
 
 // switch falling through to a default.
-TEST_F(CodegenTest, Chapter8_SwitchDefault)
+TEST_F(BookTest, Chapter8_SwitchDefault)
 {
     EXPECT_EQ("22\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -570,7 +570,7 @@ TEST_F(CodegenTest, Chapter8_SwitchDefault)
 }
 
 // empty switch bodies still evaluate the controlling expression.
-TEST_F(CodegenTest, Chapter8_SwitchEmpty)
+TEST_F(BookTest, Chapter8_SwitchEmpty)
 {
     EXPECT_EQ("12\n", CompileAndRunBook(R"(int main(void) {
     int x = 10;
@@ -584,7 +584,7 @@ TEST_F(CodegenTest, Chapter8_SwitchEmpty)
 }
 
 // fallthrough between cases without breaks.
-TEST_F(CodegenTest, Chapter8_SwitchFallthrough)
+TEST_F(BookTest, Chapter8_SwitchFallthrough)
 {
     EXPECT_EQ("6\n", CompileAndRunBook(R"(int main(void) {
     int a = 4;
@@ -605,7 +605,7 @@ TEST_F(CodegenTest, Chapter8_SwitchFallthrough)
 }
 
 // goto into the middle of a case label.
-TEST_F(CodegenTest, Chapter8_SwitchGotoMidCase)
+TEST_F(BookTest, Chapter8_SwitchGotoMidCase)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -622,7 +622,7 @@ TEST_F(CodegenTest, Chapter8_SwitchGotoMidCase)
 }
 
 // break inside a switch inside a loop breaks the switch, not the loop.
-TEST_F(CodegenTest, Chapter8_SwitchInLoop)
+TEST_F(BookTest, Chapter8_SwitchInLoop)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int acc = 0;
@@ -648,7 +648,7 @@ TEST_F(CodegenTest, Chapter8_SwitchInLoop)
 }
 
 // case labels reachable inside nested if/else/for bodies.
-TEST_F(CodegenTest, Chapter8_SwitchNestedCases)
+TEST_F(BookTest, Chapter8_SwitchNestedCases)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int switch1 = 0;
@@ -682,7 +682,7 @@ TEST_F(CodegenTest, Chapter8_SwitchNestedCases)
 }
 
 // an outer switch does not jump to a nested switch's cases.
-TEST_F(CodegenTest, Chapter8_SwitchNestedNotTaken)
+TEST_F(BookTest, Chapter8_SwitchNestedNotTaken)
 {
     EXPECT_EQ("2\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -699,7 +699,7 @@ TEST_F(CodegenTest, Chapter8_SwitchNestedNotTaken)
 }
 
 // both outer and inner switch cases execute.
-TEST_F(CodegenTest, Chapter8_SwitchNestedSwitch)
+TEST_F(BookTest, Chapter8_SwitchNestedSwitch)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void){
     switch(3) {
@@ -719,7 +719,7 @@ TEST_F(CodegenTest, Chapter8_SwitchNestedSwitch)
 }
 
 // a switch body with no case labels executes nothing.
-TEST_F(CodegenTest, Chapter8_SwitchNoCase)
+TEST_F(BookTest, Chapter8_SwitchNoCase)
 {
     EXPECT_EQ("4\n", CompileAndRunBook(R"(int main(void) {
     int a = 4;
@@ -730,7 +730,7 @@ TEST_F(CodegenTest, Chapter8_SwitchNoCase)
 }
 
 // a switch with cases but no match and no default executes nothing.
-TEST_F(CodegenTest, Chapter8_SwitchNotTaken)
+TEST_F(BookTest, Chapter8_SwitchNotTaken)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 1;
@@ -744,7 +744,7 @@ TEST_F(CodegenTest, Chapter8_SwitchNotTaken)
 }
 
 // a switch whose body is a single (unbraced) case.
-TEST_F(CodegenTest, Chapter8_SwitchSingleCase)
+TEST_F(BookTest, Chapter8_SwitchSingleCase)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 1;
@@ -754,7 +754,7 @@ TEST_F(CodegenTest, Chapter8_SwitchSingleCase)
 }
 
 // continue in a switch inside a loop (variant 2).
-TEST_F(CodegenTest, Chapter8_SwitchWithContinue2)
+TEST_F(BookTest, Chapter8_SwitchWithContinue2)
 {
     EXPECT_EQ("5\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
@@ -769,7 +769,7 @@ TEST_F(CodegenTest, Chapter8_SwitchWithContinue2)
 }
 
 // continue in a loop nested inside a switch case.
-TEST_F(CodegenTest, Chapter8_SwitchWithContinue)
+TEST_F(BookTest, Chapter8_SwitchWithContinue)
 {
     EXPECT_EQ("5\n", CompileAndRunBook(R"(int main(void) {
     switch(4) {
@@ -790,7 +790,7 @@ TEST_F(CodegenTest, Chapter8_SwitchWithContinue)
 }
 
 // a very simple switch.
-TEST_F(CodegenTest, Chapter8_Switch)
+TEST_F(BookTest, Chapter8_Switch)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int main(void) {
     switch(3) {

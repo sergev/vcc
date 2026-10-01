@@ -48,9 +48,12 @@ does not run them; `make run` depends on `make test` and then runs `ctest --test
 over everything.
 
 **The "Writing a C Compiler" chapter tests are compiled into the regular test binaries.**
-The chapter sources (`*/test/chapter*_tests.cpp`, `backend/besm6/test/chapter*_tests.cpp`) are listed
-in the same `add_executable(<module>-tests …)` as the unit tests, so e.g. `parser-tests`
-and `besm-tests` contain both. There are no separate `*-book-tests` executables and no ctest
+The chapter sources (`*/test/chapter*_tests.cpp`, and the backend run programs in
+`backend/common/test/book/chapter*_tests.cpp`) are listed in the same
+`add_executable(<module>-tests …)` as the unit tests, so e.g. `parser-tests` and `besm-tests`
+contain both. The book run programs are shared by every backend: each test is a `BookTest`,
+a fixture each backend defines in its own `test/book_test.h` (with a skip list for programs
+its target cannot run). There are no separate `*-book-tests` executables and no ctest
 `book` label. `fatal_error()` (the libraries call it, but it is defined in the test
 executable) is defined exactly once per binary in a regular unit-test source
 (`parser/test/simple_tests.cpp`, `semantic/test/typecheck_tests.cpp`, `optimize/test/pipeline_tests.cpp`,
@@ -347,7 +350,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `libutil/test/string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp` → `libutil-tests`
 
 The `chapter*_tests.cpp` files in `parser/test/`, `scanner/test/`, `semantic/test/`,
-`optimize/test/`, and `backend/besm6/test/` are the "Writing a C Compiler" book tests; they are compiled into the same
+`optimize/test/`, and `backend/common/test/book/` are the "Writing a C Compiler" book tests; they are compiled into the same
 per-module test executables as the unit tests above (e.g. `parser-tests`, `besm-tests`) and
 run by `make run` (see **Build & Test** above).
 

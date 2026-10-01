@@ -26,13 +26,13 @@
 //     return an error code on mismatch, so a BESM-6-valued expectation would
 //     just encode a meaningless failure code; DISABLED_ is the honest call.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 // --- valid (run) ------------------------------------------------------------
 
 // Assign one long variable (too large for an int) to another and compare.
 // main returns the equality result (1).
-TEST_F(CodegenTest, Chapter11_Assign)
+TEST_F(BookTest, Chapter11_Assign)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     /* initializing a tests the rewrite rule for
@@ -50,7 +50,7 @@ TEST_F(CodegenTest, Chapter11_Assign)
 }
 
 // Add/subtract/multiply by constants outside int range but within 2^40.
-TEST_F(CodegenTest, Chapter11_LargeConstants)
+TEST_F(BookTest, Chapter11_LargeConstants)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long x = 5l;
 
@@ -84,7 +84,7 @@ int main(void) {
 }
 
 // A mix of long and int locals; updating one must not clobber another.
-TEST_F(CodegenTest, Chapter11_LongAndIntLocals)
+TEST_F(BookTest, Chapter11_LongAndIntLocals)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long a = 8589934592l; // this number is outside the range of int
@@ -127,7 +127,7 @@ TEST_F(CodegenTest, Chapter11_LongAndIntLocals)
 }
 
 // Pass longs (within 2^40) as arguments, including on-stack arguments.
-TEST_F(CodegenTest, Chapter11_LongArgs)
+TEST_F(BookTest, Chapter11_LongArgs)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int test_sum(long a, long b, int c, int d, int e, int f, int g, int h, long i) {
     if (a + b < 100l) {
@@ -144,7 +144,7 @@ int main(void) {
 }
 
 // A multi-operation expression with an intermediate result outside int range.
-TEST_F(CodegenTest, Chapter11_MultiOp)
+TEST_F(BookTest, Chapter11_MultiOp)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int target(long a) {
     long b = a * 5l - 10l;
@@ -160,7 +160,7 @@ int main(void) {
 }
 
 // Return a long from a function call; main returns the equality result (1).
-TEST_F(CodegenTest, Chapter11_ReturnLong)
+TEST_F(BookTest, Chapter11_ReturnLong)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(long add(int a, int b) {
     return (long) a + (long) b;
@@ -176,7 +176,7 @@ int main(void) {
 }
 
 // Multiply by a large (in-range) immediate amid many int locals.
-TEST_F(CodegenTest, Chapter11_RewriteLargeMultiplyRegression)
+TEST_F(BookTest, Chapter11_RewriteLargeMultiplyRegression)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
@@ -279,7 +279,7 @@ int check_12_ints(int a, int b, int c, int d, int e, int f, int g, int h, int i,
 }
 
 // Common type in binary expressions: int promoted to long, not long to int.
-TEST_F(CodegenTest, Chapter11_CommonType)
+TEST_F(BookTest, Chapter11_CommonType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long l;
 int i;
@@ -328,7 +328,7 @@ int main(void) {
 }
 
 // An l-suffixed constant always has long type; a too-large constant promotes.
-TEST_F(CodegenTest, Chapter11_LongConstants)
+TEST_F(BookTest, Chapter11_LongConstants)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     if (2147483647l + 2147483647l < 0l) {
@@ -342,7 +342,7 @@ TEST_F(CodegenTest, Chapter11_LongConstants)
 }
 
 // Sign-extend int to long: positive, negative, and a constant cast.
-TEST_F(CodegenTest, Chapter11_SignExtend)
+TEST_F(BookTest, Chapter11_SignExtend)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long sign_extend(int i, long expected) {
     long extended = (long) i;
@@ -365,7 +365,7 @@ int main(void) {
 }
 
 // Compound assignment converting an int rval to the long common type.
-TEST_F(CodegenTest, Chapter11_CompoundAssignToLong)
+TEST_F(BookTest, Chapter11_CompoundAssignToLong)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long l = -34359738368l; // -2^35
@@ -379,7 +379,7 @@ TEST_F(CodegenTest, Chapter11_CompoundAssignToLong)
 }
 
 // switch on a long: case constants converted to long; 2^33 case is in range.
-TEST_F(CodegenTest, Chapter11_SwitchLong)
+TEST_F(BookTest, Chapter11_SwitchLong)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int switch_on_long(long l) {
     switch (l) {
@@ -403,7 +403,7 @@ int main(void) {
 
 // libraries: read/write long arguments across "translation units"
 // (concatenated client + lib, client first so its prototype precedes main).
-TEST_F(CodegenTest, Chapter11_LongArgsLibrary)
+TEST_F(BookTest, Chapter11_LongArgsLibrary)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int test_sum(int a, int b, int c, long d, int e, long f, int g, int h, long i);
 
@@ -422,7 +422,7 @@ int test_sum(int a, int b, int c, long d, int e, long f, int g, int h, long i) {
 }
 
 // libraries: a function taking longs and an int, called across files.
-TEST_F(CodegenTest, Chapter11_MaintainStackAlignment)
+TEST_F(BookTest, Chapter11_MaintainStackAlignment)
 {
     EXPECT_EQ("12\n", CompileAndRunBook(R"(long add_variables(long x, long y, int z);
 
@@ -439,7 +439,7 @@ long add_variables(long x, long y, int z){
 }
 
 // libraries: return a long from a function defined in another file.
-TEST_F(CodegenTest, Chapter11_ReturnLongLibrary)
+TEST_F(BookTest, Chapter11_ReturnLongLibrary)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long add(int a, int b);
 
@@ -457,7 +457,7 @@ long add(int a, int b) {
 }
 
 // complement() uses 2^40-2, the largest even value in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_ArithmeticOps)
+TEST_F(BookTest, Chapter11_ArithmeticOps)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long a;
 long b;
@@ -520,7 +520,7 @@ int main(void) {
 }
 
 // Uses 2^39 as the large threshold; in range on BESM-6.
-TEST_F(CodegenTest, Chapter11_Comparisons)
+TEST_F(BookTest, Chapter11_Comparisons)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(long l;
 long l2;
@@ -575,7 +575,7 @@ int main(void) {
 }
 
 // Uses 2^39 as a large nonzero long; in range on BESM-6.
-TEST_F(CodegenTest, Chapter11_Logical)
+TEST_F(BookTest, Chapter11_Logical)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int not(long l) {
     return !l;
@@ -622,7 +622,7 @@ int main(void) {
 }
 
 // Uses 2^40-1 (INT_MAX), the largest value in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_Simple)
+TEST_F(BookTest, Chapter11_Simple)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     long l = 1099511627775l;
@@ -631,7 +631,7 @@ TEST_F(CodegenTest, Chapter11_Simple)
 }
 
 // Assigns a large in-range long (~1.1e12, just under 2^40).
-TEST_F(CodegenTest, Chapter11_StaticLong)
+TEST_F(BookTest, Chapter11_StaticLong)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(static long foo = 4294967290l;
 
@@ -648,7 +648,7 @@ int main(void)
 }
 
 // for-loop init 2^39 (in range); halving down to 1 runs 40 iterations.
-TEST_F(CodegenTest, Chapter11_TypeSpecifiers)
+TEST_F(BookTest, Chapter11_TypeSpecifiers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(static int long a;
 int static long a;
@@ -689,7 +689,7 @@ int main(void) {
 }
 
 // (40 << 30) == 4.3e10, in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_Bitshift)
+TEST_F(BookTest, Chapter11_Bitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long l = 137438953472l; // 2^37
@@ -731,7 +731,7 @@ TEST_F(CodegenTest, Chapter11_Bitshift)
 }
 
 // Operands reduced to 40-bit masks so they stay in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_BitwiseLongOp)
+TEST_F(BookTest, Chapter11_BitwiseLongOp)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long l1 = 1095233372415l;  // 0xff_00ff_00ff
@@ -775,7 +775,7 @@ TEST_F(CodegenTest, Chapter11_BitwiseLongOp)
 }
 
 // l <<= 23 == 1.04e11, in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_CompoundBitshift)
+TEST_F(BookTest, Chapter11_CompoundBitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     int x = 100;
@@ -802,7 +802,7 @@ TEST_F(CodegenTest, Chapter11_CompoundBitshift)
 }
 
 // Operands reduced to 40-bit masks so they stay in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_CompoundBitwise)
+TEST_F(BookTest, Chapter11_CompoundBitwise)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long l1 = 1095233372415l;  // 0xff_00ff_00ff
@@ -838,7 +838,7 @@ TEST_F(CodegenTest, Chapter11_CompoundBitwise)
 }
 
 // Uses -(2^40-2), a large negative value in the 41-bit long range.
-TEST_F(CodegenTest, Chapter11_IncrementLong)
+TEST_F(BookTest, Chapter11_IncrementLong)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     long x = -1099511627774l;
@@ -863,7 +863,7 @@ TEST_F(CodegenTest, Chapter11_IncrementLong)
 // results (the correct BESM-6 behavior).
 
 // On x86 (int)(2^32+2) == 2; on BESM-6 it is unchanged (no truncation).
-TEST_F(CodegenTest, Chapter11_ConvertByAssignment)
+TEST_F(BookTest, Chapter11_ConvertByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int return_truncated_long(long l) {
     return l;
@@ -900,7 +900,7 @@ int main(void) {
 
 // On x86 the long arguments truncate to int at 32 bits; on BESM-6 int and
 // long are both 41-bit, so they pass through unchanged.
-TEST_F(CodegenTest, Chapter11_ConvertFunctionArguments)
+TEST_F(BookTest, Chapter11_ConvertFunctionArguments)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
     if (a != -1l)
@@ -937,7 +937,7 @@ int main(void) {
 
 // On x86 the static int initializer 2^33 truncates to 0; on BESM-6 it fits a
 // 41-bit int unchanged.
-TEST_F(CodegenTest, Chapter11_ConvertStaticInitializer)
+TEST_F(BookTest, Chapter11_ConvertStaticInitializer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int i = 8589934592l; // 2^33, fits 41-bit int
 long j = 123456;
@@ -954,7 +954,7 @@ int main(void) {
 }
 
 // On x86 (int)(2^34+5) == 5; on BESM-6 a 41-bit int holds 2^34+5 unchanged.
-TEST_F(CodegenTest, Chapter11_Truncate)
+TEST_F(BookTest, Chapter11_Truncate)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int truncate(long l, int expected) {
     int result = (int) l;
@@ -990,7 +990,7 @@ int main(void)
 // the multiply therefore runs through the b/mul runtime helper.  (The matching
 // compile-time constant fold of -5000000 * 10000 is covered by the optimizer
 // unit test optimize/const_fold_tests.cpp.)
-TEST_F(CodegenTest, Chapter11_CompoundAssignToInt)
+TEST_F(BookTest, Chapter11_CompoundAssignToInt)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int test(int i, int b, int c) {
     i += 2147483648l;
@@ -1024,7 +1024,7 @@ int main(void) {
 
 // On x86 the case labels 2^33 / ~3.4e10 truncate to 0 / -1; on BESM-6 they are
 // distinct in-range 41-bit ints, so each case is reached by its own value.
-TEST_F(CodegenTest, Chapter11_SwitchInt)
+TEST_F(BookTest, Chapter11_SwitchInt)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int switch_on_int(int i) {
     switch(i) {
@@ -1054,7 +1054,7 @@ int main(void) {
 
 // On x86 (int) of 2^33 is 0 by truncation; on BESM-6 a 41-bit int holds it
 // unchanged, so return_l_as_int returns the full value.
-TEST_F(CodegenTest, Chapter11_LongGlobalVar)
+TEST_F(BookTest, Chapter11_LongGlobalVar)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(extern long int l;
 long return_l(void);

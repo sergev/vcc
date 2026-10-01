@@ -1,10 +1,10 @@
-#include "codegen_test.h"
+#include "book_test.h"
 
 // Passes structs of every classification by value as single parameters.  Out-of-range x86
 // literals adapted to the BESM-6 ranges (doubles 1.7e308 -> 1.0e18; long -9223372036854775807
 // -> -(2^40-1)) and strcmp strings uppercased so the ASCII char path matches the KOI-7 static
 // path (see docs/KOI7_Encoding.md).
-TEST_F(CodegenTest, Chapter18_ClassifyParams)
+TEST_F(BookTest, Chapter18_ClassifyParams)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that we classify structure parameters correctly,
@@ -194,7 +194,7 @@ int test_pass_in_memory(struct pass_in_memory s) {
 // Passes a mix of struct and scalar arguments by value.  strcmp strings uppercased (KOI-7),
 // signed-char member values made positive (plain char is unsigned on BESM-6) and out-of-range
 // long literals reduced to the BESM-6 ~2^40 range.
-TEST_F(CodegenTest, Chapter18_ParamCallingConventions)
+TEST_F(BookTest, Chapter18_ParamCallingConventions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that we can pass a mix of struct and non-struct arguments according to
@@ -543,7 +543,7 @@ int pass_later_structs_in_regs(struct memory m, struct twelve_bytes struct1,
 )PROG"));
 }
 
-TEST_F(CodegenTest, Chapter18_StructSizes1)
+TEST_F(BookTest, Chapter18_StructSizes1)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Pass structs of sizes 1..12 bytes by value, validated byte-exact with memcmp. Split from the book's StructSizes (passing all sizes 1..24 through one function exceeds the BESM-6 address range). */
@@ -634,7 +634,7 @@ int chk1(struct bytesize7 s7, struct bytesize8 s8, struct bytesize9 s9, struct b
 )PROG"));
 }
 
-TEST_F(CodegenTest, Chapter18_StructSizes2)
+TEST_F(BookTest, Chapter18_StructSizes2)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Pass structs of sizes 13..24 bytes by value, validated byte-exact with memcmp. Split from the book's StructSizes (see StructSizes1). */
@@ -727,7 +727,7 @@ int chk1(struct bytesize19 s19, struct bytesize20 s20, struct bytesize21 s21, st
 
 
 // BESM-6: static struct inner instead of calloc for the nested pointer member.
-TEST_F(CodegenTest, Chapter18_AccessRetvalMembers)
+TEST_F(BookTest, Chapter18_AccessRetvalMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test for accessing the members in a return value of structure type */
@@ -802,7 +802,7 @@ struct outer return_nested_struct(void) {
 // Returns a wide range of struct types by value (accumulator and sret classes) and mixes
 // struct returns with scalar/struct params.  Out-of-range double 34e43 adapted to 34e16 and
 // strcmp strings uppercased for the KOI-7 static path.
-TEST_F(CodegenTest, Chapter18_ReturnCallingConventions)
+TEST_F(BookTest, Chapter18_ReturnCallingConventions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that we return a wide range of struct types according to the ABI */
@@ -1015,7 +1015,7 @@ struct memory pass_and_return_regs(int i, double d, struct int_and_xmm strct,
 
 // Returns structs of every size 1..24 bytes by value: <=6-byte structs in the accumulator,
 // larger ones via the hidden-pointer (sret) ABI.  Validated byte-exact with memcmp.
-TEST_F(CodegenTest, Chapter18_RetvalStructSizes)
+TEST_F(BookTest, Chapter18_RetvalStructSizes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that we can return structs of every size between 1 and 24 bytes. */
@@ -1459,7 +1459,7 @@ struct bytesize24 fun24(void) {
 
 // BESM-6: char members read byte #0 (MSB); array-of-pointers case rewritten to use
 // local storage instead of calloc (no heap dependency).
-TEST_F(CodegenTest, Chapter18_NestedUnionAccess)
+TEST_F(BookTest, Chapter18_NestedUnionAccess)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 union simple {
@@ -1704,7 +1704,7 @@ int main(void) {
 // BESM-6: char is unsigned and reads big-endian (byte #0 = MSB); unsigned long is one
 // 48-bit word (6 live bytes, so arr[6]/arr[7] are in the zero second word); the double
 // -1.0 has the native bit pattern exponent=64, sign=1, zero mantissa = 2^47 + 2^40.
-TEST_F(CodegenTest, Chapter18_StaticUnionAccess)
+TEST_F(BookTest, Chapter18_StaticUnionAccess)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Test access to static union members with . and ->
@@ -1769,7 +1769,7 @@ int main(void) {
 // char is unsigned here, so the bytes are the positive low-byte values 234 / 210
 // (= 9876543210 & 0xFF / 1234567890 & 0xFF).  get_flag() toggles 0->1 then 1->0, so
 // the first access selects union1 and the second selects union2.
-TEST_F(CodegenTest, Chapter18_UnionTempLifetime)
+TEST_F(BookTest, Chapter18_UnionTempLifetime)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 struct has_char_array {
@@ -1808,7 +1808,7 @@ int main(void) {
 
 // Adapted for BESM-6: unsigned long is 48-bit, so the wide constants use the
 // top word bit (2^47) instead of the x86 2^63 sign bit.
-TEST_F(CodegenTest, Chapter18_BitwiseOpsStructMembers)
+TEST_F(BookTest, Chapter18_BitwiseOpsStructMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Bitwise operations with structure members
@@ -1858,7 +1858,7 @@ int main(void) {
 // Adapted for BESM-6: unsigned long is 48-bit (so the wide modulo constant is
 // 2^48-1), plain char is unsigned (so the -12 member is made positive), and the
 // double members stay within the BESM-6 ~2^63 exponent range (80e10 not 80e20).
-TEST_F(CodegenTest, Chapter18_CompoundAssignStructMembers)
+TEST_F(BookTest, Chapter18_CompoundAssignStructMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Compound assignment operations with structure members
@@ -1979,7 +1979,7 @@ int main(void) {
 // Adapted for BESM-6: calloc replaced by a zero-initialized static array
 // (heap not yet wired up, task #23); unsigned int wraps at 2^48 and plain char
 // is unsigned, so the wide unsigned and negative-char literals are adjusted.
-TEST_F(CodegenTest, Chapter18_IncrStructMembers)
+TEST_F(BookTest, Chapter18_IncrStructMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Test prefix and postfix ++ and -- with structure members
@@ -2088,7 +2088,7 @@ int main(void) {
 // BESM-6: static int storage replaces calloc for the incomplete-union pointers;
 // the block-scope union value is +100000000 so the big-endian char member reads
 // 0; the puts("NULL POINTER") branch is dead (param is never null).
-TEST_F(CodegenTest, Chapter18_IncompleteUnionTypes)
+TEST_F(BookTest, Chapter18_IncompleteUnionTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that our typechecker can handle valid declarations and expressions
@@ -2187,7 +2187,7 @@ int main(void) {
 // BESM-6: the original test (named StructShadowsUnion) used different tags and did
 // not actually shadow; the heap (malloc) is replaced with a stack union object so the
 // test runs without the heap.
-TEST_F(CodegenTest, Chapter18_StructShadowsUnion)
+TEST_F(BookTest, Chapter18_StructShadowsUnion)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 struct s {int a; int b;};
@@ -2217,7 +2217,7 @@ int main(void) {
 // hoisted to file scope (block-scope tag definitions are unsupported); the shared-member
 // union initializes its double member directly (positive char values; no LONG_MIN→double
 // punning, which has no portable BESM-6 result).
-TEST_F(CodegenTest, Chapter18_UnionNamespace)
+TEST_F(BookTest, Chapter18_UnionNamespace)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that we treat union tags, function/variable names, and each
@@ -2300,7 +2300,7 @@ int main(void) {
 }
 
 // word/byte pointer punning comparison.
-TEST_F(CodegenTest, Chapter18_CompareUnionPointers)
+TEST_F(BookTest, Chapter18_CompareUnionPointers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Pointers to a union object and to its members all compare equal

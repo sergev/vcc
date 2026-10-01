@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "parser.h"
@@ -20,6 +21,12 @@
 #include "translate.h"
 #include "typetab.h"
 #include "xalloc.h"
+
+// A shared-suite test a target cannot run, with the reason.  Lists end with a NULL name.
+struct SkippedTest {
+    const char *name;
+    const char *reason;
+};
 
 class BackendTest : public ::testing::Test {
     const char *target_name;
@@ -92,6 +99,16 @@ protected:
             decls = next;
         }
         return all_tac;
+    }
+
+    // Skip the current test if `list` names it (call from a fixture's SetUp).
+    static void SkipIfListed(const SkippedTest *list)
+    {
+        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+        for (; list && list->name; list++) {
+            if (strcmp(list->name, test_name) == 0)
+                GTEST_SKIP() << list->reason;
+        }
     }
 
     // Scratch file of the current test in the build directory: TEST_DIR/<TestName><suffix>.

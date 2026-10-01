@@ -17,7 +17,7 @@
 // page-boundary faults) are DISABLED_ at the bottom with one-line reasons;
 // strcmp/memcmp are provided inline where a program only needs the routine.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 
 // =============================================================================
@@ -25,7 +25,7 @@
 // =============================================================================
 
 // smoke_tests/simple: struct decl, compound init, . and -> access.
-TEST_F(CodegenTest, Chapter18_Simple)
+TEST_F(BookTest, Chapter18_Simple)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct pair { int a; int b; };
@@ -40,7 +40,7 @@ int main(void) {
 
 // smoke_tests/static_vs_auto: auto structs reinitialized each scope entry,
 // static structs initialized once.  Re-enabled once block-scope statics landed.
-TEST_F(CodegenTest, Chapter18_StaticVsAuto)
+TEST_F(BookTest, Chapter18_StaticVsAuto)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int a; int b; };
@@ -62,7 +62,7 @@ int main(void) {
 }
 
 // parse_and_lex/postfix_precedence: postfix ops bind tighter than prefix.
-TEST_F(CodegenTest, Chapter18_PostfixPrecedence)
+TEST_F(BookTest, Chapter18_PostfixPrecedence)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(
 struct inner { int inner_arr[3]; };
@@ -78,7 +78,7 @@ int main(void) {
 }
 
 // parse_and_lex/trailing_comma: trailing comma in compound init.
-TEST_F(CodegenTest, Chapter18_TrailingComma)
+TEST_F(BookTest, Chapter18_TrailingComma)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int a; int b; };
@@ -90,7 +90,7 @@ int main(void) {
 }
 
 // parse_and_lex/space_around_struct_member: whitespace around '.'.
-TEST_F(CodegenTest, Chapter18_SpaceAroundStructMember)
+TEST_F(BookTest, Chapter18_SpaceAroundStructMember)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(
 struct s { int a; };
@@ -104,7 +104,7 @@ int main(void) {
 
 // parse_and_lex/struct_member_looks_like_const: member named E10 (1.E10 is a
 // float constant, but x1.E10 must lex as member access).
-TEST_F(CodegenTest, Chapter18_StructMemberLooksLikeConst)
+TEST_F(BookTest, Chapter18_StructMemberLooksLikeConst)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(
 struct s { int E10; };
@@ -120,7 +120,7 @@ int main(void) {
 // =============================================================================
 
 // semantic_analysis/cast_struct_to_void.
-TEST_F(CodegenTest, Chapter18_CastStructToVoid)
+TEST_F(BookTest, Chapter18_CastStructToVoid)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int a; int b; };
@@ -137,7 +137,7 @@ int main(void) {
 // =============================================================================
 
 // parameters/simple: pass a struct {int; double} by value.
-TEST_F(CodegenTest, Chapter18_ParamSimple)
+TEST_F(BookTest, Chapter18_ParamSimple)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct pair { int x; double y; };
@@ -154,7 +154,7 @@ int main(void) {
 
 // parameters/incomplete_param_type: declare fn with incomplete struct param,
 // complete the type, then call/define.
-TEST_F(CodegenTest, Chapter18_IncompleteParamType)
+TEST_F(BookTest, Chapter18_IncompleteParamType)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(
 struct s;
@@ -169,7 +169,7 @@ int foo(struct s blah) { return blah.a + blah.b; }
 }
 
 // parameters/libraries/pass_struct: pass struct across two TUs (merged).
-TEST_F(CodegenTest, Chapter18_PassStruct)
+TEST_F(BookTest, Chapter18_PassStruct)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct pair { int x; int y; };
@@ -188,7 +188,7 @@ int validate_struct_param(struct pair p) {
 
 // parameters/libraries/modify_param: modifying a struct param doesn't affect
 // the caller; nested struct with a pointer member is shared.
-TEST_F(CodegenTest, Chapter18_ModifyParam)
+TEST_F(BookTest, Chapter18_ModifyParam)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct inner { double d; int i; };
@@ -234,7 +234,7 @@ int modify_nested_struct(struct outer s) {
 // =============================================================================
 
 // params_and_returns/simple: struct param + struct return.
-TEST_F(CodegenTest, Chapter18_ParamsAndReturnsSimple)
+TEST_F(BookTest, Chapter18_ParamsAndReturnsSimple)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct pair { int x; char y; };
@@ -252,7 +252,7 @@ int main(void) {
 }
 
 // params_and_returns/return_incomplete_type.
-TEST_F(CodegenTest, Chapter18_ReturnIncompleteType)
+TEST_F(BookTest, Chapter18_ReturnIncompleteType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s;
@@ -277,7 +277,7 @@ struct s increment_struct(struct s param) {
 // the test only needed function names that stay distinct within Madlen's 8-char
 // identifier limit — the book's return_in_reg/return_in_mem both collapse to
 // "return_i" and alias.  Renamed to ret_reg/ret_mem.
-TEST_F(CodegenTest, Chapter18_IgnoreRetval)
+TEST_F(BookTest, Chapter18_IgnoreRetval)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct small { int x; };
@@ -305,7 +305,7 @@ int main(void) {
 // params_and_returns/temporary_lifetime: address of array member of a non-lvalue
 // struct (temporary lifetime).  &f().arr[i] reaches the sret slot via gen_lval's
 // EXPR_CALL case.
-TEST_F(CodegenTest, Chapter18_TemporaryLifetime)
+TEST_F(BookTest, Chapter18_TemporaryLifetime)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int arr[3]; };
@@ -335,7 +335,7 @@ int main(void) {
 // the second pair of structs is renamed pair3/pair4 to avoid a file-scope redefinition
 // (the original reused pair1/pair2 in sibling function scopes). Function names are
 // shortened so they stay distinct within Madlen's 8-character identifier limit.
-TEST_F(CodegenTest, Chapter18_Namespaces)
+TEST_F(BookTest, Chapter18_Namespaces)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct pair1 { int x; int y; };
@@ -384,7 +384,7 @@ int main(void) {
 // =============================================================================
 
 // other_features/decr_arrow_lexing: postfix -- followed by > lexes correctly.
-TEST_F(CodegenTest, Chapter18_DecrArrowLexing)
+TEST_F(BookTest, Chapter18_DecrArrowLexing)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 int main(void) {
@@ -398,7 +398,7 @@ int main(void) {
 // other_features/label_tag_member_namespace: a label, struct tag, and member
 // name may all be the identifier 'x' (distinct namespaces); goto jumps past it.
 // BESM-6: the tag is hoisted to file scope (block-scope tag definitions are unsupported).
-TEST_F(CodegenTest, Chapter18_LabelTagMemberNamespace)
+TEST_F(BookTest, Chapter18_LabelTagMemberNamespace)
 {
     EXPECT_EQ("10\n", CompileAndRunBook(R"(
 struct x { int x; };
@@ -420,7 +420,7 @@ x:
 // BESM-6: reading -1l back through the unsigned-long member yields its 41 value
 // bits (2^41-1); through the char member it yields byte #0 (MSB, bits 48-41) =
 // 0b00000001 = 1 (bits 48-42 are the zero exponent field, bit 41 is the sign).
-TEST_F(CodegenTest, Chapter18_UnionInitAndMemberAccess)
+TEST_F(BookTest, Chapter18_UnionInitAndMemberAccess)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 union u { double d; long l; unsigned long ul; char c; };
@@ -437,7 +437,7 @@ int main(void) {
 }
 
 // semantic_analysis/union_members_same_type: two int members of a union alias.
-TEST_F(CodegenTest, Chapter18_UnionMembersSameType)
+TEST_F(BookTest, Chapter18_UnionMembersSameType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 union u { int a; int b; };
@@ -451,7 +451,7 @@ int main(void) {
 
 // semantic_analysis/redeclare_union: a content-less re-declaration is a no-op.
 // BESM-6: the tag is hoisted to file scope (block-scope tag definitions are unsupported).
-TEST_F(CodegenTest, Chapter18_RedeclareUnion)
+TEST_F(BookTest, Chapter18_RedeclareUnion)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(
 union u { int a; };
@@ -463,7 +463,7 @@ int main(void) {
 }
 
 // semantic_analysis/cast_union_to_void.
-TEST_F(CodegenTest, Chapter18_CastUnionToVoid)
+TEST_F(BookTest, Chapter18_CastUnionToVoid)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 union u { long l; double d; };
@@ -475,7 +475,7 @@ int main(void) {
 }
 
 // semantic_analysis/union_self_pointer: a union may hold a pointer to itself.
-TEST_F(CodegenTest, Chapter18_UnionSelfPointer)
+TEST_F(BookTest, Chapter18_UnionSelfPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 union self_ptr { union self_ptr *ptr; long l; };
@@ -487,7 +487,7 @@ int main(void) {
 }
 
 // union_copy/assign_to_union: whole-union copy (struct member, then double array).
-TEST_F(CodegenTest, Chapter18_AssignToUnion)
+TEST_F(BookTest, Chapter18_AssignToUnion)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int a; int b; };
@@ -512,7 +512,7 @@ int main(void) {
 // union_copy/unions_in_conditionals: a union value in a ?: expression.  BESM-6: the
 // char member reads byte #0 (MSB), so one.c = byte#0 of -1 = 1 and two.c = byte#0 of
 // 100 = 0 (100 occupies only bits 7-1, so the MSB byte is zero).
-TEST_F(CodegenTest, Chapter18_UnionsInConditionals)
+TEST_F(BookTest, Chapter18_UnionsInConditionals)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 union u { long l; int i; char c; };
@@ -537,7 +537,7 @@ int main(void) {
 // =============================================================================
 
 // size_and_offset_calculations/sizeof_type: sizeof of struct/array types.
-TEST_F(CodegenTest, Chapter18_SizeofType)
+TEST_F(BookTest, Chapter18_SizeofType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct eight_bytes { int i; char c; };
@@ -570,7 +570,7 @@ int main(void) {
 // size_and_offset_calculations/sizeof_exps: sizeof of expressions of struct type
 // (block-scope `static` dropped — no static-local storage; sizeof never evaluates
 // its operand, so the null get_twentybyte_ptr() is never dereferenced).
-TEST_F(CodegenTest, Chapter18_SizeofExps)
+TEST_F(BookTest, Chapter18_SizeofExps)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct eight_bytes { int i; char c; };
@@ -605,7 +605,7 @@ int main(void) {
 }
 
 // extra_credit/size_and_offset/union_sizes: sizeof of union types, BESM-6 layout.
-TEST_F(CodegenTest, Chapter18_UnionSizes)
+TEST_F(BookTest, Chapter18_UnionSizes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct eight_bytes { int i; char c; };
@@ -642,7 +642,7 @@ union contains_structs *get_union_ptr(void) { return 0; }
 // libraries/global_struct: access a global struct across TUs; whole-struct
 // member assignment.  (Original x86 test used -1 char values; plain char is unsigned on
 // BESM-6, so the arr members use positive values that round-trip.)
-TEST_F(CodegenTest, Chapter18_GlobalStruct)
+TEST_F(BookTest, Chapter18_GlobalStruct)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct s { int i; char arr[2]; double d; };
@@ -676,7 +676,7 @@ void update_outer_struct(void) {
 
 // libraries/array_of_structs: pass a pointer to an array of structs (static and
 // automatic).  Validates member values, not x86 sizes.
-TEST_F(CodegenTest, Chapter18_ArrayOfStructs)
+TEST_F(BookTest, Chapter18_ArrayOfStructs)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct inner { long l; char arr[2]; };
@@ -705,7 +705,7 @@ int validate_struct_array(struct outer *struct_array) {
 
 // libraries/param_struct_pointer: pass struct pointers as parameters; the
 // declared (unused) malloc prototype is dropped.
-TEST_F(CodegenTest, Chapter18_ParamStructPointer)
+TEST_F(BookTest, Chapter18_ParamStructPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(
 struct inner { double d; int i; };
@@ -743,7 +743,7 @@ void update_members_through_pointer(struct outer *ptr, int a, int b, struct inne
 // fall off the end — see semantic/declarations.c).  We give it a (returned but
 // ignored) struct value so the program still exercises the side effect through
 // the pointer parameter while the caller discards the result.
-TEST_F(CodegenTest, Chapter18_MissingRetval)
+TEST_F(BookTest, Chapter18_MissingRetval)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(
 struct big { char arr[25]; };
@@ -778,7 +778,7 @@ struct big missing_return_value(int *i) {
 // 2e12->2e6, gl ~3.4e10->34000) so every intermediate fits the 40-bit mantissa
 // exactly (the original 13-digit -1845381177299.0 exceeds ~12-digit precision);
 // the file-scope long is renamed gl so it doesn't shadow accept_params' param l.
-TEST_F(CodegenTest, Chapter18_ScalarMemberAccessArrow)
+TEST_F(BookTest, Chapter18_ScalarMemberAccessArrow)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test the -> operator.
@@ -981,7 +981,7 @@ int main(void) {
 }
 
 // BESM-6: fixed static node pool (4) with an index counter instead of malloc.
-TEST_F(CodegenTest, Chapter18_ScalarMemberAccessLinkedList)
+TEST_F(BookTest, Chapter18_ScalarMemberAccessLinkedList)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test using -> to iterate through a linked list
@@ -1037,7 +1037,7 @@ int main(void) {
 // matches calloc; the test_auto_*/test_static_*/test_array_* helpers are renamed
 // (autodot/statdot/autoarr/statarr/aostr/aosptr) so they stay distinct within
 // Madlen's 8-char identifier limit (otherwise they alias and silently no-op).
-TEST_F(CodegenTest, Chapter18_ScalarMemberAccessNestedStruct)
+TEST_F(BookTest, Chapter18_ScalarMemberAccessNestedStruct)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test accessing nested structures members, through dot, arrow, and subscript
@@ -1513,7 +1513,7 @@ int main(void) {
 }
 
 // malloc + block-scope static + puts/putchar.
-TEST_F(CodegenTest, Chapter18_ScalarMemberAccessStaticStructs)
+TEST_F(BookTest, Chapter18_ScalarMemberAccessStaticStructs)
 {
     // BESM-6 adaptation: no working heap, so malloc is replaced by static
     // backing objects (static zero-init keeps the pointer NULL on the first
@@ -1658,7 +1658,7 @@ int main(void) {
 }
 
 // block-scope static + strcmp + local char-array string init.
-TEST_F(CodegenTest, Chapter18_StructCopyCopyStruct)
+TEST_F(BookTest, Chapter18_StructCopyCopyStruct)
 {
     // BESM-6 adaptation: the unused `void *malloc(...)` declaration is dropped
     // (this test never calls malloc).  Char-array initializers and the matching
@@ -1784,7 +1784,7 @@ int main(void) {
 // compare equal; the punctuation/control literals "!?"/"()"/"+-"/"\n\t" round-trip
 // identically through KOI-7 and are left as-is.  The six test_copy_* helpers collide in
 // Madlen's 8-char label space (test_cop), so they are renamed to distinct tc_* names.
-TEST_F(CodegenTest, Chapter18_StructCopyThroughPointer)
+TEST_F(BookTest, Chapter18_StructCopyThroughPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 int strcmp(char *s1, char *s2);
@@ -1968,7 +1968,7 @@ int main(void) {
 
 // Re-enabled once block-scope statics landed.  The six test_copy_* helpers all collided
 // in the first 8 chars (Madlen label `test*cop`), so they were shortened to tc_* names.
-TEST_F(CodegenTest, Chapter18_StructCopyWithDotOperator)
+TEST_F(BookTest, Chapter18_StructCopyWithDotOperator)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Test using . to copy entire structures
@@ -2172,7 +2172,7 @@ int main(void) {
 // Re-enabled by backing each pointer with a stack struct instead of malloc/calloc (libc
 // has no live heap in the run harness yet); the six test_* helpers were also shortened to
 // ta_* names to stay distinct within the Madlen 8-char label limit.
-TEST_F(CodegenTest, Chapter18_StructCopyWithArrowOperator)
+TEST_F(BookTest, Chapter18_StructCopyWithArrowOperator)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Test using -> to copy entire structures,
@@ -2382,7 +2382,7 @@ int main(void) {
 // Copies aggregates via Copy/Load/Store/CopyFromOffset/CopyToOffset and verifies the stack is
 // not clobbered.  The shadowing local `ptr` in test_store was renamed `p` (no-shadowing design)
 // and the validate_/test_copy_ helper families renamed to stay distinct within 8 chars.
-TEST_F(CodegenTest, Chapter18_StructCopyStackClobber)
+TEST_F(BookTest, Chapter18_StructCopyStackClobber)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test that copying an aggregate value with Copy, Load, Store,
@@ -2565,7 +2565,7 @@ int main(void) {
 // block-scope-completed type is hoisted to file scope (struct bsfd) and
 // validate_incomplete_var is renamed val_incv to stay 8-char-distinct from
 // validate_struct.
-TEST_F(CodegenTest, Chapter18_IncompleteStructs)
+TEST_F(BookTest, Chapter18_IncompleteStructs)
 {
     EXPECT_EQ("I AM A STRUCT\n0\n", CompileAndRunBook(R"PROG(
 /* Test that our typechecker can handle valid declarations and expressions

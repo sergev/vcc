@@ -9,12 +9,12 @@
 // shadow an enclosing name run here; the shadowing ones the book lists as valid
 // are semantic-negative tests in semantic/chapter7_tests.cpp instead.
 //
-#include "codegen_test.h"
+#include "book_test.h"
 
 // --- valid ------------------------------------------------------------------
 
 // int a; { int b = a = 1; } return a; — 'b' is new, no shadow.
-TEST_F(CodegenTest, Chapter7_DeclarationOnly)
+TEST_F(BookTest, Chapter7_DeclarationOnly)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a;
@@ -26,7 +26,7 @@ TEST_F(CodegenTest, Chapter7_DeclarationOnly)
 }
 
 // Empty and nested-empty blocks have no effect on the result.
-TEST_F(CodegenTest, Chapter7_EmptyBlocks)
+TEST_F(BookTest, Chapter7_EmptyBlocks)
 {
     EXPECT_EQ("30\n", CompileAndRunBook(R"(int main(void) {
     int ten = 10;
@@ -38,7 +38,7 @@ TEST_F(CodegenTest, Chapter7_EmptyBlocks)
 }
 
 // Two 'b' in sibling (not nested) blocks — allowed, no shadow.
-TEST_F(CodegenTest, Chapter7_MultipleVarsSameName)
+TEST_F(BookTest, Chapter7_MultipleVarsSameName)
 {
     EXPECT_EQ("2\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -55,7 +55,7 @@ TEST_F(CodegenTest, Chapter7_MultipleVarsSameName)
 }
 
 // 'b' and 'c' live in disjoint if/else branches — no shadow.
-TEST_F(CodegenTest, Chapter7_NestedIf)
+TEST_F(BookTest, Chapter7_NestedIf)
 {
     EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
     int a = 0;
@@ -75,7 +75,7 @@ TEST_F(CodegenTest, Chapter7_NestedIf)
 }
 
 // 'x' assigned in one inner block, read in a sibling block — no shadow.
-TEST_F(CodegenTest, Chapter7_UseInInnerScope)
+TEST_F(BookTest, Chapter7_UseInInnerScope)
 {
     EXPECT_EQ("3\n", CompileAndRunBook(R"(int main(void)
 {
@@ -92,7 +92,7 @@ TEST_F(CodegenTest, Chapter7_UseInInnerScope)
 // --- extra_credit -----------------------------------------------------------
 
 // goto jumps between sibling if-blocks; the two 'a' are in sibling scopes.
-TEST_F(CodegenTest, Chapter7_GotoSiblingScope)
+TEST_F(BookTest, Chapter7_GotoSiblingScope)
 {
     EXPECT_EQ("11\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;

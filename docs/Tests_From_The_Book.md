@@ -230,7 +230,7 @@ With that caveat in hand, the mapping is still the backbone of the whole effort:
 | `invalid_lex` | scanner | `scanner/test/chapterNN_tests.cpp` | aborts with a lexical-error message |
 | `invalid_parse` | parser | `parser/test/chapterNN_tests.cpp` | aborts with a parse-error message |
 | `invalid_semantics`, `invalid_types`, `invalid_declarations`, `invalid_labels`, `invalid_struct_tags` | semantic | `semantic/test/chapterNN_tests.cpp` | aborts with a semantic-error message |
-| `valid` (and `extra_credit`, `libraries`) | BESM-6 backend | `backend/besm6/test/chapterNN_tests.cpp` | compiles, runs, and prints the expected result |
+| `valid` (and `extra_credit`, `libraries`) | every backend | `backend/common/test/book/chapterNN_tests.cpp` | compiles, runs, and prints the expected result |
 | chapter 19 (`constant_folding`, `copy_propagation`, …) | optimizer | `optimize/test/chapter19_tests.cpp` | the TAC is simplified as expected |
 
 This is a beautiful correspondence: **our source tree already has one directory per phase**
@@ -375,6 +375,8 @@ TEST_F(CodegenTest, DISABLED_Chapter13_Nan) { /* BESM-6 FP has no NaN */ }
 ```
 
 The test is visible (reported as skipped) so we remember it, but it does not fail the build.
+Now that the run programs are shared by every backend, a program one target cannot run goes on
+that backend's skip list (`BookTest` in its `test/book_test.h`) instead.
 Every disabled test carries a **one-line reason**. Across 20 chapters those reasons settle
 into a small, recurring taxonomy — learn these eight and you can predict why almost any book
 program is disabled:
@@ -476,7 +478,7 @@ Notice the assertion is the *improved* message we designed while writing the tes
 together — that is the forcing function from §3 in action. (The `\\}` is just the regex
 escape for a literal `}`.)
 
-**A positive run test** (from [backend/besm6/test/chapter1_tests.cpp](../backend/besm6/test/chapter1_tests.cpp)).
+**A positive run test** (from [backend/common/test/book/chapter1_tests.cpp](../backend/common/test/book/chapter1_tests.cpp)).
 The `CodegenTest` fixture's `CompileAndRun` compiles the source, runs it on Dubna, and
 returns whatever it printed:
 
@@ -498,7 +500,7 @@ A few simple conventions keep the growing suite navigable:
 
 - **One file per chapter, per component.** Chapter 5's parser tests go in
   `parser/test/chapter5_tests.cpp`; its semantic tests in `semantic/test/chapter5_tests.cpp`; its
-  runnable programs in `backend/besm6/test/chapter5_tests.cpp`. The file's directory tells you
+  runnable programs in `backend/common/test/book/chapter5_tests.cpp`. The file's directory tells you
   the phase; the filename tells you the chapter.
 - **`_Neg` marks negative tests.** A name ending in `_Neg` is a "this must be rejected"
   test; everything else is a positive test.
@@ -594,7 +596,7 @@ If you remember three things from this article, make them these:
    a doctored green checkmark.
 
 From here, the natural next steps are to browse the committed chapter test files named
-throughout this article (`scanner/test/chapter1_tests.cpp`, `backend/besm6/test/chapter13_tests.cpp`,
+throughout this article (`scanner/test/chapter1_tests.cpp`, `backend/common/test/book/chapter13_tests.cpp`,
 and their siblings), and to consult [Besm6_Data_Representation.md](Besm6_Data_Representation.md)
 and the [Technical Reference](Technical_Reference.md) for the full phase-by-phase design and
 the target's data model.
