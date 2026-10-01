@@ -44,43 +44,10 @@ The backend skeleton is in place: `genriscv`, the bare-metal runtime in `libc/ri
 and `riscv-tests` with `CompileToRiscv`, `CompileAndRunRiscv` and `CompileAndRunBook`
 (and the shared book suite).
 
-## Phase 3 — instruction selection, book order
-
-Naive and correct first: every TAC variable lives in a stack slot; each
-instruction loads operands into scratch registers, computes, stores. Each step is
-done when its book chapters pass through `CompileAndRunBook` and a few golden
-assembly tests pin the selected instructions.
-
-Done: all of ch. 1–20 run. 72 book programs expect BESM-6 integer widths or sizes;
-each was checked to give on RV64 exactly what clang gives, and is on the RISC-V skip
-list. Four more wait for library routines (R17).
-
-- **R5. Frame.** *Done.* Slot layout from typed symbols (size/alignment), `ALLOCATE_LOCAL`,
-  prologue/epilogue (`ra`, `s0` frame pointer, 16-byte `sp` alignment).
-  Large-offset handling beyond the 12-bit immediate.
-- **R6. Integer ops** *Done.* (ch. 2–4, 11, 12): unary, binary, comparisons via
-  `slt`/`sltu`/`xor`+`seqz`, `W`-suffixed 32-bit ops with re-extension, shifts,
-  `mul`/`div`/`rem` and their unsigned forms, width conversions.
-- **R7. Control flow** *Done.* (ch. 5–8): labels, jumps, `beqz`/`bnez`, switch lowering
-  as emitted by the frontend.
-- **R8. Calls, simple ABI** *Done.* (ch. 9): integer/pointer args in `a0`–`a7`, the rest on
-  the stack, result in `a0`; direct and indirect (`jalr`) calls;
-  `FUN_CALL_NORETURN`.
-- **R9. Globals and static data** *Done.* (ch. 10): `.data`/`.bss`/`.rodata`, all
-  `Tac_StaticInit` kinds, address materialisation with `la` (medany code model),
-  static locals with the existing `name$N` uniqueness, using a legal symbol
-  spelling.
-- **R10. Floating point** (ch. 13): *Done.* `float`/`double` in `fa0`–`fa7`, all
-  conversions (`fcvt.*` with `rtz` for C truncation), comparisons into integer
-  registers, FP constants through an integer register (`li` + `fmv`). crt0 enables
-  the FPU (`mstatus.FS`).
-- **R11. Pointers, arrays, chars, strings** (ch. 14–16): *Done.* `LOAD`/`STORE` by width,
-  `ADD_PTR`, and the byte-pointer TAC kinds as plain operations: `GET_ADDRESS_BYTE`/
-  `GET_ADDRESS_DECAY` = address, `LOAD_BYTE` = `lb`/`lbu`, `PTR_DIFF` = `sub`,
-  `PTR_TO_CHAR_PTR`/`CHAR_PTR_TO_PTR` = copy.
-- **R12. Structs** (ch. 17–18): *Done.* member access via `COPY_*_OFFSET`,
-  whole-aggregate copies, by-value and returned structs (whole, or through the
-  hidden pointer).
+Instruction selection (R5–R12) is done: every TAC variable lives in a stack slot,
+and all of ch. 1–20 run. 72 book programs expect BESM-6 integer widths or sizes;
+each gives on RV64 exactly what clang gives, and is on the RISC-V skip list. Four
+more wait for library routines (R17).
 
 ## Phase 4 — psABI conformance
 
