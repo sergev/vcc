@@ -592,22 +592,14 @@ static Expr *typecheck_expr(Expr *e)
             default:
                 break;
             }
-            // C integer promotions: when the lvalue is a *narrow* integer type
-            // (char/short), an arithmetic compound op (+= -= *= /= %=) must be computed
-            // in get_common_type(lhs, rhs) — which promotes the narrow lvalue to at
-            // least int — and the result assigned back to the lvalue type, exactly as
-            // the non-compound `lhs = lhs op rhs` path does (see the BINARY_MUL/DIV/MOD
-            // case above).  Otherwise the op would run in the narrow type's signedness
-            // (e.g. `unsigned char uc; char c2; uc /= c2` would do an unsigned divide
-            // instead of the promoted signed-int divide).  The translator notices the
-            // promotion via the differing operand type and widens/narrows around the op.
-            //
-            // For wider lvalues (int and up) the operation already runs in the lvalue's
-            // own (already-promoted) type, and shift/bitwise ops keep converting the rhs
-            // to the lvalue type (shift rhs is promoted independently; bitwise
-            // truncate-to-lvalue yields the correct low bits) — both unchanged here.
+            // An arithmetic compound op (+= -= *= /= %=) is `lhs = lhs op rhs` (C11
+            // §6.5.16.2p3): computed in get_common_type(lhs, rhs) — the promoted lvalue,
+            // or a wider or floating rhs type (`int i; i /= 1L << 40`, `i *= 2.5`) — and
+            // the result converted back to the lvalue type.  The translator notices the
+            // differing operand type and widens/narrows around the op.  Shift and bitwise
+            // ops keep converting the rhs to the lvalue type (a shift count is promoted
+            // independently; a bitwise result truncated to the lvalue has the right bits).
             const Type *lt   = unalias(lhs->type);
-            bool lhs_narrow  = is_promotable_narrow(lt);
             bool is_arith_op = e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB ||
                                e->u.assign.op == ASSIGN_MUL || e->u.assign.op == ASSIGN_DIV ||
                                e->u.assign.op == ASSIGN_MOD;
@@ -616,8 +608,19 @@ static Expr *typecheck_expr(Expr *e)
             // converted back to _Bool (C11 §6.5.16.2p3, §6.3.1.2), and the translator
             // performs that conversion — the emit_cast that re-normalises to 0/1 — only
             // on this promoted path, where the operation type differs from the lvalue's.
-            if ((lhs_narrow && is_arith_op) || lt->kind == TYPE_BOOL) {
-                rhs = convert_to_type(rhs, get_common_type(lhs->type, rhs->type));
+            // A same-size integer common type changes nothing for + - * (the low bits
+            // agree) or when the signedness also agrees, so the lvalue type is kept: on
+            // BESM-6 a 48-bit unsigned result copied back to a 41-bit int would not be a
+            // valid int.
+            const Type *common = get_common_type(lhs->type, rhs->type);
+            bool additive      = e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB ||
+                            e->u.assign.op == ASSIGN_MUL;
+            bool same_as_lhs = is_integer(common) && is_integer(lt) &&
+                               get_size(common) == get_size(lt) &&
+                               (additive || is_signed(common) == is_signed(lt)) &&
+                               lt->kind != TYPE_BOOL && !is_promotable_narrow(lt);
+            if ((is_arith_op && !same_as_lhs) || lt->kind == TYPE_BOOL) {
+                rhs = convert_to_type(rhs, common);
             } else {
                 rhs = convert_to_type(rhs, lhs->type);
             }

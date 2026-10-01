@@ -1019,6 +1019,10 @@ TEST_F(BookTest, Chapter14_BitwiseOpsWithDereferencedPtrs)
 // the unsigned remainder is recomputed against BESM-6's 41/48-bit widths.
 TEST_F(BookTest, Chapter14_CompoundAssignConversion)
 {
+    // `*i_ptr %= 4294967200U` runs in unsigned int (C11 §6.5.16.2p3): -50 converts to
+    // 2^32 - 50 on LP64, giving 46; BESM-6 keeps the 41-bit pattern 2^41 - 50 (see
+    // docs/Besm6_Data_Representation.md), giving 49102.
+    std::string rem = IsTarget("besm6") ? "49102" : "46";
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     double d = 5.0;
     double *d_ptr = &d;
@@ -1028,10 +1032,8 @@ TEST_F(BookTest, Chapter14_CompoundAssignConversion)
     }
     int i = -50;
     int *i_ptr = &i;
-    // Compound %= is computed in the int LHS type (signed b/mod), not the
-    // unsigned common type, so this is signed -50 % 4294967200 = -50.
     *i_ptr %= 4294967200U;
-    if (*i_ptr != -50) {
+    if (*i_ptr != )" + rem + R"() {
         return 2;
     }
 

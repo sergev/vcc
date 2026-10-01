@@ -892,16 +892,17 @@ TEST_F(CoercionTest, MinusAssign_Ptr_IntRhs_CastToLong)
 
 // ─── K.3 ASSIGN_ADD / ASSIGN_SUB with arithmetic lhs ─────────────────────────
 
-TEST_F(CoercionTest, PlusAssign_Int_DoubleRhs_Cast)
+TEST_F(CoercionTest, PlusAssign_Int_DoubleRhs_NoCast)
 {
-    // double rhs narrowed to int lhs type (no diagnostic in C).
+    // x += y is x = x + y (C11 6.5.16.2p3): computed in double, so the double rhs
+    // stays as it is; the result is converted back to int.
     ParseProgram("void f(int x, double y) { x += y; }");
     typecheck_program(program);
     Expr *e = AssignExpr();
     EXPECT_EQ(e->u.assign.op, ASSIGN_ADD);
     EXPECT_EQ(e->type->kind, TYPE_INT);
-    ASSERT_EQ(e->u.assign.value->kind, EXPR_CAST);
-    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_INT);
+    ASSERT_EQ(e->u.assign.value->kind, EXPR_VAR);
+    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_DOUBLE);
 }
 
 TEST_F(CoercionTest, PlusAssign_Double_IntRhs_Cast)
@@ -952,26 +953,27 @@ TEST_F(CoercionTest, MulAssign_Double_IntRhs_Cast)
     EXPECT_EQ(e->u.assign.value->type->kind, TYPE_DOUBLE);
 }
 
-TEST_F(CoercionTest, DivAssign_Int_DoubleRhs_Cast)
+TEST_F(CoercionTest, DivAssign_Int_DoubleRhs_NoCast)
 {
     ParseProgram("void f(int x, double y) { x /= y; }");
     typecheck_program(program);
     Expr *e = AssignExpr();
     EXPECT_EQ(e->u.assign.op, ASSIGN_DIV);
     EXPECT_EQ(e->type->kind, TYPE_INT);
-    ASSERT_EQ(e->u.assign.value->kind, EXPR_CAST);
-    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_INT);
+    ASSERT_EQ(e->u.assign.value->kind, EXPR_VAR);
+    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_DOUBLE);
 }
 
-TEST_F(CoercionTest, ModAssign_Int_LongRhs_Cast)
+// A long rhs wider than int keeps its type: the remainder is computed in long.
+TEST_F(CoercionTest, ModAssign_Int_LongRhs_NoCast)
 {
     ParseProgram("void f(int x, long y) { x %= y; }");
     typecheck_program(program);
     Expr *e = AssignExpr();
     EXPECT_EQ(e->u.assign.op, ASSIGN_MOD);
     EXPECT_EQ(e->type->kind, TYPE_INT);
-    ASSERT_EQ(e->u.assign.value->kind, EXPR_CAST);
-    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_INT);
+    ASSERT_EQ(e->u.assign.value->kind, EXPR_VAR);
+    EXPECT_EQ(e->u.assign.value->type->kind, TYPE_LONG);
 }
 
 TEST_F(CoercionTest, LShiftAssign_Int_ShortRhs_Cast)

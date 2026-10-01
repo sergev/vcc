@@ -84,3 +84,48 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A case constant converts to the controlling type: with an int controlling
+// expression, `case 8589934592l` is `case 0`.
+TEST_F(RiscvTest, RunSwitchCaseConversion)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+int f(int i) {
+    switch (i) {
+    case 8589934592l:
+        return 1;
+    case 4294967295u:
+        return 2;
+    default:
+        return 3;
+    }
+}
+int g(unsigned long u) {
+    switch (u) {
+    case 4294967295u:
+        return 1;
+    default:
+        return 2;
+    }
+}
+int main(void) {
+    return (f(0) != 1) | (f(-1) != 2) << 1 | (g(4294967295ul) != 1) << 2 | (g(-1) != 2) << 3;
+})"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// E1 op= E2 is E1 = E1 op E2 in the common type (C11 6.5.16.2p3).
+TEST_F(RiscvTest, RunCompoundAssignCommonType)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+int main(void) {
+    int x = 1, b = 2147483647, i = -50;
+    x += -0.5;
+    b /= -34359738367l;
+    i %= 4294967200u;
+    return (x != 0) | (b != 0) << 1 | (i != 46) << 2;
+})"));
+    EXPECT_EQ(0, exit_status);
+}
