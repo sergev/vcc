@@ -1,3 +1,7 @@
+//
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 // BESM-6: rewritten to use a local struct instead of calloc (no heap dependency).
@@ -48,79 +52,102 @@ int main(void) {
 )PROG"));
 }
 
-// malloc + pointer-to-integer byte-address arithmetic.
+// no_structure_parameters/size_and_offset_calculations/member_offsets, from the book.
 TEST_F(BookTest, Chapter18_MemberOffsets)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Get the addresses of structure members to validate their offset and alignment
+ * (including nested members accessed through chains of . and -> operations)
+ * and addresses of one-past-the-end of structs to validate trailing padding
+ * */
 // struct declarations for size/layout tests
-//
-// On BESM-6 a word is 6 bytes, every aggregate member is word-aligned, and a
-// struct's sizeof is rounded up to a multiple of 6.
 
 struct eight_bytes {
-    int i;   // bytes 0-5 (one word)
-    char c;  // byte 6
-             // padded up to a word multiple -> sizeof 12
+    int i;   // bytes 0-3
+    char c;  // byte 4
+             // 3 more bytes of padding to make size a multiple of 4
 };
 
 struct two_bytes {
     char arr[2];  // bytes 0-1
-                  // padded up to a word -> sizeof 6
+                  // no padding
 };
 
 struct three_bytes {
     char arr[3];  // bytes 0-2
-                  // padded up to a word -> sizeof 6
+                  // no padding
 };
 
 struct sixteen_bytes {
-    struct eight_bytes eight;  // bytes 0-11
-    struct two_bytes two;      // bytes 12-17
-    struct three_bytes three;  // bytes 18-23
-};                             // sizeof 24
+    struct eight_bytes eight;  // bytes 0-7
+    struct two_bytes two;      // bytes 8-9
+    struct three_bytes three;  // bytes 10-12
+    // 3 bytes of padding to make size a multiple of 4  (i.e. 16 bytes)
+    // b/c struct eightbyte is 4 byte-aligned)
+};
+
+struct seven_bytes {
+    struct two_bytes two;      // bytes 0-1
+    struct three_bytes three;  // bytes 2-4
+    struct two_bytes two2;     // bytes 5-6
+};                             // total size is 7 bytes
+
+struct twentyfour_bytes {
+    struct seven_bytes seven;  // bytes 0-6
+    // 1 byte padding to make next member four-byte aligned
+    struct sixteen_bytes sixteen;  // bytes 8-24 (four-byte aligned)
+};
+
+struct twenty_bytes {
+    struct sixteen_bytes sixteen;  // bytes 0-15
+    struct two_bytes two;          // bytes 16-17
+    // 2 bytes padding to make the whole struct four-byte aligned
+};  // 20 bytes b/c it's four-byte aligned
 
 struct wonky {
     char arr[19];
-};  // sizeof 24 (19 data bytes + 5 bytes padding up to a word multiple)
+};  // 19 bytes w/ no padding
 
 struct internal_padding {
-    char c;    // byte 0
-    double d;  // byte 6 (word-aligned)
-};             // sizeof 12
+    char c;
+    // 7 bytes of padding so next member is eight byte-aligned
+    double d;
+};  // 16 bytes total
 
 struct contains_struct_array {
-    char c;                              // byte 0
-    struct eight_bytes struct_array[3];  // bytes 6-41 (word-aligned)
-};                                       // sizeof 42
-/* Get the addresses of structure members to validate their offset and alignment
- * (including nested members accessed through chains of . and -> operations)
- * and addresses of one-past-the-end of structs to validate trailing padding.
- *
- * On BESM-6 a pointer-to-integer cast does not decode to a byte address, so we
- * compute byte offsets as char* - char* differences, which the backend decodes
- * via b/pdiff. */
+    char c;  // byte 0
+    // 3 bytes padding so next member is 4 byte-aligned
+    struct eight_bytes struct_array[3];  // bytes 4-27
+};                                       // 28 bytes total
+
+void *malloc(unsigned long size);
 
 // test 1: validate struct w/ scalar members (includes trailing padding)
 // test member accesses of the form &x.y
 int test_eightbytes(void) {
     struct eight_bytes s;
-    char *start = (char *)&s;
-    char *i_addr = (char *)&s.i;
-    char *c_addr = (char *)&s.c;
-    char *end = (char *)(&s + 1);
+    unsigned long start_addr = (unsigned long)&s;
+    unsigned long i_addr = (unsigned long)&s.i;
+    unsigned long c_addr = (unsigned long)&s.c;
+    unsigned long end_addr = (unsigned long)(&s + 1);
+
+    // this struct should be four byte-aligned
+    if (start_addr % 4 != 0) {
+        return 0;
+    }
 
     // first element should always have same address as whole struct
-    if (start != i_addr) {
+    if (start_addr != i_addr) {
         return 0;
     }
 
-    // next element is one word in, at byte 6
-    if (c_addr - start != 6) {
+    // next element should be at byte 4 (next available byte)
+    if (c_addr - start_addr != 4) {
         return 0;
     }
 
-    // end of struct is at byte 12 (padded up to a word multiple)
-    if (end - start != 12) {
+    // end of struct should be at byte 8 due to 3 bytes of padding
+    if (end_addr - start_addr != 8) {
         return 0;
     }
 
@@ -130,25 +157,29 @@ int test_eightbytes(void) {
 // test 2: validate struct w/ padding between members (accessing struct thru
 // pointer) test member accesses of the form &x->y
 int test_internal_padding(void) {
-    struct internal_padding obj;
-    struct internal_padding *s_ptr = &obj;
-    char *start = (char *)s_ptr;
-    char *c_addr = (char *)&s_ptr->c;
-    char *d_addr = (char *)&s_ptr->d;
-    char *end = (char *)(s_ptr + 1);
+    struct internal_padding *s_ptr = malloc(sizeof(struct internal_padding));
+    unsigned long start_addr = (unsigned long)s_ptr;
+    unsigned long c_addr = (unsigned long)&s_ptr->c;
+    unsigned long d_addr = (unsigned long)&s_ptr->d;
+    unsigned long end_ptr = (unsigned long)(s_ptr + 1);
+
+    // this struct should be eight byte-aligned
+    if (start_addr % 8 != 0) {
+        return 0;
+    }
 
     // first element should always have same address as whole struct
-    if (start != c_addr) {
+    if (start_addr != c_addr) {
         return 0;
     }
 
-    // next element is word-aligned, at byte 6
-    if (d_addr - c_addr != 6) {
+    // next element should be at byte 8 (so it's correctly aligned)
+    if (d_addr - c_addr != 8) {
         return 0;
     }
 
-    // size of whole struct is 12 bytes
-    if (end - start != 12) {
+    // size of whole struct should be 16 bytes
+    if (end_ptr - start_addr != 16) {
         return 0;
     }
 
@@ -162,27 +193,27 @@ int test_three_bytes(void) {
     // calculation
     static struct three_bytes s;
 
-    char *start = (char *)&s;
-    char *arr_addr = (char *)&s.arr;
-    char *arr0_addr = (char *)&s.arr[0];
-    char *arr1_addr = (char *)&s.arr[1];
+    unsigned long start_addr = (unsigned long)&s;
+    unsigned long arr_addr = (unsigned long)&s.arr;
+    unsigned long arr0_addr = (unsigned long)&s.arr[0];
+    unsigned long arr1_addr = (unsigned long)&s.arr[1];
     // different way to calculate same address as above
-    char *arr1_addr_alt = (char *)(s.arr + 1);
-    char *arr2_addr = (char *)&s.arr[2];
-    char *arr_end = (char *)(s.arr + 3);
-    char *struct_end = (char *)(&s + 1);
+    unsigned long arr1_addr_alt = (unsigned long)(s.arr + 1);
+    unsigned long arr2_addr = (unsigned long)&s.arr[2];
+    unsigned long arr_end = (unsigned long)(&s.arr + 1);
+    unsigned long struct_end = (unsigned long)(&s + 1);
 
     // struct, array, and first array element should all have same address
-    if (start != arr_addr) {
+    if (start_addr != arr_addr) {
         return 0;
     }
 
-    if (start != arr0_addr) {
+    if (start_addr != arr0_addr) {
         return 0;
     }
 
     // s.arr[1] and s.arr[2] should be at byte offsets 1 and 2
-    if (arr1_addr - start != 1) {
+    if (arr1_addr - start_addr != 1) {
         return 0;
     }
 
@@ -190,17 +221,16 @@ int test_three_bytes(void) {
         return 0;
     }
 
-    if (arr2_addr - start != 2) {
+    if (arr2_addr - start_addr != 2) {
         return 0;
     }
 
-    // arr_end is one past the 3-element char array, at byte offset 3
-    if (arr_end - start != 3) {
+    // arr_end and struct_end should both be at byte offset 3
+    if (arr_end - start_addr != 3) {
         return 0;
     }
 
-    // struct_end is at byte offset 6 (struct padded up to a word multiple)
-    if (struct_end - start != 6) {
+    if (struct_end - start_addr != 3) {
         return 0;
     }
 
@@ -215,83 +245,87 @@ int test_sixteen_bytes(void) {
     struct sixteen_bytes *s_ptr = &s;
 
     // get addresses of various members through s_ptr
-    char *start = (char *)s_ptr;
-    char *eight_addr = (char *)&s_ptr->eight;
-    char *eight_i_addr = (char *)&s_ptr->eight.i;
-    char *eight_c_addr = (char *)&s_ptr->eight.c;
-    char *two = (char *)&s_ptr->two;
-    char *two_arr = (char *)s_ptr->two.arr;
-    char *two_arr0 = (char *)&s_ptr->two.arr[0];
-    char *two_arr1 = (char *)&s_ptr->two.arr[1];
-    char *two_arr_end = (char *)(s_ptr->two.arr + 2);
-    char *two_end = (char *)(&s_ptr->two + 1);
-    char *three = (char *)&s_ptr->three;
+    unsigned long start_addr = (unsigned long)s_ptr;
+    unsigned long eight_addr = (unsigned long)&s_ptr->eight;
+    unsigned long eight_i_addr = (unsigned long)&s_ptr->eight.i;
+    unsigned long eight_c_addr = (unsigned long)&s_ptr->eight.c;
+    unsigned long two = (unsigned long)&s_ptr->two;
+    unsigned long two_arr = (unsigned long)s_ptr->two.arr;
+    unsigned long two_arr0 = (unsigned long)&s_ptr->two.arr[0];
+    unsigned long two_arr1 = (unsigned long)&s_ptr->two.arr[1];
+    unsigned long two_arr_end = (unsigned long)(&s_ptr->two.arr + 1);
+    unsigned long two_end = (unsigned long)(&s_ptr->two + 1);
+    unsigned long three = (unsigned long)&s_ptr->three;
     // not going to validate every individual element in three.arr
     // since we already did that for two.arr
-    char *three_end = (char *)(&s_ptr->three + 1);
-    char *struct_end = (char *)(s_ptr + 1);
+    unsigned long three_end = (unsigned long)(&s_ptr->three + 1);
+    unsigned long struct_end = (unsigned long)(s_ptr + 1);
+
+    // struct is 4-byte aligned
+    if (start_addr % 4 != 0) {
+        return 0;
+    }
 
     // struct, first member, first member's first member all have same address
-    if (start != eight_addr) {
+    if (start_addr != eight_addr) {
         return 0;
     }
 
-    if (start != eight_i_addr) {
+    if (start_addr != eight_i_addr) {
         return 0;
     }
 
-    if (eight_c_addr - start != 6) {
+    if (eight_c_addr - start_addr != 4) {
         return 0;
     }
 
-    // next member starts at byte 12
-    if (two - start != 12) {
+    // next member starts at byte 8
+    if (two - start_addr != 8) {
         return 0;
     }
 
-    if (two_arr - start != 12) {
+    if (two_arr - start_addr != 8) {
         return 0;
     }
 
-    if (two_arr0 - start != 12) {
+    if (two_arr0 - start_addr != 8) {
         return 0;
     }
 
     // validate next array element in s_ptr->two.arr
-    if (two_arr1 - start != 13) {
+    if (two_arr1 - start_addr != 9) {
         return 0;
     }
 
-    // one past the 2-element char array, at byte 14
-    if (two_arr_end - start != 14) {
+    // no padding at end of s_ptr->two
+    if (two_arr_end - start_addr != 10) {
         return 0;
     }
 
-    // s_ptr->two is padded to a word, so its end is at byte 18
-    if (two_end - start != 18) {
+    if (two_arr_end != two_end) {
         return 0;
     }
 
-    if (three - start != 18) {
+    if (three - start_addr != 10) {
         return 0;
     }
 
-    if (three_end - start != 24) {
+    if (three_end - start_addr != 13) {
         return 0;
     }
 
-    if (struct_end - start != 24) {
+    if (struct_end - start_addr != 16) {
         return 0;
     }
 
     // now get addresses of a few members thru s directly and make sure they're
     // the same
 
-    char *eight_i_addr_alt = (char *)&s.eight.i;
-    char *eight_c_addr_alt = (char *)&s.eight.c;
-    char *two_arr_alt = (char *)s.two.arr;
-    char *two_arr1_alt = (char *)&s.two.arr[1];
-    char *three_alt = (char *)&s.three;
+    unsigned long eight_i_addr_alt = (unsigned long)&s.eight.i;
+    unsigned long eight_c_addr_alt = (unsigned long)&s.eight.c;
+    unsigned long two_arr_alt = (unsigned long)s.two.arr;
+    unsigned long two_arr1_alt = (unsigned long)&s.two.arr[1];
+    unsigned long three_alt = (unsigned long)&s.three;
 
     if (eight_i_addr_alt != eight_i_addr) {
         return 0;
@@ -320,16 +354,15 @@ int test_sixteen_bytes(void) {
 // padding b/t array elements test access of the form x[i].y, &x[i].y[j]
 int test_wonky_array(void) {
     struct wonky wonky_array[5];
-    char *array_start = (char *)wonky_array;
-    char *elem3 = (char *)(wonky_array + 3);
-    char *elem3_arr = (char *)wonky_array[3].arr;
-    char *elem2_arr2 = (char *)&wonky_array[2].arr[2];
-    char *elem2_arr_end = (char *)(wonky_array[2].arr + 19);
-    char *elem4_arr_end = (char *)(wonky_array[4].arr + 19);
-    char *array_end = (char *)(wonky_array + 5);
+    unsigned long array_start = (unsigned long)wonky_array;
+    unsigned long elem3 = (unsigned long)(wonky_array + 3);
+    unsigned long elem3_arr = (unsigned long)wonky_array[3].arr;
+    unsigned long elem2_arr2 = (unsigned long)&wonky_array[2].arr[2];
+    unsigned long elem2_arr_end = (unsigned long)(wonky_array[2].arr + 19);
+    unsigned long elem4_arr_end = (unsigned long)(wonky_array[4].arr + 19);
+    unsigned long array_end = (unsigned long)(wonky_array + 5);
 
-    // each element is 24 bytes (19 data bytes + 5 bytes padding)
-    if (elem3 - array_start != 24 * 3) {
+    if (elem3 - array_start != 19 * 3) {
         return 0;
     }
 
@@ -337,21 +370,17 @@ int test_wonky_array(void) {
         return 0;
     }
 
-    if (elem2_arr2 - array_start != 24 * 2 + 2) {
+    if (elem2_arr2 - array_start != 19 * 2 + 2) {
         return 0;
     }
 
-    // 5 bytes of trailing padding b/t last data byte of elem2 and start of elem3
-    if (elem3 - elem2_arr_end != 5) {
+    // no gap b/t last member of elem2 and start of elem3
+    if (elem2_arr_end != elem3) {
         return 0;
     }
 
-    // 5 bytes of trailing padding b/t last data byte of elem4 and array end
-    if (array_end - elem4_arr_end != 5) {
-        return 0;
-    }
-
-    if (array_end - array_start != 24 * 5) {
+    // no gap b/t last member of elem4 and end of whole array
+    if (elem4_arr_end != array_end) {
         return 0;
     }
 
@@ -363,77 +392,84 @@ int test_wonky_array(void) {
 // decay to pointers
 int test_contains_struct_array_array(void) {
     struct contains_struct_array arr[3];
-    char *array_start = (char *)arr;
-    char *first_scalar_elem = (char *)(&arr[0].c);
+    unsigned long array_start = (unsigned long)arr;
+    unsigned long first_scalar_elem = (unsigned long)(&arr[0].c);
 
     // arr[0].struct_array[0].i
-    char *outer0_inner0_i = (char *)(&arr[0].struct_array->i);
+    unsigned long outer0_inner0_i = (unsigned long)(&arr[0].struct_array->i);
 
-    // arr[0].struct_array[0].c
-    char *outer0_inner0_c = (char *)(&arr->struct_array->c);
+    // arr[0].struct_array[0].i
+    unsigned long outer0_inner0_c = (unsigned long)(&arr->struct_array->c);
 
     // one-past-the-end of arr[0].struct_array
-    char *outer0_end = (char *)(arr->struct_array + 3);
+    unsigned long outer0_end = (unsigned long)(arr->struct_array + 3);
 
     // start of arr[1] (should be the same as one-past-end of
     // arr[0].struct_array)
-    char *outer1 = (char *)(&arr[1]);
+    unsigned long outer1 = (unsigned long)(&arr[1]);
 
-    // struct_array of arr[1]
-    char *outer1_arr = (char *)(arr[1].struct_array);
+    // second element of arr[1]
+    unsigned long outer1_arr = (unsigned long)(arr[1].struct_array);
 
     // arr[1].struct_array[1].i
-    char *outer1_inner1_i = (char *)&(((arr + 1)->struct_array + 1)->i);
+    unsigned long outer1_inner1_i =
+        (unsigned long)&(((arr + 1)->struct_array + 1)->i);
 
     // arr[2].struct_array[0].c
-    char *outer2_inner0_c = (char *)&((arr + 2)->struct_array->c);
+    unsigned long outer2_inner0_c =
+        (unsigned long)&((arr + 2)->struct_array->c);
+
+    // whole thing should be 4-byte aligned
+    if (array_start % 4 != 0) {
+        return 0;
+    }
 
     // validate pointers to start of struct
     if (first_scalar_elem != array_start) {
         return 0;
     }
 
-    // 6 bytes into array (struct_array offset in contains_struct_array is 6,
-    // i offset in eight_bytes is 0)
-    if (outer0_inner0_i - array_start != 6) {
+    // 4 bytes into array (struct_array offset in contains_struct_array is 4,
+    // i offset in struct_array is 0)
+    if (outer0_inner0_i - array_start != 4) {
         return 0;
     }
 
-    // 12 bytes into array (struct_array offset is 6,
-    // c offset in eight_bytes is 6)
-    if (outer0_inner0_c - array_start != 12) {
+    // 8 bytes into array (struct_array offset in contains_struct_array is 4,
+    // c offset in struct_array is 4)
+    if (outer0_inner0_c - array_start != 8) {
         return 0;
     }
 
-    // no trailing padding in arr[0] (sizeof 42 is a word multiple)
+    // no trailing padding in arr[0]
     if (outer0_end != outer1) {
         return 0;
     }
 
-    // check offsets in arr[1]
-    if (outer1_arr - array_start != 48) {
+    // check offsets in arr[0]
+    if (outer1_arr - array_start != 32) {
         return 0;
     }
 
-    if (outer1_arr - outer1 != 6) {
+    if (outer1_arr - outer1 != 4) {
         return 0;
     }
 
-    // arr[1] is 42 bytes into arr
-    // arr[1].struct_array is 6 bytes into arr[1]
-    // arr[1].struct_array[1] is 12 bytes into struct_array
+    // arr[1] is 28 bytes into arr
+    // arr[1].struct_array is 4 bytes into arr[1]
+    // arr[1].struct_array[1] is 8 bytes into struct_array
     // arr[1].struct_array[1].i is 0 bytes into arr[1].struct_array[1]
-    // total offset: 42+6+12 = 60
-    if (outer1_inner1_i - array_start != 60) {
+    // total offset: 28+4+8 = 40
+    if (outer1_inner1_i - array_start != 40) {
         return 0;
     }
 
-    // arr[2] is 84 bytes into arr
-    // arr[2].struct_array is 6 bytes into arr[2]
-    // arr[2].struct_array[0] is 0 bytes into arr[2].struct_array
-    // arr[2].struct_array[0].c is 6 bytes into eight_bytes
-    // total offset: 84 + 6 + 6 = 96
-    if (outer2_inner0_c - array_start != 96) {
+    // arr[2] is 56 bytes into arr
+    // arr[2].struct_array is 4 bytes into arr[2]
+    // arr[2].struct_array[0] is 0 bytes into arr[2]
+    // arr[2].struct_array[0].c is 4 bytes into arr[2].struct_array[0]
+    // total offset: 56 + 4 + 4 = 64
+    if (outer2_inner0_c - array_start != 64) {
         return 0;
     }
 
@@ -1461,6 +1497,7 @@ int check_array(struct outer *struct_array) {
 )PROG"));
 }
 
+// no_structure_parameters/libraries/initializers/nested_static_struct_initializers, from the book.
 TEST_F(BookTest, Chapter18_NestedStaticStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
@@ -1470,6 +1507,11 @@ TEST_F(BookTest, Chapter18_NestedStaticStructInitializers)
  * - implicit conversion of scalar elements, array decay of string literals
  */
 
+/* Test initialization of nested static structs, including:
+ * - partial initialization
+ * - arrays of structs, structs containing arrays
+ * - implicit conversion of scalar elements, array decay of string literals
+ */
 
 // standard library function
 int strcmp(char *s1, char *s2);
@@ -1501,81 +1543,6 @@ int test_partially_initialized(void);
 int test_fully_intialized(void);
 int test_implicit_conversions(void);
 int test_array_of_structs(void);
-/* Test initialization of nested static structs, including:
- * - partial initialization
- * - arrays of structs, structs containing arrays
- * - implicit conversion of scalar elements, array decay of string literals
- */
-
-
-
-
-// structs defined here
-// validation functions defined in library
-
-// case 1: struct with no explicit initializer should be all zeros
-struct outer all_zeros;
-
-// case 2: partially initialized struct
-struct outer partial = {
-    100l,
-    {10, {10}},  // leave arr[1], arr[2], and y uninitialized
-    "Hello!"};   // leave d uninitialized
-
-struct outer full = {
-    1000000000000l,
-    {1000, "OK",
-     4292870144u},  // can initialized signed char array w/ static string
-    "Another message",
-    2e12};
-
-struct outer converted = {
-    10.5,  // 10l
-    {
-        2147483650u,  // 2147483650
-        {
-            15.6,             // 15
-            17592186044419l,  // 3
-            2147483777u       // -127
-        },
-        1152921506754330624ul  // 2147483648u
-    },
-    0ul,         // null pointer
-    4292870144ul  // 4292870144.0
-};
-
-struct outer struct_array[3] = {{1, {2, "ab", 3}, 0, 5},
-                                {6, {7, "cd", 8}, "Message", 9}};
-
-int main(void) {
-    if (!test_uninitialized()) {
-        return 1;
-    }
-
-    if (!test_partially_initialized()) {
-        return 2;
-    }
-
-    if (!test_fully_intialized()) {
-        return 3;
-    }
-
-    if (!test_implicit_conversions()) {
-        return 4;
-    }
-
-    if (!test_array_of_structs()) {
-        return 5;
-    }
-
-    return 0;  // success
-}
-/* Test initialization of nested static structs, including:
- * - partial initialization
- * - arrays of structs, structs containing arrays
- * - implicit conversion of scalar elements, array decay of string literals
- */
-
 
 // structs defined in client but visible here
 // validation functions defined here
@@ -1632,22 +1599,22 @@ int test_partially_initialized(void) {
 // case 3: fully initialized struct
 /*
     struct outer full = {
-        1000000000000l,
-        {1000, "OK",
+        18014398509481979l,
+        {1000, "ok",
         4292870144u},  // can initialized signed char array w/ static string
         "Another message",
         2e12};
 */
 int test_fully_intialized(void) {
     // validate elements in struct outer
-    if (full.one_l != 1000000000000l ||
+    if (full.one_l != 18014398509481979l ||
         strcmp(full.three_msg, "Another message") || full.four_d != 2e12) {
         return 0;
     }
 
     // validate elemetns in string inner
-    if (full.two_struct.one_i != 1000 || full.two_struct.two_arr[0] != 'O' ||
-        full.two_struct.two_arr[1] != 'K' || full.two_struct.two_arr[2] != 0 ||
+    if (full.two_struct.one_i != 1000 || full.two_struct.two_arr[0] != 'o' ||
+        full.two_struct.two_arr[1] != 'k' || full.two_struct.two_arr[2] != 0 ||
         full.two_struct.three_u != 4292870144u) {
         return 0;
     }
@@ -1660,7 +1627,7 @@ int test_fully_intialized(void) {
     struct outer converted = {
         10.5,  // 10l
         {
-            2147483650u,  // 2147483650
+            2147483650u,  // -2147483646
             {
                 15.6,             // 15
                 17592186044419l,  // 3
@@ -1668,19 +1635,19 @@ int test_fully_intialized(void) {
             },
             1152921506754330624ul  // 2147483648u
         },
-        0ul,         // null pointer
-        4292870144ul  // 4292870144.0
+        0ul,                   // null pointer
+        9223372036854776833ul  // 9223372036854777856.0
     };
 */
 int test_implicit_conversions(void) {
     // validate elements in struct outer
     if (converted.one_l != 10l || converted.three_msg != 0 ||
-        converted.four_d != 4292870144.0) {
+        converted.four_d != 9223372036854777856.0) {
         return 0;
     }
 
     // validate elements in struct inner
-    if (converted.two_struct.one_i != 2147483650 ||
+    if (converted.two_struct.one_i != -2147483646 ||
         converted.two_struct.two_arr[0] != 15 ||
         converted.two_struct.two_arr[1] != 3 ||
         converted.two_struct.two_arr[2] != -127 ||
@@ -1743,12 +1710,86 @@ int test_array_of_structs(void) {
 
     return 1;  // success
 }
+
+/* Test initialization of nested static structs, including:
+ * - partial initialization
+ * - arrays of structs, structs containing arrays
+ * - implicit conversion of scalar elements, array decay of string literals
+ */
+
+// structs defined here
+// validation functions defined in library
+
+// case 1: struct with no explicit initializer should be all zeros
+struct outer all_zeros;
+
+// case 2: partially initialized struct
+struct outer partial = {
+    100l,
+    {10, {10}},  // leave arr[1], arr[2], and y uninitialized
+    "Hello!"};   // leave d uninitialized
+
+struct outer full = {
+    18014398509481979l,
+    {1000, "ok",
+     4292870144u},  // can initialized signed char array w/ static string
+    "Another message",
+    2e12};
+
+struct outer converted = {
+    10.5,  // 10l
+    {
+        2147483650u,  // -2147483646
+        {
+            15.6,             // 15
+            17592186044419l,  // 3
+            2147483777u       // -127
+        },
+        1152921506754330624ul  // 2147483648u
+    },
+    0ul,                   // null pointer
+    9223372036854776833ul  // 9223372036854777856.0
+};
+
+struct outer struct_array[3] = {{1, {2, "ab", 3}, 0, 5},
+                                {6, {7, "cd", 8}, "Message", 9}};
+
+int main(void) {
+    if (!test_uninitialized()) {
+        return 1;
+    }
+
+    if (!test_partially_initialized()) {
+        return 2;
+    }
+
+    if (!test_fully_intialized()) {
+        return 3;
+    }
+
+    if (!test_implicit_conversions()) {
+        return 4;
+    }
+
+    if (!test_array_of_structs()) {
+        return 5;
+    }
+
+    return 0;  // success
+}
 )PROG"));
 }
 
+// no_structure_parameters/libraries/initializers/static_struct_initializers, from the book.
 TEST_F(BookTest, Chapter18_StaticStructInitializers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Test initialization of non-nested static structs, including:
+ * - partial initialization
+ * - implicit conversion of scalar elements
+ * - array decay of string literals
+ */
+
 /* Test initialization of non-nested static structs, including:
  * - partial initialization
  * - implicit conversion of scalar elements
@@ -1783,56 +1824,6 @@ int test_partial_inner_init(void);
 
 // case 4: implicit conversion of scalar elements
 int test_implicit_conversion(void);
-/* Test initialization of non-nested static structs, including:
- * - partial initialization
- * - implicit conversion of scalar elements
- * - array decay of string literals
- */
-
-
-
-// case 1: struct with no explicit initializer should be all zeros
-struct s uninitialized;
-
-// case 2: partially initialized struct
-struct s partial = {1.0, "Hello"};
-
-// case 3: partially initialized array w/in struct
-struct s partial_with_array = {3.0, "!", {1}, 2};
-
-// case 4: implicit conversion of scalar elements
-struct s converted = {
-    1099511627775l,  // 1099511627775.0
-    0l,              // null ptr
-    "ABC",           // {'A', 'B', 'C'}
-    17179869189l     // 17179869189
-};
-
-int main(void) {
-    if (!test_uninitialized()) {
-        return 1;
-    }
-
-    if (!test_partially_initialized()) {
-        return 2;
-    }
-
-    if (!test_partial_inner_init()) {
-        return 3;
-    }
-
-    if (!test_implicit_conversion()) {
-        return 4;
-    }
-
-    return 0;  // success
-}
-/* Test initialization of non-nested static structs, including:
- * - partial initialization
- * - implicit conversion of scalar elements
- * - array decay of string literals
- */
-
 
 // structs defined in client but visible here
 // validation functions defined here
@@ -1888,21 +1879,64 @@ int test_partial_inner_init(void) {
 // case 4: implicit conversion of scalar elements
 /*
     struct s converted = {
-        1099511627775l,  // 1099511627775.0
-        0l,              // null ptr
-        "ABC",           // {'A', 'B', 'C'}
-        17179869189l     // 17179869189
+        1152921504606846977l,  // 1152921504606846976.0
+        0l,                   // null ptr
+        "abc",                // {'a', 'b', 'c'}
+        17179869189l          // 5
     };
 */
 int test_implicit_conversion(void) {
     // validate elements
-    if (converted.one_d != 1099511627775.0 || converted.two_msg ||
-        converted.three_arr[0] != 'A' || converted.three_arr[1] != 'B' ||
-        converted.three_arr[2] != 'C' || converted.four_i != 17179869189) {
+    if (converted.one_d != 1152921504606846976.0 || converted.two_msg ||
+        converted.three_arr[0] != 'a' || converted.three_arr[1] != 'b' ||
+        converted.three_arr[2] != 'c' || converted.four_i != 5) {
         return 0;
     }
 
     return 1;  // success
+}
+
+/* Test initialization of non-nested static structs, including:
+ * - partial initialization
+ * - implicit conversion of scalar elements
+ * - array decay of string literals
+ */
+
+// case 1: struct with no explicit initializer should be all zeros
+struct s uninitialized;
+
+// case 2: partially initialized struct
+struct s partial = {1.0, "Hello"};
+
+// case 3: partially initialized array w/in struct
+struct s partial_with_array = {3.0, "!", {1}, 2};
+
+// case 4: implicit conversion of scalar elements
+struct s converted = {
+    1152921504606846977l,  // 1152921504606846976.0
+    0l,                    // null ptr
+    "abc",                 // {'a', 'b', 'c'}
+    17179869189l           // 5
+};
+
+int main(void) {
+    if (!test_uninitialized()) {
+        return 1;
+    }
+
+    if (!test_partially_initialized()) {
+        return 2;
+    }
+
+    if (!test_partial_inner_init()) {
+        return 3;
+    }
+
+    if (!test_implicit_conversion()) {
+        return 4;
+    }
+
+    return 0;  // success
 }
 )PROG"));
 }

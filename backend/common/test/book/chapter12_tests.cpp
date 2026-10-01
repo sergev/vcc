@@ -14,11 +14,9 @@
 //
 // Chapter 12 is written to prove an x86 compiler distinguishes a 32-bit
 // "unsigned int" (wraps at 2^32) from a 64-bit "unsigned long" (wraps at 2^64).
-// BESM-6 has neither width: every value fits in 48 bits and arithmetic wraps at
-// the single 48-bit modulus.  Programs that the book wrote around x86 2^32/2^64
-// wraparound or 32-bit truncation are re-expressed here in 48-bit terms — the
-// wraparound and oversized-value tests now seed values relative to 2^48 and
-// check the 48-bit modular result.
+// Programs whose values fit both targets are shared as adapted; the rest are in
+// their generic LP64 form, and BESM-6 runs its own versions of them (see
+// README.md).
 //
 #include "book_test.h"
 
@@ -419,9 +417,8 @@ int main(void) {
 })"));
 }
 
-// Unsigned arithmetic wraps at the 48-bit modulus 2^48 == 281474976710656.
-// addition: (2^48-3) + 3 == 2^48 wraps to 0; subtraction: 10 - 20 == 2^48-10;
-// neg: -1 == 2^48-1.  (The book wrote these around x86 2^32/2^64 wraparound.)
+// Unsigned arithmetic wraps around modulo 2^32 (unsigned int) or 2^64 (unsigned
+// long).
 TEST_F(BookTest, Chapter12_ArithmeticWraparound)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int ui_a;
@@ -435,15 +432,15 @@ int addition(void) {
 }
 
 int subtraction(void) {
-    return (ul_a - ul_b == 281474976710646ul);
+    return (ul_a - ul_b == 18446744073709551606ul);
 }
 
 int neg(void) {
-    return -ul_a == 281474976710655ul;
+    return -ul_a == 18446744073709551615UL;
 }
 
 int main(void) {
-    ui_a = 281474976710653u;
+    ui_a = 4294967293u;
     ui_b = 3u;
     if (!addition()) {
         return 1;
@@ -464,8 +461,7 @@ int main(void) {
 })"));
 }
 
-// a = -a expects a 2^64-range result (18446744065119617024ul).
-// a = -a wraps at the 48-bit unsigned modulus (2^48 - a) on BESM-6.
+// a = -a wraps at the unsigned long modulus 2^64.
 TEST_F(BookTest, Chapter12_Locals)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
@@ -492,7 +488,7 @@ TEST_F(BookTest, Chapter12_Locals)
     c = c + 8589934594l;
     d = d * 268435456u; // result is between INT_MAX and UINT_MAX
 
-    if (a != 281466386776064ul) {
+    if (a != 18446744065119617024ul) {
         return 5;
     }
     if (b != -2) {
@@ -581,10 +577,8 @@ int main(void)
 })"));
 }
 
-// On BESM-6 signed and unsigned types are the same size, so the common type of
-// any signed/unsigned pair is the unsigned one (unlike x86, where long is wider
-// than unsigned int). Thus uint vs long compares as unsigned: -100 becomes a
-// huge value and 100u is not greater. (-1) read as unsigned is 2^41-1.
+// Usual arithmetic conversions: long is wider than unsigned int, so uint vs long
+// compares as long; int vs unsigned long compares as unsigned long.
 TEST_F(BookTest, Chapter12_CommonType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int int_gt_uint(int i, unsigned int u) {
@@ -609,7 +603,7 @@ int long_gt_ulong(long l, unsigned long ul) {
 
 int ternary_int_uint(int flag, int i, unsigned int ui) {
     long result = flag ? i : ui;
-    return (result == -1l); // (uint)(-1) = 2^41-1, read back as long = -1
+    return (result == 4294967295l); // (uint)(-1) = 2^32-1
 }
 
 int main(void) {
@@ -618,11 +612,11 @@ int main(void) {
         return 1;
     }
 
-    if (!(int_gt_ulong(-1, 1000000ul))) {
+    if (!(int_gt_ulong(-1, 18446744073709551606ul))) {
         return 2;
     }
 
-    if (uint_gt_long(100u, -100l)) { // unsigned compare: 100 < (unsigned)(-100)
+    if (!uint_gt_long(100u, -100l)) {
         return 3;
     }
 
@@ -642,9 +636,8 @@ int main(void) {
 })"));
 }
 
-// Same-size int<->unsigned conversions are bit-pattern COPYs on BESM-6, so a
-// value in [2^40, 2^41) read as int is negative and -1 read as unsigned is
-// 2^41-1; a uint below 2^40 stays positive when read as int.
+// Conversions by assignment, argument passing and return: truncation, sign and
+// zero extension.
 TEST_F(BookTest, Chapter12_ConvertByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_int(int converted, int expected) {
@@ -677,7 +670,7 @@ int extend_on_assignment(unsigned int ui, long expected) {
 }
 
 int main(void) {
-    if (!check_int(2199023255547ul, -5)) { // 2^41-5 read as int = -5
+    if (!check_int(9223372036854775813ul, 5)) { // 2^63 + 5 truncates to 5
         return 1;
     }
 
@@ -685,7 +678,7 @@ int main(void) {
         return 2;
     }
 
-    if (!check_ulong(-1, 2199023255551ul)) { // 2^41 - 1
+    if (!check_ulong(-1, 18446744073709551615UL)) {
         return 3;
     }
 
@@ -693,12 +686,12 @@ int main(void) {
         return 4;
     }
 
-    if (return_extended_int(-1) != 2199023255551UL) { // 2^41 - 1
+    if (return_extended_int(-1) != 18446744073709551615UL) {
         return 5;
     }
 
-    long l = return_truncated_ulong(2199023255448ul); // 2^41-104 read as int
-    if (l != -104l) {
+    long l = return_truncated_ulong(1125902054326372ul); // 2^50 + 2^31 + 100 truncates to INT_MIN + 100
+    if (l != -2147483548l) {
         return 6;
     }
 
@@ -706,8 +699,8 @@ int main(void) {
         return 7;
     }
 
-    int i = 4294967196u; // 4294967196 < 2^40, stays positive as int
-    if (i != 4294967196) {
+    int i = 4294967196u; // 2^32 - 100 converts to -100
+    if (i != -100) {
         return 8;
     }
 
@@ -715,61 +708,58 @@ int main(void) {
 })"));
 }
 
-// Static initializers convert to the variable's type by same-size COPY: a
-// ulong in [2^40, 2^41) read as int is negative but read as unsigned stays
-// positive; values below 2^40 are unchanged across signed/unsigned.
+// Static initializers are converted to the variable's type at compile time.
 TEST_F(BookTest, Chapter12_StaticInitializers)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int u = 2147483660l;
+    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int u = 1152921506754330636l; // 2^60 + 2^31 + 12
 int i = 2147483650u;
-long l = 2147483660ul; // note: this has type unsigned long
+long l = 9223372036854775900u; // note: this has type unsigned long
 long l2 = 2147483650u;
 unsigned long ul = 4294967294u;
-unsigned long ul2 = 2147483798l;
-int i2 = 1099511629574ul; // 2^40 + 1798, read as int = negative
-unsigned ui2 = 1099511629574ul;
+unsigned long ul2 = 9223372036854775798l;
+int i2 = 9223372039002259606ul; // 2^63 + 2^31 + 150
+unsigned ui2 = 9223372039002259606ul;
 
 int main(void)
 {
     if (u != 2147483660u)
         return 1;
-    if (i != 2147483650)
+    if (i != -2147483646)
         return 2;
-    if (l != 2147483660l)
+    if (l != -9223372036854775716l)
         return 3;
     if (l2 != 2147483650l)
         return 4;
     if (ul != 4294967294ul)
         return 5;
-    if (ul2 != 2147483798ul)
+    if (ul2 != 9223372036854775798ul)
         return 6;
-    if (i2 != -1099511625978)
+    if (i2 != -2147483498)
         return 7;
-    if (ui2 != 1099511629574u)
+    if (ui2 != 2147483798u)
         return 8;
     return 0;
 })"));
 }
 
-// (signed)ui reinterprets the 41-bit pattern: ui carries bit 41, so (signed)ui == -96.
+// (signed)ui == -96, which sign-extends to unsigned long.
 TEST_F(BookTest, Chapter12_ChainedCasts)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int ui = 2199023255456u; // 2^41 - 96
+    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int ui = 4294967200u; // 2^32 - 96
 
 int main(void) {
 
     if ((long) (signed) ui != -96l)
         return 1;
 
-    if ((unsigned long) (signed) ui != 2199023255456ul) // same-size copy: 2^41 - 96
+    if ((unsigned long) (signed) ui != 18446744073709551520ul) // 2^64 - 96
         return 2;
 
     return 0;
 })"));
 }
 
-// (unsigned long)(-10) is a same-size COPY: the 41-bit pattern of -10 read as
-// unsigned is 2^41-10 (bits 48-42 stay zero), not 2^64-10.
+// int to unsigned long sign-extends: (unsigned long)(-10) is 2^64-10.
 TEST_F(BookTest, Chapter12_Extension)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int int_to_ulong(int i, unsigned long expected) {
@@ -791,7 +781,7 @@ int main(void) {
         return 1;
     }
 
-    if (!int_to_ulong(-10, 2199023255542ul)) { // 2^41 - 10
+    if (!int_to_ulong(-10, 18446744073709551606ul)) {
         return 2;
     }
 
@@ -809,9 +799,8 @@ int main(void) {
 })"));
 }
 
-// On BESM-6 unsigned int and signed int are both one word, and a fits in the
-// 41-bit signed range, so casting through either type is a bit-pattern-
-// preserving no-op: b equals a in both cases.
+// Casting unsigned long through a 32-bit type truncates; back to unsigned long, an
+// unsigned int zero-extends and an int sign-extends.
 TEST_F(BookTest, Chapter12_RoundTripCasts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned long a = 8589934580ul; // 2^33 - 12
@@ -820,19 +809,19 @@ int main(void) {
 
     unsigned long b = (unsigned long) (unsigned int) a;
 
-    if (b != 8589934580ul)
+    if (b != 4294967284ul)
         return 1;
 
     b = (unsigned long) (signed int) a;
-    if (b != 8589934580ul)
+    if (b != 18446744073709551604ul)
         return 2;
 
     return 0;
 })"));
 }
 
-// Signed/unsigned same-size conversions are bit-pattern COPYs: (ulong)(-1000)
-// is the 41-bit pattern of -1000 read as unsigned = 2^41-1000.
+// Signed/unsigned same-size conversions keep the bit pattern: (ulong)(-1000) is
+// 2^64-1000.
 TEST_F(BookTest, Chapter12_SameSizeConversion)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int uint_to_int(unsigned int ui, int expected) {
@@ -861,11 +850,11 @@ int main(void) {
         return 2;
     }
 
-    if (!long_to_ulong(-1000l, 2199023254552ul)) { // 2^41 - 1000
+    if (!long_to_ulong(-1000l, 18446744073709550616ul)) {
         return 3;
     }
 
-    if (!ulong_to_long(2199023254552ul, -1000l)) { // 2^41 - 1000 -> -1000
+    if (!ulong_to_long(18446744073709550616ul, -1000l)) {
         return 4;
     }
 
@@ -947,17 +936,17 @@ TEST_F(BookTest, Chapter12_BitwiseUnsignedOps)
 })"));
 }
 
-// ui = -1u is 2^48-1 on BESM-6 (48-bit unsigned); shifts wrap at 48 bits.
+// ui = -1u is 2^32-1; shifts of unsigned values are logical.
 TEST_F(BookTest, Chapter12_BitwiseUnsignedShift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
-    unsigned int ui = -1u;  // 2^48 - 1, or 281474976710655
+    unsigned int ui = -1u;  // 2^32 - 1
 
-    if ((ui << 2l) != 281474976710652) { // 2^48 - 4
+    if ((ui << 2l) != 4294967292) { // 2^32 - 4
         return 1;
     }
 
-    if ((ui >> 2) != 70368744177663) { // 2^46 - 1
+    if ((ui >> 2) != 1073741823) { // 2^30 - 1
         return 2;
     }
 
@@ -974,68 +963,60 @@ TEST_F(BookTest, Chapter12_BitwiseUnsignedShift)
 })"));
 }
 
-// x = -1u is 2^48-1; the signed long divisor converts to the common unsigned type as a
-// bit-pattern copy (see Chapter12_SameSizeConversion), so -10l becomes 2^41-10.
-// (Routed through a parameter so the conversion uses the clean 41-bit long value.)
+// x /= -10l computes in long: (2^32 - 1) / -10 = -429496729, converted back to
+// unsigned int.
 TEST_F(BookTest, Chapter12_CompoundAssignUint)
 {
-    EXPECT_EQ("1\n", CompileAndRunBook(R"(unsigned int div_assign(unsigned int x, long d) {
-    x /= d;
-    return x;
-}
-
-int main(void) {
-    // (2^48 - 1) / (unsigned)(-10l) = (2^48 - 1) / (2^41 - 10) = 128
-    return (div_assign(-1u, -10l) == 128u);
+    EXPECT_EQ("1\n", CompileAndRunBook(R"(int main(void) {
+    unsigned int x = -1u;
+    x /= -10l;
+    return (x == 3865470567u);
 })"));
 }
 
-// A constant-count signed >> is arithmetic on BESM-6 (so -2 >>= 3u stays -1); the unsigned
-// long is 48-bit, so 2^48-1 <<= 44 keeps only the top 4 bits.
+// Signed >> is arithmetic (so -2 >>= 3u gives -1); 2^64-1 <<= 44 keeps only the top
+// 20 bits.
 TEST_F(BookTest, Chapter12_CompoundBitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
 
     int i = -2;
     i >>= 3u;
-    // BESM-6 signed >> is logical: the 41-bit pattern of -2 (2^41 - 2) >> 3 = 274877906943.
-    if (i != 274877906943) {
+
+    if (i != -1) {
         return 1;
     }
 
-    unsigned long ul = 281474976710655UL;  // 2^48 - 1
+    unsigned long ul = 18446744073709551615UL;  // 2^64 - 1
     ul <<= 44;                             // 0 out lower 44 bits
-    if (ul != 263882790666240ul) {
+    if (ul != 18446726481523507200ul) {
         return 2;  // fail
     }
     return 0;  // success
 })"));
 }
 
-// 48-bit unsigned long operands; ui is set to the 48-bit pattern of l so ui ^= l zeroes it.
+// Compound bitwise operators on unsigned operands of mixed widths.
 TEST_F(BookTest, Chapter12_CompoundBitwise)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
 
-    unsigned long ul = 279263001115128ul;
-    // On BESM-6 int->unsigned long is a same-size reinterpret: the int -1000 word
-    // is 2^41-1000 (bits 42-48 zero), so the AND clears ul's bits 42-48 rather than
-    // sign-extending -1000 across the full 48 bits as on a 64-bit target.
+    unsigned long ul = 18446460386757245432ul;
+    // -1000 sign-extends to unsigned long.
     ul &= -1000;
-    if (ul != 2186070915096ul) {
+    if (ul != 18446460386757244952ul ) {
         return 1; // fail
     }
 
     ul |= 4294967040u; // 0xffff_ff00 - zero-extended to unsigned long
 
-    if (ul != 2186138353432ul) {
+    if (ul != 18446460386824683288ul ) {
         return 2; // fail
     }
 
     int i = 123456;
-    // (unsigned)(-252645136) on BESM-6 is the 41-bit pattern 2^41-252645136, so ui
-    // must hold that for ui ^= l to cancel to 0.
-    unsigned int ui = 2198770610416u;
+
+    unsigned int ui = 4042322160u;
     long l = -252645136;
     if (ui ^= l) {
         return 3; // fail
@@ -1055,13 +1036,13 @@ TEST_F(BookTest, Chapter12_CompoundBitwise)
 })"));
 }
 
-// ui++ at UINT_MAX (2^48-1) wraps to 0 on BESM-6's 48-bit unsigned int.
+// ui++ at UINT_MAX (2^32-1) wraps to 0.
 TEST_F(BookTest, Chapter12_PostfixPrecedence)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
-    unsigned int ui = 281474976710655U; // 2^48 - 1
+    unsigned int ui = 4294967295U; // 2^32 - 1
 
-    if (((unsigned long)ui++) != 281474976710655U) {
+    if (((unsigned long)ui++) != 4294967295U) {
         return 1; // fail
     }
     if (ui) {
@@ -1098,10 +1079,7 @@ int main(void) {
 })"));
 }
 
-// --/-- underflow wraparound on BESM-6. An unsigned subtract underflow is true 48-bit
-// modular arithmetic (b/usub), so the decrement-from-0 wrap lands at 2^48-1 for both
-// unsigned int and unsigned long. (Contrast with reinterpreting a signed -1 as unsigned,
-// which keeps the 41-bit pattern 2^41-1; see the conversion tests above.)
+// ++/-- on unsigned values wrap around.
 TEST_F(BookTest, Chapter12_UnsignedIncrDecr)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
@@ -1110,28 +1088,28 @@ TEST_F(BookTest, Chapter12_UnsignedIncrDecr)
     if (i-- != 0) {
         return 1;
     }
-    if (i != 281474976710655U) { // underflow from 0 -> 2^48 - 1
+    if (i != 4294967295U) {// wraparound from 0 to UINT_MAX
         return 2;
     }
 
-    if (--i != 281474976710654U) {
+    if (--i != 4294967294U) {
         return 3;
     }
-    if (i != 281474976710654U) {
+    if (i != 4294967294U) {
         return 4;
     }
 
-    unsigned long l = 0;
-    if (l-- != 0) {
+    unsigned long l = 18446744073709551614UL;
+    if (l++ != 18446744073709551614UL) {
         return 5;
     }
-    if (l != 281474976710655UL) { // underflow from 0 -> 2^48 - 1
+    if (l != 18446744073709551615UL) { 
         return 6;
     }
-    if (--l != 281474976710654UL) {
+    if (++l != 0) { // wraparound from ULONG_MAX to 0
         return 7;
     }
-    if (l != 281474976710654UL) {
+    if (l != 0) {
         return 8;
     }
     return 0; // success

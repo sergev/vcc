@@ -1,3 +1,7 @@
+//
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 // BESM-6: the arrow case uses static objects instead of calloc (no heap dependency); all
@@ -122,13 +126,15 @@ int main(void) {
 )PROG"));
 }
 
-// BESM-6: helper names shortened to stay distinct within 8 chars; the pointed-to union
-// uses a local object instead of malloc; punned bytes read big-endian (byte #0 = MSB);
-// the 64-bit long is brought into the 41-bit range and strcmp strings are UPPERCASE so the
-// automatic (ASCII) char data matches the KOI-7-repacked string constants.
+// extra_credit/union_copy/copy_thru_pointer, from the book.
 TEST_F(BookTest, Chapter18_CopyThruPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+// Test copying whole structs/unions through pointers (incl. to/from array members)
+
+void *calloc(unsigned long nmemb, unsigned long size);
+void *malloc(unsigned long size);
+
 union simple {
     int i;
     long l;
@@ -163,22 +169,18 @@ union complex_union {
     struct struct_with_union s;
     union has_union *u_ptr;
 };
-// Test copying whole structs/unions through pointers (incl. to/from array members)
-
-
 
 int strcmp(char* s1, char* s2);
 
 // case 1: *x = y
-int cptoptr(void) {
+int test_copy_to_pointer(void) {
     union simple y;
     y.l = -20;
-    union simple xobj;
-    union simple* x = &xobj;
+    union simple* x = malloc(sizeof(union simple));
     *x = y;
 
-    // validate (uc_arr reads big-endian bytes #0,#1,#2 of -20 = 1,255,255)
-    if (x->l != -20 || x->i != -20 || x->uc_arr[0] != 1 || x->uc_arr[1] != 255 || x->uc_arr[2] != 255) {
+    // validate
+    if (x->l != -20 || x->i != -20 || x->uc_arr[0] != 236 || x->uc_arr[1] != 255 || x->uc_arr[2] != 255) {
         return 0; // fail
     }
 
@@ -186,9 +188,9 @@ int cptoptr(void) {
 }
 
 // case 2: x = *y
-int cpfrptr(void) {
+int test_copy_from_pointer(void) {
     // define/initialize a union object containing a struct
-    struct simple_struct my_struct = { 999999999999l, 20e3, 2147483650u };
+    struct simple_struct my_struct = { 8223372036854775807l, 20e3, 2147483650u };
     static union has_struct my_union;
     my_union.s = my_struct;
 
@@ -200,7 +202,7 @@ int cpfrptr(void) {
     union has_struct another_union = *union_ptr;
 
     // validate
-    if (another_union.s.l != 999999999999l || another_union.s.d != 20e3 || another_union.s.u != 2147483650u) {
+    if (another_union.s.l != 8223372036854775807l || another_union.s.d != 20e3 || another_union.s.u != 2147483650u) {
         return 0; // fail
     }
 
@@ -216,29 +218,29 @@ union with_padding {
     unsigned int ui;
 };
 
-int cparrmem(void) {
+int test_copy_array_members(void) {
 
     // define/initialize an array of unions
-    union with_padding union_array[3] = { {"FOOBAR"}, {"HELLO"}, {"ITSAUNION"} };
+    union with_padding union_array[3] = { {"foobar"}, {"hello"}, {"itsaunion"} };
 
     // copy element out of array
     union with_padding another_union = union_array[0];
-    union with_padding yet_another_union = { "BLAHBLAH" };
+    union with_padding yet_another_union = { "blahblah" };
 
     // copy an element into the array
     union_array[2] = yet_another_union;
 
     // validate
-    if (strcmp(union_array[0].arr, "FOOBAR") || strcmp(union_array[1].arr, "HELLO") || strcmp(union_array[2].arr, "BLAHBLAH")) {
+    if (strcmp(union_array[0].arr, "foobar") || strcmp(union_array[1].arr, "hello") || strcmp(union_array[2].arr, "blahblah")) {
         return 0; // fail
     }
 
-    if (strcmp(another_union.arr, "FOOBAR")) {
+    if (strcmp(another_union.arr, "foobar")) {
         return 0; // fail
     }
 
     // check yet_another_union too, even though we didn't update it
-    if (strcmp(yet_another_union.arr, "BLAHBLAH")) {
+    if (strcmp(yet_another_union.arr, "blahblah")) {
         return 0; // fail
     }
 
@@ -247,15 +249,15 @@ int cparrmem(void) {
 }
 
 int main(void) {
-    if (!cptoptr()){
+    if (!test_copy_to_pointer()){
         return 1;
     }
 
-    if (!cpfrptr()) {
+    if (!test_copy_from_pointer()) {
         return 2;
     }
 
-    if (!cparrmem()) {
+    if (!test_copy_array_members()) {
         return 3;
     }
 
@@ -580,23 +582,24 @@ int p_strct(int i1, int i2, int i3, int i4, int i5, union char_arr ca) {
 )PROG"));
 }
 
-// BESM-6: validate helpers renamed to stay distinct within 8 chars; char members read
-// byte #0 (MSB), so a small int written through the union reads back 0 there; strcmp
-// strings and the struct char member use UPPERCASE so source/KOI-7 encodings agree.
+// extra_credit/libraries/static_union_inits, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_StaticUnionInits)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+// Test initialization of static unions; make sure uninitialized unions are initialized to zero
+
 int strcmp(char* s1, char* s2);
 
 // Test case 1 - simple union w/ scalar elements (and padding)
 union simple {
     int i;
-    char c;
+    signed char c;
     double d;
 };
 
 extern union simple s;
-int vsimple(void);
+int validate_simple(void);
 
 // Test case 2 - union w/ another union as first element
 union has_union {
@@ -605,7 +608,7 @@ union has_union {
 };
 
 extern union has_union h;
-int vhasun(void);
+int validate_has_union(void);
 
 // Test case 3 - struct containing partially initialized array of unions
 // (make sure we initialize padding to 0 for each of them)
@@ -615,16 +618,14 @@ struct has_union_array {
     union simple s;
 };
 
-
 extern struct has_union_array my_struct;
-int vhasarr(void);
-
+int validate_has_union_array(void);
 
 // Test case 4 - an uninitialized static union (make sure we initialize the
 // whole thing, including padding, to zeroes)
 
 extern union has_union all_zeros;
-int vuninit(void);
+int validate_uninitialized(void);
 
 // Test case 5 - an array of unions with trailing padding. Make sure padding
 // is included
@@ -634,7 +635,70 @@ union with_padding {
 }; // extra 3 bytes of padding to make it 8-byte aligned
 
 extern union with_padding padded_union_array[3];
-int vpadarr(void);
+int validate_padded_union_array(void);
+
+int validate_simple(void) {
+    return (s.c == -39 && s.i == 217);
+}
+
+int validate_has_union(void) {
+    return (h.u.c == 77 && h.c == 77 && h.u.i == 77);
+}
+
+int validate_has_union_array(void) {
+
+    // validate array of unions
+    // first validate elements 0-2
+    for (int i = 0; i < 3; i = i + 1) {
+        int expected = 'a' + i;
+        if (my_struct.union_array[i].u.c != expected
+            || my_struct.union_array[i].c != expected
+            || my_struct.union_array[i].u.i != expected) {
+            return 0;
+        }
+    }
+
+    // last array element should be all 0s (including bytes that
+    // aren't part of first member) b/c it's uninitialized
+    if (my_struct.union_array[3].u.d != 0.0) {
+        return 0;
+    }
+
+    // validate other elements of struct
+    if (my_struct.c != '#') {
+        return 0; // fail
+    }
+
+    if (my_struct.s.c != '!' || my_struct.s.i != '!') {
+        return 0; // fail
+    }
+
+    return 1;
+}
+
+int validate_uninitialized(void) {
+    if (all_zeros.u.d != 0.0) {
+        return 0; // fail
+    }
+    return 1;
+}
+
+int validate_padded_union_array(void) {
+    if (strcmp(padded_union_array[0].arr, "first string") != 0) {
+        return 0; // fail
+    }
+
+    if (strcmp(padded_union_array[1].arr, "string #2") != 0) {
+        return 0; // fail
+    }
+
+    if (strcmp(padded_union_array[2].arr, "string #3") != 0) {
+        return 0; // fail
+    }
+
+    return 1;
+}
+
 // Test initialization of static unions; make sure uninitialized
 // unions/sub-objects are initialized to zero
 
@@ -650,7 +714,7 @@ union has_union h = {{77}};
 // (make sure we initialize uninitialized values to zero)
 
 struct has_union_array my_struct = {
-    {{{'a'}}, {{'b'}}, {{'c'}}}, 'X', {'Y'}
+    {{{'a'}}, {{'b'}}, {{'c'}}}, '#', {'!'}
 };
 
 // Test case 4 - uninitialized union (make sure whole thing is initialized to
@@ -661,101 +725,33 @@ union has_union all_zeros;
 // Test case 5 - an array of unions with trailing padding. Make sure padding
 // is included
 union with_padding padded_union_array[3] = {
-    {"FIRST STRING"}, {"STRING TWO"}, {
-        "STRING THREE"
+    {"first string"}, {"string #2"}, {
+        "string #3"
     }
 };
 
 int main(void) {
-    if (!vsimple()) {
+    if (!validate_simple()) {
         return 1;
     }
 
-    if (!vhasun()){
+    if (!validate_has_union()){
         return 2;
     }
 
-    if (!vhasarr()) {
+    if (!validate_has_union_array()) {
         return 3;
     }
 
-    if (!vuninit()) {
+    if (!validate_uninitialized()) {
         return 4;
     }
 
-    if (!vpadarr()) {
+    if (!validate_padded_union_array()) {
         return 5;
     }
 
     return 0;
-}
-// Test initialization of static unions; make sure uninitialized unions are initialized to zero
-
-
-int vsimple(void) {
-    // s.c reads byte #0 (MSB) of int 217 = 0; char is unsigned on BESM-6
-    return (s.c == 0 && s.i == 217);
-}
-
-int vhasun(void) {
-    // u.c and h.c read byte #0 (MSB) of int 77 = 0; the int member holds 77
-    return (h.u.c == 0 && h.c == 0 && h.u.i == 77);
-}
-
-int vhasarr(void) {
-
-    // validate array of unions
-    // first validate elements 0-2
-    for (int i = 0; i < 3; i = i + 1) {
-        int expected = 'a' + i;
-        // the int member holds 'a'+i; the char views read byte #0 (MSB) = 0
-        if (my_struct.union_array[i].u.c != 0
-            || my_struct.union_array[i].c != 0
-            || my_struct.union_array[i].u.i != expected) {
-            return 0;
-        }
-    }
-
-    // last array element should be all 0s (including bytes that
-    // aren't part of first member) b/c it's uninitialized
-    if (my_struct.union_array[3].u.d != 0.0) {
-        return 0;
-    }
-
-    // validate other elements of struct
-    if (my_struct.c != 'X') {
-        return 0; // fail
-    }
-
-    // s.i holds 'Y'; s.c reads byte #0 (MSB) = 0
-    if (my_struct.s.c != 0 || my_struct.s.i != 'Y') {
-        return 0; // fail
-    }
-
-    return 1;
-}
-
-int vuninit(void) {
-    if (all_zeros.u.d != 0.0) {
-        return 0; // fail
-    }
-    return 1;
-}
-
-int vpadarr(void) {
-    if (strcmp(padded_union_array[0].arr, "FIRST STRING") != 0) {
-        return 0; // fail
-    }
-
-    if (strcmp(padded_union_array[1].arr, "STRING TWO") != 0) {
-        return 0; // fail
-    }
-
-    if (strcmp(padded_union_array[2].arr, "STRING THREE") != 0) {
-        return 0; // fail
-    }
-
-    return 1;
 }
 )PROG"));
 }

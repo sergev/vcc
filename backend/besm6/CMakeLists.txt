@@ -55,6 +55,7 @@ add_executable(besm-tests
     test/printf_tests.cpp
     test/funcptr_tests.cpp
     test/stdarg_tests.cpp
+    test/book_besm6_tests.cpp
     test/mem_tests.cpp
     test/str_tests.cpp
     test/typedef_tests.cpp

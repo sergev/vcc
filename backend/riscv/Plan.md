@@ -45,9 +45,10 @@ and `riscv-tests` with `CompileToRiscv`, `CompileAndRunRiscv` and `CompileAndRun
 (and the shared book suite).
 
 Instruction selection (R5–R12) is done: every TAC variable lives in a stack slot,
-and all of ch. 1–20 run. 72 book programs expect BESM-6 integer widths or sizes;
-each gives on RV64 exactly what clang gives, and is on the RISC-V skip list. Four
-more wait for library routines (R17).
+and all of ch. 1–20 run. The 72 book programs whose results depend on integer
+widths or sizes are shared in their generic LP64 form; BESM-6 runs its own versions
+from `backend/besm6/test/book_besm6_tests.cpp`. Three wait for library routines
+(R17).
 
 ## Phase 4 — psABI conformance
 
@@ -115,9 +116,9 @@ more wait for library routines (R17).
   TAC verifier, RISC-V run tests, and the BESM-6 tests as a regression net.
 - **qemu on macOS is system-mode only**: the harness owns its crt0/linker script;
   no libc from the host toolchain is used.
-- **The book suite is BESM-6-adapted** (`putch`, 41-bit values, BESM-6 `sizeof`).
-  Per-target expectations must not weaken the BESM-6 tests; where a program cannot
-  be shared, RISC-V skips it and R16 compares it against clang instead.
+- **The book suite was BESM-6-adapted** (`putch`, 41-bit values). A program that
+  cannot be shared is generic in the suite, with a BESM-6 version beside the
+  BESM-6 tests, so neither target's expectations are weakened.
 
 ## Open questions
 

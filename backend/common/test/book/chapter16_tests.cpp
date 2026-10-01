@@ -31,6 +31,9 @@
 // on mismatch, so a BESM-6-valued expectation would just encode a meaningless
 // failure code; DISABLED_ is the honest call.
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 
@@ -1409,19 +1412,15 @@ int main(void) {
 // (values beyond the BESM-6 integer range, narrow-char/charset semantics, or
 // multi-dimensional char-array sub-word scaling).
 
-// chars/explicit_casts: the static-local + 8-char-collision + 41-bit-value parts are
-// adapted here (helpers renamed to short forms like `c2uc`/`sc2ui` because the book names
-// all collided in Madlen's 8-char limit; `sc2ui` uses the BESM-6 41-bit 2^41-10 value,
-// task #14; the `static long *null_ptr` cast works).  The `(double)(unsigned char)` bit-7
-// conversion bug (task #30) is fixed: a sub-word integer source is now promoted to a full
-// word before the int->FP conversion.
+// chars/explicit_casts: explicit conversions to and from character types.  Plain
+// char may be unsigned, so helpers returning a negative value return `signed char`.
 TEST_F(BookTest, Chapter16_ExplicitCasts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test explicit conversions to and from character types */
 
 unsigned char c2uc(char c) { return (unsigned char)c; }
 signed char c2sc(char c) { return (signed char)c; }
-signed char uc2c(unsigned char u) { return (signed char)u; } // plain char unsigned on BESM-6
+signed char uc2c(unsigned char u) { return (signed char)u; }
 signed char uc2sc(unsigned char u) { return (signed char)u; }
 unsigned char sc2uc(signed char u) { return (unsigned char)u; }
 int c2i(char c) { return (int)c; }
@@ -1436,7 +1435,7 @@ unsigned long uc2ul(unsigned char u) { return (unsigned long)u; }
 double uc2d(unsigned char u) { return (double)u; }
 char i2c(int i) { return (char)i; }
 char ui2c(unsigned int u) { return (char)u; }
-signed char d2c(double d) { return (signed char)d; } // plain char unsigned on BESM-6: (char)negative-double is UB
+signed char d2c(double d) { return (signed char)d; }
 signed char ul2sc(unsigned long l) { return (signed char)l; }
 unsigned char i2uc(int i) { return (unsigned char)i; }
 unsigned char ui2uc(unsigned int ui) { return (unsigned char)ui; }
@@ -1454,7 +1453,7 @@ int main(void) {
     signed char sc = -10;
     if (sc2uc(sc) != 246) return 4;
     if (sc2l(sc) != -10) return 5;
-    if (sc2ui(sc) != 2199023255542u) return 6; // (unsigned int)(-10) = 2^41-10 on BESM-6
+    if (sc2ui(sc) != 4294967286u) return 6;
     if (sc2d(sc) != -10.0) return 7;
 
     unsigned char uc = 250;
@@ -1470,17 +1469,17 @@ int main(void) {
     if (i2c(128) != c) return 15;
     c = (char)-6;
     if (ui2c(2147483898u) != c) return 16;
-    if (d2c(-2.6) != -2) return 17; // d2c returns signed char on BESM-6
+    if (d2c(-2.6) != -2) return 17;
 
-    if (l2sc(1099511627520l)) return 18; // low byte 0
+    if (l2sc(17592186044416l)) return 18;
     sc = (signed char)-126;
-    if (ul2sc(281474976710530ul) != sc) return 19; // low byte 130
+    if (ul2sc(9224497936761618562ul) != sc) return 19;
 
     uc = (unsigned char)200;
     if (i2uc(-1234488) != uc) return 20;
     if (ui2uc(4293732808) != uc) return 21;
-    if (l2uc(1099511627720l) != uc) return 22; // low byte 200
-    if (ul2uc(281474976710600ul) != uc) return 23; // low byte 200
+    if (l2uc(-36283884951096l) != uc) return 22;
+    if (ul2uc(9224497936761618632ul) != uc) return 23;
     if (d2uc(200.99) != uc) return 24;
 
     static long *null_ptr;
@@ -1497,15 +1496,9 @@ int main(void) {
 })"));
 }
 
-// chars/convert_by_assignment: out-of-range source values are replaced with
-// in-range ones that keep the same low byte (the task #11 "value parts").  Helpers
-// whose names collide in Madlen's 8-char limit were renamed: `check_char_on_stack`
-// (vs `check_char` → `check_ch`) → `check_stk`, and the `return_extended_uchar` /
-// `return_extended_schar` / `return_truncated_long` trio (the first two both →
-// `return_e`, and even `ret_ext_uc`/`ret_ext_sc` still share `ret_ext_`) → the
-// 8-char-distinct `rxt_uc`/`rxt_sc`/`rtrunc`.  The `check_uint` expectation uses the
-// BESM-6 41-bit unsigned value (2^41-10) instead of x86's 2^32-10 (task #14).  Plain
-// char is unsigned on BESM-6, so the negative-valued `array` is declared `signed char`.
+// chars/convert_by_assignment: conversions to and from character types by
+// assignment, argument passing and return.  Plain char may be unsigned, so the
+// negative-valued `array` is declared `signed char`.
 TEST_F(BookTest, Chapter16_ConvertByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test implicit conversions to and from character types as if by assignment. */
@@ -1529,7 +1522,7 @@ unsigned char rtrunc(long l) { return l; }
 int main(void) {
     signed char sc = -10;
     if (!check_long(sc, -10l)) return 1;
-    if (!check_uint(sc, 2199023255542u)) return 2; // (unsigned int)(-10) = 2^41-10 on BESM-6
+    if (!check_uint(sc, 4294967286u)) return 2;
     if (!check_double(sc, -10.0)) return 3;
 
     unsigned char uc = 246;
@@ -1546,22 +1539,22 @@ int main(void) {
     char expected_char = -10;
     if (!check_char(uc, expected_char)) return 11;
 
-    if (!check_uchar(281474976710646ul, uc)) return 12; // low byte 246
+    if (!check_uchar(18446744073709551606ul, uc)) return 12;
 
     if (rxt_uc(uc) != 246) return 13;
-    if (rxt_sc(sc) != 2199023255542ul) return 14; // (ulong)(-10)=2^41-10
+    if (rxt_sc(sc) != 18446744073709551606ul) return 14;
     if (rtrunc(5369233654l) != uc) return 15;
 
-    signed char array[3] = {0, 0, 0}; // plain char unsigned on BESM-6; keep signed wrap
+    signed char array[3] = {0, 0, 0};
     array[1] = 128;
     if (array[0] || array[2] || array[1] != -128) return 16;
-    array[1] = 281474976710530ul; // low byte 130 (was 9.2e18)
+    array[1] = 9224497936761618562ul;
     if (array[0] || array[2] || array[1] != -126) return 17;
     array[1] = -2.6;
     if (array[0] || array[2] || array[1] != -2) return 18;
 
     unsigned char uchar_array[3] = {0, 0, 0};
-    uchar_array[1] = 1099511627520l; // low byte 0 (was 2^44)
+    uchar_array[1] = 17592186044416l;
     if (uchar_array[0] || uchar_array[2] || uchar_array[1] != 0) return 19;
     uchar_array[1] = 2147483898u;
     if (uchar_array[0] || uchar_array[2] || uchar_array[1] != 250) return 20;
@@ -1941,15 +1934,7 @@ int main(void) {
 
 // --- Negative-operand right shift is logical/impl-defined on BESM-6 -----------
 
-// extra_credit/bitshift_chars: BESM-6 right shift of a negative value is logical
-// (zero-fill of the 41-bit pattern), so the negative cases yield large positives.
-//
-// KNOWN FAILURE (return 5, pre-existing, orthogonal to plain-char signedness — task #31):
-// `-(uc << 5u) >> 5u` with `unsigned char uc` const-folds to a *uint* (48-bit) value because
-// the optimizer represents `(int)(unsigned char)` via ZERO_EXTEND→uint, so the unary minus
-// wraps at 2^48 instead of int's 2^41 (yields 8796093021953, not 68719476481).  The integer
-// promotion of `unsigned char` is to `int`, not `unsigned int` (the test's own comment), so the
-// fix belongs in const-fold's ZERO_EXTEND result-kind handling, not here.
+// extra_credit/bitshift_chars: chars are promoted to int before shifting.
 TEST_F(BookTest, Chapter16_BitshiftChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test << and >> operators with chars (or mix of chars and other types)
@@ -1963,19 +1948,19 @@ int main(void) {
     }
 
     signed char sc = -127;
-    signed char c = 5; // plain char unsigned on BESM-6; keep signed for the shift-promotion check
-    // sc is promoted to int, then shifted (logical: (2^41 - 127) >> 5)
-    if ((sc >> c) != 68719476732) {
+    signed char c = 5; // plain char may be unsigned; keep signed for the shift-promotion check
+    // sc is promoted to int, then shifted
+    if ((sc >> c) != -4) {
         return 3;  // fail
     }
 
-    // make sure c << 3ul is promoted to int, not unsigned long (logical: (2^41 - 40) >> 3)
-    if (((-(c << 3ul)) >> 3) != 274877906939) {
+    // make sure c << 3ul is promoted to int, not unsigned long
+    if (((-(c << 3ul)) >> 3) != -5) {
         return 4;  // fail
     }
 
-    // make sure uc << 5u is promoted to int, not unsigned int (logical: (2^41 - 8160) >> 5)
-    if ((-(uc << 5u) >> 5u) != 68719476481l) {
+    // make sure uc << 5u is promoted to int, not unsigned int
+    if ((-(uc << 5u) >> 5u) != -255l) {
         return 5; // fail
     }
 
@@ -2031,15 +2016,14 @@ int main(void) {
 })"));
 }
 
-// chars/common_type: the ternary's unsigned-int common type, narrowed to the long
-// return, wraps back to -10 on BESM-6 (41-bit long). char_lt_int/char_lt_uchar are
-// renamed c_lt_int/c_lt_uchar so they stay distinct within Madlen's 8-char limit.
+// chars/common_type: the ternary's common type is unsigned int, so -10 becomes
+// 2^32-10 in the long result.
 TEST_F(BookTest, Chapter16_CommonType)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly find the common type of character types and other
  * types (it's always the other type - or, if both are character types, it's int) */
 
-long ternary(int flag, signed char c) { // plain char unsigned on BESM-6; keep c signed
+long ternary(int flag, signed char c) { // plain char may be unsigned; keep c signed
     return flag ? c : 1u;
 }
 
@@ -2051,7 +2035,7 @@ int uchar_gt_long(unsigned char uc, long l) {
     return uc > l;
 }
 
-int c_lt_uchar(signed char c, unsigned char u) { // plain char unsigned on BESM-6; keep c signed
+int c_lt_uchar(signed char c, unsigned char u) { // plain char may be unsigned; keep c signed
     return c < u;
 }
 
@@ -2066,7 +2050,7 @@ int multiply(void) {
 }
 
 int main(void) {
-    if (ternary(1, -10) != -10l) {
+    if (ternary(1, -10) != 4294967286l) {
         return 1;
     }
 
@@ -2078,7 +2062,7 @@ int main(void) {
         return 3;
     }
 
-    signed char c = -1; // plain char unsigned on BESM-6; keep c signed
+    signed char c = -1; // plain char may be unsigned; keep c signed
     unsigned char u = 2;
     if (!c_lt_uchar(c, u)) {
         return 4;
@@ -2097,14 +2081,14 @@ int main(void) {
 })"));
 }
 
-// extra_credit/bitwise_ops_chars: the 48-bit unsigned analogue of 2^32-659 is 2^48-659.
+// extra_credit/bitwise_ops_chars: chars are promoted before bitwise operations.
 TEST_F(BookTest, Chapter16_BitwiseOpsChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// make sure we perform integer promotions when performing bitwise operations on chars
 
 int main(void) {
     unsigned char uc = 135;
-    signed char c = -116; // plain char is unsigned on BESM-6; keep the negative value signed
+    signed char c = -116; // plain char may be unsigned; keep the negative value signed
     if ((uc & c) != 132) {
         return 1;  // fail
     }
@@ -2113,7 +2097,7 @@ int main(void) {
         return 2;  // fail
     }
 
-    if (((c ^ 1001u) | 360l) != 281474976709997) { // 2^48 - 659
+    if (((c ^ 1001u) | 360l) != 4294966637) { // 2^32 - 659
         return 3; // fail
     }
 
@@ -2177,38 +2161,58 @@ int main(void) {
 
 // --- read an int's big-endian bytes via char* --------------------------------
 
-// chars/access_through_char_pointer (adapted for BESM-6): an int occupies one
-// 48-bit word = 6 bytes in big-endian order (byte #0 = MSB, byte #5 = LSB), so
-// reading it through a char* inspects those six bytes rather than x86's four.
+// chars/access_through_char_pointer: the bytes of a 4-byte int, an 8-byte double
+// and an array, little-endian.  The pointer is `signed char *`, since plain char
+// may be unsigned.
 TEST_F(BookTest, Chapter16_AccessThroughCharPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can read an object through a pointer to a character type */
 
 int main(void) {
 
-    /* Inspect the six big-endian bytes of an int held in one 48-bit word:
-     * byte #0 is the most significant byte, byte #5 the least significant. */
+    // inspect the four bytes of an int
     int x = 100;
-    char *byte_ptr = (char *) &x;
+    signed char *byte_ptr = (signed char *) &x;
 
-    /* the value lives in the low byte; the five higher bytes are zero */
-    if (byte_ptr[5] != 100) {
+    if (byte_ptr[0] != 100) {
         return 1;
     }
 
-    if (byte_ptr[0] || byte_ptr[1] || byte_ptr[2] || byte_ptr[3] || byte_ptr[4]) {
+    if (byte_ptr[1] || byte_ptr[2] || byte_ptr[3]) {
         return 2;
     }
 
-    /* a value spanning two bytes demonstrates big-endian ordering in the word */
-    int y = 0x0102; /* 258 */
-    byte_ptr = (char *) &y;
-    if (byte_ptr[5] != 2) {
+    // now inspect a double -- only upper bit should be set
+    double d = -0.0; // 0x8000_0000_0000_0000
+    byte_ptr = (signed char *) &d;
+    if (byte_ptr[7] != -128) {
         return 3;
     }
 
-    if (byte_ptr[4] != 1) {
-        return 4;
+    for (int i = 0; i < 7; i = i + 1) {
+        if (byte_ptr[i]) {
+            return 4;
+        }
+    }
+
+    // finally, let's look at an array
+    unsigned int array[3][2][1] = {
+        {{-1}, {-1}},
+        {{-1}, {-1}},
+        {{4294901760u}} // 0xffff_0000
+    };
+    byte_ptr = (signed char *) array;
+    byte_ptr = byte_ptr + 16; // each row is 8 bytes since it has 2 ints
+    if (byte_ptr[0] || byte_ptr[1]) {
+        return 5;
+    }
+
+    if (byte_ptr[2] != -1) {
+        return 6;
+    }
+
+    if (byte_ptr[3] != -1) {
+        return 7;
     }
 
     return 0;

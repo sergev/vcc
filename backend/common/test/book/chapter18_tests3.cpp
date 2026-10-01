@@ -1,3 +1,7 @@
+//
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 // Passes structs of every classification by value as single parameters.  Out-of-range x86
@@ -1457,15 +1461,20 @@ struct bytesize24 fun24(void) {
 )PROG"));
 }
 
-// BESM-6: char members read byte #0 (MSB); array-of-pointers case rewritten to use
-// local storage instead of calloc (no heap dependency).
+// extra_credit/member_access/nested_union_access, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_NestedUnionAccess)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Test access to nested union members through dot, arrow, and subscript operators */
+
+void *calloc(unsigned long nmemb, unsigned long size);
+void *malloc(unsigned long size);
+
 union simple {
     int i;
     long l;
-    char c;
+    signed char c;
     unsigned char uc_arr[3];
 };
 
@@ -1496,10 +1505,8 @@ union complex_union {
     struct struct_with_union s;
     union has_union *u_ptr;
 };
-/* Test access to nested union members through dot, arrow, and subscript operators */
 
-
-int autodot(void) {
+int test_auto_dot(void) {
     // Test nested access with . in unions/structs containing unions
     // with automatic storage duration
 
@@ -1525,7 +1532,7 @@ int autodot(void) {
     z.s.u.i = 12345;
     z.s.ul = 0;
 
-    if (z.s.u.c != 0) { // byte #0 (MSB) of 12345 is zero
+    if (z.s.u.c != 57) { // lowest byte of 12345
         return 0; // fail
     }
 
@@ -1544,7 +1551,7 @@ int autodot(void) {
     return 1; // success
 }
 
-int statdot(void) {
+int test_static_dot(void) {
     // identical to test_auto_dot but using objects
     // with static storage duration
 
@@ -1570,7 +1577,7 @@ int statdot(void) {
     z.s.u.i = 12345;
     z.s.ul = 0;
 
-    if (z.s.u.c != 0) { // byte #0 (MSB) of 12345 is zero
+    if (z.s.u.c != 57) { // lowest byte of 12345
         return 0; // fail
     }
 
@@ -1581,7 +1588,7 @@ int statdot(void) {
     return 1; // success
 }
 
-int autoarr(void) {
+int test_auto_arrow(void) {
     // Test nested access in unions w/ automatic storage duration,
     // using only -> operator
     union simple inner = {100};
@@ -1596,20 +1603,19 @@ int autoarr(void) {
     outer_ptr->u_ptr->l = -10;
 
     // read through other members that should have same value
-    // c reads byte #0 (MSB) of -10 = 1; i and l read the full word = -10
-    if (outer_ptr->u_ptr->c != 1 || outer_ptr->u_ptr->i != -10 || outer_ptr->u_ptr->l != -10) {
+    if (outer_ptr->u_ptr->c != -10 || outer_ptr->u_ptr->i != -10 || outer_ptr->u_ptr->l != -10) {
         return 0; // fail
     }
 
-    // read through members of uc_arr (bytes #0,#1,#2 of -10 = 1,255,255)
-    if (outer_ptr->u_ptr->uc_arr[0] != 1 || outer_ptr->u_ptr->uc_arr[1] != 255 || outer_ptr->u_ptr->uc_arr[2] != 255) {
+    // read through members of uc_arr
+    if (outer_ptr->u_ptr->uc_arr[0] != 246 || outer_ptr->u_ptr->uc_arr[1] != 255 || outer_ptr->u_ptr->uc_arr[2] != 255) {
         return 0; // fail
     }
 
     return 1; // success
 }
 
-int statarr(void) {
+int test_static_arrow(void) {
     // identical to test_auto_arrow but with objects of static storage duration
     static union simple inner = {100};
     static union has_union outer;
@@ -1624,42 +1630,38 @@ int statarr(void) {
     outer_ptr->u_ptr->l = -10;
 
     // read through other members that should have same value
-    // c reads byte #0 (MSB) of -10 = 1; i and l read the full word = -10
-    if (outer_ptr->u_ptr->c != 1 || outer_ptr->u_ptr->i != -10 || outer_ptr->u_ptr->l != -10) {
+    if (outer_ptr->u_ptr->c != -10 || outer_ptr->u_ptr->i != -10 || outer_ptr->u_ptr->l != -10) {
         return 0; // fail
     }
 
-    // read through members of uc_arr (bytes #0,#1,#2 of -10 = 1,255,255)
-    if (outer_ptr->u_ptr->uc_arr[0] != 1 || outer_ptr->u_ptr->uc_arr[1] != 255 || outer_ptr->u_ptr->uc_arr[2] != 255) {
+    // read through members of uc_arr
+    if (outer_ptr->u_ptr->uc_arr[0] != 246 || outer_ptr->u_ptr->uc_arr[1] != 255 || outer_ptr->u_ptr->uc_arr[2] != 255) {
         return 0; // fail
     }
 
     return 1; // success
 }
 
-int arrunis(void) {
+int test_array_of_unions(void) {
     // test access to array of unions
     union has_union arr[3];
     arr[0].u.l = -10000;
     arr[1].u.i = 200;
     arr[2].u.c = -120;
 
-    // arr[1].u.i = 200 → byte #0 (MSB) is 0; arr[2].u.c = -120 stores byte 136
-    if (arr[0].u.l != -10000 || arr[1].u.c != 0 || arr[2].u.uc_arr[0] != 136) {
+    if (arr[0].u.l != -10000 || arr[1].u.c != -56 || arr[2].u.uc_arr[0] != 136) {
         return 0; // fail
     }
 
     return 1; // success
 }
 
-int arrptrs(void) {
-    // test access to array of union pointers (local storage, no heap)
+int test_array_of_union_pointers(void) {
+    // test access to array of union pointers
     union has_union *ptr_arr[3];
-    union has_union storage[3];
-    union simple inner_storage[3];
     for (int i = 0; i < 3; i = i + 1) {
-        ptr_arr[i] = &storage[i];
-        ptr_arr[i]->u_ptr = &inner_storage[i];
+        ptr_arr[i] = calloc(1, sizeof(union has_union));
+        ptr_arr[i]->u_ptr = calloc(1, sizeof (union simple));
         ptr_arr[i]->u_ptr->l = i;
     }
 
@@ -1670,29 +1672,28 @@ int arrptrs(void) {
     return 1;
 }
 
-
 int main(void) {
-    if (!autodot()) {
+    if (!test_auto_dot()) {
         return 1;
     }
 
-    if (!statdot()) {
+    if (!test_static_dot()) {
         return 2;
     }
 
-    if (!autoarr()) {
+    if (!test_auto_arrow()) {
         return 3;
     }
 
-    if (!statarr()) {
+    if (!test_static_arrow()) {
         return 4;
     }
 
-    if (!arrunis()) {
+    if (!test_array_of_unions()) {
         return 5;
     }
 
-    if (!arrptrs()) {
+    if (!test_array_of_union_pointers()) {
         return 6;
     }
 
@@ -1701,9 +1702,8 @@ int main(void) {
 )PROG"));
 }
 
-// BESM-6: char is unsigned and reads big-endian (byte #0 = MSB); unsigned long is one
-// 48-bit word (6 live bytes, so arr[6]/arr[7] are in the zero second word); the double
-// -1.0 has the native bit pattern exponent=64, sign=1, zero mantissa = 2^47 + 2^40.
+// extra_credit/member_access/static_union_access, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_StaticUnionAccess)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
@@ -1711,47 +1711,42 @@ TEST_F(BookTest, Chapter18_StaticUnionAccess)
 union u {
     unsigned long l;
     double d;
-    char arr[8];
+    signed char arr[8];
 };
 
-static union u my_union = { 281474976710655UL }; // 2^48 - 1 (all 48 bits set)
+static union u my_union = { 18446744073709551615UL };
 static union u* union_ptr = 0;
 
 int main(void) {
     union_ptr = &my_union;
-    if (my_union.l != 281474976710655UL) {
+    if (my_union.l != 18446744073709551615UL) {
         return 1; // fail
     }
 
-    // word 0 is all-ones (bytes 0-5 = 255); arr[6]/arr[7] live in the zero second word
-    for (int i = 0; i < 6; i = i + 1) {
-        if (my_union.arr[i] != 255) {
+    for (int i = 0; i < 8; i = i + 1) {
+        if (my_union.arr[i] != -1) {
             return 2; // fail
         }
-    }
-    if (my_union.arr[6] != 0 || my_union.arr[7] != 0) {
-        return 3; // fail
     }
 
     union_ptr->d = -1.0;
 
-    if (union_ptr->l != 141836999983104UL) {
-        return 4; // fail
+    if (union_ptr->l != 13830554455654793216ul) {
+        return 3; // fail
     }
 
-    // byte #0 (MSB) of -1.0 is 0x81 = 129; bytes #1-5 are zero
-    if (union_ptr->arr[0] != 129) {
-        return 5; // fail
-    }
-    for (int i = 1; i < 6; i = i + 1) {
+    for (int i = 0; i < 6; i = i + 1) {
+        // lower 6 bytes are 0
         if (my_union.arr[i]) {
-            return 6; // fail
+            return 4; // fail
         }
     }
+    if (union_ptr->arr[6] != -16) {
+        return 5; // fail
+    }
 
-    // the second word is untouched by the one-word double write
-    if (union_ptr->arr[6] != 0 || union_ptr->arr[7] != 0) {
-        return 7; // fail
+    if (union_ptr->arr[7] != -65) {
+        return 6; // fail
     }
 
     return 0; // success
@@ -1759,21 +1754,16 @@ int main(void) {
 )PROG"));
 }
 
-// block-scope static + temporary lifetime + union punning.  We implicitly take the
-// address of a union with temporary lifetime (the conditional-expression result) and
-// subscript a char member of it — exercising gen_lval's EXPR_COND case.
-//
-// Union char-punning values are BESM-6-specific: a `long` is one 48-bit word whose
-// bytes pack 6/word most-significant-first, so the byte that distinguishes the two
-// initializers is arr[5] (the low byte), not arr[0] as on little-endian x86.  Plain
-// char is unsigned here, so the bytes are the positive low-byte values 234 / 210
-// (= 9876543210 & 0xFF / 1234567890 & 0xFF).  get_flag() toggles 0->1 then 1->0, so
-// the first access selects union1 and the second selects union2.
+// extra_credit/member_access/union_temp_lifetime, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_UnionTempLifetime)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+// We can implicitly get the address of a union with temporary lifetime
+// (and subscript it)
+
 struct has_char_array {
-    char arr[8];
+    signed char arr[8];
 };
 
 union has_array {
@@ -1791,13 +1781,13 @@ int main(void) {
     union has_array union1 = {9876543210l};
     union has_array union2 = {1234567890l};
 
-    // first access selects union1
-    if ((get_flag() ? union1 : union2).s.arr[5] != 234) {
+    // first access member in union1
+    if ((get_flag() ? union1 : union2).s.arr[0] != -22) {
         return 1; // fail
     }
 
-    // then access selects union2
-    if ((get_flag() ? union1 : union2).s.arr[5] != 210) {
+    // then access member in union2
+    if ((get_flag() ? union1 : union2).s.arr[0] != -46) {
         return 2; // fail
     }
 
@@ -1976,16 +1966,15 @@ int main(void) {
 )PROG"));
 }
 
-// Adapted for BESM-6: calloc replaced by a zero-initialized static array
-// (heap not yet wired up, task #23); unsigned int wraps at 2^48 and plain char
-// is unsigned, so the wide unsigned and negative-char literals are adjusted.
+// extra_credit/other_features/incr_struct_members, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_IncrStructMembers)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 // Test prefix and postfix ++ and -- with structure members
 
 struct inner {
-    char c;
+    signed char c;
     unsigned int u;
 };
 
@@ -1995,25 +1984,26 @@ struct outer {
     int array[3];
 };
 
+void *calloc(unsigned long nmemb, unsigned long size);
+
 int main(void) {
-    static struct inner zeroed[3]; // zero-initialized, stands in for calloc
     struct outer my_struct = {
         // l
-        999999999999ul,
+        9223372036854775900ul,
         // in_ptr
-        zeroed,
+        calloc(3, sizeof (struct inner)),
         // array
         {-1000, -2000, -3000},
     };
     struct outer *my_struct_ptr = &my_struct;
 
     // prefix ++
-    if (++my_struct.l != 1000000000000ul) {
+    if (++my_struct.l != 9223372036854775901ul) {
         return 1; // fail
     }
 
     // prefix --
-    if (--my_struct.in_ptr[0].u != 281474976710655U) { // unsigned wraparound
+    if (--my_struct.in_ptr[0].u != 4294967295U) { // unsigned wraparound
         return 2; // fail
     }
 
@@ -2029,14 +2019,14 @@ int main(void) {
 
     // validate current state of my_struct - make sure we performed updates
     // and didn't clobber anything
-    if (my_struct_ptr->l != 1000000000000ul) {
+    if (my_struct_ptr->l != 9223372036854775901ul) {
         return 5; // fail
     }
 
     if (my_struct.in_ptr->c != 1) {
         return 6; // fail
     }
-    if (my_struct_ptr->in_ptr->u !=  281474976710655U) {
+    if (my_struct_ptr->in_ptr->u !=  4294967295U) {
         return 7; // fail
     }
 
@@ -2061,13 +2051,12 @@ int main(void) {
     // validate - in_ptr currently points to array member at index 2
 
     // element 0 (now at index -2) should have same values as last time we checked
-    if (my_struct_ptr->in_ptr[-2].c != 1 || my_struct_ptr->in_ptr[-2].u != 281474976710655U) {
+    if (my_struct_ptr->in_ptr[-2].c != 1 || my_struct_ptr->in_ptr[-2].u != 4294967295U) {
         return 10;
     }
 
     // we decremented c in element 1 (now at index -1), didn't change u
-    // (plain char is unsigned on BESM-6, so 255 decremented reads back as 254)
-    if (my_struct_ptr->in_ptr[-1].c != 254) {
+    if (my_struct_ptr->in_ptr[-1].c != -2) {
         return 11; // fail
     }
 

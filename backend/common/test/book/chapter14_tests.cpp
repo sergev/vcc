@@ -33,6 +33,9 @@
 //     and return an error code on mismatch, so a BESM-6-valued expectation would
 //     just encode a meaningless failure code; DISABLED_ is the honest call.
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 // --- dereference ------------------------------------------------------------
@@ -1059,28 +1062,26 @@ TEST_F(BookTest, Chapter14_CompoundAssignConversion)
 })"));
 }
 
-// extra_credit/compound_bitwise_dereferenced_ptrs: ul reduced into 48-bit
-// range; & with -1000 also clears bits 42-48 (the int's pattern is 41-bit), so
-// the results are recomputed. For ui ^= l to cancel, ui must equal the 41-bit
-// unsigned image of the negative long l (2^41 - 252645136).
+// extra_credit/compound_bitwise_dereferenced_ptrs: compound bitwise operators
+// through pointers, with operands of mixed widths.
 TEST_F(BookTest, Chapter14_CompoundBitwiseDereferencedPtrs)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned long ul = 200000000000000ul;
+    EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned long ul = 18446460386757245432ul;
 
 int main(void) {
 
     unsigned long *ul_ptr = &ul;
     *ul_ptr &= -1000;
-    if (ul != 2087907000320ul) {
+    if (ul != 18446460386757244952ul ) {
         return 1;
     }
     *ul_ptr |= 4294967040u;
 
-    if (ul != 2091649072896ul) {
+    if (ul != 18446460386824683288ul ) {
         return 2;
     }
     int i = 123456;
-    unsigned int ui = 2198770610416u; // 2^41 - 252645136
+    unsigned int ui = 4042322160u; // 2^32 - 252645136
     long l = -252645136;
     unsigned int *ui_ptr = &ui;
     long *l_ptr = &l;
@@ -1104,8 +1105,7 @@ int main(void) {
 
 // --- Relies on x86 32/64-bit unsigned wraparound/truncation -----------------
 
-// extra_credit/bitshift_dereferenced_ptrs: BESM-6 unsigned int is 48-bit, so
-// 4294967295 << 2 does not wrap (== 17179869180).
+// extra_credit/bitshift_dereferenced_ptrs: 4294967295u << 2 wraps to 4294967292.
 TEST_F(BookTest, Chapter14_BitshiftDereferencedPtrs)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(unsigned int ui = 4294967295;
@@ -1118,7 +1118,7 @@ int shiftcount = 5;
 
 int main(void) {
 
-    if ((*get_ui_ptr() << 2l) != 17179869180) {
+    if ((*get_ui_ptr() << 2l) != 4294967292) {
         return 1;
     }
 
@@ -1138,8 +1138,7 @@ int main(void) {
 })"));
 }
 
-// extra_credit/incr_and_decr_through_pointer: an unsigned subtract underflow is true
-// 48-bit modular arithmetic (b/usub), so 0ul-- lands at 2^48-1 on BESM-6.
+// extra_credit/incr_and_decr_through_pointer: 0ul-- wraps to ULONG_MAX.
 TEST_F(BookTest, Chapter14_IncrAndDecrThroughPointer)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
@@ -1182,7 +1181,7 @@ TEST_F(BookTest, Chapter14_IncrAndDecrThroughPointer)
     if ((*ul_ptr)--) {
         return 9;
     }
-    if (ul != 281474976710655UL) { // underflow from 0 -> 2^48 - 1
+    if (ul != 18446744073709551615UL) { // wraparound from 0 to ULONG_MAX
         return 10;
     }
 

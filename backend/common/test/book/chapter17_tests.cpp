@@ -10,15 +10,8 @@
 //
 // Two facts specific to this chapter drive the split:
 //
-//   * sizeof is evaluated in the frontend with BESM-6 byte sizes (CodegenTest
-//     sets target=besm6): char == 1, but short/int/long/long long/float/double/
-//     long double/pointer are all 6 (one 48-bit word).  The book's sizeof
-//     self-checks assert x86 sizes (4 and 8); each such literal is rewritten to
-//     the BESM-6 value so the program is a passing run test (returns 0).  Two
-//     incidental obstacles are worked around: block-scope `static` on locals
-//     used only as sizeof operands is dropped (the backend has no static-local
-//     storage), and the single sizeof(int[4294967297L][100000000]) check whose
-//     result exceeds the BESM-6 integer range is removed.
+//   * The book's sizeof self-checks assert LP64 sizes; they are kept generic, and
+//     BESM-6 runs its own versions of them (see README.md).
 //
 //   * libc has no malloc/calloc/realloc/aligned_alloc/free (no runtime heap), so
 //     every dynamic-allocation program is rewritten to use static storage
@@ -187,11 +180,11 @@ TEST_F(BookTest, Chapter17_SizeofSimple)
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
 
 int main(void) {
-    if (sizeof (int) != 6) {
+    if (sizeof (int) != 4) {
         return 1;
     }
 
-    if (sizeof 3.0 != 6) {
+    if (sizeof 3.0 != 8) {
         return 2;
     }
 
@@ -200,7 +193,7 @@ int main(void) {
 }
 
 
-// sizeof/sizeof_basic_types: size of all basic types (char==1, word types==6).
+// sizeof/sizeof_basic_types: size of all basic types (LP64).
 TEST_F(BookTest, Chapter17_SizeofBasicTypes)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we can get the size of all basic type */
@@ -218,21 +211,21 @@ int main(void) {
         return 3;
     }
 
-    if (sizeof(int) != 6) {
+    if (sizeof(int) != 4) {
         return 4;
     }
-    if (sizeof(unsigned int) != 6) {
+    if (sizeof(unsigned int) != 4) {
         return 5;
     }
 
-    if (sizeof(long) != 6) {
+    if (sizeof(long) != 8) {
         return 6;
     }
-    if (sizeof(unsigned long) != 6) {
+    if (sizeof(unsigned long) != 8) {
         return 7;
     }
 
-    if (sizeof(double) != 6) {
+    if (sizeof(double) != 8) {
         return 8;
     }
 
@@ -242,7 +235,7 @@ int main(void) {
 
 
 // sizeof/sizeof_consts: the type, and size, of all constants (char const has
-// int type; word types are 6 bytes).
+// int type).
 TEST_F(BookTest, Chapter17_SizeofConsts)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly determine the type, and size, of all constants */
@@ -250,32 +243,32 @@ TEST_F(BookTest, Chapter17_SizeofConsts)
 int main(void) {
     // test that character constants have integer type, not character type;
     // we couldn't test this in the previous chapter
-    if (sizeof 'a' != 6) {
+    if (sizeof 'a' != 4) {
         return 1;
     }
 
     // int
-    if (sizeof 2147483647 != 6) {
+    if (sizeof 2147483647 != 4) {
         return 2;
     }
 
     // unsigned int
-    if (sizeof 4294967295U != 6) {
+    if (sizeof 4294967295U != 4) {
         return 3;
     }
 
     // long
-    if (sizeof 2l != 6) {
+    if (sizeof 2l != 8) {
         return 4;
     }
 
     // unsigned long
-    if (sizeof 0ul != 6) {
+    if (sizeof 0ul != 8) {
         return 5;
     }
 
     // double
-    if (sizeof 1.0 != 6) {
+    if (sizeof 1.0 != 8) {
         return 6;
     }
     return 0;
@@ -283,16 +276,15 @@ int main(void) {
 }
 
 
-// sizeof/sizeof_result_is_ulong: sizeof yields an unsigned long (size 6 here);
-// second check exercises its unsignedness, independent of the size value.
+// sizeof/sizeof_result_is_ulong: sizeof yields an unsigned long.
 TEST_F(BookTest, Chapter17_SizeofResultIsUlong)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
 
 int main(void) {
 
-    // sizeof result is a ulong, so _its_ size is 6 (one word)
-    if (sizeof sizeof (char) != 6) {
+    // sizeof result is a ulong, so _its_ size is 8
+    if (sizeof sizeof (char) != 8) {
         return 1;
     }
 
@@ -319,21 +311,21 @@ TEST_F(BookTest, Chapter17_SizeofArray)
 
 unsigned long sizeof_adjusted_param(int arr[3]) {
     // this should return the size of arr's _adjusted_ type,
-    // so it should return the size of a pointer (6) instead of 18
+    // so it should return the size of a pointer (8) instead of 12
     return sizeof arr;
 }
 
 int main(void) {
     // flat array
     int arr[3];
-    if (sizeof arr != 18) {
+    if (sizeof arr != 12) {
         return 1;
     }
 
-    long nested_arr[4][5];
+    static long nested_arr[4][5];
 
-    // arr[2] has type long[5], so its size is 6 * 5 = 30
-    if (sizeof nested_arr[2] != 30) {
+    // arr[2] has type long[5], so its size is 8 * 5 = 40
+    if (sizeof nested_arr[2] != 40) {
         return 2;
     }
 
@@ -344,7 +336,7 @@ int main(void) {
 
     // parameters declared with array type are adjusted to pointers,
     // and sizeof reflects this
-    if (sizeof_adjusted_param(arr) != 6) {
+    if (sizeof_adjusted_param(arr) != 8) {
         return 4;
     }
 
@@ -362,8 +354,8 @@ TEST_F(BookTest, Chapter17_SizeofDerivedTypes)
 
 int main(void) {
     // start with a simple array type
-    // 2 * 6 = 12; sizeof int is 6
-    if (sizeof(int[2]) != 12) {
+    // 2 * 4 = 8; sizeof int is 4
+    if (sizeof(int[2]) != 8) {
         return 1;
     }
 
@@ -373,26 +365,26 @@ int main(void) {
         return 2;
     }
 
-    // now try some pointer types; these are always 6 bytes (one word) no matter
-    // what they point to
-    if (sizeof(int *) != 6) {
+    // now try some pointer types; these are always 8 bytes no matter what they
+    // point to
+    if (sizeof(int *) != 8) {
         return 4;
     }
 
     if (sizeof(int(*)[2][4][6]) !=
-        6) {  // pointer to a big array is still a pointer
+        8) {  // pointer to a big array is still a pointer
         return 5;
     }
 
-    if (sizeof(char *) != 6) {
+    if (sizeof(char *) != 8) {
         return 6;
     }
 
     // array of pointers
-    // this is an array of three arrays of four pointers; 3 * 4 * 6 = 72
+    // this is an array of three arrays of four pointers; 3 * 4 * 8 = 96
     // each pointer points to element type "array of four doubles"
     // but that doesn't impact the size of this type
-    if (sizeof(double(*([3][4]))[2]) != 72) {
+    if (sizeof(double(*([3][4]))[2]) != 96) {
         return 7;
     }
 
@@ -402,10 +394,10 @@ int main(void) {
 
 
 // sizeof/sizeof_not_evaluated: sizeof does not evaluate its operand (foo, which
-// would call exit, is never run).  sizeof(int) == 6 on BESM-6.
+// would call exit, is never run).
 TEST_F(BookTest, Chapter17_SizeofNotEvaluated)
 {
-    EXPECT_EQ("6\n", CompileAndRunBook(R"(#include <stdlib.h>
+    EXPECT_EQ("4\n", CompileAndRunBook(R"(#include <stdlib.h>
 int foo(void) { exit(10); }
 
 int main(void) {
@@ -418,40 +410,40 @@ int main(void) {
 // --- sizeof extra_credit (`static` dropped on test locals; sizes rewritten) --
 
 // extra_credit/sizeof_bitwise: size of bitwise/bitshift expressions (common
-// type / promoted left operand; all word types are 6 here).
+// type / promoted left operand).
 TEST_F(BookTest, Chapter17_SizeofBitwise)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of bitwise and bitshift expression
 int main(void) {
-    long l = 0;
+    static long l = 0;
     int i = 0;
-    char c = 0;
+    static char c = 0;
 
     // result type for &, |, ^ is common type
-    if (sizeof (c & i) != 6) {
+    if (sizeof (c & i) != 4) {
         return 1;  // fail
     }
 
-    if (sizeof (i | l) != 6) {
+    if (sizeof (i | l) != 8) {
         return 2;  // fail
     }
 
     // character operands are promoted
-    if (sizeof (c ^ c) != 6) {
+    if (sizeof (c ^ c) != 4) {
         return 3;  // fail
     }
 
     // result type for <<, >> is type of left operand
-    if (sizeof (i << l) != 6) {
+    if (sizeof (i << l) != 4) {
         return 4; // fail
     }
 
     // character operands are promoted
-    if (sizeof (c << i) != 6) {
+    if (sizeof (c << i) != 4) {
         return 5; // fail
     }
 
-    if (sizeof (l >> c) != 6) {
+    if (sizeof (l >> c) != 8) {
         return 6; // fail
     }
 
@@ -469,24 +461,24 @@ TEST_F(BookTest, Chapter17_SizeofCompound)
 
 int main(void) {
     long long_arr[2] = {1, 2};
-    int i = 3;
-    unsigned char uc = 4;
+    static int i = 3;
+    static unsigned char uc = 4;
     double d = 5.0;
     long *ptr = long_arr;
 
-    if (sizeof(long_arr[1] *= 10) != 6) {
+    if (sizeof(long_arr[1] *= 10) != 8) {
         return 1;  // fail
     }
-    if (sizeof(i /= 10ul) != 6) {
+    if (sizeof(i /= 10ul) != 4) {
         return 2;  // fail
     }
     if (sizeof(uc %= 2) != 1) {
         return 3;  // fail
     }
-    if (sizeof(d -= 11) != 6) {
+    if (sizeof(d -= 11) != 8) {
         return 4;  // fail
     }
-    if (sizeof(ptr += 1) != 6) {
+    if (sizeof(ptr += 1) != 8) {
         return 5;  // fail
     }
 
@@ -523,7 +515,7 @@ TEST_F(BookTest, Chapter17_SizeofCompoundBitwise)
 // (and don't evaluate them)
 
 int main(void) {
-    signed char sc = 10;
+    static signed char sc = 10;
     unsigned int u = 10000u;
     long l = -99999;
 
@@ -531,14 +523,14 @@ int main(void) {
         return 1;  // fail
     }
 
-    if (sizeof(l |= u) != 6) {
+    if (sizeof(l |= u) != 8) {
         return 2;  // fail
     }
 
-    if (sizeof(u ^= l) != 6) {
+    if (sizeof(u ^= l) != 4) {
         return 3;  // fail
     }
-    if (sizeof(l >>= sc) != 6) {
+    if (sizeof(l >>= sc) != 8) {
         return 4;
     }
     if (sizeof(sc <<= sc) != 1) {
@@ -562,7 +554,7 @@ int main(void) {
 
 
 // extra_credit/sizeof_incr: size of ++/-- expressions (not evaluated; operand
-// type, char results stay 1).  `static` dropped on arr.
+// type, char results stay 1).
 TEST_F(BookTest, Chapter17_SizeofIncr)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
@@ -570,9 +562,9 @@ TEST_F(BookTest, Chapter17_SizeofIncr)
 int main(void) {
     int i = 0;
     long l = 0;
-    char arr[3] = {0, 0, 0};
+    static char arr[3] = {0, 0, 0};
     char *ptr = arr;
-    if (sizeof (i++) != 6) {
+    if (sizeof (i++) != 4) {
         return 1; // fail
     }
 
@@ -581,7 +573,7 @@ int main(void) {
     }
 
 
-    if (sizeof (++l) != 6) {
+    if (sizeof (++l) != 8) {
         return 3; // fail
     }
 
@@ -589,7 +581,7 @@ int main(void) {
         return 4; // fail
     }
 
-    if (sizeof (ptr--) != 6) {
+    if (sizeof (ptr--) != 8) {
         return 5;
     }
 
@@ -911,7 +903,8 @@ int main(void) {
 }
 
 
-// BESM-6: static buffer instead of malloc; sizeof checks use BESM-6 word sizes.
+// sizeof/sizeof_expressions: the size of a range of expressions (a static buffer
+// instead of malloc).
 TEST_F(BookTest, Chapter17_SizeofExpressions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly get the size of a range of expressions */
@@ -919,7 +912,7 @@ TEST_F(BookTest, Chapter17_SizeofExpressions)
 int main(void) {
     double d;
 
-    if (sizeof d != 6) {
+    if (sizeof d != 8) {
         return 2;
     }
 
@@ -932,15 +925,15 @@ int main(void) {
     static char sbuf[100];
     void *buffer = sbuf;
 
-    if (sizeof(buffer) != 6) {
+    if (sizeof(buffer) != 8) {
         return 4;
     }
 
-    if (sizeof ((int)d) != 6) {
+    if (sizeof ((int)d) != 4) {
         return 5;
     }
 
-    if (sizeof (d ? c : 10l) != 6) {
+    if (sizeof (d ? c : 10l) != 8) {
         return 6;
     }
 
@@ -992,15 +985,13 @@ int main(void) {
 
 // --- (B) sizeof a multi-dimensional global array ----------------------------
 
-// libraries/sizeof_extern, shrunk to fit BESM-6 core: the book's double[1000][2000]
-// is 12M words (core is only 32K), so use double[10][20] == 200 words; sizeof is
-// 200 elements * 6 bytes/word == 1200.
+// libraries/sizeof_extern: sizeof a large array, 1000 * 2000 doubles.
 TEST_F(BookTest, Chapter17_SizeofExtern)
 {
-    EXPECT_EQ("1\n", CompileAndRunBook(R"(double large_array[10][20];
+    EXPECT_EQ("1\n", CompileAndRunBook(R"(double large_array[1000][2000];
 
 int main(void) {
-    return sizeof large_array == 1200;
+    return sizeof large_array == 16000000;
 })"));
 }
 

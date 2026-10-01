@@ -12,6 +12,9 @@
 // depend on those are DISABLED_ with a one-line reason.  Host-only "#if/#pragma"
 // lines are stripped (our scanner has no preprocessor).
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 TEST_F(BookTest, Chapter19_WP_IntOnly_DeadCondition)
@@ -325,12 +328,12 @@ int main(void) {
 )WP"));
 }
 
+// whole_pipeline/int_only/extra_credit/fold_negative_bitshift, from the book.
 TEST_F(BookTest, Chapter19_WP_IntOnly_FoldNegativeBitshift)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
-/* Test constant folding >> with a negative source value.  On BESM-6 a signed right
- * shift is logical (the shift unit does no sign extension), so the fold matches the
- * backend: the 41-bit pattern of -20000 (2^41 - 20000) >> 3 = 274877904444.
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Test constant folding >> with negative source value (make sure
+ * we perform an arithmetic rather than logical bit shit)
  */
 
 int target(void) {
@@ -338,13 +341,13 @@ int target(void) {
 }
 
 int main(void) {
-    if (target() != 274877904444) {
+    if (target() != -2500) {
         return 1;
     }
 
     return 0; // success
 }
-)WP"));
+)PROG"));
 }
 
 TEST_F(BookTest, Chapter19_WP_AllTypes_AliasAnalysisChange)
@@ -596,58 +599,167 @@ int main(void) {
 )WP"));
 }
 
+// whole_pipeline/all_types/fold_extension_and_truncation, from the book;
+// plain char declarations are `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldExtensionAndTruncation)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test constant folding of sign extension, zero extension, and truncation.
- * On BESM-6 int/long/long long are all 41-bit, so the book's 64<->32-bit width
- * cases are no-ops with no analogue and are dropped; the meaningful narrowing
- * and extension happens at the 8-bit char boundary.  Plain char is unsigned on
- * BESM-6, so cases that rely on a signed result use `signed char` explicitly.
- * A signed->unsigned widening zero-extends the value's 41-bit pattern, e.g.
- * (unsigned long)(-1000) == 2^41-1000.  Function names are kept distinct within
- * 8 characters.
+ * We couldn't test this thoroughly during the constant folding phase because
+ * we hadn't implemented copy propagation yet.
  * */
 
-/* int -> char/signed char truncation and sign-extension back to int.
- * make sure we actually perform truncation/extension rather than treating
- * chars as full words. */
-int t_c_int(void) {
+/* Sign extension */
+
+// Test sign-extension from int to long
+// Make sure we propagate converted value, rather than
+// original value, into later expression
+long target_extend_int_to_long(void) {
+    int i = -1000;
+    long l = (long)i;
+    return (l - 72057594037927936l) / 3l;  // result is outside the range of int
+}
+
+// Test sign-extension from int to ulong
+// same idea as above
+unsigned long target_extend_int_to_ulong(void) {
+    int i = -1000;
+    unsigned long u = (unsigned long)i;
+    return u % 50ul;
+}
+
+/* Zero extension */
+long target_extend_uint_to_long(void) {
+    unsigned int u = 2147483648u;  // 2^31
+    long l = (long)u;
+    // make sure it's positive
+    if (l < 0) {
+        return 0;  // fail
+    }
+    return l % 7l;
+}
+
+unsigned long target_extend_uint_to_ulong(void) {
+    unsigned int u = 4294967295U;
+    unsigned long l = (unsigned long)u;
+    return (l == 4294967295Ul);
+}
+
+/* Truncation */
+
+// Test truncation from long to int
+// make sure we're actually performing truncation (as opposed to,
+// say, just storing ints as 64-bit values internally, then making truncation a
+// no-op or zeroing out upper bytes regardless of sign)
+int target_truncate_long_to_int(void) {
+    long l = 9223372036854775807l;         // LONG_MAX
+    int i = (int)l;                        // -1
+    long l2 = -9223372036854775807l - 1l;  // LONG_MIN
+    int i2 = (int)l2;                      // 0
+    // make sure we propagate truncated value (0) and not original value
+    // (nonzero)
+    if (i2) {  // eliminate this
+        return 0;
+    }
+    // make sure we propagate truncated value
+    // if we use original value, result of division will be different
+    // even if you only look at lower 32 bits
+    return 20 / i;
+}
+
+// Test truncation from long to int
+// same idea as above
+unsigned int target_truncate_long_to_uint(void) {
+    long l = -9223372032559808513l;  // LONG_MIN + UINT_MAX
+    unsigned int u = (unsigned)l;    // UINT_MAX
+    if (u - 4294967295U) {           // eliminate this
+        return 0;
+    }
+    return u / 20;
+}
+
+// Test truncation from unsigned long to int
+int target_truncate_ulong_to_int(void) {
+    unsigned long ul = 18446744073709551615UL;  //  ULONG_MAX
+    int i = (int)ul;                            // -1
+    unsigned long ul2 = 9223372039002259456ul;  // 2^63 + 2^31
+    int i2 = (int)ul2;                          // INT_MIN
+    if (i2 >= 0) {                              // eliminate this
+        return 0;
+    }
+    return 10 / i;  // -10
+}
+
+// Test truncation from unsigned long to unsigned int
+unsigned int target_truncate_ulong_to_uint(void) {
+    unsigned long ul = 18446744073709551615UL;  // ULONG_MAX
+    unsigned int u = (unsigned int)ul;          // UINT_MAX
+    return u / 20;
+}
+
+/* Conversions to/from character types.
+ * There are no constants of character type, and chars are promoted
+ * to int before almost every operation, so we can't test truncation and
+ * extension separately
+ * */
+
+// Test truncation from int to char/signed char, and sign-extension
+// from char/signed char to int
+// make sure we're actually performing truncation/extension (as opposed to,
+// say, just treating chars as 32-bit ints and making extension/truncation a
+// no-op)
+int target_char_int_conversion(void) {
+    // convert a wide range of ints to chars
     int i = 257;
-    unsigned char c = i;   // 1
-    signed char sc = 255;  // -1
-    i = 2147483647;        // INT-range value with all low bits set
-    signed char sc2 = i;   // -1
-    i = -129;              // need to zero the upper bits on widening
-    signed char sc3 = i;   // 127
-    i = 128;               // need to sign-extend on widening
-    signed char sc4 = i;   // -128
+    signed char c = i;
+    i = 255;
+    signed char c2 = i;
+    i = 2147483647;  // INT_MAX
+    signed char c3 = i;
+    i = -2147483647 - 1;  // INT_MIN
+    signed char c4 = i;
+    i = -129;  // all bits set except bit 128 - need to zero out all upper bits
+               // when we convert this back to int
+    signed char c5 = i;
+    i = 128;  // only bit 128 is set - need to sign-extend to all upper bites
+              // when we convert this back to int
+    signed char c6 = i;
+    // we'll convert these chars back to ints implicitly
+    // as part of usual arithmetic conversions
+    // for !=
     if (c != 1) {
         return 1;  // fail
     }
-    if (sc != -1) {
+    if (c2 != -1) {
         return 2;  // fail
     }
-    if (sc2 != -1) {
+    if (c3 != -1) {
         return 3;  // fail
     }
-    if (sc3 != 127) {
+    if (c4 != 0) {
         return 4;  // fail
     }
-    if (sc4 != -128) {
+    if (c5 != 127) {
         return 5;  // fail
+    }
+    if (c6 != -128) {
+        return 6;  // fail
     }
     return 0;  // success
 }
 
-/* int -> unsigned char truncation and zero-extension back to int */
-int t_uc_int(void) {
+int target_uchar_int_conversion(void) {
     int i = 767;
     unsigned char uc1 = i;  // 255
     i = 512;
     unsigned char uc2 = i;  // 0
-    i = -2147483647;        // INT-range value
+    i = -2147483647;        // INT_MIN + 1
     unsigned char uc3 = i;  // 1
+    i = -2147483647 + 127;  // INT_MIN + 128
+    unsigned char uc4 = i;  // 128
+
+    // we'll implicitly zero-extend these unsigned chars back to ints
+    // for comparisons
     if (uc1 != 255) {
         return 1;  // fail
     }
@@ -657,51 +769,169 @@ int t_uc_int(void) {
     if (uc3 != 1) {
         return 3;  // fail
     }
-    return 0;  // success
-}
-
-/* signed -> unsigned widening (zero-extend the 41-bit pattern) */
-int t_i2ul(void) {
-    int i = -1000;
-    unsigned long u = (unsigned long)i;  // 2^41 - 1000 == 2199023254552
-    if (u != 2199023254552ul) {
+    if (uc4 != 128) {
         return 1;  // fail
-    }
-    if (u % 50ul != 2) {
-        return 2;  // fail
     }
     return 0;  // success
 }
 
-/* unsigned long -> unsigned int is identity here (both 48-bit) */
-int t_ul2u(void) {
-    unsigned long ul = 281474976710655UL;  // 2^48 - 1
-    unsigned int u = (unsigned int)ul;
-    if (u != 281474976710655U) {
+int target_char_uint_conversion(void) {
+    signed char c = 2148532223u;              // 2^30 + 2^20 - 1, truncates to -1
+    signed char c2 = 2147483775u;      // 2^31 + 127, truncates to 127
+    unsigned int u = (unsigned int)c;  // UINT_MAX
+    if (u != 4294967295U) {
         return 1;  // fail
     }
-    if (u / 20 != 14073748835532U) {
+    u = (unsigned int)c2;
+    if (u != 127u) {
         return 2;  // fail
-    }
-    return 0;  // success
-}
-
-int main(void) {
-    if (t_c_int()) {
-        return 1;  // fail
-    }
-    if (t_uc_int()) {
-        return 2;  // fail
-    }
-    if (t_i2ul()) {
-        return 3;  // fail
-    }
-    if (t_ul2u()) {
-        return 4;  // fail
     }
     return 0;
 }
-)WP"));
+
+int target_uchar_uint_conversion(void) {
+    unsigned char uc = 2148532223u;  // 2^30 + 2^20 - 1, truncates to 255
+    unsigned int ui = (unsigned int)uc;
+    if (ui != 255u) {
+        return 1;  // fail
+    }
+    return 0;
+}
+
+int target_char_long_conversion(void) {
+    long l = 3377699720528001l;  // 2^51 + 2^50 + 129
+    signed char c = l;                  // truncates to -127
+    l = 9223372036854775807l;    // LONG_MAX
+    signed char c2 = l;                 // -1
+    l = 2147483648l + 127l;      // 2^32 + 127
+    signed char c3 = l;          // 127
+    l = -2147483647l - 1l;       // INT_MIN (as a long)
+    signed char c4 = l;                 // 0
+    l = 2147483648l + 128l;
+    signed char c5 = l;  // -128
+    // we'll convert these chars back to ints implicitly
+    // as part of usual arithmetic conversions
+    // for !=
+    if (c != -127l) {
+        return 1;  // fail
+    }
+    if (c2 != -1l) {
+        return 2;  // fail
+    }
+    if (c3 != 127l) {
+        return 3;   // fail
+    }
+    if (c4) {
+        return 4;   // fail
+    }
+    if (c5 != -128l) {
+        return 5;   // fail
+    }
+    return 0;  // success
+}
+
+int target_uchar_long_conversion(void) {
+    long l = 255l + 4294967296l;
+    unsigned char uc1 = l;            // 255
+    l = 36028798092705792l;           // 2^55 + 2^30
+    unsigned char uc2 = l;            // 0
+    l = -9223372036854775807l;        // LONG_MIN + 1
+    unsigned char uc3 = l;            // 1
+    l = -9223372036854775807l + 127;  // LONG_MIN + 128
+    unsigned char uc4 = l;            // 128
+
+    // we'll implicitly zero-extend these unsigned chars back to ints
+    // for comparisons
+    if (uc1 != 255) {
+        return 1;  // fail
+    }
+    if (uc2) {
+        return 2;  // fail
+    }
+    if (uc3 != 1) {
+        return 3;  // fail
+    }
+    if (uc4 != 128) {
+        return 1;  // fail
+    }
+    return 0;  // success
+}
+
+int target_char_ulong_conversion(void) {
+    signed char c = 9223373136366403583ul;          // 2^63 + 2^40 - 1, truncates to -1
+    signed char c2 = 9223372036854775935ul;  // 2^63 + 127, truncates to 127
+    unsigned long ul = (unsigned long)c;     // ULONG_MAX
+    if (ul != 18446744073709551615UL) {
+        return 1;  // fail
+    }
+    ul = (unsigned long)c2;
+    if (ul != 127ul) {
+        return 2;  // fail
+    }
+    return 0;
+}
+
+int target_uchar_ulong_conversion(void) {
+    unsigned char uc =
+        9223372037929566207ul;  // 2^63 + 2^30 + 2^20 - 1, truncates to 255
+    unsigned int ui = (unsigned int)uc;
+    if (ui != 255u) {
+        return 1;  // fail
+    }
+    return 0;
+}
+int main(void) {
+    if (target_extend_int_to_long() != -24019198012642978l) {
+        return 1;  // fail
+    }
+    if (target_extend_int_to_ulong() != 16ul) {
+        return 2;  // fail
+    }
+    if (target_extend_uint_to_long() != 2l) {
+        return 3;  // fail
+    }
+    if (target_extend_uint_to_ulong() != 1ul) {
+        return 4;  // fail
+    }
+    if (target_truncate_long_to_int() != -20) {
+        return 5;  // fail
+    }
+    if (target_truncate_long_to_uint() != 214748364u) {
+        return 6;  // fail
+    }
+    if (target_truncate_ulong_to_int() != -10) {
+        return 7;  // fail
+    }
+    if (target_truncate_ulong_to_uint() != 214748364u) {
+        return 8;  // fail
+    }
+    if (target_char_int_conversion()) {
+        return 9;  // fail
+    }
+    if (target_uchar_int_conversion()) {
+        return 10;  // fail
+    }
+    if (target_char_uint_conversion()) {
+        return 11;  // fail
+    }
+    if (target_uchar_uint_conversion()) {
+        return 12;  // fail
+    }
+    if (target_char_long_conversion()) {
+        return 13;  // fail
+    }
+    if (target_uchar_long_conversion()) {
+        return 14;  // fail
+    }
+    if (target_char_ulong_conversion()) {
+        return 15;  // fail
+    }
+    if (target_uchar_ulong_conversion()) {
+        return 16;  // fail
+    }
+    return 0;
+}
+)PROG"));
 }
 
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldNegativeValues)
@@ -1002,95 +1232,92 @@ int main(void) {
 )WP"));
 }
 
+// whole_pipeline/all_types/signed_unsigned_conversion, from the book.
 TEST_F(BookTest, Chapter19_WP_AllTypes_SignedUnsignedConversion)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
-/* Test constant-folding of conversions between signed and unsigned integers,
- * allowing for further copy propagation.
- *
- * On BESM-6 signed int/long are 41-bit and unsigned int/long are 48-bit, so a
- * signed->unsigned conversion zero-extends the value's 41-bit pattern:
- * (unsigned)(-1) == 2^41-1 == 2199023255551.  The reverse (unsigned->signed) is
- * only well-defined when the unsigned value fits in the 41-bit signed range
- * (the wider value would otherwise lose its high bits), so the round-trip case
- * uses an in-range value.  Function names are kept distinct within 8 characters.
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Test constant-folding of conversions between signed and unsigned types
+ * of the same size, allowing for further copy propagation
  * */
 
-unsigned int t_i2u(void) {
+unsigned int target_int_to_uint(void) {
     int i = -1;
     // after constant folding this cast, we can propagate the value of u
     // into the return statement
-    unsigned int u = (unsigned)i;  // 2^41 - 1
-    return u / 10u;                // 219902325555
-}
-
-unsigned long t_l2ul(void) {
-    long l = -200l;
-    unsigned long ul = (unsigned long)l;  // 2^41 - 200
-    return ul / 10;                       // 219902325535
-}
-
-int t_i2ucmp(void) {
-    int i = -1;
     unsigned int u = (unsigned)i;
-    return u > 1000000u;  // 1: 2^41-1 is a large unsigned value
+    return u / 10u;
 }
 
-int t_rt(void) {
-    unsigned int u = 100000u;
-    int i = (int)u;  // in-range, well-defined: 100000
-    return i + 1;    // 100001
+int target_uint_to_int(void) {
+    unsigned int u = 4294967295U;
+    // after constant folding this cast, we can propagate the value of i
+    // into the return statement
+    int i = (int)u;  // -1;
+    return (i + 1) ? 0 : i * 2;
+}
+
+long target_ulong_to_long(void) {
+    unsigned long ul = 9223372036854775900ul;
+    // after constant folding this cast, we can propagate the value of l
+    // into the return statement
+    signed long l = (long)ul;
+    return l / 4;
+}
+
+unsigned long target_long_to_ulong(void) {
+    long l = -200l;
+    unsigned long ul = (unsigned long)l;
+    return ul / 10;
 }
 
 int main(void) {
-    if (t_i2u() != 219902325555u) {
+    if (target_int_to_uint() != 429496729u) {
         return 1;  // fail
     }
-    if (t_l2ul() != 219902325535ul) {
+    if (target_uint_to_int() != -2) {
         return 2;  // fail
     }
-    if (t_i2ucmp() != 1) {
+    if (target_ulong_to_long() != -2305843009213693929) {
         return 3;  // fail
     }
-    if (t_rt() != 100001) {
+    if (target_long_to_ulong() != 1844674407370955141ul) {
         return 4;  // fail
     }
 
     return 0;  // success
 }
-)WP"));
+)PROG"));
 }
 
+// whole_pipeline/all_types/extra_credit/fold_compound_assign_all_types, from the book;
+// plain char declarations are `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCompoundAssignAllTypes)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
 /* Test copy prop/constant folding of compound assignment with non-integer
- * types and type conversions.  Adapted for BESM-6: plain char is unsigned, so
- * cases that rely on a signed wrap use `signed char`; the out-of-range
- * double/unsigned-long rows are dropped; int/long are 41-bit, so values that
- * wrapped at 32 bits on x86 don't wrap here (recomputed); function names are
- * kept distinct within 8 characters.
+ * types and type conversions
  */
 
-// like chapter 16's compound_assign_chars.c but constant-foldable
-int t_chars(void) {
+ // identical to chapter 16's compound_assign_chars.c but fully constant foldable
+ // and we'll inspect the assembly output to make sure it's constant folded
+int target_chars(void) {
     signed char c = 100;
     signed char c2 = 100;
-    c += c2; // 200 promoted to int, truncates to signed char -56
+    c += c2; // well-defined b/c of integer promotions
     if (c != -56) {
         return 1; // fail
     }
 
     unsigned char uc = 200;
     c2 = -100;
-    uc /= c2; // (int)200 / (int)(-100) == -2, back to unsigned char 254
+    uc /= c2; // convert uc and c2 to int, then convert back
     if (uc != 254) {
         return 2; // fail
     }
 
     uc -= 250.0; // convert uc to double, do operation, convert back
     if (uc != 4) {
-        return 3; // fail
+        return 3;  // fail
     }
 
     signed char sc = -70;
@@ -1106,8 +1333,9 @@ int t_chars(void) {
     return 0; // success
 }
 
-// like chapter 13's compound_assign.c
-int t_dbl(void) {
+// identical to chapter 13's compound_assign.c but
+// we inspect the assembly output
+int target_double(void) {
     double d = 10.0;
     d /= 4.0;
     if (d != 2.5) {
@@ -1117,43 +1345,75 @@ int t_dbl(void) {
     if (d != 25000.0) {
         return 2;
     }
+
     return 0;
 }
 
-// like chapter 13's compound_assign_implicit_cast.c (out-of-range ulong row dropped)
-int t_dblcast(void) {
+// Identical to chapter 13's compound_assign_implicit_cast but we inspect the assembly output
+int target_double_cast(void) {
     double d = 1000.5;
-    d += 1000; // convert 1000 to double, add, store
+    /* When we perform compound assignment, we convert both operands
+     * to their common type, operate on them, and convert the result to the
+     * type of the left operand */
+    d += 1000;
     if (d != 2000.5) {
         return 1;
     }
-    int i = 10;
-    i += 0.99999; // promote i to double, add .99999, truncate back to int
-    if (i != 10) {
+
+    unsigned long ul = 18446744073709551586ul;
+    /* We'll promote e to the nearest double,
+     * which is 18446744073709551616,
+     * then subtract 1.5 * 10^19, which
+     * results in 3446744073709551616.0,
+     * then convert it back to an unsigned long
+     */
+    ul -= 1.5E19;
+    if (ul != 3446744073709551616ul) {
         return 2;
     }
-    return 0;
-}
-
-// like chapter 12's compound_assign_uint.c.  On BESM-6 unsigned int is 48-bit,
-// so -1u is 2^48-1; dividing through the common type yields 128.
-int t_uint(void) {
-    unsigned int x = -1u;
-    x /= -10l;
-    if (x != 128) {
-        return 1; // fail
+    /* We'll promote i to a double, add .99999,
+     * then truncate it back to an int
+     */
+    int i = 10;
+    i += 0.99999;
+    if (i != 10) {
+        return 3;
     }
+
     return 0;
 }
 
-// like chapter 11's compound_assign_to_int.c; int is 41-bit so the products
-// stay in range (no 32-bit wraparound).
-int t_a2i(void) {
+// Almost identical to chapter 12's compound_assign_uint
+int target_uint(void) {
+    unsigned int x = -1u; // 2^32 - 1
+    /* 1. convert x to a signed long, which preserves its value
+     * 2. divide by -10, resulting in -429496729
+     * 3. convert -429496729 to an unsigned int by adding 2^32
+     */
+    x /= -10l;
+
+    if (x == 3865470567u) {
+        return 0; // success
+    }
+
+    return 1; // fail
+}
+
+// Identical to chapter 11's compound_assign_to_int but we inspect the assembly
+int target_assign_long_to_int(void) {
     int i = -20;
     int b = 2147483647;
     int c = -5000000;
 
-    i += 2147483648l; // 2^31; result fits in a 41-bit int
+    /* This statement is evaluated as follows:
+     * 1. sign-extend i to a long with value -20
+     * 2. add this long to 2147483648, resulting in the long 2147483628,
+     * 3. convert this to an int with value 2147483628 (this value
+     * can be represented as an int)
+     */
+    i += 2147483648l;
+
+    // make sure we got the right answer and didn't clobber b
     if (i != 2147483628) {
         return 1;
     }
@@ -1161,10 +1421,16 @@ int t_a2i(void) {
         return 2;
     }
 
-    b /= -34359738367l; // -(2^35 - 1); |b| is smaller, so result is 0
-    if (b) {
+    // b /= -2^35 + 1
+    // if we try to perform int (rather than long)
+    // division, we'll interpret this value as 1 and
+    // b's value won't change.
+    b /= -34359738367l;
+    if (b) { // b's value should be 0
         return 3;
     }
+
+    // make sure we didn't clobber i or c
     if (i != 2147483628) {
         return 4;
     }
@@ -1172,19 +1438,23 @@ int t_a2i(void) {
         return 5;
     }
 
-    c *= 10000l; // -5e10 fits in 41 bits (unlike the 32-bit wrap the book checks)
-    if (c != -50000000000l) {
+    // this result will be outside the range of int; we'll
+    // convert it to int in the usual implementation-defined way
+    c *= 10000l;
+    if (c != 1539607552) {
         return 6;
     }
 
     return 0;
 }
 
-// like chapter 11's compound_assign_to_long.c
-int t_a2l(void) {
+// Identical to chapter 11's compound_assign_to_long.c, but we inspect the
+// assembly
+int target_assign_to_long(void) {
     long l = -34359738368l; // -2^35
     int i = -10;
-    l -= i; // convert i to long, then subtract
+    /* We should convert i to a long, then subtract from l */
+    l -= i;
     if (l != -34359738358l) {
         return 1;
     }
@@ -1192,27 +1462,33 @@ int t_a2l(void) {
 }
 
 int main(void) {
-    if (t_chars()) {
+    if (target_chars()) {
         return 1;
     }
-    if (t_dbl()) {
+
+    if (target_double()) {
         return 2;
     }
-    if (t_dblcast()) {
+
+    if (target_double_cast()) {
         return 3;
     }
-    if (t_uint()) {
+
+    if (target_uint()) {
         return 4;
     }
-    if (t_a2i()) {
+
+    if (target_assign_long_to_int()) {
         return 5;
     }
-    if (t_a2l()) {
+
+    if (target_assign_to_long()) {
         return 6;
     }
+
     return 0; // success
 }
-)WP"));
+)PROG"));
 }
 
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes)
@@ -1441,26 +1717,26 @@ int main(void) {
 )WP"));
 }
 
+// whole_pipeline/all_types/extra_credit/fold_incr_decr_unsigned, from the book.
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldIncrDecrUnsigned)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
-/* Propagate ++/-- with unsigned integers (make sure they wrap around correctly).
- * On BESM-6 `unsigned` is 48-bit, so UINT_MAX is 2^48-1 = 281474976710655. */
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Propagate ++/-- with unsigned integers (make sure they wrap around correctly) */
 
 int target(void) {
     unsigned int u = 0;
     unsigned int u2 = --u;
     unsigned int u3 = u--;
 
-    unsigned int u4 = 281474976710655U;
+    unsigned int u4 = 4294967295U;
     unsigned int u5 = u4++;
     unsigned int u6 = ++u4;
 
-    if (!(u == 281474976710654U && u2 == 281474976710655U && u3 == 281474976710655U)) {
+    if (!(u == 4294967294U && u2 == 4294967295U && u3 == 4294967295U)) {
         return 1; // fail
     }
 
-    if (!(u4 == 1 && u5 == 281474976710655U && u6 == 1)) {
+    if (!(u4 == 1 && u5 == 4294967295U && u6 == 1)) {
         return 2; // fail
     }
 
@@ -1471,27 +1747,27 @@ int main(void) {
     return target();
 
 }
-)WP"));
+)PROG"));
 }
 
+// whole_pipeline/all_types/extra_credit/fold_negative_long_bitshift, from the book.
 TEST_F(BookTest, Chapter19_WP_AllTypes_FoldNegativeLongBitshift)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"WP(
-/* Test constant folding >> with a negative long source value.  On BESM-6 a signed right
- * shift is logical (the shift unit does no sign extension), so the fold matches the
- * backend: the 41-bit pattern of -2^40 (which is 2^40) >> 22 == +262144.
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Test constant folding >> with negative long source value (make sure
+ * we perform an arithmetic rather than logical bit shit)
  */
 
 long target(void) {
-    return (-1099511627775l - 1) >> 22u;
+    return (-9223372036854775807l - 1) >> 45u;
 }
 
 int main(void) {
-    if (target() != 262144) {
+    if (target() != -262144) {
         return 1;
     }
 
     return 0; // success
 }
-)WP"));
+)PROG"));
 }

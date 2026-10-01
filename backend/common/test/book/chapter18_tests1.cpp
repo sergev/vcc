@@ -17,6 +17,9 @@
 // page-boundary faults) are DISABLED_ at the bottom with one-line reasons;
 // strcmp/memcmp are provided inline where a program only needs the routine.
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 
@@ -416,24 +419,48 @@ x:
 // extra_credit/member_access & union_copy & semantic_analysis (unions)
 // =============================================================================
 
-// member_access/union_init_and_member_access: union init + member access.
-// BESM-6: reading -1l back through the unsigned-long member yields its 41 value
-// bits (2^41-1); through the char member it yields byte #0 (MSB, bits 48-41) =
-// 0b00000001 = 1 (bits 48-42 are the zero exponent field, bit 41 is the sign).
+// extra_credit/member_access/union_init_and_member_access, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_UnionInitAndMemberAccess)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(
-union u { double d; long l; unsigned long ul; char c; };
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Basic test of union type declarations, initializers, and member access */
+
+// declare a union type
+union u {
+    double d;
+    long l;
+    unsigned long ul;
+    signed char c;
+};
+
 int main(void) {
-    union u x = {20};
-    if (x.d != 20.0) return 1;
+    // declare and initialize a union
+    union u x = {20}; // this initializes first member
+
+    // read member
+    if (x.d != 20.0) {
+        return 1; // fail
+    }
+
+    // assign/read through pointer
     union u *ptr = &x;
     ptr->l = -1l;
-    if (ptr->l != -1l) return 2;
-    if (ptr->ul != 2199023255551UL) return 3;
-    if (x.c != 1) return 4;
+    if (ptr->l != -1l) {
+        return 2; // fail
+    }
+
+    // read through other members
+    if (ptr->ul != 18446744073709551615UL) {
+        return 3; // fail
+    }
+
+    if (x.c != -1) {
+        return 4; // fail
+    }
     return 0;
-})"));
+}
+)PROG"));
 }
 
 // semantic_analysis/union_members_same_type: two int members of a union alias.
@@ -509,25 +536,39 @@ int main(void) {
 })"));
 }
 
-// union_copy/unions_in_conditionals: a union value in a ?: expression.  BESM-6: the
-// char member reads byte #0 (MSB), so one.c = byte#0 of -1 = 1 and two.c = byte#0 of
-// 100 = 0 (100 occupies only bits 7-1, so the MSB byte is zero).
+// extra_credit/union_copy/unions_in_conditionals, from the book;
+// a negative-valued char member is `signed char`, since plain char may be unsigned.
 TEST_F(BookTest, Chapter18_UnionsInConditionals)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(
-union u { long l; int i; char c; };
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+// Like structures, unions can appear in conditional expression
+
+union u {
+    long l;
+    int i;
+    signed char c;
+};
 int choose_union(int flag) {
     union u one;
     union u two;
     one.l = -1;
     two.i = 100;
+
     return (flag ? one : two).c;
 }
+
 int main(void) {
-    if (choose_union(1) != 1) return 1;
-    if (choose_union(0) != 0) return 2;
-    return 0;
-})"));
+    if (choose_union(1) != -1) {
+        return 1; // fail
+    }
+
+    if (choose_union(0) != 100) {
+        return 2; // fail
+    }
+
+    return 0; // success
+}
+)PROG"));
 }
 
 
@@ -536,101 +577,412 @@ int main(void) {
 // align==6; struct/union sizes recomputed from semantic/target.c rules).
 // =============================================================================
 
-// size_and_offset_calculations/sizeof_type: sizeof of struct/array types.
+// no_structure_parameters/size_and_offset_calculations/sizeof_type, from the book.
 TEST_F(BookTest, Chapter18_SizeofType)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(
-struct eight_bytes { int i; char c; };
-struct two_bytes { char arr[2]; };
-struct three_bytes { char arr[3]; };
-struct sixteen_bytes { struct eight_bytes eight; struct two_bytes two; struct three_bytes three; };
-struct seven_bytes { struct two_bytes two; struct three_bytes three; struct two_bytes two2; };
-struct twentyfour_bytes { struct seven_bytes seven; struct sixteen_bytes sixteen; };
-struct twenty_bytes { struct sixteen_bytes sixteen; struct two_bytes two; };
-struct wonky { char arr[19]; };
-struct internal_padding { char c; double d; };
-struct contains_struct_array { char c; struct eight_bytes struct_array[3]; };
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Verify that sizeof produces correct results for various structure types (and
+ * arrays of structs) */
+
+// struct declarations for size/layout tests
+
+struct eight_bytes {
+    int i;   // bytes 0-3
+    char c;  // byte 4
+             // 3 more bytes of padding to make size a multiple of 4
+};
+
+struct two_bytes {
+    char arr[2];  // bytes 0-1
+                  // no padding
+};
+
+struct three_bytes {
+    char arr[3];  // bytes 0-2
+                  // no padding
+};
+
+struct sixteen_bytes {
+    struct eight_bytes eight;  // bytes 0-7
+    struct two_bytes two;      // bytes 8-9
+    struct three_bytes three;  // bytes 10-12
+    // 3 bytes of padding to make size a multiple of 4  (i.e. 16 bytes)
+    // b/c struct eightbyte is 4 byte-aligned)
+};
+
+struct seven_bytes {
+    struct two_bytes two;      // bytes 0-1
+    struct three_bytes three;  // bytes 2-4
+    struct two_bytes two2;     // bytes 5-6
+};                             // total size is 7 bytes
+
+struct twentyfour_bytes {
+    struct seven_bytes seven;  // bytes 0-6
+    // 1 byte padding to make next member four-byte aligned
+    struct sixteen_bytes sixteen;  // bytes 8-24 (four-byte aligned)
+};
+
+struct twenty_bytes {
+    struct sixteen_bytes sixteen;  // bytes 0-15
+    struct two_bytes two;          // bytes 16-17
+    // 2 bytes padding to make the whole struct four-byte aligned
+};  // 20 bytes b/c it's four-byte aligned
+
+struct wonky {
+    char arr[19];
+};  // 19 bytes w/ no padding
+
+struct internal_padding {
+    char c;
+    // 7 bytes of padding so next member is eight byte-aligned
+    double d;
+};  // 16 bytes total
+
+struct contains_struct_array {
+    char c;  // byte 0
+    // 3 bytes padding so next member is 4 byte-aligned
+    struct eight_bytes struct_array[3];  // bytes 4-27
+};                                       // 28 bytes total
+
 int main(void) {
-    if (sizeof(struct eight_bytes) != 12) return 1;
-    if (sizeof(struct two_bytes) != 6) return 2;
-    if (sizeof(struct three_bytes) != 6) return 3;
-    if (sizeof(struct sixteen_bytes) != 24) return 4;
-    if (sizeof(struct seven_bytes) != 18) return 5;
-    if (sizeof(struct twentyfour_bytes) != 42) return 6;
-    if (sizeof(struct twenty_bytes) != 30) return 7;
-    if (sizeof(struct wonky) != 24) return 8;
-    if (sizeof(struct internal_padding) != 12) return 9;
-    if (sizeof(struct contains_struct_array) != 42) return 10;
-    if (sizeof(struct internal_padding[4]) != 48) return 11;
-    if (sizeof(struct wonky[2]) != 48) return 12;
-    return 0;
-})"));
+    // validate the size of every type in struct_sizes.h
+
+    if (sizeof(struct eight_bytes) != 8) {
+        return 1;
+    }
+
+    if (sizeof(struct two_bytes) != 2) {
+        return 2;
+    }
+
+    if (sizeof(struct three_bytes) != 3) {
+        return 3;
+    }
+
+    if (sizeof(struct sixteen_bytes) != 16) {
+        return 4;
+    }
+
+    if (sizeof(struct seven_bytes) != 7) {
+        return 5;
+    }
+
+    if (sizeof(struct twentyfour_bytes) != 24) {
+        return 6;
+    }
+
+    if (sizeof(struct twenty_bytes) != 20) {
+        return 7;
+    }
+
+    if (sizeof(struct wonky) != 19) {
+        return 8;
+    }
+
+    if (sizeof(struct internal_padding) != 16) {
+        return 9;
+    }
+
+    if (sizeof(struct contains_struct_array) != 28) {
+        return 10;
+    }
+
+    if (sizeof(struct internal_padding[4]) != 64) {
+        return 11;
+    }
+
+    if (sizeof(struct wonky[2]) != 38) {
+        return 12;
+    }
+
+    return 0;  // success
+}
+)PROG"));
 }
 
-// size_and_offset_calculations/sizeof_exps: sizeof of expressions of struct type
-// (block-scope `static` dropped — no static-local storage; sizeof never evaluates
-// its operand, so the null get_twentybyte_ptr() is never dereferenced).
+// no_structure_parameters/size_and_offset_calculations/sizeof_exps, from the book.
 TEST_F(BookTest, Chapter18_SizeofExps)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(
-struct eight_bytes { int i; char c; };
-struct two_bytes { char arr[2]; };
-struct three_bytes { char arr[3]; };
-struct sixteen_bytes { struct eight_bytes eight; struct two_bytes two; struct three_bytes three; };
-struct seven_bytes { struct two_bytes two; struct three_bytes three; struct two_bytes two2; };
-struct twentyfour_bytes { struct seven_bytes seven; struct sixteen_bytes sixteen; };
-struct twenty_bytes { struct sixteen_bytes sixteen; struct two_bytes two; };
-struct wonky { char arr[19]; };
-struct internal_padding { char c; double d; };
-struct contains_struct_array { char c; struct eight_bytes struct_array[3]; };
-struct twenty_bytes *get_twentybyte_ptr(void) { return 0; }
-int main(void) {
-    struct contains_struct_array arr_struct;
-    if (sizeof arr_struct.struct_array[2] != 12) return 1;
-    struct twentyfour_bytes twentyfour;
-    if (sizeof twentyfour.seven.two2 != 6) return 2;
-    if (sizeof get_twentybyte_ptr()->sixteen.three != 6) return 3;
-    if (sizeof get_twentybyte_ptr()->sixteen != 24) return 4;
-    if (sizeof twentyfour.seven != 18) return 5;
-    if (sizeof twentyfour != 42) return 6;
-    if (sizeof *get_twentybyte_ptr() != 30) return 7;
-    if (sizeof *((struct wonky *)0) != 24) return 8;
-    extern struct internal_padding struct_array[4];
-    if (sizeof struct_array[0] != 12) return 9;
-    if (sizeof arr_struct != 42) return 10;
-    if (sizeof struct_array != 48) return 11;
-    if (sizeof arr_struct.struct_array != 36) return 12;
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+/* Verify that sizeof produces correct results for various expressions of
+ * structure type. This is almost identical of sizeof_type except we're applying
+ * sizeof to expressions and not just type specifiers.
+ * This also tests that we correctly infer the types of expressions w/ structure
+ * type
+ * */
+
+// struct declarations for size/layout tests
+
+struct eight_bytes {
+    int i;   // bytes 0-3
+    char c;  // byte 4
+             // 3 more bytes of padding to make size a multiple of 4
+};
+
+struct two_bytes {
+    char arr[2];  // bytes 0-1
+                  // no padding
+};
+
+struct three_bytes {
+    char arr[3];  // bytes 0-2
+                  // no padding
+};
+
+struct sixteen_bytes {
+    struct eight_bytes eight;  // bytes 0-7
+    struct two_bytes two;      // bytes 8-9
+    struct three_bytes three;  // bytes 10-12
+    // 3 bytes of padding to make size a multiple of 4  (i.e. 16 bytes)
+    // b/c struct eightbyte is 4 byte-aligned)
+};
+
+struct seven_bytes {
+    struct two_bytes two;      // bytes 0-1
+    struct three_bytes three;  // bytes 2-4
+    struct two_bytes two2;     // bytes 5-6
+};                             // total size is 7 bytes
+
+struct twentyfour_bytes {
+    struct seven_bytes seven;  // bytes 0-6
+    // 1 byte padding to make next member four-byte aligned
+    struct sixteen_bytes sixteen;  // bytes 8-24 (four-byte aligned)
+};
+
+struct twenty_bytes {
+    struct sixteen_bytes sixteen;  // bytes 0-15
+    struct two_bytes two;          // bytes 16-17
+    // 2 bytes padding to make the whole struct four-byte aligned
+};  // 20 bytes b/c it's four-byte aligned
+
+struct wonky {
+    char arr[19];
+};  // 19 bytes w/ no padding
+
+struct internal_padding {
+    char c;
+    // 7 bytes of padding so next member is eight byte-aligned
+    double d;
+};  // 16 bytes total
+
+struct contains_struct_array {
+    char c;  // byte 0
+    // 3 bytes padding so next member is 4 byte-aligned
+    struct eight_bytes struct_array[3];  // bytes 4-27
+};                                       // 28 bytes total
+
+struct twenty_bytes *get_twentybyte_ptr(void) {
     return 0;
-})"));
 }
 
-// extra_credit/size_and_offset/union_sizes: sizeof of union types, BESM-6 layout.
+int main(void) {
+    // validate the size of every type in struct_sizes.h
+
+    struct contains_struct_array arr_struct;
+
+    if (sizeof arr_struct.struct_array[2] !=
+        8) {  // elements of struct_array have type struct eight_bytes
+        return 1;
+    }
+
+    static struct twentyfour_bytes twentyfour;
+    if (sizeof twentyfour.seven.two2 != 2) {
+        return 2;
+    }
+
+    if (sizeof get_twentybyte_ptr()->sixteen.three != 3) {
+        return 3;
+    }
+
+    if (sizeof get_twentybyte_ptr()->sixteen != 16) {
+        return 4;
+    }
+
+    if (sizeof twentyfour.seven != 7) {
+        return 5;
+    }
+
+    if (sizeof twentyfour != 24) {
+        return 6;
+    }
+
+    if (sizeof *get_twentybyte_ptr() != 20) {
+        return 7;
+    }
+
+    if (sizeof *((struct wonky *)0) != 19) {
+        return 8;
+    }
+
+    extern struct internal_padding struct_array[4];
+    if (sizeof struct_array[0] != 16) {
+        return 9;
+    }
+
+    if (sizeof arr_struct != 28) {
+        return 10;
+    }
+
+    if (sizeof struct_array != 64) {
+        return 11;
+    }
+
+    // make sure arr_struct.struct_array doesn't undergo array decay here
+    if (sizeof arr_struct.struct_array != 24) {
+        return 12;
+    }
+
+    return 0;  // success
+}
+)PROG"));
+}
+
+// extra_credit/size_and_offset/union_sizes, from the book.
 TEST_F(BookTest, Chapter18_UnionSizes)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(
-struct eight_bytes { int i; char c; };
-struct wonky { char arr[19]; };
-union no_padding { char c; unsigned char uc; signed char arr[11]; };
-union with_padding { signed char arr[10]; unsigned int ui; };
-union contains_array { union with_padding arr1[2]; union no_padding arr[3]; };
-union double_and_int { int i; double d; };
-union contains_structs { struct wonky x; struct eight_bytes y; };
-union contains_structs *get_union_ptr(void);
+    EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(
+// Apply sizeof to a range of union types
+// struct declarations for size/layout tests
+
+struct eight_bytes {
+    int i;   // bytes 0-3
+    char c;  // byte 4
+             // 3 more bytes of padding to make size a multiple of 4
+};
+
+struct two_bytes {
+    char arr[2];  // bytes 0-1
+                  // no padding
+};
+
+struct three_bytes {
+    char arr[3];  // bytes 0-2
+                  // no padding
+};
+
+struct sixteen_bytes {
+    struct eight_bytes eight;  // bytes 0-7
+    struct two_bytes two;      // bytes 8-9
+    struct three_bytes three;  // bytes 10-12
+    // 3 bytes of padding to make size a multiple of 4  (i.e. 16 bytes)
+    // b/c struct eightbyte is 4 byte-aligned)
+};
+
+struct seven_bytes {
+    struct two_bytes two;      // bytes 0-1
+    struct three_bytes three;  // bytes 2-4
+    struct two_bytes two2;     // bytes 5-6
+};                             // total size is 7 bytes
+
+struct twentyfour_bytes {
+    struct seven_bytes seven;  // bytes 0-6
+    // 1 byte padding to make next member four-byte aligned
+    struct sixteen_bytes sixteen;  // bytes 8-24 (four-byte aligned)
+};
+
+struct twenty_bytes {
+    struct sixteen_bytes sixteen;  // bytes 0-15
+    struct two_bytes two;          // bytes 16-17
+    // 2 bytes padding to make the whole struct four-byte aligned
+};  // 20 bytes b/c it's four-byte aligned
+
+struct wonky {
+    char arr[19];
+};  // 19 bytes w/ no padding
+
+struct internal_padding {
+    char c;
+    // 7 bytes of padding so next member is eight byte-aligned
+    double d;
+};  // 16 bytes total
+
+struct contains_struct_array {
+    char c;  // byte 0
+    // 3 bytes padding so next member is 4 byte-aligned
+    struct eight_bytes struct_array[3];  // bytes 4-27
+};                                       // 28 bytes total
+
+// size is 11 bytes; no padding
+union no_padding {
+    char c;
+    unsigned char uc;
+    signed char arr[11];
+};
+
+// size is 12 bytes; take largest member (10 bytes)
+// and pad to 4-byte alignment (b/c ui is 4-byte aligned)
+union with_padding {
+    signed char arr[10];
+    unsigned int ui;
+};
+
+// size is 36 bytes
+// arr1 is 24 bytes, 4-byte aligned
+// arr2 is 33 bytes, 1-byte aligned
+// round 33 up to multiple of 4 to get 36
+union contains_array {
+    union with_padding arr1[2];
+    union no_padding arr[3];
+};
+
+// 8 bytes, no padding
+union double_and_int {
+    int i;
+    double d;
+};
+
+// 20 bytes, 4-byte aligned
+union contains_structs {
+    struct wonky x; // 19 bytes, 1-byte aligned
+    struct eight_bytes y; // 8 bytes, 4-byte aligned
+};
+
 int main(void) {
-    if (sizeof(union no_padding) != 12) return 1;
-    if (sizeof(union with_padding) != 12) return 2;
-    if (sizeof(union contains_array) != 36) return 3;
-    if (sizeof(union double_and_int) != 6) return 4;
-    if (sizeof(union contains_structs) != 24) return 5;
+    if (sizeof(union no_padding) != 11) {
+        return 1; // fail
+    }
+
+    if (sizeof(union with_padding) != 12) {
+        return 2; // fail
+    }
+
+    if (sizeof(union contains_array) != 36) {
+        return 3; // fail
+    }
+
+    if (sizeof(union double_and_int) != 8) {
+        return 4; // fail
+    }
+
+    if (sizeof(union contains_structs) != 20) {
+        return 5; // fail
+    }
+
+    // apply sizeof to some expressions with union type too
     union no_padding x = { 1 };
     union contains_array y = { {{{-1, 2}} }};
-    if (sizeof x != 12) return 6;
-    if (sizeof y.arr1 != 24) return 7;
-    if (sizeof * get_union_ptr() != 24) return 8;
+    union contains_structs* get_union_ptr(void);
+
+    if (sizeof x != 11) {
+        return 6; // fail
+    }
+
+    if (sizeof y.arr1 != 24) { // array of two union with_padding objects
+        return 7; // fail
+    }
+
+    if (sizeof * get_union_ptr() != 20) {
+        return 8; // fail
+    }
+
+    return 0; // success
+}
+
+union contains_structs* get_union_ptr(void) {
+    // just return null pointer - okay b/c we never actually access this struct
     return 0;
 }
-union contains_structs *get_union_ptr(void) { return 0; }
-)"));
+)PROG"));
 }
 
 

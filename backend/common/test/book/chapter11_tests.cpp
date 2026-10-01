@@ -12,19 +12,9 @@
 // among them is a plain COPY (no truncate/extend).
 //
 // Chapter 11 is written to prove an x86 compiler distinguishes 32-bit int from
-// 64-bit long.  That distinction does not exist on BESM-6, so the corpus splits
-// two ways:
-//
-//   * Programs whose every value fits in 41 bits compute the same result the
-//     book expects and are enabled run tests below.
-//
-//   * Programs that depend on a value > 2^40, or on x86's 32-bit int truncation
-//     of a long, cannot reproduce the book result on a 41-bit machine.  They are
-//     DISABLED_ (grouped at the bottom with a one-line reason each).  These are
-//     not compiler bugs — they test target semantics BESM-6 does not have.
-//     Unlike chapter 10's logical-shift case, these programs self-check and
-//     return an error code on mismatch, so a BESM-6-valued expectation would
-//     just encode a meaningless failure code; DISABLED_ is the honest call.
+// 64-bit long.  Programs whose values fit both targets are shared as adapted;
+// the rest are in their generic LP64 form, and BESM-6 runs its own versions of
+// them (see README.md).
 //
 #include "book_test.h"
 
@@ -688,7 +678,7 @@ int main(void) {
 })"));
 }
 
-// (40 << 30) == 4.3e10, in the 41-bit long range.
+// Shifts of long values; a shift of int by a long count has the type of int.
 TEST_F(BookTest, Chapter11_Bitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
@@ -704,20 +694,18 @@ TEST_F(BookTest, Chapter11_Bitshift)
     if (l << 2 != 549755813888 /* 2 ^ 39 */) {
         return 3;
     }
-    if ((40l << 30) !=  42949672960l) {
+    if ((40l << 40) !=  43980465111040l) {
         return 4;
     }
     long long_shiftcount = 3l;
     int i_neighbor1 = 0;
     int i = -2147483645; // -2^31 + 3
     int i_neighbor2 = 0;
-    // BESM-6 >> is logical (no sign extension), so a negative value's 41-bit
-    // pattern shifts in zeros and the result is a large positive number.
-    if (i >> long_shiftcount != 274609471488l) {
+    if (i >> long_shiftcount != -268435456) {
         return 5;
     }
     i = -1;
-    if (i >> 10l != 2147483647) {
+    if (i >> 10l != -1) {
         return 6;
     }
     if (i_neighbor1) {
@@ -774,7 +762,7 @@ TEST_F(BookTest, Chapter11_BitwiseLongOp)
 })"));
 }
 
-// l <<= 23 == 1.04e11, in the 41-bit long range.
+// Compound shifts of int and long values.
 TEST_F(BookTest, Chapter11_CompoundBitshift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
@@ -790,11 +778,11 @@ TEST_F(BookTest, Chapter11_CompoundBitshift)
         return 3;
     }
     long l = 12345l;
-    if ((l <<= 23) != 103557365760l) {
+    if ((l <<= 33) != 106042742538240l) {
         return 4;
     }
     l = -l;
-    if ((l >>= 10) != 2046353408l) { // BESM-6 >> is logical: -103557365760 -> 2046353408
+    if ((l >>= 10) != -103557365760l) {
         return 5;
     }
     return 0;
@@ -862,7 +850,7 @@ TEST_F(BookTest, Chapter11_IncrementLong)
 // conversions never truncate; the expected values are the untruncated
 // results (the correct BESM-6 behavior).
 
-// On x86 (int)(2^32+2) == 2; on BESM-6 it is unchanged (no truncation).
+// Assigning a long to an int truncates: (int)(2^32+2) == 2.
 TEST_F(BookTest, Chapter11_ConvertByAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int return_truncated_long(long l) {
@@ -880,7 +868,7 @@ int truncate_on_assignment(long l, int expected) {
 
 int main(void) {
     long result = return_truncated_long(4294967298l);
-    if (result != 4294967298l) {
+    if (result != 2l) {
         return 1;
     }
     result = return_extended_int(-10);
@@ -888,28 +876,27 @@ int main(void) {
         return 2;
     }
     int i = 4294967298l;
-    if (i != 4294967298l) {
+    if (i != 2) {
         return 3;
     }
-    if (!truncate_on_assignment(17179869184l, 17179869184l)) {
+    if (!truncate_on_assignment(17179869184l, 0)) {
         return 4;
     }
     return 0;
 })"));
 }
 
-// On x86 the long arguments truncate to int at 32 bits; on BESM-6 int and
-// long are both 41-bit, so they pass through unchanged.
+// Long arguments to int parameters truncate to 32 bits.
 TEST_F(BookTest, Chapter11_ConvertFunctionArguments)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
     if (a != -1l)
         return 1;
-    if (b != 4294967298l)
+    if (b != 2)
         return 2;
-    if (c != -4294967296l)
+    if (c != 0)
         return 3;
-    if (d != 21474836475l)
+    if (d != -5)
         return 4;
     if (e != -101l)
         return 5;
@@ -917,7 +904,7 @@ TEST_F(BookTest, Chapter11_ConvertFunctionArguments)
         return 6;
     if (g != -10l)
         return 7;
-    if (h != 549755813888l)
+    if (h != 1234)
         return 8;
     return 0;
 }
@@ -930,20 +917,19 @@ int main(void) {
     int e = -101;
     long f = -123;
     int g = -10;
-    long h = 549755813888;
+    long h = -9223372036854774574;
     return foo(a, b, c, d, e, f, g, h);
 })"));
 }
 
-// On x86 the static int initializer 2^33 truncates to 0; on BESM-6 it fits a
-// 41-bit int unchanged.
+// The static int initializer 2^33 truncates to 0.
 TEST_F(BookTest, Chapter11_ConvertStaticInitializer)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int i = 8589934592l; // 2^33, fits 41-bit int
+    EXPECT_EQ("0\n", CompileAndRunBook(R"(int i = 8589934592l; // 2^33
 long j = 123456;
 
 int main(void) {
-    if (i != 8589934592l) {
+    if (i != 0) {
         return 1;
     }
     if (j != 123456l) {
@@ -953,7 +939,7 @@ int main(void) {
 })"));
 }
 
-// On x86 (int)(2^34+5) == 5; on BESM-6 a 41-bit int holds 2^34+5 unchanged.
+// (int)(2^34+5) == 5.
 TEST_F(BookTest, Chapter11_Truncate)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int truncate(long l, int expected) {
@@ -970,26 +956,23 @@ int main(void)
         return 2;
     }
     if (!truncate(17179869189l, // 2^34 + 5
-                  17179869189l)) {
+                  5)) {
         return 3;
     }
     if (!truncate(-17179869179l, // (-2^34) + 5
-                  -17179869179l)) {
+                  5l)) {
         return 4;
     }
     int i = (int)17179869189l; // 2^34 + 5
-    if (i != 17179869189l)
+    if (i != 5)
         return 5;
     return 0;
 })"));
 }
 
-// Compound assignment to int values, including c *= 10000 with c = -5000000
-// (-5e10, which fits the 41-bit int range).  i, b and c arrive as runtime
-// arguments so the optimizer cannot constant-fold the whole computation away;
-// the multiply therefore runs through the b/mul runtime helper.  (The matching
-// compile-time constant fold of -5000000 * 10000 is covered by the optimizer
-// unit test optimize/const_fold_tests.cpp.)
+// Compound assignment to int values: c *= 10000l computes in long and truncates
+// back to int.  i, b and c arrive as runtime arguments so the optimizer cannot
+// constant-fold the computation away.
 TEST_F(BookTest, Chapter11_CompoundAssignToInt)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int test(int i, int b, int c) {
@@ -1011,7 +994,7 @@ TEST_F(BookTest, Chapter11_CompoundAssignToInt)
         return 5;
     }
     c *= 10000l;
-    if (c != -50000000000l) {
+    if (c != 1539607552) {
         return 6;
     }
     return 0;
@@ -1022,8 +1005,7 @@ int main(void) {
 })"));
 }
 
-// On x86 the case labels 2^33 / ~3.4e10 truncate to 0 / -1; on BESM-6 they are
-// distinct in-range 41-bit ints, so each case is reached by its own value.
+// The case labels 2^33 / ~3.4e10 convert to the int controlling type: 0 / -1.
 TEST_F(BookTest, Chapter11_SwitchInt)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int switch_on_int(int i) {
@@ -1032,7 +1014,7 @@ TEST_F(BookTest, Chapter11_SwitchInt)
             return 0;
         case 8589934592l: // 2^33
             return 1;
-        case 34359738367l: // ~3.4e10
+        case 34359738367: // ~3.4e10
             return 2;
         default:
             return 3;
@@ -1042,18 +1024,17 @@ TEST_F(BookTest, Chapter11_SwitchInt)
 int main(void) {
     if (switch_on_int(5) != 0)
         return 1;
-    if (switch_on_int(8589934592l) != 1)
+    if (switch_on_int(0) != 1)
         return 2;
-    if (switch_on_int(34359738367l) != 2)
+    if (switch_on_int(-1) != 2)
         return 3;
-    if (switch_on_int(17179869184) != 3)
+    if (switch_on_int(17179869184) != 1)
         return 4;
     return 0;
 })"));
 }
 
-// On x86 (int) of 2^33 is 0 by truncation; on BESM-6 a 41-bit int holds it
-// unchanged, so return_l_as_int returns the full value.
+// (int) of 2^33 truncates to 0.
 TEST_F(BookTest, Chapter11_LongGlobalVar)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(extern long int l;
@@ -1063,12 +1044,12 @@ int return_l_as_int(void);
 int main(void) {
     if (return_l() != 8589934592l)
         return 1;
-    if (return_l_as_int() != 8589934592l)
+    if (return_l_as_int() != 0)
         return 2;
     l = l - 10l;
     if (return_l() != 8589934582l)
         return 3;
-    if (return_l_as_int() != 8589934582l)
+    if (return_l_as_int() != -10)
         return 4;
     return 0;
 }

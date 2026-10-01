@@ -35,6 +35,9 @@
 // BESM-6-valued expectation would just encode a meaningless failure code;
 // DISABLED_ is the honest call.
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 
@@ -2336,7 +2339,7 @@ int array_param(int *a);)"));
 // --- Value exceeds the BESM-6 integer range (41-bit signed / 48-bit unsigned) --
 
 // casts/implicit_and_explicit_conversions: reading the long elements -1 and -4
-// through an unsigned long lvalue yields their 41-bit patterns (2^41-1, 2^41-4).
+// through an unsigned long lvalue yields 2^64-1 and 2^64-4.
 TEST_F(BookTest, Chapter15_ImplicitAndExplicitConversions)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly track both implicit type conversions via array decay
@@ -2363,11 +2366,11 @@ int main(void) {
     // with an lvalue of different type, but reading signed integer thru
     // corresponding unsigned type, and vice versa, is okay.
     unsigned long *unsigned_arr = (unsigned long *)arr;
-    if (unsigned_arr[0] != 2199023255551UL) { // (unsigned long)(-1) = 2^41-1
+    if (unsigned_arr[0] != 18446744073709551615UL) {
         return 3;
     }
 
-    if (unsigned_arr[3] != 2199023255548UL) { // (unsigned long)(-4) = 2^41-4
+    if (unsigned_arr[3] != 18446744073709551612UL) {
         return 4;
     }
 
@@ -2376,19 +2379,18 @@ int main(void) {
 }
 
 
-// initialization/automatic: out-of-range unsigned/double initializers replaced
-// with in-range ones; conversions recomputed for 41/48-bit widths.
+// initialization/automatic: arrays with automatic storage duration.
 TEST_F(BookTest, Chapter15_Automatic)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initialzing one-dimensional arrays with automatic storage duration */
 
 /* Initialize array with three constants */
 int test_simple(void) {
-    unsigned long arr[3] = {281474976710655UL, 140737488355327UL,
+    unsigned long arr[3] = {18446744073709551615UL, 9223372036854775807UL,
                             100ul};
 
-    return (arr[0] == 281474976710655UL &&
-            arr[1] == 140737488355327UL && arr[2] == 100ul);
+    return (arr[0] == 18446744073709551615UL &&
+            arr[1] == 9223372036854775807UL && arr[2] == 100ul);
 }
 
 /* if an array is partially initialized, any elements that aren't
@@ -2431,15 +2433,15 @@ int test_type_conversion(int *ptr) {
     *ptr = -100;
 
     unsigned long arr[4] = {
-        1000000.0,  // convert double to ulong
-        *ptr,  // dereference to get int (-100), convert to ulong = 2^41 - 100
-        (unsigned int)4294967295U,  // stays in 48-bit unsigned int
-        -global_one                 // (unsigned long)(-1) = 2^41 - 1
+        3458764513821589504.0,  // convert double to ulong
+        *ptr,  // dereference to get int (-100), convert to ulong = 2^64 - 100
+        (unsigned int)18446744073709551615UL,  // truncates to 2^32 - 1
+        -global_one                 // (unsigned long)(-1) = 2^64 - 1
     };
 
-    return (arr[0] == 1000000ul &&
-            arr[1] == 2199023255452ul && arr[2] == 4294967295U &&
-            arr[3] == 2199023255551ul);
+    return (arr[0] == 3458764513821589504ul &&
+            arr[1] == 18446744073709551516ul && arr[2] == 4294967295U &&
+            arr[3] == 18446744073709551615UL);
 }
 
 /* Initializing an array must not corrupt other objects on the stack. */
@@ -2496,46 +2498,46 @@ int main(void) {
 }
 
 
-// extra_credit/compound_bitwise_subscript: 48-bit-fitting masks substituted for
-// the 2^63 / 0xffffffff00000000 patterns; results recomputed (<<= wraps mod 2^48).
+// extra_credit/compound_bitwise_subscript: compound bitwise operators on subscript
+// expressions.
 TEST_F(BookTest, Chapter15_CompoundBitwiseSubscript)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// compound bitwise assignment on subscript expressions
 int main(void) {
     unsigned long arr[4] = {
-        4294967296ul,               // 2^32
-        281474959933440ul,          // 0xffffff_000000
-        140737488355328ul,          // 2^47
-        16557351571215ul            // 0x0f0f_0f0f_0f0f
+        2147483648l,                // 2^31
+        18446744069414584320ul,     // 0xffff_ffff_0000_0000
+        9223372036854775808ul,      // 2^63
+        1085102592571150095l        // 0x0f0f_0f0f_0f0f_0f0f
     };
 
     // &=
     arr[1] &= arr[3];
-    if (arr[1] != 16557350584320ul /* 0x0f0f0f_000000 */) {
+    if (arr[1] != 1085102592318504960 /* 0x0f0f_0f0f_0000_0000 */) {
         return 1;
     }
 
     // |=
     arr[0] |= arr[1];
-    if (arr[0] != 16557350584320ul) {
+    if (arr[0] != 1085102594465988608ul) {
         return 2;
     }
 
     // ^=
     arr[2] ^= arr[3];
-    if (arr[2] != 157294839926543ul) {
+    if (arr[2] != 10308474629425925903ul) {
         return 3;
     }
 
     // >>=
     arr[3] >>= 25;
-    if (arr[3] != 493447ul) {
+    if (arr[3] != 32338577287l) {
         return 4;
     }
 
     // <<=
     arr[1] <<= 12;
-    if (arr[1] != 264913582817280ul) {
+    if (arr[1] != 17361640446303928320ul) {
         return 5;
     }
 
@@ -2544,9 +2546,8 @@ int main(void) {
 }
 
 
-// extra_credit/compound_pointer_assignment: the 2^63 longs (whose difference is
-// 1) are replaced with in-range longs; the `4294967295U + i` that wrapped to 3
-// at 32 bits uses the 48-bit UINT_MAX so it still wraps to 3.
+// extra_credit/compound_pointer_assignment: pointer += and -= with integer operands
+// of different types; `4294967295U + i` wraps to 3.
 TEST_F(BookTest, Chapter15_CompoundPointerAssignment)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Pointer arithmetic with +=/-=
@@ -2591,7 +2592,7 @@ int int_array(void) {
 
     // with rval of different types
     // here, rval is unsigned and wraps around
-    if ((ptr -= (281474976710655U + i)) != arr + 2) {
+    if ((ptr -= (4294967295U + i)) != arr + 2) {
         return 9;
     }
 
@@ -2599,8 +2600,8 @@ int int_array(void) {
         return 10;
     }
 
-    long l = 1099511627775l;
-    if ((ptr += l - 1099511627774l) != arr + 3) {
+    long l = 9223372036854775807l;
+    if ((ptr += l - 9223372036854775806l) != arr + 3) {
         return 11;
     }
 
@@ -2650,7 +2651,7 @@ int double_array(void) {
 
     // with rval of different types
     // here, rval is unsigned and wraps around
-    if ((ptr -= (281474976710655U + i)) != arr + 2) {
+    if ((ptr -= (4294967295U + i)) != arr + 2) {
         return 9;
     }
 
@@ -2658,8 +2659,8 @@ int double_array(void) {
         return 10;
     }
 
-    long l = 1099511627775l;
-    if ((ptr += l - 1099511627774l) != arr + 3) {
+    long l = 9223372036854775807l;
+    if ((ptr += l - 9223372036854775806l) != arr + 3) {
         return 11;
     }
 
@@ -2687,13 +2688,12 @@ int main(void) {
 
 // --- Relies on x86 32-bit unsigned wraparound --------------------------------
 
-// extra_credit/compound_assign_to_subscripted_val: 48-bit unsigned wrap — element [1] is
-// set to 2^48-2 so += 2 wraps to 0, and the multiply wraps mod 2^48 (not 13).
+// extra_credit/compound_assign_to_subscripted_val: unsigned += and *= wrap mod 2^32.
 TEST_F(BookTest, Chapter15_CompoundAssignToSubscriptedVal)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test compound assignment where LHS is a subscript expression
 
-unsigned unsigned_arr[4] = {4294967295U, 281474976710654U, 4294967293U, 4294967292U};
+unsigned unsigned_arr[4] = {4294967295U, 4294967294U, 4294967293U, 4294967292U};
 
 int idx = 2;
 long long_idx = 1;
@@ -2716,9 +2716,9 @@ int main(void) {
         return 3;  // fail
     }
 
-    // unsigned_arr[2]; 4294967283 * 4294967295 (wraps mod 2^48)
+    // unsigned_arr[2]; 4294967283 * 4294967295 (wraps mod 2^32)
     unsigned_ptr[long_idx *= 2] *= unsigned_arr[0];
-    if (unsigned_arr[2] != 281414847168525u) {
+    if (unsigned_arr[2] != 13) {
         return 4;  // fail
     }
 
@@ -2737,7 +2737,7 @@ int main(void) {
         return 7;           // fail
     }
 
-    if (unsigned_arr[2] != 281414847168525u) {
+    if (unsigned_arr[2] != 13) {
         return 8;  // fail
     }
 

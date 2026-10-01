@@ -24,6 +24,9 @@
 // BESM-6 type model.  One program — DontCoalesceMovzx, an x86-only "don't coalesce a
 // movzx" check with no BESM-6 analogue — was removed (see the note at its old site).
 //
+// Programs whose results depend on integer widths or sizes are in their generic
+// LP64 form; BESM-6 runs its own versions of them (see README.md).
+//
 #include "book_test.h"
 
 // --- inlined helper_libs/util.c check_* / id helpers (exit on mismatch) ---
@@ -1934,11 +1937,8 @@ int main(void) { return target(1.0, 2.0, 3.0); }
 )WP"));
 }
 
-// Adapted for BESM-6.  Plain `char` is unsigned here, so neg_char/not_char use
-// `signed char` to keep the sign-extension.  The `a` check expects 2^41-1, not the
-// C-conforming ULONG_MAX (2^48-1): BESM-6 deviates from C11 §6.3.1.3p2 — a
-// signed→unsigned conversion is a pure reinterpretation with no sign extension, so
-// `(unsigned long)id(-1)` keeps the 41-bit signed pattern 0o37777777777777.
+// Plain `char` may be unsigned, so neg_char/not_char use `signed char` to keep the
+// sign extension.
 TEST_F(BookTest, Chapter20_AllNoCoal_TypeConversionInterference)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(EX + ID + DBLID + UID + UCID + C1I +
@@ -1961,7 +1961,7 @@ int test_movsx_dst(void) {
     long d = id(4);
     unsigned int e = (unsigned int)neg_char;
     long f = (long) not_char;
-    check_one_ulong(a, 2199023255551ul); // 2^41 - 1 for besm6
+    check_one_ulong(a, 18446744073709551615ul);
     check_one_ulong(b, 2ul);
     check_one_int(c, 10);
     check_one_long(d, 4l);

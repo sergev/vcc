@@ -7,5 +7,10 @@ test executable compiles these sources with its own include path. A program a
 target cannot run goes on that fixture's skip list.
 
 The programs were imported while BESM-6 was the only target, so some are adapted
-to it (`putch` for `putchar`, values within 41 bits, BESM-6 `sizeof` results in
-chapter 17); the comments record why.
+to it (`putch` for `putchar`, values that fit both 41 and 64 bits); the comments
+record why. A program whose result depends on integer widths or sizes is kept
+here in its generic LP64 form (32-bit `int`, 64-bit `long` and pointers, as in the
+book), with `signed char` wherever the book assumed plain `char` is signed. BESM-6
+skips those and runs its own versions from
+`backend/besm6/test/book_besm6_tests.cpp`. The RISC-V fixture also compiles every
+program with clang and checks that the output is the same.
