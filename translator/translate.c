@@ -589,12 +589,30 @@ int target_word_bytes(void)
     return (int)target_config->pointer_size;
 }
 
-bool type_is_byval_sret(const Type *t)
+static bool is_struct_or_union(const Type *t)
 {
     t = unalias(t);
-    if (!t || (t->kind != TYPE_STRUCT && t->kind != TYPE_UNION))
+    return t && (t->kind == TYPE_STRUCT || t->kind == TYPE_UNION);
+}
+
+bool type_is_byval_sret(const Type *t)
+{
+    if (!is_struct_or_union(t))
         return false;
-    return (int)get_size(t) > target_word_bytes();
+    size_t max = target_config->struct_return_max;
+    return get_size(t) > (max ? max : 2 * target_config->pointer_size);
+}
+
+bool type_is_split_arg(const Type *t)
+{
+    return target_config->struct_args_split && is_struct_or_union(t) &&
+           (int)get_size(t) > target_word_bytes();
+}
+
+bool type_needs_slot(const Type *t)
+{
+    return is_struct_or_union(t) &&
+           ((int)get_size(t) > target_word_bytes() || !target_word_addressed());
 }
 
 int aggregate_chunk(const Type *t)
@@ -697,12 +715,12 @@ static Tac_Param *params_from_type(const Type *fun_type)
         *tail         = tp;
         tail          = &tp->next;
 
-        // A multi-word struct parameter is passed by value as N consecutive machine
-        // words (see the call-site decomposition in expr.c).  The real param above is
+        // On a struct_args_split target a struct parameter wider than a word is passed
+        // as N consecutive machine words (see the call-site decomposition in expr.c).  The real param above is
         // the struct's base slot; append N-1 filler params so frame_build reserves N
         // contiguous slots and the body's `base + i*word` member accesses resolve
         // correctly.  The fillers are never referenced by name.
-        if (type_is_byval_sret(p->type)) {
+        if (type_is_split_arg(p->type)) {
             int w      = target_word_bytes();
             int nwords = ((int)get_size(p->type) + w - 1) / w;
             for (int i = 1; i < nwords; i++) {
@@ -923,7 +941,8 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
     if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION)
         tl->u.function.type = ast_type_to_tac_type(ast->u.function.type);
 
-    // A multi-word struct return uses the hidden-pointer (sret) ABI: the caller passes
+    // A struct return too wide to return by value (type_is_byval_sret) uses the
+    // hidden-pointer (sret) ABI: the caller passes
     // the address of the result slot as an implicit first argument.  Prepend it to the
     // param list so it lands in frame slot 0 (this shifts the user params' slots by one,
     // which body references pick up automatically by name).

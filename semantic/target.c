@@ -174,6 +174,8 @@ static const Target targets[] = {
       0,   // plain char unsigned
       1,   // signed >> logical (BESM-6 shift unit does no sign extension)
       6,   // aggregate_align (6)
+      6,   // struct_return_max (1 word)
+      1,   // struct_args_split
       besm6_immediate_args },
 };
 // clang-format on

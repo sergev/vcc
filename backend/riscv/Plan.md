@@ -136,6 +136,11 @@ Phase 1 adds this. It is the prerequisite for everything else.
 - **T6. By-value struct threshold.** `type_is_byval_sret` uses one pointer size; the
   psABI passes up to 2×XLEN in registers. Make the threshold (and whether to lower
   to sret in the frontend at all) a target property.
+  *Done.* `Target.struct_return_max` (0 = two pointers: 16 bytes on RV64; BESM-6 one
+  word) and `Target.struct_args_split` (BESM-6 only). On RV64 the frontend lowers
+  only a return wider than 16 bytes to a hidden first-argument pointer, as the psABI
+  does, and passes struct arguments whole for the backend to classify. A struct `?:`
+  on a byte-addressed target merges in a slot (`type_needs_slot`).
 - **T7. Verifier.** A `tac_verify` check, run in debug builds and by tests: every
   variable has a type, operand types agree with the operator.
 

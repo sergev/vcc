@@ -1261,7 +1261,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         // the rest of the aggregate — e.g. a packed char-array member — uninitialised).
         // Allocate a result slot and copy the whole aggregate out of each branch, the
         // same way the by-value/sret paths do.
-        if (type_is_byval_sret(e->type)) {
+        if (type_needs_slot(e->type)) {
             Tac_Val *cond_val = gen_cond_val(ctx, e->u.cond.condition);
             char *else_l      = new_temp(ctx);
             char *end_l       = new_temp(ctx);
@@ -1333,11 +1333,11 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         Tac_Val *args_head  = NULL;
         Tac_Val **args_tail = &args_head;
         for (Expr *arg = e->u.call.args; arg; arg = arg->next) {
-            // A multi-word struct passed by value is marshalled as N consecutive
-            // machine-word arguments (true by-value): read each word out of the struct
+            // On a struct_args_split target a struct wider than a word is marshalled as N
+            // consecutive machine-word arguments (true by-value): read each word out of the struct
             // slot and append it as its own call argument.  The callee reserves N
             // contiguous param slots (see params_from_type), so the words line up.
-            if (type_is_byval_sret(arg->type)) {
+            if (type_is_split_arg(arg->type)) {
                 Tac_Val *sv = gen_expr(ctx, arg);
                 int w       = target_word_bytes();
                 int nwords  = ((int)get_size(arg->type) + w - 1) / w;
@@ -1360,7 +1360,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             args_tail   = &av->next;
         }
 
-        // Multi-word struct return: allocate a result slot, pass its address as a hidden
+        // A struct return too wide to return by value: allocate a result slot, pass its
+        // address as a hidden
         // first argument (sret ABI), and let the call write the struct into that slot.
         // The call expression's value is then the slot itself.
         char *sret_slot = NULL;

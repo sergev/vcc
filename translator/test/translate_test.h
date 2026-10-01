@@ -201,3 +201,13 @@ protected:
         target_config = target_lookup("x86_64");
     }
 };
+
+// Fixture for the byte-addressed LP64 target the RISC-V backend uses.
+class TranslateTestRiscv : public TranslateTest {
+protected:
+    void SetUp() override
+    {
+        TranslateTest::SetUp();
+        target_config = target_lookup("riscv64");
+    }
+};

@@ -248,3 +248,107 @@ TEST_F(TranslateTestX86, AggregateCopyCappedAtWord)
     EXPECT_EQ(ChunkStores(tac, "f"), "0:ulong 8:ulong");
     tac_free_toplevel(tac);
 }
+
+// ---------------------------------------------------------------------------
+// Struct by value follows the target: RV64 returns up to 16 bytes by value, passes
+// struct arguments whole, and merges a struct `?:` in a slot
+// ---------------------------------------------------------------------------
+
+static const Tac_TopLevel *Function(const Tac_TopLevel *tac, const char *name)
+{
+    for (; tac; tac = tac->next)
+        if (tac->kind == TAC_TOPLEVEL_FUNCTION && strcmp(tac->u.function.name, name) == 0)
+            return tac;
+    return nullptr;
+}
+
+static const Tac_Instruction *FirstCall(const Tac_TopLevel *fn)
+{
+    for (const Tac_Instruction *in = fn->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL)
+            return in;
+    return nullptr;
+}
+
+static int CountArgs(const Tac_Instruction *call)
+{
+    int n = 0;
+    for (const Tac_Val *a = call->u.fun_call.args; a; a = a->next)
+        n++;
+    return n;
+}
+
+TEST_F(TranslateTestRiscv, SixteenByteStructByValue)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct P { long a, b; };
+        struct P make(long a) { struct P p = { a, a }; return p; }
+        long use(void) { struct P q = make(1); return q.b; }
+    )");
+    const Tac_TopLevel *make = Function(tac, "make");
+    EXPECT_STREQ(make->u.function.params->name, "%a"); // no hidden pointer
+    const Tac_Instruction *call = FirstCall(Function(tac, "use"));
+    EXPECT_EQ(CountArgs(call), 1);
+    ASSERT_NE(call->u.fun_call.dst, nullptr);
+    EXPECT_EQ(TypeStr(SymbolType(tac, "use", call->u.fun_call.dst->u.var_name)), "struct P(16,8)");
+    tac_free_toplevel(tac);
+}
+
+TEST_F(TranslateTestRiscv, WideStructReturnThroughHiddenPointer)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct T { long a, b, c; };
+        struct T make(long a) { struct T t = { a, a, a }; return t; }
+        long use(void) { struct T q = make(1); return q.c; }
+    )");
+    const Tac_TopLevel *make = Function(tac, "make");
+    EXPECT_STREQ(make->u.function.params->name, "%.ret");
+    EXPECT_EQ(TypeStr(make->u.function.params->type), "*struct T(24,8)");
+    const Tac_Instruction *call = FirstCall(Function(tac, "use"));
+    EXPECT_EQ(CountArgs(call), 2); // the result slot's address, then a
+    EXPECT_EQ(call->u.fun_call.dst, nullptr);
+    tac_free_toplevel(tac);
+}
+
+TEST_F(TranslateTestRiscv, StructArgumentPassedWhole)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct T { long a, b, c; };
+        long get(struct T t) { return t.c; }
+        long use(struct T *p) { return get(*p); }
+    )");
+    const Tac_TopLevel *get = Function(tac, "get");
+    EXPECT_STREQ(get->u.function.params->name, "%t");
+    EXPECT_EQ(get->u.function.params->next, nullptr); // no per-word fillers
+    const Tac_Instruction *call = FirstCall(Function(tac, "use"));
+    ASSERT_EQ(CountArgs(call), 1);
+    EXPECT_EQ(TypeStr(SymbolType(tac, "use", call->u.fun_call.args->u.var_name)),
+              "struct T(24,8)");
+    tac_free_toplevel(tac);
+}
+
+// BESM-6 splits a struct argument wider than a word into words.
+TEST_F(TranslateTest, StructArgumentSplitIntoWords)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct T { long a, b, c; };
+        long get(struct T t) { return t.c; }
+        long use(struct T *p) { return get(*p); }
+    )");
+    int nparams = 0;
+    for (const Tac_Param *p = Function(tac, "get")->u.function.params; p; p = p->next)
+        nparams++;
+    EXPECT_EQ(nparams, 3);
+    EXPECT_EQ(CountArgs(FirstCall(Function(tac, "use"))), 3);
+    tac_free_toplevel(tac);
+}
+
+TEST_F(TranslateTestRiscv, StructConditionalMergedInSlot)
+{
+    std::string yaml = CompileToYaml(R"(
+        struct S { short a, b, c; };
+        short f(int k, struct S x, struct S y) { return (k ? x : y).b; }
+    )");
+    EXPECT_NE(yaml.find("kind: allocate_local"), std::string::npos) << yaml;
+    EXPECT_EQ(yaml.find("kind: copy\n"), std::string::npos) << yaml;
+}

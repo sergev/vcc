@@ -374,7 +374,8 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         break;
     case STMT_RETURN: {
         if (ctx->sret_name && stmt->u.expr) {
-            // Multi-word struct return: copy the result into the caller's slot through the
+            // A struct return through the hidden pointer (sret): copy the result into the
+            // caller's slot through the
             // hidden return pointer, then return the pointer itself.
             Tac_Val *src = gen_expr(ctx, stmt->u.expr); // VAR naming the source aggregate
             AggPlace dst = { NULL, 0, ctx->sret_name };

@@ -60,6 +60,13 @@ typedef struct {
     // to a whole word (BESM-6 = 6); otherwise this is 1 (natural C packing).  This keeps
     // array element strides a word multiple, so &arr[i] never lands mid-word.
     size_t aggregate_align;
+    // Struct/union by value.  One returned that is wider than struct_return_max bytes
+    // goes through a hidden pointer to a caller-allocated slot, passed as the first
+    // argument (0 = two pointers, the usual psABI register pair).  With
+    // struct_args_split, an argument wider than a word is passed as that many word
+    // arguments (BESM-6); otherwise it is passed whole and the backend applies its ABI.
+    size_t struct_return_max;
+    int struct_args_split;
     // Intrinsics with an immediate first argument, terminated by a NULL name; NULL if none.
     const ImmediateArg *immediate_args;
 } Target;
