@@ -50,25 +50,9 @@ widths or sizes are shared in their generic LP64 form; BESM-6 runs its own versi
 from `backend/besm6/test/book_besm6_tests.cpp`. Three wait for library routines
 (R17).
 
-## Phase 4 — psABI conformance
-
-- **R13. Full LP64D argument classification.** *Done.* Structs ≤ 16 bytes in up to
-  two registers, using FP registers for float-member structs; larger by reference;
-  sret in `a0`. Variadic arguments always in integer registers. Checked against
-  clang in both directions.
-- **R14. `<stdarg.h>`.** *Done.* A variadic callee saves `a0`–`a7` into the 64-byte
-  save area directly below the incoming stack arguments, so the arguments are
-  contiguous and `va_list` can stay a plain pointer stepping 8 bytes, as in the
-  BESM-6 header. A named parameter passed in integer registers lives in its save
-  slot, so `va_start` steps on from its address; the last named parameter must not
-  be one passed in an FP register. `va_arg` of a struct waits for the RISC-V
-  header (R18).
-- **R15. Interop tests.** *Done.* Link our objects against clang-compiled objects in
-  both directions (we call clang code, clang code calls us) over a table of
-  signatures: mixed int/FP, small/large structs, variadics (`interop_tests.cpp`).
-- **R16. Differential testing.** *Done.* The RISC-V book fixture also compiles
-  every program with clang -O0 for RV64, runs both under qemu and compares the
-  output and exit status.
+psABI conformance (R13–R16) is done: the full LP64D calling convention including
+FP-register structs, variadic functions, interop tests against clang in both
+directions, and every book program compared with clang.
 
 ## Phase 5 — runtime library and headers
 
