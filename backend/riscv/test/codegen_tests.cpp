@@ -3,6 +3,7 @@
 //
 #include "riscv_test.h"
 
+// A leaf function that needs no stack has no frame.
 TEST_F(RiscvTest, EmptyFunction)
 {
     EXPECT_EQ(R"(    .text
@@ -10,14 +11,6 @@ TEST_F(RiscvTest, EmptyFunction)
     .p2align 2
     .type   f, @function
 f:
-    addi    sp, sp, -16
-    sd      ra, 8(sp)
-    sd      s0, 0(sp)
-    addi    s0, sp, 16
-    addi    sp, s0, -16
-    ld      ra, 8(sp)
-    ld      s0, 0(sp)
-    addi    sp, sp, 16
     ret
     .size   f, .-f
 )",
@@ -31,10 +24,6 @@ TEST_F(RiscvTest, StaticFunctionAndExtern)
     .p2align 2
     .type   g, @function
 g:
-    addi    sp, sp, -16
-    sd      ra, 8(sp)
-    sd      s0, 0(sp)
-    addi    s0, sp, 16
 .L2:
     j       .L2
     .size   g, .-g
@@ -49,15 +38,7 @@ TEST_F(RiscvTest, ReturnConstant)
     .p2align 2
     .type   main, @function
 main:
-    addi    sp, sp, -16
-    sd      ra, 8(sp)
-    sd      s0, 0(sp)
-    addi    s0, sp, 16
     li      a0, -2
-    addi    sp, s0, -16
-    ld      ra, 8(sp)
-    ld      s0, 0(sp)
-    addi    sp, sp, 16
     ret
     .size   main, .-main
 )",

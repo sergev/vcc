@@ -100,10 +100,6 @@ TEST_F(EmitTest, LabelsAndJumps)
     .p2align 2
     .type   loop, @function
 loop:
-    addi    sp, sp, -16
-    sd      ra, 8(sp)
-    sd      s0, 0(sp)
-    addi    s0, sp, 16
 .LL1:
     j       .LL1
     .size   loop, .-loop

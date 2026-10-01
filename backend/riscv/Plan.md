@@ -73,7 +73,8 @@ and `printf` with the string, memory and math routines runs on RISC-V.
   jump, jump to next label, `li`+op into immediate forms. *Done:* `peephole.c`, also
   the zero register for a zero constant, scratch moves folded, a doubleword
   reload after its store, a byte load's mask; the RISC-V libc shrinks by 17%.
-  `genriscv --no-peephole` skips it.
+  `genriscv --no-peephole` skips it. A leaf function that needs no stack has no
+  frame at all.
 
 ## Phase 7 — `long double`
 

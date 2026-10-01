@@ -535,19 +535,82 @@ static void save_regs(Gen *g, Rv_Block *b, bool restore)
     }
 }
 
+// A marker, expanded by gen_prologue once it is known whether there is a frame.
 void gen_epilogue(Gen *g)
 {
-    save_regs(g, NULL, true);
-    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
-    emit2(g, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
-    emit2(g, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
-    emit3(g, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
+    rv_append(g->fn, RV_EPILOGUE);
     rv_append(g->fn, RV_RET);
 }
 
-// Fill the prologue block, now that the frame size is known.
+static void append3(Rv_Block *b, Rv_Op op, Rv_Operand x, Rv_Operand y, Rv_Operand z)
+{
+    Rv_Instr *in = rv_append_to(b, op);
+    in->opnd[0]  = x;
+    in->opnd[1]  = y;
+    in->opnd[2]  = z;
+}
+
+// Replace each epilogue marker by the frame teardown, or by nothing.
+static void expand_epilogues(Gen *g, bool frame)
+{
+    for (Rv_Block *b = g->fn->blocks; b; b = b->next) {
+        for (Rv_Instr **link = &b->head; *link;) {
+            Rv_Instr *marker = *link;
+            if (marker->op != RV_EPILOGUE) {
+                link = &marker->next;
+                continue;
+            }
+            Rv_Block seq = { 0 };
+            if (frame) {
+                save_regs(g, &seq, true);
+                append3(&seq, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
+                append3(&seq, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8), (Rv_Operand){ 0 });
+                append3(&seq, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0), (Rv_Operand){ 0 });
+                append3(&seq, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
+            }
+            if (seq.head) {
+                seq.tail->next = marker->next;
+                *link          = seq.head;
+                link           = &seq.tail->next;
+            } else {
+                *link = marker->next;
+            }
+            xfree(marker);
+        }
+        b->tail = b->head;
+        while (b->tail && b->tail->next)
+            b->tail = b->tail->next;
+    }
+}
+
+// Whether the body needs no frame: it makes no call, saves no register, and never
+// uses s0 (no slot, no stack argument, not variadic).
+static bool is_leaf(const Gen *g)
+{
+    if (g->nsaved > 0 || gen_variadic(g))
+        return false;
+    for (const Rv_Block *b = g->fn->blocks; b; b = b->next) {
+        for (const Rv_Instr *in = b->head; in; in = in->next) {
+            if (in->op == RV_CALL || in->op == RV_JALR)
+                return false;
+            for (int i = 0; i < 3; i++)
+                if ((in->opnd[i].kind == RV_OPND_REG || in->opnd[i].kind == RV_OPND_MEM) &&
+                    (in->opnd[i].reg == RV_S0 || in->opnd[i].reg == RV_SP))
+                    return false;
+        }
+    }
+    return true;
+}
+
+// Fill the prologue block and the epilogues, now that the frame is known.  A leaf
+// function has none.
 void gen_prologue(Gen *g)
 {
+    if (is_leaf(g)) {
+        expand_epilogues(g, false);
+        return;
+    }
+    expand_epilogues(g, true);
     Rv_Block *b  = g->prologue;
     Rv_Instr *in = rv_append_to(b, RV_ADDI);
     in->opnd[0]  = rv_reg(RV_SP);

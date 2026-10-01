@@ -14,6 +14,8 @@
 //   s0 - H - ...     saved s1-s11/fs0-fs11 in use, then slots
 //   sp + 0 ...       outgoing stack arguments
 //
+// A leaf function that never touches s0 or sp, and saves no register, has no frame.
+//
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
 // aggregate copy, t5 the address of a global, t6 a large frame offset or the bits of
 // an FP constant.
