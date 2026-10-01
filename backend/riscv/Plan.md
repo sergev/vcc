@@ -51,9 +51,10 @@ more wait for library routines (R17).
 
 ## Phase 4 — psABI conformance
 
-- **R13. Full LP64D argument classification.** Structs ≤ 16 bytes in up to two
-  registers, using FP registers for float-member structs; larger by reference;
-  sret in `a0`. Variadic arguments always in integer registers.
+- **R13. Full LP64D argument classification.** *Done.* Structs ≤ 16 bytes in up to
+  two registers, using FP registers for float-member structs; larger by reference;
+  sret in `a0`. Variadic arguments always in integer registers. Checked against
+  clang in both directions.
 - **R14. `<stdarg.h>`.** A variadic callee saves `a0`–`a7` into the 64-byte save
   area directly below the incoming stack arguments, so the arguments are
   contiguous and `va_list` can stay a plain pointer stepping 8 bytes, as in the

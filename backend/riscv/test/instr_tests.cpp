@@ -161,3 +161,28 @@ ld a1, -24(s0)
     EXPECT_TRUE(Has(s, R"(call f
 sd a0, )")) << s;
 }
+
+// A struct of a float and an int goes in fa0 and a0, one of two doubles in two FP
+// registers, and comes back in fa0/fa1.
+TEST_F(InstrTest, FloatStructArguments)
+{
+    std::string s = Code(CompileToRiscv(R"(
+struct fi { float f; int i; };
+struct dd { double a, b; };
+struct dd f(struct fi p, struct dd q);
+double g(void) {
+    struct fi p = { 1.5f, 2 };
+    struct dd q = { 3, 4 };
+    struct dd r = f(p, q);
+    return r.b;
+}
+)"));
+    EXPECT_TRUE(Has(s, R"(flw fa0, -24(s0)
+lw a0, -20(s0)
+fld fa1, -40(s0)
+fld fa2, -32(s0)
+call f
+fsd fa0, -72(s0)
+fsd fa1, -64(s0)
+)")) << s;
+}

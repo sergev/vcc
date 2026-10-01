@@ -238,3 +238,45 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Structs flattening to one or two scalars, some in FP registers: arguments, results,
+// FP registers running out, and structs that do not qualify.
+TEST_F(RiscvTest, RunFloatStructs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+struct f1 { float x; };
+struct fi { float f; int i; };
+struct cd { char c; double d; };
+struct a2 { float v[2]; };
+struct f3 { float a, b, c; };
+union u { float f; int i; };
+double f1(struct f1 s) { return s.x; }
+double fi(struct fi s) { return s.f + s.i * 100; }
+double cd(struct cd s) { return s.c + s.d; }
+double a2(struct a2 s) { return s.v[0] - s.v[1]; }
+double f3(struct f3 s) { return s.a + s.b + s.c; }
+double u(union u s) { return s.f; }
+double many(double a, double b, double c, double d, double e, double f, double g, struct fi s)
+{
+    return a + b + c + d + e + f + g + s.f * 1000 + s.i * 100;
+}
+struct cd rcd(char c) { struct cd r = { c, 2.25 }; return r; }
+struct a2 ra2(void) { struct a2 r = { { 1, 2 } }; return r; }
+int main(void) {
+    struct f1 s1 = { 1.5f };
+    struct fi s2 = { 0.25f, 3 };
+    struct cd s3 = { 5, 0.5 };
+    struct a2 s4 = { { 4, 1 } };
+    struct f3 s5 = { 1, 2, 4 };
+    union u s6;
+    s6.f = 9;
+    struct cd r1 = rcd(3);
+    struct a2 r2 = ra2();
+    return (f1(s1) != 1.5) | (fi(s2) != 300.25) << 1 | (cd(s3) != 5.5) << 2 |
+           (a2(s4) != 3) << 3 | (f3(s5) != 7) << 4 | (u(s6) != 9) << 5 |
+           (many(1, 1, 1, 1, 1, 1, 1, s2) != 557) << 6 | (r1.c + r1.d != 5.25) << 7 |
+           (r2.v[1] != 2) << 8;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

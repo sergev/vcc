@@ -1,17 +1,22 @@
 //
-// Calls, parameters and return values: the LP64D integer and FP calling convention.
-// A scalar goes in the next a/fa register, or on the stack in 8 bytes.  A float or
-// double past fa7, or a variadic one, goes where an integer would.  A struct of up to
+// Calls, parameters and return values: the LP64D calling convention.  A scalar goes
+// in the next a/fa register, or on the stack in 8 bytes; a float or double past fa7,
+// or a variadic one, goes where an integer would.  A struct of up to 16 bytes that
+// flattens to one or two scalars, at least one of them floating, goes in FP registers
+// (or an FP and an integer register) when enough are left.  Any other struct of up to
 // 16 bytes goes as one or two doublewords (a register each, or the stack; the second
-// may follow on the stack when only a7 is left); a larger one by reference.  Floating
-// point members do not yet use FP registers.
+// may follow on the stack when only a7 is left); a larger one by reference.  Return
+// values use the same rules with a0/a1 and fa0/fa1.
 //
 #include "internal.h"
 
-// Where one doubleword of an argument goes: an integer or FP register, or the stack.
+// One register-sized part of an argument: where it goes, and what it holds.
 typedef struct {
-    int reg;   // register, or -1 for the stack
-    int stack; // byte offset in the argument area
+    int reg;              // register, or -1 for the stack
+    int stack;            // byte offset in the argument area
+    int offset;           // within the argument
+    int size;             // bytes
+    const Tac_Type *type; // a scalar; NULL for raw bytes of an aggregate
 } Piece;
 
 typedef struct {
@@ -24,37 +29,118 @@ typedef struct {
     int next_int, next_fp, stack;
 } ArgState;
 
-static Piece int_piece(ArgState *s)
+static void take_int(ArgState *s, Piece *p)
 {
-    if (s->next_int < 8)
-        return (Piece){ RV_A0 + s->next_int++, 0 };
-    Piece p = { -1, s->stack };
-    s->stack += 8;
-    return p;
+    if (s->next_int < 8) {
+        p->reg = RV_A0 + s->next_int++;
+    } else {
+        p->reg   = -1;
+        p->stack = s->stack;
+        s->stack += 8;
+    }
+}
+
+typedef struct {
+    const Tac_Type *type;
+    int offset;
+} Field;
+
+// Flatten `t` at `off` into scalar fields; false when there would be more than two,
+// or one wider than 8 bytes, or `t` holds a union.
+static bool flatten(const Tac_Type *t, int off, Field *f, int *n)
+{
+    switch (t->kind) {
+    case TAC_TYPE_STRUCTURE:
+        if (t->u.structure.is_union)
+            return false;
+        for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
+            if (!flatten(m->type, off + m->offset, f, n))
+                return false;
+        return true;
+    case TAC_TYPE_ARRAY:
+        for (int i = 0; i < t->u.array.size; i++)
+            if (!flatten(t->u.array.elem_type, off + i * rv_size(t->u.array.elem_type), f, n))
+                return false;
+        return true;
+    default:
+        if (*n == 2 || rv_size(t) > 8)
+            return false;
+        f[(*n)++] = (Field){ t, off };
+        return true;
+    }
+}
+
+// Pass a small struct in FP registers, if it flattens to fit and they are free.
+static bool classify_fp(ArgState *s, const Tac_Type *t, ArgLoc *a)
+{
+    Field f[2];
+    int n = 0;
+    if (!flatten(t, 0, f, &n) || n == 0)
+        return false;
+    int nfp = 0;
+    for (int i = 0; i < n; i++)
+        nfp += rv_is_fp(f[i].type);
+    if (nfp == 0 || s->next_fp + nfp > 8 || s->next_int + n - nfp > 8)
+        return false;
+    a->npieces = n;
+    for (int i = 0; i < n; i++) {
+        Piece *p  = &a->piece[i];
+        p->offset = f[i].offset;
+        p->size   = rv_size(f[i].type);
+        p->type   = f[i].type;
+        p->reg    = rv_is_fp(f[i].type) ? RV_FA0 + s->next_fp++ : RV_A0 + s->next_int++;
+    }
+    return true;
 }
 
 static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
 {
     ArgLoc a = { 0 };
-    if (rv_is_aggregate(t)) {
-        int size = rv_size(t);
-        if (size > 16) {
-            a.by_ref   = true;
-            a.npieces  = 1;
-            a.piece[0] = int_piece(s);
-        } else {
-            a.npieces = size > 8 ? 2 : 1;
-            for (int i = 0; i < a.npieces; i++)
-                a.piece[i] = int_piece(s);
-        }
-    } else if (rv_is_fp(t) && !variadic && s->next_fp < 8) {
+    if (!rv_is_aggregate(t)) {
+        a.npieces = 1;
+        a.piece[0] = (Piece){ .size = rv_size(t), .type = t };
+        if (rv_is_fp(t) && !variadic && s->next_fp < 8)
+            a.piece[0].reg = RV_FA0 + s->next_fp++;
+        else
+            take_int(s, &a.piece[0]);
+        return a;
+    }
+    int size = rv_size(t);
+    if (size > 16) {
+        a.by_ref   = true;
         a.npieces  = 1;
-        a.piece[0] = (Piece){ RV_FA0 + s->next_fp++, 0 };
-    } else {
-        a.npieces  = 1;
-        a.piece[0] = int_piece(s);
+        a.piece[0] = (Piece){ .size = 8 };
+        take_int(s, &a.piece[0]);
+        return a;
+    }
+    if (!variadic && classify_fp(s, t, &a))
+        return a;
+    a.npieces = size > 8 ? 2 : 1;
+    for (int i = 0; i < a.npieces; i++) {
+        a.piece[i] = (Piece){ .offset = 8 * i, .size = size - 8 * i < 8 ? size - 8 * i : 8 };
+        take_int(s, &a.piece[i]);
     }
     return a;
+}
+
+// Load a piece of aggregate `name` into `reg`, or store `reg` into a piece at base + off.
+static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
+{
+    int base;
+    int64_t off;
+    name_addr(g, name, RV_T5, &base, &off);
+    if (pc->type)
+        load_mem(g, reg, pc->type, base, off + pc->offset);
+    else
+        load_bytes(g, reg, base, off + pc->offset, pc->size);
+}
+
+static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
+{
+    if (pc->type)
+        store_mem(g, reg, pc->type, base, off + pc->offset);
+    else
+        store_bytes(g, reg, base, off + pc->offset, pc->size);
 }
 
 static bool is_freg(int reg)
@@ -98,13 +184,12 @@ void gen_params(Gen *g)
         } else if (rv_is_aggregate(t)) {
             for (int i = 0; i < a.npieces; i++) {
                 const Piece *pc = &a.piece[i];
-                int n           = size - 8 * i < 8 ? size - 8 * i : 8;
                 int reg         = pc->reg;
                 if (reg < 0) {
                     emit2(g, RV_LD, rv_reg(RV_T0), mem(g, RV_S0, pc->stack));
                     reg = RV_T0;
                 }
-                store_bytes(g, reg, RV_S0, off + 8 * i, n);
+                store_piece(g, reg, RV_S0, off, pc);
             }
         } else if (rv_is_fp(t) && !is_freg(a.piece[0].reg)) {
             int_to_fp(g, t, RV_F0, a.piece[0].reg);
@@ -113,16 +198,6 @@ void gen_params(Gen *g)
             store_mem(g, a.piece[0].reg, t, RV_S0, off);
         }
     }
-}
-
-// Load one doubleword of aggregate `name` (at index `i`, `size` bytes in all) into reg.
-static void load_agg_piece(Gen *g, int reg, const char *name, int i, int size)
-{
-    int base;
-    int64_t off;
-    name_addr(g, name, RV_T5, &base, &off);
-    int n = size - 8 * i < 8 ? size - 8 * i : 8;
-    load_bytes(g, reg, base, off + 8 * i, n);
 }
 
 static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a)
@@ -146,7 +221,7 @@ static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a)
         const Piece *pc = &a->piece[i];
         int reg         = pc->reg >= 0 ? pc->reg : RV_T0;
         if (rv_is_aggregate(t)) {
-            load_agg_piece(g, reg, v->u.var_name, i, rv_size(t));
+            load_piece(g, reg, v->u.var_name, pc);
         } else if (rv_is_fp(t) && !is_freg(reg)) {
             load_val(g, RV_F0, v);
             fp_to_int(g, t, reg, RV_F0);
@@ -158,21 +233,27 @@ static void gen_arg(Gen *g, const Tac_Val *v, const ArgLoc *a)
     }
 }
 
-// Store a returned value in a0/a1 or fa0 into `dst`.
+// Where a value of type `t` is returned.
+static ArgLoc classify_result(const Tac_Type *t)
+{
+    ArgState s = { 0 };
+    return classify(&s, t, false);
+}
+
+// Store a returned value into `dst`.
 static void store_result(Gen *g, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (rv_is_aggregate(t)) {
-        int size = rv_size(t);
-        int base;
-        int64_t off;
-        name_addr(g, dst->u.var_name, RV_T5, &base, &off);
-        store_bytes(g, RV_A0, base, off, size < 8 ? size : 8);
-        if (size > 8)
-            store_bytes(g, RV_A0 + 1, base, off + 8, size - 8);
+    if (!rv_is_aggregate(t)) {
+        store_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, dst);
         return;
     }
-    store_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, dst);
+    ArgLoc a = classify_result(t);
+    int base;
+    int64_t off;
+    name_addr(g, dst->u.var_name, RV_T5, &base, &off);
+    for (int i = 0; i < a.npieces; i++)
+        store_piece(g, a.piece[i].reg, base, off, &a.piece[i]);
 }
 
 void gen_call(Gen *g, const Tac_Instruction *in)
@@ -209,10 +290,9 @@ void gen_return(Gen *g, const Tac_Val *v)
     if (v) {
         const Tac_Type *t = val_type(g, v);
         if (rv_is_aggregate(t)) {
-            int size = rv_size(t);
-            load_agg_piece(g, RV_A0, v->u.var_name, 0, size);
-            if (size > 8)
-                load_agg_piece(g, RV_A0 + 1, v->u.var_name, 1, size);
+            ArgLoc a = classify_result(t);
+            for (int i = 0; i < a.npieces; i++)
+                load_piece(g, a.piece[i].reg, v->u.var_name, &a.piece[i]);
         } else {
             load_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, v);
         }
