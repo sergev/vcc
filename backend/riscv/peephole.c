@@ -240,6 +240,38 @@ static bool is_move(Rv_Op op)
     return op == RV_MV || op == RV_FMVD || op == RV_FMVS;
 }
 
+static bool is_store(Rv_Op op)
+{
+    return op == RV_SB || op == RV_SH || op == RV_SW || op == RV_SD || op == RV_FSW ||
+           op == RV_FSD;
+}
+
+// Delete a later `load` of what store `st` wrote, into the same register, when nothing
+// between them changes the register, the base, or memory that may overlap.  Only a
+// frame slot is followed past other instructions: a store through another base, or a
+// call, may write it.
+static bool delete_reload(Rv_Instr *st, Rv_Op load)
+{
+    int r = st->opnd[0].reg, base = st->opnd[1].reg;
+    int64_t off = st->opnd[1].imm;
+    for (Rv_Instr **link = &st->next; *link; link = &(*link)->next) {
+        Rv_Instr *n = *link;
+        if (n->op == load && n->opnd[0].reg == r && n->opnd[1].reg == base &&
+            n->opnd[1].imm == off) {
+            delete_at(link);
+            return true;
+        }
+        if (base != RV_SP && base != RV_S0)
+            return false;
+        if (is_call(n->op) || writes(n, r) || writes(n, base))
+            return false;
+        if (is_store(n->op) &&
+            (n->opnd[1].reg != base || (n->opnd[1].imm < off + 8 && off < n->opnd[1].imm + 8)))
+            return false;
+    }
+    return false;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(Rv_Instr **link)
 {
@@ -295,16 +327,11 @@ static bool rewrite(Rv_Instr **link)
         return true;
     }
 
-    // The reload of what was just stored, into the same register.
+    // The reload of what was stored, into the same register.
     static const Rv_Op reload[][2] = { { RV_SD, RV_LD }, { RV_FSD, RV_FLD }, { RV_FSW, RV_FLW } };
-    for (size_t k = 0; k < sizeof(reload) / sizeof(reload[0]); k++) {
-        if (in->op == reload[k][0] && next->op == reload[k][1] &&
-            next->opnd[0].reg == o[0].reg && next->opnd[1].reg == o[1].reg &&
-            next->opnd[1].imm == o[1].imm && o[1].reg != o[0].reg) {
-            delete_at(&in->next);
+    for (size_t k = 0; k < sizeof(reload) / sizeof(reload[0]); k++)
+        if (in->op == reload[k][0] && o[1].reg != o[0].reg && delete_reload(in, reload[k][1]))
             return true;
-        }
-    }
     return false;
 }
 

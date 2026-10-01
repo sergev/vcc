@@ -33,6 +33,7 @@ add_executable(riscv-tests
     test/str_tests.cpp
     test/mem_tests.cpp
     test/math_tests.cpp
+    test/float128_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(riscv-tests riscv parser translator semantic GTest::gtest_main test_util

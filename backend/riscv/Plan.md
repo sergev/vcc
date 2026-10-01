@@ -65,11 +65,16 @@ options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
 
 ## Phase 7 — `long double`
 
-- **R23. binary128 `long double`.** The psABI makes it 16 bytes, passed in an
-  integer register pair. Implement `__addtf3`, `__multf3`, `__divtf3`,
-  `__subtf3`, comparisons and conversions in C, compiled by our compiler, in the
-  RISC-V runtime. Until this step `long double` operations are a clear
-  `fatal_error`, not a miscompile.
+- **R23. binary128 `long double`.** Done. A long double lives in a 16-byte slot
+  and goes in an integer register pair (aligned on the stack, and an even pair
+  when variadic). Arithmetic, comparisons and conversions call the libgcc-named
+  routines in `libc/riscv/float128.c`, written in C and compiled by us; clang's
+  code links against them too. `float128_tests.cpp` checks them against exact
+  results (`gen_float128_cases.py`) and against clang. `printf`'s `L` prints with
+  double precision. Limitation: a long double constant is carried as the host's
+  `long double`, so on a host without binary128 (macOS arm64: double) a literal
+  like `0.1L` or `LDBL_MAX` loses precision or range; the constant folder folds
+  only exact long double results there.
 
 ## Phase 8 — finishing
 

@@ -19,6 +19,9 @@
 // against sp and s0 is not set up (ra is saved only when there are calls); see
 // gen_prologue.
 //
+// A long double never gets a register: it lives in a 16-byte slot, and its
+// operations are calls to the runtime (libc/riscv/float128.c).
+//
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
 // aggregate copy, t5 the address of a global, t6 a large frame offset or the bits of
 // an FP constant.
@@ -58,7 +61,11 @@ typedef struct {
 //
 int rv_size(const Tac_Type *t);
 int rv_align(const Tac_Type *t);
-bool rv_is_fp(const Tac_Type *t); // float or double; long double is fatal
+bool rv_is_fp(const Tac_Type *t); // float or double
+// A long double (binary128) lives in memory, and goes in integer register pairs.
+bool rv_is_ld(const Tac_Type *t);
+// The binary128 bits of `v`: low doubleword, then high.
+void rv_ld_bits(long double v, uint64_t w[2]);
 bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);
@@ -106,6 +113,10 @@ void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
 void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
 // Load integer constant `c` converted to type `t`.
 void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
+// Load the low (half 0) or high doubleword of long double `v` into `reg`.
+void ld_half(Gen *g, int reg, const Tac_Val *v, int half);
+// Store long double `src` at base + off; base is not t0, t2, t3 or t5.
+void copy_ld(Gen *g, const Tac_Val *src, int base, int64_t off);
 // Copy `size` bytes; the bases are registers other than t2 and t6.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
 // Load `size` (1..8) bytes at base + off into `reg`, or store them, byte by byte when
@@ -140,6 +151,9 @@ void gen_return(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls a runtime routine (long double arithmetic and conversions);
+// `src_type` is the type of a binary operator's operands.  Sets *dst to its result.
+bool runtime_call(const Tac_Instruction *in, const Tac_Type *src_type, const Tac_Val **dst);
 
 //
 // Static data (data.c)

@@ -166,6 +166,32 @@ lbu s2, 0(s1)
               Run());
 }
 
+// A frame slot's reload goes past other code, unless the register, the slot, or
+// memory through another base may have changed.
+TEST_F(PeepholeTest, ReloadLater)
+{
+    I(RV_SD, { R(A0), rv_mem(RV_SP, 16) });
+    I(RV_SD, { R(A0 + 1), rv_mem(RV_SP, 24) });
+    I(RV_LD, { R(A0), rv_mem(RV_SP, 16) });
+    I(RV_LD, { R(A0 + 1), rv_mem(RV_SP, 24) });
+    I(RV_SD, { R(S1), rv_mem(RV_SP, 0) });
+    I(RV_SD, { R(S2), rv_mem(RV_SP, 4) });
+    I(RV_LD, { R(S1), rv_mem(RV_SP, 0) });
+    I(RV_SD, { R(S2), rv_mem(RV_SP, 8) });
+    I(RV_SD, { R(A0), rv_mem(S1, 0) });
+    I(RV_LD, { R(S2), rv_mem(RV_SP, 8) });
+    EXPECT_EQ(R"(sd a0, 16(sp)
+sd a1, 24(sp)
+sd s1, 0(sp)
+sd s2, 4(sp)
+ld s1, 0(sp)
+sd s2, 8(sp)
+sd a0, 0(s1)
+ld s2, 8(sp)
+)",
+              Run());
+}
+
 // A branch over a jump turns around; a jump to the next label, through empty blocks,
 // goes; so does code after a jump.
 TEST_F(PeepholeTest, Branches)

@@ -17,11 +17,14 @@
 // is re-narrowed to the active target's value width for the operand kind (queried
 // from target_config), so overflow wraps at the target's width — e.g. a BESM-6
 // int is 41-bit, not the host's 32. Floating-point folding uses the host's
-// float/double/long-double.
+// float/double/long-double; a long double result is folded only when exact if the
+// target's long double may be wider than the host's (binary128 on RISC-V).
 //
 // See docs/TAC_Optimization.md §"Constant folding".
 // ============================================================================
 
+#include <float.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -386,6 +389,13 @@ static double round_float(double d)
     return d;
 }
 
+// Whether a long double result computed on the host may be inexact for the target:
+// its long double is wider than a double, and the host's narrower than binary128.
+static bool ld_may_be_narrow(void)
+{
+    return LDBL_MANT_DIG < 113 && target_config && target_config->ldouble_size > 8;
+}
+
 // Fold a binary operator on two floating-point constants of the *same* kind.
 // Arithmetic operators produce a constant of that kind; the relational and
 // equality operators produce an int 0/1 (the C comparison result type). Returns
@@ -398,22 +408,29 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
     if (c1->kind == TAC_CONST_LONG_DOUBLE) {
         long double ld1 = c1->u.long_double_val, ld2 = c2->u.long_double_val;
         long double ldr;
+        bool exact;
         switch (op) {
         case TAC_BINARY_ADD:
         case TAC_BINARY_ADD_DOUBLE:
-            ldr = ld1 + ld2;
-            break;
         case TAC_BINARY_SUBTRACT:
-        case TAC_BINARY_SUBTRACT_DOUBLE:
-            ldr = ld1 - ld2;
+        case TAC_BINARY_SUBTRACT_DOUBLE: {
+            if (op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_DOUBLE)
+                ld2 = -ld2;
+            ldr = ld1 + ld2;
+            // Two-sum: the rounding error of ld1 + ld2.
+            long double bv = ldr - ld1;
+            exact          = isfinite(ldr) && (ld1 - (ldr - bv)) + (ld2 - bv) == 0;
             break;
+        }
         case TAC_BINARY_MULTIPLY:
         case TAC_BINARY_MULTIPLY_DOUBLE:
-            ldr = ld1 * ld2;
+            ldr   = ld1 * ld2;
+            exact = isfinite(ldr) && fmal(ld1, ld2, -ldr) == 0;
             break;
         case TAC_BINARY_DIVIDE:
         case TAC_BINARY_DIVIDE_DOUBLE:
-            ldr = ld1 / ld2;
+            ldr   = ld1 / ld2;
+            exact = isfinite(ldr) && fmal(ldr, ld2, -ld1) == 0;
             break;
         case TAC_BINARY_EQUAL:
             return make_int_const_val(TAC_CONST_INT, ld1 == ld2);
@@ -434,6 +451,8 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
         default:
             return NULL;
         }
+        if (!exact && ld_may_be_narrow())
+            return NULL;
         Tac_Const *rc         = tac_new_const(TAC_CONST_LONG_DOUBLE);
         rc->u.long_double_val = ldr;
         Tac_Val *rv           = tac_new_val(TAC_VAL_CONSTANT);
@@ -827,6 +846,11 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
     case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
         if (!const_is_integer_kind(src->kind))
             return NULL;
+        if (ld_may_be_narrow()) {
+            int64_t v = const_to_int64(src);
+            if ((double)v == 0x1p63 || v != (int64_t)(double)v)
+                return NULL;
+        }
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
         rc->u.long_double_val = (long double)const_to_int64(src);
         break;
@@ -834,6 +858,11 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
     case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
         if (!const_is_integer_kind(src->kind))
             return NULL;
+        if (ld_may_be_narrow()) {
+            uint64_t v = const_to_uint64(src);
+            if ((double)v == 0x1p64 || v != (uint64_t)(double)v)
+                return NULL;
+        }
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
         rc->u.long_double_val = (long double)const_to_uint64(src);
         break;

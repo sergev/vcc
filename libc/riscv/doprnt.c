@@ -107,7 +107,7 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
         blank      = 0;
         dot        = 0;
         dwidth     = -1;
-        lmod       = 0; /* -2 hh, -1 h, 0 none, 1 l/ll/j/z/t */
+        lmod       = 0; /* -2 hh, -1 h, 0 none, 1 l/ll/j/z/t, 2 L */
 
     reswitch:
         c = fmt[i];
@@ -142,8 +142,10 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
             lmod = 1;
             goto reswitch;
         }
-        if (c == 'L')
-            goto reswitch; /* long double is not supported; treated as double */
+        if (c == 'L') {
+            lmod = 2; /* printed with double precision */
+            goto reswitch;
+        }
         if (c == '*') {
             if (!dot) {
                 width = va_arg(ap, int);
@@ -211,7 +213,7 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
         if (c == 'f' || c == 'F' || c == 'e' || c == 'E' || c == 'g' || c == 'G') {
             double d;
             int sidx, slen;
-            d     = va_arg(ap, double);
+            d     = lmod == 2 ? (double)va_arg(ap, long double) : va_arg(ap, double);
             upper = c == 'F' || c == 'E' || c == 'G';
             if (d < 0 || (d == 0 && 1 / d < 0)) {
                 neg = 1;

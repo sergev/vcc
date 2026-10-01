@@ -61,8 +61,13 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
         fprintf(out, "    .dword  0x%016llx\n", (unsigned long long)bits);
         return 8;
     }
-    case TAC_STATIC_INIT_LONG_DOUBLE:
-        fatal_error("riscv: long double is not implemented");
+    case TAC_STATIC_INIT_LONG_DOUBLE: {
+        uint64_t w[2];
+        rv_ld_bits(it->u.long_double_val, w);
+        fprintf(out, "    .dword  0x%016llx\n    .dword  0x%016llx\n", (unsigned long long)w[0],
+                (unsigned long long)w[1]);
+        return 16;
+    }
     case TAC_STATIC_INIT_ZERO:
         if (it->u.zero_bytes > 0)
             fprintf(out, "    .zero   %d\n", it->u.zero_bytes);

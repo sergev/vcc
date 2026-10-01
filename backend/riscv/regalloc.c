@@ -5,7 +5,7 @@
 // fs0-fs11, so they survive calls and keep clear of the scratch registers; a spilled
 // one stays in its frame slot.  A value not live across a call may also take the
 // argument registers a0-a7 and fa0-fa7, first: selection never uses them as scratch,
-// and only a call writes them.  A parameter prefers the register it arrives in, an
+// and only a call (or a long double operation, a runtime call) writes them.  A parameter prefers the register it arrives in, an
 // argument its argument register, a returned value or a call's result a0 or fa0.
 //
 #include <string.h>
@@ -160,6 +160,24 @@ static int *loop_depths(const Flow *f)
     return depth;
 }
 
+// The type of an operand: a tracked variable's, a global's or a constant's.
+static const Tac_Type *operand_type(const Alloc *a, const Tac_Val *v)
+{
+    int var = v->kind == TAC_VAL_VAR ? flow_var(a->flow, v->u.var_name) : -1;
+    return var >= 0 ? a->flow->types[var] : val_type(a->g, v);
+}
+
+// Whether `in` makes a call, explicit or to the runtime; its result in *res.
+static bool makes_call(const Alloc *a, const Tac_Instruction *in, const Tac_Val **res)
+{
+    if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
+        *res = in->u.fun_call.dst;
+        return true;
+    }
+    const Tac_Type *t = in->kind == TAC_INSTRUCTION_BINARY ? operand_type(a, in->u.binary.src1) : NULL;
+    return runtime_call(in, t, res);
+}
+
 static void build(Alloc *a)
 {
     const Flow *f  = a->flow;
@@ -176,10 +194,9 @@ static void build(Alloc *a)
             int dst;
             DefArg da = { a, live, move_source(a, in, &dst) };
             flow_defs(f, in, interfere_def, &da);
-            if (in->kind == TAC_INSTRUCTION_FUN_CALL ||
-                in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
-                const Tac_Val *res = in->u.fun_call.dst;
-                int r              = res ? flow_var(f, res->u.var_name) : -1;
+            const Tac_Val *res;
+            if (makes_call(a, in, &res)) {
+                int r = res ? flow_var(f, res->u.var_name) : -1;
                 for (int v = 0; v < a->n; v++)
                     if (v != r && flow_has(live, v))
                         a->cross[v] = true;
