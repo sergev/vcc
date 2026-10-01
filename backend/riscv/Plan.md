@@ -57,27 +57,11 @@ The runtime library and headers (R17–R19) are done: target-neutral libc source
 and headers are shared from `libc/common/`, the data-model headers are per target,
 and `printf` with the string, memory and math routines runs on RISC-V.
 
-## Phase 6 — code quality
-
-- **R20. Liveness and CFG over TAC** in `backend/common/`, usable by any backend.
-  *Done:* `flow.c` (blocks, successors, live-in/out, per-instruction step; tested
-  by `backend-tests`).
-- **R21. Register allocation** — graph colouring with coalescing (book ch. 20),
-  callee-saved `s1`–`s11` and `fs0`–`fs11` saved only when used; spill to the R5
-  slots. The ch. 20 tests pass. *Done:* `regalloc.c` over the R20 liveness (Briggs
-  coalescing of copies, optimistic spilling, costs weighted by loop depth);
-  narrow integers in registers are kept extended, and arguments and results are
-  extended by the declared type as the psABI asks. `genriscv --no-regalloc` keeps
-  everything in memory, for the selection tests.
-- **R22. Peephole pass** for what allocation leaves: redundant moves, branch over
-  jump, jump to next label, `li`+op into immediate forms. *Done:* `peephole.c`, also
-  the zero register for a zero constant, scratch moves folded, a doubleword
-  reload after its store, a byte load's mask; the RISC-V libc shrinks by 17%.
-  `genriscv --no-peephole` skips it. A leaf function that needs no stack has no
-  frame at all. A value not live across a call takes `a0`–`a7`/`fa0`–`fa7` first,
-  preferring the register it arrives in, is passed in or is returned in; only values
-  live across calls take callee-saved registers. Incoming parameters and outgoing
-  arguments are moved as parallel moves. 23 of the 39 libc functions have no frame.
+Code quality (R20–R22) is done: liveness over TAC in `backend/common/flow.c`; graph
+colouring with coalescing, argument registers for values not live across a call and
+callee-saved ones for the rest; a peephole pass; no frame for a leaf that needs no
+stack, and frames addressed from `sp` without `s0` when they fit. `genriscv`
+options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
 
 ## Phase 7 — `long double`
 
