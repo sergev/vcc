@@ -18,4 +18,15 @@ protected:
         SkipIfListed(skipped);
         SKIP_IF_NO_RISCV_TOOLS();
     }
+
+    // Run a book program, and check that clang -O0 gives the same.
+    std::string CompileAndRunBook(const std::string &src)
+    {
+        std::string ours = RiscvTest::CompileAndRunBook(src);
+        int status       = exit_status;
+        EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
+        EXPECT_EQ(exit_status, status) << "exit status differs from clang";
+        exit_status = status;
+        return ours;
+    }
 };

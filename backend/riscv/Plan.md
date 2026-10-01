@@ -66,8 +66,9 @@ from `backend/besm6/test/book_besm6_tests.cpp`. Three wait for library routines
 - **R15. Interop tests.** *Done.* Link our objects against clang-compiled objects in
   both directions (we call clang code, clang code calls us) over a table of
   signatures: mixed int/FP, small/large structs, variadics (`interop_tests.cpp`).
-- **R16. Differential testing.** Compile the same programs with clang for RV64,
-  run both under qemu, compare output.
+- **R16. Differential testing.** *Done.* The RISC-V book fixture also compiles
+  every program with clang -O0 for RV64, runs both under qemu and compares the
+  output and exit status.
 
 ## Phase 5 — runtime library and headers
 

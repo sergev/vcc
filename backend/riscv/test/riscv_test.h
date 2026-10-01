@@ -83,16 +83,26 @@ protected:
     // Run a program of two parts: `ours` compiled by us, `theirs` by clang -O1.
     std::string CompileAndRunWithClang(const std::string &ours, const std::string &theirs)
     {
-        return Run(CompileToRiscv(ours.c_str()), "crt0.o", &theirs);
+        return Run(CompileToRiscv(ours.c_str()), "crt0.o", &theirs, { "-O1" }, "");
+    }
+
+    // Run a book program compiled by clang -O0 with the target headers.
+    std::string ClangRunBook(const std::string &src)
+    {
+        return Run("", "crt0-status.o", &src, { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR },
+                   ".clang");
     }
 
 private:
-    // Assemble, link and run under qemu.  Returns the UART output, or "ERROR".
+    // Assemble `asm_text` (unless empty) and compile `clang_src` (if any) with
+    // `clang_flags`, link and run under qemu.  Scratch files are named by the test and
+    // `tag`.  Returns the UART output, or "ERROR".
     std::string Run(const std::string &asm_text, const char *crt0,
-                    const std::string *clang_src = nullptr)
+                    const std::string *clang_src = nullptr,
+                    const std::vector<std::string> &clang_flags = {}, const char *tag = "")
     {
         exit_status          = -1;
-        std::string base     = ScratchPath("");
+        std::string base     = ScratchPath(tag);
         std::string s_path   = base + ".s";
         std::string o_path   = base + ".o";
         std::string exe_path = base + ".elf";
@@ -105,28 +115,35 @@ private:
             ADD_FAILURE() << "Concurrent riscv-tests run detected (" << s_path << ")";
             return "ERROR";
         }
-        {
-            std::ofstream s(s_path);
-            s << asm_text;
-        }
-        int rc = RunTool({ RISCV_CLANG, "--target=riscv64", "-march=rv64imfd", "-mabi=lp64d",
+        std::vector<std::string> objs;
+        int rc;
+        if (!asm_text.empty()) {
+            {
+                std::ofstream s(s_path);
+                s << asm_text;
+            }
+            rc = RunTool({ RISCV_CLANG, "--target=riscv64", "-march=rv64imfd", "-mabi=lp64d",
                            "-c", "-o", o_path, s_path },
                          log_path);
-        EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
-        if (rc != 0)
-            return "ERROR";
-        std::vector<std::string> objs = { o_path };
+            EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
+            if (rc != 0)
+                return "ERROR";
+            objs.push_back(o_path);
+        }
         if (clang_src) {
-            std::string c_path = base + "-clang.c";
+            std::string c_path  = base + "-clang.c";
             std::string co_path = base + "-clang.o";
             {
                 std::ofstream c(c_path);
                 c << *clang_src;
             }
-            rc = RunTool({ RISCV_CLANG, "--target=riscv64", "-march=rv64imfd", "-mabi=lp64d",
-                           "-mcmodel=medany", "-O1", "-ffreestanding", "-fno-builtin", "-c",
-                           "-o", co_path, c_path },
-                         log_path);
+            std::vector<std::string> cc = { RISCV_CLANG,       "--target=riscv64", "-march=rv64imfd",
+                                            "-mabi=lp64d",     "-mcmodel=medany",  "-ffreestanding",
+                                            "-fno-builtin",    "-c",               "-o",
+                                            co_path };
+            cc.insert(cc.end(), clang_flags.begin(), clang_flags.end());
+            cc.push_back(c_path);
+            rc = RunTool(cc, log_path);
             EXPECT_EQ(0, rc) << "clang failed on " << c_path << ":\n" << ReadFile(log_path);
             if (rc != 0)
                 return "ERROR";
@@ -138,7 +155,7 @@ private:
         link.insert(link.end(), objs.begin(), objs.end());
         link.push_back(lib + "/libc.a");
         rc = RunTool(link, log_path);
-        EXPECT_EQ(0, rc) << "ld.lld failed on " << o_path << ":\n" << ReadFile(log_path);
+        EXPECT_EQ(0, rc) << "ld.lld failed on " << exe_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
         rc = RunWithTimeout({ RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none",
