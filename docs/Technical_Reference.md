@@ -393,13 +393,13 @@ The bytes are packed **big-endian, zero-padded from the left** (so `'ab'` → `0
 
 | Packed bytes | Type | Notes |
 | --- | --- | --- |
-| 1–5 (≤ 40 bits) | `int` | Fits the 48-bit BESM-6 `int` (40 value bits + sign). |
-| 6 (48 bits) | `unsigned int` | Uses the full 48-bit word. The unsignedness deviates from the standard (which says character constants are `int`); this is a deliberate extension. |
-| > 6 | — | Fatal error (`character constant too long`). |
+| 1–5 | `int` | |
+| 6–8 | `unsigned int` | A deliberate extension: the standard says character constants are `int`. |
+| > 8 | — | Fatal error in the parser. |
 
-To carry these values the AST/TAC integer-constant fields (`int_val` / `uint_val`) use 64-bit host
-storage, and an `int` static initializer is emitted in the 64-bit `INIT_I64` slot — both forms emit
-identically on BESM-6 (one 48-bit word, masked to 41/48 bits).
+A constant wider than 32 bits must also fit the target's `int` (or `unsigned int`), or the
+semantic pass rejects it. On BESM-6 that allows up to 5 bytes as `int` (41 bits) and 6 as
+`unsigned int` (48 bits). The AST integer fields use 64-bit host storage.
 
 ## Build system
 

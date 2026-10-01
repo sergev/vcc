@@ -196,12 +196,13 @@ Expr *parse_primary_expression()
 }
 
 // Append one byte to the big-endian packed value, padding from the left with
-// zeroes. At most 6 bytes (one BESM-6 word) may be packed.
+// zeroes. At most 8 bytes (the host storage) may be packed; whether the value fits
+// the target's int is checked by the semantic pass (check_int_literal_width).
 static void pack_char_byte(uint64_t *value, int *nbytes, unsigned char b)
 {
     *value = (*value << 8) | (uint64_t)b;
-    if (++(*nbytes) > 6)
-        fatal_error("character constant too long (more than 6 bytes)");
+    if (++(*nbytes) > 8)
+        fatal_error("character constant too long (more than 8 bytes)");
 }
 
 // Parse a character-constant lexeme into a packed integer value. Bytes are
@@ -213,7 +214,7 @@ static void pack_char_byte(uint64_t *value, int *nbytes, unsigned char b)
 //   - a backslash escape contributes its byte value (low 8 bits) with no UTF-8
 //     validation.
 // Sets *out_nbytes to the number of packed bytes. Fatal error on an invalid
-// UTF-8 sequence or more than 6 packed bytes.
+// UTF-8 sequence or more than 8 packed bytes.
 static uint64_t parse_char_literal(const char *s, int *out_nbytes)
 {
     // Skip optional encoding prefix: L, U, u, u8
@@ -286,8 +287,8 @@ Expr *parse_constant()
         if (*p == '\'') {
             int nbytes;
             uint64_t v = parse_char_literal(current_lexeme, &nbytes);
-            // <= 5 bytes (<= 40 bits) is type int; exactly 6 bytes (48 bits) is
-            // unsigned (a non-standard widening, documented in README).
+            // <= 5 bytes (<= 40 bits) is type int; 6 or more bytes is unsigned (a
+            // non-standard widening, see docs/Technical_Reference.md).
             if (nbytes <= 5) {
                 expr->u.literal->kind      = LITERAL_INT;
                 expr->u.literal->u.int_val = (int64_t)v;

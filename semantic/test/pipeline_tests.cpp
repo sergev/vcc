@@ -111,8 +111,8 @@ TEST_F(PipelineTest, FileVarMultipleDeclarators)
     EXPECT_TRUE(x->u.static_var.global);
     EXPECT_EQ(x->u.static_var.init_kind, INIT_INITIALIZED);
     ASSERT_NE(x->u.static_var.init_list, nullptr);
-    EXPECT_EQ(x->u.static_var.init_list->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(x->u.static_var.init_list->u.long_val, 1);
+    EXPECT_EQ(x->u.static_var.init_list->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(x->u.static_var.init_list->u.int_val, 1);
 
     const Symbol *y = symtab_get("y");
     ASSERT_NE(y, nullptr);
@@ -120,8 +120,8 @@ TEST_F(PipelineTest, FileVarMultipleDeclarators)
     EXPECT_TRUE(y->u.static_var.global);
     EXPECT_EQ(y->u.static_var.init_kind, INIT_INITIALIZED);
     ASSERT_NE(y->u.static_var.init_list, nullptr);
-    EXPECT_EQ(y->u.static_var.init_list->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(y->u.static_var.init_list->u.long_val, 2);
+    EXPECT_EQ(y->u.static_var.init_list->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(y->u.static_var.init_list->u.int_val, 2);
 }
 
 // Static and extern file-scope variables: linkage and init_kind.
@@ -397,8 +397,8 @@ TEST_F(PipelineTest, IntStaticInitFromRealConstExpr)
 {
     RunPipeline("int trunc = -1.5; int cast = (int)2.9;");
 
-    EXPECT_EQ(sole_init("trunc")->u.long_val, -1);
-    EXPECT_EQ(sole_init("cast")->u.long_val, 2);
+    EXPECT_EQ(sole_init("trunc")->u.int_val, -1);
+    EXPECT_EQ(sole_init("cast")->u.int_val, 2);
 }
 
 // A cast wraps to the cast type's own width and signedness, not the target's.  Both
@@ -408,7 +408,7 @@ TEST_F(PipelineTest, ConstExprCastNarrowsToCastType)
 {
     RunPipeline("int narrowed = (char)300; long widened = (unsigned)-1;");
 
-    EXPECT_EQ(sole_init("narrowed")->u.long_val, 44);
+    EXPECT_EQ(sole_init("narrowed")->u.int_val, 44);
     EXPECT_EQ(sole_init("widened")->u.long_val, 4294967295L); // x86_64: unsigned is 32-bit
 }
 
@@ -671,4 +671,63 @@ TEST_F(PipelineTest, FileScopeLiteralNonConstant_Neg)
 {
     EXPECT_DEATH(RunPipeline("int x; int *p = (int[]){ x };"),
                  "Static initializer is not a constant");
+}
+
+// &c of a scalar char points at its byte: offset 0 on a byte-addressed target, the low
+// byte (#5) of the char's one-word cell on BESM-6.
+TEST_F(PipelineTest, StaticAddressOfScalarChar)
+{
+    RunPipeline("char c = 1; char *p = &c;");
+    EXPECT_EQ(sole_init("p")->kind, TAC_STATIC_INIT_FAT_POINTER);
+    EXPECT_EQ(sole_init("p")->u.pointer.byte_offset, 0);
+}
+
+TEST_F(PipelineTest, StaticAddressOfScalarCharBesm6)
+{
+    TargetGuard besm6("besm6");
+    RunPipeline("char c = 1; char *p = &c;");
+    EXPECT_EQ(sole_init("p")->u.pointer.byte_offset, 5);
+}
+
+// A 4-byte int gets the 32-bit init slot; a BESM-6 word int the 64-bit one.
+TEST_F(PipelineTest, StaticIntSlotFollowsTargetSize)
+{
+    RunPipeline("int i = 5; unsigned u = 7; long l = 9;");
+    EXPECT_EQ(sole_init("i")->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(sole_init("u")->kind, TAC_STATIC_INIT_U32);
+    EXPECT_EQ(sole_init("l")->kind, TAC_STATIC_INIT_I64);
+}
+
+TEST_F(PipelineTest, StaticIntSlotFollowsTargetSizeBesm6)
+{
+    TargetGuard besm6("besm6");
+    RunPipeline("int i = 5; unsigned u = 7;");
+    EXPECT_EQ(sole_init("i")->kind, TAC_STATIC_INIT_I64);
+    EXPECT_EQ(sole_init("u")->kind, TAC_STATIC_INIT_U64);
+}
+
+// A multi-character constant must fit the target's int: five bytes do on BESM-6
+// (41-bit int), not on x86_64.
+TEST_F(PipelineTest, CharConstantWidthBesm6)
+{
+    TargetGuard besm6("besm6");
+    RunPipeline("int f(void) { return 'abcde'; } unsigned g(void) { return 'abcdef'; }");
+}
+
+TEST_F(PipelineTest, CharConstantTooWideForInt_Neg)
+{
+    EXPECT_DEATH(RunPipeline("int f(void) { return 'abcde'; }"),
+                 "character constant too long for type int");
+}
+
+TEST_F(PipelineTest, CharConstantTooWideForUnsignedBesm6_Neg)
+{
+    TargetGuard besm6("besm6");
+    EXPECT_DEATH(RunPipeline("unsigned g(void) { return 'abcdefg'; }"),
+                 "character constant too long for type unsigned int");
+}
+
+TEST_F(PipelineTest, StaticCharConstantTooWideForInt_Neg)
+{
+    EXPECT_DEATH(RunPipeline("int x = 'abcde';"), "character constant too long for type int");
 }

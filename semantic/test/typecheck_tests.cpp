@@ -63,8 +63,8 @@ TEST_F(TypecheckTest, TypecheckIntVarExpr)
 
     Tac_StaticInit *init = x->u.static_var.init_list;
     ASSERT_NE(init, nullptr);
-    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(init->u.long_val, 42);
+    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(init->u.int_val, 42);
     EXPECT_EQ(init->next, nullptr);
 
     // Check symbol main.
@@ -420,11 +420,11 @@ TEST_F(TypecheckTest, StaticVariableCompoundInitializer)
 
     Tac_StaticInit *init = s->u.static_var.init_list;
     ASSERT_NE(init, nullptr);
-    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(init->u.long_val, 1);
+    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(init->u.int_val, 1);
     ASSERT_NE(init->next, nullptr);
-    EXPECT_EQ(init->next->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(init->next->u.long_val, 2);
+    EXPECT_EQ(init->next->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(init->next->u.int_val, 2);
     EXPECT_EQ(init->next->next, nullptr);
 }
 
@@ -462,8 +462,8 @@ TEST_F(TypecheckTest, PointerStructArrowOperator)
     EXPECT_EQ(s->u.static_var.init_kind, INIT_INITIALIZED);
     Tac_StaticInit *init = s->u.static_var.init_list;
     ASSERT_NE(init, nullptr);
-    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(init->u.long_val, 42);
+    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(init->u.int_val, 42);
 
     // symtab: main
     const Symbol *main_sym = symtab_get("main");

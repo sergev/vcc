@@ -4,6 +4,7 @@
 
 #include "semantic.h"
 #include "symtab.h"
+#include "target.h"
 
 //
 // Convert literal to int64
@@ -138,6 +139,35 @@ static long double literal_to_long_double(const Literal *lit)
     }
 }
 
+void check_int_literal_width(const Literal *lit)
+{
+    if (lit->kind == LITERAL_INT && (uint64_t)lit->u.int_val > 0xFFFFFFFFu &&
+        sign_narrow((uint64_t)lit->u.int_val, target_config->int_bits) != lit->u.int_val)
+        fatal_error("character constant too long for type int");
+    if (lit->kind == LITERAL_UINT && lit->u.uint_val > 0xFFFFFFFFu &&
+        unsigned_narrow(lit->u.uint_val, (int)target_config->int_size * 8) != lit->u.uint_val)
+        fatal_error("character constant too long for type unsigned int");
+}
+
+Tac_StaticInit *new_static_init_int(size_t size, bool is_signed, uint64_t bits)
+{
+    Tac_StaticInit *result;
+    if (size == 4) {
+        result = tac_new_static_init(is_signed ? TAC_STATIC_INIT_I32 : TAC_STATIC_INIT_U32);
+        if (is_signed)
+            result->u.int_val = (int32_t)bits;
+        else
+            result->u.uint_val = (uint32_t)bits;
+    } else {
+        result = tac_new_static_init(is_signed ? TAC_STATIC_INIT_I64 : TAC_STATIC_INIT_U64);
+        if (is_signed)
+            result->u.long_val = (int64_t)bits;
+        else
+            result->u.ulong_val = bits;
+    }
+    return result;
+}
+
 //
 // Convert literal to given arithmetic type and return as Tac_StaticInit.
 //
@@ -158,8 +188,7 @@ Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Lite
             result              = tac_new_static_init(TAC_STATIC_INIT_U8);
             result->u.uchar_val = (literal_to_int64(lit) != 0);
         } else {
-            result             = tac_new_static_init(TAC_STATIC_INIT_I64);
-            result->u.long_val = (literal_to_int64(lit) != 0);
+            result = new_static_init_int(get_size(target_type), true, literal_to_int64(lit) != 0);
         }
         break;
 
@@ -184,12 +213,7 @@ Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Lite
         // An enumerated type is int-sized, int-aligned and signed everywhere else
         // (get_size/get_alignment/is_signed, and ast_type_to_tac_type maps it to
         // TAC_TYPE_INT), so it shares int's representation here too.
-        //
-        // BESM-6 int is 48-bit; use the 64-bit init slot so multi-character
-        // constants (up to 5 bytes / 40 bits) are not truncated. The backend
-        // emits INIT_I64 identically to INIT_I32 (one word, masked to 41 bits).
-        result             = tac_new_static_init(TAC_STATIC_INIT_I64);
-        result->u.long_val = literal_to_int64(lit);
+        result = new_static_init_int(get_size(target_type), true, literal_to_int64(lit));
         break;
 
     case TYPE_USHORT:
@@ -197,21 +221,15 @@ Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Lite
         result->u.ushort_val = (uint16_t)literal_to_int64(lit);
         break;
 
-    case TYPE_UINT:
-        result              = tac_new_static_init(TAC_STATIC_INIT_U64);
-        result->u.ulong_val = literal_to_uint64(lit);
-        break;
-
     case TYPE_LONG:
     case TYPE_LONG_LONG:
-        result             = tac_new_static_init(TAC_STATIC_INIT_I64);
-        result->u.long_val = literal_to_int64(lit);
+        result = new_static_init_int(get_size(target_type), true, literal_to_int64(lit));
         break;
 
+    case TYPE_UINT:
     case TYPE_ULONG:
     case TYPE_ULONG_LONG:
-        result              = tac_new_static_init(TAC_STATIC_INIT_U64);
-        result->u.ulong_val = literal_to_uint64(lit);
+        result = new_static_init_int(get_size(target_type), false, literal_to_uint64(lit));
         break;
 
     case TYPE_FLOAT:

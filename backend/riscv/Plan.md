@@ -58,6 +58,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
   - aggregate copies in pointer-size chunks → T5; one-pointer sret threshold → T6.
 - **D2. Fix the small leaks found by D1.** Character-constant length from the target
   descriptor; TAC comments and field docs stated per target, not in BESM-6 units.
+  *Done.* Static integer slots follow the object's size (`new_static_init_int`);
+  `&c` adds the low-byte offset only on a word-addressed target
+  (`target_word_addressed()`); the parser packs up to 8 bytes and the semantic pass
+  rejects a character constant that does not fit the target's `int`.
 - **D3. Generic backend driver.** Split `backend/main.c` into a shared
   `backend/common/driver.c` (argument parsing, TAC import, toplevel loop, output
   file) and a per-backend descriptor: name, default extension, extra options,

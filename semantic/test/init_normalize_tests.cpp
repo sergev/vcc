@@ -344,8 +344,8 @@ union u h = { .i = 2 };
     ASSERT_NE(sym, nullptr);
     const Tac_StaticInit *init = sym->u.static_var.init_list;
     ASSERT_NE(init, nullptr);
-    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(init->u.long_val, 1);
+    EXPECT_EQ(init->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(init->u.int_val, 1);
     ASSERT_NE(init->next, nullptr);
     EXPECT_EQ(init->next->kind, TAC_STATIC_INIT_ZERO);
     EXPECT_EQ(init->next->u.zero_bytes, 8u); // x86_64 host sizes: a[1..2]
@@ -353,7 +353,7 @@ union u h = { .i = 2 };
 
     init = symtab_get("h")->u.static_var.init_list;
     ASSERT_NE(init, nullptr);
-    EXPECT_EQ(init->u.long_val, 2);
+    EXPECT_EQ(init->u.int_val, 2);
     ASSERT_NE(init->next, nullptr);
     EXPECT_EQ(init->next->u.zero_bytes, 8u); // the rest of the 12-byte union
 }

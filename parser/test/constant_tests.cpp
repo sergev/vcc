@@ -199,10 +199,10 @@ TEST_F(ParserTest, CharConstant_sixBytesUnsigned)
     EXPECT_EQ(0x616263646566ULL, lit->u.uint_val);
 }
 
-// More than six packed bytes is a fatal error.
+// More than eight packed bytes is a fatal error.
 TEST_F(ParserTest, CharConstant_tooLong_negative)
 {
-    EXPECT_DEATH(program = parse(CreateTempFile("int x = 'abcdefg';")), "");
+    EXPECT_DEATH(program = parse(CreateTempFile("int x = 'abcdefghi';")), "");
 }
 
 // A stray UTF-8 continuation byte (no lead) is a fatal error.

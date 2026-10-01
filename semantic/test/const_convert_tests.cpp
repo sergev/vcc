@@ -59,8 +59,8 @@ TEST_F(ConstConvertTest, IntFromInt)
     auto lit  = int_lit(42);
     auto type = make_type(TYPE_INT);
     result    = new_static_init_from_literal(&type, &lit);
-    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(result->u.long_val, 42);
+    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(result->u.int_val, 42);
 }
 
 TEST_F(ConstConvertTest, IntFromChar)
@@ -68,8 +68,8 @@ TEST_F(ConstConvertTest, IntFromChar)
     auto lit  = char_lit(-5); // sign-extended to -5
     auto type = make_type(TYPE_INT);
     result    = new_static_init_from_literal(&type, &lit);
-    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(result->u.long_val, (char)-5);
+    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(result->u.int_val, (char)-5);
 }
 
 TEST_F(ConstConvertTest, IntFromFloat)
@@ -77,8 +77,8 @@ TEST_F(ConstConvertTest, IntFromFloat)
     auto lit  = float_lit(3.7); // truncated to 3
     auto type = make_type(TYPE_INT);
     result    = new_static_init_from_literal(&type, &lit);
-    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I64);
-    EXPECT_EQ(result->u.long_val, 3);
+    EXPECT_EQ(result->kind, TAC_STATIC_INIT_I32);
+    EXPECT_EQ(result->u.int_val, 3);
 }
 
 // TYPE_UINT
@@ -88,17 +88,17 @@ TEST_F(ConstConvertTest, UIntFromInt)
     auto lit  = int_lit(42);
     auto type = make_type(TYPE_UINT);
     result    = new_static_init_from_literal(&type, &lit);
-    EXPECT_EQ(result->kind, TAC_STATIC_INIT_U64);
-    EXPECT_EQ(result->u.ulong_val, (uint64_t)42);
+    EXPECT_EQ(result->kind, TAC_STATIC_INIT_U32);
+    EXPECT_EQ(result->u.uint_val, (uint32_t)42);
 }
 
 TEST_F(ConstConvertTest, UIntFromNegInt)
 {
-    auto lit  = int_lit(-1); // wraps to UINT64_MAX; codegen masks to 48 bits
+    auto lit  = int_lit(-1); // wraps to UINT32_MAX (4-byte unsigned int)
     auto type = make_type(TYPE_UINT);
     result    = new_static_init_from_literal(&type, &lit);
-    EXPECT_EQ(result->kind, TAC_STATIC_INIT_U64);
-    EXPECT_EQ(result->u.ulong_val, (uint64_t)UINT64_MAX);
+    EXPECT_EQ(result->kind, TAC_STATIC_INIT_U32);
+    EXPECT_EQ(result->u.uint_val, (uint32_t)UINT32_MAX);
 }
 
 // TYPE_LONG

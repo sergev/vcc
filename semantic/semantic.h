@@ -41,6 +41,14 @@ void fatal_error(const char *message, ...);
 // Convert literal to given arithmetic type and return as Tac_StaticInit.
 Tac_StaticInit *new_static_init_from_literal(const Type *type, const Literal *lit);
 
+// Static initializer slot for an integer (or integer-valued pointer) object of
+// `size` bytes: I32/U32 for a 4-byte object, I64/U64 for anything wider.
+Tac_StaticInit *new_static_init_int(size_t size, bool is_signed, uint64_t bits);
+
+// Reject an int/unsigned literal wider than 32 bits that does not fit the target's
+// int/unsigned int.  Only a multi-character constant can be that wide.
+void check_int_literal_width(const Literal *lit);
+
 // Convert any arithmetic literal to a real value.
 double literal_to_double(const Literal *lit);
 

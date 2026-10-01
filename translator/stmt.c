@@ -136,7 +136,7 @@ static int zero_stores(const Initializer *init)
 static void gen_zero_fill(TacCtx *ctx, const char *var_name, int bytes)
 {
     int w = target_word_bytes();
-    if ((int)target_config->aggregate_align >= w)
+    if (target_word_addressed())
         bytes = (bytes + w - 1) / w * w;
     int nwords = bytes / w;
 

@@ -139,6 +139,7 @@ static Expr *typecheck_literal(Expr *e)
     }
     free_type(e->type);
     e->type = NULL; // prevent double-free: typecheck_string also calls free_type(e->type)
+    check_int_literal_width(e->u.literal);
     switch (e->u.literal->kind) {
     case LITERAL_INT:
         e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__);

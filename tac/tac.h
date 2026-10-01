@@ -471,7 +471,7 @@ typedef struct Tac_Type {
         } array;
         struct {
             char *tag;
-            int size; // BESM-6 word count
+            int size; // in bytes
         } structure;
     } u;
 } Tac_Type;
@@ -524,7 +524,7 @@ typedef struct Tac_StaticInit {
         // INIT_POINTER, INIT_FAT_POINTER
         struct {
             char *name;
-            int byte_offset; // Total byte offset from symbol
+            int byte_offset; // Total byte offset from symbol.  On BESM-6:
                              // INIT_POINTER: multiple of 6
                              // INIT_FAT_POINTER: word*6 + byte_from_MSB
         } pointer;

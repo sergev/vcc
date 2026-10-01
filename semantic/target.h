@@ -61,6 +61,10 @@ const Target *target_lookup(const char *name);
 // Print all known target names to stderr, one per line.
 void target_list(void);
 
+// True when the smallest addressable unit is a machine word wider than a byte
+// (BESM-6): a scalar char then occupies a whole word, its value in the low byte.
+int target_word_addressed(void);
+
 // Sign-extend the low `w` bits of `bits` to a 64-bit signed value (w in (0,64)).
 // w<=0 or w>=64 means "no narrowing": return the full 64-bit pattern.  Both constant
 // folders (semantic/typecheck.c and optimize/const_fold.c) wrap folded results to a

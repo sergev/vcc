@@ -186,6 +186,11 @@ void target_list(void)
     }
 }
 
+int target_word_addressed(void)
+{
+    return target_config->aggregate_align > 1;
+}
+
 int64_t sign_narrow(uint64_t bits, int w)
 {
     if (w <= 0 || w >= 64)
