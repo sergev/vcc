@@ -1115,9 +1115,10 @@ TEST_F(TacBinaryTest, TypeStr)
     arr->u.array.elem_type       = tac_new_type(TAC_TYPE_POINTER);
     arr->u.array.elem_type->u.pointer.target_type = tac_new_type(TAC_TYPE_STRUCTURE);
     arr->u.array.elem_type->u.pointer.target_type->u.structure.tag  = xstrdup("S");
-    arr->u.array.elem_type->u.pointer.target_type->u.structure.size = 12;
+    arr->u.array.elem_type->u.pointer.target_type->u.structure.size      = 12;
+    arr->u.array.elem_type->u.pointer.target_type->u.structure.alignment = 4;
     s = tac_type_str(arr);
-    EXPECT_STREQ(s, "[4]*struct S(12)");
+    EXPECT_STREQ(s, "[4]*struct S(12,4)");
     xfree(s);
     tac_free_type(arr);
 }

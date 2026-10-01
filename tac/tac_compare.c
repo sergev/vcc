@@ -102,8 +102,21 @@ bool tac_compare_type(const Tac_Type *a, const Tac_Type *b)
             return false;
         if (a->u.structure.tag && strcmp(a->u.structure.tag, b->u.structure.tag) != 0)
             return false;
-        if (a->u.structure.size != b->u.structure.size)
+        if (a->u.structure.size != b->u.structure.size ||
+            a->u.structure.alignment != b->u.structure.alignment ||
+            a->u.structure.is_union != b->u.structure.is_union)
             return false;
+        {
+            const Tac_Member *ma = a->u.structure.members, *mb = b->u.structure.members;
+            for (; ma && mb; ma = ma->next, mb = mb->next) {
+                if ((ma->name == NULL) != (mb->name == NULL) ||
+                    (ma->name && strcmp(ma->name, mb->name) != 0) || ma->offset != mb->offset ||
+                    !tac_compare_type(ma->type, mb->type))
+                    return false;
+            }
+            if (ma || mb)
+                return false;
+        }
         break;
     default:
         break;

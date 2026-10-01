@@ -87,7 +87,10 @@ module TAC {
          | FunType(Type* params, Type ret, bool variadic)
          | Pointer(Type referenced)
          | Array(Type element, int size)
-         | Structure(identifier tag, int size)
+         | Structure(identifier tag, int size, int alignment, bool is_union, Member* members)
+
+    -- members are listed for a struct held by value, not behind a pointer
+    Member = (identifier name, int offset, Type typ)
 
     StaticInit = CharInit(int val) | UCharInit(int val)
                | ShortInit(int val) | UShortInit(int val)

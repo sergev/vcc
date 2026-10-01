@@ -236,9 +236,15 @@ void tac_print_type(FILE *fd, const Tac_Type *type, int depth)
         fprintf(fd, "Size: %d\n", type->u.array.size);
     } else if (type->kind == TAC_TYPE_STRUCTURE) {
         print_indent(fd, depth + 1);
-        fprintf(fd, "Tag: %s\n", type->u.structure.tag ? type->u.structure.tag : "(null)");
+        fprintf(fd, "Tag: %s%s\n", type->u.structure.tag ? type->u.structure.tag : "(null)",
+                type->u.structure.is_union ? " (union)" : "");
         print_indent(fd, depth + 1);
-        fprintf(fd, "Size: %d\n", type->u.structure.size);
+        fprintf(fd, "Size: %d Align: %d\n", type->u.structure.size, type->u.structure.alignment);
+        for (const Tac_Member *m = type->u.structure.members; m; m = m->next) {
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Member: %s offset %d\n", m->name ? m->name : "(null)", m->offset);
+            tac_print_type(fd, m->type, depth + 2);
+        }
     }
     if (type->next) {
         print_indent(fd, depth + 1);
@@ -298,9 +304,9 @@ static void ts_type(TypeStr *ts, const Tac_Type *type)
         ts_type(ts, type->u.array.elem_type);
         break;
     case TAC_TYPE_STRUCTURE:
-        ts_puts(ts, "struct ");
+        ts_puts(ts, type->u.structure.is_union ? "union " : "struct ");
         ts_puts(ts, type->u.structure.tag ? type->u.structure.tag : "?");
-        snprintf(num, sizeof num, "(%d)", type->u.structure.size);
+        snprintf(num, sizeof num, "(%d,%d)", type->u.structure.size, type->u.structure.alignment);
         ts_puts(ts, num);
         break;
     case TAC_TYPE_FUN_TYPE:

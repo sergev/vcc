@@ -174,6 +174,7 @@ void tac_free_type(Tac_Type *type)
         if (type->u.structure.tag) {
             xfree(type->u.structure.tag);
         }
+        tac_free_member(type->u.structure.members);
         break;
     default:
         break;
@@ -193,6 +194,19 @@ void tac_free_param(Tac_Param *param)
     tac_free_type(param->type);
     tac_free_param(param->next);
     xfree(param);
+}
+
+// Free a Tac_Member list and its contents
+void tac_free_member(Tac_Member *member)
+{
+    while (member) {
+        Tac_Member *next = member->next;
+        if (member->name)
+            xfree(member->name);
+        tac_free_type(member->type);
+        xfree(member);
+        member = next;
+    }
 }
 
 // Free a Tac_StaticLocal list and its contents recursively

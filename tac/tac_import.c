@@ -138,6 +138,24 @@ static Tac_Type *import_type(WFILE *in)
         check_input(in, "structure tag");
         t->u.structure.size = (int)wgetw(in);
         check_input(in, "structure size");
+        t->u.structure.alignment = (int)wgetw(in);
+        check_input(in, "structure alignment");
+        t->u.structure.is_union = (bool)wgetw(in);
+        check_input(in, "structure is_union");
+        for (Tac_Member **tail = &t->u.structure.members;;) {
+            size_t mtag = wgetw(in);
+            check_input(in, "member tag");
+            if (mtag != TAG_TAC_MEMBER)
+                break;
+            Tac_Member *m = tac_new_member();
+            m->name       = wgetstr(in);
+            check_input(in, "member name");
+            m->offset = (int)wgetw(in);
+            check_input(in, "member offset");
+            m->type = import_type(in);
+            *tail   = m;
+            tail    = &m->next;
+        }
         break;
     default:
         break;

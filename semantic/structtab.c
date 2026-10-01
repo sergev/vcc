@@ -48,9 +48,18 @@ void free_struct(StructDef *def)
     }
 }
 
+static StructDef *retired; // purged or replaced definitions, freed by structtab_destroy
+
 static void structtab_destroy_callback(intptr_t ptr)
 {
     free_struct((StructDef *)ptr);
+}
+
+static void structtab_retire_callback(intptr_t ptr)
+{
+    StructDef *def    = (StructDef *)ptr;
+    def->retired_next = retired;
+    retired           = def;
 }
 
 //
@@ -69,6 +78,11 @@ void structtab_init()
 void structtab_destroy()
 {
     map_destroy_free(&structtab, structtab_destroy_callback);
+    while (retired) {
+        StructDef *next = retired->retired_next;
+        free_struct(retired);
+        retired = next;
+    }
 }
 
 //
@@ -92,7 +106,7 @@ void structtab_add_struct(const char *tag, TypeKind kind, bool complete, int ali
     def->size      = size;
     def->members   = members;
 
-    map_insert_free(&structtab, tag, (intptr_t)def, level, structtab_destroy_callback);
+    map_insert_free(&structtab, tag, (intptr_t)def, level, structtab_retire_callback);
 }
 
 //
@@ -137,5 +151,5 @@ StructDef *structtab_find_opt(const char *tag)
 //
 void structtab_purge(int level)
 {
-    map_remove_level_free(&structtab, level, structtab_destroy_callback);
+    map_remove_level_free(&structtab, level, structtab_retire_callback);
 }

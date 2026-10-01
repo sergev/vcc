@@ -309,6 +309,15 @@ static void export_type(WFILE *out, const Tac_Type *t)
     case TAC_TYPE_STRUCTURE:
         wputstr(t->u.structure.tag ? t->u.structure.tag : "", out);
         wputw((size_t)t->u.structure.size, out);
+        wputw((size_t)t->u.structure.alignment, out);
+        wputw(t->u.structure.is_union ? 1 : 0, out);
+        for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+            wputw(TAG_TAC_MEMBER, out);
+            wputstr(m->name ? m->name : "", out);
+            wputw((size_t)m->offset, out);
+            export_type(out, m->type);
+        }
+        wputw(TAG_EOL, out);
         break;
     default:
         break;

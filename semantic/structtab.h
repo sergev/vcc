@@ -18,8 +18,11 @@ typedef struct FieldDef {
     int offset;            // Offset within the struct (in bytes)
 } FieldDef;
 
-// Structure for a struct type entry
-typedef struct {
+// Structure for a struct type entry.  A definition outlives its scope: on purge or
+// replacement it is retired, not freed, so an AST node that cached it (cached_def) stays
+// valid until structtab_destroy.
+typedef struct StructDef {
+    struct StructDef *retired_next; // on the retired list
     char *tag;         // Struct tag (Ident, owned copy)
     TypeKind kind;     // TYPE_STRUCT or TYPE_UNION
     bool complete;     // false for a forward declaration, true once defined

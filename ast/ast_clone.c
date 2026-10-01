@@ -81,6 +81,7 @@ Type *clone_type(const Type *type, const char *funcname, const char *filename, u
         // cache and get_size()/get_alignment() would fall through to a failing lookup.
         result->u.struct_t.cached_size  = type->u.struct_t.cached_size;
         result->u.struct_t.cached_align = type->u.struct_t.cached_align;
+        result->u.struct_t.cached_def   = type->u.struct_t.cached_def;
         break;
     case TYPE_ENUM:
         result->u.enum_t.name        = type->u.enum_t.name ? xstrdup(type->u.enum_t.name) : NULL;

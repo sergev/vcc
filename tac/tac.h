@@ -17,6 +17,7 @@ typedef struct Tac_StaticInit Tac_StaticInit;
 typedef struct Tac_TopLevel Tac_TopLevel;
 typedef struct Tac_Param Tac_Param;
 typedef struct Tac_StaticLocal Tac_StaticLocal;
+typedef struct Tac_Member Tac_Member;
 
 //
 // Program: TopLevel* decls
@@ -479,10 +480,23 @@ typedef struct Tac_Type {
         } array;
         struct {
             char *tag;
-            int size; // in bytes
+            int size;            // in bytes; 0 when incomplete
+            int alignment;       // in bytes
+            bool is_union;
+            Tac_Member *members; // by offset; NULL when not expanded (behind a pointer)
         } structure;
     } u;
 } Tac_Type;
+
+//
+// A struct/union member: its byte offset and type.
+//
+typedef struct Tac_Member {
+    struct Tac_Member *next; // Linked list
+    char *name;
+    int offset;
+    Tac_Type *type;
+} Tac_Member;
 
 //
 // StaticInit: Various initialization kinds
@@ -547,6 +561,7 @@ Tac_Instruction *tac_new_instruction(Tac_InstructionKind kind);
 Tac_Type *tac_new_type(Tac_TypeKind kind);
 Tac_Const *tac_new_const(Tac_ConstKind kind);
 Tac_Param *tac_new_param(void);
+Tac_Member *tac_new_member(void);
 Tac_StaticLocal *tac_new_static_local(void);
 Tac_TopLevel *tac_new_toplevel(Tac_TopLevelKind kind);
 Tac_StaticInit *tac_new_static_init(Tac_StaticInitKind kind);
@@ -563,6 +578,7 @@ void tac_free_val(Tac_Val *val);
 void tac_free_instruction(Tac_Instruction *instr);
 void tac_free_type(Tac_Type *type);
 void tac_free_param(Tac_Param *param);
+void tac_free_member(Tac_Member *member);
 void tac_free_static_local(Tac_StaticLocal *sl);
 void tac_free_static_init(Tac_StaticInit *init);
 void tac_free_toplevel(Tac_TopLevel *toplevel);

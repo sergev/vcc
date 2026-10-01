@@ -120,6 +120,10 @@ Phase 1 adds this. It is the prerequisite for everything else.
   renames the lists with the body (T2), leaving temporaries alone.
 - **T4. Struct layout in TAC types.** `TAC_TYPE_STRUCTURE` carries byte size,
   alignment, and member `(offset, type)` list — enough for psABI classification.
+  *Done.* Plus `is_union`; members are listed by value, not behind a pointer.
+  Typecheck caches each node's `StructDef` (`cached_def`) and `structtab` retires
+  purged definitions instead of freeing them, so block-scope tags, even reused in
+  sibling scopes, keep their layout until lowering.
 - **T5. Aggregate copy granularity.** `gen_aggregate_assign`/`gen_struct_assign`
   copy in pointer-size chunks, which over-copies a 12-byte, 4-aligned struct on a
   64-bit target. Copy in chunks of the aggregate's alignment, or emit a tail of

@@ -94,6 +94,7 @@ struct Type {
             Field *fields;
             int cached_size;  /* bytes; 0 = not resolved (set by validate_type while tag is live) */
             int cached_align; /* bytes; 0 = not resolved */
+            const struct StructDef *cached_def; /* the tag's definition; NULL = not resolved */
         } struct_t; /* optional name */
         struct {
             Ident name;

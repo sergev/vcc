@@ -54,10 +54,22 @@ Tac_Type *tac_clone_type(const Tac_Type *type)
         t->u.array.elem_type = tac_clone_type(type->u.array.elem_type);
         t->u.array.size      = type->u.array.size;
         break;
-    case TAC_TYPE_STRUCTURE:
-        t->u.structure.tag  = type->u.structure.tag ? xstrdup(type->u.structure.tag) : NULL;
-        t->u.structure.size = type->u.structure.size;
+    case TAC_TYPE_STRUCTURE: {
+        t->u.structure.tag       = type->u.structure.tag ? xstrdup(type->u.structure.tag) : NULL;
+        t->u.structure.size      = type->u.structure.size;
+        t->u.structure.alignment = type->u.structure.alignment;
+        t->u.structure.is_union  = type->u.structure.is_union;
+        Tac_Member **tail        = &t->u.structure.members;
+        for (const Tac_Member *m = type->u.structure.members; m; m = m->next) {
+            Tac_Member *nm = tac_new_member();
+            nm->name       = m->name ? xstrdup(m->name) : NULL;
+            nm->offset     = m->offset;
+            nm->type       = tac_clone_type(m->type);
+            *tail          = nm;
+            tail           = &nm->next;
+        }
         break;
+    }
     default:
         break;
     }
@@ -78,6 +90,12 @@ Tac_Param *tac_new_param(void)
 {
     Tac_Param *param = (Tac_Param *)xalloc(sizeof(Tac_Param), __func__, __FILE__, __LINE__);
     return param;
+}
+
+// Allocate a new Tac_Member
+Tac_Member *tac_new_member(void)
+{
+    return (Tac_Member *)xalloc(sizeof(Tac_Member), __func__, __FILE__, __LINE__);
 }
 
 // Allocate a new Tac_StaticLocal

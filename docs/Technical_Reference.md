@@ -240,7 +240,13 @@ then shrinks the stack frame to the slots still in use. See
     kind: int
 ```
 
-The `type:` lines, `locals:` and a call's `fun_type:` are the type annotations;
+A `structure` type also carries `alignment`, `union: true` for a union, and, held
+by value (not behind a pointer), its `members:` with byte offsets and types — what a
+psABI needs to classify an aggregate. In the one-line spelling it is
+`struct S(size,alignment)`.
+
+The `type:` lines, `locals:`, a call's `fun_type:` and the struct layout are the
+type annotations;
 setting `tac_yaml_types = false` leaves them out (the translator and optimizer test
 fixtures do, so their expected output shows only the instructions).
 

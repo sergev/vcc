@@ -202,6 +202,27 @@ static void export_yaml_type(FILE *fd, const Tac_Type *type, int level)
         fprintf(fd, "tag: %s\n", type->u.structure.tag ? type->u.structure.tag : "");
         print_indent(fd, level);
         fprintf(fd, "size: %d\n", type->u.structure.size);
+        if (!tac_yaml_types)
+            break;
+        print_indent(fd, level);
+        fprintf(fd, "alignment: %d\n", type->u.structure.alignment);
+        if (type->u.structure.is_union) {
+            print_indent(fd, level);
+            fprintf(fd, "union: true\n");
+        }
+        if (type->u.structure.members) {
+            print_indent(fd, level);
+            fprintf(fd, "members:\n");
+            for (const Tac_Member *m = type->u.structure.members; m; m = m->next) {
+                print_indent(fd, level + 1);
+                fprintf(fd, "- member: %s\n", m->name ? m->name : "");
+                print_indent(fd, level + 2);
+                fprintf(fd, "offset: %d\n", m->offset);
+                print_indent(fd, level + 2);
+                fprintf(fd, "type:\n");
+                export_yaml_type(fd, m->type, level + 3);
+            }
+        }
         break;
     }
 }

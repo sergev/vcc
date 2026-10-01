@@ -660,7 +660,20 @@ static Tac_Param *params_from_type(const Type *fun_type)
     return head;
 }
 
-Tac_Type *ast_type_to_tac_type(const Type *t)
+// The definition bound to a struct/union type node: the one typecheck cached on the
+// node (a block-scope tag is purged from structtab by now, and a sibling scope may
+// reuse the tag), else the tag's current one.  NULL when incomplete or unknown.
+static const StructDef *struct_def_of(const Type *t)
+{
+    const StructDef *d = t->u.struct_t.cached_def;
+    if (!d)
+        d = structtab_find_opt(t->u.struct_t.name);
+    return d && d->complete ? d : NULL;
+}
+
+// `deep`: list struct members.  Below a pointer a struct is shallow (tag, size and
+// alignment only), which also ends the recursion of a self-referential struct.
+static Tac_Type *convert_type(const Type *t, bool deep)
 {
     t = unalias(t); // global typedef names survive into the translator as references
     switch (t->kind) {
@@ -711,12 +724,12 @@ Tac_Type *ast_type_to_tac_type(const Type *t)
         return tac_new_type(TAC_TYPE_INT);
     case TYPE_POINTER: {
         Tac_Type *tp              = tac_new_type(TAC_TYPE_POINTER);
-        tp->u.pointer.target_type = ast_type_to_tac_type(t->u.pointer.target);
+        tp->u.pointer.target_type = convert_type(t->u.pointer.target, false);
         return tp;
     }
     case TYPE_ARRAY: {
         Tac_Type *ta          = tac_new_type(TAC_TYPE_ARRAY);
-        ta->u.array.elem_type = ast_type_to_tac_type(t->u.array.element);
+        ta->u.array.elem_type = convert_type(t->u.array.element, deep);
         if (t->u.array.size) {
             ta->u.array.size = (int)(get_size(t) / get_size(t->u.array.element));
         } else {
@@ -730,28 +743,44 @@ Tac_Type *ast_type_to_tac_type(const Type *t)
         for (const Param *p = t->u.function.params; p; p = p->next) {
             if (!p->name && unalias(p->type)->kind == TYPE_VOID)
                 continue; // skip void sentinel
-            Tac_Type *pt = ast_type_to_tac_type(p->type);
+            Tac_Type *pt = convert_type(p->type, deep);
             *param_tail  = pt;
             param_tail   = &pt->next;
         }
-        tf->u.fun_type.ret_type = ast_type_to_tac_type(t->u.function.return_type);
+        tf->u.fun_type.ret_type = convert_type(t->u.function.return_type, deep);
         tf->u.fun_type.variadic = t->u.function.variadic;
         return tf;
     }
     case TYPE_STRUCT:
     case TYPE_UNION: {
-        Tac_Type *ts         = tac_new_type(TAC_TYPE_STRUCTURE);
-        ts->u.structure.tag  = t->u.struct_t.name ? xstrdup(t->u.struct_t.name) : NULL;
-        // An incomplete type (an extern of an undefined tag) has size 0.  A block-scope
-        // tag is gone from structtab by now, but get_size has its cached size.
-        const StructDef *d   = structtab_find_opt(t->u.struct_t.name);
-        bool sized           = d ? d->complete : t->u.struct_t.cached_size != 0;
-        ts->u.structure.size = sized ? (int)get_size(t) : 0;
+        // An incomplete type (an extern of an undefined tag) has size 0.
+        const StructDef *d       = struct_def_of(t);
+        Tac_Type *ts             = tac_new_type(TAC_TYPE_STRUCTURE);
+        ts->u.structure.tag      = t->u.struct_t.name ? xstrdup(t->u.struct_t.name) : NULL;
+        ts->u.structure.size     = d ? d->size : t->u.struct_t.cached_size;
+        ts->u.structure.alignment = d ? d->alignment : t->u.struct_t.cached_align;
+        ts->u.structure.is_union = t->kind == TYPE_UNION;
+        if (deep && d) {
+            Tac_Member **tail = &ts->u.structure.members;
+            for (const FieldDef *f = d->members; f; f = f->next) {
+                Tac_Member *m = tac_new_member();
+                m->name       = f->name ? xstrdup(f->name) : NULL;
+                m->offset     = f->offset;
+                m->type       = convert_type(f->type, true);
+                *tail         = m;
+                tail          = &m->next;
+            }
+        }
         return ts;
     }
     default:
         fatal_error("ast_type_to_tac_type: unsupported type kind %d", (int)t->kind);
     }
+}
+
+Tac_Type *ast_type_to_tac_type(const Type *t)
+{
+    return convert_type(t, true);
 }
 
 Tac_Type *tac_type_ptr(Tac_Type *target)

@@ -93,6 +93,74 @@ protected:
         return result;
     }
 
+    // Translate a whole unit (no optimization) and return its TAC chain, externs last.
+    // The caller frees it with tac_free_toplevel.
+    Tac_TopLevel *CompileUnit(const char *src)
+    {
+        std::string source = preprocess_source(src);
+        fwrite(source.data(), 1, source.size(), input_file);
+        rewind(input_file);
+        program = parse(input_file);
+        EXPECT_NE(nullptr, program);
+
+        Tac_TopLevel *head = nullptr, **tail = &head;
+        ExternalDecl *decls = program->decls;
+        program->decls      = nullptr;
+        int label_seq       = 0;
+        translate_unit_begin();
+        while (decls) {
+            ExternalDecl *next = decls->next;
+            decls->next        = nullptr;
+            typecheck_decl(decls, &label_seq);
+            *tail = translate(decls, OptFlags{}, &label_seq);
+            free_external_decl(decls);
+            while (*tail)
+                tail = &(*tail)->next;
+            decls = next;
+        }
+        *tail = translate_unit_end();
+        return head;
+    }
+
+    // The type of frame-resident `name` in function `fn` of a CompileUnit chain.
+    static const Tac_Type *SymbolType(const Tac_TopLevel *tac, const char *fn, const char *name)
+    {
+        for (; tac; tac = tac->next) {
+            if (tac->kind != TAC_TOPLEVEL_FUNCTION || strcmp(tac->u.function.name, fn) != 0)
+                continue;
+            for (const Tac_Param *p = tac->u.function.params; p; p = p->next)
+                if (strcmp(p->name, name) == 0)
+                    return p->type;
+            for (const Tac_Param *p = tac->u.function.locals; p; p = p->next)
+                if (strcmp(p->name, name) == 0)
+                    return p->type;
+        }
+        return nullptr;
+    }
+
+    // Members of a struct type as "name@offset:type ...".
+    static std::string Members(const Tac_Type *t)
+    {
+        std::string out;
+        if (!t || t->kind != TAC_TYPE_STRUCTURE)
+            return "not a struct";
+        for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+            char *ts = tac_type_str(m->type);
+            out += std::string(out.empty() ? "" : " ") + m->name + "@" + std::to_string(m->offset) +
+                   ":" + ts;
+            xfree(ts);
+        }
+        return out;
+    }
+
+    static std::string TypeStr(const Tac_Type *t)
+    {
+        char *ts = tac_type_str(t);
+        std::string out(ts);
+        xfree(ts);
+        return out;
+    }
+
     // Like CompileToYaml, but with the type annotations shown and the unit's extern
     // list appended.
     std::string CompileUnitToTypedYaml(const char *src)

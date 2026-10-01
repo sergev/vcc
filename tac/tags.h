@@ -3,6 +3,7 @@ enum {
     TAG_TAC_MAGIC       = 0x54414333, // 'TAC3' - stream header, bumped on format change
     TAG_TAC_CONST       = 0x636e7374, // 'cnst' - for struct Tac_Const
     TAG_TAC_INSTR       = 0x696e7372, // 'insr' - for struct Tac_Instruction
+    TAG_TAC_MEMBER      = 0x746d6272, // 'tmbr' - for struct Tac_Member
     TAG_TAC_PARAM       = 0x7470726d, // 'tprm' - for struct Tac_Param
     TAG_TAC_STATIC_INIT = 0x73696e69, // 'sini' - for struct Tac_StaticInit
     TAG_TAC_STATIC_LOC  = 0x73746c63, // 'stlc' - for struct Tac_StaticLocal

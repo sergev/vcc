@@ -152,6 +152,7 @@ void validate_type(const Type *t)
             Type *mut                    = (Type *)t;
             mut->u.struct_t.cached_size  = (int)d->size;
             mut->u.struct_t.cached_align = (int)d->alignment;
+            mut->u.struct_t.cached_def   = d;
         }
         break;
     }

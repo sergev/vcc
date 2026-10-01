@@ -125,8 +125,10 @@ size_t get_size(const Type *t)
         // reached still carries the size once anyone has asked for it in scope.
         const StructDef *d = structtab_find_opt(t->u.struct_t.name);
         if (d) {
-            if (d->complete)
+            if (d->complete) {
                 ((Type *)t)->u.struct_t.cached_size = (int)d->size;
+                ((Type *)t)->u.struct_t.cached_def  = d;
+            }
             return d->size;
         }
         if (t->u.struct_t.cached_size)
@@ -179,8 +181,10 @@ size_t get_alignment(const Type *t)
         // See get_size: fall back to the cached alignment for a purged block-local tag.
         const StructDef *d = structtab_find_opt(t->u.struct_t.name);
         if (d) {
-            if (d->complete)
+            if (d->complete) {
                 ((Type *)t)->u.struct_t.cached_align = (int)d->alignment;
+                ((Type *)t)->u.struct_t.cached_def   = d;
+            }
             return d->alignment;
         }
         if (t->u.struct_t.cached_align)
