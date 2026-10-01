@@ -45,6 +45,17 @@ Phase 1 adds this. It is the prerequisite for everything else.
   `INIT_FAT_POINTER` "word*6 + byte_from_MSB" encoding, `TAC_TYPE_STRUCTURE.size`
   "word count", 6-byte character-constant limit in `parser/expr.c`. Output: a list
   of defects, each fixed under D2 or T-steps.
+  *Done.* All 766 programs embedded in `besm-tests` that lower for `besm6` also
+  lower for `riscv64`. Defects found:
+  - static `int`/`unsigned`/`long`/word `_Bool` and integer-to-pointer
+    initializers always use the 64-bit `I64`/`U64` slot (`const_convert.c`,
+    `initializers.c`), wrong where the type is 4 bytes → D2;
+  - a static `char *p = &c` adds byte offset 5 (the BESM-6 low byte of a char's
+    one-word cell) on every target (`initializers.c`) → D2;
+  - character constants are capped at 6 bytes and typed `int` up to 5 bytes, the
+    BESM-6 widths, in the parser, which does not know the target → D2;
+  - `TAC_TYPE_STRUCTURE.size` is in bytes, but documented as a word count → D2;
+  - aggregate copies in pointer-size chunks → T5; one-pointer sret threshold → T6.
 - **D2. Fix the small leaks found by D1.** Character-constant length from the target
   descriptor; TAC comments and field docs stated per target, not in BESM-6 units.
 - **D3. Generic backend driver.** Split `backend/main.c` into a shared
