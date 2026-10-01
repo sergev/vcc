@@ -215,7 +215,7 @@ Use the C compiler's preprocessor (`cc -E`), not a standalone `cpp`: a tradition
 `cc -E -nostdinc -Ilibc/besm6/include prog.c | parse -`. The `besm-headers` CTest
 (`scripts/check_headers.sh`, run under `make run`) preprocesses and parses every header to
 catch syntax errors. The unit-test fixtures preprocess their C snippets automatically via
-`libutil/test/test_preprocess.h` (using the CMake `BESM6_CPP`/`BESM6_INCLUDE_DIR` defines), so
+`libutil/test/test_preprocess.h` (using the CMake `TEST_CPP`/`TEST_INCLUDE_DIR` defines), so
 tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>` is
 functional (word-pointer `va_list`); its runtime behaviour is covered by `stdarg_tests.cpp`.
 

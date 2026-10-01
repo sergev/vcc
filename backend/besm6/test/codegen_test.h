@@ -1,93 +1,17 @@
 #pragma once
 
-#include <fcntl.h>
-#include <gtest/gtest.h>
-#include <sys/file.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
 #include <fstream>
-#include <stdexcept>
 #include <string>
-#include <vector>
 
+#include "backend_test.h"
 #include "besm.h"
 #include "codegen.h"
-#include "parser.h"
-#include "semantic.h"
-#include "structtab.h"
-#include "symtab.h"
-#include "tac.h"
-#include "target.h"
-#include "test_preprocess.h"
-#include "translate.h"
-#include "typetab.h"
-#include "xalloc.h"
 
 extern "C" int xalloc_debug;
 
-class CodegenTest : public ::testing::Test {
-    FILE *input_file{};
-    Program *program{};
-    OptFlags opt_flags{};
-
-    // RAII advisory lock used to detect a second concurrent besm-tests run of the same
-    // test (which would clobber the shared <TestName>.dub/.lst).  Non-blocking: if another
-    // process already holds it, locked() is false and the caller fails fast.  The kernel
-    // releases the lock on close()/process exit, so a crashed run never leaves it stuck.
-    class FlockGuard {
-    public:
-        explicit FlockGuard(const std::string &path)
-            : fd_(open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644))
-        {
-            if (fd_ >= 0 && flock(fd_, LOCK_EX | LOCK_NB) == 0)
-                locked_ = true;
-        }
-        ~FlockGuard()
-        {
-            if (fd_ >= 0) {
-                if (locked_)
-                    flock(fd_, LOCK_UN);
-                close(fd_);
-            }
-        }
-        FlockGuard(const FlockGuard &)            = delete;
-        FlockGuard &operator=(const FlockGuard &) = delete;
-        bool locked() const { return locked_; }
-
-    private:
-        int  fd_{ -1 };
-        bool locked_{ false };
-    };
-
+class CodegenTest : public BackendTest {
 protected:
-    void SetUp() override
-    {
-        target_config = target_lookup("besm6");
-        opt_flags     = opt_flags_default();
-        input_file    = tmpfile();
-        ASSERT_NE(nullptr, input_file);
-    }
-
-    void TearDown() override
-    {
-        fclose(input_file);
-        if (program)
-            free_program(program);
-        symtab_destroy();
-        structtab_destroy();
-        typetab_destroy();
-        nametab_destroy();
-        xreport_lost_memory();
-        EXPECT_EQ(xtotal_allocated_size(), 0);
-        xfree_all();
-    }
-
-    // Disable optimization.
-    void DisableOptimization() { opt_flags = {}; }
+    CodegenTest() : BackendTest("besm6") {}
 
     // Capture Madlen output from a pre-built Besm_Module (used by Madlen-level tests).
     static std::string capture(const Besm_Module *module)
@@ -130,40 +54,8 @@ protected:
     // concatenated assembly (for the requested dialect) of every translated toplevel.
     std::string CompileTo(const char *src, Besm_Dialect dialect)
     {
-        // Expand any #include/#define directives via the system cpp first so tests
-        // can pull in the shipped standard headers; directive-free source is
-        // returned unchanged.
-        std::string source = preprocess_source(src);
-        if (source.empty()) {
-            ADD_FAILURE() << "C preprocessing failed for test source";
-            return {};
-        }
-        fwrite(source.data(), 1, source.size(), input_file);
-        rewind(input_file);
-        program = parse(input_file);
-        EXPECT_NE(nullptr, program);
-
-        // Phase 1: translate all declarations and collect the full TAC chain.
         // The full chain is needed so frame_build can identify module-level names.
-        Tac_TopLevel *all_tac = nullptr, **tac_tail = &all_tac;
-        ExternalDecl *decls = program->decls;
-        program->decls      = nullptr;
-        int label_seq = 0; // unit-wide temp/label counter (see translate.h)
-        while (decls) {
-            ExternalDecl *next = decls->next;
-            decls->next        = nullptr;
-            typecheck_decl(decls, &label_seq);
-            Tac_TopLevel *tac = translate(decls, opt_flags, &label_seq);
-            free_external_decl(decls);
-            if (tac) {
-                Tac_TopLevel *t = tac;
-                while (t->next)
-                    t = t->next;
-                *tac_tail = tac;
-                tac_tail  = &t->next;
-            }
-            decls = next;
-        }
+        Tac_TopLevel *all_tac = CompileToTac(src);
 
         // Phase 2: codegen each toplevel with the full program chain as context.
         std::string result;
@@ -195,9 +87,8 @@ protected:
             "*execute\n"
             "*end file\n";
 
-        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string dub_path  = std::string(TEST_DIR "/") + test_name + ".dub";
-        std::string lst_path  = std::string(TEST_DIR "/") + test_name + ".lst";
+        std::string dub_path = ScratchPath(".dub");
+        std::string lst_path = ScratchPath(".lst");
 
         // Held across the .dub write, the dubna run, and the .lst read; released by RAII
         // on every return below.  A failure to acquire means another besm-tests process
@@ -297,9 +188,8 @@ protected:
             "*execute\n"
             "*end file\n";
 
-        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string dub_path  = std::string(TEST_DIR "/") + test_name + ".dub";
-        std::string lst_path  = std::string(TEST_DIR "/") + test_name + ".lst";
+        std::string dub_path = ScratchPath(".dub");
+        std::string lst_path = ScratchPath(".lst");
 
         // See CompileAndRun: guards against a concurrent besm-tests run clobbering the
         // shared per-test .dub/.lst files.
@@ -340,8 +230,7 @@ protected:
     {
         std::string asm_text = CompileToUnix(src.c_str());
 
-        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string base      = std::string(TEST_DIR "/") + test_name;
+        std::string base      = ScratchPath("");
         std::string s_path    = base + ".s";
         std::string o_path    = base + ".o";
         std::string exe_path  = base + ".b6";
@@ -395,8 +284,7 @@ protected:
     {
         std::string asm_text = CompileToUnix(src.c_str());
 
-        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string base      = std::string(TEST_DIR "/") + test_name;
+        std::string base      = ScratchPath("");
         std::string s_path    = base + ".s";
         std::string o_path    = base + ".o";
         std::string exe_path  = base + ".b6";
@@ -460,8 +348,7 @@ protected:
     {
         std::string asm_text = CompileToUnix(src.c_str());
 
-        const char *test_name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
-        std::string base      = std::string(TEST_DIR "/") + test_name;
+        std::string base      = ScratchPath("");
         std::string s_path    = base + ".s";
         std::string o_path    = base + ".o";
         std::string exe_path  = base + ".b6";
@@ -518,150 +405,6 @@ protected:
             return "ERROR";
         }
         return ReadFile(out_path);
-    }
-
-    // Fork a child, exec prog_path with input_filenames as arguments,
-    // and redirect its stdout to output_filename.
-    // Throws std::runtime_error on any failure.  When ignore_exit_status is true,
-    // a non-zero child exit is NOT treated as failure — needed for b6sim, which
-    // exits with the guest program's return value (0-255), so any book program
-    // that returns non-zero would otherwise look like a tool error.
-    static void RunExternalProgram(const std::string &prog_path,
-                                   const std::vector<std::string> &input_filenames,
-                                   const std::string &output_filename,
-                                   bool ignore_exit_status = false)
-    {
-        enum {
-            STATUS_OK              = EXIT_SUCCESS,
-            STATUS_COMPILER_FAILED = EXIT_FAILURE,
-            STATUS_CANNOT_READ_INPUT,
-            STATUS_CANNOT_WRITE_OUTPUT,
-            STATUS_CANNOT_RUN_PROGRAM,
-        };
-
-        pid_t pid = fork();
-        if (pid < 0)
-            throw std::runtime_error("Cannot fork");
-
-        if (pid == 0) {
-            // The input file is the LAST argument: an option, where there is one, precedes it.
-            int in_fd = open(input_filenames.back().c_str(), O_RDONLY);
-            if (in_fd < 0)
-                exit(STATUS_CANNOT_READ_INPUT);
-            close(in_fd);
-
-            int out_fd = open(output_filename.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (out_fd < 0)
-                exit(STATUS_CANNOT_WRITE_OUTPUT);
-            dup2(out_fd, STDOUT_FILENO);
-            close(out_fd);
-
-            auto argv = build_argv(prog_path, input_filenames);
-            execvp(argv[0], const_cast<char *const *>(argv.data()));
-            exit(STATUS_CANNOT_RUN_PROGRAM);
-        }
-
-        int wait_status;
-        if (waitpid(pid, &wait_status, 0) < 0)
-            throw std::runtime_error("Lost child process #" + std::to_string(pid));
-
-        // b6sim's exit status carries the guest's return value, not a tool result;
-        // the caller only wants the captured stdout in that case.
-        if (ignore_exit_status)
-            return;
-
-        int exit_code = WEXITSTATUS(wait_status);
-        switch (exit_code) {
-        case STATUS_OK:
-            return;
-        case STATUS_CANNOT_READ_INPUT:
-            throw std::runtime_error("Cannot read " + input_filenames.back());
-        case STATUS_CANNOT_WRITE_OUTPUT:
-            throw std::runtime_error("Cannot write " + output_filename);
-        case STATUS_CANNOT_RUN_PROGRAM:
-            throw std::runtime_error("Cannot execute " + prog_path);
-        default:
-            throw std::runtime_error("Program failed with status " + std::to_string(exit_code));
-        }
-    }
-
-    // Run a tool with an explicit argv (argv[0] resolved on PATH via execvp), capturing its
-    // combined stdout+stderr into log_path.  Returns the child's exit code (0 on success),
-    // or -1 if fork/waitpid failed.  Unlike RunExternalProgram this puts the real output on
-    // the tool's own -o argument, so it fits b6as/b6ld's "-o outfile first" command form and
-    // preserves their diagnostics for the failure message.
-    static int RunTool(const std::vector<std::string> &argv, const std::string &log_path)
-    {
-        pid_t pid = fork();
-        if (pid < 0)
-            return -1;
-
-        if (pid == 0) {
-            int log_fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (log_fd < 0)
-                _exit(127);
-            dup2(log_fd, STDOUT_FILENO);
-            dup2(log_fd, STDERR_FILENO);
-            close(log_fd);
-
-            std::vector<const char *> cargv;
-            cargv.reserve(argv.size() + 1);
-            std::transform(argv.begin(), argv.end(), std::back_inserter(cargv),
-                           [](const std::string &s) { return s.c_str(); });
-            cargv.push_back(nullptr);
-            execvp(cargv[0], const_cast<char *const *>(cargv.data()));
-            _exit(127);
-        }
-
-        int status;
-        if (waitpid(pid, &status, 0) < 0)
-            return -1;
-        return WEXITSTATUS(status);
-    }
-
-    // Read an entire file into a string (empty string if it cannot be opened).
-    static std::string ReadFile(const std::string &path)
-    {
-        std::ifstream f(path);
-        if (!f)
-            return {};
-        return std::string((std::istreambuf_iterator<char>(f)), {});
-    }
-
-    // True if an executable named `name` is found on PATH.  Used to skip the Unix
-    // assemble+link tests when the sibling v7besm toolchain is not installed.
-    static bool tool_available(const std::string &name)
-    {
-        const char *path = getenv("PATH");
-        if (!path)
-            return false;
-        std::string p(path);
-        size_t start = 0;
-        while (start <= p.size()) {
-            size_t colon    = p.find(':', start);
-            size_t len      = (colon == std::string::npos) ? std::string::npos : colon - start;
-            std::string dir = p.substr(start, len);
-            if (!dir.empty() && access((dir + "/" + name).c_str(), X_OK) == 0)
-                return true;
-            if (colon == std::string::npos)
-                break;
-            start = colon + 1;
-        }
-        return false;
-    }
-
-private:
-    // Build a null-terminated argv vector: [prog_path, file0, file1, ..., nullptr].
-    static std::vector<const char *> build_argv(const std::string &prog,
-                                                const std::vector<std::string> &files)
-    {
-        std::vector<const char *> argv;
-        argv.reserve(files.size() + 2);
-        argv.push_back(prog.c_str());
-        std::transform(files.begin(), files.end(), std::back_inserter(argv),
-                       [](const std::string &s) { return s.c_str(); });
-        argv.push_back(nullptr);
-        return argv;
     }
 };
 

@@ -83,12 +83,13 @@ add_executable(besm-tests
     test/chapter19_tests.cpp
     test/chapter20_tests.cpp
 )
-target_link_libraries(besm-tests besm parser translator semantic GTest::gtest_main test_util)
+target_link_libraries(besm-tests besm parser translator semantic GTest::gtest_main test_util
+    backend_test_util)
 add_dependencies(besm-tests besm-libc-dubna besm-libc-unix besm-libc-bemsh)
 add_definitions(-DTEST_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_definitions(besm-tests PRIVATE
-    BESM6_CPP="${SystemCpp}"
-    BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}")
+    TEST_CPP="${SystemCpp}"
+    TEST_INCLUDE_DIR="${BESM6_INCLUDE_DIR}")
 test_chdir_to_bindir(besm-tests)
 gtest_discover_tests(besm-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)
 

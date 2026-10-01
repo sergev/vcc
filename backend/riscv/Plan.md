@@ -79,6 +79,9 @@ Phase 1 adds this. It is the prerequisite for everything else.
   `libutil/test/` or `backend/common/test/`. Rename the `BESM6_CPP` /
   `BESM6_INCLUDE_DIR` test defines to target-neutral names with a per-target
   include dir.
+  *Done.* `libutil/test/test_tools.h` (process/file helpers, `FlockGuard`),
+  `backend/common/test/backend_test.h` (`BackendTest`: target selection,
+  `CompileToTac`, `ScratchPath`); the defines are now `TEST_CPP`/`TEST_INCLUDE_DIR`.
 - **D6. Shared book conformance suite.** Extract the "Writing a C Compiler" run
   programs from `backend/besm6/test/chapter*_tests.cpp` into a target-neutral form
   (the source and the host-`cc` expected result) driven by a per-backend

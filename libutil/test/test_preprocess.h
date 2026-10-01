@@ -1,13 +1,13 @@
 // Shared test helper: run a C source snippet through the system C preprocessor.
 //
 // The compiler has no built-in preprocessor, so test fixtures that want to
-// #include the shipped BESM-6 standard headers (e.g. <stdio.h>) must expand the
+// #include the target's standard headers (e.g. <stdio.h>) must expand the
 // directives first.  This header generalises the original per-test Preprocess()
 // (see backend/besm6/stdarg_tests.cpp) into one inline helper shared by every
 // source-compiling fixture.
 //
 // The preprocessor (the C compiler, invoked with -E) and the include directory
-// come from CMake via the BESM6_CPP and BESM6_INCLUDE_DIR compile definitions;
+// come from CMake via the TEST_CPP and TEST_INCLUDE_DIR compile definitions;
 // the macros are expanded in the including test translation unit, so only test
 // targets need to define them.
 //
@@ -21,11 +21,11 @@
 #include <cstdio>
 #include <string>
 
-#ifndef BESM6_CPP
-#error "BESM6_CPP must be defined (the C compiler, invoked with -E) to use test_preprocess.h"
+#ifndef TEST_CPP
+#error "TEST_CPP must be defined (the C compiler, invoked with -E) to use test_preprocess.h"
 #endif
-#ifndef BESM6_INCLUDE_DIR
-#error "BESM6_INCLUDE_DIR must be defined (BESM-6 standard headers) to use test_preprocess.h"
+#ifndef TEST_INCLUDE_DIR
+#error "TEST_INCLUDE_DIR must be defined (the target's standard headers) to use test_preprocess.h"
 #endif
 
 // True if some line of SRC has '#' as its first non-whitespace character, i.e.
@@ -68,7 +68,7 @@ inline std::string preprocess_source(const std::string &src)
         // -E: preprocess only; -x c: the mkstemp file has no .c suffix.  Line
         // markers are kept (no -P): our scanner consumes them and they preserve
         // original line numbers for diagnostics.
-        std::string cmd = BESM6_CPP " -E -x c -nostdinc -I" BESM6_INCLUDE_DIR " ";
+        std::string cmd = TEST_CPP " -E -x c -nostdinc -I" TEST_INCLUDE_DIR " ";
         cmd += path;
         cmd += " 2>/dev/null";
 

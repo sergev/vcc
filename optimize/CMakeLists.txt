@@ -30,7 +30,7 @@ add_executable(optimizer-tests
 )
 target_link_libraries(optimizer-tests optimize parser translator tac GTest::gtest_main test_util)
 target_compile_definitions(optimizer-tests PRIVATE
-    BESM6_CPP="${SystemCpp}"
-    BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}")
+    TEST_CPP="${SystemCpp}"
+    TEST_INCLUDE_DIR="${BESM6_INCLUDE_DIR}")
 test_chdir_to_bindir(optimizer-tests)
 gtest_discover_tests(optimizer-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)
