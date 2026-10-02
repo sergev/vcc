@@ -1,5 +1,4 @@
-# A bump allocator over the heap of link.ld, until the shared C library (plan step
-# R17): free does nothing.
+# A bump allocator over the heap of link.ld: free does nothing.
 
     .text
 

@@ -73,9 +73,8 @@ any host and folded values agree with computed ones.
 - **R24. Install.** Done. `make install` adds `bin/rv64codegen`,
   `share/riscv/lib/` (`crt0.o`, `libc.a`, `link.ld`) and `share/riscv/include/`
   (every RISC-V and shared header).
-- **R25. Documentation.** A short `docs/Riscv_Backend.md` (decisions, frame
-  layout, how to run a program by hand under qemu), README and CLAUDE.md updated:
-  the project is no longer "complete, maintenance only", and no longer BESM-6 focused.
+- **R25. Documentation.** Done. `docs/Riscv_Backend.md`; README and CLAUDE.md
+  describe a compiler with two targets.
 
 ## Risks
 

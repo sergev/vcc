@@ -1,16 +1,18 @@
-# A C Compiler for the BESM-6
+# A C11 Compiler: BESM-6 and RISC-V
 
-This is a compiler for the C programming language (the 2011 standard, C11) that produces
-code for the **BESM-6** — a Soviet mainframe designed in the 1960s.
+This is a compiler for the C programming language (the 2011 standard, C11), small enough
+to read from top to bottom. One machine-independent front end feeds two code generators:
 
-**This project is finished.** It was built for one purpose and it served it: this compiler
-was used to port **Unix v7 to the BESM-6**. That port lives in a separate repository,
-[besm6/v7besm](https://github.com/besm6/v7besm). The compiler runs under the
-[Dubna](https://github.com/besm6/dubna) monitor as well.
+* **BESM-6** — a Soviet mainframe designed in the 1960s. This compiler was used to port
+  **Unix v7 to the BESM-6**; that port lives in
+  [besm6/v7besm](https://github.com/besm6/v7besm). Programs also run under the
+  [Dubna](https://github.com/besm6/dubna) monitor.
+* **RISC-V** — 64-bit RV64IMFD with the standard LP64D calling convention, so its code
+  links with code compiled by clang. Programs run on bare-metal qemu. See
+  [docs/Riscv_Backend.md](docs/Riscv_Backend.md).
 
-The code is complete and working. It is kept here as a finished artifact — for anyone
-interested in the machine, in the Unix port, or simply in reading a small, complete
-compiler from top to bottom.
+The two machines could hardly be further apart, and that is the point: the second one
+proves that the front end is not tied to the first.
 
 ## Why a 1960s mainframe is hard to compile C for
 
@@ -46,21 +48,21 @@ the machine:
 4. **Lowering and optimization** — rewrites the tree into a simple, machine-independent
    list of instructions called *three-address code* (TAC), then improves it: folding
    constants, deleting unreachable code, and removing pointless copies and stores.
-5. **Code generation** — turns TAC into actual BESM-6 assembly, then polishes it with a
-   *peephole* pass that spots and shortens wasteful instruction sequences.
+5. **Code generation** — turns TAC into assembly for the target machine, then polishes it
+   with a *peephole* pass that spots and shortens wasteful instruction sequences. The
+   RISC-V generator also allocates registers by graph colouring.
 
 ```mermaid
 flowchart LR
     Source[C source] --> Scanner --> Parser --> Tree[Syntax tree]
     Tree --> Semantic[Semantic analysis] --> TAC[Three-address code]
-    TAC --> Optimizer --> Codegen[BESM-6 code generator] --> Asm[Assembly]
+    TAC --> Optimizer --> Codegen[BESM-6 or RISC-V code generator] --> Asm[Assembly]
 ```
 
-Stages 1–4 are machine-independent, and the design allows other machines to be plugged in
-at stage 5. Only the BESM-6 code generator was ever written; sketches for other
-architectures remain under `backend/` but were never implemented.
+Stages 1–4 are machine-independent; a machine plugs in at stage 5. Two code generators
+exist, for BESM-6 and RISC-V; sketches for other architectures remain under `backend/`.
 
-The code generator speaks three different BESM-6 assembly languages, because three
+The BESM-6 code generator speaks three different BESM-6 assembly languages, because three
 different assemblers exist for the machine: **`b6as`** (the Unix one, and the default),
 **Madlen** (for the Dubna monitor), and **Bemsh** (the original 1967 autocode, whose
 mnemonics are Russian).
@@ -69,11 +71,15 @@ mnemonics are Russian).
 
 The compiler is not one binary but three, run one after another:
 
-| Program   | Reads         | Writes                      |
-| --------- | ------------- | --------------------------- |
-| `parse`   | C source      | a syntax tree (`.ast`)      |
-| `lower`   | a syntax tree | three-address code (`.tac`) |
-| `genbesm` | TAC           | BESM-6 assembly             |
+| Program    | Reads         | Writes                      |
+| ---------- | ------------- | --------------------------- |
+| `parse`    | C source      | a syntax tree (`.ast`)      |
+| `lower`    | a syntax tree | three-address code (`.tac`) |
+| `genbesm`  | TAC           | BESM-6 assembly             |
+| `genriscv` | TAC           | RISC-V assembly             |
+
+`lower` takes the target with `-t` (`besm6` by default, or `riscv64`): sizes, alignment
+and the meaning of `long` differ between the two.
 
 Splitting them apart makes each stage easy to inspect on its own: every program can also
 print its output as readable YAML text (`--yaml`) or as a diagram for
@@ -87,7 +93,9 @@ run it through your system compiler's preprocessor first: `cc -E -nostdinc -Ilib
 
 **You need** CMake 3.10 or newer and a C11 compiler. Building the tests also needs a C++17
 compiler and, the first time you configure, network access so CMake can download
-GoogleTest.
+GoogleTest. The RISC-V runtime and run tests need a RISC-V clang, `ld.lld` and
+`qemu-system-riscv64` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those
+tests are skipped.
 
 ```bash
 make            # build the compiler and the runtime library
@@ -101,6 +109,14 @@ Compile a small program by hand and look at each stage:
 ./build/parse hello.c hello.ast          # C source  -> syntax tree
 ./build/lower hello.ast hello.tac        # tree      -> three-address code
 ./build/backend/genbesm hello.tac hello.s   # TAC    -> BESM-6 assembly
+```
+
+For RISC-V, lower for that target and use its code generator; how to assemble, link and
+run the result under qemu is in [docs/Riscv_Backend.md](docs/Riscv_Backend.md):
+
+```bash
+./build/lower -t riscv64 hello.ast hello.tac
+./build/backend/genriscv hello.tac hello.s
 ```
 
 To read what happened at any stage, ask for YAML instead:
@@ -131,8 +147,11 @@ dot -Tpng hello.dot -o hello.png
 | `share/besm6/lib/libbem.bin`   | C library for the Dubna monitor (Bemsh)      |
 | `share/besm6/lib/libruntime.a` | the helper routines the generated code calls |
 | `share/besm6/include/*.h`      | the ten headers that describe this compiler  |
+| `bin/rv64codegen`              | the RISC-V code generator                    |
+| `share/riscv/lib/`             | RISC-V `crt0.o`, `libc.a`, linker script     |
+| `share/riscv/include/*.h`      | the RISC-V C headers                         |
 
-Those ten headers — `besm6.h`, `float.h`, `iso646.h`, `limits.h`, `stdalign.h`,
+Those ten BESM-6 headers — `besm6.h`, `float.h`, `iso646.h`, `limits.h`, `stdalign.h`,
 `stdarg.h`, `stdbool.h`, `stddef.h`, `stdint.h`, `stdnoreturn.h` — describe the compiler
 itself: how big its types are, how variable arguments work, what its built-in functions
 do. So they ship with it.
@@ -140,7 +159,8 @@ do. So they ship with it.
 The rest of the C library — `stdio.h`, `string.h`, `stdlib.h`, `math.h` and the code
 behind them — comes from the **v7besm** project, which owns the real Unix C library for
 this machine. This repository builds its own smaller copy (`libc0.a`) so that its tests
-can run standalone, but deliberately does not install it.
+can run standalone, but deliberately does not install it. RISC-V has no such project, so
+its whole library and every header are installed.
 
 ## What the runtime provides
 
@@ -149,8 +169,10 @@ Programs compiled here have a usable C library: `printf`, `sprintf` and `snprint
 `atoi`; `exit`; math helpers (`fabs`, `fmin`, `fmax`, `fma`, `modf`, `frexp`, `ldexp`);
 and working variable arguments (`<stdarg.h>`).
 
-`malloc` and friends are available on the Unix path only — the allocator needs a heap
-laid out by the Unix linker, which the Dubna monitor does not provide.
+On BESM-6, `malloc` and friends are available on the Unix path only — the allocator needs
+a heap laid out by the Unix linker, which the Dubna monitor does not provide. RISC-V has
+the same library on bare-metal qemu, a simple `malloc`, and `long double` as IEEE
+binary128 in software.
 
 ## Documentation
 
@@ -182,6 +204,7 @@ the map of the source tree.
 | [docs/Type_Sizes_Alignment.md](docs/Type_Sizes_Alignment.md)       | Type sizes and alignment, per machine                       |
 | [docs/TAC_Optimization.md](docs/TAC_Optimization.md)               | The machine-independent optimizer passes                    |
 | [docs/Peephole_Rewrites.md](docs/Peephole_Rewrites.md)             | The BESM-6 peephole pass and every rewrite it performs      |
+| [docs/Riscv_Backend.md](docs/Riscv_Backend.md)                     | The RISC-V code generator, and running programs under qemu  |
 | [docs/Memory_Allocation.md](docs/Memory_Allocation.md)             | `xalloc`, the compiler's own allocator                      |
 | [docs/String_Map.md](docs/String_Map.md)                           | `string_map`, the key-value store used for symbol tables    |
 | [docs/Word_Oriented_IO.md](docs/Word_Oriented_IO.md)               | How the `.ast` and `.tac` binary files are written          |

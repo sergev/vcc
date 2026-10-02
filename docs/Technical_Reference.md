@@ -2,7 +2,7 @@
 
 This document lists repository layout, build details, components, tests, and development notes. The [README](../README.md) is the overview for new readers.
 
-The project is complete: the compiler was used to port [Unix v7 to the BESM-6](https://github.com/besm6/v7besm). The frontend and the BESM-6 backend are finished; no other machine backend was implemented.
+One frontend, two backends: BESM-6 (used to port [Unix v7 to the BESM-6](https://github.com/besm6/v7besm)) and RISC-V RV64 ([Riscv_Backend.md](Riscv_Backend.md)).
 
 ## Repository layout
 
@@ -10,13 +10,14 @@ The project is complete: the compiler was used to port [Unix v7 to the BESM-6](h
 c-compiler/
 ├── ast/            # AST: types, alloc, import/export, YAML, Graphviz, print, clone, compare, free
 ├── backend/
-│   ├── common/     # Shared by every backend: the command-line driver (driver.h)
+│   ├── common/     # Shared by every backend: the command-line driver (driver.h), TAC liveness (flow.h)
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), b6as/Madlen/Bemsh emitters, tests
 │   ├── x86/        # x86_64: never implemented — x86_64.asdl, notes, TODO.md
-│   └── ...         # aarch64/, arm32/ — ISA ASDL specs, never implemented; riscv/ — in progress (Plan.md)
+│   ├── riscv/      # RISC-V codegen: IR (rv.h), register allocation, peephole, tests; Plan.md
+│   └── ...         # aarch64/, arm32/ — ISA ASDL specs, never implemented
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md
-├── libc/           # Target C runtime + C11 headers: besm6/{include, madlen (libc.bin), unix (libruntime.a, libc0.a, crt0.o)}
+├── libc/           # Target C runtime + C11 headers: besm6/{include, madlen (libc.bin), unix (libruntime.a, libc0.a, crt0.o)}, riscv/ (crt0.o, libc.a), common/
 ├── libutil/        # xalloc, wio, string_map, float128
 ├── parser/         # Recursive-descent parser, nametab; parse driver
 ├── scanner/        # Hand-written lexer
@@ -186,6 +187,21 @@ removing the store/reload, mode-register (`ntr`), compare/branch, and branch/lab
 that one-node-at-a-time selection leaves behind; a post-peephole frame-slot reclamation pass
 then shrinks the stack frame to the slots still in use. See
 [Peephole_Rewrites.md](Peephole_Rewrites.md) for the catalogue of rewrites.
+
+### RISC-V backend (`backend/riscv/`)
+
+| File | Role |
+|------|------|
+| `rv.h`, `rv.c`, `emit.c` | IR: instructions over real registers; GNU assembly output |
+| `regalloc.c` | Graph colouring over TAC liveness (`backend/common/flow.c`) |
+| `instr.c`, `call.c` | Instruction selection; the LP64D calling convention |
+| `frame.c` | Slots, value access, prologue/epilogue |
+| `peephole.c` | Peephole pass |
+| `data.c` | Static data |
+| `codegen.c`, `main.c` | Per-function driver; `genriscv` |
+| `test/*_tests.cpp` | GoogleTest suite (`riscv-tests`) |
+
+See [Riscv_Backend.md](Riscv_Backend.md).
 
 ### TAC YAML format
 
@@ -483,6 +499,8 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `tac-tests` | `tac/test/yaml_tests.cpp`, `graphviz_tests.cpp`, `binary_tests.cpp` |
 | `semantic-tests` | `semantic/test/symtab_tests.cpp`, `structtab_tests.cpp`, `typetab_tests.cpp`, `typecheck_tests.cpp`, `real_tests.cpp`, `pipeline_tests.cpp`, `label_loops_tests.cpp`, `const_convert_tests.cpp`, `coercion_tests.cpp` |
 | `besm-tests` | `backend/besm6/test/codegen_tests.cpp`, `arith_tests.cpp`, `convert_tests.cpp`, `copy_tests.cpp`, `flow_tests.cpp`, `frame_tests.cpp`, `init_tests.cpp`, `label_tests.cpp`, `ptr_tests.cpp`, `run_tests.cpp`, `struct_tests.cpp`, `unary_tests.cpp` |
+| `riscv-tests` | `backend/riscv/test/*_tests.cpp` (golden assembly, register allocation, peephole, qemu run, clang interop, libc, `long double`) and the book suite |
+| `backend-tests` | `backend/common/test/flow_tests.cpp` |
 | `translate-tests` | `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp` |
 
 Run a single binary from `build/`:
