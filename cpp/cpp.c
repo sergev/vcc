@@ -230,7 +230,7 @@ static void parse_args(int argc, char *argv[])
                 pperror("unknown flag %s", argv[i]);
                 exit(8);
             case 'D':
-                if (cpp.pre_defs_end > cpp.pre_defs + NPREDEF) {
+                if (cpp.pre_defs_end >= cpp.pre_defs + NPREDEF) {
                     pperror("too many -D options, ignoring %s", argv[i]);
                     continue;
                 }
@@ -239,7 +239,7 @@ static void parse_args(int argc, char *argv[])
                     *cpp.pre_defs_end++ = argv[i] + 2;
                 continue;
             case 'U':
-                if (cpp.pre_undefs_end > cpp.pre_undefs + NPREDEF) {
+                if (cpp.pre_undefs_end >= cpp.pre_undefs + NPREDEF) {
                     pperror("too many -U options, ignoring %s", argv[i]);
                     continue;
                 }
@@ -412,8 +412,9 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv);
 
+    // No reset of cpp.exit_code here: an error parse_args() reported (an
+    // extraneous file name, a full -D table) must count toward the exit status.
     cpp.inc_fd[cpp.inc_level] = cpp.in_fd;
-    cpp.exit_code             = 0;
 
     register_builtins();
 

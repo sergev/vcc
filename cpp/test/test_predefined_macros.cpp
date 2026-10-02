@@ -179,3 +179,32 @@ TEST_F(Predefined, UndefTargetMacroAllowed) {
     EXPECT_TRUE(Succeeds("#undef besm6\n", {"-t", "besm6"}));
     EXPECT_PP_OK("#undef __riscv\n");
 }
+
+// Up to 20 -D options (NPREDEF) are accepted, and every one takes effect.
+TEST_F(Predefined, TwentyDefineOptions) {
+    std::vector<std::string> args;
+    std::string cond = "#if 1";
+    for (int i = 0; i < 20; ++i) {
+        args.push_back("-DM" + std::to_string(i));
+        cond += " && M" + std::to_string(i);
+    }
+    EXPECT_TRUE(TokensAre(cond + "\nALL\n#endif\n", "ALL", args));
+}
+
+// One more is an error, and an error on the command line counts toward the
+// exit status like any other.
+TEST_F(Predefined, TooManyDefineOptionsFails) {
+    std::vector<std::string> args;
+    for (int i = 0; i < 21; ++i) args.push_back("-DM" + std::to_string(i));
+    Result r = Preprocess("x\n", args);
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("too many -D options"), std::string::npos) << r.err;
+}
+
+TEST_F(Predefined, TooManyUndefOptionsFails) {
+    std::vector<std::string> args;
+    for (int i = 0; i < 21; ++i) args.push_back("-UM" + std::to_string(i));
+    Result r = Preprocess("x\n", args);
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("too many -U options"), std::string::npos) << r.err;
+}

@@ -9,6 +9,10 @@
 #
 add_executable(cpp cpp.c buffer.c scan.c direct.c macro.c diag.c parser.c yylex.c)
 target_include_directories(cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# The big state arrays in cpp.c are tentative definitions; as common symbols the
+# Apple linker aligns each by its size and warns "reducing alignment of section
+# __DATA,__common".  -fno-common puts them in ordinary BSS instead.
+target_compile_options(cpp PRIVATE -fno-common)
 target_compile_definitions(cpp PRIVATE VCC_SHARE_DIR="${CMAKE_INSTALL_PREFIX}/share/vcc")
 install(PROGRAMS $<TARGET_FILE:cpp> DESTINATION bin RENAME vcpp)
 
