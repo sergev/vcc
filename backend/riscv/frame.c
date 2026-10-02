@@ -63,6 +63,16 @@ bool rv_is_ld(const Tac_Type *t)
     return t->kind == TAC_TYPE_LONG_DOUBLE;
 }
 
+bool rv_is_ll(const Tac_Type *t)
+{
+    return riscv_xlen == 4 && (t->kind == TAC_TYPE_LONG_LONG || t->kind == TAC_TYPE_ULONG_LONG);
+}
+
+bool rv_is_pair(const Tac_Type *t)
+{
+    return rv_is_ll(t) || (riscv_xlen == 8 && rv_is_ld(t));
+}
+
 bool rv_is_double(const Tac_Type *t)
 {
     return t->kind == TAC_TYPE_DOUBLE;
@@ -242,9 +252,7 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
     };
     const Tac_Type *t =
         v->kind == TAC_VAL_CONSTANT ? &types[v->u.constant->kind] : name_type(g, v->u.var_name);
-    // TODO: register pairs (Plan.md R28) and long double on rv32 (R29).
-    if (riscv_xlen == 4 && (t->kind == TAC_TYPE_LONG_LONG || t->kind == TAC_TYPE_ULONG_LONG))
-        fatal_error("riscv: %s: long long is not supported on rv32 yet", gen_name(g));
+    // TODO: long double on rv32 (Plan.md R29).
     if (riscv_xlen == 4 && t->kind == TAC_TYPE_LONG_DOUBLE)
         fatal_error("riscv: %s: long double is not supported on rv32 yet", gen_name(g));
     return t;
@@ -316,8 +324,8 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (rv_is_ld(t))
-        fatal_error("riscv: %s: long double in a register", gen_name(g));
+    if (rv_is_pair(t))
+        fatal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
         op = rv_is_double(t) ? RV_FLD : RV_FLW;
@@ -342,8 +350,8 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (rv_is_ld(t))
-        fatal_error("riscv: %s: long double in a register", gen_name(g));
+    if (rv_is_pair(t))
+        fatal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
         op = rv_is_double(t) ? RV_FSD : RV_FSW;
@@ -523,32 +531,62 @@ void store_val(Gen *g, int reg, const Tac_Val *v)
     store_mem(g, reg, t, base, off);
 }
 
-void ld_half(Gen *g, int reg, const Tac_Val *v, int half)
+int64_t const_value(const Gen *g, const Tac_Const *c)
 {
+    switch (c->kind) {
+    case TAC_CONST_UINT:
+        return c->u.uint_val;
+    case TAC_CONST_ULONG:
+        return riscv_xlen == 4 ? (int64_t)(uint32_t)c->u.ulong_val : (int64_t)c->u.ulong_val;
+    default:
+        return const_int(g, c);
+    }
+}
+
+void pair_half(Gen *g, int reg, const Tac_Val *v, int half)
+{
+    int x = riscv_xlen;
     if (v->kind == TAC_VAL_CONSTANT) {
-        Float128 q = v->u.constant->u.long_double_val;
-        gen_li(g, reg, (int64_t)(half ? q.hi : q.lo));
+        const Tac_Const *c = v->u.constant;
+        if (c->kind == TAC_CONST_LONG_DOUBLE) {
+            Float128 q = c->u.long_double_val;
+            gen_li(g, reg, (int64_t)(half ? q.hi : q.lo));
+        } else {
+            // A long long, or a narrower integer converted to it.
+            gen_li(g, reg, (int32_t)(const_value(g, c) >> (32 * half)));
+        }
+        return;
+    }
+    const Tac_Type *t = val_type(g, v);
+    if (!rv_is_pair(t)) {
+        // A narrower integer converted to long long: extended by its type.
+        load_val(g, reg, v);
+        if (half && rv_is_unsigned(t))
+            gen_li(g, reg, 0);
+        else if (half)
+            emit3(g, RV_SRAI, rv_reg(reg), rv_reg(reg), rv_imm(31));
         return;
     }
     int base;
     int64_t off;
     name_addr(g, v->u.var_name, RV_T5, &base, &off);
-    emit2(g, RV_LD, rv_reg(reg), mem(g, base, off + 8 * half));
+    emit2(g, xlen_load(), rv_reg(reg), mem(g, base, off + x * half));
 }
 
-void copy_ld(Gen *g, const Tac_Val *src, int base, int64_t off)
+void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off)
 {
-    if (src->kind == TAC_VAL_CONSTANT) {
+    int x = riscv_xlen;
+    if (src->kind == TAC_VAL_CONSTANT || !rv_is_pair(val_type(g, src))) {
         for (int half = 0; half < 2; half++) {
-            ld_half(g, RV_T0, src, half);
-            emit2(g, RV_SD, rv_reg(RV_T0), mem(g, base, off + 8 * half));
+            pair_half(g, RV_T0, src, half);
+            emit2(g, xlen_store(), rv_reg(RV_T0), mem(g, base, off + x * half));
         }
         return;
     }
     int sbase;
     int64_t soff;
     name_addr(g, src->u.var_name, RV_T3, &sbase, &soff);
-    gen_memcopy(g, base, off, sbase, soff, 16, 16);
+    gen_memcopy(g, base, off, sbase, soff, 2 * x, 2 * x);
 }
 
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align)

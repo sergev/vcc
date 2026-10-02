@@ -59,9 +59,10 @@ typedef struct {
     X(LI, "li") X(LA, "la") X(MV, "mv") X(ADD, "add") X(ADDI, "addi") X(ADDW, "addw")     \
     X(ADDIW, "addiw") X(ORI, "ori") X(SLTI, "slti") X(SLTIU, "sltiu") X(SLLIW, "slliw")  \
     X(SRLIW, "srliw") X(SRAIW, "sraiw")                                                   \
-    X(SUB, "sub") X(SUBW, "subw") X(MUL, "mul") X(MULW, "mulw") X(DIV, "div")             \
-    X(DIVW, "divw") X(DIVU, "divu") X(DIVUW, "divuw") X(REM, "rem") X(REMW, "remw")       \
-    X(REMU, "remu") X(REMUW, "remuw") X(AND, "and") X(ANDI, "andi") X(OR, "or")           \
+    X(SUB, "sub") X(SUBW, "subw") X(MUL, "mul") X(MULHU, "mulhu") X(MULW, "mulw")         \
+    X(DIV, "div") X(DIVW, "divw") X(DIVU, "divu") X(DIVUW, "divuw") X(REM, "rem")         \
+    X(REMW, "remw") X(REMU, "remu") X(REMUW, "remuw") X(AND, "and") X(ANDI, "andi")       \
+    X(OR, "or")                                                                           \
     X(XOR, "xor") X(XORI, "xori") X(SLL, "sll") X(SLLW, "sllw") X(SLLI, "slli")           \
     X(SRL, "srl") X(SRLW, "srlw") X(SRLI, "srli") X(SRA, "sra") X(SRAW, "sraw")           \
     X(SRAI, "srai") X(SLT, "slt") X(SLTU, "sltu") X(SEQZ, "seqz") X(SNEZ, "snez")         \

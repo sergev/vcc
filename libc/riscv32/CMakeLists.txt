@@ -5,7 +5,7 @@
 # Uses the clang and llvm-ar libc/riscv64 found; skipped when they cannot target
 # riscv32.
 #
-# TODO: doprnt and float128 need long long (Plan.md R28) and long double (R29).
+# TODO: doprnt and float128 need long double (Plan.md R29).
 #
 find_program(RISCV32_QEMU NAMES qemu-system-riscv32)
 
@@ -78,7 +78,7 @@ list(REMOVE_ITEM RISCV32_LIBC_C_COMMON printf snprintf sprintf)
 foreach(name ${RISCV32_LIBC_C_COMMON})
     riscv32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-foreach(name frexp ldexp modf)
+foreach(name frexp ldexp modf int64)
     riscv32_compile_libc_c(${name} ${src})
 endforeach()
 

@@ -50,11 +50,14 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   sources that need no 64-bit integer. `riscv32` in the CMake tool check, and the test
   harness parameterized by width: a `riscv32-tests` binary built from the same run
   sources. `int`/pointer run tests pass on qemu.
-- **R28. 64-bit integers.** `long long` lives in an 8-byte slot (like `long double`),
+- **R28. 64-bit integers.** *Done:* `llong.c`, `libc/riscv32/int64.c`; a `long long`
+  is a pair value, as `long double` is on rv64, so calls pass it in a register pair
+  (an even one when variadic) already. `long long` lives in an 8-byte slot (like `long double`),
   operated on in register pairs with inline sequences; division, remainder and
   int64↔FP conversions through the libgcc-named routines, written in C in the runtime.
   Tests against exact results, as for binary128.
-- **R29. ILP32D calls.** The classification above, with clang interop tests in both
+- **R29. ILP32D calls.** What R28 left: a `double` in an integer pair (variadic, or
+  past fa7), and `long double` by reference. The classification above, with clang interop tests in both
   directions (pairs, split a7/stack, variadic alignment, structs, `long double` by
   reference). `<stdarg.h>` for rv32.
 - **R30. Library, book and install.** The libc and `long double` tests on rv32; the

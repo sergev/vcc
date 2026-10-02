@@ -11,6 +11,7 @@ add_library(riscv STATIC
     peephole.c
     data.c
     codegen.c
+    llong.c
 )
 target_include_directories(riscv PUBLIC .)
 target_link_libraries(riscv backend_common tac libutil)
@@ -62,6 +63,7 @@ gtest_discover_tests(riscv-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 
 #
 add_executable(riscv32-tests
     test/rv32_tests.cpp
+    test/llong_tests.cpp
 )
 target_link_libraries(riscv32-tests riscv parser translator semantic GTest::gtest_main test_util
     backend_test_util)

@@ -74,10 +74,10 @@ TEST_F(Rv32Test, DoubleLiteral)
     EXPECT_EQ(std::string::npos, s.find(".LC2")) << "one literal per value and function:\n" << s;
 }
 
-TEST_F(Rv32Test, RejectsLongLong)
+TEST_F(Rv32Test, RejectsLongDouble)
 {
-    EXPECT_DEATH(CompileToRiscv("long long f(long long x) { return x + 1; }"),
-                 "long long is not supported on rv32");
+    EXPECT_DEATH(CompileToRiscv("long double f(long double x) { return x + 1; }"),
+                 "long double is not supported on rv32");
 }
 
 TEST_F(Rv32Test, IntegerWidths)

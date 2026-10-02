@@ -93,7 +93,7 @@ static void find_candidates(Alloc *a)
     const Flow *f = a->flow;
     for (int v = 0; v < a->n; v++) {
         const Tac_Type *t = f->types[v];
-        a->cand[v] = t && !flow_has(f->in_memory, v) && !rv_is_aggregate(t) &&
+        a->cand[v] = t && !flow_has(f->in_memory, v) && !rv_is_aggregate(t) && !rv_is_pair(t) &&
                      t->kind != TAC_TYPE_LONG_DOUBLE && t->kind != TAC_TYPE_VOID &&
                      t->kind != TAC_TYPE_FUN_TYPE;
         a->fp[v] = a->cand[v] && rv_is_fp(t);
@@ -161,9 +161,10 @@ static int *loop_depths(const Flow *f)
 }
 
 // The type of an operand: a tracked variable's, a global's or a constant's.
-static const Tac_Type *operand_type(const Alloc *a, const Tac_Val *v)
+static const Tac_Type *operand_type(const void *arg, const Tac_Val *v)
 {
-    int var = v->kind == TAC_VAL_VAR ? flow_var(a->flow, v->u.var_name) : -1;
+    const Alloc *a = arg;
+    int var        = v->kind == TAC_VAL_VAR ? flow_var(a->flow, v->u.var_name) : -1;
     return var >= 0 ? a->flow->types[var] : val_type(a->g, v);
 }
 
@@ -174,8 +175,7 @@ static bool makes_call(const Alloc *a, const Tac_Instruction *in, const Tac_Val 
         *res = in->u.fun_call.dst;
         return true;
     }
-    const Tac_Type *t = in->kind == TAC_INSTRUCTION_BINARY ? operand_type(a, in->u.binary.src1) : NULL;
-    return runtime_call(in, t, res);
+    return runtime_call(in, operand_type, a, res);
 }
 
 static void build(Alloc *a)

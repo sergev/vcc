@@ -47,6 +47,25 @@ int main(void) {
     EXPECT_EQ(0, exit_status);
 }
 
+// Copy propagation removes a cast that changes only signedness, so an operand's
+// type may not be the operator's: the operator decides.
+TEST_F(RiscvTest, RunSignednessAfterCopyPropagation)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+int lt(unsigned long a, unsigned long b) { long sa = (long)a, sb = (long)b; return sa < sb; }
+int ult(long a, long b) { return (unsigned long)a < (unsigned long)b; }
+long shr(unsigned long a) { long s = (long)a; return s >> 60; }
+long sx(unsigned char c) { return (long)(signed char)c; }
+long sx16(unsigned short c) { return (long)(short)c; }
+int sxi(unsigned char c) { return (int)(signed char)c; }
+int main(void) {
+    return (lt((unsigned long)-1, 0) != 1) | (ult(-1, 0) != 0) << 1 | (shr(-1ul) != -1) << 2 |
+           (sx(255) != -1) << 3 | (sx16(65535) != -1) << 4 | (sxi(200) != -56) << 5;
+})"));
+    EXPECT_EQ(0, exit_status);
+}
+
 // Ten arguments: a0-a7, then two on the stack; narrow ones arrive extended.
 TEST_F(RiscvTest, RunCalls)
 {

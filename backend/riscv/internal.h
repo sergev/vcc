@@ -68,6 +68,11 @@ int rv_align(const Tac_Type *t);
 bool rv_is_fp(const Tac_Type *t); // float or double
 // A long double (binary128) lives in memory, and goes in integer register pairs.
 bool rv_is_ld(const Tac_Type *t);
+// A long long on rv32.
+bool rv_is_ll(const Tac_Type *t);
+// A scalar two registers wide, kept in memory and passed in a register pair: long
+// double on rv64, long long on rv32.
+bool rv_is_pair(const Tac_Type *t);
 bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);
@@ -120,12 +125,15 @@ int riscv_const_label(Gen *g, uint64_t bits);
 void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
 // dst = src in the register form of integer type `t`: extended from its width.
 void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
+// The value of integer constant `c` as its type says, in 64 bits.
+int64_t const_value(const Gen *g, const Tac_Const *c);
 // Load integer constant `c` converted to type `t`.
 void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
-// Load the low (half 0) or high doubleword of long double `v` into `reg`.
-void ld_half(Gen *g, int reg, const Tac_Val *v, int half);
-// Store long double `src` at base + off; base is not t0, t2, t3 or t5.
-void copy_ld(Gen *g, const Tac_Val *src, int base, int64_t off);
+// Load the low (half 0) or high register of pair value `v` into `reg`.  A narrower
+// integer is extended to a long long.  `reg` is not t5 or t6.
+void pair_half(Gen *g, int reg, const Tac_Val *v, int half);
+// Store pair value `src` at base + off; base is not t0, t2, t3 or t5.
+void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off);
 // Copy `size` bytes; the bases are registers other than t2 and t6.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
 // Load `size` (1..8) bytes at base + off into `reg`, or store them, byte by byte when
@@ -160,9 +168,33 @@ void gen_return(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
-// Whether `in` calls a runtime routine (long double arithmetic and conversions);
-// `src_type` is the type of a binary operator's operands.  Sets *dst to its result.
-bool runtime_call(const Tac_Instruction *in, const Tac_Type *src_type, const Tac_Val **dst);
+// Whether `in` calls a runtime routine (long double arithmetic and conversions, and
+// on rv32 long long division and conversions); `type_of(arg, v)` gives the type of
+// operand `v`.  Sets *dst to its result.
+typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst);
+
+//
+// 64-bit integers on rv32, in register pairs (llong.c)
+//
+void gen_ll_binary(Gen *g, const Tac_Instruction *in);
+void gen_ll_unary(Gen *g, const Tac_Instruction *in);
+// An integer conversion to or from long long.
+void gen_ll_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+// A conversion between long long and float or double: a call to the runtime.
+void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+// Whether `in`, of a long long operand type `t` or result type `dt`, calls the runtime.
+bool ll_runtime_call(const Tac_Instruction *in, const Tac_Type *t, const Tac_Type *dt);
+// Shared with instr.c.
+bool rv_unsigned_op(Tac_BinaryOperator op);
+// Store integer result `d` into `dst`, brought to its type's form in a register.
+void store_int_result(Gen *g, int d, const Tac_Val *dst);
+bool rv_from_unsigned(Tac_InstructionKind kind);
+void call_runtime(Gen *g, const char *name);
+// Pair value `v` into registers reg, reg + 1; a pair result in a0/a1 into `dst`.
+void pair_arg(Gen *g, int reg, const Tac_Val *v);
+void pair_result(Gen *g, const Tac_Val *dst);
 
 //
 // Static data (data.c)

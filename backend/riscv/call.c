@@ -11,7 +11,8 @@
 // values use the same rules with a0/a1 and fa0/fa1.
 //
 // On rv32 (ILP32D) the same rules hold with 4-byte registers and stack slots: a struct
-// of up to 8 bytes goes in registers, a larger one by reference.
+// of up to 8 bytes goes in registers, a larger one by reference, and a long long goes
+// as the long double does on rv64, in two registers aligned like an 8-byte value.
 //
 #include "codegen.h"
 #include "flow.h"
@@ -101,26 +102,27 @@ static bool classify_fp(ArgState *s, const Tac_Type *t, ArgLoc *a)
     return true;
 }
 
-// A value of 16 bytes aligned to 16 in integer registers: an even register when
-// variadic, a 16-byte boundary when on the stack.
+// A value of two registers, aligned to their size, in integer registers: an even
+// register when variadic, a boundary of its size when on the stack.
 static void align_pair(ArgState *s, const Tac_Type *t, bool variadic)
 {
-    if (rv_size(t) != 16 || rv_align(t) != 16)
+    int size = 2 * riscv_xlen;
+    if (rv_size(t) != size || rv_align(t) != size)
         return;
     if (variadic && s->next_int % 2)
         s->next_int++;
     if (s->next_int == 8)
-        s->stack = (s->stack + 15) / 16 * 16;
+        s->stack = (s->stack + size - 1) / size * size;
 }
 
 static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
 {
     ArgLoc a = { 0 };
-    if (rv_is_ld(t)) {
+    if (rv_is_pair(t)) {
         align_pair(s, t, variadic);
         a.npieces = 2;
         for (int i = 0; i < 2; i++) {
-            a.piece[i] = (Piece){ .offset = 8 * i, .size = 8, .type = t };
+            a.piece[i] = (Piece){ .offset = riscv_xlen * i, .size = riscv_xlen, .type = t };
             take_int(s, &a.piece[i]);
         }
         return a;
@@ -162,7 +164,7 @@ static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
     int base;
     int64_t off;
     name_addr(g, name, RV_T5, &base, &off);
-    if (pc->type && !rv_is_ld(pc->type))
+    if (pc->type && !rv_is_pair(pc->type))
         load_mem(g, reg, pc->type, base, off + pc->offset);
     else
         load_bytes(g, reg, base, off + pc->offset, pc->size);
@@ -170,7 +172,7 @@ static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
 
 static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
 {
-    if (pc->type && !rv_is_ld(pc->type))
+    if (pc->type && !rv_is_pair(pc->type))
         store_mem(g, reg, pc->type, base, off + pc->offset);
     else
         store_bytes(g, reg, base, off + pc->offset, pc->size);
@@ -225,7 +227,7 @@ void param_hints(const Gen *g, StringMap *hints)
     ArgState s = { 0 };
     for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
-        if (!rv_is_aggregate(p->type) && !rv_is_ld(p->type) && a.piece[0].reg >= 0 &&
+        if (!rv_is_aggregate(p->type) && !rv_is_pair(p->type) && a.piece[0].reg >= 0 &&
             is_freg(a.piece[0].reg) == rv_is_fp(p->type))
             map_insert(hints, p->name, a.piece[0].reg, 0);
     }
@@ -324,7 +326,7 @@ void gen_params(Gen *g)
                 src = RV_T3;
             }
             gen_memcopy(g, RV_S0, off, src, 0, size, rv_align(t));
-        } else if (rv_is_aggregate(t) || rv_is_ld(t)) {
+        } else if (rv_is_aggregate(t) || rv_is_pair(t)) {
             for (int i = 0; i < a.npieces; i++) {
                 const Piece *pc = &a.piece[i];
                 int reg         = pc->reg;
@@ -383,8 +385,8 @@ static void arg_to_stack(Gen *g, Arg *a)
         const Piece *pc = &a->loc.piece[i];
         if (pc->reg >= 0)
             continue;
-        if (rv_is_ld(t)) {
-            ld_half(g, RV_T0, a->v, i);
+        if (rv_is_pair(t)) {
+            pair_half(g, RV_T0, a->v, i);
         } else if (rv_is_aggregate(t)) {
             load_piece(g, RV_T0, a->v->u.var_name, pc);
         } else if (rv_is_fp(t)) {
@@ -421,8 +423,8 @@ static void arg_to_regs(Gen *g, const Arg *a)
         int reg         = pc->reg;
         if (reg < 0)
             continue;
-        if (rv_is_ld(t)) {
-            ld_half(g, reg, a->v, i);
+        if (rv_is_pair(t)) {
+            pair_half(g, reg, a->v, i);
         } else if (rv_is_aggregate(t)) {
             load_piece(g, reg, a->v->u.var_name, pc);
         } else if (rv_is_fp(t) && !is_freg(reg)) {
@@ -450,14 +452,14 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         if (!t)
             return;
         ArgLoc a = classify(&s, t, ft && ft->u.fun_type.variadic && i >= nfixed);
-        if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_ld(t) && a.piece[0].reg >= 0 &&
+        if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_pair(t) && a.piece[0].reg >= 0 &&
             is_freg(a.piece[0].reg) == rv_is_fp(t))
             hint[var] = a.piece[0].reg;
     }
     const Tac_Val *dst = in->u.fun_call.dst;
     int var            = dst ? flow_var(f, dst->u.var_name) : -1;
     if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]) &&
-        !rv_is_ld(f->types[var]))
+        !rv_is_pair(f->types[var]))
         hint[var] = rv_is_fp(f->types[var]) ? RV_FA0 : RV_A0;
 }
 
@@ -472,7 +474,7 @@ static ArgLoc classify_result(const Tac_Type *t)
 static void store_result(Gen *g, const Tac_Val *dst, const Tac_Type *ret)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (!rv_is_aggregate(t) && !rv_is_ld(t)) {
+    if (!rv_is_aggregate(t) && !rv_is_pair(t)) {
         if (!rv_is_fp(t))
             conform(g, RV_A0, ret, t);
         store_val(g, rv_is_fp(t) ? RV_FA0 : RV_A0, dst);
@@ -554,9 +556,9 @@ void gen_return(Gen *g, const Tac_Val *v)
 {
     if (v) {
         const Tac_Type *t = val_type(g, v);
-        if (rv_is_ld(t)) {
-            ld_half(g, RV_A0, v, 0);
-            ld_half(g, RV_A0 + 1, v, 1);
+        if (rv_is_pair(t)) {
+            pair_half(g, RV_A0, v, 0);
+            pair_half(g, RV_A0 + 1, v, 1);
         } else if (rv_is_aggregate(t)) {
             ArgLoc a = classify_result(t);
             for (int i = 0; i < a.npieces; i++)

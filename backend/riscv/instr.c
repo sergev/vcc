@@ -39,12 +39,13 @@ static void gen_jump(Gen *g, Rv_Op op, int reg, const char *tac)
     xfree(l);
 }
 
-// reg = 0 when long double `v` is zero, of either sign, else nonzero.
-static void ld_nonzero(Gen *g, int reg, const Tac_Val *v)
+// reg = 0 when pair value `v` is zero (a long double of either sign), else nonzero.
+static void pair_nonzero(Gen *g, int reg, const Tac_Val *v)
 {
-    ld_half(g, RV_T0, v, 0);
-    ld_half(g, RV_T1, v, 1);
-    emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(1));
+    pair_half(g, RV_T0, v, 0);
+    pair_half(g, RV_T1, v, 1);
+    if (rv_is_ld(val_type(g, v)))
+        emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(1));
     emit3(g, RV_OR, rv_reg(reg), rv_reg(RV_T0), rv_reg(RV_T1));
 }
 
@@ -53,8 +54,8 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 {
     const Tac_Type *t = val_type(g, cond);
     int reg;
-    if (rv_is_ld(t)) {
-        ld_nonzero(g, RV_T0, cond);
+    if (rv_is_pair(t)) {
+        pair_nonzero(g, RV_T0, cond);
         reg = RV_T0;
     } else if (rv_is_fp(t)) {
         // t0 = (cond == 0.0), so a zero condition is a nonzero t0.
@@ -73,11 +74,11 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (rv_is_ld(t)) {
+    if (rv_is_pair(t)) {
         int base;
         int64_t off;
         name_addr(g, dst->u.var_name, RV_T4, &base, &off);
-        copy_ld(g, src, base, off);
+        copy_pair(g, src, base, off);
         return;
     }
     if (rv_is_aggregate(t)) {
@@ -121,7 +122,7 @@ static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
     int p             = use_val(g, RV_T3, src_ptr);
-    if (rv_is_aggregate(t) || rv_is_ld(t)) {
+    if (rv_is_aggregate(t) || rv_is_pair(t)) {
         int base;
         int64_t off;
         name_addr(g, dst->u.var_name, RV_T4, &base, &off);
@@ -141,8 +142,8 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
         (rv_is_aggregate(t) && !rv_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
     int p = use_val(g, RV_T4, dst_ptr);
-    if (rv_is_ld(t)) {
-        copy_ld(g, src, p, 0);
+    if (rv_is_pair(t)) {
+        copy_pair(g, src, p, 0);
         return;
     }
     if (rv_is_aggregate(t)) {
@@ -160,8 +161,14 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
 {
     int scale          = in->u.add_ptr.scale;
     int p              = use_val(g, RV_T0, in->u.add_ptr.ptr);
-    int i              = use_val(g, RV_T1, in->u.add_ptr.index);
     const Tac_Type *it = val_type(g, in->u.add_ptr.index);
+    int i;
+    if (rv_is_ll(it)) {
+        pair_half(g, RV_T1, in->u.add_ptr.index, 0); // an address has 32 bits
+        i = RV_T1;
+    } else {
+        i = use_val(g, RV_T1, in->u.add_ptr.index);
+    }
     if (rv_size(it) == 4 && rv_is_unsigned(it) && riscv_xlen == 8) {
         emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(i), rv_imm(32));
         emit3(g, RV_SRLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
@@ -236,8 +243,8 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
     int64_t off;
     name_addr(g, dst, RV_T4, &base, &off);
     off += offset;
-    if (rv_is_ld(t)) {
-        copy_ld(g, src, base, off);
+    if (rv_is_pair(t)) {
+        copy_pair(g, src, base, off);
         return;
     }
     if (rv_is_aggregate(t)) {
@@ -261,7 +268,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
     int64_t off;
     name_addr(g, src, RV_T3, &base, &off);
     off += offset;
-    if (rv_is_aggregate(t) || rv_is_ld(t)) {
+    if (rv_is_aggregate(t) || rv_is_pair(t)) {
         int dbase;
         int64_t doff;
         name_addr(g, dst->u.var_name, RV_T4, &dbase, &doff);
@@ -290,15 +297,32 @@ static void gen_zext(Gen *g, int dst, int src, int size)
     emit3(g, RV_SRLI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
 }
 
+// dst = src sign-extended from `size` (1 or 2) bytes.
+static void gen_sext(Gen *g, int dst, int src, int size)
+{
+    int shift = 8 * riscv_xlen - 8 * size;
+    emit3(g, RV_SLLI, rv_reg(dst), rv_reg(src), rv_imm(shift));
+    emit3(g, RV_SRAI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
+}
+
 // An integer conversion.  In memory the store truncates; a register is brought to
-// the destination's form.  A sign extension keeps the value.
+// the destination's form.  A sign extension keeps the value, but for a narrow
+// unsigned source: copy propagation may have removed its cast to a signed type.
 static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
                             Tac_InstructionKind kind)
 {
+    if (rv_is_ll(val_type(g, src)) || rv_is_ll(val_type(g, dst))) {
+        gen_ll_int_convert(g, src, dst, kind);
+        return;
+    }
     int s = use_val(g, RV_T0, src);
     int d = def_reg(g, RV_T0, dst);
+    const Tac_Type *st = val_type(g, src);
     if (kind == TAC_INSTRUCTION_ZERO_EXTEND) {
-        gen_zext(g, d, s, rv_size(val_type(g, src)));
+        gen_zext(g, d, s, rv_size(st));
+        s = d;
+    } else if (kind == TAC_INSTRUCTION_SIGN_EXTEND && rv_size(st) < 4 && rv_is_unsigned(st)) {
+        gen_sext(g, d, s, rv_size(st));
         s = d;
     } else if (kind == TAC_INSTRUCTION_TRUNCATE && var_reg(g, dst)) {
         gen_canon(g, d, s, val_type(g, dst));
@@ -327,7 +351,7 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 
 // Store integer result `d` into `dst`; a register narrower than a word is brought to
 // its type's form, as a store and reload would.
-static void store_int_result(Gen *g, int d, const Tac_Val *dst)
+void store_int_result(Gen *g, int d, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
     if (var_reg(g, dst) && rv_size(t) < 4)
@@ -341,7 +365,7 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
     const Tac_Val *src = in->u.unary.src, *dst = in->u.unary.dst;
     if (in->u.unary.op == TAC_UNARY_NOT) {
         int d = def_reg(g, RV_T0, dst);
-        ld_nonzero(g, d, src);
+        pair_nonzero(g, d, src);
         emit2(g, RV_SEQZ, rv_reg(d), rv_reg(d));
         store_val(g, d, dst);
         return;
@@ -350,8 +374,8 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         fatal_error("riscv: %s: bad long double unary operator", gen_name(g));
     int base;
     int64_t off;
-    ld_half(g, RV_T0, src, 0);
-    ld_half(g, RV_T1, src, 1);
+    pair_half(g, RV_T0, src, 0);
+    pair_half(g, RV_T1, src, 1);
     gen_li(g, RV_T2, 1);
     emit3(g, RV_SLLI, rv_reg(RV_T2), rv_reg(RV_T2), rv_imm(63));
     emit3(g, RV_XOR, rv_reg(RV_T1), rv_reg(RV_T1), rv_reg(RV_T2));
@@ -363,6 +387,10 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
+    if (rv_is_ll(t)) {
+        gen_ll_unary(g, in);
+        return;
+    }
     if (rv_is_ld(t)) {
         gen_ld_unary(g, in);
         return;
@@ -474,7 +502,7 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsi
     }
 }
 
-static bool is_unsigned_op(Tac_BinaryOperator op)
+bool rv_unsigned_op(Tac_BinaryOperator op)
 {
     switch (op) {
     case TAC_BINARY_DIVIDE_UNSIGNED:
@@ -545,26 +573,24 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     store_val(g, dreg, dst);
 }
 
-static void call_runtime(Gen *g, const char *name)
+void call_runtime(Gen *g, const char *name)
 {
     rv_append(g->fn, RV_CALL)->opnd[0] = rv_sym(name, 0);
 }
 
-// Long double `v` into a0/a1 (or a2/a3).
-static void ld_arg(Gen *g, int reg, const Tac_Val *v)
+void pair_arg(Gen *g, int reg, const Tac_Val *v)
 {
-    ld_half(g, reg, v, 0);
-    ld_half(g, reg + 1, v, 1);
+    pair_half(g, reg, v, 0);
+    pair_half(g, reg + 1, v, 1);
 }
 
-// Long double result in a0/a1 into `dst`.
-static void ld_result(Gen *g, const Tac_Val *dst)
+void pair_result(Gen *g, const Tac_Val *dst)
 {
     int base;
     int64_t off;
     name_addr(g, dst->u.var_name, RV_T5, &base, &off);
-    emit2(g, RV_SD, rv_reg(RV_A0), mem(g, base, off));
-    emit2(g, RV_SD, rv_reg(RV_A0 + 1), mem(g, base, off + 8));
+    emit2(g, xlen_store(), rv_reg(RV_A0), mem(g, base, off));
+    emit2(g, xlen_store(), rv_reg(RV_A0 + 1), mem(g, base, off + riscv_xlen));
 }
 
 // Long double arithmetic and comparison: a call to the runtime (libgcc names).  A
@@ -601,12 +627,12 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
             name = ops[i].name;
     if (!name)
         fatal_error("riscv: %s: bad long double operator %d", gen_name(g), op);
-    ld_arg(g, RV_A0, in->u.binary.src1);
-    ld_arg(g, RV_A0 + 2, in->u.binary.src2);
+    pair_arg(g, RV_A0, in->u.binary.src1);
+    pair_arg(g, RV_A0 + 2, in->u.binary.src2);
     call_runtime(g, name);
     const Tac_Val *dst = in->u.binary.dst;
     if (rv_is_ld(val_type(g, dst))) {
-        ld_result(g, dst);
+        pair_result(g, dst);
         return;
     }
     Rv_Operand r = rv_reg(RV_A0), z = rv_reg(RV_ZERO);
@@ -637,9 +663,20 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
     store_val(g, RV_A0, dst);
 }
 
+static bool is_shift(Tac_BinaryOperator op)
+{
+    return op == TAC_BINARY_LEFT_SHIFT || op == TAC_BINARY_RIGHT_SHIFT ||
+           op == TAC_BINARY_RIGHT_SHIFT_LOGICAL;
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
+    bool ll2          = rv_is_ll(val_type(g, in->u.binary.src2));
+    if (rv_is_ll(t) || (ll2 && !is_shift(in->u.binary.op))) {
+        gen_ll_binary(g, in);
+        return;
+    }
     if (rv_is_ld(t)) {
         gen_ld_binary(g, in);
         return;
@@ -649,16 +686,25 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         return;
     }
     Rv_Operand a = rv_reg(use_val(g, RV_T0, in->u.binary.src1));
-    Rv_Operand b = rv_reg(use_val(g, RV_T1, in->u.binary.src2));
-    int d        = def_reg(g, RV_T0, in->u.binary.dst);
+    Rv_Operand b;
+    if (ll2) {
+        pair_half(g, RV_T1, in->u.binary.src2, 0); // a shift count
+        b = rv_reg(RV_T1);
+    } else {
+        b = rv_reg(use_val(g, RV_T1, in->u.binary.src2));
+    }
+    // The operator says the signedness: an operand's own type may differ, once copy
+    // propagation has removed a cast.  Only pointers compare unsigned under a plain one.
+    int d = def_reg(g, RV_T0, in->u.binary.dst);
     gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4 && riscv_xlen == 8,
-                  rv_is_unsigned(t) || is_unsigned_op(in->u.binary.op), rv_reg(d), a, b);
+                  t->kind == TAC_TYPE_POINTER || rv_unsigned_op(in->u.binary.op), rv_reg(d), a,
+                  b);
     store_int_result(g, d, in->u.binary.dst);
 }
 
 // Whether conversion `kind` is from an unsigned integer.  The source's own type may
 // differ in signedness, once copy propagation has removed a cast.
-static bool from_unsigned(Tac_InstructionKind kind)
+bool rv_from_unsigned(Tac_InstructionKind kind)
 {
     return kind == TAC_INSTRUCTION_UINT_TO_DOUBLE || kind == TAC_INSTRUCTION_UINT_TO_FLOAT ||
            kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
@@ -669,11 +715,15 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     bool sfp = rv_is_fp(st), dfp = rv_is_fp(dt);
+    if (rv_is_ll(st) || rv_is_ll(dt)) {
+        gen_ll_fp_convert(g, src, dst, kind);
+        return;
+    }
     Rv_Op op;
     if (sfp && dfp) {
         op = rv_is_double(dt) ? RV_FCVTDS : RV_FCVTSD;
     } else if (dfp) {
-        bool w = rv_size(st) <= 4, u = from_unsigned(kind);
+        bool w = rv_size(st) <= 4, u = rv_from_unsigned(kind);
         if (rv_is_double(dt))
             op = w ? (u ? RV_FCVTDWU : RV_FCVTDW) : (u ? RV_FCVTDLU : RV_FCVTDL);
         else
@@ -703,7 +753,7 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     const char *name;
     if (rv_is_ld(st)) {
-        ld_arg(g, RV_A0, src);
+        pair_arg(g, RV_A0, src);
         if (rv_is_fp(dt)) {
             call_runtime(g, rv_is_double(dt) ? "__trunctfdf2" : "__trunctfsf2");
             store_val(g, RV_FA0, dst);
@@ -720,16 +770,28 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
         name = rv_is_double(st) ? "__extenddftf2" : "__extendsftf2";
     } else {
         load_val(g, RV_A0, src);
-        bool w = rv_size(st) <= 4, u = from_unsigned(kind);
+        bool w = rv_size(st) <= 4, u = rv_from_unsigned(kind);
         name   = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
     }
     call_runtime(g, name);
-    ld_result(g, dst);
+    pair_result(g, dst);
 }
 
-bool runtime_call(const Tac_Instruction *in, const Tac_Type *src_type, const Tac_Val **dst)
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst)
 {
     switch (in->kind) {
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+        *dst = in->u.int_to_double.dst;
+        return ll_runtime_call(in, type_of(arg, in->u.int_to_double.src),
+                               type_of(arg, in->u.int_to_double.dst));
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
     case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
@@ -740,9 +802,15 @@ bool runtime_call(const Tac_Instruction *in, const Tac_Type *src_type, const Tac
     case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
         *dst = in->u.long_double_to_int.dst;
         return true;
-    case TAC_INSTRUCTION_BINARY:
-        *dst = in->u.binary.dst;
-        return src_type && rv_is_ld(src_type);
+    case TAC_INSTRUCTION_BINARY: {
+        *dst               = in->u.binary.dst;
+        const Tac_Type *t1 = type_of(arg, in->u.binary.src1);
+        const Tac_Type *t2 = type_of(arg, in->u.binary.src2);
+        if (t1 && rv_is_ld(t1))
+            return true;
+        const Tac_Type *t = t1 && rv_is_ll(t1) ? t1 : t2;
+        return t && ll_runtime_call(in, t, NULL);
+    }
     default:
         return false;
     }
