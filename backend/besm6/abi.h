@@ -24,7 +24,7 @@ extern "C" {
 
 //
 // Calling convention register assignments (Dubna C ABI).
-// See docs/Besm6_Calling_Conventions.md for full protocol.
+// See backend/besm6/Besm6_Calling_Conventions.md for full protocol.
 //
 // After b/save:
 //   r6 (REG_PAR)  points to the parameter block: r6+i = address of param i

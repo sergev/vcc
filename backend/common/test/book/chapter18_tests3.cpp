@@ -7,7 +7,7 @@
 // Passes structs of every classification by value as single parameters.  Out-of-range x86
 // literals adapted to the BESM-6 ranges (doubles 1.7e308 -> 1.0e18; long -9223372036854775807
 // -> -(2^40-1)) and strcmp strings uppercased so the ASCII char path matches the KOI-7 static
-// path (see docs/KOI7_Encoding.md).
+// path (see backend/besm6/KOI7_Encoding.md).
 TEST_F(BookTest, Chapter18_ClassifyParams)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"PROG(

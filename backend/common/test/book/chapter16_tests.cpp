@@ -1577,7 +1577,7 @@ int main(void) {
 // dimensional char-array initialization and indexing now work (task #5).  The book's
 // lowercase letters were upper-cased: the static-data path packs strings as KOI-7, which
 // folds lowercase Latin to uppercase codes while char literals stay ASCII, so lowercase
-// `arr[i] == 'a'` would compare unequal (see docs/KOI7_Encoding.md); the file-scope
+// `arr[i] == 'a'` would compare unequal (see backend/besm6/KOI7_Encoding.md); the file-scope
 // `nested` shadow was already resolved by renaming the locals.
 TEST_F(BookTest, Chapter16_TerminatingNullBytes)
 {
@@ -1667,7 +1667,7 @@ int main(void) {
 
 // strings_as_initializers/partial_initialize_via_string: static arrays in fns.  Enabled
 // with task #5 (multi-dim char arrays); the book's lowercase letters were upper-cased so the
-// KOI-7-packed static data matches the ASCII char literals (see docs/KOI7_Encoding.md).
+// KOI-7-packed static data matches the ASCII char literals (see backend/besm6/KOI7_Encoding.md).
 TEST_F(BookTest, Chapter16_PartialInitializeViaString)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(

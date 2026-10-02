@@ -436,7 +436,7 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
             // is not adjusted to `value + 2^48`.  E.g. `(unsigned long)-1` is
             // 2^41-1, not ULONG_MAX (2^48-1).  This is an intentional deviation
             // (matching how the target keeps signed integers in 41 bits); see
-            // docs/Besm6_Data_Representation.md.
+            // backend/besm6/Besm6_Data_Representation.md.
             Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
             in->u.copy.src      = src;
             in->u.copy.dst      = dst;

@@ -1,6 +1,6 @@
 # BESM-6 Compiler Intrinsics
 
-The twelve intrinsics of [`<besm6.h>`](../libc/besm6/include/besm6.h) give C direct access to the
+The twelve intrinsics of [`<besm6.h>`](../../libc/besm6/include/besm6.h) give C direct access to the
 machine operations it cannot otherwise express: the two supervisor instructions that reach every
 peripheral, the three that read and write the mode word PSW, the bit-manipulation instructions
 that have no C equivalent, the halt, and the extracode trap. Each one compiles into **a single
@@ -75,7 +75,7 @@ cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -
 ```
 
 This repo is the authoritative source of the header, and `make install` puts it in
-`share/besm6/include/besm6.h` — it describes *this* back end, so a copy kept anywhere else
+`share/vcc/besm6/include/besm6.h` — it describes *this* back end, so a copy kept anywhere else
 goes stale the moment a thirteenth intrinsic lands. In-tree it is consumed straight from
 `libc/besm6/include/`. It declares the twelve intrinsics **and
 nothing else**: readable wrappers — a `popcount()`, an `spl()`, the ГРП bit names, the control-word
@@ -583,9 +583,9 @@ hard errors:
 | `__besm6_maskpsw(0100000)` | `__besm6_maskpsw: mask 100000 does not fit the 15-bit address field` |
 
 All three immediate arguments are evaluated, range-checked and folded to a literal in the **front
-end** ([semantic/expressions.c](../semantic/expressions.c), `fold_immediate_arg0`, driven by
+end** ([semantic/expressions.c](../../semantic/expressions.c), `fold_immediate_arg0`, driven by
 the BESM-6 target descriptor's `immediate_args` table in
-[semantic/target.c](../semantic/target.c)), so they reach
+[semantic/target.c](../../semantic/target.c)), so they reach
 the back end as constants whatever the optimizer does. That is where the recursive
 constant-expression evaluator lives, which is why nesting depth does not matter (§2.3).
 Instruction selection re-tests each one, but only as a backstop — those messages are unreachable
@@ -604,7 +604,7 @@ address field is 15 bits — so `__besm6_ext(010000, 0)` is correct, just one in
 prototypes, so `typecheck_expr`'s `EXPR_CALL` case already checks their arity and coerces their
 arguments; they reach the back end as a plain `TAC_INSTRUCTION_FUN_CALL` whose `fun_name` begins
 with `__besm6_`. Only instruction selection knows better: `codegen_intrinsic`
-([backend/besm6/intrinsics.c](../backend/besm6/intrinsics.c)) intercepts the call at the top of
+([backend/besm6/intrinsics.c](intrinsics.c)) intercepts the call at the top of
 `instr.c`'s FUN_CALL case and emits machine instructions inline instead of a `,call,`.
 
 `tac/`, `optimize/`, `ast/` and `translator/` are untouched by the whole feature, and
@@ -679,8 +679,8 @@ untouched: `instr_reads_auto_slot` and the post-peephole frame shrink both gate 
 frame slot 17. The only backend change outside `intrinsics.c` is the Madlen emitter's raw-octal
 spelling of the register-0 `vtm` (§3.3).
 
-**Three new instruction kinds** carry this in the backend IR ([besm6.asdl](../backend/besm6/besm6.asdl),
-[besm.h](../backend/besm6/besm.h)): `BESM_IO_EXT`, `BESM_IO_MOD` and `BESM_IO_EXTRACODE`. The
+**Three new instruction kinds** carry this in the backend IR ([besm6.asdl](besm6.asdl),
+[besm.h](besm.h)): `BESM_IO_EXT`, `BESM_IO_MOD` and `BESM_IO_EXTRACODE`. The
 privileged `mod` could not reuse the `BESM_MOD_*` prefix — that is already the C-register address
 modification group, `BESM_MOD_UTC`/`BESM_MOD_WTC`, an entirely different instruction. The extracode
 is `BESM_SHAPE_SPECIAL` with its opcode in the `opcode` field, because its mnemonic *is* its opcode
@@ -713,10 +713,10 @@ both of the Format-2 forms this header needs, so both are written as machine cod
 
 ## 9. How they are tested
 
-- **Typing, arity, and the folded opcode** — [semantic/test/intrinsics_tests.cpp](../semantic/test/intrinsics_tests.cpp).
+- **Typing, arity, and the folded opcode** — [semantic/test/intrinsics_tests.cpp](../../semantic/test/intrinsics_tests.cpp).
   That the word type is `unsigned`, that `__besm6_stop` is *not* `_Noreturn`, and the negatives: a
   non-constant extracode opcode, an out-of-range one, a wrong argument count.
-- **Instruction selection** — [backend/besm6/test/intrinsics_tests.cpp](../backend/besm6/test/intrinsics_tests.cpp),
+- **Instruction selection** — [backend/besm6/test/intrinsics_tests.cpp](test/intrinsics_tests.cpp),
   golden assembly for all three dialects. These also pin that no `,call,` and no `,subp,` survives
   for an intrinsic — the alias hazard above is invisible at link time, so it has to be caught here.
   Two of them pin the ω contract specifically: a branch on an `arx` result (rule #33's `aex`

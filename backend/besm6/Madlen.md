@@ -171,7 +171,7 @@ assembler/loader silently merges them — there is no diagnostic. When two such 
 name resolves to that one body.
 
 The BESM-6 backend maps C identifiers to Madlen identifiers in `sanitize_name`
-([backend/besm6/emit_madlen.c](../backend/besm6/emit_madlen.c)): it replaces `_`→`*`, `$`→`/`,
+([backend/besm6/emit_madlen.c](emit_madlen.c)): it replaces `_`→`*`, `$`→`/`,
 `%`→`*`, and **truncates to 8 characters**. Consequently, two C names that agree in their first
 8 significant characters collide. For example:
 
@@ -1794,4 +1794,4 @@ Violations of conditions 2 and 3 are detected during translation and reported as
 
 *See also:*
 - [Besm6_Instruction_Set.md](Besm6_Instruction_Set.md) — complete instruction set reference with encoding, register descriptions, and arithmetic details.
-- [Technical_Reference.md](Technical_Reference.md) — C compiler pipeline and TAC IR reference.
+- [Technical_Reference.md](../../docs/Technical_Reference.md) — C compiler pipeline and TAC IR reference.

@@ -247,7 +247,7 @@ void mad_format_real(char *buf, size_t n, double val);
 // (repeats until a full sweep changes nothing).  Removed nodes are spliced out of
 // the list and freed; the one rule that inserts a node is the ω fixup ahead of a
 // conditional branch (#33).  Observable behavior is unchanged; only the instruction
-// sequence is made cheaper.  See docs/Peephole_Rewrites.md.
+// sequence is made cheaper.  See backend/besm6/Peephole_Rewrites.md.
 //
 // `frame` classifies which auto slots are compiler temporaries (for dead temp-store
 // elimination, rule #28); it may be NULL (e.g. for an empty function), in which case

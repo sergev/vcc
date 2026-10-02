@@ -3,8 +3,8 @@
 This article explains *peephole optimization* — what it is, why a code generator needs it,
 and how it applies to the BESM-6 backend of this compiler and the Madlen assembly it emits.
 It is written to be read top to bottom as a tutorial; every example is a real instruction
-sequence the backend produces today (see [instr.c](../backend/besm6/instr.c) and
-[emit.c](../backend/besm6/emit.c)), with the improvement it should become.
+sequence the backend produces today (see [instr.c](instr.c) and
+[emit.c](emit.c)), with the improvement it should become.
 
 ---
 
@@ -89,10 +89,10 @@ Source (.c)
 ```
 
 The BESM-6 backend's own internal flow today is a straight line. `codegen_function`
-([codegen.c](../backend/besm6/codegen.c)) builds one `Besm_Block` — a linked list of
-`Besm_Instr` nodes — by calling `codegen_instr` ([instr.c](../backend/besm6/instr.c)) for
+([codegen.c](codegen.c)) builds one `Besm_Block` — a linked list of
+`Besm_Instr` nodes — by calling `codegen_instr` ([instr.c](instr.c)) for
 each TAC instruction, then hands that list directly to `emit_madlen_module`
-([emit_madlen.c](../backend/besm6/emit_madlen.c)):
+([emit_madlen.c](emit_madlen.c)):
 
 ```
 TAC → [ codegen_instr per TAC node ] → Besm_Instr list → emit_madlen_module → .mad text
@@ -242,7 +242,7 @@ Three instructions instead of the original five — and slot 3 need not be alloc
 
 Floating-point arithmetic must run with **R = 0** so the additive/multiplicative unit
 normalizes and rounds, then restore **R = 7** for the integer-mode code around it. Selection
-brackets each FP op with `ntr 0 … ntr 7` ([instr.c](../backend/besm6/instr.c), the FP add/sub/
+brackets each FP op with `ntr 0 … ntr 7` ([instr.c](instr.c), the FP add/sub/
 mul/div path). Two FP operations in a row — `e = a + b; f = e + c;` — therefore produce a
 `ntr 7` immediately chased by a `ntr 0` (here `e` is still live, so 5.1 removes only the
 reload of `e`, leaving its store):
@@ -321,7 +321,7 @@ guarantee; the helper contract is what keeps it from firing on the shape above.
 ### 5.5 Jump and label cleanup
 
 Several rewrites need only the control-flow shape, not tracked data state. All three are
-implemented as rule #31 (see [peephole.c](../backend/besm6/peephole.c)); because they
+implemented as rule #31 (see [peephole.c](peephole.c)); because they
 need list look-ahead or list mutation rather than the `(cur, state)` predicate the rule
 table expects, they are handled directly in the sweep alongside the other look-ahead
 rules. They are locked in by the `DuplicateEpilogueJumpRemoved`, `ConditionalOverJumpInverted`,
@@ -372,7 +372,7 @@ Strictly this is an *instruction-selection* improvement rather than a peephole o
 the time the list is built. It is listed here because it is the same *idea* — replace an
 expensive form with a cheaper equivalent — and the backend already does one case of it: in
 `ADD_PTR`, a power-of-two word scale becomes a single `asn` shift instead of a `b/mul` call
-([instr.c](../backend/besm6/instr.c), the pointer-scaling path).
+([instr.c](instr.c), the pointer-scaling path).
 
 The general rule: multiply by a power of two becomes a left shift. For `n * 4`:
 
@@ -391,7 +391,7 @@ toward zero — so it stays on `b/div`.
 ### 5.7 Direct symbolic addressing for globals (to investigate)
 
 Every reference to a module-level global currently costs two instructions: `emit_xta_val`
-([emit.c](../backend/besm6/emit.c)) emits `,utc, name` to put the global's address in the C
+([emit.c](emit.c)) emits `,utc, name` to put the global's address in the C
 register, then a bare `,xta,` to load through it:
 
 ```
@@ -425,7 +425,7 @@ Since the C register resets after the one instruction that uses it (every instru
 `utc`/`wtc` clears C), consecutive dereferences cannot share it, so there is nothing left for a
 peephole to reuse. What the peephole *can* do is drop a redundant dereference outright — see
 5.9. The one interaction the backend must honour is that a `wtc reg,off` of an auto temp
-**reads** that slot — `instr_reads_auto_slot` in [peephole.c](../backend/besm6/peephole.c)
+**reads** that slot — `instr_reads_auto_slot` in [peephole.c](peephole.c)
 lists `WTC` so that dead-temp-store elimination (5.2) does not drop the store that materialises
 an `ADD_PTR` address the following `wtc` dereferences.
 
@@ -434,7 +434,7 @@ an `ADD_PTR` address the following `wtc` dereferences.
 The C address-modifier register is reset to zero after every instruction **except `utc` (022)
 and `wtc` (023)**. A C-setter and the instruction after it are therefore one indivisible unit —
 a **C group** — and the pass must both analyse and rewrite them together. The backend emits
-these shapes ([emit.c](../backend/besm6/emit.c)):
+these shapes ([emit.c](emit.c)):
 
 | Group | Meaning |
 |---|---|
@@ -448,7 +448,7 @@ Taking the address of a *global* used to appear here too, as `utc name` + `vtm 1
 longer does. `vtm` (024) is a Format-2 instruction like `utc`, so its own 15-bit address field
 holds a relocatable name, and `M[reg] = offset + C` takes no `M[reg]` contribution — the
 whole pair collapses to a single `14 ,vtm, name` at instruction selection
-([instr.c](../backend/besm6/instr.c)), one instruction and one word shorter. The local form
+([instr.c](instr.c)), one instruction and one word shorter. The local form
 above cannot collapse: its index register `reg` lives in the `utc`'s register field, and
 `vtm`'s register field is already spoken for by the destination `M[14]`.
 
@@ -461,7 +461,7 @@ Two rules follow.
 
 **A consumer's `(reg, addr)` fields do not name a frame slot.** Its effective address is
 `addr + M[reg] + C`. The pass models this with a `Loc`, in
-[peephole.c](../backend/besm6/peephole.c):
+[peephole.c](peephole.c):
 
 - `LOC_FRAME(reg, off)` — a plain `xta/atx`, no C involved
 - `LOC_GLOBAL(name, woff)` — from the first shape above
@@ -513,7 +513,7 @@ word: `EA = (addr + M[reg] + C) mod 0100000`. A constant address that fits the 1
 field is simply that field, but everything else has to be *put* somewhere the address
 calculation reads from, and the only two candidates are an index register and the C register.
 
-Instruction selection ([intrinsics.c](../backend/besm6/intrinsics.c), `emit_io_op`) picks C,
+Instruction selection ([intrinsics.c](intrinsics.c), `emit_io_op`) picks C,
 and reaches it through the stack:
 
 ```
@@ -619,7 +619,7 @@ the group the *producer* left. For `if (x - y)`:
 ```
 
 which compiles `if (x - y)` as `if (x - y >= 0)` — silently wrong for every `x > y`. This was
-[BUG.md](../backend/besm6/tmp/BUG.md), found in v7's `sort(1)`.
+[BUG.md](tmp/BUG.md), found in v7's `sort(1)`.
 
 The repair is one instruction, inserted only where the tracked group is not already logical:
 
@@ -640,7 +640,7 @@ Making it *conditional* is the whole point, and is what the pass's ω tracking b
 common shapes pay nothing, because they already end in the logical group — a surviving
 `xta`, a relational helper (5.4, by the exit contract), a compiled function's `b/ret`, an
 extracode, a read-address `ext`/`mod`. `omega_after` in
-[peephole.c](../backend/besm6/peephole.c) is the per-opcode table from
+[peephole.c](peephole.c) is the per-opcode table from
 [Besm6_Instruction_Set.md](Besm6_Instruction_Set.md) §4 transcribed, so a kind whose group is
 not modelled falls to "kept" and, at worst, buys a redundant `aex`.
 
@@ -659,7 +659,7 @@ incomplete: a kind left out of one does not fail to build, does not fail to asse
 not fail to link. It miscompiles. Whoever adds a `Besm_InstrKind` owes both of these:
 
 - **A kind with a memory operand must be added to `instr_reads_auto_slot`**
-  ([peephole.c](../backend/besm6/peephole.c)). It ends in `default: return false` — "this
+  ([peephole.c](peephole.c)). It ends in `default: return false` — "this
   instruction reads no frame slot" — so an omitted kind tells dead-temp-store elimination (5.2)
   that the temporary feeding it is never read, and the store that materialises its operand is
   deleted out from under it. This is why `WTC` is in the list.
@@ -694,7 +694,7 @@ Structure:
    compilers organize peephole passes and keeps each rule independently testable.
 3. **Rewrite by splicing the linked list.** Removing a node means relinking its predecessor's
    `next` and freeing the node with `besm_free_instr`
-   ([besm_free.c](../backend/besm6/besm_free.c)), which also frees its heap-owned `name`. Be
+   ([besm_free.c](besm_free.c)), which also frees its heap-owned `name`. Be
    careful never to free a `name` string that another node still points at (the emit helpers
    `xstrdup` their names, so each node owns its own copy — splicing one node never dangles
    another). The tracked location does borrow a node's `name`, but only ever a node that
@@ -703,7 +703,7 @@ Structure:
    enables further `ntr` collapsing), so the pass repeats over the list until a full sweep
    makes no change.
 
-Hook it into `codegen_function` ([codegen.c](../backend/besm6/codegen.c)) immediately before
+Hook it into `codegen_function` ([codegen.c](codegen.c)) immediately before
 `emit_madlen_module`, so emission always sees the optimized list.
 
 ### Correctness invariants
@@ -772,5 +772,5 @@ behind.
 - [Besm6_Calling_Conventions.md](Besm6_Calling_Conventions.md) — `b/save`/`b/ret`, R = 7
   on entry, the r6/r7 frame registers.
 - [Madlen.md](Madlen.md) — the assembler statement format used throughout.
-- [TAC_Optimization.md](TAC_Optimization.md) — the machine-independent optimizations that run
+- [TAC_Optimization.md](../../docs/TAC_Optimization.md) — the machine-independent optimizations that run
   earlier and are deliberately *not* duplicated here.

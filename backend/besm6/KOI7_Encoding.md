@@ -16,7 +16,7 @@ code generator performs.
 ## Where the conversion lives in the compiler
 
 The conversion is implemented by `utf8_to_koi7()` in
-[backend/besm6/utf8_to_koi7.c](../backend/besm6/utf8_to_koi7.c). It decodes each UTF-8
+[backend/besm6/utf8_to_koi7.c](utf8_to_koi7.c). It decodes each UTF-8
 sequence to a Unicode code point and maps it through `unicode_to_koi7()`:
 
 - The ASCII range (`U+0000`..`U+00FF`) goes through the `tab0[256]` lookup table.
@@ -24,7 +24,7 @@ sequence to a Unicode code point and maps it through `unicode_to_koi7()`:
   (`U+2000`..`U+25FF`) are handled by `switch` arms.
 - Anything unmapped becomes `0` (a NUL byte, which the printer ignores).
 
-It is invoked from [backend/besm6/static.c](../backend/besm6/static.c) when emitting
+It is invoked from [backend/besm6/static.c](static.c) when emitting
 string constants (`string_constant_log_items`) and `char` array initializers
 (`char_init_item_bytes`, `char_array_log_items`). The resulting KOI-7 bytes are packed
 six-to-a-word into 48-bit BESM-6 words and emitted as `,log,` data.
@@ -106,7 +106,7 @@ UTF-8 can name KOI-7 glyphs directly:
   `≥`→`0x0F`, `⊃`→`0x1C`, `∨`→`0x1E`, `∧`→`&`, `―`→`0x15`, `↑`→`0x16`, `⏨`→`0x17`,
   the directional quotes `‘`→`0x10` / `’`→`0x1B`.
 
-See the `switch` arms in [utf8_to_koi7.c](../backend/besm6/utf8_to_koi7.c) for the full
+See the `switch` arms in [utf8_to_koi7.c](utf8_to_koi7.c) for the full
 list. Any code point not covered maps to `0` and is dropped.
 
 ## Reproducing the data
@@ -151,9 +151,9 @@ of `koi7probe.lst` shows `<i>:<glyph>:` and reveals the glyph for code `i`.
 
 ## See also
 
-- [docs/Besm6_Data_Representation.md](Besm6_Data_Representation.md) — scalar type layouts,
+- [backend/besm6/Besm6_Data_Representation.md](Besm6_Data_Representation.md) — scalar type layouts,
   including how `char` packs into 48-bit words.
-- [docs/Madlen.md](Madlen.md) — Madlen assembler syntax and six-characters-per-word text
+- [backend/besm6/Madlen.md](Madlen.md) — Madlen assembler syntax and six-characters-per-word text
   constants.
 - [КОИ-7 on Wikipedia](https://ru.wikipedia.org/wiki/КОИ-7) — the reference cited in the
   conversion source.

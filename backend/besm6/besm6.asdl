@@ -61,7 +61,7 @@
 --   "Stack mode" is triggered automatically when M=017 AND V=0 (offset+C=0);
 --   affected instructions adjust M[017] before or after the memory access.
 --
--- Calling convention (docs/Besm6_Calling_Conventions.md):
+-- Calling convention (backend/besm6/Besm6_Calling_Conventions.md):
 --   M[013] (r13): return address — set by "13 ,VJM, fun" on each call.
 --   M[014] (r14): negative argument count — set by caller.
 --   M[015] (r15): stack pointer.
@@ -91,9 +91,9 @@
 --   or as the operand (Call, Entry).
 --
 -- References:
---   "BESM-6 Instruction Set Reference" (docs/Besm6_Instruction_Set.md)
---   "BESM-6 C Calling Conventions"     (docs/Besm6_Calling_Conventions.md)
---   "Madlen assembler"                 (docs/Madlen.md)
+--   "BESM-6 Instruction Set Reference" (backend/besm6/Besm6_Instruction_Set.md)
+--   "BESM-6 C Calling Conventions"     (backend/besm6/Besm6_Calling_Conventions.md)
+--   "Madlen assembler"                 (backend/besm6/Madlen.md)
 --   Backend work plan                  (backend/besm6/TODO.md)
 
 module Besm6 {
@@ -200,7 +200,7 @@ module Besm6 {
     -- CPU register, A carries the data in both directions, and one bit of the address
     -- selects the direction (04000 for EXT, 0200 for MOD).  Distinct from the UTC/WTC
     -- C-register group above, despite the name.  Emitted for the <besm6.h> intrinsics
-    -- (docs/Besm6_Intrinsics.md).
+    -- (backend/besm6/Besm6_Intrinsics.md).
     | EXT      -- A ↔ peripheral register named by EA        (opcode 033 F1)
     | MOD      -- A ↔ CPU-internal register named by EA      (opcode 002 F1)
 

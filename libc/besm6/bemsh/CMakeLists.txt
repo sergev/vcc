@@ -84,4 +84,4 @@ add_custom_command(
 # libruntime.a/libc0.a.
 add_custom_target(besm-libc-bemsh ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libbem.bin)
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libbem.bin DESTINATION share/besm6/lib)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libbem.bin DESTINATION share/vcc/besm6/lib)

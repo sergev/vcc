@@ -95,7 +95,7 @@ static void bemsh_format_real(char *buf, size_t n, double val)
 }
 
 // Encode a C double as a native BESM-6 48-bit floating-point word (see
-// docs/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
+// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
 // sign, bits 40-1 = 40-bit two's-complement mantissa.  Copied from emit_unix.c's
 // unix_real_word so the two emitters stay decoupled; used only for the octal fallback below.
 static uint64_t bemsh_real_word(double v)

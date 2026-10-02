@@ -1,5 +1,5 @@
 //
-// The BESM-6 compiler intrinsics declared in <besm6.h> (docs/Besm6_Intrinsics.md).
+// The BESM-6 compiler intrinsics declared in <besm6.h> (backend/besm6/Besm6_Intrinsics.md).
 //
 // The back end lowers them inline (backend/besm6/intrinsics.c, covered by
 // backend/besm6/test/intrinsics_tests.cpp); these tests stop at typecheck and

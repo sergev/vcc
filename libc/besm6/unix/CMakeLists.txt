@@ -149,4 +149,4 @@ add_custom_target(besm-libc-unix ALL
 
 # Only the compiler's own helper set is installed.  libc0.a and crt0.o stay build-local
 # (our test harnesses link them); v7besm supplies the real libc.a and crt0.o.
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libruntime.a DESTINATION share/besm6/lib)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libruntime.a DESTINATION share/vcc/besm6/lib)

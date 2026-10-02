@@ -1,5 +1,5 @@
 //
-// The <besm6.h> compiler intrinsics (docs/Besm6_Intrinsics.md), Tier 2: the five
+// The <besm6.h> compiler intrinsics (backend/besm6/Besm6_Intrinsics.md), Tier 2: the five
 // bit-manipulation instructions that have no C equivalent — gather, scatter, population
 // count, highest set bit, and the machine's own end-around-carry add; Tier 1: the halt, and
 // the two supervisor instructions `ext`/`mod` that are the machine's only I/O.

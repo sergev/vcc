@@ -186,7 +186,7 @@ types map to one representation. After instruction selection a peephole-optimiza
 removing the store/reload, mode-register (`ntr`), compare/branch, and branch/label residue
 that one-node-at-a-time selection leaves behind; a post-peephole frame-slot reclamation pass
 then shrinks the stack frame to the slots still in use. See
-[Peephole_Rewrites.md](Peephole_Rewrites.md) for the catalogue of rewrites.
+[Peephole_Rewrites.md](../backend/besm6/Peephole_Rewrites.md) for the catalogue of rewrites.
 
 ### RISC-V backend (`backend/riscv/`)
 

@@ -1,7 +1,7 @@
 /*
  * <limits.h> — sizes of integer types (C11 §7.10), BESM-6 target.
  *
- * BESM-6 integer model (see docs/Besm6_Data_Representation.md):
+ * BESM-6 integer model (see backend/besm6/Besm6_Data_Representation.md):
  *   - CHAR_BIT is 8; plain char is UNSIGNED.
  *   - Every integer occupies one 48-bit word.
  *   - Signed int/short/long/long long use a 41-bit two's-complement field

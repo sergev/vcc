@@ -6,7 +6,7 @@
  * instructions, and the machine's bit-manipulation instructions have no C
  * equivalent at all.  The intrinsics below expose them directly, so that a
  * kernel or a driver can be written in C instead of assembly.  They are
- * specified in docs/Besm6_Intrinsics.md.
+ * specified in backend/besm6/Besm6_Intrinsics.md.
  *
  * Status: all twelve are lowered — Tier 1 (ext, mod, the halt, and the three
  * mode-word intrinsics), all five Tier-2 bit manipulations, and Tier 3 (the
@@ -20,7 +20,7 @@
  * Every intrinsic that carries a machine word takes and returns `unsigned`,
  * never `int`.  A BESM-6 word is 48 bits, but a signed int on this target holds
  * only 41 of them; a device control word or a ГРП value (whose bit 48 is live)
- * would not survive the trip.  See docs/Besm6_Data_Representation.md.
+ * would not survive the trip.  See backend/besm6/Besm6_Data_Representation.md.
  *
  * The three PSW intrinsics are the deliberate exception: they are typed `int`.
  * What they carry is not a machine word but a 15-bit address-field value — PSW

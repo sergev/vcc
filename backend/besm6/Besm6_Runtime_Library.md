@@ -3,7 +3,7 @@
 These routines are emitted automatically by the compiler. They implement the C calling
 convention and the operators that have no direct BESM-6 instruction equivalents. They are
 distinct from the *user-callable standard library* (`printf`, `malloc`, `strlen`, …);
-for that, see [Standard_Include_Files.md](Standard_Include_Files.md).
+for that, see [Standard_Include_Files.md](../../docs/Standard_Include_Files.md).
 
 For a detailed description of the calling convention, see
 [Besm6_Calling_Conventions.md](Besm6_Calling_Conventions.md).
@@ -102,7 +102,7 @@ discussed with the ABI routines.
 
 ---
 
-### `b/save` — [b_save.madlen](../libc/besm6/madlen/b_save.madlen)
+### `b/save` — [b_save.madlen](../../libc/besm6/madlen/b_save.madlen)
 
 Called on entry to every C function that has **one or more parameters**.
 
@@ -136,7 +136,7 @@ The compiler emits:
 
 ---
 
-### `b/save0` — [b_save0.madlen](../libc/besm6/madlen/b_save0.madlen)
+### `b/save0` — [b_save0.madlen](../../libc/besm6/madlen/b_save0.madlen)
 
 Called on entry to every C function with **no parameters**.
 
@@ -161,7 +161,7 @@ so `b/ret` can use the same unwind calculation regardless of parameter count.
 
 ---
 
-### `b/ret` — [b_ret.madlen](../libc/besm6/madlen/b_ret.madlen)
+### `b/ret` — [b_ret.madlen](../../libc/besm6/madlen/b_ret.madlen)
 
 Called at every exit point of a C function. The return value must be in A before
 jumping to `b/ret`.
@@ -216,7 +216,7 @@ quotient exponent is corrected with `a+x, =:64`, and the exponent field is strip
 `aax, =37 7777 7777 7777` — a 42-bit mask (14 octal digits) that zeroes bits 48–42 and
 leaves the 41-bit signed result (sign bit 41 + 40-bit magnitude) in A.
 
-#### `b/mul` — [b_mul.madlen](../libc/besm6/madlen/b_mul.madlen)
+#### `b/mul` — [b_mul.madlen](../../libc/besm6/madlen/b_mul.madlen)
 
 Computes `a * b` (signed, low 41-bit result).
 
@@ -241,7 +241,7 @@ the full 48-bit range uses `b/umul` (see *Unsigned Integer Arithmetic* below).
 suppress bits with `ntr 3`; the closing `aax` mask is a logical op, so the exit lands on
 **`NTR 3` / ω = logical** (`R = 7`) — the implicit-restore idiom.
 
-#### `b/div` — [b_div.madlen](../libc/besm6/madlen/b_div.madlen)
+#### `b/div` — [b_div.madlen](../../libc/besm6/madlen/b_div.madlen)
 
 Computes `a / b` (signed, truncated toward zero — C11 §6.5.5).
 
@@ -265,7 +265,7 @@ after the sign-reapply `avx` — is itself a logical op, so it both extracts the
 the caller expects (otherwise the additive ω left by `avx` would invert the next
 `uza`/`u1a`, e.g. printf's decimal-digit loop) is supplied by that mask.
 
-#### `b/mod` — [b_mod.madlen](../libc/besm6/madlen/b_mod.madlen)
+#### `b/mod` — [b_mod.madlen](../../libc/besm6/madlen/b_mod.madlen)
 
 Computes `a % b` (signed remainder; result takes the sign of the **dividend** — C11
 §6.5.5).
@@ -308,7 +308,7 @@ additive unit misreads as an exponent — so unsigned add/subtract need software
 
 Separate helpers are therefore required for the full 48-bit unsigned range.
 
-#### `b/uadd` — [b_uadd.madlen](../libc/besm6/madlen/b_uadd.madlen) — `a + b` (unsigned)
+#### `b/uadd` — [b_uadd.madlen](../../libc/besm6/madlen/b_uadd.madlen) — `a + b` (unsigned)
 
 Receives two 48-bit unsigned values (`a` at `mem[r15−1]`, `b` in A). Returns the 48-bit
 modular sum in A. Adds the two operands in 24-bit half-words with explicit carry propagation
@@ -321,7 +321,7 @@ core sum is `arx`, which leaves *multiplicative* ω; each return path therefore 
 no-op `,aox,` (OR `mem[0] = 0`) to land on **`NTR 3` / ω = logical** (`R = 7`). (The two
 single-`*large` paths already close with the bit-48-restore `aex`, a logical op.)
 
-#### `b/usub` — [b_usub.madlen](../libc/besm6/madlen/b_usub.madlen) — `a − b` (unsigned)
+#### `b/usub` — [b_usub.madlen](../../libc/besm6/madlen/b_usub.madlen) — `a − b` (unsigned)
 
 Returns the 48-bit modular difference `a − b` in A. Negates `b` (complement plus one) and
 adds it to `a`, handling the bit-48 carry explicitly so the exponent-field bits participate
@@ -331,7 +331,7 @@ as plain value bits. Underflow wraps modulo 2⁴⁸.
 entry-ω-agnostic). The `b == 0` path closes with `stx` (logical); the general path tail-jumps
 into `b/uadd` and inherits its restored exit. Either way: **`NTR 3` / ω = logical** (`R = 7`).
 
-#### `b/umul` — [b_umul.madlen](../libc/besm6/madlen/b_umul.madlen) — `a * b` (unsigned)
+#### `b/umul` — [b_umul.madlen](../../libc/besm6/madlen/b_umul.madlen) — `a * b` (unsigned)
 
 Returns the low 48 bits of the unsigned product `a * b` in A. Adapted from the two-path
 `u_mul_u` routine of a sibling 64-bit/52-bit machine. The `A*X` instruction natively forms
@@ -358,7 +358,7 @@ operands, then repack the low 48 bits from the A:Y pair) is inlined at each of t
 multiply sites. The two cross-product addends are each `< 2⁸`, so their sum never carries
 past bit 48 and a plain `ARX` add suffices.
 
-#### `b/udiv` — [b_udiv.madlen](../libc/besm6/madlen/b_udiv.madlen) — `a / b` (unsigned)
+#### `b/udiv` — [b_udiv.madlen](../../libc/besm6/madlen/b_udiv.madlen) — `a / b` (unsigned)
 
 Receives two 48-bit unsigned values (`a` at `mem[r15−1]`, `b` in A). Returns the
 unsigned quotient in A, truncated toward zero. Division by zero returns 0
@@ -380,7 +380,7 @@ The routine carries no `,base,` directive: the sub-helpers it calls (`b/div`, `b
 `b/uadd`, `b/uge`, `b/usub`) reload `r14` with their own base and never restore it, so all
 literals and labels are addressed absolutely.
 
-#### `b/umod` — [b_umod.madlen](../libc/besm6/madlen/b_umod.madlen) — `a % b` (unsigned)
+#### `b/umod` — [b_umod.madlen](../../libc/besm6/madlen/b_umod.madlen) — `a % b` (unsigned)
 
 Returns the unsigned remainder over the full 48-bit range from the identity
 `r = a − (a÷b)·b`, composing the proven full-width helpers `b/udiv`, `b/umul`, and `b/usub`
@@ -426,13 +426,13 @@ r15=017), computing A = b XOR a.
 
 | Routine | Source | C op | Key instruction | ω mode | Branch taken when |
 |---------|--------|------|-----------------|--------|-------------------|
-| `b/not` | [b_not.madlen](../libc/besm6/madlen/b_not.madlen) | `!b` | `aex` → A = b XOR 0 = b | Logical | `uza`: A = 0 (b = 0) |
-| `b/eq` | [b_eq.madlen](../libc/besm6/madlen/b_eq.madlen) | `a == b` | `15 ,aex,` → A = b XOR a | Logical | `uza`: A = 0 (a = b) |
-| `b/ne` | [b_ne.madlen](../libc/besm6/madlen/b_ne.madlen) | `a != b` | `15 ,aex,` → A = b XOR a | Logical | `u1a`: A ≠ 0 (a ≠ b) |
-| `b/lt` | [b_lt.madlen](../libc/besm6/madlen/b_lt.madlen) | `a < b` | `15 ,x-a,` → A = a − b | Additive | `u1a`: A < 0 (a < b) |
-| `b/le` | [b_le.madlen](../libc/besm6/madlen/b_le.madlen) | `a <= b` | `15 ,a-x,` → A = b − a | Additive | `uza`: A ≥ 0 (b ≥ a) |
-| `b/gt` | [b_gt.madlen](../libc/besm6/madlen/b_gt.madlen) | `a > b` | `15 ,a-x,` → A = b − a | Additive | `u1a`: A < 0 (b < a) |
-| `b/ge` | [b_ge.madlen](../libc/besm6/madlen/b_ge.madlen) | `a >= b` | `15 ,x-a,` → A = a − b | Additive | `uza`: A ≥ 0 (a ≥ b) |
+| `b/not` | [b_not.madlen](../../libc/besm6/madlen/b_not.madlen) | `!b` | `aex` → A = b XOR 0 = b | Logical | `uza`: A = 0 (b = 0) |
+| `b/eq` | [b_eq.madlen](../../libc/besm6/madlen/b_eq.madlen) | `a == b` | `15 ,aex,` → A = b XOR a | Logical | `uza`: A = 0 (a = b) |
+| `b/ne` | [b_ne.madlen](../../libc/besm6/madlen/b_ne.madlen) | `a != b` | `15 ,aex,` → A = b XOR a | Logical | `u1a`: A ≠ 0 (a ≠ b) |
+| `b/lt` | [b_lt.madlen](../../libc/besm6/madlen/b_lt.madlen) | `a < b` | `15 ,x-a,` → A = a − b | Additive | `u1a`: A < 0 (a < b) |
+| `b/le` | [b_le.madlen](../../libc/besm6/madlen/b_le.madlen) | `a <= b` | `15 ,a-x,` → A = b − a | Additive | `uza`: A ≥ 0 (b ≥ a) |
+| `b/gt` | [b_gt.madlen](../../libc/besm6/madlen/b_gt.madlen) | `a > b` | `15 ,a-x,` → A = b − a | Additive | `u1a`: A < 0 (b < a) |
+| `b/ge` | [b_ge.madlen](../../libc/besm6/madlen/b_ge.madlen) | `a >= b` | `15 ,x-a,` → A = a − b | Additive | `uza`: A ≥ 0 (a ≥ b) |
 
 **Why pairs share an instruction:** `b/lt`/`b/ge` both compute `a − b` and test opposite
 ω conditions (`U1A` vs `UZA`). `b/le`/`b/gt` both compute `b − a` and test opposite
@@ -459,19 +459,19 @@ test never reads bit 48 as a sign, it is correct across the entire 48-bit unsign
 Each receives the two 48-bit unsigned operands in the standard helper convention
 (`a` at `mem[r15−1]`, `b` in A) and returns 0 or 1 in A.
 
-#### `b/ult` — [b_ult.madlen](../libc/besm6/madlen/b_ult.madlen) — `a < b` (unsigned)
+#### `b/ult` — [b_ult.madlen](../../libc/besm6/madlen/b_ult.madlen) — `a < b` (unsigned)
 
 Packs `a ⊕ b` under `b` and extracts bit 48 — the borrow of `a − b`, i.e. `a < b`.
 
-#### `b/ule` — [b_ule.madlen](../libc/besm6/madlen/b_ule.madlen) — `a <= b` (unsigned)
+#### `b/ule` — [b_ule.madlen](../../libc/besm6/madlen/b_ule.madlen) — `a <= b` (unsigned)
 
 Packs `a ⊕ b` under `a` and extracts bit 48 (= `a > b`), then inverts it against `b/true`.
 
-#### `b/ugt` — [b_ugt.madlen](../libc/besm6/madlen/b_ugt.madlen) — `a > b` (unsigned)
+#### `b/ugt` — [b_ugt.madlen](../../libc/besm6/madlen/b_ugt.madlen) — `a > b` (unsigned)
 
 Packs `a ⊕ b` under `a` and extracts bit 48 — the borrow of `b − a`, i.e. `a > b`.
 
-#### `b/uge` — [b_uge.madlen](../libc/besm6/madlen/b_uge.madlen) — `a >= b` (unsigned)
+#### `b/uge` — [b_uge.madlen](../../libc/besm6/madlen/b_uge.madlen) — `a >= b` (unsigned)
 
 Packs `a ⊕ b` under `b` and extracts bit 48 (= `a < b`), then inverts it against `b/true`.
 
@@ -493,10 +493,10 @@ so — unlike `b/div`/`b/mul` — no INT-format bridge is needed.
 
 | Routine | Source | Operation | Subtraction | Group | True condition |
 |---------|--------|-----------|-------------|-------|----------------|
-| `b/flt` | [b_flt.madlen](../libc/besm6/madlen/b_flt.madlen) | `a < b` | `15 ,x-a,` → A = a − b | Additive | `u1a`: A < 0 (a < b) |
-| `b/fle` | [b_fle.madlen](../libc/besm6/madlen/b_fle.madlen) | `a <= b` | `15 ,a-x,` → A = b − a | Additive | `uza`: A ≥ 0 (b ≥ a) |
-| `b/fgt` | [b_fgt.madlen](../libc/besm6/madlen/b_fgt.madlen) | `a > b` | `15 ,a-x,` → A = b − a | Additive | `u1a`: A < 0 (b < a) |
-| `b/fge` | [b_fge.madlen](../libc/besm6/madlen/b_fge.madlen) | `a >= b` | `15 ,x-a,` → A = a − b | Additive | `uza`: A ≥ 0 (a ≥ b) |
+| `b/flt` | [b_flt.madlen](../../libc/besm6/madlen/b_flt.madlen) | `a < b` | `15 ,x-a,` → A = a − b | Additive | `u1a`: A < 0 (a < b) |
+| `b/fle` | [b_fle.madlen](../../libc/besm6/madlen/b_fle.madlen) | `a <= b` | `15 ,a-x,` → A = b − a | Additive | `uza`: A ≥ 0 (b ≥ a) |
+| `b/fgt` | [b_fgt.madlen](../../libc/besm6/madlen/b_fgt.madlen) | `a > b` | `15 ,a-x,` → A = b − a | Additive | `u1a`: A < 0 (b < a) |
+| `b/fge` | [b_fge.madlen](../../libc/besm6/madlen/b_fge.madlen) | `a >= b` | `15 ,x-a,` → A = a − b | Additive | `uza`: A ≥ 0 (a ≥ b) |
 
 Floating-point `==` and `!=` are pure bit equality (`AEX` + `UZA`/`U1A`), which is
 type-independent, so they reuse `b/eq` and `b/ne` rather than dedicated FP helpers.
@@ -518,7 +518,7 @@ INT exponent, dropping the fraction. For a **non-negative** value this truncates
 zero; for a negative two's-complement mantissa it rounds toward −∞ (floors), so the signed
 helper brackets it with an absolute value.
 
-#### `b/dtoi` — [b_dtoi.madlen](../libc/besm6/madlen/b_dtoi.madlen) — `double` → signed `int`
+#### `b/dtoi` — [b_dtoi.madlen](../../libc/besm6/madlen/b_dtoi.madlen) — `double` → signed `int`
 
 Receives the 48-bit native FP value in A (no operand on the stack); returns the
 truncated 41-bit signed integer in A.
@@ -537,7 +537,7 @@ not fit the 41-bit signed range and overflow (implementation-defined, C11 §6.3.
 closing exponent-mask `aax` is logical, so the exit is **`NTR 3` / ω = logical** (`R = 7`) —
 the implicit-restore idiom (same as `b/div`).
 
-#### `b/dtou` — [b_dtou.madlen](../libc/besm6/madlen/b_dtou.madlen) — `double` → unsigned `int`
+#### `b/dtou` — [b_dtou.madlen](../../libc/besm6/madlen/b_dtou.madlen) — `double` → unsigned `int`
 
 Receives the FP value in A; returns the full 48-bit unsigned result in A. The signed
 realign+mask only recovers 41 bits, so for the whole unsigned range `b/dtou` mirrors
@@ -549,7 +549,7 @@ is undefined, as in C.
 *ω/NTR:* alternates `ntr 0` (FP multiply / normalize) and `ntr 3` (realign) per half; the
 final recombine `aox` is logical, so the exit is **`NTR 3` / ω = logical** (`R = 7`).
 
-#### `b/utod` — [b_utod.madlen](../libc/besm6/madlen/b_utod.madlen) — unsigned `int` → `double`
+#### `b/utod` — [b_utod.madlen](../../libc/besm6/madlen/b_utod.madlen) — unsigned `int` → `double`
 
 Receives the 48-bit unsigned value in A; returns the native FP value in A. The inline
 signed trick cannot be used because a 48-bit unsigned carries data in the exponent field
@@ -595,7 +595,7 @@ from the MSB is `5 - offset_enc`, and advancing the pointer one byte *decrements
 > `b/umod` were built this way from the start. Read-only `.data` tables (`ttab`, `mask`, `shift`)
 > stay static: sharing those is safe. **Keep any future port of a Madlen helper reentrant.**
 
-#### `b/stb` — [b_stb.madlen](../libc/besm6/madlen/b_stb.madlen) — store one byte
+#### `b/stb` — [b_stb.madlen](../../libc/besm6/madlen/b_stb.madlen) — store one byte
 
 Read-modify-write of a single byte through a fat pointer. Lightweight convention: the fat
 pointer `a` is on the stack top (popped by the helper) and the byte value `b` is in A. The
@@ -603,7 +603,7 @@ helper masks the byte, clears the target byte of the containing word via an offs
 mask table, ORs the new byte into place via an offset-indexed shift table, writes the word
 back, and returns the stored byte in A.
 
-#### `b/pinc` / `b/pdec` — [b_pinc.madlen](../libc/besm6/madlen/b_pinc.madlen) / [b_pdec.madlen](../libc/besm6/madlen/b_pdec.madlen) — `char*`++ / `char*`--
+#### `b/pinc` / `b/pdec` — [b_pinc.madlen](../../libc/besm6/madlen/b_pinc.madlen) / [b_pdec.madlen](../../libc/besm6/madlen/b_pdec.madlen) — `char*`++ / `char*`--
 
 Increment/decrement a fat pointer by one byte. Operand in A, result in A (no stack). The
 common case adjusts `offset_enc` by ∓1 with a single end-around add; the wrap case rebuilds
@@ -614,7 +614,7 @@ address.
 ends with a logical `aox`, so the exit is **`NTR 3` / ω = logical** (`R = 7`). (The interior
 `arx` end-around adds leave multiplicative ω transiently, but a logical op always follows.)
 
-#### `b/padd` — [b_padd.madlen](../libc/besm6/madlen/b_padd.madlen) — fat pointer + signed byte count
+#### `b/padd` — [b_padd.madlen](../../libc/besm6/madlen/b_padd.madlen) — fat pointer + signed byte count
 
 Adds a signed byte delta to a fat-or-bare base, returning a normalized fat pointer.
 Convention: base `a` on the stack top (popped), signed delta in A, result in A. A bare base
@@ -630,7 +630,7 @@ negative two's-complement mantissa) and the bias is subtracted back from the quo
 **explicitly** with `,ntr, 7` for the `m − 6q` and `word'` integer arithmetic. The closing
 `aox` (OR the marker word) is logical, so the exit is **`NTR 3` / ω = logical** (`R = 7`).
 
-#### `b/pdiff` — [b_pdiff.madlen](../libc/besm6/madlen/b_pdiff.madlen) — fat pointer − fat pointer
+#### `b/pdiff` — [b_pdiff.madlen](../../libc/besm6/madlen/b_pdiff.madlen) — fat pointer − fat pointer
 
 Computes the `ptrdiff_t` byte distance between two `char*`/`void*` fat pointers: `p - q`.
 Convention: minuend `a` (= `p`) on the stack top (popped), subtrahend `b` (= `q`) in A,
@@ -648,7 +648,7 @@ that branched on the difference would get the additive sign test instead of a ze
 
 ### I/O Routines
 
-#### `b/tout` — [b_tout.madlen](../libc/besm6/madlen/b_tout.madlen)
+#### `b/tout` — [b_tout.madlen](../../libc/besm6/madlen/b_tout.madlen)
 
 Writes a line to stdout via BESM-6 extracode 71 (Dubna monitor print-line service).
 

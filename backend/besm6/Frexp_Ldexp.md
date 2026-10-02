@@ -11,7 +11,7 @@ On the BESM-6, `float`, `double`, and `long double` are all one 48-bit machine w
 (see [Besm6_Data_Representation.md](Besm6_Data_Representation.md)), so the single `double`
 entry point serves every floating type; no `frexpf` / `ldexpf` variants are needed.
 
-Both functions are currently *declared* in [libc/besm6/include/math.h](../libc/besm6/include/math.h)
+Both functions are currently *declared* in [libc/besm6/include/math.h](../../libc/besm6/include/math.h)
 but not yet implemented (`modf` is the only implemented `<math.h>` routine so far). This
 document is the implementation proposal.
 
@@ -231,7 +231,7 @@ c        --- fraction := value with the exponent field forced to 64 ---
 - **The bias bookkeeping** is the only subtlety: the stored field is the true exponent plus
   64, `E+X` subtracts the bias when it adds, and `frexp` subtracts 64 explicitly after
   extracting the field. The exponent range that round-trips is `[−64, 63]`, matching
-  `FLT_MIN_EXP` / `FLT_MAX_EXP` in [float.h](../libc/besm6/include/float.h).
+  `FLT_MIN_EXP` / `FLT_MAX_EXP` in [float.h](../../libc/besm6/include/float.h).
 
 ## Integrating into `libc.bin`
 
@@ -240,9 +240,9 @@ c        --- fraction := value with the exponent field forced to 64 ---
 1. Added `libc/besm6/madlen/ldexp.madlen` and `libc/besm6/madlen/frexp.madlen` (no `b_`
    prefix — these are user-facing libc entry points, not internal `b/…` helpers).
 2. Appended `ldexp frexp` to the `LIBC_MADLEN` list in
-   [libc/besm6/CMakeLists.txt](../libc/besm6/CMakeLists.txt) (so they build into both the
+   [libc/besm6/CMakeLists.txt](../../libc/besm6/CMakeLists.txt) (so they build into both the
    Madlen `libc.bin` and, via the shared helper list, the Unix `libc0.a`).
-3. Listed the `frexp` / `ldexp` prototypes in [math.h](../libc/besm6/include/math.h) among
+3. Listed the `frexp` / `ldexp` prototypes in [math.h](../../libc/besm6/include/math.h) among
    the implemented routines.
 4. Added a `besm-tests` `CompileAndRun` round-trip case, run from `build/backend/besm6`
    (where `libc.bin` lives). If the exponent math misbehaves, trace it with

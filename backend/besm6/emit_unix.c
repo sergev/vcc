@@ -8,7 +8,7 @@
 #include "internal.h"
 
 // Encode a C double as a native BESM-6 48-bit floating-point word (see
-// docs/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
+// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
 // sign, bits 40-1 = 40-bit two's-complement mantissa.  b6as has no floating-point literal
 // syntax, so the Unix emitter renders every real as its octal bit pattern.
 static uint64_t unix_real_word(double v)
@@ -45,7 +45,7 @@ static uint64_t unix_real_word(double v)
 
 //
 // Unix (b6as) assembler emitter.  Renders the dialect-agnostic Besm_Module in the
-// AT&T-style syntax accepted by b6as (docs/Besm6_Unix_Assembler.md): segment directives
+// AT&T-style syntax accepted by b6as (backend/besm6/Besm6_Unix_Assembler.md): segment directives
 // (.text/.data/.bss), a `[modreg] mnem operand` line format, `#`-pool constant operands,
 // and a *translation* of the Madlen externals/relocation model into b6as's .globl/label/
 // .word model.  The four regular operand shapes and the mnemonic table are shared with the
@@ -266,7 +266,7 @@ static const Besm_Instr *emit_unix_special(FILE *out, const Besm_Instr *instr, S
         break;
 
     // Extracode: b6as has no mnemonic for opcodes 050-077, so they are written as the raw
-    // short-address opcode `$NN` in octal (docs/Besm6_Unix_Assembler.md §9.3) — `$77 4` is
+    // short-address opcode `$NN` in octal (backend/besm6/Besm6_Unix_Assembler.md §9.3) — `$77 4` is
     // the v7 write syscall, as in libc/besm6/unix/write.s.  A raw opcode takes the same
     // operand forms as a named instruction, so the (reg, addr) pair renders as usual.
     case BESM_IO_EXTRACODE: {

@@ -8,7 +8,7 @@
 #include "internal.h"
 #include "tac.h"
 
-// Lowering of the <besm6.h> compiler intrinsics (docs/Besm6_Intrinsics.md).
+// Lowering of the <besm6.h> compiler intrinsics (backend/besm6/Besm6_Intrinsics.md).
 //
 // An intrinsic *is* a call in the IR: it is declared as an ordinary prototype, so the
 // front end checks its arity and coerces its arguments like any other call, and it reaches
@@ -117,7 +117,7 @@ static IoAddrMode io_addr_classify(const Tac_Val *addr, int *imm)
 // already runs in.  It costs exactly what materializing the address into a register costs,
 // and unlike a register it is a shape the peephole can fold: rules #32(a) and #32(b) turn
 // `xta x` + `a+x =N` + this trailer into a lone `wtc x` plus the displacement N in the
-// instruction's own address field.  See docs/Peephole_Rewrites.md §5.10.
+// instruction's own address field.  See backend/besm6/Peephole_Rewrites.md §5.10.
 //
 static Besm_Instr *emit_io_op(Besm_Block *block, Besm_Instr **tail, const Frame *f,
                               Besm_InstrKind kind, const Tac_Val *addr, const Tac_Val *acc)

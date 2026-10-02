@@ -134,7 +134,7 @@ static void mad_operand(char *buf, size_t n, const Besm_Instr *i)
 // The Madlen mnemonic for kind `k`.  Madlen shares the Latin mnemonic table with the Unix
 // (b6as) emitter, with one exception: the 1972 autocode names no halt — `,stop,` is rejected
 // with "ошибка в коп" — so the halt is written as the raw octal machine code Madlen accepts in
-// place of any mnemonic (docs/Madlen.md §4, "Octal Machine Codes").
+// place of any mnemonic (backend/besm6/Madlen.md §4, "Octal Machine Codes").
 //
 // The digit count picks the instruction format, and both formats have an opcode 033: two
 // digits, `,33,`, is the Format-2 (long-address) 033 — the halt — while three digits, `,033,`,

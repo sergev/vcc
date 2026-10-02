@@ -1059,7 +1059,7 @@ Sections 1–13 describe the *language* as defined in the 1967 manual. This sect
 practical conventions for feeding Bemsh to the modern **`besmc`** driver (which runs the native
 *Макро-БЕМШ* translator inside the [`dubna`](Besm6_Unix_Assembler.md) simulator) and for running the
 result. These are the rules this project's BESM-6 C backend (`genbesm --bemsh`,
-[emit_bemsh.c](../backend/besm6/emit_bemsh.c)) obeys when it emits machine-generated Bemsh; several
+[emit_bemsh.c](emit_bemsh.c)) obeys when it emits machine-generated Bemsh; several
 were learned the hard way, by tracing wrong output on `dubna`, and are easy to get wrong by writing
 straight from the manual.
 

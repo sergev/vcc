@@ -423,7 +423,7 @@ data at the boundaries, not just within each layer.
 ### Lesson 4: Documentation as Executable Spec
 
 The ASDL files are not just comments — they're a formal specification of what the data
-structures must be. Similarly, [Besm6_Calling_Conventions.md](Besm6_Calling_Conventions.md)
+structures must be. Similarly, [Besm6_Calling_Conventions.md](../backend/besm6/Besm6_Calling_Conventions.md)
 is a precise contract. Having a written spec before implementation forces clarity about
 what you're building. Applied to any API or schema: write the spec first, implement second.
 

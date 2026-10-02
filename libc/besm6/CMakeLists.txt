@@ -126,14 +126,14 @@ add_custom_command(
 # available alongside the compiler and test executables.
 add_custom_target(besm-libc-dubna ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libc.bin)
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libc.bin DESTINATION share/besm6/lib)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libc.bin DESTINATION share/vcc/besm6/lib)
 
 #
 # The compiler-owned headers: the C11 freestanding subset (C11 §4) plus besm6.h.
 # These describe the compiler's own data model, its <stdarg.h> ABI and its
 # intrinsics, so they ship with the compiler that defines them.  The hosted
 # headers (stdio.h, string.h, stdlib.h, ...) stay uninstalled -- v7besm's libc.a
-# backs those and v7besm ships them.  share/besm6/include is the directory b6cc
+# backs those and v7besm ships them.  share/vcc/besm6/include is the directory b6cc
 # appends to every compilation.
 #
 install(FILES
@@ -147,7 +147,7 @@ install(FILES
     include/stddef.h
     include/stdint.h
     ${LIBC_COMMON_INCLUDE_DIR}/stdnoreturn.h
-    DESTINATION share/besm6/include)
+    DESTINATION share/vcc/besm6/include)
 
 # The Unix (b6as) runtime archives (libruntime.a, libc0.a).  A child scope so it inherits
 # LIBC_C_PORTABLE and LIBC_MADLEN (the reuse surface) set above.

@@ -1024,7 +1024,7 @@ TEST_F(BookTest, Chapter14_CompoundAssignConversion)
 {
     // `*i_ptr %= 4294967200U` runs in unsigned int (C11 §6.5.16.2p3): -50 converts to
     // 2^32 - 50 on LP64, giving 46; BESM-6 keeps the 41-bit pattern 2^41 - 50 (see
-    // docs/Besm6_Data_Representation.md), giving 49102.
+    // backend/besm6/Besm6_Data_Representation.md), giving 49102.
     std::string rem = IsTarget("besm6") ? "49102" : "46";
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     double d = 5.0;

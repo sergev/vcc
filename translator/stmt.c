@@ -64,7 +64,7 @@ static void collect_cases(TacCtx *ctx, Stmt *stmt, CaseList *list)
 // zeros).  Used for a 1-D char array and for each inner string row of a multi-dimensional
 // char array (whose contiguous rows the caller has already offset).  Char data keeps its
 // source (ASCII) encoding, like every scalar char value; only the static-data path repacks
-// to KOI-7 (which differs solely for lowercase Latin — see docs/KOI7_Encoding.md).
+// to KOI-7 (which differs solely for lowercase Latin — see backend/besm6/KOI7_Encoding.md).
 // With skip_zero the object was bulk-zeroed, so zero bytes are not stored.
 static void gen_char_array_string_init(TacCtx *ctx, const char *var_name, int base_offset,
                                        const Expr *str_expr, int array_bytes, bool skip_zero)

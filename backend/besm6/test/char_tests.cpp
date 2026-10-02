@@ -568,7 +568,7 @@ TEST_F(CodegenTest, CharRowPtrDifferenceRun)
 // contiguous (no per-row word padding).  Indexing m[i][j] decays the array to a fat byte
 // pointer and advances it by i*rowsize + j bytes.  Tests use UPPERCASE letters because the
 // static-data path packs strings as KOI-7, which folds lowercase Latin to uppercase codes
-// while char literals stay ASCII (see docs/KOI7_Encoding.md); uppercase keeps both equal.
+// while char literals stay ASCII (see backend/besm6/KOI7_Encoding.md); uppercase keeps both equal.
 
 // Runtime: static multi-dim char array — contiguous packing, per-row null padding, indexing.
 TEST_F(CodegenTest, MultiDimCharArrayStaticRun)

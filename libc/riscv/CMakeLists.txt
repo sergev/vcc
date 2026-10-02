@@ -40,7 +40,7 @@ add_test(
 # BESM-6, no other project provides a libc for this target.
 file(GLOB RISCV_TARGET_HEADERS ${RISCV_INCLUDE_DIR}/*.h)
 file(GLOB RISCV_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
-install(FILES ${RISCV_TARGET_HEADERS} ${RISCV_COMMON_HEADERS} DESTINATION share/riscv64/include)
+install(FILES ${RISCV_TARGET_HEADERS} ${RISCV_COMMON_HEADERS} DESTINATION share/vcc/riscv64/include)
 
 if(NOT RISCV_TOOLS_FOUND)
     message(STATUS "No RISC-V clang/llvm-ar: the RISC-V runtime is not built")
@@ -98,4 +98,4 @@ add_custom_target(riscv-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
 
 # The runtime, with the linker script for qemu `virt`.
-install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/riscv64/lib)
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/riscv64/lib)

@@ -13,9 +13,9 @@ reference: the [conformance summary](#conformance-summary) at the end lists all 
 in one table.
 
 For the underlying machine model the headers encode, keep
-[Besm6_Data_Representation.md](Besm6_Data_Representation.md) open alongside this one. For
+[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md) open alongside this one. For
 the helper routines the *compiler itself* emits (as opposed to the user-callable library
-described here), see [Besm6_Runtime_Library.md](Besm6_Runtime_Library.md).
+described here), see [Besm6_Runtime_Library.md](../backend/besm6/Besm6_Runtime_Library.md).
 
 ---
 
@@ -101,7 +101,7 @@ int main(void)
 ## The BESM-6 environment in one page
 
 Nearly every surprising thing in these headers traces back to a handful of hardware facts.
-They are documented fully in [Besm6_Data_Representation.md](Besm6_Data_Representation.md);
+They are documented fully in [Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md);
 here is the short version, each fact paired with its consequence for the library.
 
 | Hardware fact | Consequence for the headers |
@@ -196,7 +196,7 @@ significant.
 This header is usually subtle, but the BESM-6 calling convention makes it trivial and
 *exact*: every argument — `int`, pointer, `double`, even a fat `char *` — occupies one
 word, and arguments sit in consecutive words of the caller's parameter block (see
-[Besm6_Calling_Conventions.md](Besm6_Calling_Conventions.md)). Therefore:
+[Besm6_Calling_Conventions.md](../backend/besm6/Besm6_Calling_Conventions.md)). Therefore:
 
 - `va_list` is simply a word pointer;
 - `va_start(ap, last)` aims it just past the last named parameter;
@@ -380,7 +380,7 @@ into a no-op) and is deliberately **re-includable**: its meaning is recomputed a
 `<setjmp.h>` declares `jmp_buf`, `setjmp`, and `longjmp` for non-local jumps. A `jmp_buf`
 is an array of words large enough to save the registers the calling convention requires to
 be preserved — the return address (r13), the parameter and auto pointers (r6, r7), and the
-stack pointer (r15); see [Besm6_Calling_Conventions.md](Besm6_Calling_Conventions.md).
+stack pointer (r15); see [Besm6_Calling_Conventions.md](../backend/besm6/Besm6_Calling_Conventions.md).
 
 `<signal.h>` declares `signal`, `raise`, `sig_atomic_t`, and the `SIG*` numbers. The Dubna
 environment has no POSIX-style asynchronous signal delivery, so the practical use is

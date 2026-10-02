@@ -26,7 +26,7 @@ TEST_F(CodegenTest, LabelJump)
 // Selection emits `uza *L0 / uj *L1 / *L0:` (test the guard, skip the back-edge to exit).
 // Rule #31's conditional-over-jump inversion folds that to a single `u1a *L1` — branch
 // back to the loop top while the guard is nonzero — leaving the now-unreferenced exit
-// label `*L0:` in place.  See docs/Peephole_Rewrites.md §5.5.
+// label `*L0:` in place.  See backend/besm6/Peephole_Rewrites.md §5.5.
 TEST_F(CodegenTest, WhileLoopJumpIfZero)
 {
     std::string output = CompileToMadlen("void foo(int x) { while (x) {} }");

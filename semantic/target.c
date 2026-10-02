@@ -4,7 +4,7 @@
 #include <string.h>
 
 //
-// The <besm6.h> intrinsics with an immediate first argument (docs/Besm6_Intrinsics.md
+// The <besm6.h> intrinsics with an immediate first argument (backend/besm6/Besm6_Intrinsics.md
 // §3.3, §3.4, §5).
 //
 static const ImmediateArg besm6_immediate_args[] = {

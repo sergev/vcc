@@ -288,7 +288,7 @@ arithmetic *agrees* with the model the book's program was written against. Where
 disagree, the test cannot pass, and pretending otherwise would be dishonest.
 
 The disagreements all trace back to a handful of architectural facts. For the full story see
-[Besm6_Data_Representation.md](Besm6_Data_Representation.md); the essentials:
+[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md); the essentials:
 
 | Aspect | BESM-6 | The book's x86 model |
 |---|---|---|
@@ -350,7 +350,7 @@ perfectly in range:
   This means **a book test must be updated so that its *external* names — functions and
   file-scope globals, anything that becomes a Madlen label — are unique within their first 8
   characters** (after the backend's `_`/`$`/`%`→`*`/`/` substitution; see
-  [Madlen.md §3](Madlen.md)). The collision is silent: the assembler/loader merges the two
+  [Madlen.md §3](../backend/besm6/Madlen.md)). The collision is silent: the assembler/loader merges the two
   names and the later definition wins, so calls to one C name run the other's body — a wrong
   result with no compile- or link-time error. Rename the offending helpers to short distinct
   stems rather than disabling the test when that is the only obstacle: chapter 15's
@@ -597,6 +597,6 @@ If you remember three things from this article, make them these:
 
 From here, the natural next steps are to browse the committed chapter test files named
 throughout this article (`scanner/test/chapter1_tests.cpp`, `backend/common/test/book/chapter13_tests.cpp`,
-and their siblings), and to consult [Besm6_Data_Representation.md](Besm6_Data_Representation.md)
+and their siblings), and to consult [Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md)
 and the [Technical Reference](Technical_Reference.md) for the full phase-by-phase design and
 the target's data model.

@@ -34,7 +34,7 @@ std::string mangle(const char *src)
 }
 
 // A leading letter, or a leading '_' (Dubna renders it as the Cyrillic letter Ю, which
-// satisfies Bemsh's "labels must begin with a letter" rule — see docs/Bemsh.md §4).
+// satisfies Bemsh's "labels must begin with a letter" rule — see backend/besm6/Bemsh.md §4).
 bool letter_first(const std::string &s)
 {
     if (s.empty())

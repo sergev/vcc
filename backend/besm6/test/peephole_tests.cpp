@@ -6,11 +6,11 @@
 //
 // Rule #27: an `atx reg,off` that stores A to a frame slot leaves the value in A,
 // so an immediately following `xta reg,off` reload of the same slot is redundant
-// and is deleted.  See docs/Peephole_Rewrites.md §5.1.
+// and is deleted.  See backend/besm6/Peephole_Rewrites.md §5.1.
 //
 // Rule #28: once #27 removes the reload, the `atx` of a single-use '%'-temporary is
 // dead — nothing reads the slot before the block ends or it is overwritten — and is
-// removed too, leaving the result live only in A.  See docs/Peephole_Rewrites.md §5.2.
+// removed too, leaving the result live only in A.  See backend/besm6/Peephole_Rewrites.md §5.2.
 //
 
 // The sum temporary's store and reload are both gone: #27 drops the `7 ,xta,` reload
@@ -135,7 +135,7 @@ TEST_F(CodegenTest, TempAcrossBranchBehaviorUnchanged)
 // `ntr 7` (restore) immediately chased by a `ntr 0` (re-enter FP mode).  Rule #29(b)
 // drops the dead `ntr 7` and #29(a) drops the now-redundant `ntr 0`, so R = 0 is held
 // across both `a+x` and restored once at the end: a single `,ntr, 0` … `,ntr, 7`
-// bracket.  See docs/Peephole_Rewrites.md §5.3.
+// bracket.  See backend/besm6/Peephole_Rewrites.md §5.3.
 TEST_F(CodegenTest, ConsecutiveFpOpsCoalesceNtr)
 {
     std::string output = CompileToMadlen(
@@ -177,8 +177,8 @@ TEST_F(CodegenTest, FpCoalesceBehaviorUnchanged)
 // or reloaded.  This is the emergent product of rule #27 (which drops the reload) and rule
 // #28 (which drops the now-dead store), made correct by the runtime helpers' logical-ω
 // exit contract — every comparison helper leaves ω consistent with its returned A, so the
-// `,uza,` tests the result without a reload.  See docs/Peephole_Rewrites.md §5.4 and the
-// "ω mode and the AU mode register R" section of docs/Besm6_Runtime_Library.md.
+// `,uza,` tests the result without a reload.  See backend/besm6/Peephole_Rewrites.md §5.4 and the
+// "ω mode and the AU mode register R" section of backend/besm6/Besm6_Runtime_Library.md.
 //
 // The fused shape is `xta / xts / ,call, b/lt / ,uza,` with no `,atx,`/`,xta,` of the
 // comparison temporary between the call and the branch.
@@ -249,7 +249,7 @@ TEST_F(CodegenTest, ArithmeticBehaviorUnchanged)
     EXPECT_EQ("42\n", out);
 }
 
-// Rule #31 — branch / label cleanup.  See docs/Peephole_Rewrites.md §5.5.
+// Rule #31 — branch / label cleanup.  See backend/besm6/Peephole_Rewrites.md §5.5.
 
 // Rule #31(b) on the epilogue: `return x;` emits `,uj, b/ret` from the RETURN
 // instruction, then the function epilogue emits a second `,uj, b/ret`.  The second is
@@ -595,7 +595,7 @@ TEST_F(CodegenTest, DerefReloadBehaviorUnchanged)
 }
 
 //
-// Rule #32 — I/O address folding.  See docs/Peephole_Rewrites.md §5.10.
+// Rule #32 — I/O address folding.  See backend/besm6/Peephole_Rewrites.md §5.10.
 //
 // Instruction selection always delivers a non-constant `ext`/`mod`/extracode address through
 // the stack (`xts` pushes it while loading the accumulator operand, a stack-mode `wtc` pops
@@ -656,7 +656,7 @@ TEST_F(CodegenTest, IoAddressDisplacementTooLargeKept)
 }
 
 //
-// Rule #33 — ω fixup before a conditional branch.  See docs/Peephole_Rewrites.md §5.11.
+// Rule #33 — ω fixup before a conditional branch.  See backend/besm6/Peephole_Rewrites.md §5.11.
 //
 // `uza`/`u1a` test ω, and ω means "A = 0?" only under the logical group.  Instruction
 // selection loads the condition with an `xta` (logical) right before the branch, but rules

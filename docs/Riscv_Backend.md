@@ -77,13 +77,13 @@ After `make install`, which installs into `~/.local`:
 
 ```sh
 P=~/.local
-cc -E -nostdinc -I$P/share/riscv64/include hello.c -o hello.i    # preprocess
+cc -E -nostdinc -I$P/share/vcc/riscv64/include hello.c -o hello.i    # preprocess
 vparse hello.i hello.ast                                         # parse
 vlower -t riscv64 hello.ast hello.tac                            # check and lower
 vgenriscv64 hello.tac hello.s                                    # generate assembly
 clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c hello.s -o hello.o
-ld.lld -T $P/share/riscv64/lib/link.ld -o hello.elf \
-    $P/share/riscv64/lib/crt0.o hello.o $P/share/riscv64/lib/libc.a
+ld.lld -T $P/share/vcc/riscv64/lib/link.ld -o hello.elf \
+    $P/share/vcc/riscv64/lib/crt0.o hello.o $P/share/vcc/riscv64/lib/libc.a
 qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
     -kernel hello.elf
 ```

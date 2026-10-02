@@ -15,7 +15,7 @@
 // holds, *after* instruction selection and *before* Madlen emission.  It is the
 // backend's final polish: it removes the store/reload, mode-register, and
 // compare/branch residue that one-TAC-node-at-a-time selection necessarily leaves
-// behind.  See docs/Peephole_Rewrites.md for the theory and the worked before/after
+// behind.  See backend/besm6/Peephole_Rewrites.md for the theory and the worked before/after
 // sequences, and backend/besm6/TODO.md (Phase M) for the rule catalogue.
 //
 // Currently implemented: the framework itself (this file), rule #27 (redundant reload
@@ -24,7 +24,7 @@
 // before a conditional branch).  Rule #30 (compare → branch fusion) needs no
 // dedicated code: it is the emergent product of #27 (which drops the boolean reload) and
 // #28 (which drops the now-dead boolean store), made correct by the runtime helpers'
-// logical-ω exit contract (see docs/Besm6_Runtime_Library.md, "ω mode and the AU mode
+// logical-ω exit contract (see backend/besm6/Besm6_Runtime_Library.md, "ω mode and the AU mode
 // register R") — and, where the value comes from the machine's own arithmetic rather than
 // from a helper, by rule #33.  Rule #31's three control-flow rewrites — jump-to-next-label,
 // unreachable tail (which also collapses the duplicate `uj b/ret`), and conditional-over-jump
@@ -41,7 +41,7 @@
 // group as a whole — a consumer's `(reg,addr)` fields do not name a frame slot, and deleting
 // one while leaving its setter would re-bind C to whatever fell into the gap.  Rule #27 in
 // consequence matches on a `Loc`, the location a group or a plain `xta`/`atx` addresses,
-// rather than on a raw `(reg,off)` pair.  See docs/Peephole_Rewrites.md §5.9.
+// rather than on a raw `(reg,off)` pair.  See backend/besm6/Peephole_Rewrites.md §5.9.
 //
 
 //
@@ -124,7 +124,7 @@ static bool has_operand_symbol(const Besm_Instr *i)
 //
 // UZA and U1A do not test a latched flag.  They test ω, which the hardware *recomputes at
 // branch time* from the accumulator and the ω-mode field of the AU mode register R (bits
-// 5–3) — see docs/Besm6_Instruction_Set.md §4.  The field records the group of the last
+// 5–3) — see backend/besm6/Besm6_Instruction_Set.md §4.  The field records the group of the last
 // instruction that set it, and it selects what the branch means:
 //
 //     logical         ω = (A ≠ 0)          uza branches when A = 0     ← what C wants
@@ -139,7 +139,7 @@ static bool has_operand_symbol(const Besm_Instr *i)
 // from `if (x - y)`) or multiplicative ω (`arx`).  Rule #33 below restores it.
 //
 // An instruction either sets the field to one of the three groups, replaces the whole
-// register (`ntr`/`xtr`), or leaves it alone; docs/Besm6_Instruction_Set.md records which
+// register (`ntr`/`xtr`), or leaves it alone; backend/besm6/Besm6_Instruction_Set.md records which
 // for every opcode ("ω mode: Logical / Additive / Multiplicative / Kept / As set"), and
 // `omega_after` below is that table transcribed.
 //
@@ -173,7 +173,7 @@ static Omega omega_of_r(int r)
 
 // Does this EXT/MOD address select a *read*?  On a read the AU switches to logical mode,
 // because what arrives in A is a bit pattern rather than a number.  The selector bit is
-// 04000 for `ext` and 0200 for `mod` (docs/Besm6_Instruction_Set.md, opcodes 033 and 002).
+// 04000 for `ext` and 0200 for `mod` (backend/besm6/Besm6_Instruction_Set.md, opcodes 033 and 002).
 // Only a constant address in the instruction's own field can be classified; an address
 // delivered through the C register (rule #32's trailer) is not visible here.
 static bool io_reads(const Besm_Instr *i)
@@ -233,7 +233,7 @@ static Omega omega_after(const Besm_Instr *i)
         return OMEGA_UNKNOWN;
 
     // A call returns with logical ω: every runtime helper exits that way by contract (see
-    // docs/Besm6_Runtime_Library.md, "ω mode and the AU mode register R"), and a compiled
+    // backend/besm6/Besm6_Runtime_Library.md, "ω mode and the AU mode register R"), and a compiled
     // C function returns through b/ret, whose last accumulator ops are `stx`/`sti`.
     case BESM_BRANCH_CALL:
     case BESM_BRANCH_VJM:
@@ -504,7 +504,7 @@ static void state_step(PeepState *st, const Besm_Instr *i)
 }
 
 //
-// Rule #27 — redundant reload elimination.  Section 5.1 of docs/Peephole_Rewrites.md.
+// Rule #27 — redundant reload elimination.  Section 5.1 of backend/besm6/Peephole_Rewrites.md.
 //
 // `cur` is an `xta` reload of a location whose value the tracked state says A already holds
 // (the preceding `atx` to it stored the value and did not disturb A).  The reload is pure
@@ -518,7 +518,7 @@ static bool rule_redundant_reload(const Besm_Instr *cur, const PeepState *st)
 }
 
 //
-// Rule #29(a) — redundant NTR elimination.  See docs/Peephole_Rewrites.md §5.3.
+// Rule #29(a) — redundant NTR elimination.  See backend/besm6/Peephole_Rewrites.md §5.3.
 //
 // `cur` is an `ntr n` (SETR) that re-establishes a mode-register value R already
 // holds (the tracked state says R == n), so it has no effect; report a match so the
@@ -550,7 +550,7 @@ static const PeepRule rule_table[] = {
 #define NUM_RULES (sizeof(rule_table) / sizeof(rule_table[0]))
 
 //
-// Rule #28 — dead temp-store elimination.  See docs/Peephole_Rewrites.md §5.2.
+// Rule #28 — dead temp-store elimination.  See backend/besm6/Peephole_Rewrites.md §5.2.
 //
 // An `atx reg,off` that stores a compiler temporary's frame slot is dead when nothing
 // reads that slot before it is overwritten or the basic block ends.  Restricting to
@@ -639,7 +639,7 @@ static bool dead_temp_store(const Besm_Instr *cur, const Frame *frame, const boo
 }
 
 //
-// Rule #29(b) — dead NTR elimination.  See docs/Peephole_Rewrites.md §5.3.
+// Rule #29(b) — dead NTR elimination.  See backend/besm6/Peephole_Rewrites.md §5.3.
 //
 // Two FP ops in a row emit `ntr 7` (restore) immediately chased by `ntr 0` (re-enter
 // FP mode), with only R-independent moves between them.  The first `ntr` is dead: its
@@ -699,7 +699,7 @@ static bool dead_ntr_set(const Besm_Instr *cur)
 static void delete_instr(Besm_Block *block, Besm_Instr *prev, Besm_Instr *cur);
 
 //
-// Rule #31 — branch / label cleanup.  See docs/Peephole_Rewrites.md §5.5.
+// Rule #31 — branch / label cleanup.  See backend/besm6/Peephole_Rewrites.md §5.5.
 //
 // Three rewrites that need only the control-flow shape, not the tracked A/R/ω state.
 // None fits the `(cur, st)` `PeepRule` signature: two need list look-ahead and one
@@ -772,7 +772,7 @@ static bool try_invert_branch_over_jump(Besm_Block *block, Besm_Instr *cur)
 }
 
 //
-// Rule #32 — I/O address folding.  See docs/Peephole_Rewrites.md §5.10.
+// Rule #32 — I/O address folding.  See backend/besm6/Peephole_Rewrites.md §5.10.
 //
 // `ext`, `mod` and the extracode name their device register / trap argument through the
 // effective address, `EA = (addr + M[reg] + C) mod 0100000`.  For anything but a small
@@ -939,7 +939,7 @@ static int try_io_memory_address(Besm_Instr *cur)
 }
 
 //
-// Rule #33 — ω fixup before a conditional branch.  See docs/Peephole_Rewrites.md §5.11.
+// Rule #33 — ω fixup before a conditional branch.  See backend/besm6/Peephole_Rewrites.md §5.11.
 //
 // `uza`/`u1a` test ω, and ω means "A = 0?" only under the logical group (see the ω section
 // at the top of this file).  Instruction selection always loads the condition with an `xta`
@@ -955,7 +955,7 @@ static int try_io_memory_address(Besm_Instr *cur)
 // The repair is one instruction: `aex` with no operand XORs memory word 0 — architecturally
 // zero — into A.  A is unchanged, the R suppress bits are unchanged, and the ω group
 // becomes logical.  AEX is the cheapest of the logical ops; the runtime library writes the
-// same no-op as `,aox,` (docs/Besm6_Runtime_Library.md, "ω mode and the AU mode register R").
+// same no-op as `,aox,` (backend/besm6/Besm6_Runtime_Library.md, "ω mode and the AU mode register R").
 //
 // It is inserted only where the tracked group is not already logical, so the common cases —
 // a surviving `xta`, a relational runtime helper (rule #30's fusion), a read-address `ext` —
