@@ -278,12 +278,16 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
     return fun_type && fun_type->kind == TAC_TYPE_FUN_TYPE ? fun_type->u.fun_type.ret_type : NULL;
 }
 
-void param_hints(const Gen *g, StringMap *hints)
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
 {
     ArgState s = first_arg(ret_type(g->tl->u.function.type));
     for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
-        if (!rv_is_aggregate(p->type) && !rv_is_pair(p->type) && a.piece[0].reg >= 0 &&
+        if (rv_is_ll(p->type) && rv_is_pair(p->type)) {
+            for (int i = 0; i < 2; i++)
+                if (a.piece[i].reg >= 0)
+                    map_insert(i ? hints_hi : hints, p->name, a.piece[i].reg, 0);
+        } else if (!rv_is_aggregate(p->type) && !rv_is_pair(p->type) && a.piece[0].reg >= 0 &&
             is_freg(a.piece[0].reg) == rv_is_fp(p->type))
             map_insert(hints, p->name, a.piece[0].reg, 0);
     }
@@ -585,13 +589,22 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         if (!t)
             return;
         ArgLoc a = classify(&s, t, ft && ft->u.fun_type.variadic && i >= nfixed);
-        if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_pair(t) && a.piece[0].reg >= 0 &&
+        if (var >= 0 && rv_is_ll(t) && rv_is_pair(t)) {
+            for (int k = 0; k < 2; k++)
+                if (!hint[var + k * f->nvars] && a.piece[k].reg >= 0)
+                    hint[var + k * f->nvars] = a.piece[k].reg;
+        } else if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_pair(t) && a.piece[0].reg >= 0 &&
             is_freg(a.piece[0].reg) == rv_is_fp(t))
             hint[var] = a.piece[0].reg;
     }
     const Tac_Val *dst = in->u.fun_call.dst;
     int var            = dst ? flow_var(f, dst->u.var_name) : -1;
-    if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]) &&
+    if (var >= 0 && f->types[var] && rv_is_ll(f->types[var]) && rv_is_pair(f->types[var])) {
+        if (!hint[var])
+            hint[var] = RV_A0;
+        if (!hint[var + f->nvars])
+            hint[var + f->nvars] = RV_A0 + 1;
+    } else if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]) &&
         !rv_is_pair(f->types[var]) && !rv_is_ld(f->types[var]))
         hint[var] = rv_is_fp(f->types[var]) ? RV_FA0 : RV_A0;
 }

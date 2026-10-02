@@ -384,6 +384,43 @@ int main(void)
     EXPECT_EQ(expect, CompileAndRunRiscv(src));
 }
 
+// Copies the allocator coalesces as pairs, or must not: a source still live after the
+// copy, a rotation, a swap, and the words of one value moved to another's.
+TEST_F(LongLongTest, Copies)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    std::string src = std::string(kPrelude) + R"(
+u64 swapw(u64 x) { u64 y = x; x = x >> 32 | x << 32; return x ^ (y + 1); }
+i64 fib(int n) { i64 a = 0, b = 1; while (n-- > 0) { i64 t = a + b; a = b; b = t; } return a; }
+void swap(u64 *p, u64 *q) { u64 a = *p, b = *q, t = a; a = b; b = t; *p = a; *q = b; }
+i64 keep(i64 a, i64 b) { i64 c = a; a = b * 3; b = c - 1; return a * 5 + b + c; }
+int main(void)
+{
+    hex(swapw(0x0123456789abcdefULL));
+    hex(fib(90));
+    u64 x = 0x1111111122222222ULL, y = 0x3333333344444444ULL;
+    swap(&x, &y);
+    hex(x);
+    hex(y);
+    hex(keep(0x100000005LL, -0x200000007LL));
+    nl();
+    return 0;
+}
+)";
+    uint64_t sw  = 0x0123456789abcdefull;
+    uint64_t fib = 0, b = 1;
+    for (int i = 0; i < 90; i++) {
+        uint64_t t = fib + b;
+        fib        = b;
+        b          = t;
+    }
+    int64_t ka = 0x100000005ll, kb = -0x200000007ll;
+    std::string expect = Hex((sw >> 32 | sw << 32) ^ (sw + 1)) + Hex(fib) +
+                         Hex(0x3333333344444444ull) + Hex(0x1111111122222222ull) +
+                         Hex((uint64_t)(kb * 3 * 5 + (ka - 1) + ka)) + "\n";
+    EXPECT_EQ(expect, CompileAndRunRiscv(src));
+}
+
 TEST_F(LongLongTest, Runtime)
 {
     SKIP_IF_NO_RISCV_TOOLS();

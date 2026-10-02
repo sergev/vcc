@@ -165,10 +165,12 @@ void gen_regalloc(Gen *g);
 // Calls and parameters (call.c)
 //
 void gen_params(Gen *g);
-// The incoming register of each scalar parameter passed in one of its own class.
-void param_hints(const Gen *g, StringMap *hints);
+// The incoming register of each scalar parameter passed in one of its own class; of
+// the high word of a long long pair in `hints_hi`.
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);
 // Hints for a call: each scalar argument variable its argument register, the result
-// a0/fa0; only where hint[var] is still 0 (indexed by flow variable).
+// a0/fa0; only where hint[var] is still 0 (indexed by flow variable).  The high word
+// of a long long pair at hint[var + f->nvars], a1 for the result.
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);

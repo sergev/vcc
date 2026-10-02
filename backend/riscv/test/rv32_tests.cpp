@@ -408,10 +408,36 @@ long long mix(long long a, int i) { long long x = a * i; return x < 0 ? -x : x <
 }
 
 // The peephole takes the copies around a pair: an add reads its operands where they
-// are and computes the halves where they go.
+// are and computes the halves where they go.  Both words of a parameter stay in the
+// registers it arrives in, and a result is computed in a0/a1.
 TEST_F(Rv32Test, LongLongPairMoves)
 {
     std::string s = Code(CompileToRiscv("long long add(long long a, long long b) { return a + b; }"));
-    EXPECT_NE(std::string::npos, s.find("add t1, a1, a3\nadd a1, t1, t0\nmv a0, t2\nret\n")) << s;
-    EXPECT_EQ(s.find("mv "), s.rfind("mv ")) << s;
+    EXPECT_NE(std::string::npos,
+              s.find("add a0, a0, a2\nsltu t0, a0, a2\nadd t1, a1, a3\nadd a1, t1, t0\nret\n"))
+        << s;
+}
+
+TEST_F(Rv32Test, LongLongParamsInPlace)
+{
+    std::string s = Code(CompileToRiscv("int lt(long long a, long long b) { return a < b; }"));
+    EXPECT_EQ(std::string::npos, s.find("mv ")) << s;
+}
+
+// A copy of a long long is coalesced as a pair: an accumulator in a loop is added to
+// in place.
+TEST_F(Rv32Test, LongLongCopyCoalesced)
+{
+    std::string s = Code(CompileToRiscv(R"(
+long long sum(long long *p, int n)
+{
+    long long s = 0;
+    for (int i = 0; i < n; i++)
+        s += p[i];
+    return s;
+}
+)"));
+    size_t loop = s.find("beqz"), end = s.find("j ", loop);
+    ASSERT_NE(std::string::npos, end) << s;
+    EXPECT_EQ(std::string::npos, s.substr(loop, end - loop).find("mv ")) << s;
 }

@@ -22,6 +22,7 @@ and pointers are 32 bits, `long long` 64, `float` and `double` are still in hard
 - **`long long`** is a pair of registers, or two words in memory, low word first; it is
   worked on with t0-t4 (`llong.c`). Division, remainder and the conversions with `float` and `double` call
   the libgcc-named routines in `libc/riscv32/int64.c` (`__divdi3`, `__floatdidf`, …).
+  The allocator gives its high word a node of its own, and coalesces a copy word by word.
 - **Calls.** A `long long`, or a `double` where an integer would go (a variadic one, or
   one past fa7), takes two integer registers, an even pair when variadic. A struct of
   up to 8 bytes goes in registers, a larger one by reference, but a struct of one or

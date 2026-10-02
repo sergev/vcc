@@ -193,11 +193,13 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     switch (op) {
     case TAC_BINARY_ADD:
     case TAC_BINARY_ADD_UNSIGNED:
-        op3(g, RV_ADD, T2, T0, T2);
-        op3(g, RV_SLTU, T0, T2, T0); // the carry
+        // The carry: the sum is below either addend.  Compared with one not in the
+        // destination's register, the peephole can compute the sum there.
+        op3(g, RV_ADD, T4, T0, T2);
+        op3(g, RV_SLTU, T0, T4, var_reg(g, dst) && var_reg(g, dst) == var_reg(g, a) ? T2 : T0);
         op3(g, RV_ADD, T1, T1, T3);
         op3(g, RV_ADD, T1, T1, T0);
-        store_pair(g, T2, T1, dst);
+        store_pair(g, T4, T1, dst);
         return;
     case TAC_BINARY_SUBTRACT:
     case TAC_BINARY_SUBTRACT_UNSIGNED:

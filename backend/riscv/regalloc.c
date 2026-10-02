@@ -8,8 +8,9 @@
 // and only a call (or a long double operation, a runtime call) writes them.  A parameter prefers the register it arrives in, an
 // argument its argument register, a returned value or a call's result a0 or fa0.
 // A long long on rv32 needs two registers: its high word is a node of its own (flow
-// variable v + n), interfering with all the low word does and with the low word; a
-// copy of one is not coalesced.  It gets registers only when both halves do.
+// variable v + n), interfering with all the low word does and with the low word.  A
+// copy of one is coalesced as a pair, low word with low and high with high, or not at
+// all.  It gets registers only when both halves do.
 //
 #include <string.h>
 
@@ -130,8 +131,10 @@ static int move_source(const Alloc *a, const Tac_Instruction *in, int *dst)
         return -1;
     int s = flow_var(a->flow, in->u.copy.src->u.var_name);
     int d = flow_var(a->flow, in->u.copy.dst->u.var_name);
-    if (s < 0 || d < 0 || !a->cand[s] || !a->cand[d] ||
-        a->flow->types[s]->kind != a->flow->types[d]->kind || hi_node(a, s) >= 0)
+    if (s < 0 || d < 0 || !a->cand[s] || !a->cand[d] || (hi_node(a, s) >= 0) != (hi_node(a, d) >= 0))
+        return -1;
+    // The two kinds of long long are the same pair of words.
+    if (a->flow->types[s]->kind != a->flow->types[d]->kind && hi_node(a, s) < 0)
         return -1;
     *dst = d;
     return s;
@@ -153,12 +156,22 @@ static void add_var_edge(Alloc *a, int x, int y)
                 add_edge(a, xs[i], ys[j]);
 }
 
+// A copy's destination interferes with what is live after it, but its source; of a
+// pair, a word of the destination still interferes with the other word of the source.
 static void interfere_def(int d, void *arg)
 {
     DefArg *da = arg;
-    for (int v = 0; v < da->a->n; v++)
-        if (v != da->skip && flow_has(da->live, v))
-            add_var_edge(da->a, d, v);
+    Alloc *a   = da->a;
+    for (int v = 0; v < a->n; v++) {
+        if (!flow_has(da->live, v))
+            continue;
+        if (v != da->skip) {
+            add_var_edge(a, d, v);
+        } else if (hi_node(a, v) >= 0) {
+            add_edge(a, d, hi_node(a, v));
+            add_edge(a, hi_node(a, d), v);
+        }
+    }
 }
 
 typedef struct {
@@ -299,6 +312,13 @@ static void coalesce(Alloc *a)
             int x = find(a, dst), y = find(a, src);
             if (x == y || flow_has(row(a, x), y) || !can_merge(a, x, y))
                 continue;
+            int hd = hi_node(a, dst);
+            if (hd >= 0) {
+                int hx = find(a, hd), hy = find(a, hi_node(a, src));
+                if (flow_has(row(a, hx), hy) || !can_merge(a, hx, hy))
+                    continue;
+                merge(a, hx, hy);
+            }
             merge(a, x, y);
             changed = true;
         }
@@ -353,15 +373,21 @@ static void color(Alloc *a)
     // Parameters first (or what they were coalesced into), in the registers they
     // arrive in, unless two coalesced parameters want different ones.
     for (const Tac_Param *p = a->flow->fn->u.function.params; p; p = p->next) {
-        int v = flow_var(a->flow, p->name), r = v >= 0 ? find(a, v) : -1;
-        if (v < 0 || !a->cand[v] || a->color[r] ||
-            !in_pool(pool_of(a, r), k_of(a, r), a->hint[v]))
+        int pv = flow_var(a->flow, p->name);
+        if (pv < 0)
             continue;
-        bool ok = true;
-        for (int u = 0; u < n && ok; u++)
-            ok = !(flow_has(row(a, r), u) && a->color[u] == a->hint[v]);
-        if (ok)
-            a->color[r] = a->hint[v];
+        int words[2] = { pv, hi_node(a, pv) };
+        for (int i = 0; i < 2; i++) {
+            int v = words[i], r = v >= 0 ? find(a, v) : -1;
+            if (v < 0 || !a->cand[v] || a->color[r] ||
+                !in_pool(pool_of(a, r), k_of(a, r), a->hint[v]))
+                continue;
+            bool ok = true;
+            for (int u = 0; u < n && ok; u++)
+                ok = !(flow_has(row(a, r), u) && a->color[u] == a->hint[v]);
+            if (ok)
+                a->color[r] = a->hint[v];
+        }
     }
     while (nstack > 0) {
         int v           = stack[--nstack];
@@ -380,18 +406,23 @@ static void color(Alloc *a)
     xfree(deg);
 }
 
-// Hints: a parameter's incoming register, a0/fa0 for a returned variable.
+// Hints: a parameter's incoming register, a0/fa0 for a returned variable (a0 and a1
+// for a long long pair).
 static void find_hints(Alloc *a)
 {
     const Flow *f = a->flow;
-    StringMap params;
+    StringMap params, params_hi;
     map_init(&params);
-    param_hints(a->g, &params);
+    map_init(&params_hi);
+    param_hints(a->g, &params, &params_hi);
     for (int v = 0; v < a->n; v++) {
         intptr_t r;
         if (map_get(&params, f->names[v], &r))
             a->hint[v] = (int)r;
+        if (hi_node(a, v) >= 0 && map_get(&params_hi, f->names[v], &r))
+            a->hint[hi_node(a, v)] = (int)r;
     }
+    map_destroy(&params_hi);
     map_destroy(&params);
     for (int i = 0; i < f->ninstrs; i++) {
         const Tac_Instruction *in = f->instrs[i];
@@ -402,6 +433,8 @@ static void find_hints(Alloc *a)
             int v = flow_var(f, in->u.return_.src->u.var_name);
             if (v >= 0 && a->cand[v] && !a->hint[v])
                 a->hint[v] = a->fp[v] ? RV_FA0 : RV_A0;
+            if (v >= 0 && hi_node(a, v) >= 0 && !a->hint[hi_node(a, v)])
+                a->hint[hi_node(a, v)] = RV_A0 + 1;
         }
     }
 }
@@ -440,7 +473,7 @@ void gen_regalloc(Gen *g)
     for (int v = 0; v < n; v++) {
         int reg = a.cand[v] ? a.color[find(&a, v)] : 0;
         int h   = hi_node(&a, v);
-        int hi  = h >= 0 ? a.color[h] : 0;
+        int hi  = h >= 0 ? a.color[find(&a, h)] : 0;
         if (!reg || (h >= 0 && !hi))
             continue; // a long long gets both registers or neither
         map_insert(&g->regs, a.flow->names[v], reg, 0);
