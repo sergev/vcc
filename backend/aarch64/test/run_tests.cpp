@@ -40,21 +40,23 @@ TEST_F(Aarch64Test, RunBookStatusMin)
 TEST_F(Aarch64Test, RuntimeUnalignedLoadAndFloatingPoint)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
-    EXPECT_EQ("", RunAssembly("    .text\n"
-                              "    .globl  main\n"
-                              "main:\n"
-                              "    adrp    x0, buf\n"
-                              "    add     x0, x0, :lo12:buf\n"
-                              "    ldr     x1, [x0, #1]\n"
-                              "    lsr     x1, x1, #56\n" // the low byte of the second word
-                              "    fmov    d0, #1.5\n"
-                              "    fadd    d0, d0, d0\n"
-                              "    fcvtzs  w2, d0\n"
-                              "    add     w0, w1, w2\n" // 4 + 3
-                              "    ret\n"
-                              "    .data\n"
-                              "buf:\n"
-                              "    .quad   1, 4\n"));
+    EXPECT_EQ("", RunAssembly(R"(
+    .text
+    .globl  main
+main:
+    adrp    x0, buf
+    add     x0, x0, :lo12:buf
+    ldr     x1, [x0, #1]
+    lsr     x1, x1, #56         // the low byte of the second word
+    fmov    d0, #1.5
+    fadd    d0, d0, d0
+    fcvtzs  w2, d0
+    add     w0, w1, w2          // 4 + 3
+    ret
+    .data
+buf:
+    .quad   1, 4
+)"));
     EXPECT_EQ(7, exit_status);
 }
 
@@ -62,13 +64,14 @@ TEST_F(Aarch64Test, RuntimeUnalignedLoadAndFloatingPoint)
 TEST_F(Aarch64Test, RuntimeExceptionReported)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
-    std::string out = RunAssembly(
-        "    .text\n"
-        "    .globl  main\n"
-        "main:\n"
-        "    mov     x0, #0x80000000\n" // unmapped: translation fault
-        "    ldr     x1, [x0]\n"
-        "    ret\n");
+    std::string out = RunAssembly(R"(
+    .text
+    .globl  main
+main:
+    mov     x0, #0x80000000     // unmapped: translation fault
+    ldr     x1, [x0]
+    ret
+)");
     EXPECT_EQ(255, exit_status);
     EXPECT_NE(std::string::npos,
               out.find("exception: vector 0000000000000004 esr=0000000096000005"))

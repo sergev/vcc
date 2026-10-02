@@ -5,20 +5,20 @@
 
 TEST_F(Aarch64Test, ReturnConstant)
 {
-    EXPECT_EQ(
-        "    .text\n"
-        "    .globl  main\n"
-        "    .p2align 2\n"
-        "    .type   main, @function\n"
-        "main:\n"
-        "    stp     x29, x30, [sp, #-16]!\n"
-        "    mov     x29, sp\n"
-        "    mov     w0, #2\n"
-        "    mov     sp, x29\n"
-        "    ldp     x29, x30, [sp], #16\n"
-        "    ret\n"
-        "    .size   main, .-main\n",
-        CompileToAarch64("int main(void) { return 2; }"));
+    EXPECT_EQ(R"(    .text
+    .globl  main
+    .p2align 2
+    .type   main, @function
+main:
+    stp     x29, x30, [sp, #-16]!
+    mov     x29, sp
+    mov     w0, #2
+    mov     sp, x29
+    ldp     x29, x30, [sp], #16
+    ret
+    .size   main, .-main
+)",
+              CompileToAarch64("int main(void) { return 2; }"));
 }
 
 TEST_F(Aarch64Test, StaticFunctionIsLocal)

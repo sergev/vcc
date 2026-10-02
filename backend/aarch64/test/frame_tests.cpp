@@ -9,31 +9,31 @@
 TEST_F(Aarch64Test, LocalSlot)
 {
     DisableOptimization();
-    EXPECT_EQ(
-        "stp x29, x30, [sp, #-16]!\n"
-        "mov x29, sp\n"
-        "sub sp, sp, #16\n"
-        "mov w9, #5\n"
-        "str w9, [x29, #-4]\n"
-        "ldr w0, [x29, #-4]\n"
-        "mov sp, x29\n"
-        "ldp x29, x30, [sp], #16\n"
-        "ret\n",
-        Code(CompileToAarch64("int main(void) { int a = 5; return a; }")));
+    EXPECT_EQ(R"(stp x29, x30, [sp, #-16]!
+mov x29, sp
+sub sp, sp, #16
+mov w9, #5
+str w9, [x29, #-4]
+ldr w0, [x29, #-4]
+mov sp, x29
+ldp x29, x30, [sp], #16
+ret
+)",
+              Code(CompileToAarch64("int main(void) { int a = 5; return a; }")));
 }
 
 // Each width loads and stores as itself; a char by its signedness.
 TEST_F(Aarch64Test, SlotWidths)
 {
     DisableOptimization();
-    std::string code =
-        Code(CompileToAarch64("long f(void) {\n"
-                              "    signed char c = -1; unsigned char u = 255;\n"
-                              "    short s = -2; unsigned short us = 2;\n"
-                              "    long l = 7; long m = l; c = c; u = u; s = s;\n"
-                              "    us = us;\n"
-                              "    return m;\n"
-                              "}\n"));
+    std::string code = Code(CompileToAarch64(R"(
+long f(void) {
+    signed char c = -1; unsigned char u = 255;
+    short s = -2; unsigned short us = 2;
+    long l = 7; long m = l; c = c; u = u; s = s;
+    us = us;
+    return m;
+})"));
     for (const char *s : { "strb w9", "ldrsb w9", "ldrb w9", "strh w9", "ldrsh w9", "ldrh w9",
                            "str x9", "ldr x9", "ldr x0" })
         EXPECT_NE(std::string::npos, code.find(s)) << s << " in\n" << code;
@@ -58,12 +58,12 @@ TEST_F(Aarch64Test, RunLocals)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
     DisableOptimization();
-    EXPECT_EQ("",
-              CompileAndRunAarch64("int main(void) {\n"
-                                   "    int a = 40; int b = a; long c = 2; unsigned char d = 200;\n"
-                                   "    b = b; c = c; d = d;\n"
-                                   "    return b;\n"
-                                   "}\n"));
+    EXPECT_EQ("", CompileAndRunAarch64(R"(
+int main(void) {
+    int a = 40; int b = a; long c = 2; unsigned char d = 200;
+    b = b; c = c; d = d;
+    return b;
+})"));
     EXPECT_EQ(40, exit_status);
 }
 

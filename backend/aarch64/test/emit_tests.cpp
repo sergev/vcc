@@ -137,15 +137,15 @@ TEST_F(EmitTest, Function)
     a64_append(fn, A64_RET);
     std::string s = Capture([&](FILE *f) { a64_emit_func(f, fn); });
     a64_free_func(fn);
-    EXPECT_EQ(
-        "    .text\n"
-        "    .globl  f\n"
-        "    .p2align 2\n"
-        "    .type   f, @function\n"
-        "f:\n"
-        "    mov     w0, #0\n"
-        ".L1:\n"
-        "    ret\n"
-        "    .size   f, .-f\n",
-        s);
+    EXPECT_EQ(R"(    .text
+    .globl  f
+    .p2align 2
+    .type   f, @function
+f:
+    mov     w0, #0
+.L1:
+    ret
+    .size   f, .-f
+)",
+              s);
 }
