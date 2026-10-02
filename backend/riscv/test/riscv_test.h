@@ -1,16 +1,14 @@
 // RISC-V fixture: compile C source to assembly in-process, and run it on bare-metal
-// qemu `virt` (assemble with clang, link with ld.lld against crt0 and libc.a).
+// qemu `virt` (qemu_test.h).
 //
 // The width comes from RISCV_TEST_XLEN (64 by default): riscv32-tests is built from
 // the same sources with 32, and with the riscv32 headers, runtime and qemu.
 #pragma once
 
-#include <fstream>
 #include <string>
-#include <vector>
 
-#include "backend_test.h"
 #include "codegen.h"
+#include "qemu_test.h"
 
 #ifndef RISCV_TEST_XLEN
 #define RISCV_TEST_XLEN 64
@@ -33,17 +31,26 @@ inline bool riscv_tools_available()
 }
 
 // Skip a run test when the RISC-V toolchain or qemu is absent.
-#define SKIP_IF_NO_RISCV_TOOLS()                                                       \
-    do {                                                                               \
-        if (!riscv_tools_available())                                                  \
-            GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found; skipping run test";   \
+#define SKIP_IF_NO_RISCV_TOOLS()                                                     \
+    do {                                                                             \
+        if (!riscv_tools_available())                                                \
+            GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found; skipping run test"; \
     } while (0)
 
-class RiscvTest : public BackendTest {
+class RiscvTest : public QemuTest {
 protected:
-    int exit_status = -1; // of the last run: main's result, modulo 256
-
-    RiscvTest() : BackendTest(RISCV_TEST_TARGET)
+    RiscvTest()
+        : QemuTest(RISCV_TEST_TARGET,
+                   { "riscv-tests",
+                     RISCV_CLANG,
+                     { "--target=" RISCV_TEST_TARGET, RISCV_TEST_MARCH, RISCV_TEST_MABI },
+                     { "-mcmodel=medany", "-ffreestanding", "-fno-builtin" },
+                     RISCV_LD,
+                     RISCV_LINK_SCRIPT,
+                     RISCV_LIB_DIR,
+                     { RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none", "-serial",
+                       "stdio", "-monitor", "none" },
+                     RISCV_TEST_XLEN == 32 ? "-rv32" : "" })
     {
         riscv_regalloc      = true;
         riscv_peephole      = true;
@@ -111,100 +118,9 @@ protected:
     // Run a book program compiled by clang -O0 with the target headers.
     std::string ClangRunBook(const std::string &src)
     {
-        return Run("", "crt0-status.o", &src, { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
+        return Run("", "crt0-status.o", &src,
+                   { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
                      TEST_COMMON_INCLUDE_DIR },
                    ".clang");
-    }
-
-private:
-    // Scratch file of the current test: TEST_DIR/<Suite>.<Test>[-rv32]<tag>.  The suite
-    // keeps apart tests of one name in two suites, the width the two test binaries.
-    static std::string RiscvScratchPath(const std::string &tag)
-    {
-        const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
-        return std::string(TEST_DIR "/") + info->test_suite_name() + "." + info->name() +
-               (RISCV_TEST_XLEN == 32 ? "-rv32" : "") + tag;
-    }
-
-    // Assemble `asm_text` (unless empty) and compile `clang_src` (if any) with
-    // `clang_flags`, link and run under qemu.  Scratch files are named by the test and
-    // `tag`.  Returns the UART output, or "ERROR".
-    std::string Run(const std::string &asm_text, const char *crt0,
-                    const std::string *clang_src = nullptr,
-                    const std::vector<std::string> &clang_flags = {}, const char *tag = "")
-    {
-        exit_status          = -1;
-        std::string base     = RiscvScratchPath(tag);
-        std::string s_path   = base + ".s";
-        std::string o_path   = base + ".o";
-        std::string exe_path = base + ".elf";
-        std::string out_path = base + ".out";
-        std::string log_path = base + ".log";
-
-        // Guards the scratch files against a concurrent run of the same test.
-        FlockGuard lock(s_path);
-        if (!lock.locked()) {
-            ADD_FAILURE() << "Concurrent riscv-tests run detected (" << s_path << ")";
-            return "ERROR";
-        }
-        std::vector<std::string> objs;
-        int rc;
-        if (!asm_text.empty()) {
-            {
-                std::ofstream s(s_path);
-                s << asm_text;
-            }
-            rc = RunTool({ RISCV_CLANG, "--target=" RISCV_TEST_TARGET, RISCV_TEST_MARCH,
-                           RISCV_TEST_MABI, "-c", "-o", o_path, s_path },
-                         log_path);
-            EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
-            if (rc != 0)
-                return "ERROR";
-            objs.push_back(o_path);
-        }
-        if (clang_src) {
-            std::string c_path  = base + "-clang.c";
-            std::string co_path = base + "-clang.o";
-            {
-                std::ofstream c(c_path);
-                c << *clang_src;
-            }
-            std::vector<std::string> cc = { RISCV_CLANG,
-                                            "--target=" RISCV_TEST_TARGET,
-                                            RISCV_TEST_MARCH,
-                                            RISCV_TEST_MABI,
-                                            "-mcmodel=medany",
-                                            "-ffreestanding",
-                                            "-fno-builtin",
-                                            "-c",
-                                            "-o",
-                                            co_path };
-            cc.insert(cc.end(), clang_flags.begin(), clang_flags.end());
-            cc.push_back(c_path);
-            rc = RunTool(cc, log_path);
-            EXPECT_EQ(0, rc) << "clang failed on " << c_path << ":\n" << ReadFile(log_path);
-            if (rc != 0)
-                return "ERROR";
-            objs.push_back(co_path);
-        }
-        std::string lib = RISCV_LIB_DIR;
-        std::vector<std::string> link = { RISCV_LD, "-T", RISCV_LINK_SCRIPT, "-o", exe_path,
-                                          lib + "/" + crt0 };
-        link.insert(link.end(), objs.begin(), objs.end());
-        link.push_back(lib + "/libc.a");
-        rc = RunTool(link, log_path);
-        EXPECT_EQ(0, rc) << "ld.lld failed on " << exe_path << ":\n" << ReadFile(log_path);
-        if (rc != 0)
-            return "ERROR";
-        rc = RunWithTimeout({ RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none",
-                              "-serial", "stdio", "-monitor", "none", "-kernel", exe_path },
-                            out_path, log_path, 5);
-        if (rc < 0) {
-            ADD_FAILURE() << (rc == -2 ? "qemu timed out" : "qemu failed") << " on " << exe_path
-                          << ":\n" << ReadFile(log_path);
-            return "ERROR";
-        }
-        exit_status = rc;
-        return ReadFile(out_path);
     }
 };
