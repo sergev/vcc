@@ -91,13 +91,13 @@ with pointers), not all at once in A23.
   into a slot; narrow arguments and results extended by the receiver (a store
   truncates, a load extends); `bl` and `blr`, `FUN_CALL_NORETURN` alike. Run against
   clang in both directions. `libc.a` gets its first C source, `putchar`.
-- **A13. Globals and static data** (ch. 10–12, which also need A10's `long` and
-  `unsigned` and A12's calls): `.data`, `.bss`, `.rodata`, every
-  `Tac_StaticInit` kind, `adrp` + `add :lo12:` addressing (small code model; no GOT in a
-  static bare-metal link), static locals' `name$N` spelled legally. Set
-  `struct_return_max` for `aarch64` so the frontend never lowers a struct result to a
-  hidden first argument: the backend owns every struct result, since its address goes
-  in `x8` (as RV32 already owns its 9–16-byte ones).
+- **A13. Globals and static data. Done** (ch. 10–12): `data.c` (`.data`, `.bss`,
+  `.section .rodata`; `.byte`/`.hword`/`.word`/`.xword`, `.zero`, `.ascii`; every
+  `Tac_StaticInit` kind; block-scope statics after their function, under their
+  `name$N`), globals through `adrp` + `add :lo12:` (small code model, no GOT), and
+  `GET_ADDRESS` of a slot, global or function. The `aarch64` descriptor's
+  `struct_return_max` is `SIZE_MAX`: the front end never lowers a struct result to a
+  hidden first argument, the backend owns every one (its address goes in `x8`).
 - **A14. Floating point** (ch. 13): `fadd`/`fsub`/`fmul`/`fdiv`/`fneg` on S/D,
   `fcvt` between them, `scvtf`/`ucvtf`/`fcvtzs`/`fcvtzu` (native 64-bit unsigned
   conversions, no helpers), `fcmp` + `cset` with NaN-correct conditions (`mi`/`ls` for

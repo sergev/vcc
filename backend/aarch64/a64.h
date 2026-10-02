@@ -102,9 +102,10 @@ typedef struct {
     X(MOV, "mov")                                                                                 \
     X(MOVZ, "movz")                                                                               \
     X(MOVN, "movn")                                                                               \
-    X(MOVK, "movk") X(ADD, "add") X(SUB, "sub") X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv")       \
-        X(UDIV, "udiv") X(MSUB, "msub") X(MADD, "madd") X(AND, "and") X(ORR, "orr") X(EOR, "eor") \
-            X(MVN, "mvn") X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") \
+    X(MOVK, "movk")                                                                               \
+    X(ADD, "add") X(SUB, "sub") X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv")       \
+        X(MSUB, "msub") X(MADD, "madd") X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn")   \
+            X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset")               \
                 X(SXTB, "sxtb") X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth")   \
                     X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh")               \
                         X(LDRSH, "ldrsh") X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb")         \

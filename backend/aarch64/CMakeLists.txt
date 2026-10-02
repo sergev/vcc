@@ -7,6 +7,7 @@ add_library(aarch64 STATIC
     frame.c
     instr.c
     call.c
+    data.c
     codegen.c
 )
 target_include_directories(aarch64 PUBLIC .)
@@ -18,7 +19,7 @@ target_link_libraries(aarch64 backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(AARCH64_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter[1-9]_tests\\.cpp$")
+list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-2])_tests\\.cpp$")
 
 add_executable(aarch64-tests
     test/emit_tests.cpp
@@ -27,6 +28,7 @@ add_executable(aarch64-tests
     test/int_tests.cpp
     test/flow_tests.cpp
     test/call_tests.cpp
+    test/data_tests.cpp
     test/run_tests.cpp
     ${AARCH64_BOOK_SOURCES}
 )

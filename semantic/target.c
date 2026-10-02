@@ -89,7 +89,9 @@ static const Target targets[] = {
       16, 32, 64, 64, // signed bits
       0,   // plain char unsigned (AAPCS64)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      SIZE_MAX }, // struct_return_max: never lowered by the front end; the backend
+                  // passes a large result's address in x8, not as an argument
 
     { "x86_64",
       1, 1,   // _Bool
