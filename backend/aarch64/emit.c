@@ -19,8 +19,8 @@ const char *a64_reg_name(int reg, A64_Width width)
             strcpy(name, width == A64_W ? "wsp" : "sp");
         else if (reg == A64_ZR)
             strcpy(name, width == A64_W ? "wzr" : "xzr");
-        else if (gpr && reg < A64_SP)
-            snprintf(name, 5, "%c%d", prefix[width], reg);
+        else if (gpr && reg >= A64_X0 && reg < A64_SP)
+            snprintf(name, 5, "%c%d", prefix[width], reg - A64_X0);
         else if (!gpr && a64_is_fpreg(reg))
             snprintf(name, 5, "%c%d", prefix[width], reg - A64_V0);
         else
@@ -28,6 +28,9 @@ const char *a64_reg_name(int reg, A64_Width width)
     }
     return name;
 }
+
+static const char *const conds[] = { "eq", "ne", "hs", "lo", "mi", "pl", "vs",
+                                     "vc", "hi", "ls", "ge", "lt", "gt", "le" };
 
 static void emit_reg(FILE *out, int reg, A64_Width width)
 {
@@ -45,8 +48,6 @@ static void emit_operand(FILE *out, const A64_Operand *o)
     static const char *const shifts[]  = { "lsl", "lsr", "asr" };
     static const char *const extends[] = { "uxtb", "uxth", "uxtw", "uxtx",
                                            "sxtb", "sxth", "sxtw", "sxtx" };
-    static const char *const conds[]   = { "eq", "ne", "hs", "lo", "mi", "pl", "vs",
-                                           "vc", "hi", "ls", "ge", "lt", "gt", "le" };
     switch (o->kind) {
     case A64_OPND_NONE:
         break;
@@ -93,10 +94,17 @@ static void emit_operand(FILE *out, const A64_Operand *o)
 // An instruction: 4-space indent, mnemonic padded to 8 columns.
 void a64_emit_instr(FILE *out, const A64_Instr *in)
 {
-    const char *mnem = a64_mnemonic[in->op];
+    char mnem[16];
+    int first = 0;
+    if (in->op == A64_BCOND) {
+        snprintf(mnem, sizeof(mnem), "b.%s", conds[in->opnd[0].sub]);
+        first = 1;
+    } else {
+        snprintf(mnem, sizeof(mnem), "%s", a64_mnemonic[in->op]);
+    }
     fprintf(out, "    %s", mnem);
-    for (int i = 0; i < A64_MAX_OPERANDS && in->opnd[i].kind != A64_OPND_NONE; i++) {
-        if (i == 0) {
+    for (int i = first; i < A64_MAX_OPERANDS && in->opnd[i].kind != A64_OPND_NONE; i++) {
+        if (i == first) {
             int pad = 8 - (int)strlen(mnem);
             fprintf(out, "%*s", pad > 1 ? pad : 1, "");
         } else {

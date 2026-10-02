@@ -64,14 +64,19 @@ and the harness runs qemu under a short timeout regardless.
 Naive and correct first: every TAC variable in a frame slot, operands loaded into
 scratch registers (`x9`–`x15`, `v16`–`v31`), result stored back. Each step is done when
 its book chapters pass (added to `AARCH64_BOOK_SOURCES`) and a few golden tests pin the
-selected instructions.
+selected instructions. The book programs from chapter 9 on call `putchar`, `puts`,
+`strcmp`, `malloc`, …: the C sources of libc join `libc.a` step by step, as soon as the
+code generator compiles them (`putchar` with calls, the string and memory functions
+with pointers), not all at once in A23.
 
-- **A9. Frame.** Slot layout from typed TAC, `ALLOCATE_LOCAL`, prologue
-  `stp x29, x30, [sp, #-N]!` / `mov x29, sp`, epilogue, 16-byte alignment. Immediates
-  and offsets out of range: `add`/`sub` take a 12-bit immediate (optionally `lsl 12`),
-  `ldr`/`str` a scaled unsigned 12-bit offset or an unscaled signed 9-bit one
-  (`ldur`/`stur`); beyond that, through `x16`/`x17`. Constants via `movz`/`movn`/`movk`.
-- **A10. Integer ops** (ch. 2–4, 11, 12): 32-bit operations on W registers, 64-bit on
+- **A9. Frame. Done.** `frame.c`: slots below x29 from the typed `locals` (an
+  `ALLOCATE_LOCAL` may enlarge one), `stp x29, x30, [sp, #-16]!` / `mov x29, sp` /
+  `sub sp, sp, #N`, and an epilogue marker expanded to `mov sp, x29` /
+  `ldp x29, x30, [sp], #16` once the frame is known. An offset that fits neither
+  `ldr`/`str` (scaled 12 bits) nor `ldur`/`stur` (signed 9 bits) goes through x16, built
+  by `add`/`sub` with a 12-bit immediate and `lsl #12` (x17 beyond 16 MiB); `COPY`
+  through scratch registers, `RETURN` of a variable.
+- **A10. Integer ops** (ch. 2–4): 32-bit operations on W registers, 64-bit on
   X; `neg`, `mvn`, `mul`, `sdiv`/`udiv`, remainder as `msub`; shifts; comparisons as
   `cmp` + `cset`; width conversions with `sxtb`/`sxth`/`sxtw`/`uxtb`/`uxth` and the
   W-write zeroing of the upper half. A logical-immediate encoder (bitmask immediates)
@@ -80,7 +85,8 @@ selected instructions.
   `cmp` + `b.cond`.
 - **A12. Calls, scalar ABI** (ch. 9): `x0`–`x7`/`v0`–`v7`, 8-byte stack slots, narrow
   arguments and results extended by the receiver, `bl` and `blr`, `FUN_CALL_NORETURN`.
-- **A13. Globals and static data** (ch. 10): `.data`, `.bss`, `.rodata`, every
+- **A13. Globals and static data** (ch. 10–12, which also need A10's `long` and
+  `unsigned` and A12's calls): `.data`, `.bss`, `.rodata`, every
   `Tac_StaticInit` kind, `adrp` + `add :lo12:` addressing (small code model; no GOT in a
   static bare-metal link), static locals' `name$N` spelled legally. Set
   `struct_return_max` for `aarch64` so the frontend never lowers a struct result to a

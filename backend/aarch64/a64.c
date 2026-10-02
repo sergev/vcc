@@ -34,7 +34,11 @@ A64_Block *a64_new_block(A64_Func *fn, const char *label)
 
 A64_Instr *a64_append(A64_Func *fn, A64_Op op)
 {
-    A64_Block *b  = fn->tail;
+    return a64_append_to(fn->tail, op);
+}
+
+A64_Instr *a64_append_to(A64_Block *b, A64_Op op)
+{
     A64_Instr *in = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
     in->op        = op;
     if (b->tail)

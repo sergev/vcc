@@ -15,22 +15,24 @@ extern "C" {
 #endif
 
 // Register numbers: x0..x30, sp, the zero register, then v0..v31, then virtual
-// registers.  An operand gives the width the register is used at.
+// registers.  Numbering starts at 1: 0 means "no register" (as in the shared register
+// allocator).  An operand gives the width the register is used at.
+#define A64_X(n) (1 + (n))
+#define A64_V(n) (A64_V0 + (n))
 enum {
-    A64_X0   = 0,
-    A64_X8   = 8,  // indirect result address
-    A64_X9   = 9,  // first scratch
-    A64_X16  = 16, // ip0
-    A64_X17  = 17, // ip1
-    A64_X18  = 18, // platform register: never used
-    A64_X19  = 19, // first callee-saved
-    A64_X28  = 28,
-    A64_FP   = 29,
-    A64_LR   = 30,
-    A64_SP   = 31,
-    A64_ZR   = 32,
-    A64_V0   = 33,
-    A64_VREG = 65, // first virtual register
+    A64_X0   = A64_X(0),
+    A64_X8   = A64_X(8),  // indirect result address
+    A64_X16  = A64_X(16), // ip0
+    A64_X17  = A64_X(17), // ip1
+    A64_X18  = A64_X(18), // platform register: never used
+    A64_X19  = A64_X(19), // first callee-saved
+    A64_X28  = A64_X(28),
+    A64_FP   = A64_X(29),
+    A64_LR   = A64_X(30),
+    A64_SP   = A64_X(31),
+    A64_ZR   = A64_X(32),
+    A64_V0   = A64_X(33),
+    A64_VREG = A64_V0 + 32, // first virtual register
 };
 
 typedef enum {
@@ -96,7 +98,23 @@ typedef struct {
 } A64_Operand;
 
 // Opcode and mnemonic.
-#define A64_OPS(X) X(MOV, "mov") X(MOVZ, "movz") X(MOVN, "movn") X(MOVK, "movk") X(RET, "ret")
+#define A64_OPS(X)                                                                                \
+    X(MOV, "mov")                                                                                 \
+    X(MOVZ, "movz") X(MOVN, "movn") X(MOVK, "movk") X(ADD, "add") X(SUB, "sub") X(NEG, "neg")     \
+        X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv") X(MSUB, "msub") X(MADD, "madd")             \
+            X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn") X(LSL, "lsl") X(LSR, "lsr")   \
+                X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") X(SXTB, "sxtb") X(SXTH, "sxth")       \
+                    X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth") X(LDR, "ldr") X(LDRB, "ldrb") \
+                        X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh") X(LDRSW, "ldrsw")     \
+                            X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(LDP, "ldp")           \
+                                X(STP, "stp") X(ADRP, "adrp") X(B, "b") X(BCOND, "b.")            \
+                                    X(CBZ, "cbz") X(CBNZ, "cbnz") X(BL, "bl") X(BLR, "blr")       \
+                                        X(RET, "ret") X(FMOV, "fmov") X(FADD, "fadd")             \
+                                            X(FSUB, "fsub") X(FMUL, "fmul") X(FDIV, "fdiv")       \
+                                                X(FNEG, "fneg") X(FCMP, "fcmp") X(FCVT, "fcvt")   \
+                                                    X(SCVTF, "scvtf") X(UCVTF, "ucvtf")           \
+                                                        X(FCVTZS, "fcvtzs") X(FCVTZU, "fcvtzu")   \
+                                                            X(EPILOGUE, "#epilogue")
 
 typedef enum {
 #define A64_ENUM(op, mnem) A64_##op,
@@ -125,12 +143,16 @@ typedef struct {
     A64_Block *blocks, *tail;
 } A64_Func;
 
+// A conditional branch is `b.<cond> label`: BCOND with the condition as its first
+// operand, printed as part of the mnemonic.
+
 extern const char *const a64_mnemonic[A64_NUM_OPS];
 
 A64_Func *a64_new_func(const char *name, bool global);
 // Append a block, labelled `label` (copied; NULL for none), and make it current.
 A64_Block *a64_new_block(A64_Func *fn, const char *label);
-// Append an instruction to the current (last) block.
+// Append an instruction to block `b`, or to the current (last) block.
+A64_Instr *a64_append_to(A64_Block *b, A64_Op op);
 A64_Instr *a64_append(A64_Func *fn, A64_Op op);
 void a64_free_func(A64_Func *fn);
 

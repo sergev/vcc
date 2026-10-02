@@ -4,6 +4,9 @@
 add_library(aarch64 STATIC
     a64.c
     emit.c
+    frame.c
+    instr.c
+    call.c
     codegen.c
 )
 target_include_directories(aarch64 PUBLIC .)
@@ -20,6 +23,7 @@ list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(aarch64-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${AARCH64_BOOK_SOURCES}
 )

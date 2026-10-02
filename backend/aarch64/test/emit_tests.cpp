@@ -82,7 +82,7 @@ TEST_F(EmitTest, RegisterNames)
 TEST_F(EmitTest, RegistersAndImmediates)
 {
     EXPECT_EQ("    mov     w0, #2\n", Line(A64_MOV, { a64_reg(A64_X0, A64_W), a64_imm(2) }));
-    EXPECT_EQ("    mov     x1, #-5\n", Line(A64_MOV, { a64_reg(1, A64_X), a64_imm(-5) }));
+    EXPECT_EQ("    mov     x1, #-5\n", Line(A64_MOV, { a64_reg(A64_X(1), A64_X), a64_imm(-5) }));
     EXPECT_EQ("    movk    x0, #4660, lsl #48\n",
               Line(A64_MOVK, { a64_reg(A64_X0, A64_X), a64_imm(4660), a64_lsl(48) }));
     EXPECT_EQ("    mov     %x3, %w0\n",
@@ -92,11 +92,12 @@ TEST_F(EmitTest, RegistersAndImmediates)
 
 TEST_F(EmitTest, MemoryOperands)
 {
-    EXPECT_EQ("    mov     x0, [x1]\n", Line(A64_MOV, { a64_reg(0, A64_X), a64_mem(1, 0) }));
+    EXPECT_EQ("    mov     x0, [x1]\n",
+              Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_mem(A64_X(1), 0) }));
     EXPECT_EQ("    mov     x0, [sp, #16]\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_mem(A64_SP, 16) }));
+              Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_mem(A64_SP, 16) }));
     EXPECT_EQ("    mov     x0, [x29, #-8]\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_mem(A64_FP, -8) }));
+              Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_mem(A64_FP, -8) }));
     EXPECT_EQ("    mov     x29, [sp, #-32]!\n",
               Line(A64_MOV, { a64_reg(A64_FP, A64_X), a64_mem_pre(A64_SP, -32) }));
     EXPECT_EQ("    mov     x29, [sp], #32\n",
@@ -106,18 +107,24 @@ TEST_F(EmitTest, MemoryOperands)
 TEST_F(EmitTest, SymbolsShiftsExtendsConditions)
 {
     EXPECT_EQ("    mov     x0, counter\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_sym("counter", 0) }));
+              Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_sym("counter", 0) }));
     EXPECT_EQ("    mov     x0, x0, :lo12:counter+8\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_reg(0, A64_X), a64_lo12("counter", 8) }));
-    EXPECT_EQ("    mov     x0, x1, lsl #3\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_shift(1, A64_X, A64_SHIFT_LSL, 3) }));
-    EXPECT_EQ("    mov     w0, w1, asr #31\n",
-              Line(A64_MOV, { a64_reg(0, A64_W), a64_shift(1, A64_W, A64_SHIFT_ASR, 31) }));
-    EXPECT_EQ("    mov     x0, w1, sxtw\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_ext(1, A64_W, A64_EXT_SXTW, 0) }));
-    EXPECT_EQ("    mov     x0, w1, uxtw #2\n",
-              Line(A64_MOV, { a64_reg(0, A64_X), a64_ext(1, A64_W, A64_EXT_UXTW, 2) }));
-    EXPECT_EQ("    mov     w0, lt\n", Line(A64_MOV, { a64_reg(0, A64_W), a64_cond(A64_LT) }));
+              Line(A64_MOV,
+                   { a64_reg(A64_X(0), A64_X), a64_reg(A64_X(0), A64_X), a64_lo12("counter", 8) }));
+    EXPECT_EQ(
+        "    mov     x0, x1, lsl #3\n",
+        Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_shift(A64_X(1), A64_X, A64_SHIFT_LSL, 3) }));
+    EXPECT_EQ(
+        "    mov     w0, w1, asr #31\n",
+        Line(A64_MOV, { a64_reg(A64_X(0), A64_W), a64_shift(A64_X(1), A64_W, A64_SHIFT_ASR, 31) }));
+    EXPECT_EQ(
+        "    mov     x0, w1, sxtw\n",
+        Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_ext(A64_X(1), A64_W, A64_EXT_SXTW, 0) }));
+    EXPECT_EQ(
+        "    mov     x0, w1, uxtw #2\n",
+        Line(A64_MOV, { a64_reg(A64_X(0), A64_X), a64_ext(A64_X(1), A64_W, A64_EXT_UXTW, 2) }));
+    EXPECT_EQ("    mov     w0, lt\n",
+              Line(A64_MOV, { a64_reg(A64_X(0), A64_W), a64_cond(A64_LT) }));
 }
 
 TEST_F(EmitTest, Function)
