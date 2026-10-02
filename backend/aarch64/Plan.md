@@ -86,8 +86,11 @@ with pointers), not all at once in A23.
 - **A11. Control flow. Done** (ch. 5–8): a TAC label `%N` is a block labelled `.LN`
   (unique per TU), `b`, and `cbz`/`cbnz` on the condition at its type's width; a
   compare-and-branch (`cmp` + `b.cond`) is the peephole's (A26).
-- **A12. Calls, scalar ABI** (ch. 9): `x0`–`x7`/`v0`–`v7`, 8-byte stack slots, narrow
-  arguments and results extended by the receiver, `bl` and `blr`, `FUN_CALL_NORETURN`.
+- **A12. Calls, scalar ABI. Done** (ch. 9): `x0`–`x7`/`v0`–`v7`, 8-byte stack slots
+  in the outgoing area at sp, read by the callee at x29 + 16; each parameter stored
+  into a slot; narrow arguments and results extended by the receiver (a store
+  truncates, a load extends); `bl` and `blr`, `FUN_CALL_NORETURN` alike. Run against
+  clang in both directions. `libc.a` gets its first C source, `putchar`.
 - **A13. Globals and static data** (ch. 10–12, which also need A10's `long` and
   `unsigned` and A12's calls): `.data`, `.bss`, `.rodata`, every
   `Tac_StaticInit` kind, `adrp` + `add :lo12:` addressing (small code model; no GOT in a

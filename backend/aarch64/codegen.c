@@ -5,12 +5,11 @@
 
 #include "internal.h"
 
-// A slot for every local: an ALLOCATE_LOCAL may ask for more room or alignment than
-// the type.
+// A slot for every parameter and local: an ALLOCATE_LOCAL may ask for more room or
+// alignment than the type.
 static void layout_frame(Gen *g)
 {
-    if (g->tl->u.function.params)
-        fatal_error("aarch64: %s: parameters are not implemented yet", gen_name(g));
+    gen_params(g);
     StringMap allocs;
     map_init(&allocs);
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)

@@ -1,7 +1,7 @@
 #
 # AArch64 runtime for bare-metal qemu `virt`: crt0.o, crt0-status.o (prints main's
-# result, for the book run tests) and libc.a.  For now the archive holds only the
-# assembly leaves; the C sources join it once the code generator can compile them.
+# result, for the book run tests) and libc.a: the assembly leaves, and the C sources the
+# code generator compiles so far (the list grows with it; see backend/aarch64/Plan.md).
 # Uses the clang, llvm-ar and ld.lld libc/riscv64 found; skipped when that clang has no
 # AArch64 target.
 #
@@ -43,6 +43,23 @@ foreach(name console malloc)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${AARCH64_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
+    list(APPEND AARCH64_LIBC_OBJS ${out}/${name}.o)
+endforeach()
+
+# C sources, through cpp -> parse -> lower -> genaarch64 -> clang.  The headers are the
+# riscv64 ones, the same LP64 data model, until AArch64 has its own (Plan.md, A22).
+set(AARCH64_LIBC_C putchar)
+file(GLOB AARCH64_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+foreach(name ${AARCH64_LIBC_C})
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR}
+                ${LIBC_COMMON_DIR}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t aarch64 ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genaarch64 ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${RISCV_CLANG} ${AARCH64_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${LIBC_COMMON_DIR}/${name}.c ${AARCH64_LIBC_HEADERS} parse lower genaarch64
+        COMMENT "Compiling ${name}.c -> ${name}.o (AArch64)")
     list(APPEND AARCH64_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
