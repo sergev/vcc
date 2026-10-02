@@ -130,7 +130,8 @@ supplies only its flags, output extension and a per-toplevel `codegen` callback.
 
 ### Installation
 
-`make install` runs `cmake --install build --prefix ~/.local`. The executables are renamed
+`make install` runs `cmake --install build`, whose default prefix is `~/.local` (set in
+the top-level `CMakeLists.txt`; override with `--prefix DIR`). The executables are renamed
 with a `v` prefix only at install time; each target's runtime and headers go to
 `share/vcc/<target>/`:
 

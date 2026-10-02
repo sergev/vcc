@@ -26,8 +26,7 @@ run:    test
 	ctest --test-dir build --progress
 
 install: all
-	@echo "Installing to $$HOME/.local"; \
-	cmake --install build --prefix "$$HOME/.local"
+	cmake --install build
 
 clean:
 	rm -rf build

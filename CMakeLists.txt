@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(c-scanner)
 
+# Install into the user's ~/.local unless a prefix is given explicitly.
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "$ENV{HOME}/.local" CACHE PATH "Install prefix" FORCE)
+endif()
+
 # The new Apple/LLD linkers resolve symbols from all archives in one pass, so
 # repeating static libraries (as a traditional linker needs) makes them warn:
 #   ld: warning: ignoring duplicate libraries: '.../libsemantic.a'

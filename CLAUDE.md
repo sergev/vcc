@@ -43,7 +43,8 @@ and the qemu `virt` linker script `link.ld` → `share/vcc/riscv64/lib/`, and *a
 shared headers, hosted ones included, → `share/vcc/riscv64/include/` (no other project supplies a
 RISC-V libc); the runtime only when the RISC-V clang/llvm-ar were found. riscv32 will add
 `bin/vgenriscv32` and `share/vcc/riscv32/` (backend/riscv/Plan.md).
-The prefix is set in the Makefile and passed as `cmake --install build --prefix`; the
+The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
+`CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via
 `install(PROGRAMS … RENAME)`, so the in-tree build outputs (`build/parse`, `build/lower`,
 `build/backend/genbesm`) keep their original names.
