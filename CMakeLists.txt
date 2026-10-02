@@ -93,6 +93,7 @@ function(test_chdir_to_bindir target)
 endfunction()
 
 add_subdirectory(libutil)
+add_subdirectory(cpp)
 add_subdirectory(ast)
 add_subdirectory(scanner)
 add_subdirectory(parser)

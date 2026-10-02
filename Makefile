@@ -6,7 +6,7 @@
 #
 # make run   -- run all unit tests (including the textbook chapter tests)
 #
-# make install -- install vparse, vlower, vgenbesm6 with libc.bin, libbem.bin,
+# make install -- install vcpp, vparse, vlower, vgenbesm6 with libc.bin, libbem.bin,
 #                 libruntime.a and the compiler-owned headers (the C11 freestanding
 #                 subset plus besm6.h); vgenriscv64 with the RISC-V runtime and
 #                 headers -- to ~/.local

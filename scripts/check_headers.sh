@@ -9,7 +9,8 @@
 # macro expansions and accidental comment terminators in the headers.
 #
 # Usage: check_headers.sh <cpp> <parse> <work-dir> <include-dir>...
-# The include directories are searched in the order given.
+# The include directories are searched in the order given.  Extra preprocessor
+# flags (e.g. our own cpp's -t target) may be passed in $CPPFLAGS.
 #
 set -u
 
@@ -18,7 +19,7 @@ PARSE="$2"
 WORK="$3"
 shift 3
 INCDIRS="$*"
-INCFLAGS=""
+INCFLAGS="${CPPFLAGS:-}"
 for d in $INCDIRS; do
     INCFLAGS="$INCFLAGS -I$d"
 done

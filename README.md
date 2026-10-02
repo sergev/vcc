@@ -25,28 +25,29 @@ machine. Each target is described in its own documents (see [Documentation](#doc
 A compiler is a pipeline. Each stage rewrites the program into a form a little closer to
 the machine:
 
-1. **Scanner** — splits the source text into words and symbols (*tokens*).
-2. **Parser** — arranges those tokens into a tree that mirrors the structure of the
+1. **Preprocessor** — expands `#include`, `#define` and `#if` (the C preprocessor, `cpp`).
+2. **Scanner** — splits the source text into words and symbols (*tokens*).
+3. **Parser** — arranges those tokens into a tree that mirrors the structure of the
    program (a *syntax tree*).
-3. **Semantic analysis** — checks the meaning: do the types agree, does every name refer to
+4. **Semantic analysis** — checks the meaning: do the types agree, does every name refer to
    something that was declared?
-4. **Lowering and optimization** — rewrites the tree into a simple, machine-independent
+5. **Lowering and optimization** — rewrites the tree into a simple, machine-independent
    list of instructions called *three-address code* (TAC), then improves it: folding
    constants, deleting unreachable code, and removing pointless copies and stores.
-5. **Code generation** — turns TAC into assembly for the target machine: register
+6. **Code generation** — turns TAC into assembly for the target machine: register
    allocation, instruction selection, and a *peephole* pass that spots and shortens
    wasteful instruction sequences.
 
 ```mermaid
 flowchart LR
-    Source[C source] --> Scanner --> Parser --> Tree[Syntax tree]
+    Source[C source] --> Cpp[Preprocessor] --> Scanner --> Parser --> Tree[Syntax tree]
     Tree --> Semantic[Semantic analysis] --> TAC[Three-address code]
     TAC --> Optimizer --> Codegen[Target code generator] --> Asm[Assembly]
 ```
 
-Stages 1–4 are machine-independent; a target plugs in at stage 5. The only thing the
-front end needs to know about a target is a small descriptor, chiefly the sizes and
-alignment of the C types.
+Stages 1–5 are machine-independent (the preprocessor only predefines a few target
+macros); a target plugs in at stage 6. The only thing the front end needs to know about
+a target is a small descriptor, chiefly the sizes and alignment of the C types.
 
 ## The programs
 
@@ -54,21 +55,25 @@ The compiler is not one binary but several, run one after another:
 
 | Program    | Reads         | Writes                      |
 | ---------- | ------------- | --------------------------- |
-| `parse`    | C source      | a syntax tree (`.ast`)      |
+| `cpp`      | C source      | preprocessed C (`.i`)       |
+| `parse`    | preprocessed C | a syntax tree (`.ast`)     |
 | `lower`    | a syntax tree | three-address code (`.tac`) |
 | `genriscv` | TAC           | RISC-V assembly             |
 | `genbesm`  | TAC           | BESM-6 assembly             |
 
-`lower` takes the target with `-t` (for example `-t riscv64`), since type sizes and
+`cpp` and `lower` take the target with `-t` (for example `-t riscv64`): `cpp` for the
+predefined macros and the standard header directory, `lower` because type sizes and
 alignment differ between machines.
 
 Splitting them apart makes each stage easy to inspect on its own: every program can also
 print its output as readable YAML text (`--yaml`) or as a diagram for
 [Graphviz](https://graphviz.org/) (`--dot`).
 
-There is no preprocessor in this repository. If your program uses `#include` or `#define`,
-run it through your system compiler's preprocessor first, pointing it at the target's
-headers: `cc -E -nostdinc -Ilibc/riscv/include -Ilibc/common/include prog.c`.
+The preprocessor ([cpp/README.md](cpp/README.md)) descends from the Unix v7 `cpp`,
+modernized to C11 in the [v7besm](https://github.com/besm6/v7besm) project. In the build
+tree, point it at the source headers:
+`build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv/include -Ilibc/common/include prog.c prog.i`.
+Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too.)
 
 ## Getting started
 
@@ -87,7 +92,9 @@ make install    # install (see below)
 Compile a small program by hand and look at each stage:
 
 ```bash
-./build/parse hello.c hello.ast                 # C source -> syntax tree
+./build/cpp/cpp -nostdinc -Ilibc/riscv/include -Ilibc/common/include \
+    hello.c hello.i                             # C source -> preprocessed C
+./build/parse hello.i hello.ast                 # C        -> syntax tree
 ./build/lower -t riscv64 hello.ast hello.tac    # tree     -> three-address code
 ./build/backend/genriscv hello.tac hello.s      # TAC      -> RISC-V assembly
 ```
@@ -118,6 +125,7 @@ libraries and headers go into their own directory under `share/vcc/`.
 
 | Installed as                   | What it is                                      |
 | ------------------------------ | ----------------------------------------------- |
+| `bin/vcpp`                     | the preprocessor                                |
 | `bin/vparse`                   | the parser                                      |
 | `bin/vlower`                   | the analyzer and optimizer                      |
 | `bin/vgenriscv64`              | the RISC-V code generator                       |

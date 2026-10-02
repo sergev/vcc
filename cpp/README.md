@@ -1,0 +1,144 @@
+# cpp — the C preprocessor
+
+The C preprocessor of VCC, built as `build/cpp/cpp` and installed as `bin/vcpp`. It
+expands `#include`, `#define` and conditional compilation before the source reaches
+`parse`, which has no preprocessor of its own.
+
+The engine descends from John F. Reiser's Unix v7 `cpp` (1978). It was modernized to
+**C11 (N1570)** in the [v7besm](https://github.com/besm6/v7besm) project, where it is
+`b6cpp` (`cmd/cpp/`); these are the same sources, plus target selection (`-t`) and the
+`-nostdinc` option. The v7besm copy also builds natively for the BESM-6 under a
+reduced size profile (`#ifdef besm6` in [`defs.h`](defs.h)); that build and its
+documentation stay in v7besm. Here it is a host tool only.
+
+## Usage
+
+```text
+cpp [options] [infile [outfile]]
+```
+
+With no file arguments it reads standard input and writes standard output; the first
+positional argument is the input file, the second the output file (`-` stands for either
+standard stream). **The exit status is the number of errors reported** (0 on success).
+
+| Option | Meaning |
+| --- | --- |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`) or `besm6`. Selects the predefined macros and the standard include directory. |
+| `-Ipath` | Add a directory to the header search list (up to 8). |
+| `-nostdinc` | Do not search the target's standard include directory. |
+| `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |
+| `-Uname` | Undefine a macro at startup. Up to 20. |
+| `-R` | Allow macro recursion (disables the "blue paint" recursion stop). |
+| `-P` | Suppress the `# line "file"` line markers. |
+| `-C` | Keep comments in the output. |
+| `-w` | Suppress warnings. |
+| `-trigraphs` | Enable translation-phase-1 trigraph replacement. |
+| `-E` | Accepted and ignored, for compatibility. |
+
+`-I`, `-D` and `-U` take their argument in the same word (`-Ifoo`, not `-I foo`).
+
+A full compilation:
+
+```sh
+vcpp -t riscv64 hello.c hello.i       # searches ~/.local/share/vcc/riscv64/include
+vparse hello.i hello.ast
+vlower -t riscv64 hello.ast hello.tac
+vgenriscv64 hello.tac hello.s
+```
+
+In the build tree, point it at the source headers instead:
+
+```sh
+build/cpp/cpp -t besm6 -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c prog.i
+```
+
+## Targets
+
+| Target | Predefined macros | Standard include directory |
+| --- | --- | --- |
+| `riscv64` | `__riscv`, `__riscv_xlen` = 64, `__LP64__`, `_LP64`, `__riscv_float_abi_double`, `__riscv_mul`, `__riscv_div` | `<prefix>/share/vcc/riscv64/include` |
+| `besm6` | `besm6`, `__besm6__` | `<prefix>/share/vcc/besm6/include` |
+
+The RISC-V set is a subset of clang's, so a header written for clang takes the same
+branches. `<prefix>` is the install prefix the build was configured with (`~/.local` by
+default), compiled in as `VCC_SHARE_DIR`. The standard directory is searched after every
+`-I` directory. For BESM-6 only the freestanding headers and `besm6.h` are installed there;
+the hosted headers come with v7besm's libc, so pass `-I` for them.
+
+The target macros are ordinary macros and can be `#undef`'d.
+
+## Directives
+
+`#include` (`<header>` and `"header"`), `#define`, `#undef`, `#if`, `#ifdef`, `#ifndef`,
+`#elif`, `#else`, `#endif`, `#line`, `#error` and `#pragma`. Unknown pragmas are ignored.
+Leading whitespace before the `#` is allowed (C11 §6.10), unlike a traditional `cpp`.
+
+`#if`/`#elif` take a full integer constant expression: arithmetic, bitwise, shift,
+relational, equality and logical operators, `?:`, the comma operator, and both
+`defined name` and `defined(name)`. Operands are decimal, octal or hexadecimal integers
+(with an `L` suffix) or character constants; an undefined identifier is `0`. Division or
+modulo by zero is diagnosed.
+
+## Macros
+
+- Object-like and function-like macros.
+- Variadic macros with `__VA_ARGS__`, GNU named varargs (`#define M(args...)`), and GNU
+  comma elision (`, ## __VA_ARGS__`).
+- The `#` and `##` operators, with their C11 constraints.
+- Rescanning with recursion prevention (the "blue paint" rule of §6.10.3.4); `-R`
+  overrides it.
+- A wrong argument count is an error. An identical redefinition is accepted silently, an
+  incompatible one warned.
+
+Predefined, besides the target macros: `__LINE__`, `__FILE__`, the `_Pragma` operator,
+`__STDC__` (1), `__STDC_VERSION__` (`201112L`), `__STDC_HOSTED__` (1), `__DATE__`,
+`__TIME__`, and the conditional-feature macros `__STDC_NO_COMPLEX__`,
+`__STDC_NO_ATOMICS__`, `__STDC_NO_THREADS__`, `__STDC_NO_VLA__` (the compiler has none of
+those features). The standard ones are protected: `#define`/`#undef` of them, or `-D`/`-U`,
+is rejected (§6.10.8.4).
+
+Identifiers are significant to their full length. Bytes 0x80–0xFF are identifier
+characters, so UTF-8 names such as `#define длина 100` work, as in GCC and clang.
+
+## Limits
+
+From [`defs.h`](defs.h); all meet the C11 §5.2.4.1 minimums.
+
+| Limit | Value |
+| --- | --- |
+| Logical source line | at least 4095 characters |
+| Simultaneously defined macros | 4095 or more (hash table of 6151) |
+| Macro parameters | 127 |
+| `#include` nesting | 10 |
+| `#if` nesting | 64 |
+
+## Source layout
+
+| File | Responsibility |
+| --- | --- |
+| `cpp.c` | Entry point: state init, scan tables, option parsing, targets, built-in directives and predefined macros. |
+| `buffer.c` | I/O and the sliding scan buffer, output, macro pushback, trigraphs. |
+| `scan.c` | The lexical scanner: tokens, comments, strings, line continuation. |
+| `macro.c` | Macro definition, the symbol table, and expansion (arguments, `#`/`##`, blue paint). |
+| `direct.c` | Directive dispatch, `#include` search and the include stack. |
+| `parser.c`, `yylex.c` | The `#if` expression evaluator and its tokenizer. |
+| `diag.c` | Diagnostics and small string helpers. |
+| `defs.h` | The state struct, the symbol-table entry, the size limits. |
+| `intern.h` | Scan-table macros, marker bytes, the macro-name filter. |
+
+## Testing
+
+`cpp-tests` ([`test/`](test)) is a C11 conformance suite, one file per clause of the
+standard, plus the target options. Every suite derives from the `PreprocessorTest`
+fixture ([`test/test_support.h`](test/test_support.h)), which runs the built `cpp` in a
+temporary directory and compares normalized output (`EXPECT_TOKENS`, `EXPECT_PP_OK`,
+`EXPECT_PP_DIAGNOSES`).
+
+The `besm-headers-cpp` and `riscv-headers-cpp` ctests preprocess every shipped header with
+this `cpp` and parse the result, alongside the `besm-headers`/`riscv-headers` checks that
+use the system `cc -E`.
+
+```sh
+./build/cpp/test/cpp-tests
+ctest --test-dir build -R headers
+```

@@ -18,6 +18,7 @@ vcc/
 │   ├── riscv/      # RISC-V codegen: IR (rv.h), register allocation, instruction selection, peephole, tests
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), three assembler dialects, tests, BESM-6 docs
 │   └── ...         # x86/, aarch64/, arm32/, avr/, mmix/, msp430/ — ISA ASDL specs and notes, not implemented
+├── cpp/            # C preprocessor (v7 cpp, C11; from v7besm's b6cpp), its conformance tests
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md
 ├── libc/           # Target runtimes and C11 headers: riscv/ (crt0.o, libc.a, link.ld, include/), common/ (portable C sources, shared headers), besm6/
@@ -38,20 +39,21 @@ vcc/
 
 | Program | Built as | Installed as | Reads | Writes |
 |---------|----------|--------------|-------|--------|
+| `cpp` | `build/cpp/cpp` | `bin/vcpp` | C source | preprocessed C |
 | `parse` | `build/parse` | `bin/vparse` | preprocessed C | binary AST (`.ast`), YAML, DOT |
 | `lower` | `build/lower` | `bin/vlower` | binary AST | binary TAC (`.tac`), YAML, DOT |
 | `genriscv` | `build/backend/genriscv` | `bin/vgenriscv64` | binary TAC | RISC-V GNU assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
-`parse` and `lower` are built from the root `CMakeLists.txt`, the code generators from
-`backend/CMakeLists.txt`. None of them writes binary output to stdout unless asked: with
+`parse` and `lower` are built from the root `CMakeLists.txt`, `cpp` from
+`cpp/CMakeLists.txt`, the code generators from `backend/CMakeLists.txt`. None of them writes binary output to stdout unless asked: with
 no output argument the result goes to a file named after the input with the new suffix;
 pass `-` as the output argument for stdout.
 
 A complete RISC-V compilation in the build tree:
 
 ```bash
-cc -E -nostdinc -Ilibc/riscv/include -Ilibc/common/include hello.c -o hello.i
+./build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv/include -Ilibc/common/include hello.c hello.i
 ./build/parse hello.i hello.ast
 ./build/lower -t riscv64 hello.ast hello.tac
 ./build/backend/genriscv hello.tac hello.s
@@ -60,13 +62,23 @@ cc -E -nostdinc -Ilibc/riscv/include -Ilibc/common/include hello.c -o hello.i
 Linking with `crt0.o`, `libc.a` and `link.ld` and running under qemu is described in
 [Riscv_Backend.md](Riscv_Backend.md#running-a-program-by-hand).
 
+### `cpp` (preprocessor)
+
+**Input:** C source. **Output:** preprocessed C with `# line` markers (`-P` drops them),
+to stdout or the second positional argument. `-t riscv64|besm6` (default `riscv64`)
+selects the predefined target macros and the standard include directory
+`<prefix>/share/vcc/<target>/include`, searched after the `-I` directories unless
+`-nostdinc` is given. The exit status is the error count. See [cpp/README.md](../cpp/README.md).
+
+The build itself (libc, test fixtures) still preprocesses with the system `cc -E`.
+
 ### `parse` (parser)
 
-**Input:** one C source file. The compiler has no preprocessor; feed it preprocessed C.
+**Input:** one C source file, already preprocessed (by `cpp` or the system `cc -E`).
 The standard headers are in `libc/riscv/include/` (data-model dependent) and
 `libc/common/include/` (target-neutral), and are expanded by an external preprocessor
-first — use the C compiler's `cc -E`, not a traditional `cpp`, which only honors
-column-1 directives. `# line` markers are consumed, so diagnostics keep original line
+first — use `cpp` or the C compiler's `cc -E`, not a traditional system `cpp`, which
+only honors column-1 directives. `# line` markers are consumed, so diagnostics keep original line
 numbers. See [Standard_Include_Files.md](Standard_Include_Files.md).
 
 **Output:** one of:
@@ -137,7 +149,7 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vparse`, `vlower`, `vgenriscv64`, `vgenbesm6` |
+| `bin/` | `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
@@ -741,6 +753,7 @@ below), so `make run` runs them too. Test executables and their unit-test source
 
 | Executable | Sources (under repo root) |
 |------------|---------------------------|
+| `cpp-tests` | `cpp/test/test_*.cpp` (C11 conformance, one file per clause, plus the target options) |
 | `scanner-tests` | `scanner/test/tests.cpp` |
 | `parser-tests` | `parser/test/simple_tests.cpp`, …, `negative_tests.cpp` (9 files) |
 | `ast-tests` | `ast/test/clone_tests.cpp` |
@@ -754,7 +767,7 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `besm-tests` | `backend/besm6/test/*_tests.cpp` (golden output for the three dialects, run tests under the `dubna` and `b6sim` simulators) and the book suite |
 
 Besides the GoogleTest cases, ctest runs the `riscv-headers` and `besm-headers`
-header checks. cppcheck, when installed, runs during the build, not under ctest.
+header checks, and their `-cpp` twins that preprocess with our own `cpp`. cppcheck, when installed, runs during the build, not under ctest.
 
 `riscv-tests` runs programs on bare-metal `qemu-system-riscv64`, links VCC code with
 clang-compiled code in both directions, and compares every book program's output with

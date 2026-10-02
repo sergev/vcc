@@ -22,7 +22,7 @@ make clean        # remove ./build/
 ```
 
 **`make install`** builds everything, then installs the artifacts via `cmake --install`
-to `~/.local`: `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
+to `~/.local`: `cpp` → `bin/vcpp` (the C preprocessor, `cpp/`), `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
 `bin/vgenbesm6`, and the three runtime libraries
 `libc.bin` / `libbem.bin` / `libruntime.a` → `share/vcc/besm6/lib/`, plus the ten
 **compiler-owned headers** → `share/vcc/besm6/include/` (the directory `b6cc` appends to every
@@ -47,7 +47,7 @@ The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
 `CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via
 `install(PROGRAMS … RENAME)`, so the in-tree build outputs (`build/parse`, `build/lower`,
-`build/backend/genbesm`) keep their original names.
+`build/backend/genbesm`, `build/cpp/cpp`) keep their original names.
 
 **Tests are built by the default build.** A plain `make`/`make all` builds the compiler and
 runtime (`parse`, `lower`, `genbesm`, and `libc.bin`) *and* every per-module test executable.
@@ -70,6 +70,7 @@ needs none — it uses its own `lex_error()`/`exit()`.
 
 Run a single test binary directly (semantic and translator tests live in subdirectories):
 ```sh
+./build/cpp/test/cpp-tests
 ./build/ast/ast-tests
 ./build/parser-tests
 ./build/tac/tac-tests
@@ -222,14 +223,17 @@ data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg
 `setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`), and `libc/common/include/` the target-neutral
 rest, searched second (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
-The compiler has no preprocessor, so these are consumed by an external preprocessor first.
-Use the C compiler's preprocessor (`cc -E`), not a standalone `cpp`: a traditional `cpp`
+`parse` has no preprocessor, so these are consumed by a preprocessor first: our own
+`cpp` (`cpp/`, installed as `vcpp`; `-t besm6|riscv64` selects the target macros and the
+installed `share/vcc/<target>/include`, `-nostdinc` drops it) or, as the build itself still
+does (`SystemCpp`), the C compiler's `cc -E` — not a traditional standalone `cpp`: a traditional `cpp`
 (e.g. Apple's `/usr/bin/cpp`) only recognizes a `#` directive in column 1, so indented
 `#include` lines silently fail to expand. No `-P` is needed — `parse`'s scanner consumes
 `# line` markers and keeping them preserves original line numbers in diagnostics:
 `cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -`. The
 `besm-headers` and `riscv-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
-preprocess and parse every header to catch syntax errors. The unit-test fixtures preprocess
+preprocess and parse every header to catch syntax errors; their `besm-headers-cpp`/
+`riscv-headers-cpp` twins do the same through our `cpp` (`CPPFLAGS=-t<target>`). The unit-test fixtures preprocess
 their C snippets automatically via `libutil/test/test_preprocess.h` (using the CMake
 `TEST_CPP`/`TEST_INCLUDE_DIR`/`TEST_COMMON_INCLUDE_DIR` defines), so
 tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>` is
@@ -273,6 +277,7 @@ This is a multi-platform C11 compiler. The shared frontend emits TAC; machine ba
 
 ```
 Source (.c)
+  → [cpp]        Macro expansion, #include, #if → preprocessed C (`-t` target macros)
   → [parse]      Scanner → Parser → AST (binary/YAML/DOT)
   → [lower]      Typecheck → Translate → Optimize → TAC (binary/YAML/DOT)
   → [genbesm]    Frame alloc → Instruction select → Unix b6as assembly (.s, default)
@@ -290,6 +295,7 @@ Source (.c)
 
 | Phase | Location | Status |
 |---|---|---|
+| Preprocessor | `cpp/` | Complete (Reiser v7 cpp modernized to C11, ported from v7besm `cmd/cpp` (b6cpp); adds `-t`/`--target` and `-nostdinc`; the `#ifdef besm6` size profile in `defs.h` is kept for diffability with v7besm, where it builds natively; see [cpp/README.md](cpp/README.md)) |
 | Lexer | `scanner/` | Complete |
 | Parser | `parser/` | Complete |
 | AST | `ast/` | Complete (alloc/free/export/import/yaml/graphviz/clone/compare) |
@@ -358,6 +364,7 @@ Source (.c)
 
 Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 
+- `cpp/test/test_*.cpp` (C11 conformance suite driving the built `cpp` via `test_support.h`'s `PreprocessorTest`; target options in `test_predefined_macros.cpp`) → `cpp-tests`
 - `ast/test/clone_tests.cpp` → `ast-tests`
 - `scanner/test/tests.cpp` → `scanner-tests`
 - `parser/test/simple_tests.cpp`, `statement_tests.cpp`, … (9 files, including `negative_tests.cpp`) → `parser-tests`
@@ -378,6 +385,7 @@ run by `make run` (see **Build & Test** above).
 ## Documentation
 
 - [README.md](README.md) — goals, getting started, component overview
+- [cpp/README.md](cpp/README.md) — the C preprocessor: options, targets, directives, macros, limits
 - [docs/Technical_Reference.md](docs/Technical_Reference.md) — detailed reference: repo layout, components, build system, TAC YAML format, development notes
 - [docs/Memory_Allocation.md](docs/Memory_Allocation.md) — memory allocator (`xalloc`) design and usage
 - [docs/String_Map.md](docs/String_Map.md) — `libutil/string_map` key-value store

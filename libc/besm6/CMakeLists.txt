@@ -175,3 +175,13 @@ add_test(
             ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${LIBC_COMMON_INCLUDE_DIR})
+# ... and the same through our own preprocessor (cpp/, installed as vcpp).
+add_test(
+    NAME besm-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-tbesm6
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${LIBC_COMMON_INCLUDE_DIR})

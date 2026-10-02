@@ -35,6 +35,16 @@ add_test(
             ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${RISCV_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
+# ... and the same through our own preprocessor (cpp/, installed as vcpp).
+add_test(
+    NAME riscv-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-triscv64
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${RISCV_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
 
 # All the headers, the RISC-V and the shared ones, go into one directory: unlike
 # BESM-6, no other project provides a libc for this target.
