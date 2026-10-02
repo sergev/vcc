@@ -460,6 +460,36 @@ void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int
     }
 }
 
+void load_bytes(Gen *g, int reg, int base, int64_t off, int size)
+{
+    A64_Operand r = a64_reg(reg, A64_X);
+    if (size == 8) {
+        emit2(g, A64_LDR, r, mem(g, base, off, 8));
+        return;
+    }
+    emit2(g, A64_LDRB, a64_reg(reg, A64_W), mem(g, base, off + size - 1, 1));
+    for (int i = size - 2; i >= 0; i--) {
+        emit2(g, A64_LDRB, a64_reg(T2, A64_W), mem(g, base, off + i, 1));
+        emit3(g, A64_ORR, r, a64_reg(T2, A64_X), a64_shift(reg, A64_X, A64_SHIFT_LSL, 8));
+    }
+}
+
+void store_bytes(Gen *g, int reg, int base, int64_t off, int size)
+{
+    if (size == 8) {
+        emit2(g, A64_STR, a64_reg(reg, A64_X), mem(g, base, off, 8));
+        return;
+    }
+    for (int i = 0; i < size; i++) {
+        if (i == 0)
+            emit2(g, A64_STRB, a64_reg(reg, A64_W), mem(g, base, off, 1));
+        else {
+            emit3(g, A64_LSR, a64_reg(T2, A64_X), a64_reg(reg, A64_X), a64_imm(8 * i));
+            emit2(g, A64_STRB, a64_reg(T2, A64_W), mem(g, base, off + i, 1));
+        }
+    }
+}
+
 void gen_epilogue(Gen *g)
 {
     a64_append(g->fn, A64_EPILOGUE);

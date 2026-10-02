@@ -61,6 +61,7 @@ typedef struct {
     int locals_size;   // bytes of slots below the frame record
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
+    int ret_ptr;       // slot of the result address that came in x8, or 0
 } Gen;
 
 //
@@ -113,6 +114,11 @@ int64_t const_value(const Tac_Const *c);
 void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
 // Copy `size` bytes; the bases are registers other than x11 and ip0.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
+// Load `size` (1..8) bytes at base + off into X register `reg`, or store them: a whole
+// doubleword at once, fewer byte by byte (an object may end there).  x11 is the
+// temporary.
+void load_bytes(Gen *g, int reg, int base, int64_t off, int size);
+void store_bytes(Gen *g, int reg, int base, int64_t off, int size);
 A64_Instr *emit1(Gen *g, A64_Op op, A64_Operand a);
 A64_Instr *emit2(Gen *g, A64_Op op, A64_Operand a, A64_Operand b);
 A64_Instr *emit3(Gen *g, A64_Op op, A64_Operand a, A64_Operand b, A64_Operand c);

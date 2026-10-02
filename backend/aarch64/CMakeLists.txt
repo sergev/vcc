@@ -19,7 +19,7 @@ target_link_libraries(aarch64 backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(AARCH64_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-6])_tests\\.cpp$")
+list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter[0-9]+_tests[0-9]*\\.cpp$")
 
 add_executable(aarch64-tests
     test/emit_tests.cpp
@@ -31,6 +31,7 @@ add_executable(aarch64-tests
     test/data_tests.cpp
     test/fp_tests.cpp
     test/ptr_tests.cpp
+    test/struct_tests.cpp
     test/run_tests.cpp
     ${AARCH64_BOOK_SOURCES}
 )

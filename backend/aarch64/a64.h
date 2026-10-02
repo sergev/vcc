@@ -99,25 +99,26 @@ typedef struct {
 } A64_Operand;
 
 // Opcode and mnemonic.
-#define A64_OPS(X)                                                                                \
-    X(MOV, "mov")                                                                                 \
-    X(MOVZ, "movz")                                                                               \
-    X(MOVN, "movn")                                                                               \
-    X(MOVK, "movk")                                                                               \
-    X(ADD, "add")                                                                                 \
-    X(SUB, "sub") X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv") X(MSUB, "msub")     \
-        X(MADD, "madd") X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn") X(LSL, "lsl")     \
-            X(LSR, "lsr") X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") X(SXTB, "sxtb")             \
-                X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth") X(LDR, "ldr")     \
-                    X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")           \
-                        X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb") X(STRH, "strh")           \
-                            X(LDP, "ldp") X(STP, "stp") X(ADRP, "adrp") X(B, "b") X(BCOND, "b.")  \
-                                X(CBZ, "cbz") X(CBNZ, "cbnz") X(BL, "bl") X(BLR, "blr")           \
-                                    X(RET, "ret") X(FMOV, "fmov") X(FADD, "fadd") X(FSUB, "fsub") \
-                                        X(FMUL, "fmul") X(FDIV, "fdiv") X(FNEG, "fneg")           \
-                                            X(FCMP, "fcmp") X(FCVT, "fcvt") X(SCVTF, "scvtf")     \
-                                                X(UCVTF, "ucvtf") X(FCVTZS, "fcvtzs")             \
-                                                    X(FCVTZU, "fcvtzu") X(EPILOGUE, "#epilogue")
+#define A64_OPS(X)                                                                                 \
+    X(MOV, "mov")                                                                                  \
+    X(MOVZ, "movz")                                                                                \
+    X(MOVN, "movn")                                                                                \
+    X(MOVK, "movk")                                                                                \
+    X(ADD, "add")                                                                                  \
+    X(SUB, "sub")                                                                                  \
+    X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv") X(MSUB, "msub") X(MADD, "madd")    \
+        X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn") X(LSL, "lsl") X(LSR, "lsr")        \
+            X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") X(SXTB, "sxtb") X(SXTH, "sxth")            \
+                X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth") X(LDR, "ldr") X(LDRB, "ldrb")      \
+                    X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh") X(LDRSW, "ldrsw")          \
+                        X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(LDP, "ldp") X(STP, "stp")  \
+                            X(ADRP, "adrp") X(B, "b") X(BCOND, "b.") X(CBZ, "cbz") X(CBNZ, "cbnz") \
+                                X(BL, "bl") X(BLR, "blr") X(RET, "ret") X(FMOV, "fmov")            \
+                                    X(FADD, "fadd") X(FSUB, "fsub") X(FMUL, "fmul")                \
+                                        X(FDIV, "fdiv") X(FNEG, "fneg") X(FCMP, "fcmp")            \
+                                            X(FCVT, "fcvt") X(SCVTF, "scvtf") X(UCVTF, "ucvtf")    \
+                                                X(FCVTZS, "fcvtzs") X(FCVTZU, "fcvtzu")            \
+                                                    X(EPILOGUE, "#epilogue")
 
 typedef enum {
 #define A64_ENUM(op, mnem) A64_##op,

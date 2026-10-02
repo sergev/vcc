@@ -113,9 +113,15 @@ with pointers), not all at once in A23.
   them). An aggregate or a `long double` value is copied as bytes. `libc.a` now holds
   all of `libc/common` but the `printf` family (A18) and `libc/lp64`, all compiled by
   us; malloc's run test is back.
-- **A16. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
-  copies (`ldp`/`stp` of 16 bytes, then a tail), struct arguments and results passed
-  whole through memory and `x8` for now.
+- **A16. Structs. Done** (ch. 17–20): member access and copies (A15), and structs by
+  value under AAPCS64's general composite rules: up to 16 bytes in one or two X
+  registers (an even pair when 16-byte aligned; whole on the stack, rounded to 8 and
+  aligned, once the registers run out, and then no later X register), a larger one as
+  a pointer to the caller's copy, a result of up to 16 bytes in x0/x1, a larger one
+  through the address the caller passes in x8 (saved by the callee on entry). A last
+  doubleword shorter than 8 bytes is moved byte by byte. Run against clang both ways.
+  With it every book chapter passes, 19 and 20 included. Homogeneous float aggregates
+  are A17's.
 
 ## Phase 3 — ABI conformance
 
