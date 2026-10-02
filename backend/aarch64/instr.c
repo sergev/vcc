@@ -51,26 +51,196 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     xfree(l);
 }
 
+// An aggregate, or a long double: copied as bytes, never in a register.
+static bool is_wide(const Tac_Type *t)
+{
+    return a64_is_aggregate(t) || a64_is_ld(t);
+}
+
+// Store wide value `src` of type `t` at base + off: a copy of its object, or a long
+// double constant's two words.  `base` is not x11, x12 or ip0.
+static void store_wide(Gen *g, const Tac_Val *src, const Tac_Type *t, int base, int64_t off)
+{
+    if (src->kind == TAC_VAL_CONSTANT) {
+        Float128 q = src->u.constant->u.long_double_val;
+        gen_li(g, T0, A64_X, (int64_t)q.lo);
+        emit2(g, A64_STR, a64_reg(T0, A64_X), mem(g, base, off, 8));
+        gen_li(g, T0, A64_X, (int64_t)q.hi);
+        emit2(g, A64_STR, a64_reg(T0, A64_X), mem(g, base, off + 8, 8));
+        return;
+    }
+    int sbase;
+    int64_t soff;
+    name_addr(g, src->u.var_name, T3, &sbase, &soff);
+    gen_memcopy(g, base, off, sbase, soff, a64_size(t), a64_align(t));
+}
+
+// Load scalar `v` of type `t` into a scratch register of its class; returns it.
+static int load_scalar(Gen *g, const Tac_Val *v, const Tac_Type *t)
+{
+    if (a64_is_fp(t)) {
+        load_val(g, F0, v);
+        return F0;
+    }
+    load_int_as(g, T0, v, t);
+    return T0;
+}
+
 // dst = src, for any type.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (a64_is_aggregate(t)) {
-        int sbase, dbase;
-        int64_t soff, doff;
-        name_addr(g, src->u.var_name, T3, &sbase, &soff);
-        name_addr(g, dst->u.var_name, T4, &dbase, &doff);
-        gen_memcopy(g, dbase, doff, sbase, soff, a64_size(t), a64_align(t));
+    if (is_wide(t)) {
+        int base;
+        int64_t off;
+        name_addr(g, dst->u.var_name, T4, &base, &off);
+        store_wide(g, src, t, base, off);
         return;
     }
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
-    if (a64_is_fp(t)) {
-        load_val(g, F0, src);
-    } else {
-        load_int_as(g, T0, src, t);
+    store_val(g, load_scalar(g, src, t), dst);
+}
+
+// The type stored through pointer value `ptr`, or NULL when not known.
+static const Tac_Type *pointee(Gen *g, const Tac_Val *ptr)
+{
+    const Tac_Type *t = val_type(g, ptr);
+    return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
+}
+
+// dst = *src_ptr.
+static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
+{
+    const Tac_Type *t = val_type(g, dst);
+    load_val(g, T3, src_ptr);
+    if (is_wide(t)) {
+        int base;
+        int64_t off;
+        name_addr(g, dst->u.var_name, T4, &base, &off);
+        gen_memcopy(g, base, off, T3, 0, a64_size(t), a64_align(t));
+        return;
     }
-    store_val(g, a64_is_fp(t) ? F0 : T0, dst);
+    int d = a64_is_fp(t) ? F0 : T0;
+    load_mem(g, d, t, T3, 0);
+    store_val(g, d, dst);
+}
+
+// *dst_ptr = src, in the width of the pointee (or of src when that is not known).
+static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
+{
+    const Tac_Type *t = pointee(g, dst_ptr);
+    if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
+        (a64_is_aggregate(t) && !a64_is_aggregate(val_type(g, src))))
+        t = val_type(g, src);
+    load_val(g, T4, dst_ptr);
+    if (is_wide(t)) {
+        store_wide(g, src, t, T4, 0);
+        return;
+    }
+    store_mem(g, load_scalar(g, src, t), t, T4, 0);
+}
+
+// dst = ptr + index * scale (bytes).  An index narrower than 64 bits is extended by its
+// type first: a W load has zeroed the upper half.
+static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
+{
+    int scale          = in->u.add_ptr.scale;
+    const Tac_Type *it = val_type(g, in->u.add_ptr.index);
+    load_val(g, T0, in->u.add_ptr.ptr);
+    load_val(g, T1, in->u.add_ptr.index);
+    A64_Operand i = a64_reg(T1, A64_X);
+    if (a64_size(it) <= 4 && !a64_is_unsigned(it))
+        emit2(g, A64_SXTW, i, a64_reg(T1, A64_W));
+    int shift = 0;
+    while ((1 << shift) < scale)
+        shift++;
+    if ((1 << shift) != scale) {
+        gen_li(g, T2, A64_X, scale);
+        emit3(g, A64_MUL, i, i, a64_reg(T2, A64_X));
+        shift = 0;
+    }
+    A64_Operand p = a64_reg(T0, A64_X);
+    emit3(g, A64_ADD, p, p, shift ? a64_shift(T1, A64_X, A64_SHIFT_LSL, shift) : i);
+    store_val(g, T0, in->u.add_ptr.dst);
+}
+
+// dst = a - b, a byte count.
+static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
+{
+    load_val(g, T0, in->u.ptr_diff.ptr_a);
+    load_val(g, T1, in->u.ptr_diff.ptr_b);
+    emit3(g, A64_SUB, a64_reg(T0, A64_X), a64_reg(T0, A64_X), a64_reg(T1, A64_X));
+    store_val(g, T0, in->u.ptr_diff.dst);
+}
+
+// The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
+// members there, one of `size` bytes is preferred, else the first.
+static const Tac_Type *scalar_at(const Tac_Type *t, int offset, int size)
+{
+    if (!t)
+        return NULL;
+    if (t->kind == TAC_TYPE_ARRAY) {
+        int esize = a64_size(t->u.array.elem_type);
+        return esize > 0 ? scalar_at(t->u.array.elem_type, offset % esize, size) : NULL;
+    }
+    if (t->kind != TAC_TYPE_STRUCTURE)
+        return offset == 0 ? t : NULL;
+    const Tac_Type *first = NULL;
+    for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+        if (offset < m->offset || offset >= m->offset + a64_size(m->type))
+            continue;
+        const Tac_Type *s = scalar_at(m->type, offset - m->offset, size);
+        if (s && a64_size(s) == size)
+            return s;
+        if (!first)
+            first = s;
+    }
+    return first;
+}
+
+// Member store: aggregate `dst` at byte `offset` = src.  A constant takes the width of
+// the member there (its own kind may be wider); a byte copy is one byte.
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int offset, bool byte)
+{
+    static const Tac_Type uchar = { .kind = TAC_TYPE_UCHAR };
+    const Tac_Type *t           = val_type(g, src);
+    if (byte) {
+        t = &uchar;
+    } else if (src->kind == TAC_VAL_CONSTANT) {
+        const Tac_Type *m = scalar_at(name_type(g, dst), offset, a64_size(t));
+        if (m && a64_is_fp(m) == a64_is_fp(t) && !is_wide(m))
+            t = m;
+    }
+    int base;
+    int64_t off;
+    name_addr(g, dst, T4, &base, &off);
+    off += offset;
+    if (is_wide(t)) {
+        store_wide(g, src, t, base, off);
+        return;
+    }
+    store_mem(g, load_scalar(g, src, t), t, base, off);
+}
+
+// Member load: dst = aggregate `src` at byte `offset`.
+static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_Val *dst, bool byte)
+{
+    const Tac_Type *t = val_type(g, dst);
+    if (byte && a64_size(t) != 1)
+        fatal_error("aarch64: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+    int base;
+    int64_t off;
+    name_addr(g, src, T3, &base, &off);
+    off += offset;
+    if (is_wide(t)) {
+        int dbase;
+        int64_t doff;
+        name_addr(g, dst->u.var_name, T4, &dbase, &doff);
+        gen_memcopy(g, dbase, doff, base, off, a64_size(t), a64_align(t));
+        return;
+    }
+    int d = a64_is_fp(t) ? F0 : T0;
+    load_mem(g, d, t, base, off);
+    store_val(g, d, dst);
 }
 
 // The register view of an operation on type `t`: W up to 32 bits, else X.
@@ -422,6 +592,36 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         gen_get_address(g, in->u.get_address.src, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_LOAD:
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        gen_load(g, in->u.load.src_ptr, in->u.load.dst);
+        break;
+    case TAC_INSTRUCTION_STORE:
+    case TAC_INSTRUCTION_STORE_BYTE:
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr);
+        break;
+    case TAC_INSTRUCTION_ADD_PTR:
+        gen_add_ptr(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_DIFF:
+        gen_ptr_diff(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:
+    case TAC_INSTRUCTION_CHAR_PTR_TO_PTR:
+        gen_copy(g, in->u.ptr_to_char_ptr.src, in->u.ptr_to_char_ptr.dst);
+        break;
+    case TAC_INSTRUCTION_COPY_TO_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+        gen_copy_to_offset(g, in->u.copy_to_offset.src, in->u.copy_to_offset.dst,
+                           in->u.copy_to_offset.offset,
+                           in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET);
+        break;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        gen_copy_from_offset(g, in->u.copy_from_offset.src, in->u.copy_from_offset.offset,
+                             in->u.copy_from_offset.dst,
+                             in->kind == TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET);
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

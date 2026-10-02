@@ -105,9 +105,14 @@ with pointers), not all at once in A23.
   and moved with `fmov`; `fmov`'s own 8-bit immediate is the peephole's (A26). FP
   arguments and results run against clang both ways. `libc.a` gains `fabs`, `fma`,
   `fmax`, `fmin`. `long double` operations stay a clear `fatal_error` until A21.
-- **A15. Pointers, arrays, chars, strings** (ch. 14–16): loads/stores by width and
-  signedness (`ldrsb`/`ldrb`, …), `ADD_PTR` with scaled-register addressing where it
-  fits, and the byte-pointer TAC kinds as plain operations, as on RISC-V.
+- **A15. Pointers, arrays, chars, strings. Done** (ch. 14–16): loads and stores
+  through a pointer by width and signedness (`ldrsb`/`ldrb`, …), `ADD_PTR` as a shifted
+  add for a power-of-two scale (a `mul` otherwise; an index narrower than 64 bits
+  extended by its type), `PTR_DIFF`, the byte-pointer TAC kinds as plain operations,
+  and the member copies `COPY_TO_OFFSET`/`COPY_FROM_OFFSET` (array initializers use
+  them). An aggregate or a `long double` value is copied as bytes. `libc.a` now holds
+  all of `libc/common` but the `printf` family (A18) and `libc/lp64`, all compiled by
+  us; malloc's run test is back.
 - **A16. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
   copies (`ldp`/`stp` of 16 bytes, then a tail), struct arguments and results passed
   whole through memory and `x8` for now.
