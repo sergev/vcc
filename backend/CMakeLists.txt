@@ -10,7 +10,7 @@ add_executable(genbesm
 )
 target_link_libraries(genbesm besm backend_common)
 
-install(PROGRAMS $<TARGET_FILE:genbesm> DESTINATION bin RENAME b6codegen)
+install(PROGRAMS $<TARGET_FILE:genbesm> DESTINATION bin RENAME vgenbesm6)
 
 #
 # `genriscv` executable
@@ -20,4 +20,4 @@ add_executable(genriscv
 )
 target_link_libraries(genriscv riscv backend_common)
 
-install(PROGRAMS $<TARGET_FILE:genriscv> DESTINATION bin RENAME rv64codegen)
+install(PROGRAMS $<TARGET_FILE:genriscv> DESTINATION bin RENAME vgenriscv64)

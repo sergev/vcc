@@ -73,16 +73,17 @@ In `libc/riscv/`:
 You need clang with RISC-V support, `ld.lld` and `qemu-system-riscv64`. On macOS:
 `brew install llvm lld qemu`.
 
-After `make install` (here `$P` is the install prefix, e.g. `~/.local`):
+After `make install`, which installs into `~/.local`:
 
 ```sh
-cc -E -nostdinc -I$P/share/riscv/include hello.c -o hello.i      # preprocess
-b6parse hello.i hello.ast                                          # parse
-b6lower -t riscv64 hello.ast hello.tac                             # check and lower
-rv64codegen hello.tac hello.s                                      # generate assembly
+P=~/.local
+cc -E -nostdinc -I$P/share/riscv64/include hello.c -o hello.i    # preprocess
+vparse hello.i hello.ast                                         # parse
+vlower -t riscv64 hello.ast hello.tac                            # check and lower
+vgenriscv64 hello.tac hello.s                                    # generate assembly
 clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c hello.s -o hello.o
-ld.lld -T $P/share/riscv/lib/link.ld -o hello.elf \
-    $P/share/riscv/lib/crt0.o hello.o $P/share/riscv/lib/libc.a
+ld.lld -T $P/share/riscv64/lib/link.ld -o hello.elf \
+    $P/share/riscv64/lib/crt0.o hello.o $P/share/riscv64/lib/libc.a
 qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
     -kernel hello.elf
 ```

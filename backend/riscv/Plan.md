@@ -14,7 +14,7 @@ Step IDs are stable: a finished step is marked done, never renumbered.
 | Data model | `int`, `long`, pointers 32-bit; `long long` 64; `long double` binary128 | as the descriptor and clang |
 | Backend | `genriscv --rv32`: one backend, register width a parameter | about 80% is shared: allocation, peephole, frames, calls |
 | Run | `qemu-system-riscv32 -M virt -bios none` | same machine, RAM and devices as rv64 |
-| Install | `rv32codegen`? or `rv64codegen --rv32` | open question 1 |
+| Install | `bin/vgenriscv32`, `share/riscv32/{include,lib}` | beside `vgenriscv64` and `share/riscv64/` |
 
 Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is installed.
 
@@ -52,7 +52,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   reference). `<stdarg.h>` for rv32.
 - **R30. Library, book and install.** The libc and `long double` tests on rv32; the
   book suite on rv32, compared with clang, with a skip list for the programs whose
-  results depend on 64-bit `long`; `make install` for rv32; docs/Riscv_Backend.md.
+  results depend on 64-bit `long`; `make install` for rv32 (`vgenriscv32`, `share/riscv32/`); docs/Riscv_Backend.md.
 - **R31. Optional: `long long` in registers.** Register allocation of pairs, if the
   generated code is worth it.
 
@@ -69,6 +69,6 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
 
 ## Open questions
 
-1. Install name: `rv32codegen`, or one `rv64codegen` with `--rv32`?
+1. Answered: installed as `vgenriscv32`, with `share/riscv32/include` and `lib`.
 2. Runtime layout: `libc/riscv32/` beside `libc/riscv/`, or one directory built twice
    with the width-dependent headers in subdirectories?

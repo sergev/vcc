@@ -22,8 +22,8 @@ make clean        # remove ./build/
 ```
 
 **`make install`** builds everything, then installs the artifacts via `cmake --install`
-to `~/.local` if that directory exists, otherwise `/usr/local`: `parse` → `bin/b6parse`,
-`lower` → `bin/b6lower`, `genbesm` → `bin/b6codegen`, and the three runtime libraries
+to `~/.local`: `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
+`bin/vgenbesm6`, and the three runtime libraries
 `libc.bin` / `libbem.bin` / `libruntime.a` → `share/besm6/lib/`, plus the ten
 **compiler-owned headers** → `share/besm6/include/` (the directory `b6cc` appends to every
 compilation): the C11 freestanding subset (C11 §4 — `float.h`, `iso646.h`, `limits.h`,
@@ -38,12 +38,13 @@ with them, so this repo ships only what v7besm cannot supply: `libruntime.a` (th
 helpers the code generator emits calls to) and the freestanding/intrinsics headers. The
 hosted headers and `libc0.a` still build and are used in-tree (test fixtures, the
 `besm-headers` test, the Unix run harnesses).
-For RISC-V it installs `genriscv` → `bin/rv64codegen`, the runtime `crt0.o`, `libc.a`
-and the qemu `virt` linker script `link.ld` → `share/riscv/lib/`, and *all* the RISC-V and
-shared headers, hosted ones included, → `share/riscv/include/` (no other project supplies a
-RISC-V libc); the runtime only when the RISC-V clang/llvm-ar were found.
-The prefix is chosen in the Makefile at install time and passed as `cmake --install build
---prefix`; the driver binaries are renamed (`b6` prefix) only at install time via
+For RISC-V it installs `genriscv` → `bin/vgenriscv64`, the runtime `crt0.o`, `libc.a`
+and the qemu `virt` linker script `link.ld` → `share/riscv64/lib/`, and *all* the RISC-V and
+shared headers, hosted ones included, → `share/riscv64/include/` (no other project supplies a
+RISC-V libc); the runtime only when the RISC-V clang/llvm-ar were found. riscv32 will add
+`bin/vgenriscv32` and `share/riscv32/` (backend/riscv/Plan.md).
+The prefix is set in the Makefile and passed as `cmake --install build --prefix`; the
+binaries are renamed (`v` prefix) only at install time via
 `install(PROGRAMS … RENAME)`, so the in-tree build outputs (`build/parse`, `build/lower`,
 `build/backend/genbesm`) keep their original names.
 

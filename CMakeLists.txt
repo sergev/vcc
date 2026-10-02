@@ -119,9 +119,9 @@ add_executable(lower
 target_link_libraries(lower optimize translator)
 
 #
-# Installation: compiler driver executables (renamed with a b6 prefix) and the
-# BESM-6 C runtime library.  The Makefile `install` target picks the prefix
-# (~/.local if present, else /usr/local) and passes it via `cmake --install --prefix`.
+# Installation: the compiler executables, renamed with a `v` prefix, and the runtime
+# of each target under share/<target>.  The Makefile `install` target passes the
+# prefix, ~/.local, via `cmake --install --prefix`.
 #
-install(PROGRAMS $<TARGET_FILE:parse> DESTINATION bin RENAME b6parse)
-install(PROGRAMS $<TARGET_FILE:lower> DESTINATION bin RENAME b6lower)
+install(PROGRAMS $<TARGET_FILE:parse> DESTINATION bin RENAME vparse)
+install(PROGRAMS $<TARGET_FILE:lower> DESTINATION bin RENAME vlower)

@@ -135,21 +135,21 @@ dot -Tpng hello.dot -o hello.png
 
 ## What gets installed
 
-`make install` puts everything into `~/.local` if that directory exists, otherwise into
-`/usr/local`. (To choose your own location: `cmake --install build --prefix /opt/besm6`.)
+`make install` puts everything into `~/.local`. (To choose your own location:
+`cmake --install build --prefix /opt/vcc`.)
 
 | Installed as                   | What it is                                   |
 | ------------------------------ | -------------------------------------------- |
-| `bin/b6parse`                  | the parser                                   |
-| `bin/b6lower`                  | the analyzer and optimizer                   |
-| `bin/b6codegen`                | the BESM-6 code generator                    |
+| `bin/vparse`                   | the parser                                   |
+| `bin/vlower`                   | the analyzer and optimizer                   |
+| `bin/vgenbesm6`                | the BESM-6 code generator                    |
 | `share/besm6/lib/libc.bin`     | C library for the Dubna monitor (Madlen)     |
 | `share/besm6/lib/libbem.bin`   | C library for the Dubna monitor (Bemsh)      |
 | `share/besm6/lib/libruntime.a` | the helper routines the generated code calls |
 | `share/besm6/include/*.h`      | the ten headers that describe this compiler  |
-| `bin/rv64codegen`              | the RISC-V code generator                    |
-| `share/riscv/lib/`             | RISC-V `crt0.o`, `libc.a`, linker script     |
-| `share/riscv/include/*.h`      | the RISC-V C headers                         |
+| `bin/vgenriscv64`              | the RISC-V code generator                    |
+| `share/riscv64/lib/`           | RISC-V `crt0.o`, `libc.a`, linker script     |
+| `share/riscv64/include/*.h`    | the RISC-V C headers                         |
 
 Those ten BESM-6 headers — `besm6.h`, `float.h`, `iso646.h`, `limits.h`, `stdalign.h`,
 `stdarg.h`, `stdbool.h`, `stddef.h`, `stdint.h`, `stdnoreturn.h` — describe the compiler

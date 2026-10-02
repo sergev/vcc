@@ -6,10 +6,10 @@
 #
 # make run   -- run all unit tests (including the textbook chapter tests)
 #
-# make install -- install b6parse, b6lower, b6codegen, libc.bin, libbem.bin,
+# make install -- install vparse, vlower, vgenbesm6 with libc.bin, libbem.bin,
 #                 libruntime.a and the compiler-owned headers (the C11 freestanding
-#                 subset plus besm6.h); rv64codegen with the RISC-V runtime and
-#                 headers -- to ~/.local if it exists, else /usr/local
+#                 subset plus besm6.h); vgenriscv64 with the RISC-V runtime and
+#                 headers -- to ~/.local
 #
 # make clean -- remove build files
 #
@@ -26,9 +26,8 @@ run:    test
 	ctest --test-dir build --progress
 
 install: all
-	@prefix=$$( [ -d "$$HOME/.local" ] && echo "$$HOME/.local" || echo /usr/local ); \
-	echo "Installing to $$prefix"; \
-	cmake --install build --prefix "$$prefix"
+	@echo "Installing to $$HOME/.local"; \
+	cmake --install build --prefix "$$HOME/.local"
 
 clean:
 	rm -rf build
