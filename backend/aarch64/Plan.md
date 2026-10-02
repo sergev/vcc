@@ -59,74 +59,36 @@ and the harness runs qemu under a short timeout regardless.
   AAPCS64 structure `{ __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }` — the
   largest difference from RISC-V (A18).
 
-## Phase 0 — groundwork
-
-- **A1. Target plumbing. Done.** `cpp -t aarch64` predefines clang's `__aarch64__`,
-  `__ARM_ARCH=8`, `__ARM_64BIT_STATE`, `__LP64__`, `_LP64`, `__CHAR_UNSIGNED__` and
-  `__ELF__` (no `__SIZEOF_*__`, as for RISC-V); `Predefined.Aarch64Target` tests it.
-  The descriptor needed no change before A13 (`struct_return_max`).
-- **A2. TAC audit for `aarch64`. Done, no defects.** Nothing in shared code keys on a
-  target's name, and the `aarch64` and `riscv64` descriptors have the same data model:
-  all 623 literal book programs and every `libc/common` and RISC-V libc source
-  (`float128.c` included) lower to byte-identical TAC for the two targets.
-- **A3. Share the register allocator. Done.** The graph colouring is
-  `backend/common/regalloc.c`, behind a `RegAlloc_Target` (`regalloc.h`): the integer
-  and FP pools with their argument-register prefix, the result registers, and hooks to
-  classify a type (none / integer / FP / integer pair), to tell a runtime call, for
-  parameter and call hints, and to take each assignment. `backend/riscv/regalloc.c` is
-  now only that descriptor. RISC-V assembly of the whole corpus, rv64 and rv32 (1310
-  files), is byte-identical before and after.
-- **A4. Shared qemu test plumbing. Done.** `backend/common/test/qemu_test.h`
-  (`QemuTest`, configured by a `QemuConfig`: clang and its flags, ld.lld, link script,
-  library directory, the qemu command) assembles, links and runs; `RiscvTest` keeps
-  only its RISC-V configuration and helpers, its tests unchanged. The `aarch64`
-  `BookTest` comes with the code generator, in A8.
-- **A5. Share the runtime sources. Done for the sources.** `doprnt.c` and `float128.c`
-  are in `libc/common/` (the `LIBC_C_IEEE` list: byte-addressed IEEE-754 targets only,
-  not BESM-6), `frexp.c`/`ldexp.c`/`modf.c` in `libc/lp64/` (`LIBC_C_LP64`). The six
-  data-model headers that `aarch64` can share with `riscv64` (`float.h`, `inttypes.h`,
-  `limits.h`, `math.h`, `stddef.h`, `stdint.h`; only their comments name RISC-V) are
-  left for A22: sharing them takes a third include directory through the test
-  preprocessing, header checks, install and `cc` tests, which pays off only once
-  `aarch64` has headers.
-
-`make run` stays green after every A-step.
-
 ## Phase 1 — skeleton
 
-- **A6. Runtime.** `libc/aarch64/`:
-  - `crt0.S`: set `sp`; enable FP/SIMD (`CPACR_EL1.FPEN`); install a vector table
-    whose every entry prints the exception syndrome (`ESR_EL1`, `ELR_EL1`) and exits
-    with a distinctive status; build a two-entry level-1 identity map in 1 GiB blocks
-    (`0`–`1 GiB` Device for the UART, `1`–`2 GiB` Normal cacheable for RAM), set
-    `MAIR_EL1`/`TCR_EL1`/`TTBR0_EL1` and enable the MMU and caches (`SCTLR_EL1`), so
-    unaligned access is legal as on any real AArch64 system; clear `.bss`; call `main`;
-    pass its result to `exit`.
-  - `console.s`: `putbyte` to the PL011 data register, `exit` through semihosting
-    `SYS_EXIT_EXTENDED` (`hlt #0xf000`, `ADP_Stopped_ApplicationExit` + status).
-  - `link.ld`: load at `0x40080000` (RAM starts at `0x40000000`; qemu may put the DTB
-    at its start), stack and heap at the top of a 128 MiB RAM.
-  - `malloc.s`, and the shared sources of A5, built with our compiler; archived with
-    `llvm-ar` as `libc.a`.
-- **A7. Skeleton.** `backend/aarch64/` with `CMakeLists.txt`, `a64.h` (IR: function,
-  block, instruction over virtual registers; operands: register with width W/X/S/D/Q,
-  immediate, symbol with optional `:lo12:` modifier, memory `[base, #off]` with
-  pre/post-index, shifted/extended register, condition code), `codegen.c`, `emit.c`,
-  `main.c` on `backend/common/driver.c`, and `genaarch64`. Emits sections, `.globl`,
-  `.type`/`.size`, `.p2align`, labels.
-- **A8. Run harness and first program.** `CompileToAarch64` (golden assembly) and
-  `CompileAndRunAarch64` (assemble, link with crt0 and `libc.a`, run qemu with
-  `-display none -serial stdio -monitor none -semihosting` under a short timeout).
-  `aarch64_test.h` is a `QemuTest` (A4) with the AArch64 configuration, and
-  `book_test.h` its `BookTest` with a skip list. CMake finds `qemu-system-aarch64`;
-  tests guard with `SKIP_IF_NO_AARCH64_TOOLS()`.
-  `int main(void) { return 2; }` runs and returns 2.
+- **A6. Runtime. Done.** `libc/aarch64/`: `crt0.S` (sp, FP/SIMD, a vector table that
+  prints the vector, `ESR_EL1`, `ELR_EL1` and `FAR_EL1` and exits with 255, the
+  identity-mapped MMU and caches, `.bss`, `main`, `exit`; `crt0-status.o` prints main's
+  result first), `console.s` (PL011 `putbyte`, semihosting `exit`), `link.ld` (at
+  `0x40080000`), `malloc.s`. `libc.a` holds only the assembly leaves for now: the C
+  sources need the code generator, and join it in A23 — and with them `memset` and
+  `memcpy`, without which `calloc`/`realloc` do not link, so malloc's run test waits
+  for A23 too.
+- **A7. Skeleton. Done.** `backend/aarch64/`: `a64.h`/`a64.c` (the IR, with every
+  operand form of the plan: W/X/S/D/Q registers, immediates, symbols with `:lo12:`,
+  memory with pre/post-index, shifted and extended registers, `lsl` for `movz`/`movk`,
+  conditions), `emit.c`, `codegen.c`, `main.c`, `genaarch64`. Selection so far: a
+  `return` of an integer constant, by `gen_li` (one `mov` when it is a single `movz` or
+  `movn`, else `movz`/`movn` and `movk`s); anything else is a clear `fatal_error`.
+- **A8. Run harness and first program. Done.** `aarch64_test.h` (`Aarch64Test`, a
+  `QemuTest`), `book_test.h` (`BookTest`, comparing every program with clang), tests
+  `emit_tests.cpp`, `codegen_tests.cpp` and `run_tests.cpp` (the first programs, and
+  the runtime on hand-written assembly: an unaligned load and FP with the MMU on, a
+  fault reported). Book chapters are enabled in `backend/aarch64/CMakeLists.txt`
+  (`AARCH64_BOOK_SOURCES`); chapter 1 passes. The test programs use the riscv64
+  headers (the same LP64 data model) until A22.
 
 ## Phase 2 — instruction selection, book order
 
 Naive and correct first: every TAC variable in a frame slot, operands loaded into
 scratch registers (`x9`–`x15`, `v16`–`v31`), result stored back. Each step is done when
-its book chapters pass and a few golden tests pin the selected instructions.
+its book chapters pass (added to `AARCH64_BOOK_SOURCES`) and a few golden tests pin the
+selected instructions.
 
 - **A9. Frame.** Slot layout from typed TAC, `ALLOCATE_LOCAL`, prologue
   `stp x29, x30, [sp, #-N]!` / `mov x29, sp`, epilogue, 16-byte alignment. Immediates
@@ -202,20 +164,22 @@ its book chapters pass and a few golden tests pin the selected instructions.
 
 - **A21. binary128 `long double`.** Values in `q` registers and 16-byte slots; moves
   between `q` and an X pair (`fmov x, d` / `mov x, v.d[1]`) only where a helper needs
-  it. Arithmetic, comparisons and conversions call the routines of the A5 `float128.c`,
+  it. Arithmetic, comparisons and conversions call the routines of `libc/common/float128.c`,
   compiled for AArch64, so folded and computed values agree as on RISC-V. A
   `float128_tests` run like RISC-V's, against the same exact cases.
-- **A22. Headers.** Move the six LP64 data-model headers A5 found to
+- **A22. Headers.** Move the six LP64 data-model headers (`float.h`, `inttypes.h`,
+  `limits.h`, `math.h`, `stddef.h`, `stdint.h` of `libc/riscv64/include`) to
   `libc/lp64/include/`, searched between the target's own and `libc/common/include`
   (for `riscv64` too); `libc/aarch64/include/` then holds `setjmp.h` and the A18
   `stdarg.h`. An `aarch64-headers` CTest and its `-cpp`
   twin, like `riscv-headers`.
-- **A23. Libc run tests.** Port the RISC-V `printf_tests`/`str_tests`/`mem_tests`/
-  `math_tests` (host libc output as expectation).
+- **A23. Libc.** Build the C sources (`libc/common`, `LIBC_C_IEEE`, `libc/lp64`) with
+  our compiler into `libc.a`; add malloc's run test; port the RISC-V `printf_tests`/
+  `str_tests`/`mem_tests`/`math_tests` (host libc output as expectation).
 
 ## Phase 5 — code quality
 
-- **A24. Register allocation** on the A3 allocator: `x0`–`x7`/`v0`–`v7` for values not
+- **A24. Register allocation** on `backend/common/regalloc.c`: `x0`–`x7`/`v0`–`v7` for values not
   live across a call, `x19`–`x28`/`v8`–`v15` otherwise, saved with `stp`/`ldp` pairs
   only when used. The ch. 20 tests pass.
 - **A25. Leaf functions** with no frame and no stack; slots addressed from `sp` when
@@ -239,8 +203,6 @@ its book chapters pass and a few golden tests pin the selected instructions.
 
 ## Risks
 
-- **The allocator extraction (A3)** touches a working backend. Mitigation:
-  byte-identical RISC-V golden output, and the fork fallback.
 - **`__builtin_va_class` touches every frontend stage** (parser, semantic, the
   constant folder). Mitigation: it folds to a plain integer constant before lowering,
   so TAC, the optimizer and the other backends never see it; BESM-6 and RISC-V output
