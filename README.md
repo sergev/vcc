@@ -55,6 +55,7 @@ The compiler is not one binary but several, run one after another:
 
 | Program    | Reads         | Writes                      |
 | ---------- | ------------- | --------------------------- |
+| `cc`       | C, assembly, objects | runs the programs below, then the assembler and linker |
 | `cpp`      | C source      | preprocessed C (`.i`)       |
 | `parse`    | preprocessed C | a syntax tree (`.ast`)     |
 | `lower`    | a syntax tree | three-address code (`.tac`) |
@@ -74,6 +75,11 @@ modernized to C11 in the [v7besm](https://github.com/besm6/v7besm) project. In t
 tree, point it at the source headers:
 `build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv/include -Ilibc/common/include prog.c prog.i`.
 Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too.)
+
+The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
+chain: `vcc -o hello.elf hello.c` preprocesses, compiles, assembles with clang and links
+with `ld.lld` for RISC-V (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
+`-o`, `-D`, `-I`, `-L` and `-l`.
 
 ## Getting started
 
@@ -99,7 +105,15 @@ Compile a small program by hand and look at each stage:
 ./build/backend/genriscv hello.tac hello.s      # TAC      -> RISC-V assembly
 ```
 
-How to assemble, link and run the result under qemu is in
+After `make install`, the driver does all of that, and the assembling and linking too:
+
+```bash
+vcc -o hello.elf hello.c
+qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
+    -kernel hello.elf
+```
+
+How to assemble, link and run the result by hand is in
 [docs/Riscv_Backend.md](docs/Riscv_Backend.md). Other targets work the same way with
 their own `-t` and code generator.
 
@@ -125,6 +139,7 @@ libraries and headers go into their own directory under `share/vcc/`.
 
 | Installed as                   | What it is                                      |
 | ------------------------------ | ----------------------------------------------- |
+| `bin/vcc`                      | the compiler driver                             |
 | `bin/vcpp`                     | the preprocessor                                |
 | `bin/vparse`                   | the parser                                      |
 | `bin/vlower`                   | the analyzer and optimizer                      |

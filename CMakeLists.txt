@@ -107,6 +107,8 @@ add_subdirectory(optimize)
 # referencing backend-defined `genbesm` from here is fine even though backend follows.
 add_subdirectory(libc)
 add_subdirectory(backend)
+# The driver uses the RISC-V tool paths libc/riscv found.
+add_subdirectory(cc)
 
 #
 # 'parse' executable

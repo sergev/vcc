@@ -73,7 +73,15 @@ In `libc/riscv/`:
 You need clang with RISC-V support, `ld.lld` and `qemu-system-riscv64`. On macOS:
 `brew install llvm lld qemu`.
 
-After `make install`, which installs into `~/.local`:
+After `make install`, which installs into `~/.local`, the driver does it all:
+
+```sh
+vcc -o hello.elf hello.c
+qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
+    -kernel hello.elf
+```
+
+`vcc -v` prints each step's command. By hand, the same steps are:
 
 ```sh
 P=~/.local

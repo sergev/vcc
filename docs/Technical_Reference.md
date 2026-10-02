@@ -18,6 +18,7 @@ vcc/
 │   ├── riscv/      # RISC-V codegen: IR (rv.h), register allocation, instruction selection, peephole, tests
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), three assembler dialects, tests, BESM-6 docs
 │   └── ...         # x86/, aarch64/, arm32/, avr/, mmix/, msp430/ — ISA ASDL specs and notes, not implemented
+├── cc/             # Compiler driver vcc (from v7besm's b6cc), its end-to-end tests
 ├── cpp/            # C preprocessor (v7 cpp, C11; from v7besm's b6cpp), its conformance tests
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md
@@ -39,14 +40,15 @@ vcc/
 
 | Program | Built as | Installed as | Reads | Writes |
 |---------|----------|--------------|-------|--------|
+| `cc` | `build/cc/cc` | `bin/vcc` | C, `.S`/`.s` assembly, objects | objects, executables (drives the others) |
 | `cpp` | `build/cpp/cpp` | `bin/vcpp` | C source | preprocessed C |
 | `parse` | `build/parse` | `bin/vparse` | preprocessed C | binary AST (`.ast`), YAML, DOT |
 | `lower` | `build/lower` | `bin/vlower` | binary AST | binary TAC (`.tac`), YAML, DOT |
 | `genriscv` | `build/backend/genriscv` | `bin/vgenriscv64` | binary TAC | RISC-V GNU assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
-`parse` and `lower` are built from the root `CMakeLists.txt`, `cpp` from
-`cpp/CMakeLists.txt`, the code generators from `backend/CMakeLists.txt`. None of them writes binary output to stdout unless asked: with
+`parse` and `lower` are built from the root `CMakeLists.txt`, `cc` and `cpp` from
+`cc/CMakeLists.txt` and `cpp/CMakeLists.txt`, the code generators from `backend/CMakeLists.txt`. None of them writes binary output to stdout unless asked: with
 no output argument the result goes to a file named after the input with the new suffix;
 pass `-` as the output argument for stdout.
 
@@ -61,6 +63,16 @@ A complete RISC-V compilation in the build tree:
 
 Linking with `crt0.o`, `libc.a` and `link.ld` and running under qemu is described in
 [Riscv_Backend.md](Riscv_Backend.md#running-a-program-by-hand).
+
+### `cc` (driver)
+
+Runs `vcpp` → `vparse` → `vlower` → `vgen<T>` → assembler → linker for the target given
+with `-t riscv64|besm6` (default `riscv64`), stopping early with `-E`, `-S` or `-c`.
+Our passes are taken from the directory `vcc` is in, and headers and libraries from
+`../share/vcc/<target>/`, so an installation can be moved. The RISC-V assembler and
+linker are clang and `ld.lld`, the BESM-6 ones v7besm's `b6as` and `b6ld`. Each tool can be
+overridden with `VCC_CPP`, `VCC_PARSE`, `VCC_LOWER`, `VCC_GEN`, `VCC_AS` or `VCC_LD`. See
+[cc/README.md](../cc/README.md).
 
 ### `cpp` (preprocessor)
 
@@ -149,7 +161,7 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenbesm6` |
+| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
@@ -753,6 +765,7 @@ below), so `make run` runs them too. Test executables and their unit-test source
 
 | Executable | Sources (under repo root) |
 |------------|---------------------------|
+| `cc-tests` | `cc/test/cc_test.cpp` (the driver end to end: every stage, both targets, a staged installation) |
 | `cpp-tests` | `cpp/test/test_*.cpp` (C11 conformance, one file per clause, plus the target options) |
 | `scanner-tests` | `scanner/test/tests.cpp` |
 | `parser-tests` | `parser/test/simple_tests.cpp`, …, `negative_tests.cpp` (9 files) |

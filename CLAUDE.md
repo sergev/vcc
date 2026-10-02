@@ -22,7 +22,7 @@ make clean        # remove ./build/
 ```
 
 **`make install`** builds everything, then installs the artifacts via `cmake --install`
-to `~/.local`: `cpp` → `bin/vcpp` (the C preprocessor, `cpp/`), `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
+to `~/.local`: `cc` → `bin/vcc` (the compiler driver, `cc/`), `cpp` → `bin/vcpp` (the C preprocessor, `cpp/`), `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
 `bin/vgenbesm6`, and the three runtime libraries
 `libc.bin` / `libbem.bin` / `libruntime.a` → `share/vcc/besm6/lib/`, plus the ten
 **compiler-owned headers** → `share/vcc/besm6/include/` (the directory `b6cc` appends to every
@@ -47,7 +47,9 @@ The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
 `CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via
 `install(PROGRAMS … RENAME)`, so the in-tree build outputs (`build/parse`, `build/lower`,
-`build/backend/genbesm`, `build/cpp/cpp`) keep their original names.
+`build/backend/genbesm`, `build/cpp/cpp`, `build/cc/cc`) keep their original names.
+`vcc` is relocatable: it runs the passes from its own directory and takes headers and
+libraries from `../share/vcc/<target>/` (see [cc/README.md](cc/README.md)).
 
 **Tests are built by the default build.** A plain `make`/`make all` builds the compiler and
 runtime (`parse`, `lower`, `genbesm`, and `libc.bin`) *and* every per-module test executable.
@@ -70,6 +72,7 @@ needs none — it uses its own `lex_error()`/`exit()`.
 
 Run a single test binary directly (semantic and translator tests live in subdirectories):
 ```sh
+./build/cc/test/cc-tests
 ./build/cpp/test/cpp-tests
 ./build/ast/ast-tests
 ./build/parser-tests
@@ -276,6 +279,8 @@ Compiler flags in use: `-Wall -Werror -Wshadow` — all warnings are errors.
 This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6 and RISC-V. The pipeline:
 
 ```
+[vcc] drives the whole chain, then the assembler and linker (clang + ld.lld | b6as + b6ld):
+
 Source (.c)
   → [cpp]        Macro expansion, #include, #if → preprocessed C (`-t` target macros)
   → [parse]      Scanner → Parser → AST (binary/YAML/DOT)
@@ -295,6 +300,7 @@ Source (.c)
 
 | Phase | Location | Status |
 |---|---|---|
+| Compiler driver | `cc/` | Complete (ported from v7besm `cmd/cc` (b6cc); `-t riscv64|besm6`, `-E/-S/-c`, `-Smadlen/-Sbemsh`, links with ld.lld or b6ld; finds the passes beside itself and `../share/vcc/<target>`; tool overrides `VCC_CPP`/`VCC_PARSE`/`VCC_LOWER`/`VCC_GEN`/`VCC_AS`/`VCC_LD`; the BESM-6 `crt0.o`/`libc.a` are v7besm's, not installed here; see [cc/README.md](cc/README.md)) |
 | Preprocessor | `cpp/` | Complete (Reiser v7 cpp modernized to C11, ported from v7besm `cmd/cpp` (b6cpp); adds `-t`/`--target` and `-nostdinc`; the `#ifdef besm6` size profile in `defs.h` is kept for diffability with v7besm, where it builds natively; see [cpp/README.md](cpp/README.md)) |
 | Lexer | `scanner/` | Complete |
 | Parser | `parser/` | Complete |
@@ -364,6 +370,7 @@ Source (.c)
 
 Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 
+- `cc/test/cc_test.cpp` (the driver end to end, with the in-tree passes through the `VCC_*` overrides; `StagedPrefix*` cases run a miniature installation with none) → `cc-tests`
 - `cpp/test/test_*.cpp` (C11 conformance suite driving the built `cpp` via `test_support.h`'s `PreprocessorTest`; target options in `test_predefined_macros.cpp`) → `cpp-tests`
 - `ast/test/clone_tests.cpp` → `ast-tests`
 - `scanner/test/tests.cpp` → `scanner-tests`
@@ -385,6 +392,7 @@ run by `make run` (see **Build & Test** above).
 ## Documentation
 
 - [README.md](README.md) — goals, getting started, component overview
+- [cc/README.md](cc/README.md) — the compiler driver `vcc`: pipeline per target, options, tool lookup, linking
 - [cpp/README.md](cpp/README.md) — the C preprocessor: options, targets, directives, macros, limits
 - [docs/Technical_Reference.md](docs/Technical_Reference.md) — detailed reference: repo layout, components, build system, TAC YAML format, development notes
 - [docs/Memory_Allocation.md](docs/Memory_Allocation.md) — memory allocator (`xalloc`) design and usage
