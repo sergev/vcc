@@ -39,7 +39,7 @@ and pointers are 32 bits, `long long` 64, `float` and `double` are still in hard
 
 For each function, in this order:
 
-1. **Register allocation** (`regalloc.c`). Local variables and temporaries are put in
+1. **Register allocation** (`regalloc.c`, on the shared `backend/common/regalloc.c`). Local variables and temporaries are put in
    CPU registers where possible. A variable whose address is taken (`&x`), an array or a
    struct stays in memory. A value still needed after a function call goes in a register
    that calls preserve (s1–s11, fs0–fs11).

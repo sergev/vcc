@@ -1,9 +1,11 @@
 #
-# Code shared by every backend: the command-line driver, control flow and liveness.
+# Code shared by every backend: the command-line driver, control flow and liveness,
+# register allocation.
 #
 add_library(backend_common STATIC
     driver.c
     flow.c
+    regalloc.c
 )
 target_include_directories(backend_common PUBLIC .)
 target_link_libraries(backend_common tac libutil)
