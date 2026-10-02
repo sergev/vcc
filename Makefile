@@ -8,7 +8,8 @@
 #
 # make install -- install b6parse, b6lower, b6codegen, libc.bin, libbem.bin,
 #                 libruntime.a and the compiler-owned headers (the C11 freestanding
-#                 subset plus besm6.h) -- to ~/.local if it exists, else /usr/local
+#                 subset plus besm6.h); rv64codegen with the RISC-V runtime and
+#                 headers -- to ~/.local if it exists, else /usr/local
 #
 # make clean -- remove build files
 #

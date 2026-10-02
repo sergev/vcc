@@ -36,6 +36,10 @@ with them, so this repo ships only what v7besm cannot supply: `libruntime.a` (th
 helpers the code generator emits calls to) and the freestanding/intrinsics headers. The
 hosted headers and `libc0.a` still build and are used in-tree (test fixtures, the
 `besm-headers` test, the Unix run harnesses).
+For RISC-V it installs `genriscv` → `bin/rv64codegen`, the runtime `crt0.o`, `libc.a`
+and the qemu `virt` linker script `link.ld` → `share/riscv/lib/`, and *all* the RISC-V and
+shared headers, hosted ones included, → `share/riscv/include/` (no other project supplies a
+RISC-V libc); the runtime only when the RISC-V clang/llvm-ar were found.
 The prefix is chosen in the Makefile at install time and passed as `cmake --install build
 --prefix`; the driver binaries are renamed (`b6` prefix) only at install time via
 `install(PROGRAMS … RENAME)`, so the in-tree build outputs (`build/parse`, `build/lower`,

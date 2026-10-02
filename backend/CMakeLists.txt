@@ -19,3 +19,5 @@ add_executable(genriscv
     riscv/main.c
 )
 target_link_libraries(genriscv riscv backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genriscv> DESTINATION bin RENAME rv64codegen)

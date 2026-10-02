@@ -70,8 +70,9 @@ any host and folded values agree with computed ones.
 
 ## Phase 8 — finishing
 
-- **R24. Install.** `genriscv`, the RISC-V runtime and headers under
-  `share/riscv/`, mirroring `make install` for BESM-6.
+- **R24. Install.** Done. `make install` adds `bin/rv64codegen`,
+  `share/riscv/lib/` (`crt0.o`, `libc.a`, `link.ld`) and `share/riscv/include/`
+  (every RISC-V and shared header).
 - **R25. Documentation.** A short `docs/Riscv_Backend.md` (decisions, frame
   layout, how to run a program by hand under qemu), README and CLAUDE.md updated:
   the project is no longer "complete, maintenance only", and no longer BESM-6 focused.
@@ -90,7 +91,7 @@ any host and folded values agree with computed ones.
 ## Open questions
 
 1. Answered: `long double` is binary128 (R23).
-2. Install names for the RISC-V tools (`genriscv` → ?).
+2. Answered: `genriscv` installs as `rv64codegen`; `parse`/`lower` stay `b6parse`/`b6lower`.
 3. Whether `backend/common/` code (driver, liveness) should already be a separate
    CMake library with a documented API, in preparation for the eventual
    repository split.
