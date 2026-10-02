@@ -20,6 +20,24 @@ int main(void) {
 )PROG"));
 }
 
+// The length modifiers: ll and j read a long long, 64 bits on both widths.
+TEST_F(RiscvTest, PrintfLengthModifiers)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("-9223372036854775808 18446744073709551615 123456789abcdef -5 44 4464 7 -3\n",
+              CompileAndRunRiscv(R"PROG(
+#include <stdint.h>
+#include <stdio.h>
+#include <stddef.h>
+int main(void) {
+    printf("%lld %llu %llx %jd %hhd %hd %zu %td\n", (long long)(-9223372036854775807LL - 1),
+           18446744073709551615ULL, 0x123456789abcdefULL, (intmax_t)-5, 300, 70000,
+           (size_t)7, (ptrdiff_t)-3);
+    return 0;
+}
+)PROG"));
+}
+
 TEST_F(RiscvTest, PrintfUnsignedOctalHex)
 {
     SKIP_IF_NO_RISCV_TOOLS();

@@ -1,7 +1,8 @@
 //
 // long double (binary128): the runtime routines in libc/riscv64/float128.c, reached
 // through C operators compiled by us, against exact results (gen_float128_cases.py);
-// and long double values passed to and from clang-compiled code.
+// and long double values passed to and from clang-compiled code.  Built for both
+// widths: on rv32 a long double goes by reference, and 64-bit values are long long.
 //
 #include "riscv_test.h"
 
@@ -18,12 +19,12 @@ typedef union {
     long double f;
     double d;
     float s;
-    unsigned long w[2];
+    unsigned long long w[2];
 } B;
 
 static int fails;
 
-static long double ld(const unsigned long *p)
+static long double ld(const unsigned long long *p)
 {
     B b;
     b.w[0] = p[0];
@@ -31,14 +32,14 @@ static long double ld(const unsigned long *p)
     return b.f;
 }
 
-static int nan_bits(const unsigned long *p)
+static int nan_bits(const unsigned long long *p)
 {
-    unsigned long hi = p[1] & 0x7fffffffffffffffUL;
-    return hi > 0x7fff000000000000UL || (hi == 0x7fff000000000000UL && p[0]);
+    unsigned long long hi = p[1] & 0x7fffffffffffffffULL;
+    return hi > 0x7fff000000000000ULL || (hi == 0x7fff000000000000ULL && p[0]);
 }
 
 // x has the bits at r, or is a NaN when r is one.
-static int same(long double x, const unsigned long *r)
+static int same(long double x, const unsigned long long *r)
 {
     B b;
     b.f = x;
@@ -68,8 +69,8 @@ int main(void)
         check("div", i, same(ld(t_div[i]) / ld(t_div[i] + 2), t_div[i] + 4));
     for (i = 0; i < N(t_cmp); i++) {
         long double x = ld(t_cmp[i]), y = ld(t_cmp[i] + 2);
-        unsigned long m = (x < y) | (x <= y) << 1 | (x > y) << 2 | (x >= y) << 3 |
-                          (x == y) << 4 | (x != y) << 5;
+        unsigned long long m = (x < y) | (x <= y) << 1 | (x > y) << 2 | (x >= y) << 3 |
+                               (x == y) << 4 | (x != y) << 5;
         check("cmp", i, m == t_cmp[i][4]);
     }
     for (i = 0; i < N(t_narrow); i++) {
@@ -83,9 +84,9 @@ int main(void)
             check("narrow", i, d.w[0] == t_narrow[i][2] && (unsigned)s.w[0] == t_narrow[i][3]);
     }
     for (i = 0; i < N(t_fix); i++)
-        check("fix", i, (long)ld(t_fix[i]) == (long)t_fix[i][2]);
+        check("fix", i, (long long)ld(t_fix[i]) == (long long)t_fix[i][2]);
     for (i = 0; i < N(t_float); i++)
-        check("float", i, same((long double)(long)t_float[i][0], t_float[i] + 1));
+        check("float", i, same((long double)(long long)t_float[i][0], t_float[i] + 1));
     for (i = 0; i < N(t_extend); i++) {
         B d;
         d.w[0] = t_extend[i][0];
@@ -117,8 +118,8 @@ struct LD ld_struct(struct LD s, long double y);
 long a16_stack(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7, int k,
                struct A16 t);
 long a16_va(int n, ...);
-long double ld_conv(double d, float f, int i, unsigned long u);
-long ld_back(long double x, int which);
+long double ld_conv(double d, float f, int i, unsigned long long u);
+long long ld_back(long double x, int which);
 )";
 
 static const std::string kLdCallee = kDecls + R"(
@@ -172,17 +173,17 @@ long a16_va(int n, ...)
     va_end(ap);
     return t.a * 10 + t.b + n * 100;
 }
-long double ld_conv(double d, float f, int i, unsigned long u)
+long double ld_conv(double d, float f, int i, unsigned long long u)
 {
     return (long double)d + f + i + u;
 }
-long ld_back(long double x, int which)
+long long ld_back(long double x, int which)
 {
     if (which == 0)
-        return (long)x;
+        return (long long)x;
     if (which == 1)
-        return (long)(double)x;
-    return (long)((float)x * 4);
+        return (long long)(double)x;
+    return (long long)((float)x * 4);
 }
 )";
 
@@ -206,7 +207,7 @@ int main(void)
     struct A16 t = { 3, 4 };
     if (a16_stack(0, 0, 0, 0, 0, 0, 0, 0, 5, t) != 534) return 8;
     if (a16_va(2, t) != 234) return 9;
-    if (ld_conv(0.5, 0.25f, -3, 1UL << 63) != (long double)(1UL << 63) - 2.25L) return 10;
+    if (ld_conv(0.5, 0.25f, -3, 1ULL << 63) != (long double)(1ULL << 63) - 2.25L) return 10;
     if (ld_back(-7.75L, 0) != -7) return 11;
     if (ld_back(1e18L, 1) != 1000000000000000000) return 12;
     if (ld_back(2.5L, 2) != 10) return 13;
@@ -234,6 +235,7 @@ TEST_F(Float128Test, InteropClangCallsUs)
 
 // An operation is a call to the runtime, with operands in register pairs.  A long
 // double lives in a 16-byte slot; the reloads of what was just stored go.
+#if RISCV_TEST_XLEN == 64
 TEST_F(Float128Test, CallsRuntime)
 {
     EXPECT_EQ(R"(addi sp, sp, -64
@@ -251,6 +253,15 @@ ret
 )",
               Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }")));
 }
+#else
+// On rv32 the operands go by reference to copies, the result through a hidden pointer.
+TEST_F(Float128Test, CallsRuntime)
+{
+    std::string s = Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }"));
+    EXPECT_NE(std::string::npos, s.find("call __addtf3\n")) << s;
+    EXPECT_EQ(std::string::npos, s.find("ld ")) << s;
+}
+#endif
 
 // printf's L modifier, printed with double precision; a static long double.
 TEST_F(Float128Test, Printf)

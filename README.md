@@ -11,8 +11,8 @@ optimizer stay as they are.
 | Target        | Status   | Notes                                                                   |
 | ------------- | -------- | ----------------------------------------------------------------------- |
 | RISC-V 64     | complete | RV64IMFD, standard LP64D calling convention; links with clang's objects |
+| RISC-V 32     | complete | RV32IMFD, ILP32D (`-t riscv32`); the same code generator                |
 | BESM-6        | complete | 48-bit word-addressed mainframe; three assembler dialects               |
-| RISC-V 32     | planned  | see [backend/riscv/Plan.md](backend/riscv/Plan.md)                      |
 | x86-64, AArch64, ARM32, others | design notes | sketches under [backend/](backend/)                 |
 
 The two working targets could hardly be further apart — a modern byte-addressed RISC
@@ -144,6 +144,7 @@ libraries and headers go into their own directory under `share/vcc/`.
 | `bin/vparse`                   | the parser                                      |
 | `bin/vlower`                   | the analyzer and optimizer                      |
 | `bin/vgenriscv64`              | the RISC-V code generator                       |
+| `bin/vgenriscv32`              | the same, for 32-bit RISC-V                     |
 | `bin/vgenbesm6`                | the BESM-6 code generator                       |
 | `share/vcc/<target>/include/`  | the target's C headers                          |
 | `share/vcc/<target>/lib/`      | the target's runtime and C library              |

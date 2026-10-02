@@ -132,6 +132,25 @@ Expr *typecheck_string(Expr *e)
     return e;
 }
 
+// The parser types an integer constant as if long had 64 bits.  Where long is narrower
+// than long long, a long one that does not fit is a long long (C11 §6.4.4.1).
+static void widen_long_literal(Literal *lit)
+{
+    if (target_config->long_size >= target_config->llong_size)
+        return;
+    int bits = (int)target_config->long_size * 8;
+    if (lit->kind == LITERAL_LONG &&
+        (lit->u.long_val > (1LL << (bits - 1)) - 1 || lit->u.long_val < -(1LL << (bits - 1)))) {
+        long long v              = lit->u.long_val;
+        lit->kind                = LITERAL_LONG_LONG;
+        lit->u.long_long_val     = v;
+    } else if (lit->kind == LITERAL_ULONG && lit->u.ulong_val > (1ULL << bits) - 1) {
+        unsigned long long v     = lit->u.ulong_val;
+        lit->kind                = LITERAL_ULONG_LONG;
+        lit->u.ulong_long_val    = v;
+    }
+}
+
 // Type-check a constant literal.
 static Expr *typecheck_literal(Expr *e)
 {
@@ -141,6 +160,7 @@ static Expr *typecheck_literal(Expr *e)
     free_type(e->type);
     e->type = NULL; // prevent double-free: typecheck_string also calls free_type(e->type)
     check_int_literal_width(e->u.literal);
+    widen_long_literal(e->u.literal);
     switch (e->u.literal->kind) {
     case LITERAL_INT:
         e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__);

@@ -161,6 +161,11 @@ TEST_F(Predefined, Riscv64Target) {
     EXPECT_TRUE(TokensAre("#ifdef __riscv\nTARGET\n#endif\n", "TARGET", {"--target=riscv64"}));
 }
 
+TEST_F(Predefined, Riscv32Target) {
+    EXPECT_TRUE(TokensAre("#if __riscv && __riscv_xlen == 32 && __ILP32__ && !defined(__LP64__)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "riscv32"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"

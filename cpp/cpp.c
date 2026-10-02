@@ -55,6 +55,8 @@ static const struct target targets[] = {
     { "besm6",   { "besm6", "__besm6__" } },
     { "riscv64", { "__riscv", "__riscv_xlen=64", "__LP64__", "_LP64",
                    "__riscv_float_abi_double", "__riscv_mul", "__riscv_div" } },
+    { "riscv32", { "__riscv", "__riscv_xlen=32", "__ILP32__", "_ILP32",
+                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div" } },
 };
 
 static const struct target *target;     // selected by -t; default riscv64, like lower
@@ -90,7 +92,7 @@ void usage()
     printf("Usage:\n");
     printf("    %s [options] [infile [outfile]]\n", cpp.prog_name ? cpp.prog_name : "cpp");
     printf("Options:\n");
-    printf("    -t target           Target: besm6 or riscv64 (default riscv64)\n");
+    printf("    -t target           Target: besm6, riscv64 or riscv32 (default riscv64)\n");
     printf("    -I path             Add path to the search list for header files\n");
     printf("    -nostdinc           Do not search the target's standard include directory\n");
     printf("    -D macro[=value]    Fake a definition at the beginning\n");

@@ -379,3 +379,18 @@ TEST_F(Rv32Test, BookStatus)
     EXPECT_EQ("-17\n", CompileAndRunBook(src));
     EXPECT_EQ(ClangRunBook(src), "-17\n");
 }
+
+TEST_F(Rv32Test, PrintfLong)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("-2147483648 4294967295 ffffffff 4 12345678901 1.5 2.25\n", CompileAndRunRiscv(R"(
+#include <limits.h>
+#include <stdio.h>
+int main(void)
+{
+    printf("%ld %lu %lx %zu %lld %g %Lg\n", LONG_MIN, ULONG_MAX, ULONG_MAX, sizeof(long),
+           12345678901LL, 1.5, 2.25L);
+    return 0;
+}
+)"));
+}

@@ -21,3 +21,4 @@ add_executable(genriscv
 target_link_libraries(genriscv riscv backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genriscv> DESTINATION bin RENAME vgenriscv64)
+install(PROGRAMS $<TARGET_FILE:genriscv> DESTINATION bin RENAME vgenriscv32)

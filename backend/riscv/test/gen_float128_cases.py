@@ -168,11 +168,11 @@ def compare(a, b):
 
 
 def words(b):
-    return "0x%016xUL, 0x%016xUL" % (b & ((1 << 64) - 1), b >> 64)
+    return "0x%016xULL, 0x%016xULL" % (b & ((1 << 64) - 1), b >> 64)
 
 
 def table(name, rows):
-    lines = ["static const unsigned long %s[][%d] = {" % (name, rows[0][0])]
+    lines = ["static const unsigned long long %s[][%d] = {" % (name, rows[0][0])]
     for _, text in rows:
         lines.append("    { %s }," % text)
     lines.append("};")
@@ -209,7 +209,7 @@ def main():
         else:
             d = encode(x, 52, 11) | (s << 63 if x == 0 else 0)
             f = encode(x, 23, 8) | (s << 31 if x == 0 else 0)
-        rows.append((4, "%s, 0x%016xUL, 0x%08xUL" % (words(a), d, f)))
+        rows.append((4, "%s, 0x%016xULL, 0x%08xULL" % (words(a), d, f)))
     out.append(table("t_narrow", rows))
 
     rows = []
@@ -218,7 +218,7 @@ def main():
         x, _ = decode(a)
         if abs(x) < 2**62:
             t = int(x)
-            rows.append((3, "%s, 0x%016xUL" % (words(a), t & ((1 << 64) - 1))))
+            rows.append((3, "%s, 0x%016xULL" % (words(a), t & ((1 << 64) - 1))))
     out.append(table("t_fix", rows))
 
     # long, double and float -> long double, exact.
@@ -226,7 +226,7 @@ def main():
     for v in [0, 1, -1, 2**63 - 1, -(2**63), 12345] + [
         random.randint(-(2**63), 2**63 - 1) >> random.randint(0, 62) for _ in range(30)
     ]:
-        rows.append((3, "0x%016xUL, %s" % (v & ((1 << 64) - 1), words(encode(Fraction(v), FBITS, EBITS)))))
+        rows.append((3, "0x%016xULL, %s" % (v & ((1 << 64) - 1), words(encode(Fraction(v), FBITS, EBITS)))))
     out.append(table("t_float", rows))
 
     rows = []
@@ -240,7 +240,7 @@ def main():
             f = d & ((1 << 52) - 1)
             v = Fraction(f, 1 << (52 + 1022)) if e == 0 else Fraction((1 << 52) | f) * Fraction(2) ** (e - 1023 - 52)
             r = encode(-v if d >> 63 else v, FBITS, EBITS) | (d >> 63) << 127
-        rows.append((3, "0x%016xUL, %s" % (d, words(r))))
+        rows.append((3, "0x%016xULL, %s" % (d, words(r))))
     out.append(table("t_extend", rows))
 
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "float128_cases.inc")

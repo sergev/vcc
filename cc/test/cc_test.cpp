@@ -211,12 +211,15 @@ protected:
         fs::create_symlink(VCC_LOWER_PATH, prefix + "/bin/vlower");
         fs::create_symlink(VCC_GENBESM_PATH, prefix + "/bin/vgenbesm6");
         fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv64");
+        fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv32");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
         fs::create_directories(share + "/lib");
-        for (const char *inc : { target == "besm6" ? BESM6_INCLUDE_DIR : RISCV_INCLUDE_DIR,
-                                 COMMON_INCLUDE_DIR }) {
+        const char *target_inc = target == "besm6"     ? BESM6_INCLUDE_DIR
+                                 : target == "riscv32" ? RISCV32_INCLUDE_DIR
+                                                       : RISCV_INCLUDE_DIR;
+        for (const char *inc : { target_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
                 if (!fs::exists(to))
@@ -241,10 +244,10 @@ protected:
     }
 
     // Run a linked RISC-V ELF under qemu `virt`; returns its UART output.
-    std::string RunQemu(const std::string &elf)
+    std::string RunQemu(const std::string &elf, const char *qemu = RISCV_QEMU)
     {
         std::string out = Path("qemu.out");
-        int rc = RunProcess({ RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none",
+        int rc = RunProcess({ qemu, "-M", "virt", "-bios", "none", "-display", "none",
                               "-serial", "stdio", "-monitor", "none", "-kernel", elf },
                             out, Path("qemu.err"), 10);
         EXPECT_GE(rc, 0) << "qemu failed:\n" << ReadFile(Path("qemu.err"));
@@ -398,7 +401,7 @@ TEST_F(CcDriver, RejectsLinkScriptForBesm6)
 {
     WriteSource("t.o", "");
     EXPECT_NE(Vcc({ "-t", "besm6", "-T", "x.ld", "t.o" }), 0);
-    EXPECT_NE(Stderr().find("-T is only supported for riscv64"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("-T is only supported for RISC-V"), std::string::npos) << Stderr();
 }
 
 TEST_F(CcDriver, RejectsNoInputs)
@@ -496,6 +499,38 @@ TEST_F(CcDriver, StagedPrefixRiscv64)
     EXPECT_NE(echo.find(prefix + "/bin/vgenriscv64 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+}
+
+// The same for riscv32: vgenriscv32 is the one code generator under another name.
+TEST_F(CcDriver, StagedPrefixRiscv32)
+{
+    if (!HaveRiscvLink() || !HaveTool(RISCV32_QEMU) ||
+        access((std::string(RISCV32_LIB_DIR) + "/libc.a").c_str(), R_OK) != 0)
+        GTEST_SKIP() << "RISC-V clang/ld.lld/qemu-system-riscv32 not found";
+    std::string prefix = StagePrefix("riscv32");
+    std::string lib = prefix + "/share/vcc/riscv32/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(RISCV32_LIB_DIR) + "/" + name, lib + "/" + name);
+    fs::create_symlink(RISCV_LINK_SCRIPT, lib + "/link.ld");
+
+    WriteSource("t.c", "#include <stdio.h>\n"
+                       "int main(void)\n"
+                       "{\n"
+                       "    long long x = 1LL << 40;\n"
+                       "    printf(\"%d %d %lld\\n\", (int)sizeof(long), __riscv_xlen, x);\n"
+                       "    return 0;\n"
+                       "}\n");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "riscv32", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
+    EXPECT_EQ(RunQemu(Path("t.elf"), RISCV32_QEMU), "4 32 1099511627776\n");
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t riscv32 -nostdinc -I" + prefix +
+                        "/share/vcc/riscv32/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenriscv32 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" --target=riscv32 -march=rv32imfd -mabi=ilp32d "), std::string::npos)
+        << echo;
 }
 
 TEST_F(CcDriver, StagedPrefixMissingPass)

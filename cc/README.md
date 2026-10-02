@@ -27,6 +27,7 @@ linker       link          .o   -> a.out
 | Target | `-t` | Code generator | Assembler | Linker |
 | --- | --- | --- | --- | --- |
 | RISC-V RV64IMFD/LP64D | `riscv64` (default) | `vgenriscv64` | `clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c` | `ld.lld -T link.ld` |
+| RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c` | `ld.lld -T link.ld` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
@@ -45,7 +46,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default) or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32` or `besm6` |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -54,7 +55,7 @@ and removed on exit.
 | `-v` | Echo each sub-command before running it |
 | `-Dname[=v]`, `-Uname`, `-Ipath` | Passed to the preprocessor (`-D name` is folded into `-Dname`) |
 | `-Lpath`, `-lname` | Passed to the linker, after the objects |
-| `-T file` | Linker script instead of the standard `link.ld` (`riscv64` only) |
+| `-T file` | Linker script instead of the standard `link.ld` (RISC-V only) |
 | `-nostdinc` | Do not add the target's standard include directory |
 | `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
@@ -101,7 +102,8 @@ ld.lld -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... 
 ```
 
 The result is an ELF for the qemu `virt` machine. It runs with
-`qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none -kernel a.out`.
+`qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none -kernel a.out`
+(`qemu-system-riscv32` for `riscv32`).
 
 BESM-6:
 

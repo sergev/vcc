@@ -1,6 +1,6 @@
 /*
  * Core formatting engine shared by printf / sprintf / snprintf, for a
- * byte-addressed target with 64-bit long and IEEE-754 double.
+ * byte-addressed target with IEEE-754 double, and long of 32 or 64 bits.
  *
  * Derived from the BESM-6 engine (libc/besm6/doprnt.c), itself from the FreeBSD
  * kernel printf.  Differences: conversion letters keep their case, the length
@@ -57,15 +57,16 @@ static void emit_str(const char *s)
  * produced (zero padded).  Returns a pointer to the most-significant digit and
  * stores the digit count in *lenp.
  */
-static char *ksprintn(char *nbuf, unsigned long ul, int base, int prec, int upper, int *lenp)
+static char *ksprintn(char *nbuf, unsigned long long ul, int base, int prec, int upper,
+                      int *lenp)
 {
     const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
     char *p            = nbuf;
 
     *p = 0;
     do {
-        *++p = digits[ul % (unsigned long)base];
-        ul   = ul / (unsigned long)base;
+        *++p = digits[ul % (unsigned)base];
+        ul   = ul / (unsigned)base;
     } while (--prec > 0 || ul);
     *lenp = (int)(p - nbuf);
     return p;
@@ -80,7 +81,7 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
     char fbuf[FBUFSIZE];
     int i, c, base, ladjust, sharpflag, neg, dot, upper, lmod;
     int n, width, dwidth, sign, blank, extrazeros, padding, dlen;
-    unsigned long ul;
+    unsigned long long ul;
     char *s, *msd;
 
     g_to_buf = to_buf;
@@ -107,7 +108,7 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
         blank      = 0;
         dot        = 0;
         dwidth     = -1;
-        lmod       = 0; /* -2 hh, -1 h, 0 none, 1 l/ll/j/z/t, 2 L */
+        lmod       = 0; /* -2 hh, -1 h, 0 none, 1 l/z/t, 2 L, 3 ll/j */
 
     reswitch:
         c = fmt[i];
@@ -138,7 +139,15 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
             lmod = lmod == -1 ? -2 : -1;
             goto reswitch;
         }
-        if (c == 'l' || c == 'j' || c == 'z' || c == 't') {
+        if (c == 'l') {
+            lmod = lmod == 1 ? 3 : 1;
+            goto reswitch;
+        }
+        if (c == 'j') {
+            lmod = 3;
+            goto reswitch;
+        }
+        if (c == 'z' || c == 't') {
             lmod = 1;
             goto reswitch;
         }
@@ -274,8 +283,10 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
         /* ---- integer conversions ---- */
         upper = c == 'X';
         if (c == 'd' || c == 'i') {
-            long l;
-            if (lmod > 0)
+            long long l;
+            if (lmod == 3)
+                l = va_arg(ap, long long);
+            else if (lmod > 0)
                 l = va_arg(ap, long);
             else if (lmod == -1)
                 l = (short)va_arg(ap, int);
@@ -287,15 +298,17 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
                 sign = 1;
             if (l < 0) {
                 neg = '-';
-                ul  = 0 - (unsigned long)l;
+                ul  = 0 - (unsigned long long)l;
             } else {
-                ul = (unsigned long)l;
+                ul = (unsigned long long)l;
             }
             base = 10;
             goto number;
         }
         if (c == 'u' || c == 'o' || c == 'x' || c == 'X') {
-            if (lmod > 0)
+            if (lmod == 3)
+                ul = va_arg(ap, unsigned long long);
+            else if (lmod > 0)
                 ul = va_arg(ap, unsigned long);
             else if (lmod == -1)
                 ul = (unsigned short)va_arg(ap, unsigned);

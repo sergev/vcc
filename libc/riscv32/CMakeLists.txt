@@ -30,6 +30,23 @@ add_test(
             ${RISCV32_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, as for riscv64.
+file(GLOB RISCV32_TARGET_HEADERS ${RISCV32_INCLUDE_DIR}/*.h)
+file(GLOB RISCV32_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${RISCV32_TARGET_HEADERS} ${RISCV32_COMMON_HEADERS}
+        DESTINATION share/vcc/riscv32/include)
+
+# ... and the same through our own preprocessor.
+add_test(
+    NAME riscv32-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-triscv32
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${RISCV32_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
 if(NOT RISCV32_TOOLS_FOUND)
     message(STATUS "No riscv32 clang/llvm-ar: the RISC-V RV32 runtime is not built")
     return()
@@ -89,3 +106,6 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${RISCV32_LIBC_OBJS})
 add_custom_target(riscv32-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+# The runtime, with the linker script for qemu `virt`.
+install(FILES ${out}/crt0.o ${out}/libc.a ${RISCV64_DIR}/link.ld DESTINATION share/vcc/riscv32/lib)

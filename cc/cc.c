@@ -11,7 +11,8 @@
 //     as         assemble        .s   -> .o     (b6as | clang)
 //     ld         link            .o   -> a.out  (b6ld | ld.lld)
 //
-// The target is chosen with -t (riscv64 by default, like vcpp and vlower).
+// The target is chosen with -t (riscv64 by default, like vcpp and vlower; or riscv32,
+// besm6).
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
 // straight to the linker, as is a .a archive.
@@ -60,11 +61,12 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // assembler and linker are given as an environment override, the path found when
 // vcc was configured (may be empty), and the bare name to look up on PATH.
 //
-enum arch { ARCH_BESM6, ARCH_RISCV64 };
+enum arch { ARCH_BESM6, ARCH_RISCV };
 
 struct target {
     const char *name;
     enum arch arch;
+    const char *march, *mabi; // RISC-V assembler flags
     const char *codegen;      // our code generator, next to vcc
     const char *as_default;   // configure-time assembler path, or ""
     const char *as_name;      // assembler on PATH
@@ -73,8 +75,11 @@ struct target {
 };
 
 static const struct target targets[] = {
-    { "besm6", ARCH_BESM6, "vgenbesm6", "", "b6as", "", "b6ld" },
-    { "riscv64", ARCH_RISCV64, "vgenriscv64", RISCV_CLANG, "clang", RISCV_LD, "ld.lld" },
+    { "besm6", ARCH_BESM6, NULL, NULL, "vgenbesm6", "", "b6as", "", "b6ld" },
+    { "riscv64", ARCH_RISCV, "-march=rv64imfd", "-mabi=lp64d", "vgenriscv64", RISCV_CLANG, "clang",
+      RISCV_LD, "ld.lld" },
+    { "riscv32", ARCH_RISCV, "-march=rv32imfd", "-mabi=ilp32d", "vgenriscv32", RISCV_CLANG, "clang",
+      RISCV_LD, "ld.lld" },
 };
 
 static const struct target *target = &targets[1]; // riscv64
@@ -122,7 +127,7 @@ static bool opt_v;         // -v: echo each sub-command before running it
 static bool opt_nostdlib;  // -nostdlib: skip the library dir, crt0.o and the implicit -l's
 static bool opt_nostdinc;  // -nostdinc: skip the target's standard include dir
 static char *outfile;      // -o NAME: explicit output name
-static char *linkscript;   // -T FILE: linker script (riscv64), instead of the standard one
+static char *linkscript;   // -T FILE: linker script (RISC-V), instead of the standard one
 static char *codegen_dialect;  // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
 
 static struct vec sources;   // input .c/.s files to compile
@@ -543,6 +548,7 @@ static int run_codegen(const char *in, const char *out)
 // Run the assembler, in -> out:
 //     besm6:   b6as -X -o out in
 //     riscv64: clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c -o out in
+//     riscv32: clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c -o out in
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
@@ -555,10 +561,10 @@ static int run_as(const char *in, const char *out)
     case ARCH_BESM6:
         vec_push(&av, "-X");
         break;
-    case ARCH_RISCV64:
-        vec_push(&av, "--target=riscv64");
-        vec_push(&av, "-march=rv64imfd");
-        vec_push(&av, "-mabi=lp64d");
+    case ARCH_RISCV:
+        vec_push(&av, concat("--target=", target->name));
+        vec_push(&av, (char *)target->march);
+        vec_push(&av, (char *)target->mabi);
         vec_push(&av, "-c");
         break;
     }
@@ -671,7 +677,7 @@ static int compile_one(const char *src)
 //
 // Link all collected objects into an executable:
 //     besm6:   b6ld -X -e _start -o out -L<lib> <lib>/crt0.o objs ldflags -lc -lruntime
-//     riscv64: ld.lld -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc
+//     riscv64/32: ld.lld -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc
 // where <lib> is <share>/lib.  -nostdlib drops the -L, crt0.o and the implicit
 // archives; the RISC-V linker script (the qemu `virt` memory map) stays, unless
 // -T names another.  A missing crt0.o is a fatal error.  See README.md,
@@ -690,7 +696,7 @@ static int link_objects(void)
         vec_push(&av, "-e");
         vec_push(&av, "_start");
         break;
-    case ARCH_RISCV64: {
+    case ARCH_RISCV: {
         char *script = linkscript ? linkscript : concat(libdir, "/link.ld");
         if (access(script, R_OK) != 0) {
             error("linker script %s not found; use -T", script);
@@ -768,7 +774,7 @@ static void usage(void)
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
-    printf("    -t, --target NAME  Target: riscv64 (default) or besm6\n");
+    printf("    -t, --target NAME  Target: riscv64 (default), riscv32 or besm6\n");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");
@@ -783,7 +789,7 @@ static void usage(void)
     printf("    -Ipath          Add a header search directory\n");
     printf("    -Lpath          Add a library search directory (for the linker)\n");
     printf("    -lname          Link against library libname (for the linker)\n");
-    printf("    -T file         Linker script instead of the standard one (riscv64)\n");
+    printf("    -T file         Linker script instead of the standard one (RISC-V)\n");
     printf("    -nostdlib       Do not use the standard library dir, crt0.o or the implicit libraries\n");
     printf("    -nostdinc       Do not add the standard include directory\n");
     printf("Inputs are dispatched by suffix: .c (compile), "
@@ -922,8 +928,8 @@ int main(int argc, char *argv[])
         error("-S%s needs -t besm6", codegen_dialect + 2);
         return 1;
     }
-    if (linkscript && target->arch != ARCH_RISCV64) {
-        error("-T is only supported for riscv64");
+    if (linkscript && target->arch != ARCH_RISCV) {
+        error("-T is only supported for RISC-V");
         return 1;
     }
 

@@ -66,6 +66,12 @@ add_executable(riscv32-tests
     test/llong_tests.cpp
     test/interop_tests.cpp
     test/interop32_tests.cpp
+    test/printf_tests.cpp
+    test/str_tests.cpp
+    test/mem_tests.cpp
+    test/math_tests.cpp
+    test/float128_tests.cpp
+    ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(riscv32-tests riscv parser translator semantic GTest::gtest_main test_util
     backend_test_util)

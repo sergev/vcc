@@ -60,7 +60,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   past fa7), and `long double` by reference. The classification above, with clang interop tests in both
   directions (pairs, split a7/stack, variadic alignment, structs, `long double` by
   reference). `<stdarg.h>` for rv32.
-- **R30. Library, book and install.** The libc and `long double` tests on rv32; the
+- **R30. Library, book and install.** *Done:* 88 book programs skipped on rv32, each of which gives clang's result; three of them are not valid C with a 32-bit `long`. Integer literals are re-typed for a narrow `long` in the type checker (the parser assumes 64 bits). The libc and `long double` tests on rv32; the
   book suite on rv32, compared with clang, with a skip list for the programs whose
   results depend on 64-bit `long`; `make install` for rv32 (`vgenriscv32`,
   `share/vcc/riscv32/`); `-t riscv32` in `vcpp` (`__riscv_xlen=32`, `__ILP32__`) and in

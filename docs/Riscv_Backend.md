@@ -1,7 +1,7 @@
 # The RISC-V backend
 
 `genriscv` turns the compiler's intermediate code (TAC) into assembly for 64-bit
-RISC-V. The code follows the standard RISC-V calling rules, so it can call, and be
+or 32-bit RISC-V. The code follows the standard RISC-V calling rules, so it can call, and be
 called by, code compiled with clang. Programs run under the `qemu` emulator, with no
 operating system.
 
@@ -12,6 +12,27 @@ operating system.
   pointers are 64.
 - **Output:** a `.s` file that clang assembles.
 - **`long double`:** 128 bits, computed in software.
+
+## 32-bit RISC-V
+
+The same code generator makes RV32IMFD code for the ILP32D convention, when invoked
+as `vgenriscv32` or with `--rv32` (TAC lowered with `lower -t riscv32`). `int`, `long`
+and pointers are 32 bits, `long long` 64, `float` and `double` are still in hardware.
+
+- **`long long`** lives in memory and is worked on in register pairs, low word first
+  (`llong.c`). Division, remainder and the conversions with `float` and `double` call
+  the libgcc-named routines in `libc/riscv32/int64.c` (`__divdi3`, `__floatdidf`, …).
+- **Calls.** A `long long`, or a `double` where an integer would go (a variadic one, or
+  one past fa7), takes two integer registers, an even pair when variadic. A struct of
+  up to 8 bytes goes in registers, a larger one by reference, but a struct of one or
+  two floating-point fields still goes in FP registers: `{double, double}` comes back
+  in fa0/fa1. A `long double` goes by reference, and is returned through a hidden
+  pointer in a0, as is any other result that would go by reference.
+- **No `fmv.d.x`:** a `double` constant is a literal in `.rodata`, and a `double` moves
+  between the register files through memory.
+- **Runtime:** `libc/riscv32/` holds the 32-bit `crt0.S`, `malloc.s`, the data-model
+  headers and the bit-level math (`frexp`, `ldexp`, `modf`); the console, the linker
+  script, `doprnt.c` and `float128.c` are shared with `libc/riscv64/`.
 
 ## How code is generated
 
@@ -102,9 +123,16 @@ headers in `libc/riscv64/include` and `libc/common/include`, and the library in
 
 To read the intermediate code, run `lower` with `--yaml`.
 
+For 32 bits, add `-t riscv32` to `vcc` and run `qemu-system-riscv32`; by hand, the
+headers and library are under `share/vcc/riscv32`, `vgenriscv32` is the code generator,
+and clang takes `--target=riscv32 -march=rv32imfd -mabi=ilp32d`.
+
 ## Tests
 
 `build/backend/riscv/riscv-tests` checks the generated assembly and runs programs on
 qemu. It also links our code with clang's code in both directions, and compares every
-book program's output with clang's. Tests that need qemu or clang are skipped when the
-tools are missing.
+book program's output with clang's. `riscv32-tests` does the same on
+`qemu-system-riscv32` (ctest names start with `rv32.`): the run, libc, `long double`,
+interop and book tests built again for 32 bits, plus its own `long long` and ILP32D
+tests; book programs that expect a 64-bit `long` are skipped. Tests that need qemu or
+clang are skipped when the tools are missing.
