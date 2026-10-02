@@ -25,3 +25,5 @@ add_subdirectory(besm6)
 set(RISCV64_DIR ${CMAKE_CURRENT_SOURCE_DIR}/riscv64)
 add_subdirectory(riscv64)
 add_subdirectory(riscv32)
+# aarch64 uses the tools riscv64 found.
+add_subdirectory(aarch64)
