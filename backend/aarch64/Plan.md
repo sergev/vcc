@@ -28,8 +28,8 @@ Verified 2026-10-02 on this machine: a hand-written `_start` assembled with Home
 clang, linked by `ld.lld` at `0x40080000`, ran under qemu `virt` at EL1, enabled FP
 through `CPACR_EL1`, printed through the PL011, and exited with status 5 through
 semihosting. **With the MMU off, an unaligned load takes an alignment fault** (memory is
-then Device type), so crt0 must turn on the MMU with an identity map (see A6). A stray
-exception otherwise loops forever: crt0 installs a vector table that reports and exits,
+then Device type), so `libc/aarch64/crt0.S` turns on the MMU with an identity map. A
+stray exception would loop forever: crt0 installs a vector table that reports and exits,
 and the harness runs qemu under a short timeout regardless.
 
 ### AAPCS64, as it affects us
@@ -58,30 +58,6 @@ and the harness runs qemu under a short timeout regardless.
   remaining `x` and `q` argument registers in two save areas, and `va_list` is the
   AAPCS64 structure `{ __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }` — the
   largest difference from RISC-V (A18).
-
-## Phase 1 — skeleton
-
-- **A6. Runtime. Done.** `libc/aarch64/`: `crt0.S` (sp, FP/SIMD, a vector table that
-  prints the vector, `ESR_EL1`, `ELR_EL1` and `FAR_EL1` and exits with 255, the
-  identity-mapped MMU and caches, `.bss`, `main`, `exit`; `crt0-status.o` prints main's
-  result first), `console.s` (PL011 `putbyte`, semihosting `exit`), `link.ld` (at
-  `0x40080000`), `malloc.s`. `libc.a` holds only the assembly leaves for now: the C
-  sources need the code generator, and join it in A23 — and with them `memset` and
-  `memcpy`, without which `calloc`/`realloc` do not link, so malloc's run test waits
-  for A23 too.
-- **A7. Skeleton. Done.** `backend/aarch64/`: `a64.h`/`a64.c` (the IR, with every
-  operand form of the plan: W/X/S/D/Q registers, immediates, symbols with `:lo12:`,
-  memory with pre/post-index, shifted and extended registers, `lsl` for `movz`/`movk`,
-  conditions), `emit.c`, `codegen.c`, `main.c`, `genaarch64`. Selection so far: a
-  `return` of an integer constant, by `gen_li` (one `mov` when it is a single `movz` or
-  `movn`, else `movz`/`movn` and `movk`s); anything else is a clear `fatal_error`.
-- **A8. Run harness and first program. Done.** `aarch64_test.h` (`Aarch64Test`, a
-  `QemuTest`), `book_test.h` (`BookTest`, comparing every program with clang), tests
-  `emit_tests.cpp`, `codegen_tests.cpp` and `run_tests.cpp` (the first programs, and
-  the runtime on hand-written assembly: an unaligned load and FP with the MMU on, a
-  fault reported). Book chapters are enabled in `backend/aarch64/CMakeLists.txt`
-  (`AARCH64_BOOK_SOURCES`); chapter 1 passes. The test programs use the riscv64
-  headers (the same LP64 data model) until A22.
 
 ## Phase 2 — instruction selection, book order
 
@@ -207,10 +183,6 @@ selected instructions.
   constant folder). Mitigation: it folds to a plain integer constant before lowering,
   so TAC, the optimizer and the other backends never see it; BESM-6 and RISC-V output
   stay unchanged.
-- **crt0 is more than on RISC-V**: MMU, caches, exception vectors. A mistake there
-  shows up as a hang or a fault far from its cause. Mitigation: the reporting vector
-  table, the run timeout, and A6 tested on its own (an unaligned load, an FP op, a
-  deliberate fault) before any compiled code depends on it.
 - **ABI corners** (receiver-side extension, HFA rules, the no-split rule, `q`
   registers for `long double`) are easy to get almost right. Mitigation: A19's interop
   table, written before the code it tests, with clang as the oracle.
