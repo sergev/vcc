@@ -2,7 +2,8 @@
  * long double (IEEE-754 binary128) arithmetic, comparisons and conversions: the
  * libgcc/compiler-rt routines that our code generator and clang call.  The work is
  * done by the compiler's own binary128 code, included here, so constants folded at
- * compile time and values computed at run time agree.
+ * compile time and values computed at run time agree.  The `di` routines take and
+ * return long long: 64 bits on both rv64 and rv32.
  */
 #define F128_RUNTIME
 #define F128_API static
@@ -94,7 +95,7 @@ int __unordtf2(long double x, long double y)
     return f128_cmp(q_of(x), q_of(y)) == 2;
 }
 
-long __fixtfdi(long double f)
+long long __fixtfdi(long double f)
 {
     return f128_to_i64(q_of(f), 64);
 }
@@ -104,7 +105,7 @@ int __fixtfsi(long double f)
     return (int)f128_to_i64(q_of(f), 32);
 }
 
-unsigned long __fixunstfdi(long double f)
+unsigned long long __fixunstfdi(long double f)
 {
     return f128_to_u64(q_of(f), 64);
 }
@@ -114,12 +115,12 @@ unsigned __fixunstfsi(long double f)
     return (unsigned)f128_to_u64(q_of(f), 32);
 }
 
-long double __floatditf(long v)
+long double __floatditf(long long v)
 {
     return ld_of(f128_from_i64(v));
 }
 
-long double __floatunditf(unsigned long v)
+long double __floatunditf(unsigned long long v)
 {
     return ld_of(f128_from_u64(v));
 }

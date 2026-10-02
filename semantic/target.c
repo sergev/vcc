@@ -119,7 +119,9 @@ static const Target targets[] = {
       16, 32, 32, 64, // signed bits
       0,   // plain char unsigned (RISC-V ABI)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      16 }, // struct_return_max: ILP32D returns {double, double} in fa0/fa1; the
+            // backend passes the hidden pointer for the other structs over 8 bytes
 
     { "riscv64",
       1, 1,   // _Bool

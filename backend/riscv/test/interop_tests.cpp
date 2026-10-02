@@ -1,7 +1,7 @@
 //
 // Interoperation with clang: the same callee functions and caller are linked with
 // one side compiled by us and the other by clang, in both directions.  The caller
-// returns the number of the first check that failed, or 0.
+// returns the number of the first check that failed, or 0.  Built for both widths.
 //
 #include "riscv_test.h"
 
@@ -171,7 +171,7 @@ int main(void)
     struct CD cd = { 4, 0.25 };
     struct F3 f3 = { 1, 2, 3 };
     struct D1 d1 = { 7.5 };
-    if (ext(200, -3, 60000, -300, 4000000000u, -5) != 4000059892) return 1;
+    if (ext(200, -3, 60000, -300, 4000000000u, -5) != (long)4000059892LL) return 1;
     if (ruc(0x1ff) != 0xff) return 2;
     if (rs(0x18000) != -32768) return 3;
     if (ru(-1) != 4294967295u) return 4;

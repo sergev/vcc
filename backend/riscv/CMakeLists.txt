@@ -64,6 +64,8 @@ gtest_discover_tests(riscv-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 
 add_executable(riscv32-tests
     test/rv32_tests.cpp
     test/llong_tests.cpp
+    test/interop_tests.cpp
+    test/interop32_tests.cpp
 )
 target_link_libraries(riscv32-tests riscv parser translator semantic GTest::gtest_main test_util
     backend_test_util)

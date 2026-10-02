@@ -12,8 +12,14 @@
 //
 // On rv32 (ILP32D) the same rules hold with 4-byte registers and stack slots: a struct
 // of up to 8 bytes goes in registers, a larger one by reference, and a long long goes
-// as the long double does on rv64, in two registers aligned like an 8-byte value.
+// as the long double does on rv64, in two registers aligned like an 8-byte value; so
+// does a double where an integer would go.  A long double is 16 bytes, so it goes by
+// reference.  A result that would go by reference is written through a hidden pointer
+// the caller passes in a0: for a struct wider than 16 bytes the front end adds it (the
+// `.ret` parameter), for a long double or a struct of 9 to 16 bytes on rv32 we do.
 //
+#include <string.h>
+
 #include "codegen.h"
 #include "flow.h"
 #include "internal.h"
@@ -127,13 +133,22 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
         }
         return a;
     }
-    if (!rv_is_aggregate(t)) {
+    if (!rv_is_aggregate(t) && !rv_is_ld(t)) {
         a.npieces = 1;
         a.piece[0] = (Piece){ .size = rv_size(t), .type = t };
-        if (rv_is_fp(t) && !variadic && s->next_fp < 8)
+        if (rv_is_fp(t) && !variadic && s->next_fp < 8) {
             a.piece[0].reg = RV_FA0 + s->next_fp++;
-        else
+        } else if (rv_size(t) > riscv_xlen) {
+            // A double on rv32, in integers: as a long long.
+            align_pair(s, t, variadic);
+            a.npieces = 2;
+            for (int i = 0; i < 2; i++) {
+                a.piece[i] = (Piece){ .offset = 4 * i, .size = 4, .type = t };
+                take_int(s, &a.piece[i]);
+            }
+        } else {
             take_int(s, &a.piece[0]);
+        }
         return a;
     }
     // FP registers first: on rv32 a flattened struct may be wider than two registers.
@@ -158,13 +173,20 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
 
 #define is_freg rv_is_freg
 
+// A piece holding all of a scalar is loaded and stored as one; a part of a value, as
+// bytes.
+static bool whole(const Piece *pc)
+{
+    return pc->type && rv_size(pc->type) == pc->size;
+}
+
 // Load a piece of aggregate `name` into `reg`, or store `reg` into a piece at base + off.
 static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
 {
     int base;
     int64_t off;
     name_addr(g, name, RV_T5, &base, &off);
-    if (pc->type && !rv_is_pair(pc->type))
+    if (whole(pc))
         load_mem(g, reg, pc->type, base, off + pc->offset);
     else
         load_bytes(g, reg, base, off + pc->offset, pc->size);
@@ -172,18 +194,23 @@ static void load_piece(Gen *g, int reg, const char *name, const Piece *pc)
 
 static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
 {
-    if (pc->type && !rv_is_pair(pc->type))
+    if (whole(pc))
         store_mem(g, reg, pc->type, base, off + pc->offset);
     else
         store_bytes(g, reg, base, off + pc->offset, pc->size);
 }
 
-// TODO: a double in an integer register pair on rv32 (Plan.md R29).
+// A double in a pair of integer registers (rv32), not a struct flattened into fields.
+static bool split_fp(const ArgLoc *a)
+{
+    return a->npieces == 2 && a->piece[0].type && rv_is_fp(a->piece[0].type) && !whole(&a->piece[0]);
+}
+
+// No fmv.x.d on rv32: a double goes between the register files through memory.
 static void check_fp_move(Gen *g, const Tac_Type *t)
 {
     if (riscv_xlen == 4 && rv_is_double(t))
-        fatal_error("riscv: %s: double in integer registers is not supported on rv32 yet",
-                    gen_name(g));
+        fatal_error("riscv: %s: fmv of a double on rv32", gen_name(g));
 }
 
 // Move an FP value between an FP register and an integer register.
@@ -222,9 +249,35 @@ static bool in_int_regs(const ArgLoc *a)
     return true;
 }
 
-void param_hints(const Gen *g, StringMap *hints)
+// Where a value of type `t` is returned.
+static ArgLoc classify_result(const Tac_Type *t)
 {
     ArgState s = { 0 };
+    return classify(&s, t, false);
+}
+
+// Whether a result of type `t` goes through a hidden pointer that we pass (see above).
+static bool hidden_result(const Tac_Type *t)
+{
+    if (!t || t->kind == TAC_TYPE_VOID || (rv_is_aggregate(t) && rv_size(t) > 16))
+        return false;
+    return classify_result(t).by_ref;
+}
+
+// The argument registers before the first argument of a function returning `ret`.
+static ArgState first_arg(const Tac_Type *ret)
+{
+    return (ArgState){ .next_int = hidden_result(ret) ? 1 : 0 };
+}
+
+static const Tac_Type *ret_type(const Tac_Type *fun_type)
+{
+    return fun_type && fun_type->kind == TAC_TYPE_FUN_TYPE ? fun_type->u.fun_type.ret_type : NULL;
+}
+
+void param_hints(const Gen *g, StringMap *hints)
+{
+    ArgState s = first_arg(ret_type(g->tl->u.function.type));
     for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
         if (!rv_is_aggregate(p->type) && !rv_is_pair(p->type) && a.piece[0].reg >= 0 &&
@@ -288,18 +341,44 @@ void gen_params(Gen *g)
 {
     Move moves[16];
     int nmoves = 0;
+    struct {
+        int reg, slot;
+    } fp_loads[8]; // doubles that arrived in integer registers, for FP registers
+    int nfp_loads = 0;
     bool variadic = gen_variadic(g);
     int x = riscv_xlen;
     if (variadic)
         for (int i = 0; i < 8; i++)
             emit2(g, xlen_store(), rv_reg(RV_A0 + i), rv_mem(RV_S0, x * (i - 8)));
-    ArgState s = { 0 };
+    const Tac_Type *ret = ret_type(g->tl->u.function.type);
+    if (hidden_result(ret)) {
+        g->ret_ptr = alloc_slot(g, NULL, NULL, x, x);
+        emit2(g, xlen_store(), rv_reg(RV_A0), rv_mem(RV_S0, g->ret_ptr));
+    }
+    ArgState s = first_arg(ret);
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
             fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t, false);
         int preg = assigned_reg(g, p->name);
+        if (preg && split_fp(&a) && a.piece[0].reg >= 0) {
+            // A double in integer registers, for an FP register: through memory.
+            int slot = alloc_slot(g, NULL, NULL, 8, 8);
+            for (int i = 0; i < 2; i++) {
+                const Piece *pc = &a.piece[i];
+                int reg         = pc->reg;
+                if (reg < 0) {
+                    emit2(g, xlen_load(), rv_reg(RV_T0), mem(g, RV_S0, pc->stack));
+                    reg = RV_T0;
+                }
+                store_piece(g, reg, RV_S0, slot, pc);
+            }
+            place_reg(g, p->name, t, preg);
+            fp_loads[nfp_loads].reg    = preg;
+            fp_loads[nfp_loads++].slot = slot;
+            continue;
+        }
         if (preg) {
             // A scalar, into its register.
             const Piece *pc = &a.piece[0];
@@ -326,7 +405,7 @@ void gen_params(Gen *g)
                 src = RV_T3;
             }
             gen_memcopy(g, RV_S0, off, src, 0, size, rv_align(t));
-        } else if (rv_is_aggregate(t) || rv_is_pair(t)) {
+        } else if (rv_is_aggregate(t) || rv_is_pair(t) || split_fp(&a)) {
             for (int i = 0; i < a.npieces; i++) {
                 const Piece *pc = &a.piece[i];
                 int reg         = pc->reg;
@@ -344,8 +423,10 @@ void gen_params(Gen *g)
         }
     }
     parallel_move(g, moves, nmoves);
+    for (int i = 0; i < nfp_loads; i++)
+        emit2(g, RV_FLD, rv_reg(fp_loads[i].reg), mem(g, RV_S0, fp_loads[i].slot));
 
-    s = (ArgState){ 0 };
+    s = first_arg(ret);
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
         int preg = assigned_reg(g, p->name);
@@ -360,8 +441,26 @@ typedef struct {
     const Tac_Val *v;
     const Tac_Type *type, *want;
     ArgLoc loc;
-    int copy; // frame offset of the copy passed by reference
+    int copy;     // frame offset of the copy passed by reference, or of a spilled double
+    bool spilled; // a double in integer registers, from an FP register: at `copy`
 } Arg;
+
+// Half `i` of a double going in integer registers (rv32) into `reg`.
+static void double_half(Gen *g, int reg, const Arg *a, int i)
+{
+    if (a->spilled) {
+        emit2(g, RV_LW, rv_reg(reg), mem(g, RV_S0, a->copy + 4 * i));
+    } else if (a->v->kind == TAC_VAL_CONSTANT) {
+        uint64_t bits;
+        memcpy(&bits, &a->v->u.constant->u.double_val, 8);
+        gen_li(g, reg, (int32_t)(bits >> (32 * i)));
+    } else {
+        int base;
+        int64_t off;
+        name_addr(g, a->v->u.var_name, RV_T5, &base, &off);
+        emit2(g, RV_LW, rv_reg(reg), mem(g, base, off + 4 * i));
+    }
+}
 
 // Put the parts of argument `a` that go on the stack there.  Only reads registers.
 static void arg_to_stack(Gen *g, Arg *a)
@@ -370,10 +469,14 @@ static void arg_to_stack(Gen *g, Arg *a)
     if (a->loc.by_ref) {
         int size = rv_size(t);
         a->copy  = alloc_slot(g, NULL, NULL, size, rv_align(t) > 8 ? rv_align(t) : 8);
-        int base;
-        int64_t off;
-        name_addr(g, a->v->u.var_name, RV_T3, &base, &off);
-        gen_memcopy(g, RV_S0, a->copy, base, off, size, rv_align(t));
+        if (rv_is_ld(t)) {
+            copy_pair(g, a->v, RV_S0, a->copy); // a variable or a constant
+        } else {
+            int base;
+            int64_t off;
+            name_addr(g, a->v->u.var_name, RV_T3, &base, &off);
+            gen_memcopy(g, RV_S0, a->copy, base, off, size, rv_align(t));
+        }
         const Piece *pc = &a->loc.piece[0];
         if (pc->reg < 0) {
             gen_addr(g, RV_T0, RV_S0, a->copy);
@@ -381,12 +484,20 @@ static void arg_to_stack(Gen *g, Arg *a)
         }
         return;
     }
+    if (split_fp(&a->loc) && var_reg(g, a->v)) {
+        // Before the moves may overwrite its register.
+        a->copy    = alloc_slot(g, NULL, NULL, 8, 8);
+        a->spilled = true;
+        store_mem(g, var_reg(g, a->v), t, RV_S0, a->copy);
+    }
     for (int i = 0; i < a->loc.npieces; i++) {
         const Piece *pc = &a->loc.piece[i];
         if (pc->reg >= 0)
             continue;
         if (rv_is_pair(t)) {
             pair_half(g, RV_T0, a->v, i);
+        } else if (split_fp(&a->loc)) {
+            double_half(g, RV_T0, a, i);
         } else if (rv_is_aggregate(t)) {
             load_piece(g, RV_T0, a->v->u.var_name, pc);
         } else if (rv_is_fp(t)) {
@@ -403,7 +514,8 @@ static void arg_to_stack(Gen *g, Arg *a)
 static bool arg_move(const Gen *g, const Arg *a, Move *m)
 {
     int src = var_reg(g, a->v);
-    if (!src || a->loc.by_ref || rv_is_aggregate(a->type) || a->loc.piece[0].reg < 0)
+    if (!src || a->loc.by_ref || rv_is_aggregate(a->type) || a->loc.piece[0].reg < 0 ||
+        a->loc.npieces != 1)
         return false;
     *m = (Move){ a->loc.piece[0].reg, src, a->type, a->want };
     return true;
@@ -425,6 +537,8 @@ static void arg_to_regs(Gen *g, const Arg *a)
             continue;
         if (rv_is_pair(t)) {
             pair_half(g, reg, a->v, i);
+        } else if (split_fp(&a->loc)) {
+            double_half(g, reg, a, i);
         } else if (rv_is_aggregate(t)) {
             load_piece(g, reg, a->v->u.var_name, pc);
         } else if (rv_is_fp(t) && !is_freg(reg)) {
@@ -444,7 +558,7 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
     if (ft)
         for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
             nfixed++;
-    ArgState s = { 0 };
+    ArgState s = first_arg(ret_type(ft));
     int i      = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
         int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
@@ -459,15 +573,8 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
     const Tac_Val *dst = in->u.fun_call.dst;
     int var            = dst ? flow_var(f, dst->u.var_name) : -1;
     if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]) &&
-        !rv_is_pair(f->types[var]))
+        !rv_is_pair(f->types[var]) && !rv_is_ld(f->types[var]))
         hint[var] = rv_is_fp(f->types[var]) ? RV_FA0 : RV_A0;
-}
-
-// Where a value of type `t` is returned.
-static ArgLoc classify_result(const Tac_Type *t)
-{
-    ArgState s = { 0 };
-    return classify(&s, t, false);
 }
 
 // Store a value returned as type `ret` into `dst`.
@@ -516,7 +623,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     Arg *args            = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
     Move moves[16];
     int nmoves           = 0;
-    ArgState s           = { 0 };
+    const Tac_Type *ret  = ret_type(ft);
+    if (!ret && in->u.fun_call.dst)
+        ret = val_type(g, in->u.fun_call.dst);
+    bool hidden          = hidden_result(ret);
+    ArgState s           = first_arg(ret);
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     int i                = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
@@ -524,8 +635,9 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         a->v    = v;
         a->type = val_type(g, v);
         a->want = want;
-        a->loc  = classify(&s, a->type, variadic && i >= nfixed);
-        a->copy = 0;
+        a->loc     = classify(&s, a->type, variadic && i >= nfixed);
+        a->copy    = 0;
+        a->spilled = false;
         if (want)
             want = want->next;
         arg_to_stack(g, a);
@@ -542,19 +654,67 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
+    if (hidden) {
+        // The result's address in a0: the destination, or a slot for an unused one.
+        int base;
+        int64_t off;
+        if (in->u.fun_call.dst) {
+            name_addr(g, in->u.fun_call.dst->u.var_name, RV_A0, &base, &off);
+        } else {
+            base = RV_S0;
+            off  = alloc_slot(g, NULL, NULL, rv_size(ret), rv_align(ret));
+        }
+        gen_addr(g, RV_A0, base, off);
+    }
 
     if (in->u.fun_call.indirect) {
         rv_append(g->fn, RV_JALR)->opnd[0] = rv_reg(fpreg);
     } else {
         rv_append(g->fn, RV_CALL)->opnd[0] = rv_sym(in->u.fun_call.fun_name, 0);
     }
-    if (in->u.fun_call.dst)
-        store_result(g, in->u.fun_call.dst, ft ? ft->u.fun_type.ret_type : NULL);
+    if (in->u.fun_call.dst && !hidden)
+        store_result(g, in->u.fun_call.dst, ret_type(ft));
+}
+
+void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
+                      int nargs, const Tac_Val *dst)
+{
+    Tac_Type params[4];
+    Tac_Val vals[4];
+    if (nargs > 4)
+        fatal_error("riscv: %s: runtime call with %d arguments", gen_name(g), nargs);
+    for (int i = 0; i < nargs; i++) {
+        params[i]      = *val_type(g, args[i]);
+        params[i].next = i + 1 < nargs ? &params[i + 1] : NULL;
+        vals[i]        = *args[i];
+        vals[i].next   = i + 1 < nargs ? &vals[i + 1] : NULL;
+    }
+    Tac_Type fun                 = { .kind = TAC_TYPE_FUN_TYPE };
+    fun.u.fun_type.param_types   = nargs ? params : NULL;
+    fun.u.fun_type.ret_type      = (Tac_Type *)ret;
+    Tac_Instruction call         = { .kind = TAC_INSTRUCTION_FUN_CALL };
+    call.u.fun_call.fun_name     = (char *)name;
+    call.u.fun_call.args         = nargs ? vals : NULL;
+    call.u.fun_call.dst          = (Tac_Val *)dst;
+    call.u.fun_call.fun_type     = &fun;
+    gen_call(g, &call);
 }
 
 void gen_return(Gen *g, const Tac_Val *v)
 {
-    if (v) {
+    if (v && g->ret_ptr) {
+        // Through the hidden pointer.
+        const Tac_Type *t = val_type(g, v);
+        emit2(g, xlen_load(), rv_reg(RV_T4), mem(g, RV_S0, g->ret_ptr));
+        if (rv_is_ld(t)) {
+            copy_pair(g, v, RV_T4, 0);
+        } else {
+            int base;
+            int64_t off;
+            name_addr(g, v->u.var_name, RV_T3, &base, &off);
+            gen_memcopy(g, RV_T4, 0, base, off, rv_size(t), rv_align(t));
+        }
+    } else if (v) {
         const Tac_Type *t = val_type(g, v);
         if (rv_is_pair(t)) {
             pair_half(g, RV_A0, v, 0);

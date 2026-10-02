@@ -250,12 +250,9 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
         [TAC_CONST_SCHAR] = { .kind = TAC_TYPE_SCHAR },
         [TAC_CONST_UCHAR] = { .kind = TAC_TYPE_UCHAR },
     };
-    const Tac_Type *t =
-        v->kind == TAC_VAL_CONSTANT ? &types[v->u.constant->kind] : name_type(g, v->u.var_name);
-    // TODO: long double on rv32 (Plan.md R29).
-    if (riscv_xlen == 4 && t->kind == TAC_TYPE_LONG_DOUBLE)
-        fatal_error("riscv: %s: long double is not supported on rv32 yet", gen_name(g));
-    return t;
+    if (v->kind == TAC_VAL_CONSTANT)
+        return &types[v->u.constant->kind];
+    return name_type(g, v->u.var_name);
 }
 
 Rv_Instr *emit2(Gen *g, Rv_Op op, Rv_Operand a, Rv_Operand b)
@@ -324,7 +321,7 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (rv_is_pair(t))
+    if (rv_is_pair(t) || rv_is_ld(t))
         fatal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
@@ -350,7 +347,7 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (rv_is_pair(t))
+    if (rv_is_pair(t) || rv_is_ld(t))
         fatal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
@@ -576,6 +573,23 @@ void pair_half(Gen *g, int reg, const Tac_Val *v, int half)
 void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off)
 {
     int x = riscv_xlen;
+    if (riscv_xlen == 4 && rv_is_ld(val_type(g, src))) {
+        // A long double on rv32: four words.
+        if (src->kind != TAC_VAL_CONSTANT) {
+            int sbase;
+            int64_t soff;
+            name_addr(g, src->u.var_name, RV_T3, &sbase, &soff);
+            gen_memcopy(g, base, off, sbase, soff, 16, 16);
+            return;
+        }
+        Float128 q = src->u.constant->u.long_double_val;
+        for (int i = 0; i < 4; i++) {
+            uint64_t half = i < 2 ? q.lo : q.hi;
+            gen_li(g, RV_T0, (int32_t)(half >> (32 * (i % 2))));
+            emit2(g, RV_SW, rv_reg(RV_T0), mem(g, base, off + 4 * i));
+        }
+        return;
+    }
     if (src->kind == TAC_VAL_CONSTANT || !rv_is_pair(val_type(g, src))) {
         for (int half = 0; half < 2; half++) {
             pair_half(g, RV_T0, src, half);

@@ -54,6 +54,7 @@ typedef struct {
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots
+    int ret_ptr;       // slot of the hidden result pointer we pass, or 0 (call.c)
     int nconsts;       // double literals (rv32), emitted after the function
     int consts_cap;
     uint64_t *const_bits;
@@ -132,7 +133,8 @@ void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
 // Load the low (half 0) or high register of pair value `v` into `reg`.  A narrower
 // integer is extended to a long long.  `reg` is not t5 or t6.
 void pair_half(Gen *g, int reg, const Tac_Val *v, int half);
-// Store pair value `src` at base + off; base is not t0, t2, t3 or t5.
+// Store pair value `src` (or a long double on rv32) at base + off; base is not t0, t2,
+// t3 or t5.
 void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off);
 // Copy `size` bytes; the bases are registers other than t2 and t6.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
@@ -162,6 +164,10 @@ void param_hints(const Gen *g, StringMap *hints);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
+// A call to runtime routine `name` with arguments `args` of their own types, by the
+// calling convention; the result, of type `ret`, into `dst` (or left in a0/fa0).
+void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
+                      int nargs, const Tac_Val *dst);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //

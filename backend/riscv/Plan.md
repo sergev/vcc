@@ -56,7 +56,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   operated on in register pairs with inline sequences; division, remainder and
   int64↔FP conversions through the libgcc-named routines, written in C in the runtime.
   Tests against exact results, as for binary128.
-- **R29. ILP32D calls.** What R28 left: a `double` in an integer pair (variadic, or
+- **R29. ILP32D calls.** *Done:* `interop32_tests.cpp`, and `interop_tests.cpp` runs on rv32 too; `riscv32` gets `struct_return_max` 16, since a 16-byte `{double, double}` comes back in fa0/fa1, and the backend passes the hidden pointer for a `long double` or a struct of 9–16 bytes. What R28 left: a `double` in an integer pair (variadic, or
   past fa7), and `long double` by reference. The classification above, with clang interop tests in both
   directions (pairs, split a7/stack, variadic alignment, structs, `long double` by
   reference). `<stdarg.h>` for rv32.

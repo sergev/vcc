@@ -5,8 +5,6 @@
 # Uses the clang and llvm-ar libc/riscv64 found; skipped when they cannot target
 # riscv32.
 #
-# TODO: doprnt and float128 need long double (Plan.md R29).
-#
 find_program(RISCV32_QEMU NAMES qemu-system-riscv32)
 
 set(RISCV32_TOOLS_FOUND OFF)
@@ -58,6 +56,7 @@ foreach(asm ${RISCV64_DIR}/console.s ${src}/malloc.s)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genriscv --rv32 -> clang.
+set(RISCV32_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
 file(GLOB RISCV32_LIBC_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(riscv32_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
@@ -67,16 +66,18 @@ macro(riscv32_compile_libc_c name srcdir)
         COMMAND lower -t riscv32 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genriscv --rv32 ${out}/${name}.tac ${out}/${name}.s
         COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
-        DEPENDS ${srcdir}/${name}.c ${RISCV32_LIBC_HEADERS} parse lower genriscv
+        DEPENDS ${srcdir}/${name}.c ${RISCV32_LIBC_HEADERS} ${RISCV32_LIBC_EXTRA_DEPS} parse lower
+                genriscv
         COMMENT "Compiling ${name}.c -> ${name}.o (RISC-V RV32)")
     list(APPEND RISCV32_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# printf, snprintf and sprintf wrap doprnt: not yet.
-set(RISCV32_LIBC_C_COMMON ${LIBC_C_COMMON})
-list(REMOVE_ITEM RISCV32_LIBC_C_COMMON printf snprintf sprintf)
-foreach(name ${RISCV32_LIBC_C_COMMON})
+foreach(name ${LIBC_C_COMMON})
     riscv32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+# The width-neutral ones of riscv64; float128.c includes the compiler's own binary128.
+foreach(name doprnt float128)
+    riscv32_compile_libc_c(${name} ${RISCV64_DIR})
 endforeach()
 foreach(name frexp ldexp modf int64)
     riscv32_compile_libc_c(${name} ${src})
