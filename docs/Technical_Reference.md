@@ -13,7 +13,7 @@ c-compiler/
 │   ├── common/     # Shared by every backend: the command-line driver (driver.h), TAC liveness (flow.h)
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), b6as/Madlen/Bemsh emitters, tests
 │   ├── x86/        # x86_64: never implemented — x86_64.asdl, notes, TODO.md
-│   ├── riscv/      # RISC-V codegen: IR (rv.h), register allocation, peephole, tests; Plan.md
+│   ├── riscv/      # RISC-V codegen: IR (rv.h), register allocation, peephole, tests
 │   └── ...         # aarch64/, arm32/ — ISA ASDL specs, never implemented
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md

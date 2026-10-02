@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Project status: active, two targets.** One C11 frontend feeds two backends: BESM-6
 (`genbesm`; used to port [Unix v7 to the BESM-6](https://github.com/besm6/v7besm)) and
 RISC-V RV64IMFD/LP64D (`genriscv`; bare-metal qemu, link-compatible with clang — see
-[docs/Riscv_Backend.md](docs/Riscv_Backend.md) and `backend/riscv/Plan.md`).
+[docs/Riscv_Backend.md](docs/Riscv_Backend.md)).
 `backend/x86/` and the other ISA directories hold design notes only. A shared-code
 change must keep both backends' tests green, and must not change BESM-6 output except
 to fix a bug.
