@@ -284,7 +284,8 @@ Tests: `flow_tests.cpp` → `backend-tests`.
 |------|------|
 | `rv.h`, `rv.c` | IR: functions as instruction lists over virtual and real registers |
 | `regalloc.c` | Graph colouring over TAC liveness (`backend/common/flow.c`) |
-| `instr.c`, `call.c` | Instruction selection; the LP64D calling convention (structs, variadics, `long double`) |
+| `instr.c`, `call.c` | Instruction selection; the LP64D and ILP32D calling conventions (structs, variadics, `long double`) |
+| `llong.c` | `long long` in register pairs on riscv32 |
 | `frame.c` | Stack slots, value access, prologue/epilogue |
 | `peephole.c` | Peephole pass |
 | `data.c` | Static data (`.data`, `.rodata`, `.bss`) |
@@ -292,8 +293,7 @@ Tests: `flow_tests.cpp` → `backend-tests`.
 | `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
 | `main.c` | `genriscv` entry |
 | `riscv.asdl`, `riscv.md` | Reference ISA description and its design notes (not used by the build) |
-| `Plan.md` | Plan for the riscv32 target |
-| `test/*_tests.cpp` | GoogleTest suite (`riscv-tests`) |
+| `test/*_tests.cpp` | GoogleTest suites (`riscv-tests`, and `riscv32-tests` for `--rv32`) |
 
 Per function: register allocation, instruction selection, prologue/epilogue, peephole.
 For the frame layout, calls and runtime see [Riscv_Backend.md](Riscv_Backend.md).

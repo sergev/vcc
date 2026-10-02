@@ -85,13 +85,14 @@ with `ld.lld` for RISC-V (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`,
 
 **You need** CMake 3.10 or newer and a C11 compiler. Building the tests also needs a C++17
 compiler and, the first time you configure, network access so CMake can download
-GoogleTest. The RISC-V runtime and run tests need a RISC-V clang, `ld.lld` and
-`qemu-system-riscv64` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those
-tests are skipped, as are the tests of any other target whose tools are missing.
+GoogleTest. The RISC-V runtimes and run tests need a RISC-V clang, `ld.lld`, and
+`qemu-system-riscv64` and `qemu-system-riscv32` (on macOS: Homebrew `llvm`, `lld` and
+`qemu`); without them those tests are skipped, as are the tests of any other target whose
+tools are missing.
 
 ```bash
 make            # build the compiler and the runtime libraries
-make run        # build and run the full test suite
+make run        # build and run the full test suite (or: ctest --test-dir build -j8)
 make install    # install (see below)
 ```
 
@@ -113,9 +114,18 @@ qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none
     -kernel hello.elf
 ```
 
-How to assemble, link and run the result by hand is in
-[docs/Riscv_Backend.md](docs/Riscv_Backend.md). Other targets work the same way with
-their own `-t` and code generator.
+For 32-bit RISC-V, add `-t riscv32` and run it under `qemu-system-riscv32`:
+
+```bash
+vcc -t riscv32 -o hello32.elf hello.c
+qemu-system-riscv32 -M virt -bios none -display none -serial stdio -monitor none \
+    -kernel hello32.elf
+```
+
+By hand, the 32-bit chain is the same with `cpp -t riscv32` and `libc/riscv32/include`,
+`lower -t riscv32` and `genriscv --rv32`. How to assemble, link and run the result is in
+[docs/Riscv_Backend.md](docs/Riscv_Backend.md). BESM-6 works the same way with
+`-t besm6` and its own code generator.
 
 To read what happened at any stage, ask for YAML instead:
 
@@ -161,8 +171,12 @@ Programs compiled here have a usable C library: `printf`, `sprintf` and `snprint
 `puts`, `putchar` and console input; the whole of `<string.h>` and the `mem*` family;
 `malloc` and friends; `atoi`; `exit`; math helpers (`fabs`, `fmin`, `fmax`, `fma`,
 `modf`, `frexp`, `ldexp`); and working variable arguments (`<stdarg.h>`). On RISC-V,
-`long double` is IEEE binary128, computed in software. The portable part of the library
-lives in [libc/common/](libc/common/) and is shared by every target.
+`long double` is IEEE binary128, computed in software. On 32-bit RISC-V, `long long` is
+computed inline in register pairs, with division and the conversions to and from
+floating point in the runtime (the routines clang's code calls too). The portable part of
+the library lives in [libc/common/](libc/common/) and is shared by every target; each
+RISC-V width has its own directory for the rest ([libc/riscv64/](libc/riscv64/),
+[libc/riscv32/](libc/riscv32/)).
 
 ## Documentation
 
@@ -188,7 +202,7 @@ source tree.
 
 | Document                                       | What it covers                                                   |
 | ---------------------------------------------- | ---------------------------------------------------------------- |
-| [docs/Riscv_Backend.md](docs/Riscv_Backend.md) | The code generator, frame layout, calls, and running under qemu |
+| [docs/Riscv_Backend.md](docs/Riscv_Backend.md) | The code generator for both widths, frame layout, calls, and running under qemu |
 
 ## License
 

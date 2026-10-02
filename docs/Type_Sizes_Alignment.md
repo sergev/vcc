@@ -308,8 +308,8 @@ Other target-defined choices:
 Notes on the individual targets:
 
 - **riscv32** (ILP32): the 32-bit RISC-V ABI. Same sizes as ARM32 except `long double`,
-  which stays binary128 as on riscv64. Descriptor only; `backend/riscv/Plan.md` plans
-  the backend.
+  which stays binary128 as on riscv64. Compiled by `genriscv --rv32`; see
+  [Riscv_Backend.md](Riscv_Backend.md).
 - **x86_64** (System V; Windows' LLP64 is not described): `long double` is an x87
   80-bit value stored in a 16-byte, 16-aligned slot.
 - **aarch64** (AAPCS64): the same sizes as riscv64, including binary128 `long double`.
