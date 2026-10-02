@@ -61,32 +61,34 @@ and the harness runs qemu under a short timeout regardless.
 
 ## Phase 0 — groundwork
 
-- **A1. Target plumbing.** Review the `aarch64` descriptor in `semantic/target.c`
-  (`struct_return_max` chosen in A13). Teach `cpp -t aarch64` its predefined macros
-  (`__aarch64__`, `__ARM_ARCH=8`, `__ARM_64BIT_STATE`, `__LP64__`, `_LP64`,
-  `__CHAR_UNSIGNED__`, `__ELF__`, the `__SIZEOF_*__` set) with a test in
-  `test_predefined_macros.cpp`; `lower -t aarch64` already accepts the name.
-- **A2. TAC audit for `aarch64`.** Run the test corpus (chapter sources, translator
-  fixtures, libc sources) through `lower -t aarch64`. Being LP64 with binary128 `long
-  double` and unsigned `char` like `riscv64`, few surprises are expected; fix any in
-  shared code and list them.
-- **A3. Share the register allocator.** `backend/riscv/regalloc.c` colours TAC
-  variables, not machine instructions, so most of it is target-neutral. Move the core
-  (interference over `backend/common/flow.c`, Briggs coalescing, optimistic spilling,
-  hints, the cross-call constraint) to `backend/common/regalloc.c`, parameterized by a
-  register-class descriptor: per class the argument pool, the callee-saved pool, the
-  hint registers, and an optional "needs a pair" hook (RV32 `long long`). RISC-V output
-  stays byte-identical — the golden tests are the net. If the coupling with RISC-V's
-  `Gen` turns out too deep, fork instead and record why.
-- **A4. Shared qemu test plumbing.** Split the target-neutral half of
-  `backend/riscv/test/riscv_test.h` (assemble, link, run qemu with a timeout, decode
-  the exit status, the clang comparison) into a shared fixture with a per-target
-  command line, so `aarch64_test.h` is small. The book suite gets an `aarch64`
-  `BookTest` with its skip list. RISC-V tests unchanged.
-- **A5. Share the LP64 runtime sources.** `libc/riscv64/float128.c`, `doprnt.c`,
-  `frexp.c`, `ldexp.c`, `modf.c` contain nothing RISC-V-specific; move what is
-  target-neutral to `libc/common/` (or an `lp64` subdirectory if they assume LP64), so
-  `libc/aarch64` reuses them. Likewise the data-model headers that would be identical.
+- **A1. Target plumbing. Done.** `cpp -t aarch64` predefines clang's `__aarch64__`,
+  `__ARM_ARCH=8`, `__ARM_64BIT_STATE`, `__LP64__`, `_LP64`, `__CHAR_UNSIGNED__` and
+  `__ELF__` (no `__SIZEOF_*__`, as for RISC-V); `Predefined.Aarch64Target` tests it.
+  The descriptor needed no change before A13 (`struct_return_max`).
+- **A2. TAC audit for `aarch64`. Done, no defects.** Nothing in shared code keys on a
+  target's name, and the `aarch64` and `riscv64` descriptors have the same data model:
+  all 623 literal book programs and every `libc/common` and RISC-V libc source
+  (`float128.c` included) lower to byte-identical TAC for the two targets.
+- **A3. Share the register allocator. Done.** The graph colouring is
+  `backend/common/regalloc.c`, behind a `RegAlloc_Target` (`regalloc.h`): the integer
+  and FP pools with their argument-register prefix, the result registers, and hooks to
+  classify a type (none / integer / FP / integer pair), to tell a runtime call, for
+  parameter and call hints, and to take each assignment. `backend/riscv/regalloc.c` is
+  now only that descriptor. RISC-V assembly of the whole corpus, rv64 and rv32 (1310
+  files), is byte-identical before and after.
+- **A4. Shared qemu test plumbing. Done.** `backend/common/test/qemu_test.h`
+  (`QemuTest`, configured by a `QemuConfig`: clang and its flags, ld.lld, link script,
+  library directory, the qemu command) assembles, links and runs; `RiscvTest` keeps
+  only its RISC-V configuration and helpers, its tests unchanged. The `aarch64`
+  `BookTest` comes with the code generator, in A8.
+- **A5. Share the runtime sources. Done for the sources.** `doprnt.c` and `float128.c`
+  are in `libc/common/` (the `LIBC_C_IEEE` list: byte-addressed IEEE-754 targets only,
+  not BESM-6), `frexp.c`/`ldexp.c`/`modf.c` in `libc/lp64/` (`LIBC_C_LP64`). The six
+  data-model headers that `aarch64` can share with `riscv64` (`float.h`, `inttypes.h`,
+  `limits.h`, `math.h`, `stddef.h`, `stdint.h`; only their comments name RISC-V) are
+  left for A22: sharing them takes a third include directory through the test
+  preprocessing, header checks, install and `cc` tests, which pays off only once
+  `aarch64` has headers.
 
 `make run` stays green after every A-step.
 
@@ -115,7 +117,9 @@ and the harness runs qemu under a short timeout regardless.
 - **A8. Run harness and first program.** `CompileToAarch64` (golden assembly) and
   `CompileAndRunAarch64` (assemble, link with crt0 and `libc.a`, run qemu with
   `-display none -serial stdio -monitor none -semihosting` under a short timeout).
-  CMake finds `qemu-system-aarch64`; tests guard with `SKIP_IF_NO_AARCH64_TOOLS()`.
+  `aarch64_test.h` is a `QemuTest` (A4) with the AArch64 configuration, and
+  `book_test.h` its `BookTest` with a skip list. CMake finds `qemu-system-aarch64`;
+  tests guard with `SKIP_IF_NO_AARCH64_TOOLS()`.
   `int main(void) { return 2; }` runs and returns 2.
 
 ## Phase 2 — instruction selection, book order
@@ -201,9 +205,10 @@ its book chapters pass and a few golden tests pin the selected instructions.
   it. Arithmetic, comparisons and conversions call the routines of the A5 `float128.c`,
   compiled for AArch64, so folded and computed values agree as on RISC-V. A
   `float128_tests` run like RISC-V's, against the same exact cases.
-- **A22. Headers.** `libc/aarch64/include/`: `float.h`, `limits.h`, `stdint.h`,
-  `inttypes.h`, `stddef.h`, `math.h`, `setjmp.h` (sharing with `riscv64` where A5 made
-  that possible) and the A18 `stdarg.h`. An `aarch64-headers` CTest and its `-cpp`
+- **A22. Headers.** Move the six LP64 data-model headers A5 found to
+  `libc/lp64/include/`, searched between the target's own and `libc/common/include`
+  (for `riscv64` too); `libc/aarch64/include/` then holds `setjmp.h` and the A18
+  `stdarg.h`. An `aarch64-headers` CTest and its `-cpp`
   twin, like `riscv-headers`.
 - **A23. Libc run tests.** Port the RISC-V `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests` (host libc output as expectation).
