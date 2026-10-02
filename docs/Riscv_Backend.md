@@ -32,8 +32,9 @@ and pointers are 32 bits, `long long` 64, `float` and `double` are still in hard
 - **No `fmv.d.x`:** a `double` constant is a literal in `.rodata`, and a `double` moves
   between the register files through memory.
 - **Runtime:** `libc/riscv32/` holds the 32-bit `crt0.S`, `malloc.s`, the data-model
-  headers and the bit-level math (`frexp`, `ldexp`, `modf`); the console, the linker
-  script, `doprnt.c` and `float128.c` are shared with `libc/riscv64/`.
+  headers and the bit-level math (`frexp`, `ldexp`, `modf`); the console and the linker
+  script are shared with `libc/riscv64/`, `doprnt.c` and `float128.c` with every
+  byte-addressed target (`libc/common/`).
 
 ## How code is generated
 
@@ -76,7 +77,7 @@ it is addressed from `sp` and `s0` is not used.
   a pointer to a copy.
 - A `long double` travels in two integer registers. Its arithmetic is done by library
   functions such as `__addtf3` (add) and `__lttf2` (compare), in
-  `libc/riscv64/float128.c`.
+  `libc/common/float128.c`.
 - A function with `...` saves a0–a7 next to its stack arguments, so `va_arg` simply
   walks one array.
 
@@ -89,7 +90,8 @@ In `libc/riscv64/`:
   exit with status 0; any other value becomes qemu's exit status.
 - `link.ld` — memory layout: the program loads at address 0x80000000.
 - C library: `printf`, the string functions, a simple `malloc`, the math helpers and
-  the `long double` routines.
+  the `long double` routines; most of it from `libc/common/`, the bit-level math from
+  `libc/lp64/`.
 
 ## Running a program by hand
 

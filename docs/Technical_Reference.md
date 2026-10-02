@@ -334,8 +334,9 @@ instruction selection on its own.
 | `libc/riscv64/crt0.S` | Start-up: stack, call `main`, then `exit` (also built as `crt0-status.o`, which prints `main`'s result, for the book run tests) |
 | `libc/riscv64/console.s` | `putbyte` (UART output) and `exit` (stops qemu) |
 | `libc/riscv64/malloc.s` | Simple allocator |
-| `libc/riscv64/doprnt.c`, `frexp.c`, `ldexp.c`, `modf.c` | Target-specific C routines |
-| `libc/riscv64/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
+| `libc/common/doprnt.c` | The `printf` engine for the byte-addressed IEEE-754 targets |
+| `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
+| `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
 | `libc/riscv64/include/` | Data-model-dependent headers (`float.h`, `limits.h`, `stdint.h`, `stdarg.h`, …) |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |

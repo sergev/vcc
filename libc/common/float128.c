@@ -3,7 +3,7 @@
  * libgcc/compiler-rt routines that our code generator and clang call.  The work is
  * done by the compiler's own binary128 code, included here, so constants folded at
  * compile time and values computed at run time agree.  The `di` routines take and
- * return long long: 64 bits on both rv64 and rv32.
+ * return long long: 64 bits on every target that uses this file.
  */
 #define F128_RUNTIME
 #define F128_API static

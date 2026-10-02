@@ -96,8 +96,11 @@ endmacro()
 foreach(name ${LIBC_C_COMMON})
     riscv_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-foreach(name doprnt frexp ldexp modf float128)
-    riscv_compile_libc_c(${name} ${src})
+foreach(name ${LIBC_C_IEEE})
+    riscv_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+foreach(name ${LIBC_C_LP64})
+    riscv_compile_libc_c(${name} ${LIBC_LP64_DIR})
 endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a

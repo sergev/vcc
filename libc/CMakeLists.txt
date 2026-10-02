@@ -13,6 +13,12 @@ set(LIBC_C_COMMON
     printf puts putchar snprintf sprintf
     strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy
     strrchr strstr strtok)
+# ... and, in the same directory, those only for the byte-addressed IEEE-754 targets
+# (RISC-V, AArch64): the __doprnt printf engine and the binary128 long double runtime.
+set(LIBC_C_IEEE doprnt float128)
+# C sources that assume LP64: a 64-bit long holds a double's bits (riscv64, aarch64).
+set(LIBC_LP64_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lp64)
+set(LIBC_C_LP64 frexp ldexp modf)
 
 add_subdirectory(besm6)
 # riscv32 shares sources with riscv64, and uses the tools riscv64 found.

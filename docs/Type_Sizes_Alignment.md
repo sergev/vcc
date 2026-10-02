@@ -73,7 +73,7 @@ naturally aligned: its alignment equals its size.
 The `riscv64` target follows the RISC-V ELF psABI with the LP64D calling convention:
 RV64IMFD, little-endian, 64-bit `long` and pointers, `float` and `double` in hardware
 (F and D extensions). `long double` is IEEE 754 binary128; no RISC-V extension in use
-here computes it, so its arithmetic is done in software by `libc/riscv64/float128.c`
+here computes it, so its arithmetic is done in software by `libc/common/float128.c`
 (see [Riscv_Backend.md](Riscv_Backend.md)).
 
 | Type                    | Size | Alignment | Notes |

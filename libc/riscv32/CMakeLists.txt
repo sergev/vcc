@@ -92,9 +92,9 @@ endmacro()
 foreach(name ${LIBC_C_COMMON})
     riscv32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-# The width-neutral ones of riscv64; float128.c includes the compiler's own binary128.
-foreach(name doprnt float128)
-    riscv32_compile_libc_c(${name} ${RISCV64_DIR})
+# float128.c includes the compiler's own binary128.
+foreach(name ${LIBC_C_IEEE})
+    riscv32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 foreach(name frexp ldexp modf int64)
     riscv32_compile_libc_c(${name} ${src})

@@ -20,7 +20,7 @@
 // gen_prologue.
 //
 // A long double never gets a register: it lives in a 16-byte slot, and its
-// operations are calls to the runtime (libc/riscv64/float128.c).
+// operations are calls to the runtime (libc/common/float128.c).
 //
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
 // aggregate copy, t5 the address of a global, t6 a large frame offset or the bits of

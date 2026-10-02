@@ -122,7 +122,7 @@ library.
 | `CHAR_BIT` is **8**; plain `char` is **unsigned** (the RISC-V ABI). | `CHAR_MIN` is 0, `CHAR_MAX` 255. |
 | `_Bool` is one byte; converting any scalar to it yields 0 or 1. | `<stdbool.h>` is plain macros over `_Bool`. |
 | `float` and `double` are IEEE-754 **binary32** and **binary64**, in hardware (the F and D extensions). | `<float.h>` has the familiar IEEE values; `<math.h>` defines `INFINITY` and `NAN`; `printf` prints `inf`/`nan`. |
-| `long double` is IEEE **binary128**, 16 bytes, computed in software (`libc/riscv64/float128.c`). | `LDBL_MANT_DIG` is 113; `max_align_t` has 16-byte alignment. |
+| `long double` is IEEE **binary128**, 16 bytes, computed in software (`libc/common/float128.c`). | `LDBL_MANT_DIG` is 113; `max_align_t` has 16-byte alignment. |
 | A variadic function saves `a0`–`a7` just below its stack arguments. | `<stdarg.h>` needs no compiler builtins: `va_list` is a `char *` that walks 8-byte slots. |
 | No operating system: programs run bare-metal on qemu `virt`. Output goes byte by byte to the ns16550 UART. | `<stdio.h>` works on `stdout` only; there is no file layer; `flush` is a no-op. |
 
@@ -293,7 +293,7 @@ What to know on RISC-V:
   UART's transmitter and writes one byte; run qemu with `-serial stdio` to see it. Output
   is unbuffered, so `flush` does nothing, and `putch` is simply `putbyte`. There is no
   input: `getch` is declared but not implemented for this target.
-- **The format engine** (`libc/riscv64/doprnt.c`) handles `%d %i %u %o %x %X %c %s %p %f
+- **The format engine** (`libc/common/doprnt.c`) handles `%d %i %u %o %x %X %c %s %p %f
   %F %e %E %g %G %%`, the flags `-+ #0`, a width and precision (also as `*`), and the
   length modifiers `hh`, `h`, `l`, `ll`, `j`, `z`, `t`, which select the argument type.
   Conversion letters keep their case: `%x` prints lower-case hex, `%X` upper-case.
