@@ -104,6 +104,9 @@ void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off);
 // variable, in the view of the variable's type.
 void load_val(Gen *g, int reg, const Tac_Val *v);
 void store_val(Gen *g, int reg, const Tac_Val *v);
+// Load integer value `v` into `reg` for an operation on type `t`: a variable as its own
+// type, a constant converted to `t` (its own kind may differ).
+void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t);
 // The value of integer constant `c` as its type says, in 64 bits.
 int64_t const_value(const Tac_Const *c);
 // Load integer constant `c` converted to integer type `t`, in its register form.

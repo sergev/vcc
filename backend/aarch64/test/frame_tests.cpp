@@ -22,6 +22,23 @@ TEST_F(Aarch64Test, LocalSlot)
         Code(CompileToAarch64("int main(void) { int a = 5; return a; }")));
 }
 
+// Each width loads and stores as itself; a char by its signedness.
+TEST_F(Aarch64Test, SlotWidths)
+{
+    DisableOptimization();
+    std::string code =
+        Code(CompileToAarch64("long f(void) {\n"
+                              "    signed char c = -1; unsigned char u = 255;\n"
+                              "    short s = -2; unsigned short us = 2;\n"
+                              "    long l = 7; long m = l; c = c; u = u; s = s;\n"
+                              "    us = us;\n"
+                              "    return m;\n"
+                              "}\n"));
+    for (const char *s : { "strb w9", "ldrsb w9", "ldrb w9", "strh w9", "ldrsh w9", "ldrh w9",
+                           "str x9", "ldr x9", "ldr x0" })
+        EXPECT_NE(std::string::npos, code.find(s)) << s << " in\n" << code;
+}
+
 // Offsets beyond ldur's reach go through ip0: sub with lsl #12 and a remainder.
 TEST_F(Aarch64Test, LargeFrameOffsets)
 {

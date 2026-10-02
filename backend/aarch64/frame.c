@@ -428,6 +428,14 @@ void load_val(Gen *g, int reg, const Tac_Val *v)
     load_mem(g, reg, t, base, off);
 }
 
+void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t)
+{
+    if (v->kind == TAC_VAL_CONSTANT)
+        load_const_as(g, reg, v->u.constant, t);
+    else
+        load_val(g, reg, v);
+}
+
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
     int base;

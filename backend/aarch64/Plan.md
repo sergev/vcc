@@ -76,11 +76,13 @@ with pointers), not all at once in A23.
   `ldr`/`str` (scaled 12 bits) nor `ldur`/`stur` (signed 9 bits) goes through x16, built
   by `add`/`sub` with a 12-bit immediate and `lsl #12` (x17 beyond 16 MiB); `COPY`
   through scratch registers, `RETURN` of a variable.
-- **A10. Integer ops** (ch. 2–4): 32-bit operations on W registers, 64-bit on
-  X; `neg`, `mvn`, `mul`, `sdiv`/`udiv`, remainder as `msub`; shifts; comparisons as
-  `cmp` + `cset`; width conversions with `sxtb`/`sxth`/`sxtw`/`uxtb`/`uxth` and the
-  W-write zeroing of the upper half. A logical-immediate encoder (bitmask immediates)
-  decides when `and`/`orr`/`eor` take an immediate.
+- **A10. Integer ops. Done** (ch. 2–4): 32-bit operations on W registers, 64-bit on
+  X; `neg`, `mvn`, `mul`, `sdiv`/`udiv`, remainder as `sdiv` + `msub`; shifts;
+  comparisons as `cmp` + `cset`, the operator (or a pointer) saying the signedness;
+  conversions: a store truncates, a load extends by the source's type, and
+  `sxtb`/`sxth`/`sxtw`/`uxtb`/`uxth` where those differ. A constant operand is loaded
+  as the operation's type. Constants go through a register: immediate operands are the
+  peephole's (A26).
 - **A11. Control flow** (ch. 5–8): `.L` labels unique per TU, `b`, `cbz`/`cbnz`,
   `cmp` + `b.cond`.
 - **A12. Calls, scalar ABI** (ch. 9): `x0`–`x7`/`v0`–`v7`, 8-byte stack slots, narrow
@@ -166,7 +168,8 @@ with pointers), not all at once in A23.
   only when used. The ch. 20 tests pass.
 - **A25. Leaf functions** with no frame and no stack; slots addressed from `sp` when
   the offsets fit, as on RISC-V.
-- **A26. Peephole**: redundant moves and reloads, `ldr`/`str` pairs to `ldp`/`stp`,
+- **A26. Peephole**: immediate operands (`add`/`sub`/`cmp` with 12 bits, a bitmask
+  immediate encoder for `and`/`orr`/`eor`), redundant moves and reloads, `ldr`/`str` pairs to `ldp`/`stp`,
   `add` folded into the addressing mode, `mul`+`add` to `madd`, `cmp #0` + `b.eq` to
   `cbz`, branch over jump, jump to next label.
 
