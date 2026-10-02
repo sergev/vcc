@@ -1,0 +1,74 @@
+# RISC-V backend — plan: the riscv32 target
+
+The riscv64 backend is done ([docs/Riscv_Backend.md](../../docs/Riscv_Backend.md)).
+This plan adds 32-bit RISC-V to the same backend, switched by a flag, not a copy.
+
+Step IDs are stable: a finished step is marked done, never renumbered.
+
+## Target and decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| ISA | RV32IMFD (`-march=rv32imfd`) | the 32-bit twin of rv64: same F and D, so `float` and `double` stay in hardware |
+| ABI | ILP32D psABI, the existing `riscv32` descriptor | link-compatible with clang `--target=riscv32` |
+| Data model | `int`, `long`, pointers 32-bit; `long long` 64; `long double` binary128 | as the descriptor and clang |
+| Backend | `genriscv --rv32`: one backend, register width a parameter | about 80% is shared: allocation, peephole, frames, calls |
+| Run | `qemu-system-riscv32 -M virt -bios none` | same machine, RAM and devices as rv64 |
+| Install | `rv32codegen`? or `rv64codegen --rv32` | open question 1 |
+
+Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is installed.
+
+## What differs from rv64
+
+- **64-bit integers need register pairs.** `long long` (and `double` passed in integer
+  registers) is two registers: add/sub with carry, compare by halves, shifts across the
+  halves, `mul`+`mulhu` for multiply. Divide and remainder call `__divdi3`, `__udivdi3`,
+  `__moddi3`, `__umoddi3`; conversions with `double`/`float` call `__floatdidf`,
+  `__fixdfdi` and friends.
+- **No `*w` instructions, no `ld`/`sd`.** Pointers and `long` are `lw`/`sw`; a 32-bit
+  value needs no sign-extension rule.
+- **ILP32D calls.** XLEN = 4: a struct in registers up to 8 bytes, larger by reference;
+  `long long` in a register pair (an even pair when variadic); `double` in FP
+  registers, but in an integer pair when variadic; `long double` (16 bytes) by
+  reference. Save slots are 4 bytes; the stack stays 16-byte aligned.
+- **Runtime.** `crt0.S`, `console.s`, `malloc.s` in 32-bit forms; the C sources
+  recompiled; data-model headers of their own (`limits.h`, `stdint.h`, `stddef.h`,
+  `stdarg.h`, `inttypes.h`).
+
+## Phase 9 — riscv32
+
+- **R27. Register width as a parameter.** `genriscv --rv32` (a global like
+  `riscv_regalloc`); every `ld`/`sd`, `*w` op, slot size and canonical form chosen by
+  width. `long long` and `unsigned long long` are rejected with a clear `fatal_error`.
+  Runtime for rv32 (`libc/riscv32/` or a width-parameterized `libc/riscv/` build: crt0,
+  console, malloc, link script, headers), `riscv32` in the CMake tool check, and the
+  test harness parameterized by width. `int`/pointer run tests pass on qemu.
+- **R28. 64-bit integers.** `long long` lives in an 8-byte slot (like `long double`),
+  operated on in register pairs with inline sequences; division, remainder and
+  int64↔FP conversions through the libgcc-named routines, written in C in the runtime.
+  Tests against exact results, as for binary128.
+- **R29. ILP32D calls.** The classification above, with clang interop tests in both
+  directions (pairs, split a7/stack, variadic alignment, structs, `long double` by
+  reference). `<stdarg.h>` for rv32.
+- **R30. Library, book and install.** The libc and `long double` tests on rv32; the
+  book suite on rv32, compared with clang, with a skip list for the programs whose
+  results depend on 64-bit `long`; `make install` for rv32; docs/Riscv_Backend.md.
+- **R31. Optional: `long long` in registers.** Register allocation of pairs, if the
+  generated code is worth it.
+
+## Risks
+
+- **Frontend assumptions that `long` is as wide as `long long`, or a pointer as wide as
+  a 64-bit integer.** No 32-bit byte-addressed target has run yet. Mitigation: the TAC
+  verifier, the interop tests, and fixes in the shared code, never worked around in
+  the backend.
+- **Golden assembly tests are rv64-specific.** They stay so; rv32 gets a few of its
+  own, and is checked mostly by run and interop tests.
+- **The book suite's generic programs assume LP64** where widths matter. A skip list
+  for rv32, as BESM-6 has, rather than weakened expectations.
+
+## Open questions
+
+1. Install name: `rv32codegen`, or one `rv64codegen` with `--rv32`?
+2. Runtime layout: `libc/riscv32/` beside `libc/riscv/`, or one directory built twice
+   with the width-dependent headers in subdirectories?
