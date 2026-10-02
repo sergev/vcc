@@ -15,6 +15,9 @@ Step IDs are stable: a finished step is marked done, never renumbered.
 | Backend | `genriscv --rv32`: one backend, register width a parameter | about 80% is shared: allocation, peephole, frames, calls |
 | Run | `qemu-system-riscv32 -M virt -bios none` | same machine, RAM and devices as rv64 |
 | Install | `bin/vgenriscv32`, `share/vcc/riscv32/{include,lib}` | beside `vgenriscv64` and `share/vcc/riscv64/` |
+| Runtime | `libc/riscv32/` beside `libc/riscv64/` (today's `libc/riscv/`, renamed) | one directory per installed `share/vcc/<target>/` |
+| Tools | `vcpp -t riscv32`, `vlower -t riscv32`, `vcc -t riscv32` | the preprocessor and driver (ported from v7besm) already select a target with `-t`; `lower` defaults to riscv64 |
+| `size_t`, `ptrdiff_t` | `unsigned long`, `long`, as the front end types `sizeof` and pointer differences | clang says `unsigned int`/`int`: the same in the ILP32 ABI |
 
 Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is installed.
 
@@ -25,8 +28,10 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   halves, `mul`+`mulhu` for multiply. Divide and remainder call `__divdi3`, `__udivdi3`,
   `__moddi3`, `__umoddi3`; conversions with `double`/`float` call `__floatdidf`,
   `__fixdfdi` and friends.
-- **No `*w` instructions, no `ld`/`sd`.** Pointers and `long` are `lw`/`sw`; a 32-bit
-  value needs no sign-extension rule.
+- **No `*w` instructions, no `ld`/`sd`, no `fmv.x.d`/`fmv.d.x`.** Pointers and `long`
+  are `lw`/`sw`; a 32-bit value needs no sign-extension rule. A `double` constant is
+  loaded from a literal in `.rodata`, and a `double` moves between register files
+  through memory.
 - **ILP32D calls.** XLEN = 4: a struct in registers up to 8 bytes, larger by reference;
   `long long` in a register pair (an even pair when variadic); `double` in FP
   registers, but in an integer pair when variadic; `long double` (16 bytes) by
@@ -39,10 +44,12 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
 
 - **R27. Register width as a parameter.** `genriscv --rv32` (a global like
   `riscv_regalloc`); every `ld`/`sd`, `*w` op, slot size and canonical form chosen by
-  width. `long long` and `unsigned long long` are rejected with a clear `fatal_error`.
-  Runtime for rv32 (`libc/riscv32/` or a width-parameterized `libc/riscv/` build: crt0,
-  console, malloc, link script, headers), `riscv32` in the CMake tool check, and the
-  test harness parameterized by width. `int`/pointer run tests pass on qemu.
+  width. `long long`, `unsigned long long` and `long double` are rejected with a clear
+  `fatal_error` (until R28 and R29). `libc/riscv/` renamed `libc/riscv64/`; runtime for
+  rv32 in `libc/riscv32/`: crt0, console, malloc, link script, headers, and the C
+  sources that need no 64-bit integer. `riscv32` in the CMake tool check, and the test
+  harness parameterized by width: a `riscv32-tests` binary built from the same run
+  sources. `int`/pointer run tests pass on qemu.
 - **R28. 64-bit integers.** `long long` lives in an 8-byte slot (like `long double`),
   operated on in register pairs with inline sequences; division, remainder and
   int64↔FP conversions through the libgcc-named routines, written in C in the runtime.
@@ -52,9 +59,11 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   reference). `<stdarg.h>` for rv32.
 - **R30. Library, book and install.** The libc and `long double` tests on rv32; the
   book suite on rv32, compared with clang, with a skip list for the programs whose
-  results depend on 64-bit `long`; `make install` for rv32 (`vgenriscv32`, `share/vcc/riscv32/`); docs/Riscv_Backend.md.
-- **R31. Optional: `long long` in registers.** Register allocation of pairs, if the
-  generated code is worth it.
+  results depend on 64-bit `long`; `make install` for rv32 (`vgenriscv32`,
+  `share/vcc/riscv32/`); `-t riscv32` in `vcpp` (`__riscv_xlen=32`, `__ILP32__`) and in
+  `vcc` (assembler flags, `link.ld`, the `cc-tests` cases); docs/Riscv_Backend.md,
+  cc/README.md, cpp/README.md.
+- **R31. `long long` in registers.** Register allocation of pairs.
 
 ## Risks
 
@@ -70,5 +79,6 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
 ## Open questions
 
 1. Answered: installed as `vgenriscv32`, with `share/vcc/riscv32/include` and `lib`.
-2. Runtime layout: `libc/riscv32/` beside `libc/riscv/`, or one directory built twice
-   with the width-dependent headers in subdirectories?
+2. Answered: runtime layout: `libc/riscv32/` beside `libc/riscv64/`. C sources shared
+   by the two (`doprnt.c`, `float128.c`, …) stay in `libc/riscv64/` and are compiled
+   from there for rv32 too, unless they turn out to need a 32-bit variant.
