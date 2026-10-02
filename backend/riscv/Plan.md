@@ -63,16 +63,10 @@ callee-saved ones for the rest; a peephole pass; no frame for a leaf that needs 
 stack, and frames addressed from `sp` without `s0` when they fit. `genriscv`
 options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
 
-## Phase 7 — `long double`
-
-- **R23. binary128 `long double`.** Done. A long double lives in a 16-byte slot
-  and goes in an integer register pair (aligned on the stack, and an even pair
-  when variadic). Arithmetic, comparisons and conversions call the libgcc-named
-  routines in `libc/riscv/float128.c`, written in C and compiled by us; clang's
-  code links against them too. `float128_tests.cpp` checks them against exact
-  results (`gen_float128_cases.py`) and against clang. `printf`'s `L` prints with
-  double precision. Long double constants are exact binary128 on any host: parsed,
-  folded and carried as bits (`libutil/float128.c`, which the runtime includes).
+`long double` (R23) is done: binary128, in a 16-byte slot and an integer register
+pair; its operations call the libgcc-named routines in `libc/riscv/float128.c`,
+which includes the compiler's own `libutil/float128.c`, so constants are exact on
+any host and folded values agree with computed ones.
 
 ## Phase 8 — finishing
 
@@ -80,9 +74,7 @@ options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
   `share/riscv/`, mirroring `make install` for BESM-6.
 - **R25. Documentation.** A short `docs/Riscv_Backend.md` (decisions, frame
   layout, how to run a program by hand under qemu), README and CLAUDE.md updated:
-  the project is no longer "complete, maintenance only".
-- **R26. Optional: Linux user-mode.** A second crt0 over Linux syscalls for
-  `qemu-riscv64` on Linux hosts.
+  the project is no longer "complete, maintenance only", and no longer BESM-6 focused.
 
 ## Risks
 
@@ -97,8 +89,7 @@ options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
 
 ## Open questions
 
-1. `long double`: binary128 per psABI (recommended, R23), or 64-bit `double` as a
-   non-conforming shortcut?
+1. Answered: `long double` is binary128 (R23).
 2. Install names for the RISC-V tools (`genriscv` → ?).
 3. Whether `backend/common/` code (driver, liveness) should already be a separate
    CMake library with a documented API, in preparation for the eventual
