@@ -36,11 +36,18 @@ static void gen_jump(Gen *g, const char *tac)
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
-    if (a64_is_fp(t) || a64_is_ld(t))
-        fatal_error("aarch64: %s: a floating-point condition is not implemented yet", gen_name(g));
-    load_val(g, T0, cond);
+    if (a64_is_ld(t))
+        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
     char *l = label_name(target);
-    emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, a64_width(t)), a64_sym(l, 0));
+    if (a64_is_fp(t)) {
+        // A NaN is not zero: unordered leaves Z clear.
+        load_val(g, F0, cond);
+        emit2(g, A64_FCMP, a64_reg(F0, a64_width(t)), a64_fzero());
+        emit2(g, A64_BCOND, a64_cond(if_zero ? A64_EQ : A64_NE), a64_sym(l, 0));
+    } else {
+        load_val(g, T0, cond);
+        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, a64_width(t)), a64_sym(l, 0));
+    }
     xfree(l);
 }
 
@@ -101,11 +108,32 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     store_val(g, T0, dst);
 }
 
+// A floating-point negation, or `!` (equal to zero, a NaN is not).
+static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
+{
+    A64_Operand f = a64_reg(F0, a64_width(t));
+    load_val(g, F0, in->u.unary.src);
+    if (in->u.unary.op == TAC_UNARY_NOT) {
+        emit2(g, A64_FCMP, f, a64_fzero());
+        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(A64_EQ));
+        store_val(g, T0, in->u.unary.dst);
+        return;
+    }
+    if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
+        fatal_error("aarch64: %s: bad floating-point unary operator", gen_name(g));
+    emit2(g, A64_FNEG, f, f);
+    store_val(g, F0, in->u.unary.dst);
+}
+
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    if (a64_is_fp(t) || a64_is_ld(t))
-        fatal_error("aarch64: %s: floating-point unary is not implemented yet", gen_name(g));
+    if (a64_is_ld(t))
+        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
+    if (a64_is_fp(t)) {
+        gen_fp_unary(g, in, t);
+        return;
+    }
     A64_Width w = int_width(t);
     load_int_as(g, T0, in->u.unary.src, t);
     A64_Operand r = a64_reg(T0, w);
@@ -229,11 +257,78 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool is_unsigned, A64_W
     }
 }
 
+// A floating-point operator: arithmetic leaves its result in v16, a comparison 0/1 in
+// w9.  fcmp sets C and V for unordered operands, so mi and ls are false for a NaN where
+// lt and le would not be.
+static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
+{
+    A64_Width w    = a64_width(t);
+    A64_Operand fa = a64_reg(F0, w), fb = a64_reg(F1, w);
+    load_val(g, F0, in->u.binary.src1);
+    load_val(g, F1, in->u.binary.src2);
+    A64_Op op = A64_RET;
+    int cond  = -1;
+    switch (in->u.binary.op) {
+    case TAC_BINARY_ADD:
+    case TAC_BINARY_ADD_DOUBLE:
+        op = A64_FADD;
+        break;
+    case TAC_BINARY_SUBTRACT:
+    case TAC_BINARY_SUBTRACT_DOUBLE:
+        op = A64_FSUB;
+        break;
+    case TAC_BINARY_MULTIPLY:
+    case TAC_BINARY_MULTIPLY_DOUBLE:
+        op = A64_FMUL;
+        break;
+    case TAC_BINARY_DIVIDE:
+    case TAC_BINARY_DIVIDE_DOUBLE:
+        op = A64_FDIV;
+        break;
+    case TAC_BINARY_EQUAL:
+        cond = A64_EQ;
+        break;
+    case TAC_BINARY_NOT_EQUAL:
+        cond = A64_NE;
+        break;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        cond = A64_MI;
+        break;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
+        cond = A64_LS;
+        break;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        cond = A64_GT;
+        break;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
+        cond = A64_GE;
+        break;
+    default:
+        fatal_error("aarch64: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+    }
+    if (cond >= 0) {
+        emit2(g, A64_FCMP, fa, fb);
+        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(cond));
+        store_val(g, T0, in->u.binary.dst);
+        return;
+    }
+    emit3(g, op, fa, fa, fb);
+    store_val(g, F0, in->u.binary.dst);
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
-    if (a64_is_fp(t) || a64_is_ld(t))
-        fatal_error("aarch64: %s: floating-point arithmetic is not implemented yet", gen_name(g));
+    if (a64_is_ld(t))
+        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
+    if (a64_is_fp(t)) {
+        gen_fp_binary(g, in, t);
+        return;
+    }
     // A shift count may be of another width: it is used at the shifted value's.
     Tac_BinaryOperator op = in->u.binary.op;
     bool shift            = op == TAC_BINARY_LEFT_SHIFT || op == TAC_BINARY_RIGHT_SHIFT ||
@@ -242,6 +337,32 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     load_int_as(g, T1, in->u.binary.src2, shift ? val_type(g, in->u.binary.src2) : t);
     gen_int_binop(g, op, t->kind == TAC_TYPE_POINTER || unsigned_op(op), int_width(t), T0, T0, T1);
     store_val(g, T0, in->u.binary.dst);
+}
+
+// An int/FP or float/double conversion.  To an integer it truncates toward zero, into
+// the destination's width (a narrower one is truncated by the store); the signedness of
+// an integer source is the conversion's (its own type may differ, once copy propagation
+// has removed a cast).
+static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+{
+    const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
+    if (a64_is_ld(st) || a64_is_ld(dt))
+        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
+    bool sfp = a64_is_fp(st), dfp = a64_is_fp(dt);
+    int s = sfp ? F0 : T0, d = dfp ? F1 : T1;
+    load_val(g, s, src);
+    A64_Op op;
+    if (sfp && dfp) {
+        op = A64_FCVT;
+    } else if (dfp) {
+        bool u = kind == TAC_INSTRUCTION_UINT_TO_DOUBLE || kind == TAC_INSTRUCTION_UINT_TO_FLOAT;
+        op     = u ? A64_UCVTF : A64_SCVTF;
+    } else {
+        op = a64_is_unsigned(dt) ? A64_FCVTZU : A64_FCVTZS;
+    }
+    emit2(g, op, a64_reg(d, dfp ? a64_width(dt) : int_width(dt)),
+          a64_reg(s, sfp ? a64_width(st) : int_width(st)));
+    store_val(g, d, dst);
 }
 
 // dst = &src, of a named object or function.
@@ -278,6 +399,18 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_TRUNCATE:
     case TAC_INSTRUCTION_ZERO_EXTEND:
         gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

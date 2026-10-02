@@ -98,11 +98,13 @@ with pointers), not all at once in A23.
   `GET_ADDRESS` of a slot, global or function. The `aarch64` descriptor's
   `struct_return_max` is `SIZE_MAX`: the front end never lowers a struct result to a
   hidden first argument, the backend owns every one (its address goes in `x8`).
-- **A14. Floating point** (ch. 13): `fadd`/`fsub`/`fmul`/`fdiv`/`fneg` on S/D,
+- **A14. Floating point. Done** (ch. 13): `fadd`/`fsub`/`fmul`/`fdiv`/`fneg` on S/D,
   `fcvt` between them, `scvtf`/`ucvtf`/`fcvtzs`/`fcvtzu` (native 64-bit unsigned
   conversions, no helpers), `fcmp` + `cset` with NaN-correct conditions (`mi`/`ls` for
-  `<`/`<=`), `fmov` for 8-bit-encodable constants, otherwise a literal in `.rodata`.
-  Until A21, `long double` operations are a clear `fatal_error`, not a miscompile.
+  `<`/`<=`), `fcmp #0.0` + `b.eq`/`b.ne` for a condition. A constant is built in x17
+  and moved with `fmov`; `fmov`'s own 8-bit immediate is the peephole's (A26). FP
+  arguments and results run against clang both ways. `libc.a` gains `fabs`, `fma`,
+  `fmax`, `fmin`. `long double` operations stay a clear `fatal_error` until A21.
 - **A15. Pointers, arrays, chars, strings** (ch. 14–16): loads/stores by width and
   signedness (`ldrsb`/`ldrb`, …), `ADD_PTR` with scaled-register addressing where it
   fits, and the byte-pointer TAC kinds as plain operations, as on RISC-V.

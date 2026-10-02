@@ -135,6 +135,11 @@ A64_Operand a64_lsl(int amount)
     return (A64_Operand){ .kind = A64_OPND_LSL, .imm = amount };
 }
 
+A64_Operand a64_fzero(void)
+{
+    return (A64_Operand){ .kind = A64_OPND_FZERO };
+}
+
 A64_Operand a64_cond(A64_Cond cond)
 {
     return (A64_Operand){ .kind = A64_OPND_COND, .sub = cond };

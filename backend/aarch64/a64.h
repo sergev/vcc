@@ -53,6 +53,7 @@ typedef enum {
     A64_OPND_EXT,   // reg at width, extended: uxtw/sxtw/... #amount
     A64_OPND_LSL,   // a bare "lsl #imm" (movz, movk)
     A64_OPND_COND,  // a condition code
+    A64_OPND_FZERO, // #0.0 (fcmp)
 } A64_OperandKind;
 
 typedef enum { A64_SHIFT_LSL, A64_SHIFT_LSR, A64_SHIFT_ASR } A64_Shift;
@@ -103,20 +104,20 @@ typedef struct {
     X(MOVZ, "movz")                                                                               \
     X(MOVN, "movn")                                                                               \
     X(MOVK, "movk")                                                                               \
-    X(ADD, "add") X(SUB, "sub") X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv")       \
-        X(MSUB, "msub") X(MADD, "madd") X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn")   \
-            X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset")               \
-                X(SXTB, "sxtb") X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth")   \
-                    X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh")               \
-                        X(LDRSH, "ldrsh") X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb")         \
-                            X(STRH, "strh") X(LDP, "ldp") X(STP, "stp") X(ADRP, "adrp") X(B, "b") \
-                                X(BCOND, "b.") X(CBZ, "cbz") X(CBNZ, "cbnz") X(BL, "bl")          \
-                                    X(BLR, "blr") X(RET, "ret") X(FMOV, "fmov") X(FADD, "fadd")   \
-                                        X(FSUB, "fsub") X(FMUL, "fmul") X(FDIV, "fdiv")           \
-                                            X(FNEG, "fneg") X(FCMP, "fcmp") X(FCVT, "fcvt")       \
-                                                X(SCVTF, "scvtf") X(UCVTF, "ucvtf")               \
-                                                    X(FCVTZS, "fcvtzs") X(FCVTZU, "fcvtzu")       \
-                                                        X(EPILOGUE, "#epilogue")
+    X(ADD, "add")                                                                                 \
+    X(SUB, "sub") X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv") X(MSUB, "msub")     \
+        X(MADD, "madd") X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn") X(LSL, "lsl")     \
+            X(LSR, "lsr") X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") X(SXTB, "sxtb")             \
+                X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth") X(LDR, "ldr")     \
+                    X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")           \
+                        X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb") X(STRH, "strh")           \
+                            X(LDP, "ldp") X(STP, "stp") X(ADRP, "adrp") X(B, "b") X(BCOND, "b.")  \
+                                X(CBZ, "cbz") X(CBNZ, "cbnz") X(BL, "bl") X(BLR, "blr")           \
+                                    X(RET, "ret") X(FMOV, "fmov") X(FADD, "fadd") X(FSUB, "fsub") \
+                                        X(FMUL, "fmul") X(FDIV, "fdiv") X(FNEG, "fneg")           \
+                                            X(FCMP, "fcmp") X(FCVT, "fcvt") X(SCVTF, "scvtf")     \
+                                                X(UCVTF, "ucvtf") X(FCVTZS, "fcvtzs")             \
+                                                    X(FCVTZU, "fcvtzu") X(EPILOGUE, "#epilogue")
 
 typedef enum {
 #define A64_ENUM(op, mnem) A64_##op,
@@ -169,6 +170,7 @@ A64_Operand a64_shift(int reg, A64_Width width, A64_Shift shift, int amount);
 A64_Operand a64_ext(int reg, A64_Width width, A64_Extend ext, int amount);
 A64_Operand a64_lsl(int amount);
 A64_Operand a64_cond(A64_Cond cond);
+A64_Operand a64_fzero(void);
 // The assembler name of register `reg` at `width`, or NULL for a virtual register.
 const char *a64_reg_name(int reg, A64_Width width);
 bool a64_is_fpreg(int reg); // v0-v31

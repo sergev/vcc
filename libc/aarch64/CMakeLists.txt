@@ -48,7 +48,7 @@ endforeach()
 
 # C sources, through cpp -> parse -> lower -> genaarch64 -> clang.  The headers are the
 # riscv64 ones, the same LP64 data model, until AArch64 has its own (Plan.md, A22).
-set(AARCH64_LIBC_C putchar)
+set(AARCH64_LIBC_C putchar fabs fma fmax fmin)
 file(GLOB AARCH64_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 foreach(name ${AARCH64_LIBC_C})
     add_custom_command(OUTPUT ${out}/${name}.o

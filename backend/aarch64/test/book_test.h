@@ -12,6 +12,7 @@ protected:
     {
         Aarch64Test::SetUp();
         static const SkippedTest skipped[] = {
+            { "Chapter13_StandardLibraryCall", "needs ldexp, which needs pointer loads (A15)" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

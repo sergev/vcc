@@ -88,6 +88,9 @@ static void emit_operand(FILE *out, const A64_Operand *o)
     case A64_OPND_COND:
         fputs(conds[o->sub], out);
         break;
+    case A64_OPND_FZERO:
+        fputs("#0.0", out);
+        break;
     }
 }
 
