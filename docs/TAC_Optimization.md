@@ -9,7 +9,7 @@ The TAC lowering phase (`translator/`) is deliberately written for correctness, 
 Optimizing at TAC level is the right place to fix this because:
 
 - TAC is already fully typed and fully lowered — we do not need to worry about C syntax or scoping rules.
-- TAC is machine-independent — optimizations written here benefit every backend (BESM-6, x86-64, and future targets).
+- TAC is machine-independent — optimizations written here benefit every backend (RISC-V, BESM-6, and future targets).
 - TAC instructions have a simple, uniform structure that makes optimization algorithms easy to express.
 
 Optimizations that transform one function at a time, without knowledge of the rest of the program, are called **intraprocedural** optimizations. The four passes described here are all intraprocedural. Each `TAC_TOPLEVEL_FUNCTION` is processed independently; static variables, function calls, and pointer aliasing are handled conservatively.
@@ -70,7 +70,7 @@ A `Unary` instruction with a constant operand is similarly folded:
 
 Integer folding must respect the width of the result type encoded in `Tac_ConstKind`; overflow wraps at the C type's boundary, matching C's defined behavior for unsigned arithmetic and the implementation-defined wrapping our target uses for signed types.
 
-Floating-point folding applies the same rule for `ConstFloat`, `ConstDouble`, and `ConstLongDouble`. A long double constant is binary128 bits, folded in software binary128 (`libutil/float128.c`, the same code as the RISC-V runtime), or as a double where the target's long double is one (BESM-6); the host's own `long double` is never used.
+Floating-point folding applies the same rule for `ConstFloat`, `ConstDouble`, and `ConstLongDouble`. A long double constant is binary128 bits, folded in software binary128 (`libutil/float128.c`, the same code as the RISC-V runtime), or as a double on a target whose long double is one; the host's own `long double` is never used.
 
 ### Type conversion instructions
 

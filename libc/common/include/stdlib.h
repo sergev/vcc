@@ -3,7 +3,8 @@
  *
  * Status: exit() and atoi() are implemented in the runtime.  malloc/calloc/
  * realloc/free are in the BESM-6 Unix libc0.a (not the Madlen libc.bin, which
- * has no heap) and in the RISC-V libc.a (a bump allocator; free does nothing).
+ * has no heap) and in the RISC-V libc.a (a bump allocator; free does nothing,
+ * realloc copies into a new block unless the old one is big enough).
  * The rest are declared for future implementation (TODO).
  */
 #ifndef _STDLIB_H

@@ -70,7 +70,7 @@ macro(besm6_unix_compile_c name srcdir objlist)
         COMMAND ${SystemCpp} -E -nostdinc -I${PORTABLE_DIR}/include -I${LIBC_COMMON_INCLUDE_DIR}
                 ${c_src} -o ${c_pre}
         COMMAND parse   ${c_pre} ${c_ast}
-        COMMAND lower   ${c_ast} ${c_tac}
+        COMMAND lower   -t besm6 ${c_ast} ${c_tac}
         COMMAND genbesm --unix ${c_tac} ${c_asm}
         COMMAND b6as -o ${c_obj} ${c_asm}
         DEPENDS ${c_src} ${BESM6_HEADERS} parse lower genbesm

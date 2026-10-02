@@ -235,10 +235,9 @@ tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>`
 functional (BESM-6: word-pointer `va_list`, covered by `stdarg_tests.cpp`; RISC-V: a byte
 pointer over the register save area, covered by the RISC-V run and interop tests).
 
-Static analysis (requires cppcheck):
-```sh
-ctest --test-dir build -R cppcheck
-```
+Static analysis: when `cppcheck` is installed, CMake attaches it to every C and C++ target
+(`CMAKE_C_CPPCHECK`/`CMAKE_CXX_CPPCHECK` in the top-level `CMakeLists.txt`), so it runs as
+part of the build and any finding fails the build. There is no separate ctest for it.
 
 Try the compiler tools:
 ```sh
@@ -252,11 +251,12 @@ Try the compiler tools:
 # redirect), pass "-" as the output argument:
 ./build/parse input.c -          > /tmp/input.ast   # "-" = binary AST to stdout
 ./build/parse input.c               # → input.ast (default file output)
-./build/lower /tmp/input.ast              # → binary TAC to /tmp/input.tac (default target: besm6)
+./build/lower /tmp/input.ast              # → binary TAC to /tmp/input.tac (default target: riscv64)
 ./build/lower --yaml /tmp/input.ast -     # → YAML TAC to stdout ("-" = stdout)
 ./build/lower -t x86_64 /tmp/input.ast -  # → TAC with x86_64 type sizes/offsets
 ./build/lower -D /tmp/input.ast           # debug: translator trace
 
+# genbesm needs TAC lowered for its target: ./build/lower -t besm6 /tmp/input.ast
 # genbesm defaults to the Unix (b6as) dialect; the output file's extension follows the
 # dialect (.s for Unix, .mad for Madlen, .bem for Bemsh) when no output name is given.
 ./build/backend/genbesm /tmp/input.tac              # → Unix b6as assembly to /tmp/input.s

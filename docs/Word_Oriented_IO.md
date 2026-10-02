@@ -8,7 +8,7 @@ The compiler is split into separate executables, each responsible for one stage:
 source.c  →  [parse]  →  binary AST  →  [lower]  →  binary TAC  →  [codegen]
 ```
 
-`parse` reads a C source file and builds an Abstract Syntax Tree (AST) — a web of interconnected C structs in memory. It must pass that tree to `lower`, which type-checks it and translates it to Three-Address Code (TAC). `lower` in turn writes TAC so the future code generator can turn it into BESM-6 machine instructions.
+`parse` reads a C source file and builds an Abstract Syntax Tree (AST) — a web of interconnected C structs in memory. It must pass that tree to `lower`, which type-checks it and translates it to Three-Address Code (TAC). `lower` in turn writes TAC so a target code generator (`genriscv`, `genbesm`) can turn it into machine instructions.
 
 The same `wio` layer handles both hand-offs: AST from `parse` to `lower`, and TAC from `lower` to the code generator.
 

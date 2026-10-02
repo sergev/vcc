@@ -5,13 +5,12 @@ programs from Nora Sandler's book *Writing a C Compiler* (No Starch Press, 2024)
 written for a reader who is new to compilers **and** new to automated testing. The first
 half is a gentle on-ramp — what testing is, how the book's tests are organized, and why
 each test belongs to a particular part of our compiler. The second half is the part you
-*cannot* get from the book itself: what we actually learned carrying all 20 chapters of its
-test corpus onto a 1960s Soviet mainframe, where the clean textbook model bends in
-interesting ways.
+*cannot* get from the book itself: how one set of run tests serves every backend, including
+a target whose data model differs from the book's.
 
 If you have not yet read the project overview, skim the [README](../README.md) and
-[Technical Reference](Technical_Reference.md) first. A friendly companion to this article
-is [Learn From This Project](Learn_From_This_Project.md).
+[Technical Reference](Technical_Reference.md) first. The RISC-V backend, which the run-test
+examples below use, is described in [Riscv_Backend.md](Riscv_Backend.md).
 
 ## 1. Where the tests come from
 
@@ -125,7 +124,7 @@ Source (.c)
   → Semantic     checks meaning: types, declarations    (e.g. "is `x` declared? is this assignment legal?")
   → Translator   lowers the tree to simple 3-address code (TAC)
   → Optimizer    simplifies the TAC                      (e.g. folds `2+3` into `5`)
-  → BESM-6 backend  turns TAC into machine instructions for the BESM-6 computer
+  → Backend      turns TAC into assembly for one target  (RISC-V or BESM-6)
 ```
 
 Each phase has a single, well-defined job:
@@ -142,8 +141,10 @@ Each phase has a single, well-defined job:
   Code), a simple intermediate language that is easy to optimize and to translate.
 - **Optimizer** (`optimize/`): rewrites the TAC to be smaller or faster without changing
   what it computes.
-- **BESM-6 backend** (`backend/besm6/`): emits real assembly for the BESM-6, a historic
-  Soviet mainframe, which we run on the **Dubna** simulator.
+- **Backends** (`backend/`): emit real assembly for a target machine. There are two. The
+  **RISC-V** backend (`backend/riscv/`) produces RV64 code that we run on the
+  `qemu-system-riscv64` emulator. The **BESM-6** backend (`backend/besm6/`) produces code for
+  a historic Soviet mainframe, which we run on a simulator.
 
 The full diagram and phase status table live in [CLAUDE.md](../CLAUDE.md) and the
 [Technical Reference](Technical_Reference.md).
@@ -231,10 +232,10 @@ With that caveat in hand, the mapping is still the backbone of the whole effort:
 | `invalid_parse` | parser | `parser/test/chapterNN_tests.cpp` | aborts with a parse-error message |
 | `invalid_semantics`, `invalid_types`, `invalid_declarations`, `invalid_labels`, `invalid_struct_tags` | semantic | `semantic/test/chapterNN_tests.cpp` | aborts with a semantic-error message |
 | `valid` (and `extra_credit`, `libraries`) | every backend | `backend/common/test/book/chapterNN_tests.cpp` | compiles, runs, and prints the expected result |
-| chapter 19 (`constant_folding`, `copy_propagation`, …) | optimizer | `optimize/test/chapter19_tests.cpp` | the TAC is simplified as expected |
+| chapter 19 (`constant_folding`, `copy_propagation`, …) | optimizer | `optimize/test/chapter19_tests1.cpp` … `chapter19_tests4.cpp` | the TAC is simplified as expected |
 
 This is a beautiful correspondence: **our source tree already has one directory per phase**
-(`scanner/`, `parser/`, `semantic/`, `translator/`, `optimize/`, `backend/besm6/`), and the
+(`scanner/`, `parser/`, `semantic/`, `translator/`, `optimize/`, `backend/`), and the
 book's tests already sort themselves into those same buckets. Importing a chapter is mostly
 a matter of carrying each program to its rightful home — adjusted, per §5, for the cases
 where *our* compiler catches a thing in a different phase than the book does.
@@ -243,165 +244,142 @@ where *our* compiler catches a thing in a different phase than the book does.
 
 Negative tests are about *rejecting* bad programs, which any phase can do on its own. But a
 positive test must *run* a valid program and check its answer — and to run a program you
-need a complete compiler with a real backend. We have one: the **BESM-6 backend** plus the
-**Dubna** simulator. So our positive tests genuinely compile each program to BESM-6 machine
-code and execute it.
+need a complete compiler with a real backend. We have two, and the run tests are written
+once for both.
 
-There is one wrinkle. On our BESM-6 runtime, execution starts at a function called
-`program`, not `main`, and we observe a program by what it *prints*, not by an exit code.
-The book's valid programs, however, are written as `int main(void)` and are judged by the
-value `main` returns. To bridge the two, we wrap each program with a tiny `program` that
-calls `main` and prints its return value. That wrapper lives in
-[backend/besm6/test/codegen_test.h](../backend/besm6/test/codegen_test.h):
+**One suite, every backend.** The book's valid programs live in
+[backend/common/test/book/](../backend/common/test/book/) (`chapter1_tests.cpp` …
+`chapter20_tests.cpp`; chapter 18 is split over four files). They do not belong to any one
+target. CMake collects them into `BOOK_TEST_SOURCES`
+([backend/common/CMakeLists.txt](../backend/common/CMakeLists.txt)), and each backend
+compiles that same list into its own test executable — `riscv-tests` and `besm-tests`.
+Every test is written against a fixture called `BookTest`, and each backend defines its
+own `BookTest` in its own `test/book_test.h`. The `#include "book_test.h"` at the top of a
+chapter file therefore picks up a different fixture in each executable: the same
+`TEST_F(BookTest, Chapter1_Return2)` runs on RISC-V in one binary and on BESM-6 in the
+other.
 
-```c
-// Wrap a book program so program() prints `main()`'s return value as "%d\n".
-inline std::string WrapMain(const std::string &program)
-{
-    return "int printf(const char *format, ...);\n" + program +
-           "\nvoid program(void) { printf(\"%d\\n\", main()); }\n";
-}
-```
+**How a RISC-V run works.** The RISC-V fixture,
+[backend/riscv/test/book_test.h](../backend/riscv/test/book_test.h), derives from the
+backend's general run fixture `RiscvTest` in
+[backend/riscv/test/riscv_test.h](../backend/riscv/test/riscv_test.h). Its
+`CompileAndRunBook(src)` does the whole trip in-process and through real tools:
 
-So a book program that ends `return 2;` becomes a program that *prints* `2`, and our test
-simply checks that the output is `"2\n"`. This one trick works for the whole corpus: simple
-programs whose return value is the point, and the book's "self-checking" programs (which
-return `0` on success and a nonzero code on the first failed check) alike.
+1. compile the C source through our pipeline (parse → typecheck → translate → optimize →
+   `riscv_codegen`) to RISC-V assembly;
+2. assemble it with clang (`--target=riscv64 -march=rv64imfd -mabi=lp64d`);
+3. link it with `ld.lld` against our runtime (`crt0-status.o`, `libc.a`) and the qemu `virt`
+   linker script;
+4. boot the executable on bare-metal `qemu-system-riscv64 -M virt -bios none`, with the
+   program's UART output captured as its stdout (with a 5-second limit per run).
 
-Two details make the comparison honest:
+The book's programs are judged by the value `main` returns, but a test compares *printed
+output*. The bridge is a startup object: `crt0-status.o` is our ordinary `crt0` built with
+`-DPRINT_STATUS` ([libc/riscv/crt0.S](../libc/riscv/crt0.S)), which calls `main` and then
+prints its return value as `"%d\n"` before exiting. So a book program that ends
+`return 2;` prints `2`, and the test checks that the output is `"2\n"`. This one trick works
+for the whole corpus: simple programs whose return value is the point, and the book's
+"self-checking" programs (which return `0` on success and a nonzero code on the first failed
+check) alike. Printing the value, rather than reading an exit code, also sidesteps the
+`mod 256` truncation an exit status would impose on a return value like `300`.
 
-- **Where the expected value comes from.** We do not hand-type the expected number. We take
-  the *same wrapped source*, compile it with the host `cc`, and use its stdout as the
-  expectation. Comparing printed output (not an exit code) sidesteps the `mod 256`
-  truncation a shell exit status would impose on a return value like `300`.
-- **Multi-file `libraries` tests.** Some book tests split a program across a client file and
-  a library file. We have no linker in this pipeline, so we **concatenate them into one
-  translation unit, client first**, and compile that.
+**A second opinion from clang.** The expected string in each test is a literal, written
+into the test. On RISC-V that is not the only check: the fixture's `CompileAndRunBook`
+also compiles the *same source* with clang (`-O0`, against our own target headers), links
+it with the same `crt0-status.o` and runs it on qemu too. The test then requires our output
+to equal clang's (`"differs from clang"`) and our exit status to equal clang's. clang is
+an independent, mature RISC-V compiler, so every book program is a differential test as
+well as a unit test: if our output and the expected literal agree but clang disagrees, the
+expectation itself is suspect.
+
+**When the tools are missing.** The run tests need clang with RISC-V support, `ld.lld` and
+`qemu-system-riscv64` (found by CMake in
+[libc/riscv/CMakeLists.txt](../libc/riscv/CMakeLists.txt); on macOS
+`brew install llvm lld qemu`). The fixture's `SetUp` calls `SKIP_IF_NO_RISCV_TOOLS()`, so on
+a machine without them every book test reports *skipped* rather than failed, and
+`make run` stays green.
+
+**Multi-file `libraries` tests.** Some book tests split a program across a client file and
+a library file. The fixture compiles a single source, so we **concatenate them into one
+translation unit, client first** (for example `Chapter9_LibraryAddition`).
+
+**The same suite on BESM-6.** The second backend's fixture,
+[backend/besm6/test/book_test.h](../backend/besm6/test/book_test.h), derives from
+`CodegenTest` and implements `CompileAndRunBook` with the BESM-6 Unix toolchain: our
+`genbesm` assembly is assembled by `b6as`, linked by `b6ld`, and run under the `b6sim`
+simulator with `--status`, which likewise appends `main`'s result to the output. There is
+no clang to compare against on that machine, so only the expected literal is checked.
 
 ## 8. When the target disagrees with the book
 
-Here is the single most important thing the book cannot teach you, because the book targets
-x86 and we target a machine from 1968. **A perfectly correct C program can legitimately fail
-on BESM-6 — not because our compiler is wrong, but because the two machines compute
-different answers to the same C.** A positive run test only passes when the backend's
-arithmetic *agrees* with the model the book's program was written against. Where they
-disagree, the test cannot pass, and pretending otherwise would be dishonest.
+The book targets x86-64. RISC-V's LP64 data model is the same as the book's — 32-bit `int`,
+64-bit `long` and pointers, IEEE-754 floating point, byte addressing — so on RISC-V every one
+of the shared programs runs, and its output agrees with clang's.
 
-The disagreements all trace back to a handful of architectural facts. For the full story see
-[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md); the essentials:
+A target with a different data model teaches the one thing the book cannot: **a perfectly
+correct C program can legitimately compute a different answer on another machine — not
+because the compiler is wrong, but because the two machines compute different answers to the
+same C.** A run test only passes when the backend's arithmetic *agrees* with the model the
+program was written against. The second backend, BESM-6, is such a machine — one 41-bit word
+for both `int` and `long`, word addressing, a non-IEEE float format (see
+[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md)) — and the
+suite settles each disagreement in one of three ways.
 
-| Aspect | BESM-6 | The book's x86 model |
-|---|---|---|
-| `int`, `long` | the **same** 41-bit signed word (±2⁴⁰ ≈ ±1.1×10¹²) | 32-bit `int`, 64-bit `long` |
-| `unsigned` (all widths) | one 48-bit word (0 … 2⁴⁸−1) | 32-bit / 64-bit |
-| floating point | one 48-bit format for `float`/`double`/`long double`: 7-bit exponent (~10⁻¹⁹ … ~9.2×10¹⁸), 40-bit mantissa (~12 digits), **no NaN, infinity, negative zero, or subnormals** | IEEE-754 binary32 / binary64 |
-| addressing | **word**-addressed (a pointer is a word index) | byte-addressed |
-| identifiers | Madlen assembler truncates to **8 characters** | effectively unlimited |
-| output charset | lowercase Latin folds to **Cyrillic** (GOST) | ASCII |
-| `>>` of a negative | **logical** (no sign extension) | arithmetic (implementation-defined) |
-| runtime | hosted libc subset (stdio/string/math helpers); allocator on the Unix path only, no libm transcendentals | full libc + libm |
+**Width-dependent programs: a generic version, plus a target version.** Chapter 11 assigns a
+64-bit `long` to a 32-bit `int` and self-checks that the high bits were *lost*
+(`Chapter11_Truncate`). Where `int` and `long` are the same width nothing is truncated and
+the self-check fails — the codegen is flawless; the *premise* of the test does not exist on
+that machine. Such programs stay in the shared suite in their generic LP64 form, as in the
+book; a target that cannot honour the premise skips them (§9) and runs its own rewritten
+versions instead (for BESM-6,
+[book_besm6_tests.cpp](../backend/besm6/test/book_besm6_tests.cpp)).
 
-Now the worked examples — each one a real program from the corpus.
-
-**Truncation that doesn't happen** (chapter 11, `truncate` / `convert_by_assignment`). The
-program assigns a 64-bit `long` to a 32-bit `int` and self-checks that the high bits were
-*lost*. On BESM-6 `int` and `long` are the *same* 41-bit word, so nothing is truncated, the
-value survives intact, the self-check sees the "wrong" answer and returns a failure code.
-The codegen is flawless; the *premise* of the test does not exist on this machine. Disabled.
-A cluster of chapter-11/12 programs (`switch_int`, `convert_function_arguments`,
-`compound_assign_to_int`, …) fail for exactly this reason.
-
-**Unsigned width** (chapter 12). The chapter exists to prove an x86 compiler distinguishes a
-32-bit `unsigned int` (wraps at 2³²) from a 64-bit `unsigned long` (wraps at 2⁶⁴). BESM-6
-has a *single* 48-bit unsigned word, so `-1u`, an `unsigned int` incremented past 2³²−1, and
-the various narrowing casts simply don't behave as the program expects. The four programs
-whose values happen to stay in range and don't depend on the wrap point run and pass; the
-other 25 are disabled.
-
-**No NaN, no infinity** (chapter 13). `nan`, `infinity`, `negative_zero`, and
-`subnormal_not_zero` exercise IEEE corner cases the BESM-6 float format does not have — there
-is no bit pattern for NaN, and `isnan` would need libm besides. Separately, `return_double`
-returns `1234e75`, whose exponent blows past the format's ~9.2×10¹⁸ ceiling. Different
-reasons, same outcome: disabled.
-
-**The rare program we keep with a *different* expected value** (chapter 10,
-`bitwise_ops_file_scope_vars`). Right-shifting a *negative* integer is
-implementation-defined in C11 (§6.5.7p5): x86 shifts arithmetically, BESM-6 shifts
-logically. This program is *not* self-checking — it just computes a value and returns it. So
-we keep it **enabled** and set the expected value to the genuine BESM-6 result (`2`), not the
-x86 result (`0`). That is legitimate: the C standard blesses both.
-
-The contrast with the truncation case above is the whole judgment call, and it is worth
-stating plainly. When a program merely *computes and returns* a value whose C semantics are
-implementation-defined, we keep it and expect the BESM-6 answer. When a program *self-checks*
-and returns a pass/fail code, a BESM-6-tuned expectation would just be encoding the
-program's own failure code — a green checkmark that secretly means "this test failed." That
-is worse than useless, so those programs are disabled, not "fixed" with a doctored number.
-**Disabling is the honest call.**
-
-**Mechanical target limits.** Three smaller constraints disable programs that are otherwise
-perfectly in range:
-
-- *8-character identifiers.* Madlen truncates names to 8 chars, so `one_hundred` and
-  `one_hundred_ulong` (chapter 12 `comparisons`) both become `ONE*HUND` and collide
-  ("twice-described identifier"); chapter 20's `glob_four` / `glob_fourteen` collide on
-  `glob_fou` and had to be renamed to `gr0…gr14` to enable the test.
-
-  This means **a book test must be updated so that its *external* names — functions and
-  file-scope globals, anything that becomes a Madlen label — are unique within their first 8
-  characters** (after the backend's `_`/`$`/`%`→`*`/`/` substitution; see
-  [Madlen.md §3](../backend/besm6/Madlen.md)). The collision is silent: the assembler/loader merges the two
-  names and the later definition wins, so calls to one C name run the other's body — a wrong
-  result with no compile- or link-time error. Rename the offending helpers to short distinct
-  stems rather than disabling the test when that is the only obstacle: chapter 15's
-  `pointer_diff`, for example, was enabled by shortening `get_multidim_ptr_diff` /
-  `get_multidim_ptr_diff_2` (both → `get*mult`) to `pdiff_m` / `pdiff_m2`. Block-scope locals
-  are frame slots, not labels, so they need no such care.
-- *Output charset.* The runtime renders lowercase Latin as Cyrillic, so the book's
-  `hello_world` prints uppercase letters and our expected strings use UPPERCASE ASCII.
-- *Simulator time budget.* Chapter 8's `empty_loop_body` is correct codegen but spins ~430
-  million iterations — over a minute on Dubna, past the 10-second ctest timeout — so it is
-  disabled for speed, not correctness.
-
-## 9. A field guide to `DISABLED_`
-
-Sometimes the book exercises a feature our backend cannot handle *yet*, or — far more often,
-per §8 — a feature this machine simply does not have. We do not let that block a chapter, and
-we do not quietly drop the test. GoogleTest lets you prefix a test name with `DISABLED_` to
-register it but skip it:
+**Implementation-defined results: one test, a per-target expectation.** Right-shifting a
+*negative* integer is implementation-defined in C11 (§6.5.7p5): RISC-V shifts
+arithmetically, some machines logically. `Chapter3_BitwiseShiftrNegative` just computes
+`-5 >> 30` and returns it, so it stays in the shared suite with a per-target expectation;
+the fixture's `IsTarget` tells the test which backend it is running on:
 
 ```cpp
-TEST_F(CodegenTest, DISABLED_Chapter13_Nan) { /* BESM-6 FP has no NaN */ }
+EXPECT_EQ(IsTarget("besm6") ? "2047\n" : "-1\n",
+          CompileAndRunBook("int main(void) { return -5 >> 30; }"));
 ```
 
-The test is visible (reported as skipped) so we remember it, but it does not fail the build.
-Now that the run programs are shared by every backend, a program one target cannot run goes on
-that backend's skip list (`BookTest` in its `test/book_test.h`) instead.
-Every disabled test carries a **one-line reason**. Across 20 chapters those reasons settle
-into a small, recurring taxonomy — learn these eight and you can predict why almost any book
-program is disabled:
+**Programs with no analogue: removed.** The IEEE corner-case programs of chapters 13 and 19
+(`nan`, `infinity`, `negative_zero`, `subnormal_not_zero`) are not in the suite.
 
-| # | Category | Representative example |
-|---|---|---|
-| B | Value exceeds BESM-6 range (41-bit signed / 48-bit unsigned / FP exponent) | ch11 `simple` (±(2⁶³−1)), ch13 `return_double` |
-| C | Relies on x86 32/64-bit truncation or wraparound | ch11 `truncate`, ch12 `switch_uint` |
-| D | Needs runtime absent from the Madlen `libc.bin`: libm transcendentals, or the Unix-only allocator (`malloc`/`free`) | ch17 `void_pointer/*`, ch13 `standard_library_call` |
-| E | Forbidden by the no-shadowing design rule | ch7/8/9/10/18/20 shadowing programs |
-| F | 8-character Madlen identifier collision | ch12 `comparisons`, ch20 `briggs_xmm_k_value` |
-| G | Output charset folds lowercase Latin to Cyrillic | ch16 `write_to_array` |
-| H | Loop runs past the 10s ctest timeout | ch8 `empty_loop_body`, ch9 `test_for_memory_leaks` |
-| I | Assumes x86 byte addressing / page boundaries / `.s` helpers | ch14 `pointer_int_casts`, `push_arg_on_page_boundary` |
+The contrast between the first two cases is the whole judgment call. When a program merely
+*computes and returns* a value whose C semantics are implementation-defined, we keep it and
+expect each target's answer. When a program *self-checks* and returns a pass/fail code, a
+target-tuned expectation would just be encoding the program's own failure code — a green
+checkmark that secretly means "this test failed." So such a program is never "fixed" with a
+doctored number: the target either runs a version of the program that is true to its data
+model, or skips it.
+
+## 9. Skip lists
+
+Each backend's `BookTest` has a **skip list** — an array of `{ test name, reason }` pairs
+that its `SetUp` hands to `SkipIfListed` (from
+[backend/common/test/backend_test.h](../backend/common/test/backend_test.h)), which calls
+`GTEST_SKIP()` with the reason when the current test is on it. A skipped test is still
+reported, with its reason, so nothing is silently lost. (A name prefix such as GoogleTest's
+`DISABLED_` would not do: a program can be fine on one target and impossible on another.)
+
+- **RISC-V has no skip list.** Its `BookTest` skips only when the tools are missing; all of
+  the shared programs run on qemu and agree with clang.
+- **BESM-6 skips the width-dependent programs** and runs its own versions of them under a
+  separate fixture (`Besm6BookTest`).
 
 The discipline behind this is worth making explicit, because it is the difference between a
 test suite you can trust and one you cannot:
 
-- **One faithful test per book program.** We transcribe every program, even the ones we know
-  we must disable — so the corpus stays complete and a future backend improvement has a test
-  already waiting to be flipped on.
-- **Disable, don't hide.** A `DISABLED_` test with a reason is a tracked gap. A silently
-  omitted program is forgotten knowledge.
+- **One faithful test per book program.** Every program is transcribed in its generic form,
+  even when some target cannot run it — so the corpus stays complete and a new backend has a
+  test already waiting for it.
+- **Skip, don't hide.** A skipped test with a reason is a tracked gap. A silently omitted
+  program is forgotten knowledge.
 - **Never encode a meaningless number.** As §8 argued, a self-checking program must never be
-  "made to pass" with a BESM-6-tuned expectation that is really its own failure code.
+  "made to pass" with a target-tuned expectation that is really its own failure code.
 
 ## 10. Negative tests buy diagnostics — the receipts
 
@@ -479,20 +457,21 @@ together — that is the forcing function from §3 in action. (The `\\}` is just
 escape for a literal `}`.)
 
 **A positive run test** (from [backend/common/test/book/chapter1_tests.cpp](../backend/common/test/book/chapter1_tests.cpp)).
-The `CodegenTest` fixture's `CompileAndRun` compiles the source, runs it on Dubna, and
-returns whatever it printed:
+The `BookTest` fixture's `CompileAndRunBook` compiles the source, runs it, and returns what
+it printed followed by `main`'s return value:
 
 ```cpp
 // return 2;
-TEST_F(CodegenTest, Chapter1_Return2)
+TEST_F(BookTest, Chapter1_Return2)
 {
-    EXPECT_EQ("2\n", CompileAndRun(WrapMain("int main(void) { return 2; }")));
+    EXPECT_EQ("2\n", CompileAndRunBook("int main(void) { return 2; }"));
 }
 ```
 
-Read it aloud: "wrap `int main(void){return 2;}` so it prints `main()`'s result, compile
-and run it, and expect the output `2`." That is a complete, end-to-end test of the entire
-compiler in three lines.
+Read it aloud: "compile `int main(void){return 2;}`, run it, and expect the output `2`."
+That is a complete, end-to-end test of the entire compiler in three lines. In `riscv-tests`
+those three lines also assemble and link with real RISC-V tools, boot the program on qemu,
+and check that clang's build of the same program prints the same thing (§7).
 
 ## 12. Naming and file organization
 
@@ -501,19 +480,23 @@ A few simple conventions keep the growing suite navigable:
 - **One file per chapter, per component.** Chapter 5's parser tests go in
   `parser/test/chapter5_tests.cpp`; its semantic tests in `semantic/test/chapter5_tests.cpp`; its
   runnable programs in `backend/common/test/book/chapter5_tests.cpp`. The file's directory tells you
-  the phase; the filename tells you the chapter.
+  the phase; the filename tells you the chapter. (A very large chapter is split into
+  numbered files, such as `chapter18_tests1.cpp` … `chapter18_tests4.cpp`.)
 - **`_Neg` marks negative tests.** A name ending in `_Neg` is a "this must be rejected"
   test; everything else is a positive test.
 - **Tests live next to the code they exercise.** This is a long-standing rule in this
   project (see the Tests section of the [Technical Reference](Technical_Reference.md)): the
-  scanner's tests are in `scanner/`, the parser's in `parser/`, and so on. The book's
-  directory layout maps onto ours almost perfectly, which — adjusting for the
-  reclassifications of §5 — is why the import is largely mechanical.
+  scanner's tests are in `scanner/`, the parser's in `parser/`, and so on. The run programs
+  are the one shared exception: they exercise *every* backend, so they live in
+  `backend/common/` and each backend's test executable compiles them. The book's directory
+  layout maps onto ours almost perfectly, which — adjusting for the reclassifications of
+  §5 — is why the import is largely mechanical.
 
 Each new chapter file is added to its component's test executable in the relevant
 `CMakeLists.txt` (for example `parser/CMakeLists.txt` lists the chapter sources in the same
-`parser-tests` binary as the everyday unit tests), so it is picked up by `make test`
-(see §14).
+`parser-tests` binary as the everyday unit tests). The run programs need no such edit:
+[backend/common/CMakeLists.txt](../backend/common/CMakeLists.txt) globs
+`test/book/chapter*_tests*.cpp`, and both `riscv-tests` and `besm-tests` compile the result.
 
 ## 13. The incremental workflow
 
@@ -521,61 +504,67 @@ We imported the corpus **one chapter at a time, in order**, because each chapter
 on features from earlier chapters. A chapter is considered *done* when:
 
 1. its new test files build, and
-2. the **entire** test suite still passes — `make test` runs the unit tests and the chapter
+2. the **entire** test suite still passes — `make run` runs the unit tests and the chapter
    tests together.
 
 Two pieces of discipline kept the import honest as it scaled to 2,548 tests, and both are
 worth carrying into any test-import work of your own:
 
-- **Transcribe faithfully, then disable what the target can't do.** Every program becomes a
-  test. The ones the machine cannot run become `DISABLED_` with a one-line reason (§9),
-  never silently dropped — so the suite is a complete census of the corpus and the gaps are
-  visible, not lost.
+- **Transcribe faithfully, then mark what the target can't do.** Every program becomes a
+  test. The ones a machine cannot run were marked with a one-line reason — `DISABLED_` then,
+  a skip-list entry now (§9) — never silently dropped, so the suite is a complete census of
+  the corpus and the gaps are visible, not lost.
 - **Let the failures teach you.** A genuinely red run test means a backend bug, and the
   import surfaced real ones (multi-dimensional array decay, pointer-to-array scaling, signed
-  complement corrupting the FP exponent field, union sizing, …). The `DISABLED_` reason
-  forces you to *classify* each gap, which is how you tell a real bug apart from a
-  target-semantics mismatch (§8). The first you fix; the second you document.
+  complement corrupting the FP exponent field, union sizing, …). The one-line reason forces
+  you to *classify* each gap, which is how you tell a real bug apart from a target-semantics
+  mismatch (§8). The first you fix; the second you document.
+
+The same suite then paid for itself a second time. When the RISC-V backend was written, the
+book programs were its acceptance test, chapter by chapter, from the first `return 2;` to
+structures and unions — and, once the clang comparison was added, a differential test too.
 
 ## 14. Running the tests
 
 The chapter tests are compiled **into the regular per-module test binaries** — the chapter
 sources sit in the same `add_executable(<module>-tests …)` as the unit tests. So
-`parser-tests` holds the parser chapter tests, `besm-tests` holds the BESM-6 run tests, and
-so on. All of the test executables are `EXCLUDE_FROM_ALL`, so a plain `make` builds only the
-compiler and runtime; one target builds and runs everything:
+`parser-tests` holds the parser chapter tests, `riscv-tests` and `besm-tests` each hold the
+whole set of run programs, and so on. A plain `make` builds the compiler, the runtime *and*
+every test binary; `make test` does the same without running anything; one target builds
+and runs everything:
 
 ```sh
 make run                  # builds every test binary, then runs all tests (unit + chapter)
 ```
 
-`make run` builds `all` (compiler, runtime, and every test binary) and runs
-`ctest --test-dir build` over the whole suite. There is no separate book target or ctest
-label any more.
+`make run` runs `ctest --test-dir build` over the whole suite. There is no separate book
+target or ctest label. ctest gives each test 10 seconds.
 
-To run a single component or a single test while developing, first make sure the test
-binaries are built (`make` or `cmake --build build`), then
-**run from inside the `build/` directory**, not from the repository root:
+To run a single component or a single test while developing, run the binary directly. Every
+test binary `chdir()`s into its own build directory at startup, so it can be launched from
+anywhere — its scratch files (for a RISC-V run: `<TestName>.s`, `.o`, `.elf`, `.out`, and
+the clang build's files beside them) land in `build/…`, not in your source tree:
 
 ```sh
-ctest --test-dir build -R Chapter1                    # every chapter-1 test, anywhere
-cd build/parser        && ./parser-tests              # parser unit + chapter tests
-cd build/scanner       && ./scanner-tests
-cd build/backend/besm6 && ./besm-tests                # the run tests (need libc.bin here)
+ctest --test-dir build -R Chapter1                              # every chapter-1 test, anywhere
+./build/parser/parser-tests                                     # parser unit + chapter tests
+./build/scanner/scanner-tests
+./build/backend/riscv/riscv-tests --gtest_filter='BookTest.*'   # every book run test on RISC-V
 ```
-
-Why the `cd`? Some fixtures write small temporary files into the *current directory* while
-they run. If you launch a test binary from the repository root, those scratch files litter
-your source tree; launched from inside `build/`, they stay out of the way. The BESM-6 run
-tests have an extra reason: they link the runtime library `libc.bin`, which is built in
-`build/backend/besm6`, so they must run from there. (Also: don't run two `besm-tests`
-processes at once — they share scratch filenames.)
 
 To run just one test by name:
 
 ```sh
-cd build/backend/besm6 && ./besm-tests --gtest_filter='CodegenTest.Chapter1_Return2'
+./build/backend/riscv/riscv-tests --gtest_filter='BookTest.Chapter1_Return2'
+./build/backend/besm6/besm-tests --gtest_filter='BookTest.Chapter1_Return2'    # same program, BESM-6
 ```
+
+The RISC-V run tests need clang with RISC-V support, `ld.lld` and `qemu-system-riscv64`;
+without them they report *skipped*. A full `BookTest.*` run on RISC-V boots qemu twice per
+program (ours and clang's), so expect it to take a couple of minutes. The BESM-6 run tests
+need the `b6as`/`b6ld`/`b6sim` tools from the sibling v7besm project on `PATH`. Don't run
+two copies of the same test binary at once: they share scratch filenames, and the fixtures
+detect the clash and fail the test rather than let the runs clobber each other's files.
 
 ## 15. Takeaways
 
@@ -583,20 +572,24 @@ If you remember three things from this article, make them these:
 
 1. **Tests are how you make change safe.** A dense, automated suite turns "I hope I didn't
    break anything" into "the computer just confirmed I didn't." That is what lets a compiler
-   grow without rotting.
+   grow without rotting — and, here, what let a second backend grow on top of the first.
 2. **An error is a classifier — but the classifier can disagree with the book.** The kind of
    mistake usually tells you which phase should catch it (bad token → scanner, bad grammar →
    parser, bad meaning → semantic). Yet because our parser is more permissive and our type
    checker is unified, many programs reclassify across phases — and our no-shadowing rule
    turns some *valid* programs into negatives. The directory is a hypothesis, not a verdict.
-3. **The target decides which valid programs can even run.** BESM-6's 41-bit integers,
-   48-bit unsigneds, NaN-free floats, and word addressing mean a *correct* C program can
-   legitimately compute a different answer than x86 — so a large, well-understood slice of
-   the corpus is `DISABLED_` on purpose, each with a one-line reason. Honest disabling beats
-   a doctored green checkmark.
+3. **The target decides which valid programs can even run.** On RISC-V, whose data model is
+   the book's, every shared program runs and agrees with clang. On the BESM-6, 41-bit
+   integers, 48-bit unsigneds, NaN-free floats and word addressing mean a *correct* C program
+   can legitimately compute a different answer — so that target skips a well-understood slice
+   of the suite, each with a one-line reason, and runs its own versions instead. Honest
+   skipping beats a doctored green checkmark.
 
 From here, the natural next steps are to browse the committed chapter test files named
 throughout this article (`scanner/test/chapter1_tests.cpp`, `backend/common/test/book/chapter13_tests.cpp`,
-and their siblings), and to consult [Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md)
-and the [Technical Reference](Technical_Reference.md) for the full phase-by-phase design and
-the target's data model.
+and their siblings), the two `BookTest` fixtures
+([RISC-V](../backend/riscv/test/book_test.h), [BESM-6](../backend/besm6/test/book_test.h)),
+and to consult [Riscv_Backend.md](Riscv_Backend.md),
+[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md) and the
+[Technical Reference](Technical_Reference.md) for the full phase-by-phase design and the
+targets' data models.

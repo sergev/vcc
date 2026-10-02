@@ -4,9 +4,13 @@
 
 The C11 standard deliberately leaves the sizes of most integer types unspecified so
 that each implementation can pick the sizes that are most efficient on its target
-hardware. A `long` is 32 bits on a 32-bit ARM but 64 bits on a 64-bit x86. An `int`
+hardware. A `long` is 32 bits on a 32-bit ARM but 64 bits on 64-bit RISC-V. An `int`
 is 16 bits on an 8-bit AVR but 32 bits on every 32-bit-and-above platform. A compiler
 that targets multiple CPU families must track these differences explicitly.
+
+This document uses the RISC-V 64 target (`riscv64`, the LP64D ABI that `genriscv`
+implements) as its running example: Section 3 lists its types, Section 4 works through
+struct layout on it, and Section 6 compares it with every other target VCC knows about.
 
 ### C11 minimum guarantees
 
@@ -19,12 +23,13 @@ The standard only guarantees minimum precisions (in bits):
 | `int`       | 16                |
 | `long`      | 32                |
 | `long long` | 64                |
-| `float`     | IEEE 754 binary32 |
-| `double`    | IEEE 754 binary64 |
+
+For floating point it only requires minimum ranges and decimal precisions
+(`FLT_DIG` ≥ 6, `DBL_DIG` ≥ 10); IEEE 754 binary32/binary64 is what Annex F asks for,
+but Annex F is optional.
 
 The standard also guarantees `sizeof(char) == 1` by definition, where "1" means one
-*addressable unit*, not necessarily one octet. On unusual hardware the addressable unit
-may be wider than 8 bits (see Section 4 on BESM-6).
+*addressable unit*, not necessarily one octet.
 
 ### Data models
 
@@ -35,11 +40,11 @@ The common models on byte-addressed machines are:
 |-------|--------|--------|-------------|---------|------------------|
 | LP16  | 16-bit | 32-bit | 64-bit      | 16-bit  | AVR, MSP430      |
 | ILP32 | 32-bit | 32-bit | 64-bit      | 32-bit  | ARM32, RISC-V 32 |
-| LP64  | 32-bit | 64-bit | 64-bit      | 64-bit  | x86_64 (Linux/macOS), AArch64, RISC-V 64, MMIX |
+| LP64  | 32-bit | 64-bit | 64-bit      | 64-bit  | RISC-V 64, AArch64, x86_64 (Linux/macOS), MMIX |
 | LLP64 | 32-bit | 32-bit | 64-bit      | 64-bit  | x86_64 (Windows) |
 
-BESM-6 does not fit any of these models cleanly because it is not byte-addressed;
-it is described separately in Section 3.9 and in Section 4.
+RISC-V 64 is LP64. BESM-6, the compiler's other backend, does not fit any of these
+models because it is not byte-addressed; see Section 7.
 
 ---
 
@@ -50,423 +55,303 @@ For example, a 4-byte `int` is naturally aligned at addresses 0, 4, 8, 12, …
 
 ### Why alignment matters
 
-- **Fault**: Some CPUs (many ARM Cortex-M, MIPS, SPARC) raise a hardware exception
-  on a misaligned load or store.
+- **Fault or trap**: Some CPUs (many ARM Cortex-M, MIPS, SPARC) raise a hardware
+  exception on a misaligned load or store. The RISC-V base ISA allows an implementation
+  to do the same, or to emulate the access in a trap handler — correct, but very slow.
 - **Performance**: x86_64 and AArch64 accept misaligned accesses but may require two
-  cache-line fetches instead of one, doubling memory latency.
+  cache-line fetches instead of one.
 - **Atomicity**: C11 `_Atomic` operations are only guaranteed lock-free when naturally
   aligned.
 
-### Struct padding
+On every byte-addressed target VCC describes except AVR and MSP430, each scalar type is
+naturally aligned: its alignment equals its size.
 
-When the compiler lays out a struct, it inserts padding bytes between members and after
-the last member so that every member is naturally aligned and the struct's total size is
-a multiple of its strictest member's alignment. The `offsetof` macro (from `<stddef.h>`)
-returns the byte offset of each member including any padding.
+---
+
+## 3. RISC-V 64 (LP64D)
+
+The `riscv64` target follows the RISC-V ELF psABI with the LP64D calling convention:
+RV64IMFD, little-endian, 64-bit `long` and pointers, `float` and `double` in hardware
+(F and D extensions). `long double` is IEEE 754 binary128; no RISC-V extension in use
+here computes it, so its arithmetic is done in software by `libc/riscv/float128.c`
+(see [Riscv_Backend.md](Riscv_Backend.md)).
+
+| Type                    | Size | Alignment | Notes |
+|-------------------------|------|-----------|-------|
+| `_Bool`                 | 1    | 1         | |
+| `char`                  | 1    | 1         | **Unsigned** (`CHAR_MIN` = 0, `CHAR_MAX` = 255) |
+| `signed char`           | 1    | 1         | |
+| `short`                 | 2    | 2         | |
+| `int`                   | 4    | 4         | |
+| enum                    | 4    | 4         | Same as `int` (on every target) |
+| `long`                  | 8    | 8         | LP64 |
+| `long long`             | 8    | 8         | |
+| `float`                 | 4    | 4         | IEEE 754 binary32 |
+| `double`                | 8    | 8         | IEEE 754 binary64 |
+| `long double`           | 16   | 16        | IEEE 754 binary128, software |
+| pointer                 | 8    | 8         | |
+
+Unsigned variants have the size and alignment of their signed counterparts, and all
+integer types use their full width for the value: `int` is 32 bits, `long` 64.
+
+The headers in `libc/riscv/include/` spell out the same choices:
+
+| Header       | Definitions |
+|--------------|-------------|
+| `limits.h`   | `CHAR_BIT` 8; `INT_MAX` 2147483647; `LONG_MAX` = `LLONG_MAX` = 9223372036854775807 |
+| `stddef.h`   | `size_t` = `unsigned long`, `ptrdiff_t` = `long`, `wchar_t` = `int`; `max_align_t` holds a `long long` and a `long double`, so it is 32 bytes aligned to 16 |
+| `stdint.h`   | `int64_t`, `intptr_t`, `intmax_t` = `long`; `int_fast16_t` and `int_fast32_t` are `long` too |
+| `float.h`    | `FLT_MANT_DIG` 24, `DBL_MANT_DIG` 53, `LDBL_MANT_DIG` 113; `LDBL_MAX_EXP` 16384 |
+
+Plain `char` being unsigned is the RISC-V ABI's choice (ARM's too), and differs from
+x86_64, where it is signed. Code that stores a negative value in a plain `char` and
+compares it with a negative constant behaves differently on the two.
+
+---
+
+## 4. Struct and Union Layout on RISC-V 64
+
+The compiler lays out a struct by placing each member, in declaration order, at the
+next offset that is a multiple of the member's alignment. The struct's alignment is the
+strictest alignment of its members, and its size is rounded up to a multiple of that
+alignment. The `offsetof` macro (from `<stddef.h>`) returns the byte offset of each
+member including any padding. The code is `register_struct_type` in
+`semantic/declarations.c`.
+
+Every layout below was produced by the compiler itself (see "Checking a layout" at the
+end of this section).
+
+### Padding between members
 
 ```c
-struct Example {      // on x86_64
+struct Example {      // riscv64
     char   a;         // offset 0, size 1
     // 3 bytes padding
     int    b;         // offset 4, size 4
     double c;         // offset 8, size 8
-};                    // total size 16, alignment 8
+};                    // size 16, alignment 8
 ```
 
-Compilers provide `__attribute__((packed))` (GCC/Clang) to suppress padding, but the
-resulting code is slower and may fault on strict-alignment CPUs.
+### Member order matters
 
----
-
-## 3. Architecture Tables
-
-Each table lists sizes and alignments for the primitive scalar types. All values are in
-bytes unless otherwise noted. "Natural" alignment means alignment equals size.
-
-### 3.1 AVR (8-bit Harvard)
-
-The AVR is an 8-bit RISC microcontroller with a Harvard architecture (separate
-program and data memories). Data memory is byte-addressable SRAM; all alignments are 1
-because the CPU reads one byte at a time and has no alignment restrictions. Multi-byte
-values are accessed with multiple byte-load instructions.
-
-The C standard requires `int` ≥ 16 bits; on AVR `int` is 16 bits (2 bytes). There is no
-hardware floating-point unit. By default avr-gcc makes `double` the same size as `float`
-(4 bytes) to save code space; newer toolchain versions optionally support 8-byte `double`.
-
-Data pointers are 16 bits (2 bytes) matching the maximum SRAM address space of 64 KiB.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | Unsigned by default |
-| `short`       | 2    | 1         | |
-| `int`         | 2    | 1         | |
-| `long`        | 4    | 1         | |
-| `long long`   | 8    | 1         | |
-| `float`       | 4    | 1         | Software FP |
-| `double`      | 4    | 1         | Same as `float` in avr-gcc default mode |
-| `long double` | 4    | 1         | Same as `float` |
-| pointer       | 2    | 1         | 16-bit data address |
-
-### 3.2 MSP430 (16-bit von Neumann)
-
-The MSP430 is a 16-bit RISC microcontroller with a unified (von Neumann) address space.
-Word instructions require 2-byte alignment; multi-byte types are therefore aligned to 2.
-The extended MSP430X variant adds a 20-bit address bus; on MSP430X the pointer widens
-to 4 bytes (with the upper 4 bits carrying the extended address).
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | |
-| `short`       | 2    | 2         | |
-| `int`         | 2    | 2         | |
-| `long`        | 4    | 2         | |
-| `long long`   | 8    | 2         | |
-| `float`       | 4    | 2         | Software FP |
-| `double`      | 8    | 2         | Software FP |
-| `long double` | 8    | 2         | Same as `double` |
-| pointer       | 2    | 2         | 4 bytes on MSP430X |
-
-### 3.3 ARM32 (32-bit, ARM EABI)
-
-ARM32 follows the 32-bit ARM Embedded Application Binary Interface (EABI, document
-IHI0042). All types are naturally aligned. The `long double` type maps to the same
-representation as `double` (64-bit IEEE 754) because the ARM EABI does not define an
-extended-precision format; hardware with VFP/NEON provides 32-bit and 64-bit FP only.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | Unsigned by default on ARM |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 4    | 4         | ILP32: same size as `int` |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 |
-| `double`      | 8    | 8         | IEEE 754 binary64 |
-| `long double` | 8    | 8         | Same as `double` on ARM EABI |
-| pointer       | 4    | 4         | |
-
-### 3.4 AArch64 (64-bit ARM)
-
-AArch64 follows the 64-bit ARM Procedure Call Standard (AAPCS64, document IHI0055).
-The LP64 data model is used: `long` and pointers are 64 bits. `long double` is the
-full IEEE 754 binary128 quad-precision format (16 bytes).
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | Unsigned by default |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 8    | 8         | LP64 |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 |
-| `double`      | 8    | 8         | IEEE 754 binary64 |
-| `long double` | 16   | 16        | IEEE 754 binary128 |
-| pointer       | 8    | 8         | |
-
-### 3.5 x86_64 (64-bit, System V ABI — Linux/macOS)
-
-The System V AMD64 ABI uses the LP64 data model. The x87 FPU supports 80-bit extended
-precision; `long double` uses this format but is stored in a 16-byte slot on the stack
-(with 6 bytes of padding after the 10-byte value) to maintain 16-byte stack alignment.
-
-Note: the Microsoft x64 ABI (Windows) uses the LLP64 model where `long` = 4 bytes.
-The table below covers the System V ABI only.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 8    | 8         | LP64 |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 |
-| `double`      | 8    | 8         | IEEE 754 binary64 |
-| `long double` | 16   | 16        | x87 80-bit value in a 16-byte slot |
-| pointer       | 8    | 8         | |
-
-### 3.6 RISC-V 32 (32-bit, ilp32 ABI)
-
-RISC-V is an open-standard ISA designed at UC Berkeley. The 32-bit variant (RV32I)
-uses the ilp32 ABI defined in the RISC-V ELF psABI document. It follows the ILP32
-data model — the same sizes as ARM32. RISC-V is little-endian. The base ISA has no
-floating-point; the F and D standard extensions add hardware binary32 and binary64 FP.
-`long double` is 128-bit (IEEE 754 binary128) implemented entirely in software; no
-RISC-V extension provides hardware quad-precision.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 4    | 4         | ILP32: same size as `int` |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 (F extension) |
-| `double`      | 8    | 8         | IEEE 754 binary64 (D extension) |
-| `long double` | 16   | 16        | IEEE 754 binary128, software only |
-| pointer       | 4    | 4         | |
-
-### 3.7 RISC-V 64 (64-bit, lp64 ABI)
-
-The 64-bit RISC-V variant (RV64I) uses the lp64 ABI. It follows the LP64 data model —
-the same integer sizes as x86_64 and AArch64. Like RV32, `long double` is 128-bit IEEE
-754 binary128 in software. RISC-V is little-endian.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 8    | 8         | LP64 |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 (F extension) |
-| `double`      | 8    | 8         | IEEE 754 binary64 (D extension) |
-| `long double` | 16   | 16        | IEEE 754 binary128, software only |
-| pointer       | 8    | 8         | |
-
-### 3.8 MMIX (64-bit, Knuth)
-
-MMIX is Donald Knuth's 64-bit RISC architecture, described in *The Art of Computer
-Programming* fascicle 1 and implemented in the MMIXware simulator. It uses a 2⁶⁴-byte
-byte-addressed virtual address space and is big-endian. MMIX has 256 general-purpose
-64-bit registers and provides native load/store instructions for bytes (LDBU/STBU),
-wydes (16-bit: LDWU/STW), tetras (32-bit: LDTU/STT), and octas (64-bit: LDO/STO).
-
-MMIX follows the LP64 model for integers. The FPU handles IEEE 754 binary32 and binary64
-natively; there is no hardware quad-precision. The GCC MMIX port therefore maps
-`long double` to the same 8-byte representation as `double` (`LONG_DOUBLE_TYPE_SIZE=64`),
-the same choice made by ARM32 — unlike AArch64, x86_64, and both RISC-V variants which
-all use 16-byte `long double`.
-
-| Type          | Size | Alignment | Notes |
-|---------------|------|-----------|-------|
-| `bool`        | 1    | 1         | |
-| `char`        | 1    | 1         | |
-| `short`       | 2    | 2         | |
-| `int`         | 4    | 4         | |
-| `long`        | 8    | 8         | LP64 |
-| `long long`   | 8    | 8         | |
-| `float`       | 4    | 4         | IEEE 754 binary32 |
-| `double`      | 8    | 8         | IEEE 754 binary64 |
-| `long double` | 8    | 8         | Same as `double`; no wider FP hardware |
-| pointer       | 8    | 8         | |
-
-### 3.9 BESM-6 (48-bit word-oriented)
-
-The BESM-6 is a 48-bit Soviet mainframe from the 1960s. Its memory model differs
-fundamentally from all architectures above: see Section 4 for a detailed explanation.
-The minimum addressable unit is one 48-bit *word*; there is no hardware byte access.
-
-The address space is 32,768 words (15-bit word address). Addresses increment per word,
-not per byte. For a C compiler the consequences are:
-
-- `CHAR_BIT` = 48 (one addressable unit = 48 bits).
-- Pointer arithmetic on any scalar type advances the address by 1 (one word) — every
-  scalar type, including `long long` and `long double`, is a single word on BESM-6.
-- "Fat pointers" are used for char* and void*, with a sub-word byte offset in MSB.
-- Conventionally `sizeof(char) == 1` and `sizeof(type) == 6` for every type that occupies one word.
-
-The BESM-6 has its own 48-bit floating-point format (7-bit base-2 exponent, 40-bit
-two's-complement mantissa). `float` and `double` both map to this native format.
-There is no IEEE 754 hardware.
-
-| Type          | Size | Alignment | Bits used | Notes |
-|---------------|------|-----------|-----------|-------|
-| `bool`        | 1w   | 1w        | 1         | Lower bit; upper 47 bits zero |
-| `char`        | 1w   | 1w        | 8         | Fat pointers |
-| `short`       | 1w   | 1w        | 48        | Same as `int` |
-| `int`         | 1w   | 1w        | 48        | Full word |
-| `long`        | 1w   | 1w        | 48        | Same as `int` |
-| `long long`   | 1w   | 1w        | 48        | Same as `long` |
-| `float`       | 1w   | 1w        | 48        | BESM-6 native FP format |
-| `double`      | 1w   | 1w        | 48        | Same as `float` (no wider FP hardware) |
-| `long double` | 1w   | 1w        | 48        | Same as `double` (no wider FP hardware) |
-| pointer       | 1w   | 1w        | 15        | Word address in lower 15 bits |
-
-On BESM-6, a `char` variable wastes 40 bits per allocation.
-The packed representation (6 chars per word, using a sub-word byte offset baked into the pointer)
-trades memory efficiency for pointer complexity; that scheme requires "fat pointers"
-carrying both a word address and a 3-bit intra-word offset.
-
----
-
-## 4. Word-Oriented vs. Byte-Addressed Machines
-
-### Byte-addressed machines (AVR, MSP430, ARM32, AArch64, x86_64, RISC-V 32, RISC-V 64, MMIX)
-
-On a byte-addressed machine every byte has a unique address. A 4-byte `int` stored at
-address 100 occupies bytes 100, 101, 102, 103. The next `int` in an array starts at
-address 104.
-
-Pointer arithmetic follows `sizeof`: incrementing a `T*` adds `sizeof(T)` to the
-numeric address. For example:
+The same three-byte payload costs 24 bytes or 16 depending on the order:
 
 ```c
-int  *p = (int *)100;  p++;  // p is now 104
-char *q = (char *)100; q++;  // q is now 101
+struct Reorder {      // size 24, alignment 8
+    char   a;         // offset 0
+    // 7 bytes padding
+    double b;         // offset 8
+    char   c;         // offset 16
+    // 7 bytes tail padding
+};
+
+struct Sorted {       // size 16, alignment 8
+    double b;         // offset 0
+    char   a;         // offset 8
+    char   c;         // offset 9
+    // 6 bytes tail padding
+};
 ```
 
-Because each byte is individually addressable, the compiler can read or write any single
-byte with a single load/store instruction. Sub-byte types (bit-fields) require
-read-modify-write, but sub-word types like `char` and `short` are efficiently supported.
+Sorting members from the strictest alignment down minimizes padding.
 
-### Word-addressed machines (BESM-6)
+### Tail padding and arrays
 
-On the BESM-6, the address space is a flat array of 48-bit words. An address is a
-*word index*, not a byte index. There is no instruction to load or store a single byte
-or a sub-word portion of memory directly. Reading less than one full word requires
-loading the containing word and then masking/shifting the desired bits in software.
-
-The C standard defines `sizeof(char) == 1` to mean one addressable unit, and requires
-that `char` is at least 8 bits. On BESM-6 the addressable unit is a 48-bit word, though
-`CHAR_BIT == 8` and a `char` object occupies one full word.
-All of the following are true simultaneously:
-
-```
-sizeof(char)   == 1
-sizeof(short)  == 6
-sizeof(int)    == 6
-sizeof(long)   == 6
-sizeof(float)  == 6
-sizeof(double) == 6
-sizeof(void*)  == 6
-```
-
-Pointer arithmetic works differently for regular pointers (word address) and fat pointers
-(word address and intra-word offset).
-Incrementing a regular `T*` adds 1 to the numeric address, so
-a pointer increment advances by exactly 1 word:
+Tail padding is what keeps every element of an array aligned. In
 
 ```c
-int  *p = (int *)100;   // p is 100
-p++;                    // p is 101  (one word forward)
+struct Tail {         // size 16, alignment 8
+    long l;           // offset 0
+    char c;           // offset 8
+    // 7 bytes tail padding
+};
+struct Tail arr[3];   // 48 bytes; arr[1].l is at offset 16
 ```
 
-Incrementing a fat `char*` increases the intra-word offset, and occasionally adds 1 to
-the word address, so a pointer increment advances by exactly 1 word:
+without the padding `arr[1].l` would sit at offset 9.
+
+### Smaller and larger alignments
+
+A struct with no member wider than `short` is only 2-aligned, and a `long double`
+member forces 16:
 
 ```c
-char *q = (char *)100;  // q is 100 + ((64 + 40) << 41)  (fat pointer)
-q++;                    // q is 100 + ((64 + 32) << 41)  (one byte forward)
+struct Small {        // size 4, alignment 2
+    char  a;          // offset 0
+    short b;          // offset 2
+};
+
+struct LD {           // size 32, alignment 16
+    char        c;    // offset 0
+    // 15 bytes padding
+    long double x;    // offset 16
+};
 ```
 
-A single `char` variable on BESM-6 occupies full word, and wastes 40 of its 48 bits.
+On x86_64 `struct LD` has the same layout; there the `long double` is an 80-bit x87
+value in a 16-byte slot.
 
-### Packed character arrays on BESM-6
+### Unions and `_Alignas`
 
-The BESM-6 hardware can pack six 8-bit characters per 48-bit word. An array of `char`
-represents a string as a sequence of words containing packed chars.
-For the pointer `char *p` to address individual characters within a packed
-word, it needs more information than a plain 15-bit word address.
-The compiler uses a **fat pointers** approach: a `char *` is a pair `(word_addr, bit_offset)` where
-`bit_offset` in the most significant bits of the pointer selects the character within the word.
+A union places every member at offset 0; its size is the largest member rounded up to
+the union's alignment. `_Alignas` raises a member's alignment above its natural one:
 
-String operations (`memcpy`, `strlen`, etc.) implemented for BESM-6 work on fat pointers.
+```c
+union U {             // size 8, alignment 4
+    char c[5];        // offset 0, size 5
+    int  i;           // offset 0, size 4
+};
 
-### Synthesizing sub-word access
+struct A {            // size 32, alignment 16
+    char c;                // offset 0
+    _Alignas(16) int i;    // offset 16
+};
+```
 
-When the compiler must extract or insert a value narrower than a word (e.g., to
-implement a `short` bit-field or to sign-extend a 32-bit `int` loaded from a word),
-it emits bit-shift and mask instructions:
+### Structs at a call boundary
 
-- **Read word** by bits [15:1] of the pointer:
-  ```
-  WTC ptr          ; use word address in lower 15 bits
-  XTA              ; get word
-  ```
-- **Select** required byte by a sub-word bit offset:
-  ```
-  ASX ptr          ; shift right by offset in MSB
-  AAX =0377        ; mask the required byte
-  ```
+Layout also decides how a struct crosses a call (`backend/riscv/call.c`):
+
+- A struct of up to 16 bytes travels in one or two registers. If it flattens to one or
+  two scalars, at least one of them floating point, it goes in `fa` registers (or one
+  `fa` and one `a` register); otherwise as one or two doublewords in `a` registers.
+- A larger struct is passed by reference to a copy, and returned through a hidden
+  pointer to a caller-allocated slot. The 16-byte limit is two pointers; the target
+  descriptor leaves `struct_return_max` at 0, which means exactly that.
+- A `long double` is passed like a 16-byte struct, in two integer registers; a value of
+  16 bytes aligned to 16 starts at a 16-byte boundary on the stack.
+
+### Checking a layout
+
+`lower --yaml` prints each struct's size, alignment and member offsets for any target:
+
+```sh
+./build/parse file.c file.ast
+./build/lower -t riscv64 --yaml file.ast - | grep -E "tag|size|alignment|offset"
+```
+
+`lower` defaults to `-t riscv64`; pass `-t` to lay the same struct out for another target.
 
 ---
 
-## 5. Summary Comparison
-
-The table below compares sizes across all architectures. Byte-addressed architectures
-show sizes in bytes; BESM-6 shows sizes in words (1 word = 48 bits = 6 bytes).
-
-| Type          | AVR | MSP430 | ARM32 | RV32 | AArch64 | x86_64 | RV64 | MMIX | BESM-6 |
-|---------------|-----|--------|-------|------|---------|--------|------|------|--------|
-| `bool`        | 1   | 1      | 1     | 1    | 1       | 1      | 1    | 1    | 1 word |
-| `char`        | 1   | 1      | 1     | 1    | 1       | 1      | 1    | 1    | 1 word |
-| `short`       | 2   | 2      | 2     | 2    | 2       | 2      | 2    | 2    | 1 word |
-| `int`         | 2   | 2      | 4     | 4    | 4       | 4      | 4    | 4    | 1 word |
-| `long`        | 4   | 4      | 4     | 4    | 8       | 8      | 8    | 8    | 1 word |
-| `long long`   | 8   | 8      | 8     | 8    | 8       | 8      | 8    | 8    | 1 word |
-| `float`       | 4   | 4      | 4     | 4    | 4       | 4      | 4    | 4    | 1 word |
-| `double`      | 4   | 8      | 8     | 8    | 8       | 8      | 8    | 8    | 1 word |
-| `long double` | 4   | 8      | 8     | 16   | 16      | 16     | 16   | 8    | 1 word |
-| pointer       | 2   | 2      | 4     | 4    | 8       | 8      | 8    | 8    | 1 word |
-
-And alignment values (same units as sizes):
-
-| Type          | AVR | MSP430 | ARM32 | RV32 | AArch64 | x86_64 | RV64 | MMIX | BESM-6 |
-|---------------|-----|--------|-------|------|---------|--------|------|------|--------|
-| `bool`        | 1   | 1      | 1     | 1    | 1       | 1      | 1    | 1    | 1 word |
-| `char`        | 1   | 1      | 1     | 1    | 1       | 1      | 1    | 1    | 1 word |
-| `short`       | 1   | 2      | 2     | 2    | 2       | 2      | 2    | 2    | 1 word |
-| `int`         | 1   | 2      | 4     | 4    | 4       | 4      | 4    | 4    | 1 word |
-| `long`        | 1   | 2      | 4     | 4    | 8       | 8      | 8    | 8    | 1 word |
-| `long long`   | 1   | 2      | 8     | 8    | 8       | 8      | 8    | 8    | 1 word |
-| `float`       | 1   | 2      | 4     | 4    | 4       | 4      | 4    | 4    | 1 word |
-| `double`      | 1   | 2      | 8     | 8    | 8       | 8      | 8    | 8    | 1 word |
-| `long double` | 1   | 2      | 8     | 16   | 16      | 16     | 16   | 8    | 1 word |
-| pointer       | 1   | 2      | 4     | 4    | 8       | 8      | 8    | 8    | 1 word |
-
-Notable observations:
-
-- **AVR** aligns everything to 1 byte — no alignment requirements at all.
-- **MSP430** aligns everything to 2 bytes once the type is 2 bytes or wider.
-- **ARM32 and RISC-V 32** share the ILP32 model (`long` = 4) with identical type sizes.
-- **AArch64, x86_64, RISC-V 64, and MMIX** all use LP64 integers (`long` = pointer = 8).
-- **x86_64** `long double` is a 10-byte (80-bit) value stored in a 16-byte slot.
-- **AArch64 and RISC-V 64** `long double` is a true 16-byte (128-bit) IEEE 754 quad-precision value.
-- **MMIX** maps `long double` to 8 bytes (same as `double`) despite being a 64-bit machine,
-  matching ARM32 — the FPU is 64-bit only.
-- **BESM-6** collapses every scalar type — `char`, `short`, `int`, `long`, `long long`,
-  `float`, `double`, `long double`, and pointers — to the same size (1 word). No scalar
-  type is two words.
-
----
-
-## 6. Implications for This Compiler
+## 5. Where the Numbers Live
 
 `get_size()` / `get_alignment()` in `semantic/type_utils.c` read the active target
-descriptor (`semantic/target.h`, table in `semantic/target.c`), so every size above is
-already target-specific; only `char`/`signed char`/`unsigned char` are hard-coded at 1,
-which C requires.
+descriptor, a `Target` record (`semantic/target.h`) chosen from the table in
+`semantic/target.c` by `target_lookup()` — `lower -t NAME` selects it. Only
+`char`/`signed char`/`unsigned char` are hard-coded at 1, which C requires; enums are
+always the size of `int`. Besides the scalar sizes and alignments, each descriptor
+records:
 
-`_Bool` has a size of its own in that descriptor (`bool_size` / `bool_align`) rather
-than sharing the char types' fixed 1. C11 leaves its width implementation-defined, and
-on the word-addressed BESM-6 a 1-byte size *means* byte-packed storage and a fat byte
-pointer — six `_Bool`s to a word and a read-modify-write for every store, all to carry
-one bit. BESM-6 therefore gives `_Bool` `int`'s representation, one 48-bit word, as the
-BESM-6 table above says; the byte-addressed targets keep the 1-byte `_Bool` their ABIs
-specify. The TAC lowering follows the width: `translator/translate.c` carries a
-word-sized `_Bool` in `TAC_TYPE_INT` and a byte-sized one in `TAC_TYPE_UCHAR`, since
-TAC has no `_Bool` kind of its own.
+| Field                     | Meaning |
+|---------------------------|---------|
+| `short_bits` … `llong_bits` | Signed value width in bits, which the constant folders wrap to |
+| `char_signed`             | Whether plain `char` is signed |
+| `right_shift_is_logical`  | Whether `>>` of a signed value zero-fills |
+| `aggregate_align`         | Minimum alignment of any struct or union |
+| `struct_return_max`       | Widest struct returned in registers (0 = two pointers) |
+| `struct_args_split`       | Pass a struct wider than a word as separate word arguments |
 
-When adding backends for other architectures, the following changes will be required:
+The TAC carries each struct's size, alignment and member offsets, so a backend takes
+aggregate layout from its input rather than recomputing it.
 
-1. **TAC layer**: TAC currently stores sizes as `size_t` byte counts derived from the
-   host-model values. For BESM-6, "bytes" become "words"; the TAC consumer (the backend)
-   must interpret them in the correct unit. Byte arrays are packed as 6 bytes per word.
+---
 
-2. **BESM-6 backend specifics**:
-   - `char` and `short` loads must emit mask/shift sequences to extract the narrow value
-     from its containing word.
-   - Regular pointer comparisons and arithmetic work identically to int arithmetic (both are
-     one-word quantities).
-   - Fat pointer comparisons and arithmetic use special implementation.
-   - `sizeof` works as usual: 1 for `char` and 6 for word-sized types.
-   - String and memory-copy operations should process one word (6 logical bytes) per
-     iteration for efficiency when packed strings are used.
+## 6. Target Comparison
+
+`semantic/target.c` defines nine target descriptors. Two of them have a code
+generator: `riscv64` (`genriscv`) and `besm6` (`genbesm`). The other seven describe
+real ABIs so that the front end and the TAC can be produced for them, for example to
+compare layouts; `x86_64` is the default when a program using the libraries sets no
+target.
+
+Sizes, in bytes (`sizeof` units):
+
+| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
+|---------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
+| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
+| `char`        | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 1     |
+| `short`       | 2       | 2       | 2      | 2       | 2     | 2    | 2      | 2   | 6     |
+| `int`         | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 2   | 6     |
+| `long`        | 8       | 4       | 8      | 8       | 4     | 8    | 4      | 4   | 6     |
+| `long long`   | 8       | 8       | 8      | 8       | 8     | 8    | 8      | 8   | 6     |
+| `float`       | 4       | 4       | 4      | 4       | 4     | 4    | 4      | 4   | 6     |
+| `double`      | 8       | 8       | 8      | 8       | 8     | 8    | 8      | 4   | 6     |
+| `long double` | 16      | 16      | 16     | 16      | 8     | 8    | 8      | 4   | 6     |
+| pointer       | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 2   | 6     |
+
+Alignments, in bytes:
+
+| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
+|---------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
+| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
+| `char`        | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 1     |
+| `short`       | 2       | 2       | 2      | 2       | 2     | 2    | 2      | 1   | 6     |
+| `int`         | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 1   | 6     |
+| `long`        | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 1   | 6     |
+| `long long`   | 8       | 8       | 8      | 8       | 8     | 8    | 2      | 1   | 6     |
+| `float`       | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 1   | 6     |
+| `double`      | 8       | 8       | 8      | 8       | 8     | 8    | 2      | 1   | 6     |
+| `long double` | 16      | 16      | 16     | 16      | 8     | 8    | 2      | 1   | 6     |
+| pointer       | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 1   | 6     |
+| struct (min.) | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
+
+Other target-defined choices:
+
+| Property              | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
+|-----------------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
+| plain `char`          | unsigned | unsigned | signed | unsigned | unsigned | signed | signed | unsigned | unsigned |
+| signed `int` bits     | 32      | 32      | 32     | 32      | 32    | 32   | 16     | 16  | 41    |
+| signed `long` bits    | 64      | 32      | 64     | 64      | 32    | 64   | 32     | 32  | 41    |
+| signed `>>`           | arith.  | arith.  | arith. | arith.  | arith. | arith. | arith. | arith. | logical |
+
+Notes on the individual targets:
+
+- **riscv32** (ILP32): the 32-bit RISC-V ABI. Same sizes as ARM32 except `long double`,
+  which stays binary128 as on riscv64. Descriptor only; `backend/riscv/Plan.md` plans
+  the backend.
+- **x86_64** (System V; Windows' LLP64 is not described): `long double` is an x87
+  80-bit value stored in a 16-byte, 16-aligned slot.
+- **aarch64** (AAPCS64): the same sizes as riscv64, including binary128 `long double`.
+- **arm32** (ARM EABI): `long double` is the same 64-bit format as `double`.
+- **mmix** (Knuth's MMIX, big-endian): LP64 integers, but `long double` is the same
+  8-byte format as `double` (the GCC MMIX port's choice; the FPU has no wider format).
+- **msp430**: everything 2 bytes or wider is aligned to 2. On MSP430X pointers widen to
+  4 bytes; the descriptor describes the 16-bit variant.
+- **avr**: no alignment requirement at all; `double` and `long double` are the same
+  4-byte format as `float` (avr-gcc's default).
+- **besm6**: every scalar is one 48-bit word; see the next section.
+
+Taken together: riscv64, aarch64, x86_64 and mmix share LP64 integers; riscv32 and
+arm32 share ILP32; `long double` is a true binary128 on riscv64, riscv32 and aarch64.
+
+---
+
+## 7. BESM-6: a Word-Addressed Target
+
+BESM-6 is the one target that is not byte-addressed. Memory is an array of 48-bit
+words, an address is a 15-bit word index, and there is no instruction that loads or
+stores a single byte. VCC keeps `CHAR_BIT` at 8 and counts `sizeof` in bytes, so one
+word is 6:
+
+- **Every scalar is one word.** `_Bool`, `short`, `int`, `long`, `long long`, `float`,
+  `double`, `long double` and pointers all have size 6 and alignment 6; there is no
+  two-word scalar. Signed integers carry 41 value bits (sign included) in the word,
+  unsigned ones all 48, and the floating-point types share the machine's native 48-bit
+  format, not IEEE 754.
+- **`char` is packed six to a word** in arrays and among struct members (in
+  `struct Sorted` from Section 4 the two `char`s sit at offsets 6 and 7), while a
+  standalone `char` variable takes a whole word.
+- **`char *` and `void *` are fat pointers**: a word address plus a byte position held
+  in the pointer's high bits. Loading a byte is a word load, a shift and a mask; storing
+  one is a read-modify-write.
+- **Aggregates are whole words.** Every struct and union is aligned to at least a word
+  (`aggregate_align` = 6), so array strides stay word multiples; `struct Example` from
+  Section 4 is 18 bytes (three words). A struct wider than a word is passed as separate
+  word arguments, and only a one-word struct is returned in a register.
+- **`_Bool` is a word** rather than a byte, because on this machine a 1-byte type means
+  packed storage and fat pointers — six `_Bool`s to a word and a read-modify-write for
+  every store, all to carry one bit.
+
+Bit layouts, ranges and the fat-pointer encoding are in
+[Besm6_Data_Representation.md](../backend/besm6/Besm6_Data_Representation.md).

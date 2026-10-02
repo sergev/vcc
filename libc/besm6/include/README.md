@@ -19,8 +19,8 @@ preprocessor first, then feed the result to `parse`:
 ```sh
 cc -E -nostdinc -I libc/besm6/include -I libc/common/include prog.c prog.i
 ./build/parse prog.i prog.ast
-./build/lower  prog.ast prog.tac
-./build/genbesm prog.tac prog.mad
+./build/lower -t besm6 prog.ast prog.tac
+./build/backend/genbesm prog.tac prog.s
 ```
 
 Use the compiler's preprocessor (`cc -E`), not a standalone `cpp`: a traditional

@@ -41,7 +41,7 @@ macro(besm6_compile_libc_c_bemsh name srcdir)
         COMMAND ${SystemCpp} -E -nostdinc -I${BEMSH_DIR}/../include -I${LIBC_COMMON_INCLUDE_DIR}
                 ${c_src} -o ${c_pre}
         COMMAND parse   ${c_pre} ${c_ast}
-        COMMAND lower   ${c_ast} ${c_tac}
+        COMMAND lower   -t besm6 ${c_ast} ${c_tac}
         COMMAND genbesm --bemsh ${c_tac} ${c_bem}
         DEPENDS ${c_src} ${BESM6_HEADERS} parse lower genbesm
         COMMENT "Compiling ${name}.c -> ${name}.bemsh")

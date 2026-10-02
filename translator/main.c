@@ -69,7 +69,7 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-dead-store     Disable dead store elimination\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
-    fprintf(stderr, "    -t, --target NAME   Target architecture (default: besm6)\n");
+    fprintf(stderr, "    -t, --target NAME   Target architecture (default: riscv64)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug         Print debug information\n");
     fprintf(stderr, "    -h, --help          Show this help message\n");
@@ -86,7 +86,7 @@ static void init_args(Args *args)
     args->help           = 0;
     args->debug          = 0;
     args->format         = FORMAT_TAC; // Default format
-    args->target_name    = "besm6";
+    args->target_name    = "riscv64";
     args->input_file     = NULL;
     args->output_file    = NULL;
     args->no_unreachable = 0;

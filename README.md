@@ -142,25 +142,23 @@ lives in [libc/common/](libc/common/) and is shared by every target.
 
 ## Documentation
 
-Start with [docs/Learn_From_This_Project.md](docs/Learn_From_This_Project.md) if you want
-the guided tour, or [docs/Technical_Reference.md](docs/Technical_Reference.md) if you want
-the map of the source tree.
+Start with [docs/Technical_Reference.md](docs/Technical_Reference.md) for the map of the
+source tree.
 
 ### About the compiler
 
-| Document                                                           | What it covers                                              |
-| ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| [docs/Technical_Reference.md](docs/Technical_Reference.md)         | Source layout, every component, the build system, the tests |
-| [docs/Learn_From_This_Project.md](docs/Learn_From_This_Project.md) | A walkthrough of how the compiler was built and why         |
-| [docs/Tests_From_The_Book.md](docs/Tests_From_The_Book.md)         | How the test suite is organized, for newcomers              |
-| [docs/C_Grammar.md](docs/C_Grammar.md)                             | The C grammar, and how it maps onto the hand-written parser |
-| [docs/Type_Coercion.md](docs/Type_Coercion.md)                     | C's rules for mixing types in an expression                 |
-| [docs/Type_Sizes_Alignment.md](docs/Type_Sizes_Alignment.md)       | Type sizes and alignment, per machine                       |
-| [docs/TAC_Optimization.md](docs/TAC_Optimization.md)               | The machine-independent optimizer passes                    |
-| [docs/Standard_Include_Files.md](docs/Standard_Include_Files.md)   | The C11 headers shipped with the compiler                   |
-| [docs/Memory_Allocation.md](docs/Memory_Allocation.md)             | `xalloc`, the compiler's own allocator                      |
-| [docs/String_Map.md](docs/String_Map.md)                           | `string_map`, the key-value store used for symbol tables    |
-| [docs/Word_Oriented_IO.md](docs/Word_Oriented_IO.md)               | How the `.ast` and `.tac` binary files are written          |
+| Document                                                         | What it covers                                              |
+| ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| [docs/Technical_Reference.md](docs/Technical_Reference.md)       | Source layout, every component, the build system, the tests |
+| [docs/Tests_From_The_Book.md](docs/Tests_From_The_Book.md)       | How the test suite is organized, for newcomers              |
+| [docs/C_Grammar.md](docs/C_Grammar.md)                           | The C grammar, and how it maps onto the hand-written parser |
+| [docs/Type_Coercion.md](docs/Type_Coercion.md)                   | C's rules for mixing types in an expression                 |
+| [docs/Type_Sizes_Alignment.md](docs/Type_Sizes_Alignment.md)     | Type sizes and alignment, per machine                       |
+| [docs/TAC_Optimization.md](docs/TAC_Optimization.md)             | The machine-independent optimizer passes                    |
+| [docs/Standard_Include_Files.md](docs/Standard_Include_Files.md) | The C11 headers shipped with the compiler                   |
+| [docs/Memory_Allocation.md](docs/Memory_Allocation.md)           | `xalloc`, the compiler's own allocator                      |
+| [docs/String_Map.md](docs/String_Map.md)                         | `string_map`, the key-value store used for symbol tables    |
+| [docs/Word_Oriented_IO.md](docs/Word_Oriented_IO.md)             | How the `.ast` and `.tac` binary files are written          |
 
 ### RISC-V target
 
@@ -168,24 +166,8 @@ the map of the source tree.
 | ---------------------------------------------- | ---------------------------------------------------------------- |
 | [docs/Riscv_Backend.md](docs/Riscv_Backend.md) | The code generator, frame layout, calls, and running under qemu |
 
-### BESM-6 target
-
-| Document                                                                                 | What it covers                                               |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [backend/besm6/Besm6_Data_Representation.md](backend/besm6/Besm6_Data_Representation.md) | How every C type is stored in a 48-bit word                  |
-| [backend/besm6/Besm6_Instruction_Set.md](backend/besm6/Besm6_Instruction_Set.md)         | The instruction set                                          |
-| [backend/besm6/Besm6_Calling_Conventions.md](backend/besm6/Besm6_Calling_Conventions.md) | How functions call each other                                |
-| [backend/besm6/Besm6_Runtime_Library.md](backend/besm6/Besm6_Runtime_Library.md)         | The helper routines the generated code calls                 |
-| [backend/besm6/Besm6_Intrinsics.md](backend/besm6/Besm6_Intrinsics.md)                   | Reaching machine instructions that C has no way to express   |
-| [backend/besm6/Peephole_Rewrites.md](backend/besm6/Peephole_Rewrites.md)                 | The peephole pass and every rewrite it performs              |
-| [backend/besm6/KOI7_Encoding.md](backend/besm6/KOI7_Encoding.md)                         | The KOI-7 character set and the conversion the compiler does |
-| [backend/besm6/Frexp_Ldexp.md](backend/besm6/Frexp_Ldexp.md)                             | `frexp` and `ldexp` in assembly                              |
-| [backend/besm6/Besm6_Unix_Assembler.md](backend/besm6/Besm6_Unix_Assembler.md)           | `b6as`, the Unix assembler (the default dialect)             |
-| [backend/besm6/Madlen.md](backend/besm6/Madlen.md)                                       | Madlen, the Dubna monitor assembler                          |
-| [backend/besm6/Bemsh.md](backend/besm6/Bemsh.md)                                         | Bemsh, the 1967 autocode with Russian mnemonics              |
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-Copyright (c) 2025 Serge Vakulenko
+Copyright (c) 2025-2026 Serge Vakulenko

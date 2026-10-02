@@ -318,3 +318,72 @@ int main(void) {
 }
 )PROG"));
 }
+
+TEST_F(RiscvTest, MallocAlignedAndDistinct)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("1 1 1\n", CompileAndRunRiscv(R"PROG(
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) {
+    char *a = malloc(3);
+    char *b = malloc(5);
+    printf("%d %d %d\n", ((long)a & 15) == 0, ((long)b & 15) == 0, b >= a + 3);
+    return 0;
+}
+)PROG"));
+}
+
+TEST_F(RiscvTest, CallocZeroes)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("0\n", CompileAndRunRiscv(R"PROG(
+#include <stdio.h>
+#include <stdlib.h>
+int main(void) {
+    int *p = calloc(10, sizeof(int));
+    int sum = 0;
+    for (int i = 0; i < 10; i++)
+        sum += p[i];
+    printf("%d\n", sum);
+    return 0;
+}
+)PROG"));
+}
+
+TEST_F(RiscvTest, ReallocGrowKeepsContents)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("HELLO WORLD\n", CompileAndRunRiscv(R"PROG(
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    char *p = malloc(6);
+    strcpy(p, "HELLO");
+    malloc(32);
+    p = realloc(p, 12);
+    strcat(p, " WORLD");
+    printf("%s\n", p);
+    return 0;
+}
+)PROG"));
+}
+
+TEST_F(RiscvTest, ReallocShrinkAndNull)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("1 ABC 1\n", CompileAndRunRiscv(R"PROG(
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int main(void) {
+    char *p = malloc(16);
+    strcpy(p, "ABC");
+    char *q = realloc(p, 4);
+    char *r = realloc(NULL, 8);
+    printf("%d %s %d\n", q == p, q, r != NULL && r != p);
+    return 0;
+}
+)PROG"));
+}

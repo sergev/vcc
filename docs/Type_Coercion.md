@@ -60,9 +60,12 @@ Applied to both operands of `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `==`,
 6. Otherwise → the operand with the larger size wins.
 
 The result is computed by `get_common_type()` in `semantic/typecheck.c`, which gives
-`long double` the highest floating rank (a mixed `long double` operand wins).  On the
-BESM-6 target `long double`, `double`, and `float` share the same single-word native-FP
-representation, so the resulting conversion is a bit-pattern copy.
+`long double` the highest floating rank (a mixed `long double` operand wins).  On RISC-V
+the three are distinct formats — `float` is IEEE binary32, `double` binary64 and
+`long double` binary128 — so each widening or narrowing is a real conversion (a
+binary128 one goes through the software runtime in `libc/riscv/float128.c`). A target
+whose formats coincide (BESM-6 has one native FP word for all three) gets a plain copy
+instead.
 
 ---
 
