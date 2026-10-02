@@ -104,7 +104,7 @@ TEST_F(RiscvTest, FrameVariadicFromSp)
 {
     std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
     EXPECT_EQ(0u, s.find("addi sp, sp, -64\nsd a0, 0(sp)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("sd a7, 56(sp)\nmv a0, sp\n")) << s; // &n
+    EXPECT_NE(std::string::npos, s.find("add a0, sp, t1\n")) << s; // &n + 2
     EXPECT_NE(std::string::npos, s.find("addi sp, sp, 64\nret\n")) << s;
 }
 

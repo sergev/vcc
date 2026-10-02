@@ -47,7 +47,8 @@ For each function, in this order:
 3. **Prologue and epilogue** (`frame.c`). The code that sets up and tears down the
    function's stack space.
 4. **Peephole** (`peephole.c`). Small cleanups: `addi` instead of `li` + `add`, no
-   reload of a value just stored, no jump to the next line.
+   reload of a value just stored, no jump to the next line.  A copy is followed to its
+   uses within a block, so the copies around an RV32 `long long` pair mostly go.
 
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genriscv`.

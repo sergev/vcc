@@ -1,7 +1,8 @@
 //
 // Peephole pass over the RISC-V IR, after register allocation: an operation on a
-// just-loaded constant takes the immediate form (or the zero register), a scratch move
-// folds into its one use or its result's one move, identities and a store's reload go, and so do a jump to the
+// just-loaded constant takes the immediate form (or the zero register), a move folds
+// into its uses within the block and a result is computed where it is moved, a move
+// back goes, identities and a store's reload go, and so do a jump to the
 // next label, a branch over a jump, and code after a jump.  Code selection never
 // carries a scratch register (t0-t6, ft0-ft11) past its block, so whether a scratch
 // value is read again is decided by looking to the end of the block.
@@ -90,6 +91,26 @@ static bool dead_after(const Rv_Instr *in, int r)
             return true;
     }
     return true;
+}
+
+// The value `in` leaves in register r is never read: as dead_after, and for any other
+// register, written again before a branch, or an argument register at a return that
+// does not read it.
+static bool dies_after(const Rv_Instr *in, int r)
+{
+    if (is_scratch(r))
+        return dead_after(in, r);
+    for (const Rv_Instr *n = in->next; n; n = n->next) {
+        if (reads(n, r))
+            return false;
+        if (writes(n, r))
+            return true;
+        if (n->op == RV_RET)
+            return is_arg(r);
+        if (is_branch(n->op) || n->op == RV_J)
+            return false;
+    }
+    return false;
 }
 
 // The value r holds before `in` is not read after it.
@@ -273,6 +294,89 @@ static bool delete_reload(Rv_Instr *st, Rv_Op load)
     return false;
 }
 
+// `mv t, r`: the reads of t up to its next write read r instead, if r is not written
+// before the last of them.  A scratch t may reach the end of the block instead, and an
+// argument register a return; any other register must be written again before a
+// branch, or its value may be read beyond.  This takes the operand and result copies around a register pair, which come
+// four together, not one by one.
+static bool forward_move(Rv_Instr **link)
+{
+    Rv_Instr *mv = *link;
+    int t = mv->opnd[0].reg, r = mv->opnd[1].reg;
+    bool clobbered = false;
+    Rv_Instr *end  = NULL;
+    for (Rv_Instr *n = mv->next;; n = n->next) {
+        if (!n) {
+            if (!is_scratch(t))
+                return false;
+            break;
+        }
+        if (reads(n, t)) {
+            if (clobbered || is_call(n->op) || (mv->op != RV_MV && reads_as_base(n, t)))
+                return false;
+        }
+        if (writes(n, t)) {
+            end = n->next;
+            break;
+        }
+        // An argument register the return does not read is dead there: the
+        // epilogue is already in place.
+        if (n->op == RV_RET && is_arg(t) && !reads(n, t))
+            break;
+        if (!is_scratch(t) && (is_branch(n->op) || n->op == RV_J || n->op == RV_RET))
+            return false;
+        if (writes(n, r))
+            clobbered = true;
+    }
+    for (Rv_Instr *n = mv->next; n != end; n = n->next)
+        if (reads(n, t))
+            replace_reads(n, t, r, true);
+    delete_at(link);
+    return true;
+}
+
+// `mv x, y` and a later `mv y, x`, with neither register written between: the second
+// changes nothing.
+static bool move_back(Rv_Instr *mv)
+{
+    int x = mv->opnd[0].reg, y = mv->opnd[1].reg;
+    for (Rv_Instr **link = &mv->next; *link; link = &(*link)->next) {
+        Rv_Instr *n = *link;
+        if (n->op == mv->op && n->opnd[0].reg == y && n->opnd[1].reg == x) {
+            delete_at(link);
+            return true;
+        }
+        if (writes(n, x) || writes(n, y))
+            return false;
+    }
+    return false;
+}
+
+// `in` computes into t, and a later `mv d, t` is the last read of it: compute into d,
+// when d is neither read nor written in between.  The reads of t in between read d.
+static bool compute_in_place(Rv_Instr *in)
+{
+    int t = in->opnd[0].reg;
+    for (Rv_Instr **link = &in->next; *link; link = &(*link)->next) {
+        Rv_Instr *n = *link;
+        if (is_move(n->op) && n->opnd[1].reg == t && n->opnd[0].reg != t &&
+            rv_is_freg(n->opnd[0].reg) == rv_is_freg(t) && dies_after(n, t)) {
+            int d = n->opnd[0].reg;
+            for (Rv_Instr *m = in->next; m != n; m = m->next)
+                if (reads(m, d) || writes(m, d))
+                    return false;
+            for (Rv_Instr *m = in->next; m != n; m = m->next)
+                replace_reads(m, t, d, true);
+            in->opnd[0].reg = d;
+            delete_at(link);
+            return true;
+        }
+        if (writes(n, t) || is_call(n->op))
+            return false;
+    }
+    return false;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(Rv_Instr **link)
 {
@@ -303,23 +407,16 @@ static bool rewrite(Rv_Instr **link)
     if (!next)
         return false;
 
-    // A scratch move into its one use.
-    if (is_move(in->op) && is_scratch(o[0].reg) && o[0].reg != o[1].reg && reads(next, o[0].reg) &&
-        last_read(next, o[0].reg) && !is_call(next->op) &&
-        (in->op == RV_MV || !reads_as_base(next, o[0].reg))) {
-        replace_reads(next, o[0].reg, o[1].reg, true);
-        delete_at(link);
+    // A move into its uses.
+    if (is_move(in->op) && forward_move(link))
         return true;
-    }
+    if (is_move(in->op) && move_back(in))
+        return true;
 
     // A result computed into a scratch register only to be moved: compute it in place.
-    if (is_move(next->op) && !no_dest(in->op) && !is_call(in->op) && o[0].kind == RV_OPND_REG &&
-        next->opnd[1].reg == o[0].reg && is_scratch(o[0].reg) && next->opnd[0].reg != o[0].reg &&
-        rv_is_freg(next->opnd[0].reg) == rv_is_freg(o[0].reg) && dead_after(next, o[0].reg)) {
-        o[0].reg = next->opnd[0].reg;
-        delete_at(&in->next);
+    if (!no_dest(in->op) && !is_call(in->op) && o[0].kind == RV_OPND_REG && o[0].reg != RV_SP &&
+        compute_in_place(in))
         return true;
-    }
 
     // A byte load is already zero-extended.
     if (in->op == RV_LBU && next->op == RV_ANDI && next->opnd[2].imm == 255 &&

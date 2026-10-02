@@ -66,7 +66,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   `share/vcc/riscv32/`); `-t riscv32` in `vcpp` (`__riscv_xlen=32`, `__ILP32__`) and in
   `vcc` (assembler flags, `link.ld`, the `cc-tests` cases); docs/Riscv_Backend.md,
   cc/README.md, cpp/README.md.
-- **R31. `long long` in registers.** *Done:* the high word is an allocator node of its own; copies of a `long long` are not coalesced, and the moves around a pair are many (room for a peephole).
+- **R31. `long long` in registers.** *Done:* the high word is an allocator node of its own; copies of a `long long` are not coalesced; the peephole follows a copy to its uses within a block, which takes most of the moves around a pair (the rv32 libc is 14% smaller).
 
 ## Risks
 

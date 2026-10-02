@@ -406,3 +406,12 @@ long long mix(long long a, int i) { long long x = a * i; return x < 0 ? -x : x <
     EXPECT_EQ(std::string::npos, s.find("lw ")) << s;
     EXPECT_EQ(std::string::npos, s.find("sp")) << s;
 }
+
+// The peephole takes the copies around a pair: an add reads its operands where they
+// are and computes the halves where they go.
+TEST_F(Rv32Test, LongLongPairMoves)
+{
+    std::string s = Code(CompileToRiscv("long long add(long long a, long long b) { return a + b; }"));
+    EXPECT_NE(std::string::npos, s.find("add t1, a1, a3\nadd a1, t1, t0\nmv a0, t2\nret\n")) << s;
+    EXPECT_EQ(s.find("mv "), s.rfind("mv ")) << s;
+}

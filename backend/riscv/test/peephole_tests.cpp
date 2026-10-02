@@ -149,6 +149,63 @@ add a0, s2, s2
               Run());
 }
 
+// The copies around an rv32 register-pair add: the operands are read where they are,
+// and the halves are computed where they go.
+TEST_F(PeepholeTest, PairMoves)
+{
+    I(RV_MV, { R(T0), R(S1) });
+    I(RV_MV, { R(T1), R(S2) });
+    I(RV_MV, { R(RV_T2), R((RV_S2 + 1)) });
+    I(RV_MV, { R(RV_T3), R((RV_S2 + 2)) });
+    I(RV_ADD, { R(RV_T2), R(T0), R(RV_T2) });
+    I(RV_SLTU, { R(T0), R(RV_T2), R(T0) });
+    I(RV_ADD, { R(T1), R(T1), R(RV_T3) });
+    I(RV_ADD, { R(T1), R(T1), R(T0) });
+    I(RV_MV, { R((RV_S2 + 3)), R(RV_T2) });
+    I(RV_MV, { R((RV_S2 + 4)), R(T1) });
+    EXPECT_EQ(R"(add s5, s1, s3
+sltu t0, s5, s1
+add t1, s2, s4
+add s6, t1, t0
+)",
+              Run());
+}
+
+// A move straight back goes; so does a move into an argument register the return does
+// not read, and one computed into a0 only to be moved, as a0 is written again.  a1 is
+// returned, so its move stays.
+TEST_F(PeepholeTest, ArgumentMoves)
+{
+    I(RV_MV, { R((RV_A0 + 2)), R(S1) });
+    I(RV_MV, { R(S1), R((RV_A0 + 2)) });
+    I(RV_ADD, { R(A0), R(S1), R(S2) });
+    I(RV_MV, { R((RV_A0 + 1)), R(A0) });
+    I(RV_MV, { R(A0), R(S2) });
+    I(RV_RET, {});
+    EXPECT_EQ(R"(add a1, s1, s2
+mv a0, s2
+ret
+)",
+              Run());
+}
+
+// A register other than scratch and arguments may be read after a branch.
+TEST_F(PeepholeTest, MoveBeforeBranch)
+{
+    I(RV_MV, { R(S1), R(S2) });
+    I(RV_BNEZ, { R(A0), rv_sym(".L1", 0) });
+    I(RV_MV, { R(S1), R(A0) });
+    Label(".L1");
+    I(RV_RET, {});
+    EXPECT_EQ(R"(mv s1, s2
+bnez a0, .L1
+mv s1, a0
+.L1:
+ret
+)",
+              Run());
+}
+
 // A doubleword reload of what was just stored goes; a byte load needs no mask.
 TEST_F(PeepholeTest, ReloadAndMask)
 {
