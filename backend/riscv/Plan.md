@@ -42,7 +42,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
 
 ## Phase 9 — riscv32
 
-- **R27. Register width as a parameter.** `genriscv --rv32` (a global like
+- **R27. Register width as a parameter.** *Done.* `genriscv --rv32` (a global like
   `riscv_regalloc`); every `ld`/`sd`, `*w` op, slot size and canonical form chosen by
   width. `long long`, `unsigned long long` and `long double` are rejected with a clear
   `fatal_error` (until R28 and R29). `libc/riscv/` renamed `libc/riscv64/`; runtime for

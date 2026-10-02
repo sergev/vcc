@@ -60,11 +60,12 @@ endif()
 # only recognises a '#' directive in column 1, whereas `cc -E` accepts directives
 # anywhere on the line.  Exposed to all subdirectories as SystemCpp (always
 # invoked with -E).  A target's headers are its own directory (BESM6_INCLUDE_DIR,
-# RISCV_INCLUDE_DIR) followed by the target-neutral LIBC_COMMON_INCLUDE_DIR.
+# RISCV_INCLUDE_DIR, RISCV32_INCLUDE_DIR) followed by the target-neutral LIBC_COMMON_INCLUDE_DIR.
 #
 set(SystemCpp ${CMAKE_C_COMPILER})
 set(BESM6_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/besm6/include)
-set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv/include)
+set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv64/include)
+set(RISCV32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv32/include)
 set(LIBC_COMMON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/common/include)
 
 # Download GoogleTest
@@ -107,7 +108,7 @@ add_subdirectory(optimize)
 # referencing backend-defined `genbesm` from here is fine even though backend follows.
 add_subdirectory(libc)
 add_subdirectory(backend)
-# The driver uses the RISC-V tool paths libc/riscv found.
+# The driver uses the RISC-V tool paths libc/riscv64 found.
 add_subdirectory(cc)
 
 #

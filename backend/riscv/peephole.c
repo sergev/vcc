@@ -8,6 +8,7 @@
 //
 #include <string.h>
 
+#include "codegen.h"
 #include "rv.h"
 #include "xalloc.h"
 
@@ -176,15 +177,15 @@ static bool immediate_form(Rv_Instr *in, int64_t imm)
         break;
     case RV_SLL:
         op  = RV_SLLI;
-        imm &= 63;
+        imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SRL:
         op  = RV_SRLI;
-        imm &= 63;
+        imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SRA:
         op  = RV_SRAI;
-        imm &= 63;
+        imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SLLW:
         op  = RV_SLLIW;
@@ -328,8 +329,13 @@ static bool rewrite(Rv_Instr **link)
     }
 
     // The reload of what was stored, into the same register.
-    static const Rv_Op reload[][2] = { { RV_SD, RV_LD }, { RV_FSD, RV_FLD }, { RV_FSW, RV_FLW } };
-    for (size_t k = 0; k < sizeof(reload) / sizeof(reload[0]); k++)
+    // A word reload restores the register only on rv32, where a word is all of it.
+    static const Rv_Op reload[][2] = { { RV_SD, RV_LD },
+                                       { RV_FSD, RV_FLD },
+                                       { RV_FSW, RV_FLW },
+                                       { RV_SW, RV_LW } };
+    size_t nreload = sizeof(reload) / sizeof(reload[0]) - (riscv_xlen == 8);
+    for (size_t k = 0; k < nreload; k++)
         if (in->op == reload[k][0] && o[1].reg != o[0].reg && delete_reload(in, reload[k][1]))
             return true;
     return false;

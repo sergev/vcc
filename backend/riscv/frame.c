@@ -1,5 +1,5 @@
 //
-// Types, frame slots, and loading/storing values (LP64D).
+// Types, frame slots, and loading/storing values (LP64D, or ILP32D on rv32).
 //
 #include <stdlib.h>
 #include <string.h>
@@ -23,12 +23,13 @@ int rv_size(const Tac_Type *t)
     case TAC_TYPE_FLOAT:
         return 4;
     case TAC_TYPE_LONG:
-    case TAC_TYPE_LONG_LONG:
     case TAC_TYPE_ULONG:
-    case TAC_TYPE_ULONG_LONG:
-    case TAC_TYPE_DOUBLE:
     case TAC_TYPE_POINTER:
     case TAC_TYPE_FUN_TYPE:
+        return riscv_xlen;
+    case TAC_TYPE_LONG_LONG:
+    case TAC_TYPE_ULONG_LONG:
+    case TAC_TYPE_DOUBLE:
         return 8;
     case TAC_TYPE_LONG_DOUBLE:
         return 16;
@@ -87,6 +88,16 @@ bool rv_is_aggregate(const Tac_Type *t)
     return t->kind == TAC_TYPE_ARRAY || t->kind == TAC_TYPE_STRUCTURE;
 }
 
+Rv_Op xlen_load(void)
+{
+    return riscv_xlen == 8 ? RV_LD : RV_LW;
+}
+
+Rv_Op xlen_store(void)
+{
+    return riscv_xlen == 8 ? RV_SD : RV_SW;
+}
+
 static void add_global(Gen *g, const char *name, const Tac_Type *type)
 {
     if (name && type)
@@ -104,7 +115,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->frame);
     map_init(&g->globals);
     map_init(&g->regs);
-    g->header = gen_variadic(g) ? 80 : 16;
+    g->header = gen_variadic(g) ? 16 + 8 * riscv_xlen : 16;
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -135,6 +146,8 @@ void gen_done(Gen *g)
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
     map_destroy(&g->regs);
+    xfree(g->const_bits);
+    xfree(g->const_label);
     rv_free_func(g->fn);
 }
 
@@ -227,9 +240,14 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
         [TAC_CONST_SCHAR] = { .kind = TAC_TYPE_SCHAR },
         [TAC_CONST_UCHAR] = { .kind = TAC_TYPE_UCHAR },
     };
-    if (v->kind == TAC_VAL_CONSTANT)
-        return &types[v->u.constant->kind];
-    return name_type(g, v->u.var_name);
+    const Tac_Type *t =
+        v->kind == TAC_VAL_CONSTANT ? &types[v->u.constant->kind] : name_type(g, v->u.var_name);
+    // TODO: register pairs (Plan.md R28) and long double on rv32 (R29).
+    if (riscv_xlen == 4 && (t->kind == TAC_TYPE_LONG_LONG || t->kind == TAC_TYPE_ULONG_LONG))
+        fatal_error("riscv: %s: long long is not supported on rv32 yet", gen_name(g));
+    if (riscv_xlen == 4 && t->kind == TAC_TYPE_LONG_DOUBLE)
+        fatal_error("riscv: %s: long double is not supported on rv32 yet", gen_name(g));
+    return t;
 }
 
 Rv_Instr *emit2(Gen *g, Rv_Op op, Rv_Operand a, Rv_Operand b)
@@ -356,13 +374,13 @@ static int64_t const_int(const Gen *g, const Tac_Const *c)
     case TAC_CONST_INT:
         return (int32_t)c->u.int_val;
     case TAC_CONST_LONG:
-        return c->u.long_val;
+        return riscv_xlen == 4 ? (int32_t)c->u.long_val : c->u.long_val;
     case TAC_CONST_LONG_LONG:
         return c->u.long_long_val;
     case TAC_CONST_UINT:
         return (int32_t)c->u.uint_val;
     case TAC_CONST_ULONG:
-        return (int64_t)c->u.ulong_val;
+        return riscv_xlen == 4 ? (int32_t)c->u.ulong_val : (int64_t)c->u.ulong_val;
     case TAC_CONST_ULONG_LONG:
         return (int64_t)c->u.ulong_long_val;
     case TAC_CONST_SCHAR:
@@ -385,11 +403,31 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
     } else if (c->kind == TAC_CONST_DOUBLE) {
         uint64_t bits;
         memcpy(&bits, &c->u.double_val, 8);
-        gen_li(g, RV_T6, (int64_t)bits);
-        emit2(g, RV_FMVDX, rv_reg(reg), rv_reg(RV_T6));
+        if (riscv_xlen == 8) {
+            gen_li(g, RV_T6, (int64_t)bits);
+            emit2(g, RV_FMVDX, rv_reg(reg), rv_reg(RV_T6));
+        } else if (bits == 0) {
+            fp_zero(g, reg, true);
+        } else {
+            // No fmv.d.x on rv32: a literal, emitted after the function.
+            char label[32];
+            snprintf(label, sizeof(label), ".LC%d", riscv_const_label(g, bits));
+            emit2(g, RV_LA, rv_reg(RV_T6), rv_sym(label, 0));
+            emit2(g, RV_FLD, rv_reg(reg), rv_mem(RV_T6, 0));
+        }
     } else {
         fatal_error("riscv: %s: integer constant in an FP register", gen_name(g));
     }
+}
+
+void fp_zero(Gen *g, int reg, bool dbl)
+{
+    if (!dbl)
+        emit2(g, RV_FMVWX, rv_reg(reg), rv_reg(RV_ZERO));
+    else if (riscv_xlen == 8)
+        emit2(g, RV_FMVDX, rv_reg(reg), rv_reg(RV_ZERO));
+    else
+        emit2(g, RV_FCVTDW, rv_reg(reg), rv_reg(RV_ZERO));
 }
 
 void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
@@ -405,14 +443,14 @@ void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
 void gen_canon(Gen *g, int dst, int src, const Tac_Type *t)
 {
     int size = rv_size(t);
-    if (size >= 8) {
+    if (size >= riscv_xlen) {
         move_reg(g, dst, src, t);
     } else if (size == 4) {
         emit2(g, RV_SEXTW, rv_reg(dst), rv_reg(src));
     } else if (size == 1 && rv_is_unsigned(t)) {
         emit3(g, RV_ANDI, rv_reg(dst), rv_reg(src), rv_imm(255));
     } else {
-        int shift = 64 - 8 * size;
+        int shift = 8 * riscv_xlen - 8 * size;
         emit3(g, RV_SLLI, rv_reg(dst), rv_reg(src), rv_imm(shift));
         emit3(g, rv_is_unsigned(t) ? RV_SRLI : RV_SRAI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
     }
@@ -518,6 +556,8 @@ void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int
     static const Rv_Op loads[]  = { [1] = RV_LBU, [2] = RV_LHU, [4] = RV_LW, [8] = RV_LD };
     static const Rv_Op stores[] = { [1] = RV_SB, [2] = RV_SH, [4] = RV_SW, [8] = RV_SD };
     int chunk = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
+    if (chunk > riscv_xlen)
+        chunk = riscv_xlen;
     for (int i = 0; i < size;) {
         while (chunk > size - i)
             chunk /= 2;
@@ -529,8 +569,8 @@ void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int
 
 void load_bytes(Gen *g, int reg, int base, int64_t off, int size)
 {
-    if (size == 8) {
-        emit2(g, RV_LD, rv_reg(reg), mem(g, base, off));
+    if (size == riscv_xlen) {
+        emit2(g, xlen_load(), rv_reg(reg), mem(g, base, off));
         return;
     }
     emit2(g, RV_LBU, rv_reg(reg), mem(g, base, off + size - 1));
@@ -543,8 +583,8 @@ void load_bytes(Gen *g, int reg, int base, int64_t off, int size)
 
 void store_bytes(Gen *g, int reg, int base, int64_t off, int size)
 {
-    if (size == 8) {
-        emit2(g, RV_SD, rv_reg(reg), mem(g, base, off));
+    if (size == riscv_xlen) {
+        emit2(g, xlen_store(), rv_reg(reg), mem(g, base, off));
         return;
     }
     emit2(g, RV_MV, rv_reg(RV_T2), rv_reg(reg));
@@ -602,7 +642,7 @@ static void save_regs(const Gen *g, const Frame *fr, Rv_Block *b, bool restore)
         if (is_freg(reg))
             op = restore ? RV_FLD : RV_FSD;
         else
-            op = restore ? RV_LD : RV_SD;
+            op = restore ? xlen_load() : xlen_store();
         append2(b, op, rv_reg(reg), frame_mem(fr, g->saved_off[i]));
     }
 }
@@ -622,13 +662,13 @@ static void epilogue(const Gen *g, const Frame *fr, Rv_Block *b)
     save_regs(g, fr, b, true);
     if (fr->kind == FRAME_SP) {
         if (fr->calls)
-            append2(b, RV_LD, rv_reg(RV_RA), frame_mem(fr, -g->header + 8));
+            append2(b, xlen_load(), rv_reg(RV_RA), frame_mem(fr, -g->header + 8));
         append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(fr->size));
         return;
     }
     append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_S0), rv_imm(-g->header));
-    append2(b, RV_LD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
-    append2(b, RV_LD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
+    append2(b, xlen_load(), rv_reg(RV_RA), rv_mem(RV_SP, 8));
+    append2(b, xlen_load(), rv_reg(RV_S0), rv_mem(RV_SP, 0));
     append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(g->header));
 }
 
@@ -739,7 +779,7 @@ void gen_prologue(Gen *g)
         fr.kind = FRAME_SP;
         append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-fr.size));
         if (fr.calls)
-            append2(b, RV_SD, rv_reg(RV_RA), frame_mem(&fr, -g->header + 8));
+            append2(b, xlen_store(), rv_reg(RV_RA), frame_mem(&fr, -g->header + 8));
         save_regs(g, &fr, b, false);
         expand_epilogues(g, &fr);
         return;
@@ -748,8 +788,8 @@ void gen_prologue(Gen *g)
     fr.size = g->header + rest;
     fr.gap  = 0;
     append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-g->header));
-    append2(b, RV_SD, rv_reg(RV_RA), rv_mem(RV_SP, 8));
-    append2(b, RV_SD, rv_reg(RV_S0), rv_mem(RV_SP, 0));
+    append2(b, xlen_store(), rv_reg(RV_RA), rv_mem(RV_SP, 8));
+    append2(b, xlen_store(), rv_reg(RV_S0), rv_mem(RV_SP, 0));
     append3(b, RV_ADDI, rv_reg(RV_S0), rv_reg(RV_SP), rv_imm(g->header));
     if (rest == 0) {
         // nothing

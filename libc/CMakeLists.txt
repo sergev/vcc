@@ -15,4 +15,7 @@ set(LIBC_C_COMMON
     strrchr strstr strtok)
 
 add_subdirectory(besm6)
-add_subdirectory(riscv)
+# riscv32 shares sources with riscv64, and uses the tools riscv64 found.
+set(RISCV64_DIR ${CMAKE_CURRENT_SOURCE_DIR}/riscv64)
+add_subdirectory(riscv64)
+add_subdirectory(riscv32)

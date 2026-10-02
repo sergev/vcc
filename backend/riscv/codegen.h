@@ -16,6 +16,8 @@ extern bool riscv_regalloc;
 extern bool riscv_peephole;
 // Keep the frame pointer s0 in every function with a frame (false by default).
 extern bool riscv_frame_pointer;
+// Register width in bytes: 8 for RV64 (the default), 4 for RV32 (--rv32).
+extern int riscv_xlen;
 
 // Translate one TAC toplevel to RISC-V assembly on `out`.  `program` heads the whole
 // translation unit.

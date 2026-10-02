@@ -1,7 +1,7 @@
 //
 // IEEE-754 binary128 in software, for long double constants on any host: parsing,
 // arithmetic rounded to nearest even, comparison, conversion and formatting.  The
-// arithmetic and conversions are also the RISC-V runtime (libc/riscv/float128.c
+// arithmetic and conversions are also the RISC-V runtime (libc/riscv64/float128.c
 // includes float128.c with F128_RUNTIME defined), so the compiler folds exactly as
 // the target computes.
 //

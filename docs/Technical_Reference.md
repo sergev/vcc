@@ -55,7 +55,7 @@ pass `-` as the output argument for stdout.
 A complete RISC-V compilation in the build tree:
 
 ```bash
-./build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv/include -Ilibc/common/include hello.c hello.i
+./build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv64/include -Ilibc/common/include hello.c hello.i
 ./build/parse hello.i hello.ast
 ./build/lower -t riscv64 hello.ast hello.tac
 ./build/backend/genriscv hello.tac hello.s
@@ -87,7 +87,7 @@ The build itself (libc, test fixtures) still preprocesses with the system `cc -E
 ### `parse` (parser)
 
 **Input:** one C source file, already preprocessed (by `cpp` or the system `cc -E`).
-The standard headers are in `libc/riscv/include/` (data-model dependent) and
+The standard headers are in `libc/riscv64/include/` (data-model dependent) and
 `libc/common/include/` (target-neutral), and are expanded by an external preprocessor
 first — use `cpp` or the C compiler's `cc -E`, not a traditional system `cpp`, which
 only honors column-1 directives. `# line` markers are consumed, so diagnostics keep original line
@@ -327,23 +327,23 @@ With `--no-regalloc` each TAC name gets a 4-byte stack slot instead, and every
 instruction loads its operands into `t0`/`t1` and stores its result — useful for reading
 instruction selection on its own.
 
-### RISC-V runtime (`libc/riscv/`, `libc/common/`)
+### RISC-V runtime (`libc/riscv64/`, `libc/common/`)
 
 | File | Role |
 |------|------|
-| `libc/riscv/crt0.S` | Start-up: stack, call `main`, then `exit` (also built as `crt0-status.o`, which prints `main`'s result, for the book run tests) |
-| `libc/riscv/console.s` | `putbyte` (UART output) and `exit` (stops qemu) |
-| `libc/riscv/malloc.s` | Simple allocator |
-| `libc/riscv/doprnt.c`, `frexp.c`, `ldexp.c`, `modf.c` | Target-specific C routines |
-| `libc/riscv/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
-| `libc/riscv/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
-| `libc/riscv/include/` | Data-model-dependent headers (`float.h`, `limits.h`, `stdint.h`, `stdarg.h`, …) |
+| `libc/riscv64/crt0.S` | Start-up: stack, call `main`, then `exit` (also built as `crt0-status.o`, which prints `main`'s result, for the book run tests) |
+| `libc/riscv64/console.s` | `putbyte` (UART output) and `exit` (stops qemu) |
+| `libc/riscv64/malloc.s` | Simple allocator |
+| `libc/riscv64/doprnt.c`, `frexp.c`, `ldexp.c`, `modf.c` | Target-specific C routines |
+| `libc/riscv64/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
+| `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
+| `libc/riscv64/include/` | Data-model-dependent headers (`float.h`, `limits.h`, `stdint.h`, `stdarg.h`, …) |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |
 
 The C sources are compiled by VCC itself (`cc -E` → `parse` → `lower -t riscv64` →
 `genriscv` → clang as assembler) and archived with `llvm-ar` into
-`build/libc/riscv/libc.a`. Without a RISC-V-capable clang and `llvm-ar` the runtime is
+`build/libc/riscv64/libc.a`. Without a RISC-V-capable clang and `llvm-ar` the runtime is
 skipped, and the run tests skip themselves.
 
 ### BESM-6 backend (`backend/besm6/`)
@@ -736,7 +736,7 @@ allows 5 and 6. The AST integer fields use 64-bit host storage.
 - **Compiler flags:** `-Wall -Werror -Wshadow` for C and C++ (see root `CMakeLists.txt`).
 - **GoogleTest:** FetchContent, tag `v1.15.2`, `BUILD_GMOCK=OFF`.
 - **cppcheck:** If `cppcheck` is found, it is attached to C and C++ targets with project-specific suppressions and `scripts/googletest.xml` for tests.
-- **RISC-V tools:** `libc/riscv/CMakeLists.txt` looks for a `clang` that lists `riscv64` among its targets (Homebrew's LLVM first), `llvm-ar`, `ld.lld` and `qemu-system-riscv64`. clang and `llvm-ar` are needed to build the runtime; `ld.lld` and qemu to run programs. On macOS: `brew install llvm lld qemu`.
+- **RISC-V tools:** `libc/riscv64/CMakeLists.txt` looks for a `clang` that lists `riscv64` among its targets (Homebrew's LLVM first), `llvm-ar`, `ld.lld` and `qemu-system-riscv64`. clang and `llvm-ar` are needed to build the runtime; `ld.lld` and qemu to run programs. On macOS: `brew install llvm lld qemu`.
 - **Makefile:** Creates `build/`, runs `cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo`, delegates `all` to `$(MAKE) -C build`. Targets: `make` (compiler, runtimes, and all test executables), `make test` (builds `all`, but does not run the tests), `make run` (builds `all`, then runs every test via `ctest --test-dir build` — including the textbook chapter tests), `make install` (see [Installation](#installation)), `make clean`, `make debug` (cmake Debug build into `build`).
 
 Common build types: `Debug`, `RelWithDebInfo`, `Release`.

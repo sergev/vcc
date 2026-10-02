@@ -53,13 +53,13 @@ it is addressed from `sp` and `s0` is not used.
   a pointer to a copy.
 - A `long double` travels in two integer registers. Its arithmetic is done by library
   functions such as `__addtf3` (add) and `__lttf2` (compare), in
-  `libc/riscv/float128.c`.
+  `libc/riscv64/float128.c`.
 - A function with `...` saves a0–a7 next to its stack arguments, so `va_arg` simply
   walks one array.
 
 ## The runtime library
 
-In `libc/riscv/`:
+In `libc/riscv64/`:
 
 - `crt0.S` — start-up code: sets up the stack, calls `main`, then `exit`.
 - `console.s` — `putbyte` prints a character; `exit` stops qemu. `exit(0)` makes qemu
@@ -97,8 +97,8 @@ qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none
 ```
 
 Without installing, use `build/parse`, `build/lower`, `build/backend/genriscv`, the
-headers in `libc/riscv/include` and `libc/common/include`, and the library in
-`build/libc/riscv/`.
+headers in `libc/riscv64/include` and `libc/common/include`, and the library in
+`build/libc/riscv64/`.
 
 To read the intermediate code, run `lower` with `--yaml`.
 

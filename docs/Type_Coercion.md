@@ -63,7 +63,7 @@ The result is computed by `get_common_type()` in `semantic/typecheck.c`, which g
 `long double` the highest floating rank (a mixed `long double` operand wins).  On RISC-V
 the three are distinct formats — `float` is IEEE binary32, `double` binary64 and
 `long double` binary128 — so each widening or narrowing is a real conversion (a
-binary128 one goes through the software runtime in `libc/riscv/float128.c`). A target
+binary128 one goes through the software runtime in `libc/riscv64/float128.c`). A target
 whose formats coincide (BESM-6 has one native FP word for all three) gets a plain copy
 instead.
 

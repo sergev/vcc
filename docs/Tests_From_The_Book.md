@@ -275,7 +275,7 @@ backend's general run fixture `RiscvTest` in
 
 The book's programs are judged by the value `main` returns, but a test compares *printed
 output*. The bridge is a startup object: `crt0-status.o` is our ordinary `crt0` built with
-`-DPRINT_STATUS` ([libc/riscv/crt0.S](../libc/riscv/crt0.S)), which calls `main` and then
+`-DPRINT_STATUS` ([libc/riscv64/crt0.S](../libc/riscv64/crt0.S)), which calls `main` and then
 prints its return value as `"%d\n"` before exiting. So a book program that ends
 `return 2;` prints `2`, and the test checks that the output is `"2\n"`. This one trick works
 for the whole corpus: simple programs whose return value is the point, and the book's
@@ -294,7 +294,7 @@ expectation itself is suspect.
 
 **When the tools are missing.** The run tests need clang with RISC-V support, `ld.lld` and
 `qemu-system-riscv64` (found by CMake in
-[libc/riscv/CMakeLists.txt](../libc/riscv/CMakeLists.txt); on macOS
+[libc/riscv64/CMakeLists.txt](../libc/riscv64/CMakeLists.txt); on macOS
 `brew install llvm lld qemu`). The fixture's `SetUp` calls `SKIP_IF_NO_RISCV_TOOLS()`, so on
 a machine without them every book test reports *skipped* rather than failed, and
 `make run` stays green.

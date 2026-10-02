@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Test cases for the binary128 runtime (libc/riscv/float128.c): random and special
+# Test cases for the binary128 runtime (libc/riscv64/float128.c): random and special
 # operands, with results computed exactly by rational arithmetic and rounded to
 # nearest even.  Writes float128_cases.inc, a C++ raw string of C tables, for
 # float128_tests.cpp.  Deterministic: rerun to regenerate.

@@ -1,5 +1,5 @@
 //
-// long double (binary128): the runtime routines in libc/riscv/float128.c, reached
+// long double (binary128): the runtime routines in libc/riscv64/float128.c, reached
 // through C operators compiled by us, against exact results (gen_float128_cases.py);
 // and long double values passed to and from clang-compiled code.
 //

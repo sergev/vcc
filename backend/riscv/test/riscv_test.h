@@ -1,5 +1,8 @@
 // RISC-V fixture: compile C source to assembly in-process, and run it on bare-metal
 // qemu `virt` (assemble with clang, link with ld.lld against crt0 and libc.a).
+//
+// The width comes from RISCV_TEST_XLEN (64 by default): riscv32-tests is built from
+// the same sources with 32, and with the riscv32 headers, runtime and qemu.
 #pragma once
 
 #include <fstream>
@@ -8,6 +11,19 @@
 
 #include "backend_test.h"
 #include "codegen.h"
+
+#ifndef RISCV_TEST_XLEN
+#define RISCV_TEST_XLEN 64
+#endif
+#if RISCV_TEST_XLEN == 32
+#define RISCV_TEST_TARGET "riscv32"
+#define RISCV_TEST_MARCH  "-march=rv32imfd"
+#define RISCV_TEST_MABI   "-mabi=ilp32d"
+#else
+#define RISCV_TEST_TARGET "riscv64"
+#define RISCV_TEST_MARCH  "-march=rv64imfd"
+#define RISCV_TEST_MABI   "-mabi=lp64d"
+#endif
 
 // The RISC-V tools, from CMake; a missing one names a path that does not exist.
 inline bool riscv_tools_available()
@@ -27,11 +43,12 @@ class RiscvTest : public BackendTest {
 protected:
     int exit_status = -1; // of the last run: main's result, modulo 256
 
-    RiscvTest() : BackendTest("riscv64") 
+    RiscvTest() : BackendTest(RISCV_TEST_TARGET)
     {
-        riscv_regalloc = true;
+        riscv_regalloc      = true;
         riscv_peephole      = true;
         riscv_frame_pointer = false;
+        riscv_xlen          = RISCV_TEST_XLEN / 8;
     }
 
     // Assembly of every toplevel of the translation unit.
@@ -100,6 +117,15 @@ protected:
     }
 
 private:
+    // Scratch file of the current test: TEST_DIR/<Suite>.<Test>[-rv32]<tag>.  The suite
+    // keeps apart tests of one name in two suites, the width the two test binaries.
+    static std::string RiscvScratchPath(const std::string &tag)
+    {
+        const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
+        return std::string(TEST_DIR "/") + info->test_suite_name() + "." + info->name() +
+               (RISCV_TEST_XLEN == 32 ? "-rv32" : "") + tag;
+    }
+
     // Assemble `asm_text` (unless empty) and compile `clang_src` (if any) with
     // `clang_flags`, link and run under qemu.  Scratch files are named by the test and
     // `tag`.  Returns the UART output, or "ERROR".
@@ -108,7 +134,7 @@ private:
                     const std::vector<std::string> &clang_flags = {}, const char *tag = "")
     {
         exit_status          = -1;
-        std::string base     = ScratchPath(tag);
+        std::string base     = RiscvScratchPath(tag);
         std::string s_path   = base + ".s";
         std::string o_path   = base + ".o";
         std::string exe_path = base + ".elf";
@@ -128,8 +154,8 @@ private:
                 std::ofstream s(s_path);
                 s << asm_text;
             }
-            rc = RunTool({ RISCV_CLANG, "--target=riscv64", "-march=rv64imfd", "-mabi=lp64d",
-                           "-c", "-o", o_path, s_path },
+            rc = RunTool({ RISCV_CLANG, "--target=" RISCV_TEST_TARGET, RISCV_TEST_MARCH,
+                           RISCV_TEST_MABI, "-c", "-o", o_path, s_path },
                          log_path);
             EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
             if (rc != 0)
@@ -143,9 +169,15 @@ private:
                 std::ofstream c(c_path);
                 c << *clang_src;
             }
-            std::vector<std::string> cc = { RISCV_CLANG,       "--target=riscv64", "-march=rv64imfd",
-                                            "-mabi=lp64d",     "-mcmodel=medany",  "-ffreestanding",
-                                            "-fno-builtin",    "-c",               "-o",
+            std::vector<std::string> cc = { RISCV_CLANG,
+                                            "--target=" RISCV_TEST_TARGET,
+                                            RISCV_TEST_MARCH,
+                                            RISCV_TEST_MABI,
+                                            "-mcmodel=medany",
+                                            "-ffreestanding",
+                                            "-fno-builtin",
+                                            "-c",
+                                            "-o",
                                             co_path };
             cc.insert(cc.end(), clang_flags.begin(), clang_flags.end());
             cc.push_back(c_path);

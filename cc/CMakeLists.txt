@@ -5,7 +5,7 @@
 # vcc finds our own passes (vcpp, vparse, vlower, vgen*) in the directory it runs
 # from and each target's headers and libraries in ../share/vcc/<target>, so the
 # installation is relocatable.  The RISC-V assembler and linker default to the
-# clang and ld.lld found at configure time (libc/riscv/CMakeLists.txt), else to
+# clang and ld.lld found at configure time (libc/riscv64/CMakeLists.txt), else to
 # whatever is on PATH.
 #
 add_executable(cc cc.c)

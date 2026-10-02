@@ -2,7 +2,7 @@
 
 This article is a guided tour of the C11 standard-library headers that ship with VCC, as
 a RISC-V (riscv64) programmer sees them. They live in two source directories:
-[`libc/riscv/include/`](../libc/riscv/include/) holds the headers that depend on the
+[`libc/riscv64/include/`](../libc/riscv64/include/) holds the headers that depend on the
 target's data model, and [`libc/common/include/`](../libc/common/include/) the
 target-neutral rest, searched second. `make install` copies both into one directory,
 `share/vcc/riscv64/include/`. The article explains what each header is *for*, what it
@@ -26,7 +26,7 @@ Those services live in the **standard library**, and the library presents itself
 program through a fixed set of **headers** — files you pull in with `#include`. A header
 declares the *interface* (types, macros, function prototypes); the *implementation* lives
 in a compiled library — here the RISC-V runtime `libc.a`, together with the start-up
-object `crt0.o` and the linker script `link.ld`, all built in `build/libc/riscv/` and
+object `crt0.o` and the linker script `link.ld`, all built in `build/libc/riscv64/` and
 installed to `share/vcc/riscv64/lib/`.
 
 This article describes the full C11 header *interface*. Only a subset is implemented so
@@ -65,7 +65,7 @@ which translation phases 1–4 are already done: it understands `#`-line markers
 preprocessor first, and the preprocessed result fed to the toolchain. In the build tree:
 
 ```sh
-cc -E -nostdinc -Ilibc/riscv/include -Ilibc/common/include prog.c -o prog.i
+cc -E -nostdinc -Ilibc/riscv64/include -Ilibc/common/include prog.c -o prog.i
 build/parse  prog.i prog.ast
 build/lower  -t riscv64 prog.ast prog.tac
 build/backend/genriscv prog.tac prog.s
@@ -122,7 +122,7 @@ library.
 | `CHAR_BIT` is **8**; plain `char` is **unsigned** (the RISC-V ABI). | `CHAR_MIN` is 0, `CHAR_MAX` 255. |
 | `_Bool` is one byte; converting any scalar to it yields 0 or 1. | `<stdbool.h>` is plain macros over `_Bool`. |
 | `float` and `double` are IEEE-754 **binary32** and **binary64**, in hardware (the F and D extensions). | `<float.h>` has the familiar IEEE values; `<math.h>` defines `INFINITY` and `NAN`; `printf` prints `inf`/`nan`. |
-| `long double` is IEEE **binary128**, 16 bytes, computed in software (`libc/riscv/float128.c`). | `LDBL_MANT_DIG` is 113; `max_align_t` has 16-byte alignment. |
+| `long double` is IEEE **binary128**, 16 bytes, computed in software (`libc/riscv64/float128.c`). | `LDBL_MANT_DIG` is 113; `max_align_t` has 16-byte alignment. |
 | A variadic function saves `a0`–`a7` just below its stack arguments. | `<stdarg.h>` needs no compiler builtins: `va_list` is a `char *` that walks 8-byte slots. |
 | No operating system: programs run bare-metal on qemu `virt`. Output goes byte by byte to the ns16550 UART. | `<stdio.h>` works on `stdout` only; there is no file layer; `flush` is a no-op. |
 
@@ -293,7 +293,7 @@ What to know on RISC-V:
   UART's transmitter and writes one byte; run qemu with `-serial stdio` to see it. Output
   is unbuffered, so `flush` does nothing, and `putch` is simply `putbyte`. There is no
   input: `getch` is declared but not implemented for this target.
-- **The format engine** (`libc/riscv/doprnt.c`) handles `%d %i %u %o %x %X %c %s %p %f
+- **The format engine** (`libc/riscv64/doprnt.c`) handles `%d %i %u %o %x %X %c %s %p %f
   %F %e %E %g %G %%`, the flags `-+ #0`, a width and precision (also as `*`), and the
   length modifiers `hh`, `h`, `l`, `ll`, `j`, `z`, `t`, which select the argument type.
   Conversion letters keep their case: `%x` prints lower-case hex, `%X` upper-case.
@@ -370,7 +370,7 @@ the `wctype`/`wctrans` extensible-property mechanism. It draws `wint_t` and `WEO
 | Misc | `hypot`, `fma`, `fmin`, `fmax`, `copysign` |
 
 Implemented in `libc.a` so far: `fabs`, `fmin`, `fmax`, `fma` (shared C sources), and the
-binary64-specific `modf`, `frexp` and `ldexp` (in `libc/riscv/`), which work on the
+binary64-specific `modf`, `frexp` and `ldexp` (in `libc/riscv64/`), which work on the
 IEEE bit layout directly. The rest are declared for future implementation.
 
 Because the formats are IEEE, `<math.h>` defines `INFINITY` and `NAN`. The compiler has

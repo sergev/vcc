@@ -3,6 +3,7 @@
 //
 #include <string.h>
 
+#include "codegen.h"
 #include "internal.h"
 
 static void emit_ascii(FILE *out, const char *s, size_t len)
@@ -82,12 +83,14 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
         return (int)len;
     }
     case TAC_STATIC_INIT_POINTER:
-    case TAC_STATIC_INIT_FAT_POINTER:
+    case TAC_STATIC_INIT_FAT_POINTER: {
+        const char *dir = riscv_xlen == 8 ? ".dword " : ".word  ";
         if (it->u.pointer.byte_offset)
-            fprintf(out, "    .dword  %s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
+            fprintf(out, "    %s %s%+d\n", dir, it->u.pointer.name, it->u.pointer.byte_offset);
         else
-            fprintf(out, "    .dword  %s\n", it->u.pointer.name);
-        return 8;
+            fprintf(out, "    %s %s\n", dir, it->u.pointer.name);
+        return riscv_xlen;
+    }
     }
     return 0;
 }

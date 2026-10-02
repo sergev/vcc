@@ -6,10 +6,48 @@
 #include <string.h>
 
 #include "internal.h"
+#include "xalloc.h"
 
 bool riscv_regalloc = true;
 bool riscv_peephole = true;
 bool riscv_frame_pointer = false;
+int riscv_xlen           = 8;
+
+// Numbers the double literals of a translation unit: .LC0, .LC1, ...
+static int const_seq;
+
+int riscv_const_label(Gen *g, uint64_t bits)
+{
+    for (int i = 0; i < g->nconsts; i++)
+        if (g->const_bits[i] == bits)
+            return g->const_label[i];
+    if (g->nconsts == g->consts_cap) {
+        g->consts_cap   = g->consts_cap ? 2 * g->consts_cap : 8;
+        uint64_t *bits_ = xalloc(g->consts_cap * sizeof(uint64_t), __func__, __FILE__, __LINE__);
+        int *label      = xalloc(g->consts_cap * sizeof(int), __func__, __FILE__, __LINE__);
+        if (g->nconsts) {
+            memcpy(bits_, g->const_bits, g->nconsts * sizeof(uint64_t));
+            memcpy(label, g->const_label, g->nconsts * sizeof(int));
+        }
+        xfree(g->const_bits);
+        xfree(g->const_label);
+        g->const_bits  = bits_;
+        g->const_label = label;
+    }
+    g->const_bits[g->nconsts]  = bits;
+    g->const_label[g->nconsts] = const_seq++;
+    return g->const_label[g->nconsts++];
+}
+
+static void emit_consts(FILE *out, const Gen *g)
+{
+    if (g->nconsts == 0)
+        return;
+    fprintf(out, "    .section .rodata\n    .p2align 3\n");
+    for (int i = 0; i < g->nconsts; i++)
+        fprintf(out, ".LC%d:\n    .word   0x%08x\n    .word   0x%08x\n", g->const_label[i],
+                (unsigned)g->const_bits[i], (unsigned)(g->const_bits[i] >> 32));
+}
 
 // Save slots for the callee-saved registers in use, then a register or a slot for
 // every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment
@@ -67,6 +105,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     if (riscv_peephole)
         rv_peephole(g.fn);
     rv_emit_func(out, g.fn);
+    emit_consts(out, &g);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)
         emit_static_variable(out, s->name, false, s->type, s->init_list, false, s->alignment);
@@ -85,6 +124,8 @@ static int declared_alignment(const Tac_TopLevel *program, const char *name)
 
 void riscv_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
+    if (tl == program)
+        const_seq = 0; // a new translation unit
     switch (tl->kind) {
     case TAC_TOPLEVEL_FUNCTION:
         gen_function(program, tl, out);

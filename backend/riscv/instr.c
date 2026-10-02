@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "codegen.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -58,7 +59,7 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     } else if (rv_is_fp(t)) {
         // t0 = (cond == 0.0), so a zero condition is a nonzero t0.
         int f = use_val(g, RV_F0, cond);
-        emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
+        fp_zero(g, RV_F0 + 1, rv_is_double(t));
         emit3(g, rv_is_double(t) ? RV_FEQD : RV_FEQS, rv_reg(RV_T0), rv_reg(f), rv_reg(RV_F0 + 1));
         if_zero = !if_zero;
         reg     = RV_T0;
@@ -161,7 +162,7 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
     int p              = use_val(g, RV_T0, in->u.add_ptr.ptr);
     int i              = use_val(g, RV_T1, in->u.add_ptr.index);
     const Tac_Type *it = val_type(g, in->u.add_ptr.index);
-    if (rv_size(it) == 4 && rv_is_unsigned(it)) {
+    if (rv_size(it) == 4 && rv_is_unsigned(it) && riscv_xlen == 8) {
         emit3(g, RV_SLLI, rv_reg(RV_T1), rv_reg(i), rv_imm(32));
         emit3(g, RV_SRLI, rv_reg(RV_T1), rv_reg(RV_T1), rv_imm(32));
         i = RV_T1;
@@ -276,7 +277,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 static void gen_zext(Gen *g, int dst, int src, int size)
 {
     static const Tac_Type ulong = { .kind = TAC_TYPE_ULONG };
-    if (size >= 8) {
+    if (size >= riscv_xlen) {
         move_reg(g, dst, src, &ulong);
         return;
     }
@@ -284,7 +285,7 @@ static void gen_zext(Gen *g, int dst, int src, int size)
         emit3(g, RV_ANDI, rv_reg(dst), rv_reg(src), rv_imm(255));
         return;
     }
-    int shift = 64 - 8 * size;
+    int shift = 8 * riscv_xlen - 8 * size;
     emit3(g, RV_SLLI, rv_reg(dst), rv_reg(src), rv_imm(shift));
     emit3(g, RV_SRLI, rv_reg(dst), rv_reg(dst), rv_imm(shift));
 }
@@ -312,7 +313,7 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     int s  = use_val(g, RV_F0, in->u.unary.src);
     if (in->u.unary.op == TAC_UNARY_NOT) {
         int r = def_reg(g, RV_T0, in->u.unary.dst);
-        emit2(g, d ? RV_FMVDX : RV_FMVWX, rv_reg(RV_F0 + 1), rv_reg(RV_ZERO));
+        fp_zero(g, RV_F0 + 1, d);
         emit3(g, d ? RV_FEQD : RV_FEQS, rv_reg(r), rv_reg(s), rv_reg(RV_F0 + 1));
         store_val(g, r, in->u.unary.dst);
         return;
@@ -370,7 +371,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_fp_unary(g, in, t);
         return;
     }
-    bool word    = rv_size(t) <= 4;
+    bool word    = rv_size(t) <= 4 && riscv_xlen == 8; // rv32 has no *w forms
     Rv_Operand s = rv_reg(use_val(g, RV_T0, in->u.unary.src));
     int d        = def_reg(g, RV_T0, in->u.unary.dst);
     switch (in->u.unary.op) {
@@ -650,7 +651,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Rv_Operand a = rv_reg(use_val(g, RV_T0, in->u.binary.src1));
     Rv_Operand b = rv_reg(use_val(g, RV_T1, in->u.binary.src2));
     int d        = def_reg(g, RV_T0, in->u.binary.dst);
-    gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4,
+    gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4 && riscv_xlen == 8,
                   rv_is_unsigned(t) || is_unsigned_op(in->u.binary.op), rv_reg(d), a, b);
     store_int_result(g, d, in->u.binary.dst);
 }

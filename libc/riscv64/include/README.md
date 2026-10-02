@@ -6,7 +6,7 @@ target-neutral headers are in [libc/common/include](../../common/include), which
 searched second:
 
 ```sh
-cc -E -nostdinc -I libc/riscv/include -I libc/common/include prog.c prog.i
+cc -E -nostdinc -I libc/riscv64/include -I libc/common/include prog.c prog.i
 ```
 
 `int` is 32 bits, `long` and pointers 64, plain `char` unsigned; `float` and `double`

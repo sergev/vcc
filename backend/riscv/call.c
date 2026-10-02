@@ -10,6 +10,10 @@
 // 16-byte boundary on the stack, and when variadic in an even register.  Return
 // values use the same rules with a0/a1 and fa0/fa1.
 //
+// On rv32 (ILP32D) the same rules hold with 4-byte registers and stack slots: a struct
+// of up to 8 bytes goes in registers, a larger one by reference.
+//
+#include "codegen.h"
 #include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
@@ -40,7 +44,7 @@ static void take_int(ArgState *s, Piece *p)
     } else {
         p->reg   = -1;
         p->stack = s->stack;
-        s->stack += 8;
+        s->stack += riscv_xlen;
     }
 }
 
@@ -50,7 +54,7 @@ typedef struct {
 } Field;
 
 // Flatten `t` at `off` into scalar fields; false when there would be more than two,
-// or one wider than 8 bytes, or `t` holds a union.
+// or one wider than a register of its class, or `t` holds a union.
 static bool flatten(const Tac_Type *t, int off, Field *f, int *n)
 {
     switch (t->kind) {
@@ -67,7 +71,7 @@ static bool flatten(const Tac_Type *t, int off, Field *f, int *n)
                 return false;
         return true;
     default:
-        if (*n == 2 || rv_size(t) > 8)
+        if (*n == 2 || rv_size(t) > (rv_is_fp(t) ? 8 : riscv_xlen))
             return false;
         f[(*n)++] = (Field){ t, off };
         return true;
@@ -130,20 +134,21 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
             take_int(s, &a.piece[0]);
         return a;
     }
-    int size = rv_size(t);
-    if (size > 16) {
+    // FP registers first: on rv32 a flattened struct may be wider than two registers.
+    int size = rv_size(t), x = riscv_xlen;
+    if (!variadic && classify_fp(s, t, &a))
+        return a;
+    if (size > 2 * x) {
         a.by_ref   = true;
         a.npieces  = 1;
-        a.piece[0] = (Piece){ .size = 8 };
+        a.piece[0] = (Piece){ .size = x };
         take_int(s, &a.piece[0]);
         return a;
     }
-    if (!variadic && classify_fp(s, t, &a))
-        return a;
     align_pair(s, t, variadic);
-    a.npieces = size > 8 ? 2 : 1;
+    a.npieces = size > x ? 2 : 1;
     for (int i = 0; i < a.npieces; i++) {
-        a.piece[i] = (Piece){ .offset = 8 * i, .size = size - 8 * i < 8 ? size - 8 * i : 8 };
+        a.piece[i] = (Piece){ .offset = x * i, .size = size - x * i < x ? size - x * i : x };
         take_int(s, &a.piece[i]);
     }
     return a;
@@ -171,14 +176,24 @@ static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
         store_bytes(g, reg, base, off + pc->offset, pc->size);
 }
 
+// TODO: a double in an integer register pair on rv32 (Plan.md R29).
+static void check_fp_move(Gen *g, const Tac_Type *t)
+{
+    if (riscv_xlen == 4 && rv_is_double(t))
+        fatal_error("riscv: %s: double in integer registers is not supported on rv32 yet",
+                    gen_name(g));
+}
+
 // Move an FP value between an FP register and an integer register.
 static void fp_to_int(Gen *g, const Tac_Type *t, int ireg, int freg)
 {
+    check_fp_move(g, t);
     emit2(g, rv_is_double(t) ? RV_FMVXD : RV_FMVXW, rv_reg(ireg), rv_reg(freg));
 }
 
 static void int_to_fp(Gen *g, const Tac_Type *t, int freg, int ireg)
 {
+    check_fp_move(g, t);
     emit2(g, rv_is_double(t) ? RV_FMVDX : RV_FMVWX, rv_reg(freg), rv_reg(ireg));
 }
 
@@ -272,9 +287,10 @@ void gen_params(Gen *g)
     Move moves[16];
     int nmoves = 0;
     bool variadic = gen_variadic(g);
+    int x = riscv_xlen;
     if (variadic)
         for (int i = 0; i < 8; i++)
-            emit2(g, RV_SD, rv_reg(RV_A0 + i), rv_mem(RV_S0, -64 + 8 * i));
+            emit2(g, xlen_store(), rv_reg(RV_A0 + i), rv_mem(RV_S0, x * (i - 8)));
     ArgState s = { 0 };
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
@@ -295,7 +311,7 @@ void gen_params(Gen *g)
             continue;
         }
         if (variadic && in_int_regs(&a)) {
-            place_slot(g, p->name, t, -64 + 8 * (a.piece[0].reg - RV_A0));
+            place_slot(g, p->name, t, x * (a.piece[0].reg - RV_A0 - 8));
             continue;
         }
         int size = rv_size(t);
@@ -304,7 +320,7 @@ void gen_params(Gen *g)
             const Piece *pc = &a.piece[0];
             int src         = pc->reg;
             if (src < 0) {
-                emit2(g, RV_LD, rv_reg(RV_T3), mem(g, RV_S0, pc->stack));
+                emit2(g, xlen_load(), rv_reg(RV_T3), mem(g, RV_S0, pc->stack));
                 src = RV_T3;
             }
             gen_memcopy(g, RV_S0, off, src, 0, size, rv_align(t));
@@ -313,7 +329,7 @@ void gen_params(Gen *g)
                 const Piece *pc = &a.piece[i];
                 int reg         = pc->reg;
                 if (reg < 0) {
-                    emit2(g, RV_LD, rv_reg(RV_T0), mem(g, RV_S0, pc->stack));
+                    emit2(g, xlen_load(), rv_reg(RV_T0), mem(g, RV_S0, pc->stack));
                     reg = RV_T0;
                 }
                 store_piece(g, reg, RV_S0, off, pc);
@@ -359,7 +375,7 @@ static void arg_to_stack(Gen *g, Arg *a)
         const Piece *pc = &a->loc.piece[0];
         if (pc->reg < 0) {
             gen_addr(g, RV_T0, RV_S0, a->copy);
-            emit2(g, RV_SD, rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
+            emit2(g, xlen_store(), rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
         }
         return;
     }
@@ -377,7 +393,7 @@ static void arg_to_stack(Gen *g, Arg *a)
             load_val(g, RV_T0, a->v);
             conform(g, RV_T0, t, a->want);
         }
-        emit2(g, RV_SD, rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
+        emit2(g, xlen_store(), rv_reg(RV_T0), mem(g, RV_SP, pc->stack));
     }
 }
 

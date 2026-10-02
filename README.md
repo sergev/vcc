@@ -73,7 +73,7 @@ print its output as readable YAML text (`--yaml`) or as a diagram for
 The preprocessor ([cpp/README.md](cpp/README.md)) descends from the Unix v7 `cpp`,
 modernized to C11 in the [v7besm](https://github.com/besm6/v7besm) project. In the build
 tree, point it at the source headers:
-`build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv/include -Ilibc/common/include prog.c prog.i`.
+`build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv64/include -Ilibc/common/include prog.c prog.i`.
 Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too.)
 
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
@@ -98,7 +98,7 @@ make install    # install (see below)
 Compile a small program by hand and look at each stage:
 
 ```bash
-./build/cpp/cpp -nostdinc -Ilibc/riscv/include -Ilibc/common/include \
+./build/cpp/cpp -nostdinc -Ilibc/riscv64/include -Ilibc/common/include \
     hello.c hello.i                             # C source -> preprocessed C
 ./build/parse hello.i hello.ast                 # C        -> syntax tree
 ./build/lower -t riscv64 hello.ast hello.tac    # tree     -> three-address code

@@ -20,7 +20,7 @@
 // gen_prologue.
 //
 // A long double never gets a register: it lives in a 16-byte slot, and its
-// operations are calls to the runtime (libc/riscv/float128.c).
+// operations are calls to the runtime (libc/riscv64/float128.c).
 //
 // Scratch registers: t0-t2 and ft0-ft2 hold operands, t3/t4 addresses of an
 // aggregate copy, t5 the address of a global, t6 a large frame offset or the bits of
@@ -54,6 +54,10 @@ typedef struct {
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots
+    int nconsts;       // double literals (rv32), emitted after the function
+    int consts_cap;
+    uint64_t *const_bits;
+    int *const_label;  // .LC<n>
 } Gen;
 
 //
@@ -68,6 +72,9 @@ bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);
 bool gen_variadic(const Gen *g);
+// Load and store of a register-width integer: ld/sd, or lw/sw on rv32.
+Rv_Op xlen_load(void);
+Rv_Op xlen_store(void);
 
 //
 // Frame and value access (frame.c)
@@ -105,6 +112,10 @@ void store_val(Gen *g, int reg, const Tac_Val *v);
 int use_val(Gen *g, int scratch, const Tac_Val *v);
 // The register to compute `v` into: its own, or `scratch` (then store_val it).
 int def_reg(const Gen *g, int scratch, const Tac_Val *v);
+// FP register `reg` = +0.0, a double when `dbl`.
+void fp_zero(Gen *g, int reg, bool dbl);
+// The label number of a double literal with `bits`, emitted after the function.
+int riscv_const_label(Gen *g, uint64_t bits);
 // dst = src, registers of one class; nothing when they are the same.
 void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
 // dst = src in the register form of integer type `t`: extended from its width.
