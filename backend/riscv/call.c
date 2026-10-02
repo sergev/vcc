@@ -25,6 +25,9 @@
 #include "internal.h"
 #include "xalloc.h"
 
+// The type of a register holding a word of a long long, in a move.
+static const Tac_Type word = { .kind = TAC_TYPE_UINT };
+
 // One register-sized part of an argument: where it goes, and what it holds.
 typedef struct {
     int reg;              // register, or -1 for the stack
@@ -339,7 +342,7 @@ static void parallel_move(Gen *g, Move *m, int n)
 // which may be other argument registers; parameters on the stack are loaded last.
 void gen_params(Gen *g)
 {
-    Move moves[16];
+    Move moves[32];
     int nmoves = 0;
     struct {
         int reg, slot;
@@ -374,17 +377,18 @@ void gen_params(Gen *g)
                 }
                 store_piece(g, reg, RV_S0, slot, pc);
             }
-            place_reg(g, p->name, t, preg);
+            place_reg(g, p->name, t, preg, 0);
             fp_loads[nfp_loads].reg    = preg;
             fp_loads[nfp_loads++].slot = slot;
             continue;
         }
         if (preg) {
-            // A scalar, into its register.
-            const Piece *pc = &a.piece[0];
-            place_reg(g, p->name, t, preg);
-            if (pc->reg >= 0)
-                moves[nmoves++] = (Move){ preg, pc->reg, t, NULL };
+            // A scalar, into its register (a long long, into two).
+            int hi = assigned_reg_hi(g, p->name);
+            place_reg(g, p->name, t, preg, hi);
+            for (int i = 0; i < a.npieces; i++)
+                if (a.piece[i].reg >= 0)
+                    moves[nmoves++] = (Move){ i ? hi : preg, a.piece[i].reg, hi ? &word : t, NULL };
             continue;
         }
         if (!a.by_ref && a.piece[0].reg < 0) {
@@ -429,9 +433,14 @@ void gen_params(Gen *g)
     s = first_arg(ret);
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
-        int preg = assigned_reg(g, p->name);
-        if (preg && a.piece[0].reg < 0)
+        int preg = assigned_reg(g, p->name), hi = assigned_reg_hi(g, p->name);
+        if (preg && hi) {
+            for (int i = 0; i < 2; i++)
+                if (a.piece[i].reg < 0)
+                    emit2(g, RV_LW, rv_reg(i ? hi : preg), mem(g, RV_S0, a.piece[i].stack));
+        } else if (preg && a.piece[0].reg < 0) {
             load_mem(g, preg, p->type, RV_S0, a.piece[0].stack);
+        }
     }
 }
 
@@ -511,14 +520,24 @@ static void arg_to_stack(Gen *g, Arg *a)
 }
 
 // A scalar argument in a register, already in a register: a move.
-static bool arg_move(const Gen *g, const Arg *a, Move *m)
+// Moves for the parts of argument `a` in a register, already in registers (both words
+// of a long long); returns their number, 0 when none.
+static int arg_moves(const Gen *g, const Arg *a, Move *m)
 {
-    int src = var_reg(g, a->v);
-    if (!src || a->loc.by_ref || rv_is_aggregate(a->type) || a->loc.piece[0].reg < 0 ||
-        a->loc.npieces != 1)
-        return false;
+    int src = var_reg(g, a->v), hi = var_reg_hi(g, a->v);
+    if (!src || a->loc.by_ref || rv_is_aggregate(a->type))
+        return 0;
+    if (hi) {
+        int n = 0;
+        for (int i = 0; i < 2; i++)
+            if (a->loc.piece[i].reg >= 0)
+                m[n++] = (Move){ a->loc.piece[i].reg, i ? hi : src, &word, NULL };
+        return n;
+    }
+    if (a->loc.piece[0].reg < 0 || a->loc.npieces != 1)
+        return 0;
     *m = (Move){ a->loc.piece[0].reg, src, a->type, a->want };
-    return true;
+    return 1;
 }
 
 // Load argument `a`'s register parts from memory or a constant.
@@ -581,6 +600,10 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
 static void store_result(Gen *g, const Tac_Val *dst, const Tac_Type *ret)
 {
     const Tac_Type *t = val_type(g, dst);
+    if (var_reg_hi(g, dst)) {
+        set_pair(g, dst, RV_A0, RV_A0 + 1);
+        return;
+    }
     if (!rv_is_aggregate(t) && !rv_is_pair(t)) {
         if (!rv_is_fp(t))
             conform(g, RV_A0, ret, t);
@@ -621,7 +644,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next)
         nargs++;
     Arg *args            = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
-    Move moves[16];
+    Move moves[32];
     int nmoves           = 0;
     const Tac_Type *ret  = ret_type(ft);
     if (!ret && in->u.fun_call.dst)
@@ -643,12 +666,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         arg_to_stack(g, a);
     }
     for (i = 0; i < nargs; i++)
-        if (arg_move(g, &args[i], &moves[nmoves]))
-            nmoves++;
+        nmoves += arg_moves(g, &args[i], &moves[nmoves]);
     parallel_move(g, moves, nmoves);
     for (i = 0; i < nargs; i++) {
-        Move m;
-        if (!arg_move(g, &args[i], &m))
+        Move m[2];
+        if (!arg_moves(g, &args[i], m))
             arg_to_regs(g, &args[i]);
     }
     xfree(args);
@@ -677,17 +699,25 @@ void gen_call(Gen *g, const Tac_Instruction *in)
 }
 
 void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
-                      int nargs, const Tac_Val *dst)
+                      const Tac_Type *const *types, int nargs, const Tac_Val *dst)
 {
     Tac_Type params[4];
     Tac_Val vals[4];
+    Tac_Const consts[4];
     if (nargs > 4)
         fatal_error("riscv: %s: runtime call with %d arguments", gen_name(g), nargs);
     for (int i = 0; i < nargs; i++) {
-        params[i]      = *val_type(g, args[i]);
+        params[i]      = types ? *types[i] : *val_type(g, args[i]);
         params[i].next = i + 1 < nargs ? &params[i + 1] : NULL;
         vals[i]        = *args[i];
         vals[i].next   = i + 1 < nargs ? &vals[i + 1] : NULL;
+        if (types && rv_is_ll(types[i]) && args[i]->kind == TAC_VAL_CONSTANT &&
+            !rv_is_ll(val_type(g, args[i]))) {
+            // A narrower constant, as the long long the routine takes.
+            consts[i]                 = (Tac_Const){ .kind = TAC_CONST_LONG_LONG };
+            consts[i].u.long_long_val = const_value(g, args[i]->u.constant);
+            vals[i].u.constant        = &consts[i];
+        }
     }
     Tac_Type fun                 = { .kind = TAC_TYPE_FUN_TYPE };
     fun.u.fun_type.param_types   = nargs ? params : NULL;
@@ -716,7 +746,11 @@ void gen_return(Gen *g, const Tac_Val *v)
         }
     } else if (v) {
         const Tac_Type *t = val_type(g, v);
-        if (rv_is_pair(t)) {
+        if (var_reg_hi(g, v)) {
+            Move m[2] = { { RV_A0, var_reg(g, v), &word, NULL },
+                          { RV_A0 + 1, var_reg_hi(g, v), &word, NULL } };
+            parallel_move(g, m, 2);
+        } else if (rv_is_pair(t)) {
             pair_half(g, RV_A0, v, 0);
             pair_half(g, RV_A0 + 1, v, 1);
         } else if (rv_is_aggregate(t)) {

@@ -37,6 +37,7 @@ typedef struct {
     const Tac_Type *type;
     int offset; // from s0
     int reg;    // allocated register, or 0 for the slot
+    int reg_hi; // of a long long on rv32 in registers: the high word's
 } Slot;
 
 typedef struct {
@@ -51,6 +52,7 @@ typedef struct {
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
     StringMap regs;    // name → allocated register
+    StringMap regs_hi; // name → register of a long long's high word
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots
@@ -93,10 +95,13 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
 // Give `name` a slot at a fixed offset (an incoming stack argument).
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset);
 const Slot *find_slot(const Gen *g, const char *name);
-// Keep `name` in register `reg`.
-void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg);
-// The register allocated to name `name` (by gen_regalloc), or 0.
+// Keep `name` in register `reg` (and a long long's high word in `hi`, else 0).
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg, int hi);
+// The register allocated to name `name` (by gen_regalloc), or 0; and the high word's.
 int assigned_reg(const Gen *g, const char *name);
+int assigned_reg_hi(const Gen *g, const char *name);
+// The register holding the high word of long long `v`, or 0.
+int var_reg_hi(const Gen *g, const Tac_Val *v);
 // The register holding variable `v`, or 0 when it is in memory or a constant.
 int var_reg(const Gen *g, const Tac_Val *v);
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
@@ -133,6 +138,9 @@ void load_const_as(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t);
 // Load the low (half 0) or high register of pair value `v` into `reg`.  A narrower
 // integer is extended to a long long.  `reg` is not t5 or t6.
 void pair_half(Gen *g, int reg, const Tac_Val *v, int half);
+// Pair variable `dst` = lo, hi: into its registers, or its memory.  lo and hi are not
+// t5 or t6.
+void set_pair(Gen *g, const Tac_Val *dst, int lo, int hi);
 // Store pair value `src` (or a long double on rv32) at base + off; base is not t0, t2,
 // t3 or t5.
 void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off);
@@ -164,10 +172,11 @@ void param_hints(const Gen *g, StringMap *hints);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
-// A call to runtime routine `name` with arguments `args` of their own types, by the
-// calling convention; the result, of type `ret`, into `dst` (or left in a0/fa0).
+// A call to runtime routine `name` with arguments `args`, of `types` (or their own when
+// NULL), by the calling convention; the result, of type `ret`, into `dst` (or left in
+// a0/fa0).
 void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
-                      int nargs, const Tac_Val *dst);
+                      const Tac_Type *const *types, int nargs, const Tac_Val *dst);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //

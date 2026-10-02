@@ -15,11 +15,7 @@ static void load_pair(Gen *g, int lo, int hi, const Tac_Val *v)
 
 static void store_pair(Gen *g, int lo, int hi, const Tac_Val *dst)
 {
-    int base;
-    int64_t off;
-    name_addr(g, dst->u.var_name, RV_T5, &base, &off);
-    emit2(g, RV_SW, rv_reg(lo), mem(g, base, off));
-    emit2(g, RV_SW, rv_reg(hi), mem(g, base, off + 4));
+    set_pair(g, dst, lo, hi);
 }
 
 static void op3(Gen *g, Rv_Op op, int d, int a, int b)
@@ -38,6 +34,8 @@ static void op2(Gen *g, Rv_Op op, int d, int a)
 }
 
 enum { T0 = RV_T0, T1, T2, T3 = RV_T3, T4 };
+
+static const Tac_Type ll = { .kind = TAC_TYPE_LONG_LONG }, ull = { .kind = TAC_TYPE_ULONG_LONG };
 
 // t0 = a < b, the pairs in t0/t1 and t2/t3.
 static void less_than(Gen *g, bool is_unsigned)
@@ -166,11 +164,13 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     case TAC_BINARY_DIVIDE_UNSIGNED:
     case TAC_BINARY_REMAINDER:
     case TAC_BINARY_REMAINDER_UNSIGNED: {
-        bool div = op == TAC_BINARY_DIVIDE || op == TAC_BINARY_DIVIDE_UNSIGNED;
-        pair_arg(g, RV_A0, a);
-        pair_arg(g, RV_A0 + 2, b);
-        call_runtime(g, div ? (u ? "__udivdi3" : "__divdi3") : (u ? "__umoddi3" : "__moddi3"));
-        pair_result(g, dst);
+        // A call as any other: an operand may be in an argument register.
+        bool div                     = op == TAC_BINARY_DIVIDE || op == TAC_BINARY_DIVIDE_UNSIGNED;
+        const Tac_Type *t            = u ? &ull : &ll;
+        const Tac_Val *args[2]       = { a, b };
+        const Tac_Type *const ts[2] = { t, t };
+        gen_runtime_call(g, div ? (u ? "__udivdi3" : "__divdi3") : (u ? "__umoddi3" : "__moddi3"),
+                         t, args, ts, 2, dst);
         return;
     }
     case TAC_BINARY_LEFT_SHIFT:
@@ -284,10 +284,8 @@ void gen_ll_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Inst
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     if (rv_is_ll(st) && rv_is_ll(dt)) {
-        int base;
-        int64_t off;
-        name_addr(g, dst->u.var_name, RV_T4, &base, &off);
-        copy_pair(g, src, base, off);
+        load_pair(g, T0, T1, src);
+        store_pair(g, T0, T1, dst);
         return;
     }
     if (rv_is_ll(dt)) {
@@ -328,22 +326,26 @@ void gen_ll_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Inst
 
 void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
 {
+    static const Tac_Type d = { .kind = TAC_TYPE_DOUBLE }, f = { .kind = TAC_TYPE_FLOAT };
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
+    const char *name;
+    const Tac_Type *ret, *param;
     if (rv_is_ll(st)) {
         bool u = rv_from_unsigned(kind);
-        pair_arg(g, RV_A0, src);
         if (rv_is_double(dt))
-            call_runtime(g, u ? "__floatundidf" : "__floatdidf");
+            name = u ? "__floatundidf" : "__floatdidf";
         else
-            call_runtime(g, u ? "__floatundisf" : "__floatdisf");
-        store_val(g, RV_FA0, dst);
-        return;
+            name = u ? "__floatundisf" : "__floatdisf";
+        ret   = rv_is_double(dt) ? &d : &f;
+        param = u ? &ull : &ll;
+    } else {
+        bool u = rv_is_unsigned(dt);
+        if (rv_is_double(st))
+            name = u ? "__fixunsdfdi" : "__fixdfdi";
+        else
+            name = u ? "__fixunssfdi" : "__fixsfdi";
+        ret   = u ? &ull : &ll;
+        param = rv_is_double(st) ? &d : &f;
     }
-    bool u = rv_is_unsigned(dt);
-    load_val(g, RV_FA0, src);
-    if (rv_is_double(st))
-        call_runtime(g, u ? "__fixunsdfdi" : "__fixdfdi");
-    else
-        call_runtime(g, u ? "__fixunssfdi" : "__fixsfdi");
-    pair_result(g, dst);
+    gen_runtime_call(g, name, ret, &src, &param, 1, dst);
 }

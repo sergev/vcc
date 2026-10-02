@@ -97,6 +97,12 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
+    if (var_reg_hi(g, dst)) {
+        pair_half(g, RV_T0, src, 0);
+        pair_half(g, RV_T1, src, 1);
+        set_pair(g, dst, RV_T0, RV_T1);
+        return;
+    }
     if (rv_is_pair(t) || rv_is_ld(t)) {
         int base;
         int64_t off;
@@ -145,6 +151,12 @@ static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
     int p             = use_val(g, RV_T3, src_ptr);
+    if (var_reg_hi(g, dst)) {
+        emit2(g, RV_LW, rv_reg(RV_T0), rv_mem(p, 0));
+        emit2(g, RV_LW, rv_reg(RV_T1), rv_mem(p, 4));
+        set_pair(g, dst, RV_T0, RV_T1);
+        return;
+    }
     if (rv_is_aggregate(t) || rv_is_pair(t) || rv_is_ld(t)) {
         int base;
         int64_t off;
@@ -291,6 +303,12 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
     int64_t off;
     name_addr(g, src, RV_T3, &base, &off);
     off += offset;
+    if (var_reg_hi(g, dst)) {
+        emit2(g, RV_LW, rv_reg(RV_T0), mem(g, base, off));
+        emit2(g, RV_LW, rv_reg(RV_T1), mem(g, base, off + 4));
+        set_pair(g, dst, RV_T0, RV_T1);
+        return;
+    }
     if (rv_is_aggregate(t) || rv_is_pair(t) || rv_is_ld(t)) {
         int dbase;
         int64_t doff;
@@ -622,11 +640,7 @@ void pair_arg(Gen *g, int reg, const Tac_Val *v)
 
 void pair_result(Gen *g, const Tac_Val *dst)
 {
-    int base;
-    int64_t off;
-    name_addr(g, dst->u.var_name, RV_T5, &base, &off);
-    emit2(g, xlen_store(), rv_reg(RV_A0), mem(g, base, off));
-    emit2(g, xlen_store(), rv_reg(RV_A0 + 1), mem(g, base, off + riscv_xlen));
+    set_pair(g, dst, RV_A0, RV_A0 + 1);
 }
 
 // Long double arithmetic and comparison: a call to the runtime (libgcc names).  A
@@ -669,7 +683,7 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
         // By reference, the result through a hidden pointer: as any call.
         static const Tac_Type ld = { .kind = TAC_TYPE_LONG_DOUBLE }, i = { .kind = TAC_TYPE_INT };
         const Tac_Val *args[2] = { in->u.binary.src1, in->u.binary.src2 };
-        gen_runtime_call(g, name, arith ? &ld : &i, args, 2, arith ? dst : NULL);
+        gen_runtime_call(g, name, arith ? &ld : &i, args, NULL, 2, arith ? dst : NULL);
         if (arith)
             return;
     } else {
@@ -856,7 +870,7 @@ static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac
         bool w = rv_size(st) <= 4, un = rv_from_unsigned(kind);
         name   = w ? (un ? "__floatunsitf" : "__floatsitf") : (un ? "__floatunditf" : "__floatditf");
     }
-    gen_runtime_call(g, name, ret, &src, 1, dst);
+    gen_runtime_call(g, name, ret, &src, NULL, 1, dst);
 }
 
 bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,

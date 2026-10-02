@@ -7,6 +7,9 @@
 // argument registers a0-a7 and fa0-fa7, first: selection never uses them as scratch,
 // and only a call (or a long double operation, a runtime call) writes them.  A parameter prefers the register it arrives in, an
 // argument its argument register, a returned value or a call's result a0 or fa0.
+// A long long on rv32 needs two registers: its high word is a node of its own (flow
+// variable v + n), interfering with all the low word does and with the low word; a
+// copy of one is not coalesced.  It gets registers only when both halves do.
 //
 #include <string.h>
 
@@ -31,10 +34,12 @@ static const int fp_pool[]  = { RV_FA0,     RV_FA0 + 1, RV_FA0 + 2, RV_FA0 + 3, 
 typedef struct {
     Gen *g;
     Flow *flow;
-    int n;
+    int n;     // flow variables
+    int N;     // nodes: n, then the high words of long longs
+    int words; // per adjacency row
     bool *cand;
     bool *fp;
-    Flow_Set *adj; // n rows of flow->words
+    Flow_Set *adj; // N rows of `words`
     int *alias;
     double *cost;
     int *color; // register, or 0
@@ -44,7 +49,13 @@ typedef struct {
 
 static Flow_Set *row(const Alloc *a, int v)
 {
-    return a->adj + (size_t)v * a->flow->words;
+    return a->adj + (size_t)v * a->words;
+}
+
+// The high-word node of variable v, or -1.
+static int hi_node(const Alloc *a, int v)
+{
+    return v < a->n && a->cand[v + a->n] ? v + a->n : -1;
 }
 
 static void add_edge(Alloc *a, int x, int y)
@@ -58,7 +69,7 @@ static void add_edge(Alloc *a, int x, int y)
 static int degree(const Alloc *a, int v)
 {
     int d = 0;
-    for (int w = 0; w < a->flow->words; w++)
+    for (int w = 0; w < a->words; w++)
         d += __builtin_popcountll(row(a, v)[w]);
     return d;
 }
@@ -93,7 +104,8 @@ static void find_candidates(Alloc *a)
     const Flow *f = a->flow;
     for (int v = 0; v < a->n; v++) {
         const Tac_Type *t = f->types[v];
-        a->cand[v] = t && !flow_has(f->in_memory, v) && !rv_is_aggregate(t) && !rv_is_pair(t) &&
+        a->cand[v] = t && !flow_has(f->in_memory, v) && !rv_is_aggregate(t) &&
+                     (!rv_is_pair(t) || rv_is_ll(t)) &&
                      t->kind != TAC_TYPE_LONG_DOUBLE && t->kind != TAC_TYPE_VOID &&
                      t->kind != TAC_TYPE_FUN_TYPE;
         a->fp[v] = a->cand[v] && rv_is_fp(t);
@@ -107,6 +119,8 @@ static void find_candidates(Alloc *a)
             in->kind == TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET)
             exclude_name(a, in->u.copy_from_offset.src);
     }
+    for (int v = 0; v < a->n; v++)
+        a->cand[v + a->n] = a->cand[v] && rv_is_ll(f->types[v]);
 }
 
 // The source variable of a copy between candidates of one type, or -1.
@@ -117,7 +131,7 @@ static int move_source(const Alloc *a, const Tac_Instruction *in, int *dst)
     int s = flow_var(a->flow, in->u.copy.src->u.var_name);
     int d = flow_var(a->flow, in->u.copy.dst->u.var_name);
     if (s < 0 || d < 0 || !a->cand[s] || !a->cand[d] ||
-        a->flow->types[s]->kind != a->flow->types[d]->kind)
+        a->flow->types[s]->kind != a->flow->types[d]->kind || hi_node(a, s) >= 0)
         return -1;
     *dst = d;
     return s;
@@ -129,12 +143,22 @@ typedef struct {
     int skip; // the source of a move: no edge
 } DefArg;
 
+// Edges between every word of variables x and y.
+static void add_var_edge(Alloc *a, int x, int y)
+{
+    int xs[2] = { x, hi_node(a, x) }, ys[2] = { y, hi_node(a, y) };
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++)
+            if (xs[i] >= 0 && ys[j] >= 0)
+                add_edge(a, xs[i], ys[j]);
+}
+
 static void interfere_def(int d, void *arg)
 {
     DefArg *da = arg;
     for (int v = 0; v < da->a->n; v++)
         if (v != da->skip && flow_has(da->live, v))
-            add_edge(da->a, d, v);
+            add_var_edge(da->a, d, v);
 }
 
 typedef struct {
@@ -215,6 +239,14 @@ static void build(Alloc *a)
                 interfere_def(v, &da);
         }
     }
+    for (int v = 0; v < a->n; v++) {
+        int h = hi_node(a, v);
+        if (h >= 0) {
+            add_edge(a, v, h);
+            a->cross[h] = a->cross[v];
+            a->cost[h]  = a->cost[v];
+        }
+    }
     xfree(depth);
     xfree(live);
 }
@@ -222,13 +254,13 @@ static void build(Alloc *a)
 // Merge y into x.
 static void merge(Alloc *a, int x, int y)
 {
-    for (int v = 0; v < a->n; v++) {
+    for (int v = 0; v < a->N; v++) {
         if (flow_has(row(a, y), v)) {
             flow_remove(row(a, v), y);
             add_edge(a, x, v);
         }
     }
-    memset(row(a, y), 0, a->flow->words * sizeof(Flow_Set));
+    memset(row(a, y), 0, a->words * sizeof(Flow_Set));
     a->alias[y] = x;
     a->cost[x] += a->cost[y];
     if (!a->hint[x])
@@ -243,7 +275,7 @@ static bool can_merge(const Alloc *a, int x, int y)
     a->cross[x] = cross || a->cross[y];
     int k       = k_of(a, x), significant = 0;
     a->cross[x] = cross;
-    for (int v = 0; v < a->n; v++) {
+    for (int v = 0; v < a->N; v++) {
         bool nx = flow_has(row(a, x), v), ny = flow_has(row(a, y), v);
         if (!nx && !ny)
             continue;
@@ -283,7 +315,7 @@ static bool in_pool(const int *pool, int k, int reg)
 
 static void color(Alloc *a)
 {
-    int n        = a->n;
+    int n        = a->N;
     int *deg     = xalloc((n ? n : 1) * sizeof(int), __func__, __FILE__, __LINE__);
     int *stack   = xalloc((n ? n : 1) * sizeof(int), __func__, __FILE__, __LINE__);
     bool *gone   = xalloc((n ? n : 1) * sizeof(bool), __func__, __FILE__, __LINE__);
@@ -385,15 +417,17 @@ void gen_regalloc(Gen *g)
 {
     Alloc a = { .g = g, .flow = flow_build(g->tl) };
     int n   = a.n = a.flow->nvars;
-    a.cand  = zalloc(n * sizeof(bool));
-    a.fp    = zalloc(n * sizeof(bool));
-    a.adj   = zalloc((size_t)n * a.flow->words * sizeof(Flow_Set));
-    a.alias = zalloc(n * sizeof(int));
-    a.cost  = zalloc(n * sizeof(double));
-    a.color = zalloc(n * sizeof(int));
-    a.hint  = zalloc(n * sizeof(int));
-    a.cross = zalloc(n * sizeof(bool));
-    for (int v = 0; v < n; v++)
+    int N   = a.N = 2 * n;
+    a.words = (N + 63) / 64;
+    a.cand  = zalloc(N * sizeof(bool));
+    a.fp    = zalloc(N * sizeof(bool));
+    a.adj   = zalloc((size_t)N * a.words * sizeof(Flow_Set));
+    a.alias = zalloc(N * sizeof(int));
+    a.cost  = zalloc(N * sizeof(double));
+    a.color = zalloc(N * sizeof(int));
+    a.hint  = zalloc(N * sizeof(int));
+    a.cross = zalloc(N * sizeof(bool));
+    for (int v = 0; v < N; v++)
         a.alias[v] = v;
 
     find_candidates(&a);
@@ -405,9 +439,15 @@ void gen_regalloc(Gen *g)
     bool used[RV_VREG] = { false };
     for (int v = 0; v < n; v++) {
         int reg = a.cand[v] ? a.color[find(&a, v)] : 0;
-        if (reg) {
-            map_insert(&g->regs, a.flow->names[v], reg, 0);
-            used[reg] = true;
+        int h   = hi_node(&a, v);
+        int hi  = h >= 0 ? a.color[h] : 0;
+        if (!reg || (h >= 0 && !hi))
+            continue; // a long long gets both registers or neither
+        map_insert(&g->regs, a.flow->names[v], reg, 0);
+        used[reg] = true;
+        if (hi) {
+            map_insert(&g->regs_hi, a.flow->names[v], hi, 0);
+            used[hi] = true;
         }
     }
     for (int r = 0; r < RV_VREG; r++)

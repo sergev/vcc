@@ -394,3 +394,15 @@ int main(void)
 }
 )"));
 }
+
+// A long long gets a register pair: these need no stack at all.
+TEST_F(Rv32Test, LongLongInRegisters)
+{
+    std::string s = Code(CompileToRiscv(R"(
+long long add(long long a, long long b) { return a + b; }
+long long mix(long long a, int i) { long long x = a * i; return x < 0 ? -x : x << 3; }
+)"));
+    EXPECT_EQ(std::string::npos, s.find("sw ")) << s;
+    EXPECT_EQ(std::string::npos, s.find("lw ")) << s;
+    EXPECT_EQ(std::string::npos, s.find("sp")) << s;
+}

@@ -125,6 +125,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->frame);
     map_init(&g->globals);
     map_init(&g->regs);
+    map_init(&g->regs_hi);
     g->header = gen_variadic(g) ? 16 + 8 * riscv_xlen : 16;
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
@@ -156,6 +157,7 @@ void gen_done(Gen *g)
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
     map_destroy(&g->regs);
+    map_destroy(&g->regs_hi);
     xfree(g->const_bits);
     xfree(g->const_label);
     rv_free_func(g->fn);
@@ -172,12 +174,14 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg,
+                        int hi)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
     s->offset = offset;
     s->reg    = reg;
+    s->reg_hi = hi;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -190,24 +194,38 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->header - g->locals_size;
     if (name)
-        insert_slot(g, name, type, offset, 0);
+        insert_slot(g, name, type, offset, 0, 0);
     return offset;
 }
 
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
 {
-    insert_slot(g, name, type, offset, 0);
+    insert_slot(g, name, type, offset, 0, 0);
 }
 
-void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg)
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg, int hi)
 {
-    insert_slot(g, name, type, 0, reg);
+    insert_slot(g, name, type, 0, reg, hi);
 }
 
 int assigned_reg(const Gen *g, const char *name)
 {
     intptr_t v;
     return map_get(&g->regs, name, &v) ? (int)v : 0;
+}
+
+int assigned_reg_hi(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->regs_hi, name, &v) ? (int)v : 0;
+}
+
+int var_reg_hi(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return 0;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->reg_hi : 0;
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
@@ -555,6 +573,10 @@ void pair_half(Gen *g, int reg, const Tac_Val *v, int half)
         return;
     }
     const Tac_Type *t = val_type(g, v);
+    if (var_reg_hi(g, v)) {
+        move_reg(g, reg, half ? var_reg_hi(g, v) : var_reg(g, v), t);
+        return;
+    }
     if (!rv_is_pair(t)) {
         // A narrower integer converted to long long: extended by its type.
         load_val(g, reg, v);
@@ -568,6 +590,31 @@ void pair_half(Gen *g, int reg, const Tac_Val *v, int half)
     int64_t off;
     name_addr(g, v->u.var_name, RV_T5, &base, &off);
     emit2(g, xlen_load(), rv_reg(reg), mem(g, base, off + x * half));
+}
+
+void set_pair(Gen *g, const Tac_Val *dst, int lo, int hi)
+{
+    int dlo = var_reg(g, dst), dhi = var_reg_hi(g, dst);
+    if (!dhi) {
+        int base;
+        int64_t off;
+        name_addr(g, dst->u.var_name, RV_T5, &base, &off);
+        emit2(g, xlen_store(), rv_reg(lo), mem(g, base, off));
+        emit2(g, xlen_store(), rv_reg(hi), mem(g, base, off + riscv_xlen));
+        return;
+    }
+    // As if at once: hi may be dlo, lo may be dhi.
+    if (dlo == hi && dhi == lo) {
+        emit2(g, RV_MV, rv_reg(RV_T6), rv_reg(lo));
+        lo = RV_T6;
+    }
+    if (dlo == hi) {
+        emit2(g, RV_MV, rv_reg(dhi), rv_reg(hi));
+        emit2(g, RV_MV, rv_reg(dlo), rv_reg(lo));
+    } else {
+        emit2(g, RV_MV, rv_reg(dlo), rv_reg(lo));
+        emit2(g, RV_MV, rv_reg(dhi), rv_reg(hi));
+    }
 }
 
 void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off)
@@ -590,7 +637,7 @@ void copy_pair(Gen *g, const Tac_Val *src, int base, int64_t off)
         }
         return;
     }
-    if (src->kind == TAC_VAL_CONSTANT || !rv_is_pair(val_type(g, src))) {
+    if (src->kind == TAC_VAL_CONSTANT || !rv_is_pair(val_type(g, src)) || var_reg_hi(g, src)) {
         for (int half = 0; half < 2; half++) {
             pair_half(g, RV_T0, src, half);
             emit2(g, xlen_store(), rv_reg(RV_T0), mem(g, base, off + x * half));

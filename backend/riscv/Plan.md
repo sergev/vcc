@@ -40,7 +40,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   recompiled; data-model headers of their own (`limits.h`, `stdint.h`, `stddef.h`,
   `stdarg.h`, `inttypes.h`).
 
-## Phase 9 — riscv32
+## Phase 9 — riscv32 (done)
 
 - **R27. Register width as a parameter.** *Done.* `genriscv --rv32` (a global like
   `riscv_regalloc`); every `ld`/`sd`, `*w` op, slot size and canonical form chosen by
@@ -66,7 +66,7 @@ Verified 2026-10-01: Homebrew clang lists `riscv32`; `qemu-system-riscv32` is in
   `share/vcc/riscv32/`); `-t riscv32` in `vcpp` (`__riscv_xlen=32`, `__ILP32__`) and in
   `vcc` (assembler flags, `link.ld`, the `cc-tests` cases); docs/Riscv_Backend.md,
   cc/README.md, cpp/README.md.
-- **R31. `long long` in registers.** Register allocation of pairs.
+- **R31. `long long` in registers.** *Done:* the high word is an allocator node of its own; copies of a `long long` are not coalesced, and the moves around a pair are many (room for a peephole).
 
 ## Risks
 
