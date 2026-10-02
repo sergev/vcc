@@ -166,6 +166,12 @@ TEST_F(Predefined, Riscv32Target) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "riscv32"}));
 }
 
+TEST_F(Predefined, Aarch64Target) {
+    EXPECT_TRUE(TokensAre("#if __aarch64__ && __ARM_ARCH == 8 && __ARM_64BIT_STATE && __LP64__ && "
+                          "_LP64 && __CHAR_UNSIGNED__ && __ELF__ && !defined(__riscv)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"
