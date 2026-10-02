@@ -83,8 +83,9 @@ with pointers), not all at once in A23.
   `sxtb`/`sxth`/`sxtw`/`uxtb`/`uxth` where those differ. A constant operand is loaded
   as the operation's type. Constants go through a register: immediate operands are the
   peephole's (A26).
-- **A11. Control flow** (ch. 5–8): `.L` labels unique per TU, `b`, `cbz`/`cbnz`,
-  `cmp` + `b.cond`.
+- **A11. Control flow. Done** (ch. 5–8): a TAC label `%N` is a block labelled `.LN`
+  (unique per TU), `b`, and `cbz`/`cbnz` on the condition at its type's width; a
+  compare-and-branch (`cmp` + `b.cond`) is the peephole's (A26).
 - **A12. Calls, scalar ABI** (ch. 9): `x0`–`x7`/`v0`–`v7`, 8-byte stack slots, narrow
   arguments and results extended by the receiver, `bl` and `blr`, `FUN_CALL_NORETURN`.
 - **A13. Globals and static data** (ch. 10–12, which also need A10's `long` and

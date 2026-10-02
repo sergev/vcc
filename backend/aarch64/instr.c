@@ -2,8 +2,47 @@
 // Instruction selection: one TAC instruction at a time, its operands loaded into
 // scratch registers and its result stored back.
 //
+#include <string.h>
+
 #include "codegen.h"
 #include "internal.h"
+#include "xalloc.h"
+
+// Local label for TAC label `%N`: `.LN`.
+static char *label_name(const char *tac)
+{
+    size_t len = strlen(tac);
+    char *s    = xalloc(len + 3, __func__, __FILE__, __LINE__);
+    strcpy(s, ".L");
+    strcat(s, tac[0] == '%' ? tac + 1 : tac);
+    return s;
+}
+
+static void gen_label(Gen *g, const char *tac)
+{
+    char *l = label_name(tac);
+    a64_new_block(g->fn, l);
+    xfree(l);
+}
+
+static void gen_jump(Gen *g, const char *tac)
+{
+    char *l = label_name(tac);
+    emit1(g, A64_B, a64_sym(l, 0));
+    xfree(l);
+}
+
+// Branch to `target` when `cond` is zero (or nonzero).
+static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
+{
+    const Tac_Type *t = val_type(g, cond);
+    if (a64_is_fp(t) || a64_is_ld(t))
+        fatal_error("aarch64: %s: a floating-point condition is not implemented yet", gen_name(g));
+    load_val(g, T0, cond);
+    char *l = label_name(target);
+    emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, a64_width(t)), a64_sym(l, 0));
+    xfree(l);
+}
 
 // dst = src, for any type.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
@@ -208,6 +247,17 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
+    case TAC_INSTRUCTION_LABEL:
+        gen_label(g, in->u.label.name);
+        break;
+    case TAC_INSTRUCTION_JUMP:
+        gen_jump(g, in->u.jump.target);
+        break;
+    case TAC_INSTRUCTION_JUMP_IF_ZERO:
+    case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
+        gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
+                      in->u.jump_if_zero.target);
+        break;
     case TAC_INSTRUCTION_RETURN:
         gen_return(g, in->u.return_.src);
         break;
