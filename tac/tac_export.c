@@ -42,7 +42,7 @@ static void export_const(WFILE *out, const Tac_Const *c)
         wputd(c->u.double_val, out);
         break;
     case TAC_CONST_LONG_DOUBLE:
-        wputld(c->u.long_double_val, out);
+        wputf128(c->u.long_double_val, out);
         break;
     case TAC_CONST_SCHAR:
         wputw((unsigned)c->u.char_val, out);
@@ -366,7 +366,7 @@ static void export_static_init(WFILE *out, const Tac_StaticInit *si)
         wputd(si->u.double_val, out);
         break;
     case TAC_STATIC_INIT_LONG_DOUBLE:
-        wputld(si->u.long_double_val, out);
+        wputf128(si->u.long_double_val, out);
         break;
     case TAC_STATIC_INIT_ZERO:
         wputw((size_t)si->u.zero_bytes, out);

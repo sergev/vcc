@@ -373,7 +373,7 @@ Expr *parse_constant()
             expr->u.literal->u.real_val = strtof(current_lexeme, NULL);
         } else if (is_l_suffix) {
             expr->u.literal->kind              = LITERAL_LONG_DOUBLE;
-            expr->u.literal->u.long_double_val = strtold(current_lexeme, NULL);
+            expr->u.literal->u.long_double_val = f128_from_string(current_lexeme, NULL);
         } else {
             expr->u.literal->u.real_val = v;
         }

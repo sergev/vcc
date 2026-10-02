@@ -61,6 +61,8 @@ foreach(name console malloc)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genriscv -> clang.
+# float128.c includes the compiler's own binary128 code.
+set(RISCV_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
 file(GLOB RISCV_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(riscv_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
@@ -70,7 +72,7 @@ macro(riscv_compile_libc_c name srcdir)
         COMMAND lower -t riscv64 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genriscv ${out}/${name}.tac ${out}/${name}.s
         COMMAND ${RISCV_CLANG} ${RISCV_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
-        DEPENDS ${srcdir}/${name}.c ${RISCV_LIBC_HEADERS} parse lower genriscv
+        DEPENDS ${srcdir}/${name}.c ${RISCV_LIBC_HEADERS} ${RISCV_LIBC_EXTRA_DEPS} parse lower genriscv
         COMMENT "Compiling ${name}.c -> ${name}.o (RISC-V)")
     list(APPEND RISCV_LIBC_OBJS ${out}/${name}.o)
 endmacro()

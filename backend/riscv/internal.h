@@ -64,8 +64,6 @@ int rv_align(const Tac_Type *t);
 bool rv_is_fp(const Tac_Type *t); // float or double
 // A long double (binary128) lives in memory, and goes in integer register pairs.
 bool rv_is_ld(const Tac_Type *t);
-// The binary128 bits of `v`: low doubleword, then high.
-void rv_ld_bits(long double v, uint64_t w[2]);
 bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);

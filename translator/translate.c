@@ -176,7 +176,7 @@ Tac_Val *val_double(double v)
     return tv;
 }
 
-Tac_Val *val_long_double(long double v)
+Tac_Val *val_long_double(Float128 v)
 {
     Tac_Val *tv          = tac_new_val(TAC_VAL_CONSTANT);
     Tac_Const *c         = tac_new_const(TAC_CONST_LONG_DOUBLE);
@@ -216,7 +216,7 @@ Tac_Val *val_zero(const Type *t)
     case TYPE_DOUBLE:
         return val_double(0.0);
     case TYPE_LONG_DOUBLE:
-        return val_long_double(0.0L);
+        return val_long_double(f128_from_i64(0));
     default:
         return val_int(0); // integers, enums and word pointers: a zero word
     }

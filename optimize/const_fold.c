@@ -17,14 +17,12 @@
 // is re-narrowed to the active target's value width for the operand kind (queried
 // from target_config), so overflow wraps at the target's width — e.g. a BESM-6
 // int is 41-bit, not the host's 32. Floating-point folding uses the host's
-// float/double/long-double; a long double result is folded only when exact if the
-// target's long double may be wider than the host's (binary128 on RISC-V).
+// float/double, and long double in software binary128 (as a double where the
+// target's long double is one), so that no host's long double is relied on.
 //
 // See docs/TAC_Optimization.md §"Constant folding".
 // ============================================================================
 
-#include <float.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -61,7 +59,7 @@ static bool const_is_zero(const Tac_Const *c)
     case TAC_CONST_DOUBLE:
         return c->u.double_val == 0.0;
     case TAC_CONST_LONG_DOUBLE:
-        return c->u.long_double_val == 0.0L;
+        return f128_is_zero(c->u.long_double_val);
     case TAC_CONST_SCHAR:
         return c->u.char_val == 0;
     case TAC_CONST_UCHAR:
@@ -110,7 +108,7 @@ static Tac_Val *fold_unary_const(Tac_UnaryOperator op, const Tac_Const *src)
             break;
         case TAC_CONST_LONG_DOUBLE:
             rc                    = tac_new_const(src->kind);
-            rc->u.long_double_val = -src->u.long_double_val;
+            rc->u.long_double_val = f128_neg(src->u.long_double_val);
             break;
         case TAC_CONST_SCHAR:
             rc             = tac_new_const(src->kind);
@@ -389,11 +387,51 @@ static double round_float(double d)
     return d;
 }
 
-// Whether a long double result computed on the host may be inexact for the target:
-// its long double is wider than a double, and the host's narrower than binary128.
-static bool ld_may_be_narrow(void)
+// Whether the target's long double is a double (BESM-6): then it folds as one.
+static bool ld_is_double(void)
 {
-    return LDBL_MANT_DIG < 113 && target_config && target_config->ldouble_size > 8;
+    return target_config && target_config->ldouble_size <= 8;
+}
+
+static Float128 ld_from_int(int64_t v, bool is_unsigned)
+{
+    if (ld_is_double())
+        return f128_from_double(is_unsigned ? (double)(uint64_t)v : (double)v);
+    return is_unsigned ? f128_from_u64((uint64_t)v) : f128_from_i64(v);
+}
+
+// A long double operation on binary128 values, as the target computes it.
+static Float128 ld_arith(Tac_BinaryOperator op, Float128 a, Float128 b)
+{
+    if (ld_is_double()) {
+        double x = f128_to_double(a), y = f128_to_double(b);
+        switch (op) {
+        case TAC_BINARY_ADD:
+        case TAC_BINARY_ADD_DOUBLE:
+            return f128_from_double(x + y);
+        case TAC_BINARY_SUBTRACT:
+        case TAC_BINARY_SUBTRACT_DOUBLE:
+            return f128_from_double(x - y);
+        case TAC_BINARY_MULTIPLY:
+        case TAC_BINARY_MULTIPLY_DOUBLE:
+            return f128_from_double(x * y);
+        default:
+            return f128_from_double(x / y);
+        }
+    }
+    switch (op) {
+    case TAC_BINARY_ADD:
+    case TAC_BINARY_ADD_DOUBLE:
+        return f128_add(a, b);
+    case TAC_BINARY_SUBTRACT:
+    case TAC_BINARY_SUBTRACT_DOUBLE:
+        return f128_sub(a, b);
+    case TAC_BINARY_MULTIPLY:
+    case TAC_BINARY_MULTIPLY_DOUBLE:
+        return f128_mul(a, b);
+    default:
+        return f128_div(a, b);
+    }
 }
 
 // Fold a binary operator on two floating-point constants of the *same* kind.
@@ -406,55 +444,39 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
         return NULL;
 
     if (c1->kind == TAC_CONST_LONG_DOUBLE) {
-        long double ld1 = c1->u.long_double_val, ld2 = c2->u.long_double_val;
-        long double ldr;
-        bool exact;
+        Float128 a = c1->u.long_double_val, b = c2->u.long_double_val;
+        int c      = f128_cmp(a, b); // 2 when unordered
         switch (op) {
         case TAC_BINARY_ADD:
         case TAC_BINARY_ADD_DOUBLE:
         case TAC_BINARY_SUBTRACT:
-        case TAC_BINARY_SUBTRACT_DOUBLE: {
-            if (op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_DOUBLE)
-                ld2 = -ld2;
-            ldr = ld1 + ld2;
-            // Two-sum: the rounding error of ld1 + ld2.
-            long double bv = ldr - ld1;
-            exact          = isfinite(ldr) && (ld1 - (ldr - bv)) + (ld2 - bv) == 0;
-            break;
-        }
+        case TAC_BINARY_SUBTRACT_DOUBLE:
         case TAC_BINARY_MULTIPLY:
         case TAC_BINARY_MULTIPLY_DOUBLE:
-            ldr   = ld1 * ld2;
-            exact = isfinite(ldr) && fmal(ld1, ld2, -ldr) == 0;
-            break;
         case TAC_BINARY_DIVIDE:
         case TAC_BINARY_DIVIDE_DOUBLE:
-            ldr   = ld1 / ld2;
-            exact = isfinite(ldr) && fmal(ldr, ld2, -ld1) == 0;
             break;
         case TAC_BINARY_EQUAL:
-            return make_int_const_val(TAC_CONST_INT, ld1 == ld2);
+            return make_int_const_val(TAC_CONST_INT, c == 0);
         case TAC_BINARY_NOT_EQUAL:
-            return make_int_const_val(TAC_CONST_INT, ld1 != ld2);
+            return make_int_const_val(TAC_CONST_INT, c != 0);
         case TAC_BINARY_LESS_THAN:
         case TAC_BINARY_LESS_THAN_DOUBLE:
-            return make_int_const_val(TAC_CONST_INT, ld1 < ld2);
+            return make_int_const_val(TAC_CONST_INT, c == -1);
         case TAC_BINARY_LESS_OR_EQUAL:
         case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
-            return make_int_const_val(TAC_CONST_INT, ld1 <= ld2);
+            return make_int_const_val(TAC_CONST_INT, c == -1 || c == 0);
         case TAC_BINARY_GREATER_THAN:
         case TAC_BINARY_GREATER_THAN_DOUBLE:
-            return make_int_const_val(TAC_CONST_INT, ld1 > ld2);
+            return make_int_const_val(TAC_CONST_INT, c == 1);
         case TAC_BINARY_GREATER_OR_EQUAL:
         case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
-            return make_int_const_val(TAC_CONST_INT, ld1 >= ld2);
+            return make_int_const_val(TAC_CONST_INT, c == 1 || c == 0);
         default:
             return NULL;
         }
-        if (!exact && ld_may_be_narrow())
-            return NULL;
         Tac_Const *rc         = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = ldr;
+        rc->u.long_double_val = ld_arith(op, a, b);
         Tac_Val *rv           = tac_new_val(TAC_VAL_CONSTANT);
         rv->u.constant        = rc;
         return rv;
@@ -846,25 +868,15 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
     case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
         if (!const_is_integer_kind(src->kind))
             return NULL;
-        if (ld_may_be_narrow()) {
-            int64_t v = const_to_int64(src);
-            if ((double)v == 0x1p63 || v != (int64_t)(double)v)
-                return NULL;
-        }
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = (long double)const_to_int64(src);
+        rc->u.long_double_val = ld_from_int(const_to_int64(src), false);
         break;
 
     case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
         if (!const_is_integer_kind(src->kind))
             return NULL;
-        if (ld_may_be_narrow()) {
-            uint64_t v = const_to_uint64(src);
-            if ((double)v == 0x1p64 || v != (uint64_t)(double)v)
-                return NULL;
-        }
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = (long double)const_to_uint64(src);
+        rc->u.long_double_val = ld_from_int((int64_t)const_to_uint64(src), true);
         break;
 
         /* ---- floating-point → integer (truncate toward zero) ---- */
@@ -906,7 +918,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             return NULL;
         rc            = tac_new_const(TAC_CONST_INT);
         rc->u.int_val =
-            sign_narrow((uint64_t)(int64_t)src->u.long_double_val, target_signed_bits(TAC_CONST_INT));
+            sign_narrow((uint64_t)f128_to_i64(src->u.long_double_val, 64),
+                        target_signed_bits(TAC_CONST_INT));
         break;
 
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
@@ -914,7 +927,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             return NULL;
         rc             = tac_new_const(TAC_CONST_UINT);
         rc->u.uint_val =
-            unsigned_narrow((uint64_t)src->u.long_double_val, target_unsigned_bits(TAC_CONST_UINT));
+            unsigned_narrow(f128_to_u64(src->u.long_double_val, 64),
+                            target_unsigned_bits(TAC_CONST_UINT));
         break;
 
         /* ---- floating-point ↔ floating-point ---- */
@@ -937,28 +951,29 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (src->kind != TAC_CONST_FLOAT)
             return NULL;
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = (long double)src->u.float_val;
+        rc->u.long_double_val = f128_from_double(src->u.float_val);
         break;
 
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
         rc              = tac_new_const(TAC_CONST_FLOAT);
-        rc->u.float_val = round_float((double)src->u.long_double_val);
+        rc->u.float_val = round_float(ld_is_double() ? f128_to_double(src->u.long_double_val)
+                                                     : (double)f128_to_float(src->u.long_double_val));
         break;
 
     case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
         if (src->kind != TAC_CONST_DOUBLE)
             return NULL;
         rc                    = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = (long double)src->u.double_val;
+        rc->u.long_double_val = f128_from_double(src->u.double_val);
         break;
 
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
         rc               = tac_new_const(TAC_CONST_DOUBLE);
-        rc->u.double_val = (double)src->u.long_double_val;
+        rc->u.double_val = f128_to_double(src->u.long_double_val);
         break;
 
     default:

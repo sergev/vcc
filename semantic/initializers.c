@@ -489,6 +489,11 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
     // here is necessarily a real one.
     if (init->kind == INITIALIZER_SINGLE && is_arithmetic(var_type)) {
         const Expr *expr = typecheck_and_decay(init->u.expr);
+        Float128 q;
+        if (unalias(var_type)->kind == TYPE_LONG_DOUBLE && try_eval_const_ld(expr, &q)) {
+            Literal lit = { .kind = LITERAL_LONG_DOUBLE, .u.long_double_val = q };
+            return new_static_init_from_literal(var_type, &lit);
+        }
         double val;
         if (try_eval_const_real(expr, &val)) {
             Literal lit = { .kind = LITERAL_DOUBLE, .u.real_val = val };

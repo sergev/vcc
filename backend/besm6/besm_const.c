@@ -42,7 +42,7 @@ Besm_ConstWord besm_const_word(const Tac_Const *c)
         // float ≡ double ≡ long double on BESM-6 (one 48-bit native-FP word).
         w.is_real  = true;
         w.real_val = (c->kind == TAC_CONST_FLOAT)         ? (double)c->u.float_val
-                     : (c->kind == TAC_CONST_LONG_DOUBLE) ? (double)c->u.long_double_val
+                     : (c->kind == TAC_CONST_LONG_DOUBLE) ? f128_to_double(c->u.long_double_val)
                                                           : c->u.double_val;
         break;
     default:

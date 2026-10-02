@@ -30,7 +30,7 @@ int64_t literal_to_int64(const Literal *lit)
     case LITERAL_DOUBLE:
         return (int64_t)lit->u.real_val;
     case LITERAL_LONG_DOUBLE:
-        return (int64_t)lit->u.long_double_val;
+        return f128_to_i64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
         fatal_error("literal_to_int64: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
@@ -64,7 +64,7 @@ uint64_t literal_to_uint64(const Literal *lit)
     case LITERAL_DOUBLE:
         return (uint64_t)lit->u.real_val;
     case LITERAL_LONG_DOUBLE:
-        return (uint64_t)lit->u.long_double_val;
+        return f128_to_u64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
         fatal_error("literal_to_uint64: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
@@ -98,7 +98,7 @@ double literal_to_double(const Literal *lit)
     case LITERAL_DOUBLE:
         return (double)lit->u.real_val;
     case LITERAL_LONG_DOUBLE:
-        return (double)lit->u.long_double_val;
+        return f128_to_double(lit->u.long_double_val);
     case LITERAL_STRING:
         fatal_error("literal_to_double: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
@@ -108,26 +108,26 @@ double literal_to_double(const Literal *lit)
     }
 }
 
-static long double literal_to_long_double(const Literal *lit)
+Float128 literal_to_long_double(const Literal *lit)
 {
     switch (lit->kind) {
     case LITERAL_CHAR:
-        return (long double)lit->u.char_val;
+        return f128_from_i64(lit->u.char_val);
     case LITERAL_INT:
-        return (long double)lit->u.int_val;
+        return f128_from_i64(lit->u.int_val);
     case LITERAL_LONG:
-        return (long double)lit->u.long_val;
+        return f128_from_i64(lit->u.long_val);
     case LITERAL_LONG_LONG:
-        return (long double)lit->u.long_long_val;
+        return f128_from_i64(lit->u.long_long_val);
     case LITERAL_UINT:
-        return (long double)lit->u.uint_val;
+        return f128_from_u64(lit->u.uint_val);
     case LITERAL_ULONG:
-        return (long double)lit->u.ulong_val;
+        return f128_from_u64(lit->u.ulong_val);
     case LITERAL_ULONG_LONG:
-        return (long double)lit->u.ulong_long_val;
+        return f128_from_u64(lit->u.ulong_long_val);
     case LITERAL_FLOAT:
     case LITERAL_DOUBLE:
-        return (long double)lit->u.real_val;
+        return f128_from_double(lit->u.real_val);
     case LITERAL_LONG_DOUBLE:
         return lit->u.long_double_val;
     case LITERAL_STRING:

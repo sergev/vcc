@@ -1,7 +1,6 @@
 //
 // Types, frame slots, and loading/storing values (LP64D).
 //
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,38 +60,6 @@ bool rv_is_fp(const Tac_Type *t)
 bool rv_is_ld(const Tac_Type *t)
 {
     return t->kind == TAC_TYPE_LONG_DOUBLE;
-}
-
-void rv_ld_bits(long double v, uint64_t w[2])
-{
-    uint64_t sign = signbit(v) ? (uint64_t)1 << 63 : 0;
-    w[0]          = 0;
-    if (isnan(v)) {
-        w[1] = 0x7fff800000000000ULL;
-        return;
-    }
-    v = fabsl(v);
-    if (isinf(v)) {
-        w[1] = sign | 0x7fff000000000000ULL;
-        return;
-    }
-    if (v == 0) {
-        w[1] = sign;
-        return;
-    }
-    // v = m * 2^e, m in [0.5, 1): the significand bits, 49 and then 64.
-    int e;
-    long double m = frexpl(v, &e);
-    int exp       = e - 1 + 16383;
-    int shift     = exp > 0 ? 0 : 1 - exp; // a subnormal: fewer bits
-    if (exp <= 0)
-        exp = 0;
-    m           = ldexpl(m, 49 - shift);
-    uint64_t hi = (uint64_t)m;
-    m           = ldexpl(m - (long double)hi, 64);
-    uint64_t lo = (uint64_t)m;
-    w[0]        = lo;
-    w[1]        = sign | (uint64_t)exp << 48 | (hi & 0xffffffffffffULL);
 }
 
 bool rv_is_double(const Tac_Type *t)
@@ -521,9 +488,8 @@ void store_val(Gen *g, int reg, const Tac_Val *v)
 void ld_half(Gen *g, int reg, const Tac_Val *v, int half)
 {
     if (v->kind == TAC_VAL_CONSTANT) {
-        uint64_t w[2];
-        rv_ld_bits(v->u.constant->u.long_double_val, w);
-        gen_li(g, reg, (int64_t)w[half]);
+        Float128 q = v->u.constant->u.long_double_val;
+        gen_li(g, reg, (int64_t)(half ? q.hi : q.lo));
         return;
     }
     int base;

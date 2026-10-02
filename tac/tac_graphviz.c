@@ -152,9 +152,11 @@ static void emit_const(FILE *fd, const Tac_Const *c, int parent_id)
         fprintf(fd, "double %s", hex);
         break;
     }
-    case TAC_CONST_LONG_DOUBLE:
-        fprintf(fd, "long_double %La", c->u.long_double_val);
+    case TAC_CONST_LONG_DOUBLE: {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "long_double %s", f128_format(c->u.long_double_val, buf));
         break;
+    }
     case TAC_CONST_SCHAR:
         fprintf(fd, "char %d", c->u.char_val);
         break;
@@ -307,9 +309,11 @@ static void emit_static_init(FILE *fd, const Tac_StaticInit *init, int parent_id
             fprintf(fd, "double %s", hex);
             break;
         }
-        case TAC_STATIC_INIT_LONG_DOUBLE:
-            fprintf(fd, "long_double %La", init->u.long_double_val);
+        case TAC_STATIC_INIT_LONG_DOUBLE: {
+            char buf[F128_BUFSIZE];
+            fprintf(fd, "long_double %s", f128_format(init->u.long_double_val, buf));
             break;
+        }
         case TAC_STATIC_INIT_ZERO:
             fprintf(fd, "zero %d", init->u.zero_bytes);
             break;

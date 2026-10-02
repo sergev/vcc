@@ -562,9 +562,11 @@ static void export_literal(FILE *fd, const Literal *lit, int level)
     case LITERAL_DOUBLE:
         fprintf(fd, "%a\n", lit->u.real_val);
         break;
-    case LITERAL_LONG_DOUBLE:
-        fprintf(fd, "%La\n", lit->u.long_double_val);
+    case LITERAL_LONG_DOUBLE: {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "%s\n", f128_format(lit->u.long_double_val, buf));
         break;
+    }
     case LITERAL_CHAR:
         fprintf(fd, "'%c'\n", lit->u.char_val);
         break;

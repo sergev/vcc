@@ -67,8 +67,11 @@ static void export_yaml_const(FILE *fd, const Tac_Const *c, int level)
     case TAC_CONST_LONG_DOUBLE:
         fprintf(fd, "long_double\n");
         print_indent(fd, level);
-        fprintf(fd, "value: %La\n", c->u.long_double_val);
+    {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "value: %s\n", f128_format(c->u.long_double_val, buf));
         break;
+    }
     case TAC_CONST_SCHAR:
         fprintf(fd, "char\n");
         print_indent(fd, level);
@@ -313,8 +316,11 @@ static void export_yaml_static_init(FILE *fd, const Tac_StaticInit *init, int le
     case TAC_STATIC_INIT_LONG_DOUBLE:
         fprintf(fd, "long_double\n");
         print_indent(fd, level);
-        fprintf(fd, "value: %La\n", init->u.long_double_val);
+    {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "value: %s\n", f128_format(init->u.long_double_val, buf));
         break;
+    }
     case TAC_STATIC_INIT_ZERO:
         fprintf(fd, "zero\n");
         print_indent(fd, level);

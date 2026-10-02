@@ -927,7 +927,7 @@ static Tac_Val *gen_step(TacCtx *ctx, const Type *type, Tac_Val *src, bool inc)
                 step = val_float(1.0f);
                 break;
             case TYPE_LONG_DOUBLE:
-                step = val_long_double(1.0L);
+                step = val_long_double(f128_from_i64(1));
                 break;
             default:
                 step = val_double(1.0);

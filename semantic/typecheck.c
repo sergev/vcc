@@ -424,6 +424,8 @@ typedef struct {
     TypeKind kind; // integer type kind of the value, valid when !is_real
     uint64_t u;    // canonical bits (see above),      valid when !is_real
     double d;      //                                  valid when  is_real
+    bool is_ld;    // a long double wider than double:  valid when  is_real
+    Float128 q;    // its exact value (d is it rounded), valid when  is_ld
 } ConstVal;
 
 // Value width in bits of an integer type kind on the active target.  A signed kind uses
@@ -595,6 +597,47 @@ static uint64_t cv_convert(const ConstVal *v, TypeKind k)
     return t.u;
 }
 
+static void cv_set_real(ConstVal *out, double d)
+{
+    out->is_real = true;
+    out->is_ld   = false;
+    out->d       = d;
+}
+
+// Whether long double is wider than double on the target, and so folds in binary128.
+static bool wide_ld(void)
+{
+    return !target_config || target_config->ldouble_size > target_config->double_size;
+}
+
+static void cv_set_ld(ConstVal *out, Float128 q)
+{
+    if (!wide_ld()) {
+        cv_set_real(out, f128_to_double(q));
+        return;
+    }
+    out->is_real = true;
+    out->is_ld   = true;
+    out->q       = q;
+    out->d       = f128_to_double(q);
+}
+
+// The value of a folded constant as a long double, whichever kind it holds.
+static Float128 const_as_ld(const ConstVal *v)
+{
+    if (v->is_real)
+        return v->is_ld ? v->q : f128_from_double(v->d);
+    return kind_is_unsigned(v->kind) ? f128_from_u64(v->u) : f128_from_i64(cv_int64(v));
+}
+
+// Whether a folded constant is zero.
+static bool cv_is_zero(const ConstVal *v)
+{
+    if (v->is_real)
+        return v->is_ld ? f128_is_zero(v->q) : v->d == 0.0;
+    return v->u == 0;
+}
+
 // The value of a folded constant as a real, whichever kind it holds.
 static double const_as_real(const ConstVal *v)
 {
@@ -620,24 +663,20 @@ static bool fold_real_binop(BinaryOp op, double left, double right, ConstVal *ou
 {
     switch (op) {
     case BINARY_MUL:
-        out->is_real = true;
-        out->d       = left * right;
+        cv_set_real(out, left * right);
         return true;
     case BINARY_DIV:
         // Division by zero is not a constant expression; reject rather than fold an
         // infinity into a static initializer.  Mirrors the integer guard below.
         if (right == 0.0)
             return false;
-        out->is_real = true;
-        out->d       = left / right;
+        cv_set_real(out, left / right);
         return true;
     case BINARY_ADD:
-        out->is_real = true;
-        out->d       = left + right;
+        cv_set_real(out, left + right);
         return true;
     case BINARY_SUB:
-        out->is_real = true;
-        out->d       = left - right;
+        cv_set_real(out, left - right);
         return true;
     case BINARY_LT:
         cv_set_int(out, TYPE_INT, left < right);
@@ -665,6 +704,55 @@ static bool fold_real_binop(BinaryOp op, double left, double right, ConstVal *ou
         return true;
     default:
         // BINARY_MOD, the shifts and the bitwise operators need integer operands.
+        return false;
+    }
+}
+
+// fold_real_binop for long double operands, in binary128.
+static bool fold_ld_binop(BinaryOp op, const ConstVal *l, const ConstVal *r, ConstVal *out)
+{
+    Float128 a = const_as_ld(l), b = const_as_ld(r);
+    int c      = f128_cmp(a, b); // 2 when unordered
+    switch (op) {
+    case BINARY_MUL:
+        cv_set_ld(out, f128_mul(a, b));
+        return true;
+    case BINARY_DIV:
+        if (f128_is_zero(b))
+            return false;
+        cv_set_ld(out, f128_div(a, b));
+        return true;
+    case BINARY_ADD:
+        cv_set_ld(out, f128_add(a, b));
+        return true;
+    case BINARY_SUB:
+        cv_set_ld(out, f128_sub(a, b));
+        return true;
+    case BINARY_LT:
+        cv_set_int(out, TYPE_INT, c == -1);
+        return true;
+    case BINARY_GT:
+        cv_set_int(out, TYPE_INT, c == 1);
+        return true;
+    case BINARY_LE:
+        cv_set_int(out, TYPE_INT, c == -1 || c == 0);
+        return true;
+    case BINARY_GE:
+        cv_set_int(out, TYPE_INT, c == 1 || c == 0);
+        return true;
+    case BINARY_EQ:
+        cv_set_int(out, TYPE_INT, c == 0);
+        return true;
+    case BINARY_NE:
+        cv_set_int(out, TYPE_INT, c != 0);
+        return true;
+    case BINARY_LOG_AND:
+        cv_set_int(out, TYPE_INT, !cv_is_zero(l) && !cv_is_zero(r));
+        return true;
+    case BINARY_LOG_OR:
+        cv_set_int(out, TYPE_INT, !cv_is_zero(l) || !cv_is_zero(r));
+        return true;
+    default:
         return false;
     }
 }
@@ -716,11 +804,12 @@ static bool eval_const(const Expr *e, ConstVal *out)
             out->u    = (uint64_t)(int64_t)sym->u.enum_val;
             return true;
         }
+        case LITERAL_LONG_DOUBLE:
+            cv_set_ld(out, e->u.literal->u.long_double_val);
+            return true;
         case LITERAL_FLOAT:
         case LITERAL_DOUBLE:
-        case LITERAL_LONG_DOUBLE:
-            out->is_real = true;
-            out->d       = literal_to_double(e->u.literal);
+            cv_set_real(out, literal_to_double(e->u.literal));
             if (e->u.literal->kind == LITERAL_FLOAT)
                 round_float(TYPE_FLOAT, out);
             return true;
@@ -734,7 +823,9 @@ static bool eval_const(const Expr *e, ConstVal *out)
         const Type *ct = unalias(e->u.cast.type);
         if (is_integer(ct)) {
             uint64_t bits;
-            if (v.is_real)
+            if (v.is_real && v.is_ld)
+                bits = v.q.hi >> 63 ? (uint64_t)f128_to_i64(v.q, 64) : f128_to_u64(v.q, 64);
+            else if (v.is_real)
                 // C11 §6.3.1.4: a real converts to an integer by truncation toward zero
                 // (via int64_t when negative — a direct uint64_t conversion would be UB).
                 bits = v.d < 0 ? (uint64_t)(int64_t)v.d : (uint64_t)v.d;
@@ -745,14 +836,16 @@ static bool eval_const(const Expr *e, ConstVal *out)
         }
         if (ct->kind == TYPE_FLOAT) {
             // A cast to float rounds to float precision, and the folded value keeps it.
-            float rounded = (float)const_as_real(&v);
-            out->is_real  = true;
-            out->d        = rounded;
+            float rounded = v.is_real && v.is_ld ? f128_to_float(v.q) : (float)const_as_real(&v);
+            cv_set_real(out, rounded);
             return true;
         }
-        if (ct->kind == TYPE_DOUBLE || ct->kind == TYPE_LONG_DOUBLE) {
-            out->is_real = true;
-            out->d       = const_as_real(&v);
+        if (ct->kind == TYPE_LONG_DOUBLE) {
+            cv_set_ld(out, const_as_ld(&v));
+            return true;
+        }
+        if (ct->kind == TYPE_DOUBLE) {
+            cv_set_real(out, const_as_real(&v));
             return true;
         }
         // A cast to a non-arithmetic type passes an integer operand through unchanged:
@@ -769,9 +862,12 @@ static bool eval_const(const Expr *e, ConstVal *out)
             return false;
         switch (e->u.unary_op.op) {
         case UNARY_NEG: {
+            if (v.is_real && v.is_ld) {
+                cv_set_ld(out, f128_neg(v.q));
+                return true;
+            }
             if (v.is_real) {
-                out->is_real = true;
-                out->d       = -v.d;
+                cv_set_real(out, -v.d);
                 return true;
             }
             // The result has the promoted operand type; a negated unsigned wraps
@@ -796,7 +892,7 @@ static bool eval_const(const Expr *e, ConstVal *out)
         }
         case UNARY_LOG_NOT:
             // ! yields an int whatever the operand's type is (C11 §6.5.3.3p5).
-            cv_set_int(out, TYPE_INT, const_as_real(&v) == 0.0);
+            cv_set_int(out, TYPE_INT, cv_is_zero(&v));
             return true;
         default:
             return false;
@@ -806,6 +902,8 @@ static bool eval_const(const Expr *e, ConstVal *out)
         ConstVal l, r;
         if (!eval_const(e->u.binary_op.left, &l) || !eval_const(e->u.binary_op.right, &r))
             return false;
+        if ((l.is_real && l.is_ld) || (r.is_real && r.is_ld))
+            return fold_ld_binop(e->u.binary_op.op, &l, &r, out);
         if (l.is_real || r.is_real) {
             if (!fold_real_binop(e->u.binary_op.op, const_as_real(&l), const_as_real(&r), out))
                 return false;
@@ -953,6 +1051,16 @@ bool try_eval_const_real(const Expr *e, double *out)
     if (!eval_const(e, &v))
         return false;
     *out = const_as_real(&v);
+    return true;
+}
+
+// Evaluate a constant arithmetic expression as a long double.
+bool try_eval_const_ld(const Expr *e, Float128 *out)
+{
+    ConstVal v;
+    if (!eval_const(e, &v))
+        return false;
+    *out = const_as_ld(&v);
     return true;
 }
 

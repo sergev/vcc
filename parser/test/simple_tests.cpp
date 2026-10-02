@@ -106,7 +106,7 @@ TEST_F(ParserTest, ScanLongDoubleLiteralUpperL)
 
     EXPECT_EQ(EXPR_LITERAL, expr->kind);
     EXPECT_EQ(LITERAL_LONG_DOUBLE, expr->u.literal->kind);
-    EXPECT_EQ(1.5L, expr->u.literal->u.long_double_val);
+    EXPECT_EQ(1.5, f128_to_double(expr->u.literal->u.long_double_val));
 
     free_expression(expr);
 }
@@ -122,7 +122,7 @@ TEST_F(ParserTest, ScanLongDoubleLiteralLowerL)
 
     EXPECT_EQ(EXPR_LITERAL, expr->kind);
     EXPECT_EQ(LITERAL_LONG_DOUBLE, expr->u.literal->kind);
-    EXPECT_EQ(2.5L, expr->u.literal->u.long_double_val);
+    EXPECT_EQ(2.5, f128_to_double(expr->u.literal->u.long_double_val));
 
     free_expression(expr);
 }

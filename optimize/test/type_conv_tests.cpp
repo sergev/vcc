@@ -503,7 +503,7 @@ TEST_F(OptimizerTest, ConvFloatToLongDouble)
     ASSERT_NE(body, nullptr);
     ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
     EXPECT_EQ(body->u.copy.src->u.constant->kind, TAC_CONST_LONG_DOUBLE);
-    EXPECT_NEAR((double)body->u.copy.src->u.constant->u.long_double_val, 3.14, 1e-5);
+    EXPECT_NEAR(f128_to_double(body->u.copy.src->u.constant->u.long_double_val), 3.14, 1e-5);
 }
 
 // LongDoubleToFloat(ConstLongDouble(2.5L))  →  Copy(ConstFloat(2.5), t)

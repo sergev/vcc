@@ -642,7 +642,7 @@ Literal *import_literal(WFILE *input)
         check_input(input, "literal float/double");
         break;
     case LITERAL_LONG_DOUBLE:
-        lit->u.long_double_val = wgetld(input);
+        lit->u.long_double_val = wgetf128(input);
         check_input(input, "literal long double");
         break;
     case LITERAL_CHAR:

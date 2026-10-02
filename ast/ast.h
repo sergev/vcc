@@ -10,6 +10,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
+#include "float128.h"
+
 /* Forward declarations for recursive types */
 typedef struct Type Type;
 typedef struct TypeQualifier TypeQualifier;
@@ -407,7 +409,7 @@ struct Literal {
         unsigned long ulong_val;
         unsigned long long ulong_long_val;
         double real_val;
-        long double long_double_val;
+        Float128 long_double_val; // binary128 bits, exact on any host
         char char_val;
         char *string_val;
         Ident enum_const;

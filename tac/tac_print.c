@@ -115,9 +115,11 @@ void tac_print_const(FILE *fd, const Tac_Const *constant, int depth)
         fprintf(fd, "double %s\n", hex);
         break;
     }
-    case TAC_CONST_LONG_DOUBLE:
-        fprintf(fd, "long_double %La\n", constant->u.long_double_val);
+    case TAC_CONST_LONG_DOUBLE: {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "long_double %s\n", f128_format(constant->u.long_double_val, buf));
         break;
+    }
     case TAC_CONST_SCHAR:
         fprintf(fd, "char %d\n", constant->u.char_val);
         break;
@@ -404,9 +406,11 @@ void tac_print_static_init(FILE *fd, const Tac_StaticInit *init, int depth)
         fprintf(fd, "f64 %s\n", hex);
         break;
     }
-    case TAC_STATIC_INIT_LONG_DOUBLE:
-        fprintf(fd, "ld128 %La\n", init->u.long_double_val);
+    case TAC_STATIC_INIT_LONG_DOUBLE: {
+        char buf[F128_BUFSIZE];
+        fprintf(fd, "ld128 %s\n", f128_format(init->u.long_double_val, buf));
         break;
+    }
     case TAC_STATIC_INIT_ZERO:
         fprintf(fd, "zero %d bytes\n", init->u.zero_bytes);
         break;

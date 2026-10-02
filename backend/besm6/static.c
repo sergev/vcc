@@ -299,7 +299,7 @@ static void append_word_item(const Tac_StaticInit *init, Besm_Instr ***tailp)
     case TAC_STATIC_INIT_LONG_DOUBLE:
         // long double ≡ double on BESM-6 (one 48-bit native-FP word).
         item           = besm_new_instr(BESM_DATA_REAL);
-        item->real_val = (double)init->u.long_double_val;
+        item->real_val = f128_to_double(init->u.long_double_val);
         break;
     default:
         // Unreachable: byte-packed kinds (I8/U8/STRING/ZERO) never reach here.

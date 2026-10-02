@@ -6,6 +6,7 @@ add_library(libutil STATIC
     string_map.c
     xalloc.c
     wio.c
+    float128.c
 )
 target_include_directories(libutil PUBLIC .)
 target_link_libraries(libutil m)
@@ -26,6 +27,7 @@ add_executable(libutil-tests
     test/string_map_tests.cpp
     test/wio_tests.cpp
     test/xalloc_tests.cpp
+    test/float128_tests.cpp
 )
 target_link_libraries(libutil-tests libutil GTest::gtest_main)
 test_chdir_to_bindir(libutil-tests)

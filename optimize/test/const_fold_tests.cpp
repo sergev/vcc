@@ -1,5 +1,3 @@
-#include <cfloat>
-
 #include "optimizer_test_fixture.h"
 #include "target.h"
 
@@ -294,19 +292,25 @@ TEST_F(OptimizerTest, BinaryFoldLongDoubleAdd)
     AssertFoldedLongDouble(body, 4.0);
 }
 
-// For binary128 long double (riscv64), a result the host rounds is not folded unless
-// the host's long double is binary128 too: 1.0L / 3 stays; 1.0L / 4 folds.
-TEST_F(OptimizerTest, BinaryFoldLongDoubleInexact)
+// Long double folds in binary128 on any host (riscv64), and as a double where long
+// double is one (BESM-6): 1.0L / 3 to each format's nearest.
+TEST_F(OptimizerTest, BinaryFoldLongDoublePrecision)
 {
     TargetGuard guard("riscv64");
     Tac_Instruction *body = constant_fold(make_binary(TAC_BINARY_DIVIDE_DOUBLE,
                                                       make_const_long_double(1.0L),
                                                       make_const_long_double(3.0L), make_var("t")));
-    EXPECT_EQ(body->kind, LDBL_MANT_DIG < 113 ? TAC_INSTRUCTION_BINARY : TAC_INSTRUCTION_COPY);
+    ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
+    Float128 q = body->u.copy.src->u.constant->u.long_double_val;
+    EXPECT_EQ(0x3ffd555555555555ULL, q.hi);
+    EXPECT_EQ(0x5555555555555555ULL, q.lo);
 
+    TargetGuard besm("besm6");
     body = constant_fold(make_binary(TAC_BINARY_DIVIDE_DOUBLE, make_const_long_double(1.0L),
-                                     make_const_long_double(4.0L), make_var("t")));
-    AssertFoldedLongDouble(body, 0.25);
+                                     make_const_long_double(3.0L), make_var("t")));
+    ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
+    q = body->u.copy.src->u.constant->u.long_double_val;
+    EXPECT_EQ(0, f128_cmp(q, f128_from_double(1.0 / 3)));
 }
 
 // The FP-specific binary ops the translator now emits for double/float operands fold

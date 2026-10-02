@@ -322,9 +322,10 @@ Source (.c)
   `++`/`--` and `semantic/const_convert.c` for static initializers. `_Bool` also promotes to
   `int` like any narrow integer type (`is_promotable_narrow`); without that, `b + i` would
   find the two types the same size and pick the *unsigned* one, `_Bool`, as the common type.
+- **`long double` constants are binary128 bits on every host.** The scanner parses a long double literal exactly (`f128_from_string`, `libutil/float128.c`), and the AST, the constant evaluator, TAC, the optimizer and the backends carry a `Float128`, never the host's `long double` (only a double on macOS arm64). Arithmetic folds in software binary128, or as a double where the target's long double is one (BESM-6). The RISC-V runtime (`libc/riscv/float128.c`) includes the same `float128.c`, so folded and computed values agree.
 - **`.asdl` files are canonical specs, not code generators.** `ast/ast.asdl` and `tac/tacky.asdl` document the IR; `ast/ast.h` and `tac/tac.h` are maintained manually and must stay in sync.
 - **Word I/O (`libutil/wio`)**: AST and TAC binary streams use `size_t`-wide words for portability. Use `wio` for all IR serialization.
-- **TAC binary tags (`tac/tags.h`)**: Each TAC node header uses one `size_t`-wide word encoding `TAG_BASE + kind`. Tag constants are readable 4-letter ASCII (e.g. `cnst`, `insr`, `tval`). Stream magic is `TAC4` (`tac_export_begin_stream`). See `tac/tags.h`, `tac_export.c`, `tac_import.c`.
+- **TAC binary tags (`tac/tags.h`)**: Each TAC node header uses one `size_t`-wide word encoding `TAG_BASE + kind`. Tag constants are readable 4-letter ASCII (e.g. `cnst`, `insr`, `tval`). Stream magic is `TAC5` (`tac_export_begin_stream`). See `tac/tags.h`, `tac_export.c`, `tac_import.c`.
 - **`xalloc` (`libutil/xalloc`)**: All allocations go through `xalloc`/`xfree`. In debug builds, `xalloc_report()` prints leak totals.
 - **Single-pass semantics**: `typecheck_global_decl()` binds names and type-checks in a single pass.
 - **Canonical initializers.** `normalize_init` (`semantic/init_normalize.c`) is the only code that interprets designators and brace elision; `build_static_init` and `typecheck_init` run it first and then consume the result by position. Canonical form: an array has exactly N items, a struct one per member, a union one item (carrying a `DESIGNATOR_FIELD` if not the first member); a NULL item `init` means zero. In automatic mode it is the only place leaf expressions are typechecked (once — a typechecked leaf has a non-NULL `Initializer.type`).
@@ -356,7 +357,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/common/test/flow_tests.cpp` (CFG and liveness over TAC, `backend/common/flow.c`) → `backend-tests`
 - `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `type_tests.cpp` (typed TAC, struct layout, target struct ABI) → `translate-tests`
 - `optimize/test/const_fold_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `dead_store_tests.cpp`, `type_conv_tests.cpp`, `pipeline_tests.cpp` → `optimizer-tests`
-- `libutil/test/string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp` → `libutil-tests`
+- `libutil/test/string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` → `libutil-tests`
 
 The `chapter*_tests.cpp` files in `parser/test/`, `scanner/test/`, `semantic/test/`,
 `optimize/test/`, and `backend/common/test/book/` are the "Writing a C Compiler" book tests; they are compiled into the same

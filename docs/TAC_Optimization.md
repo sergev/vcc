@@ -70,7 +70,7 @@ A `Unary` instruction with a constant operand is similarly folded:
 
 Integer folding must respect the width of the result type encoded in `Tac_ConstKind`; overflow wraps at the C type's boundary, matching C's defined behavior for unsigned arithmetic and the implementation-defined wrapping our target uses for signed types.
 
-Floating-point folding applies the same rule for `ConstFloat`, `ConstDouble`, and `ConstLongDouble`, in the host's precision. A long double result (and an integer converted to long double) is folded only when exact if the target's long double is wider than a double and the host's is narrower than binary128, so that the runtime, not the host, rounds it.
+Floating-point folding applies the same rule for `ConstFloat`, `ConstDouble`, and `ConstLongDouble`. A long double constant is binary128 bits, folded in software binary128 (`libutil/float128.c`, the same code as the RISC-V runtime), or as a double where the target's long double is one (BESM-6); the host's own `long double` is never used.
 
 ### Type conversion instructions
 

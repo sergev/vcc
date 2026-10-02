@@ -81,7 +81,7 @@ Tac_Val *val_ulong(unsigned long v);
 Tac_Val *val_ulong_long(unsigned long long v);
 Tac_Val *val_float(float v);
 Tac_Val *val_double(double v);
-Tac_Val *val_long_double(long double v);
+Tac_Val *val_long_double(Float128 v);
 Tac_Val *val_var(const char *name);
 // A Var naming a fresh temporary of `type` (takes ownership of `type`).
 Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type);

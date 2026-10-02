@@ -17,7 +17,7 @@ c-compiler/
 ├── docs/           # Project documentation (this file)
 ├── grammar/        # C11 Yacc/Lex/ASDL reference; see docs/C_Grammar.md
 ├── libc/           # Target C runtime + C11 headers: besm6/{include, madlen (libc.bin), unix (libruntime.a, libc0.a, crt0.o)}
-├── libutil/        # xalloc, wio, string_map
+├── libutil/        # xalloc, wio, string_map, float128
 ├── parser/         # Recursive-descent parser, nametab; parse driver
 ├── scanner/        # Hand-written lexer
 ├── scripts/        # googletest.xml (cppcheck), validate_asdl.py
@@ -149,7 +149,7 @@ Tests: `decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `
 | `tac_print.c` | Human-readable TAC printing |
 | `tac_compare.c` | Structural comparison |
 | `tac_export.c`, `tac_import.c` | Binary wire format (read/write via `wio`) |
-| `tags.h` | 4-letter ASCII tag constants for binary wire format; a stream starts with the magic `TAC4` |
+| `tags.h` | 4-letter ASCII tag constants for binary wire format; a stream starts with the magic `TAC5` |
 | `tac_yaml.c` | YAML listing (debug/test; not re-importable) |
 | `tac_graphviz.c` | Graphviz DOT output |
 
@@ -265,7 +265,7 @@ kind: constant
 const:
   kind: int      # int | long | long_long | uint | ulong | ulong_long
                  # | char | uchar | float | double | long_double
-  value: 42      # float/double/long_double use %a (hex float) format
+  value: 42      # float/double/long_double use %a (hex float) format; long_double is exact binary128
 ```
 
 **Variable name convention.** A `var` name encodes its storage class by its first
@@ -379,8 +379,9 @@ Reference grammars and notes. See [grammar/README.md](../grammar/README.md) for 
 | **xalloc** | `xalloc.c`, `xalloc.h`, `xalloc_tests.cpp` | Tracked allocation; `xfree_all`; `xstruniq()` for unique name generation; leak reporting in debug builds |
 | **wio** | `wio.c`, `wio.h` | Binary I/O for AST and TAC streams |
 | **string_map** | `string_map.c`, `string_map.h` | Map used in symbol and type tables |
+| **float128** | `float128.c`, `float128.h` | IEEE binary128 in software: the value of every long double constant, exact on any host (parsing, folding, conversion, formatting); also included by the RISC-V runtime |
 
-Tests: `string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp` → `libutil-tests`.
+Tests: `string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` → `libutil-tests`.
 
 ### Scripts (`scripts/`)
 
@@ -478,7 +479,7 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `scanner-tests` | `scanner/test/tests.cpp` |
 | `parser-tests` | `parser/test/simple_tests.cpp`, …, `serialize_tests.cpp` (9 files) |
 | `ast-tests` | `ast/test/clone_tests.cpp` |
-| `libutil-tests` | `libutil/test/string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp` |
+| `libutil-tests` | `libutil/test/string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` |
 | `tac-tests` | `tac/test/yaml_tests.cpp`, `graphviz_tests.cpp`, `binary_tests.cpp` |
 | `semantic-tests` | `semantic/test/symtab_tests.cpp`, `structtab_tests.cpp`, `typetab_tests.cpp`, `typecheck_tests.cpp`, `real_tests.cpp`, `pipeline_tests.cpp`, `label_loops_tests.cpp`, `const_convert_tests.cpp`, `coercion_tests.cpp` |
 | `besm-tests` | `backend/besm6/test/codegen_tests.cpp`, `arith_tests.cpp`, `convert_tests.cpp`, `copy_tests.cpp`, `flow_tests.cpp`, `frame_tests.cpp`, `init_tests.cpp`, `label_tests.cpp`, `ptr_tests.cpp`, `run_tests.cpp`, `struct_tests.cpp`, `unary_tests.cpp` |

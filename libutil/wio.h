@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "float128.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -39,8 +41,9 @@ size_t wgetw(WFILE *stream);
 int wputw(size_t w, WFILE *stream);
 double wgetd(WFILE *stream);
 int wputd(double w, WFILE *stream);
-long double wgetld(WFILE *stream);
-int wputld(long double w, WFILE *stream);
+// A binary128 value, as two words: low, then high.
+Float128 wgetf128(WFILE *stream);
+int wputf128(Float128 f, WFILE *stream);
 bool weof(const WFILE *stream);
 bool werror(const WFILE *stream);
 int wfileno(const WFILE *stream);

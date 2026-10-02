@@ -12,6 +12,12 @@ static bool fp_equal(long double x, long double y)
     return x == y || (isnan(x) && isnan(y));
 }
 
+// Binary128 constants are equal when their bits are, or both are NaN.
+static bool f128_equal(Float128 x, Float128 y)
+{
+    return (x.lo == y.lo && x.hi == y.hi) || (f128_is_nan(x) && f128_is_nan(y));
+}
+
 // Compare two Tac_Const structures
 bool tac_compare_const(const Tac_Const *a, const Tac_Const *b)
 {
@@ -39,7 +45,7 @@ bool tac_compare_const(const Tac_Const *a, const Tac_Const *b)
     case TAC_CONST_DOUBLE:
         return fp_equal(a->u.double_val, b->u.double_val);
     case TAC_CONST_LONG_DOUBLE:
-        return fp_equal(a->u.long_double_val, b->u.long_double_val);
+        return f128_equal(a->u.long_double_val, b->u.long_double_val);
     case TAC_CONST_SCHAR:
         return a->u.char_val == b->u.char_val;
     case TAC_CONST_UCHAR:
@@ -191,7 +197,7 @@ bool tac_compare_static_init(const Tac_StaticInit *a, const Tac_StaticInit *b)
     case TAC_STATIC_INIT_DOUBLE:
         return a->u.double_val == b->u.double_val;
     case TAC_STATIC_INIT_LONG_DOUBLE:
-        return a->u.long_double_val == b->u.long_double_val;
+        return f128_equal(a->u.long_double_val, b->u.long_double_val);
     case TAC_STATIC_INIT_ZERO:
         return a->u.zero_bytes == b->u.zero_bytes;
     case TAC_STATIC_INIT_STRING:

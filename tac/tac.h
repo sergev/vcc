@@ -9,6 +9,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdio.h>
 
+#include "float128.h"
+
 // Forward declarations
 typedef struct Tac_Val Tac_Val;
 typedef struct Tac_Instruction Tac_Instruction;
@@ -443,7 +445,7 @@ typedef struct Tac_Const {
         unsigned long long ulong_long_val;
         double float_val;
         double double_val;
-        long double long_double_val;
+        Float128 long_double_val; // binary128 bits
         int char_val;
         unsigned char uchar_val;
     } u;
@@ -544,7 +546,7 @@ typedef struct Tac_StaticInit {
         uint64_t ulong_val;          // INIT_U64
         double float_val;            // INIT_FLOAT
         double double_val;           // INIT_DOUBLE
-        long double long_double_val; // INIT_LONG_DOUBLE
+        Float128 long_double_val; // INIT_LONG_DOUBLE, binary128 bits
         int zero_bytes;              // INIT_ZERO
 
         // INIT_STRING

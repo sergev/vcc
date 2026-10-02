@@ -1,6 +1,6 @@
 enum {
     TAG_EOL             = 0,          // end of list / NULL
-    TAG_TAC_MAGIC       = 0x54414334, // 'TAC4' - stream header, bumped on format change
+    TAG_TAC_MAGIC       = 0x54414335, // 'TAC5' - stream header, bumped on format change
     TAG_TAC_CONST       = 0x636e7374, // 'cnst' - for struct Tac_Const
     TAG_TAC_INSTR       = 0x696e7372, // 'insr' - for struct Tac_Instruction
     TAG_TAC_MEMBER      = 0x746d6272, // 'tmbr' - for struct Tac_Member

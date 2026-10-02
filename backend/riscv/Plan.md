@@ -71,10 +71,8 @@ options `--no-regalloc`, `--no-peephole` and `--frame-pointer` turn these off.
   routines in `libc/riscv/float128.c`, written in C and compiled by us; clang's
   code links against them too. `float128_tests.cpp` checks them against exact
   results (`gen_float128_cases.py`) and against clang. `printf`'s `L` prints with
-  double precision. Limitation: a long double constant is carried as the host's
-  `long double`, so on a host without binary128 (macOS arm64: double) a literal
-  like `0.1L` or `LDBL_MAX` loses precision or range; the constant folder folds
-  only exact long double results there.
+  double precision. Long double constants are exact binary128 on any host: parsed,
+  folded and carried as bits (`libutil/float128.c`, which the runtime includes).
 
 ## Phase 8 — finishing
 

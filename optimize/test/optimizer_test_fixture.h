@@ -98,7 +98,7 @@ protected:
     static Tac_Val *make_const_long_double(long double v)
     {
         Tac_Const *c         = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        c->u.long_double_val = v;
+        c->u.long_double_val = f128_from_double((double)v);
         Tac_Val *val         = tac_new_val(TAC_VAL_CONSTANT);
         val->u.constant      = c;
         return val;
@@ -424,6 +424,6 @@ protected:
         ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
         ASSERT_NE(body->u.copy.src, nullptr);
         EXPECT_EQ(body->u.copy.src->u.constant->kind, TAC_CONST_LONG_DOUBLE);
-        EXPECT_DOUBLE_EQ((double)body->u.copy.src->u.constant->u.long_double_val, (double)expected);
+        EXPECT_DOUBLE_EQ(f128_to_double(body->u.copy.src->u.constant->u.long_double_val), (double)expected);
     }
 };

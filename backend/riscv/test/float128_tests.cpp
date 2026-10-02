@@ -284,3 +284,52 @@ int main(void)
 }
 )"));
 }
+
+// Constants: each side checks the other's literals, folded expressions and static
+// initializers against its own, bit for bit.
+static const std::string kConstDecls = R"(
+int ld_consts(long double tenth, long double max, long double min, long double tmin,
+              long double eps, long double third, long double neg, long double big);
+)";
+
+static const std::string kConstCheck = kConstDecls + R"(
+#include <float.h>
+static long double s_third = 1.0L / 3;
+static long double s_neg   = -0.1L * 7;
+int ld_consts(long double tenth, long double max, long double min, long double tmin,
+              long double eps, long double third, long double neg, long double big)
+{
+    if (tenth != 0.1L) return 1;
+    if (max != LDBL_MAX) return 2;
+    if (min != LDBL_MIN) return 3;
+    if (tmin != LDBL_TRUE_MIN) return 4;
+    if (eps != LDBL_EPSILON || 1 + eps == 1) return 5;
+    if (third != s_third) return 6;
+    if (neg != s_neg) return 7;
+    if (big != 123456789012345678901234567890.0L) return 8;
+    return 0;
+}
+)";
+
+static const std::string kConstCall = kConstDecls + R"(
+#include <float.h>
+int main(void)
+{
+    return ld_consts(0.1L, LDBL_MAX, LDBL_MIN, LDBL_TRUE_MIN, LDBL_EPSILON, 1.0L / 3,
+                     -0.1L * 7, 123456789012345678901234567890.0L);
+}
+)";
+
+TEST_F(Float128Test, ConstantsWeCallClang)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunWithClang(kConstCall, kConstCheck));
+    EXPECT_EQ(0, exit_status);
+}
+
+TEST_F(Float128Test, ConstantsClangCallsUs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunWithClang(kConstCheck, kConstCall));
+    EXPECT_EQ(0, exit_status);
+}

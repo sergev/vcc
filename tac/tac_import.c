@@ -60,7 +60,7 @@ static Tac_Const *import_const(WFILE *in)
         check_input(in, "const double");
         break;
     case TAC_CONST_LONG_DOUBLE:
-        c->u.long_double_val = wgetld(in);
+        c->u.long_double_val = wgetf128(in);
         check_input(in, "const long double");
         break;
     case TAC_CONST_SCHAR:
@@ -213,7 +213,7 @@ static Tac_StaticInit *import_static_init(WFILE *in)
         check_input(in, "static_init double");
         break;
     case TAC_STATIC_INIT_LONG_DOUBLE:
-        si->u.long_double_val = wgetld(in);
+        si->u.long_double_val = wgetf128(in);
         check_input(in, "static_init long double");
         break;
     case TAC_STATIC_INIT_ZERO:
@@ -481,7 +481,7 @@ Tac_Program *tac_import_program(WFILE *in)
 {
     Tac_Program *prog = tac_new_program();
     if (!tac_import_begin_stream(in)) {
-        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC4')\n");
+        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC5')\n");
         exit(1);
     }
     for (Tac_TopLevel **p = &prog->decls;; p = &(*p)->next) {

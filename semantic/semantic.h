@@ -51,6 +51,8 @@ void check_int_literal_width(const Literal *lit);
 
 // Convert any arithmetic literal to a real value.
 double literal_to_double(const Literal *lit);
+// The exact binary128 value of a numeric literal.
+Float128 literal_to_long_double(const Literal *lit);
 
 //
 // Helpers for Type.

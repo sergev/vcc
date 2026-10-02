@@ -514,33 +514,17 @@ int wputd(double f, WFILE *stream)
     return -1;
 }
 
-long double wgetld(WFILE *stream)
+Float128 wgetf128(WFILE *stream)
 {
-    union {
-        size_t w[(sizeof(long double) + sizeof(size_t) - 1) / sizeof(size_t)];
-        long double f;
-    } u;
-    u.f           = 0;
-    size_t nwords = sizeof(u.w) / sizeof(size_t);
-    for (size_t i = 0; i < nwords; i++) {
-        u.w[i] = wgetw(stream);
-        if (werror(stream))
-            return __builtin_nanl("");
-    }
-    return u.f;
+    Float128 f;
+    f.lo = (uint64_t)wgetw(stream);
+    f.hi = (uint64_t)wgetw(stream);
+    return f;
 }
 
-int wputld(long double f, WFILE *stream)
+int wputf128(Float128 f, WFILE *stream)
 {
-    union {
-        long double f;
-        size_t w[(sizeof(long double) + sizeof(size_t) - 1) / sizeof(size_t)];
-    } u;
-    u.f           = f;
-    size_t nwords = sizeof(u.w) / sizeof(size_t);
-    for (size_t i = 0; i < nwords; i++) {
-        if (wputw(u.w[i], stream) < 0)
-            return -1;
-    }
-    return 0;
+    if (wputw((size_t)f.lo, stream) < 0)
+        return -1;
+    return wputw((size_t)f.hi, stream);
 }
