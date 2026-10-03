@@ -148,6 +148,8 @@ int compare_cond(Tac_BinaryOperator op, bool is_unsigned);
 // Whether operation `op` on type `t` is unsigned: by the operator, as the
 // operands' types may differ once copy propagation has removed a cast, or a pointer.
 bool unsigned_operation(const Tac_Type *t, Tac_BinaryOperator op);
+// A branch to TAC label `tac` when condition `cond` holds (A32_AL: always).
+void gen_branch(Gen *g, int cond, const char *tac);
 // reg = 1 when condition `cond` holds, else 0; the flags are kept.
 void set_cond(Gen *g, int reg, int cond);
 // Operand 2 of `op` for integer value `v` of type `t`: a modified immediate when the

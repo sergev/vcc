@@ -8,6 +8,49 @@
 #include "internal.h"
 #include "xalloc.h"
 
+// Local label for TAC label `%N`: `.LN`.
+static char *label_name(const char *tac)
+{
+    size_t len = strlen(tac);
+    char *s    = xalloc(len + 3, __func__, __FILE__, __LINE__);
+    strcpy(s, ".L");
+    strcat(s, tac[0] == '%' ? tac + 1 : tac);
+    return s;
+}
+
+static void gen_label(Gen *g, const char *tac)
+{
+    char *l = label_name(tac);
+    a32_new_block(g->fn, l);
+    xfree(l);
+}
+
+// A branch to TAC label `tac` when condition `cond` holds.
+void gen_branch(Gen *g, int cond, const char *tac)
+{
+    char *l                              = label_name(tac);
+    emit1(g, A32_B, a32_sym(l, 0))->cond = cond;
+    xfree(l);
+}
+
+// Branch to `target` when `cond` is zero (or nonzero).  ARM state has no cbz: a
+// cmp, or for a long long an orrs of its words.
+static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
+{
+    const Tac_Type *t = val_type(g, cond);
+    if (a32_is_fp(t))
+        fatal_error("arm32: %s: a floating-point condition is not implemented yet", gen_name(g));
+    if (a32_is_pair(t)) {
+        load_word(g, T0, cond, t, 0);
+        load_word(g, T1, cond, t, 1);
+        emit3(g, A32_ORR, a32_reg(T0), a32_reg(T0), a32_reg(T1))->set_flags = true;
+    } else {
+        load_val(g, T0, cond);
+        emit2(g, A32_CMP, a32_reg(T0), a32_imm(0));
+    }
+    gen_branch(g, if_zero ? A32_EQ : A32_NE, target);
+}
+
 // dst = src, for any type: an aggregate copied as bytes, an 8-byte scalar as two
 // words, any other through r12.  A float or double needs no VFP register to move.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
@@ -272,6 +315,17 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
+    case TAC_INSTRUCTION_LABEL:
+        gen_label(g, in->u.label.name);
+        break;
+    case TAC_INSTRUCTION_JUMP:
+        gen_branch(g, A32_AL, in->u.jump.target);
+        break;
+    case TAC_INSTRUCTION_JUMP_IF_ZERO:
+    case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
+        gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
+                      in->u.jump_if_zero.target);
+        break;
     case TAC_INSTRUCTION_RETURN:
         gen_return(g, in->u.return_.src);
         break;
