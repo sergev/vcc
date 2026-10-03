@@ -73,6 +73,29 @@ compared with clang. Findings and changes against the plan:
 - The `long long` run tests are RV32's `llong_tests`, ported (host results as
   expectation).
 
+Phase 3 is done. The calls are AAPCS-VFP in full, interop-tested with clang both ways
+over a table of signatures, and the whole book runs, compared with clang (only the
+ILP32 skip list stays out). Findings and changes against the plan:
+- **`tac_aapcs32_class`** shares `tac_aapcs64_class`'s code in `tac/tac_abi.c`, with
+  `long double` counted as `double` and 8 bytes. An HFA takes the lowest run of free `s`
+  registers (even pairs for doubles) that holds it, as an FP scalar does, so it is
+  back-filled too. Under the base standard it is a plain composite, as an argument and
+  as a result (≤ 4 bytes in r0, else through the address in r0).
+- **A variadic function** pushes `r0`–`r3` before its frame record and returns with
+  `pop {r11, lr}; add sp, sp, #16; bx lr`. It reads every parameter, the named ones
+  too, in place in that one area (`r11 + 8` on), and returns a `float` in r0 and a
+  `double` in r0:r1.
+- **`libc/arm32/include/stdarg.h`** came at V18, ahead of the other ARM32 headers.
+  `TEST_TARGET_INCLUDE_DIR` (`libutil/test/test_preprocess.h`) and the libc build put it
+  before the riscv32 headers. V21 drops that once the ARM32 directory is complete.
+- **`libc.a` has the printf family** (`printf`, `sprintf`, `snprintf`, `__doprnt`): all of
+  `LIBC_C_COMMON` but no `float128`, since `long double` is a double.
+- **Clang-compiled code calls** `__aeabi_ldivmod`, `__aeabi_uldivmod`, `__aeabi_l2d`,
+  `__aeabi_ul2f`, `__aeabi_d2lz`, `__aeabi_f2ulz` and `__aeabi_memcpy4` from our
+  `libc.a`; a run test checks each.
+- **Chapters 19 and 20** passed as soon as they were enabled; there is no chapter filter
+  any more.
+
 ## Target and decisions
 
 | Decision | Choice | Why |
@@ -164,48 +187,14 @@ A `float` occupies a whole `d` register in the allocator's view (its even `s` ha
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
 
-## Phase 3 — ABI conformance
-
-- **V17. Full aggregate classification.** One function, `tac_aapcs32_class` beside
-  `tac_aapcs64_class` in `tac/tac_abi.c`, decides HFA or not (AAPCS counts `long
-  double` as `double`, so a struct mixing the two is still homogeneous). It drives HFAs
-  in VFP registers (with back-filling and the stack-closes-VFP rule) and HFA results in
-  `s0`–`s3`/`d0`–`d3`; `call.c`'s other composites (V16: core registers, the
-  `r3`/stack split, results in `r0` or through it) move onto it unchanged.
-- **V18. Variadic functions and `<stdarg.h>`.**
-  - Calls to a variadic callee, direct or through a pointer, use the base standard: FP
-    arguments in core registers and stack (a `float` already promoted to `double` by the
-    frontend), named arguments included; HFAs travel as plain composites.
-  - A variadic function's own parameters arrive under the same rules. Its prologue
-    pushes `r0`–`r3` (the unnamed ones at least) just below the incoming stack
-    arguments, so registers and stack form one contiguous area. Its named parameters
-    are read from there.
-  - `<stdarg.h>` is pure macros, RV32-style: `typedef struct __va_list { char *__ap; }
-    va_list;` (clang's type, a 4-byte composite passed in a core register like a
-    pointer), `va_start` from the address after the last named parameter, `va_arg`
-    rounding to 4 bytes and aligning to 8 for an 8-aligned type. No by-reference case
-    exists: AAPCS passes every composite by value. `va_copy` is a struct copy, `va_end`
-    nothing.
-  - `va_list` handed to a clang-compiled `vprintf`, and ours receiving clang's, are
-    covered by V19.
-- **V19. Interop tests** with clang in both directions over a table of signatures, built
-  before the code they test: mixed int/FP with back-filling (`float, double, float`),
-  `long long` forcing the even pair and the `r3` skip, narrow ints in both extension
-  directions, HFAs of `float` and `double` (1–4 members), small and odd-sized structs,
-  a struct split between `r3` and the stack, large structs by value, struct results
-  (≤ 4 bytes, HFA, through `r0`), many arguments, variadics both ways (`double` in an
-  even core pair, HFA structs through `va_arg`), a `va_list` handed across, and a
-  clang callee that divides `long long` (pulling `__aeabi_ldivmod` from our `libc.a`).
-- **V20. Differential book tests.** Every book program compiled by clang too, run under
-  qemu, outputs compared — the RISC-V and AArch64 suites' comparison.
-
 ## Phase 4 — library and headers
 
 - **V21. Headers.** `libc/arm32/include/`: `float.h` (`LDBL_*` equal to `DBL_*`),
   `stddef.h` and `stdint.h` (unsigned `wchar_t`), `setjmp.h` (`r4`–`r11`, `sp`, `lr`,
-  `d8`–`d15`), and the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and
+  `d8`–`d15`), beside the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and
   `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
-  `riscv32-headers`, and switch `arm32-tests` from the riscv32 headers to these.
+  `riscv32-headers`, and switch `arm32-tests` and the libc build from the riscv32
+  headers to these (dropping `TEST_TARGET_INCLUDE_DIR`).
 - **V22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests` (host libc output as expectation). `printf("%Lf")` exercises the 8-byte
   `long double` through `va_arg`.
@@ -215,7 +204,7 @@ registers, for back-filling.
 - **V23. Register allocation** on `backend/common/regalloc.c`, with the pools of the
   register table. The pair hook RV32 added carries `long long`. Callee-saved core
   registers are pushed with the frame record in one `push`/`pop`, VFP ones with one
-  `vpush`/`vpop` of the used range. The ch. 20 tests pass.
+  `vpush`/`vpop` of the used range. The ch. 20 tests keep passing.
 - **V24. Leaf functions and sp-addressed frames.** A leaf that needs no stack has no
   prologue at all and returns with `bx lr`. Without `--frame-pointer`, slots are
   addressed from `sp` and `r11` joins the allocator's pool, as on AArch64.
@@ -258,10 +247,11 @@ registers, for back-filling.
   and r10 out of the callee-saved pool. Mitigation: the register table above.
 - **AAPCS-VFP argument rules** — back-filling, the closed-VFP-after-stack rule, the
   even-pair rule, the `r3`/stack split, and the switch to the base standard for
-  variadics — are each easy to get almost right. Mitigation: V19's interop table,
-  written before the code it tests, with clang as the oracle in both directions.
+  variadics — are each easy to get almost right. Mitigation: V19's interop table, with
+  clang as the oracle in both directions; V23–V25 must keep it green.
 - **`s`/`d` aliasing** would corrupt values silently if two allocator units overlapped.
   Mitigation: the allocator sees only `d` registers, a `float` living in the even half,
-  and only call setup (V12, V17) names odd `s` registers. A regalloc test pins that.
+  and only call setup (`call.c`) names odd `s` registers. A regalloc test pins that.
 - **Missing RTABI symbols** surface only when clang-compiled code is linked. Mitigation:
-  `aeabi_*.s` provide the whole family up front, and V19 has a clang callee for each.
+  `aeabi_*.s` provide the whole family up front, and V19 links clang callees that use
+  the common ones.
