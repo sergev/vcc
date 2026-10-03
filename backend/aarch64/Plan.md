@@ -59,35 +59,6 @@ and the harness runs qemu under a short timeout regardless.
   AAPCS64 structure `{ __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }` — the
   largest difference from RISC-V (A18).
 
-## Phase 5 — code quality
-
-- **A24. Register allocation. Done.** On `backend/common/regalloc.c` (`regalloc.c`):
-  `x0`–`x7`/`v0`–`v7` for values not live across a call (nor a long double runtime
-  call), `x19`–`x28`/`v8`–`v15` otherwise, saved with `stp`/`ldp` pairs only when used.
-  A register holds an integer in canonical form (W view with the upper half zero,
-  `char`/`short` extended by type), so a parameter is extended on arrival and a call
-  result on return; parameters and register arguments go through a parallel move.
-  `--no-regalloc`, `--no-peephole` and `--frame-pointer` flags as on RISC-V; the
-  selection goldens pin the naive code with `NaiveSelection()`. All book chapters pass,
-  20 included.
-- **A25. Leaf functions. Done.** A function that makes no call, saves no register and
-  never touches x29 or sp has no prologue at all. Otherwise, when every x29 offset
-  still fits its instruction from sp (`gen_prologue`'s `rebase_to_sp`), there is no
-  frame record: `sub sp`, x30 saved above the slots only when there are calls, the
-  incoming stack arguments right above the frame. Larger frames keep x29, and so does
-  every function under `--frame-pointer`.
-- **A26. Peephole. Done** (`peephole.c`, after the frame): immediate operands
-  (`add`/`sub`/`cmp`, 12 bits optionally shifted, `cmn` for a negative compare; a
-  bitmask immediate encoder for `and`/`orr`/`eor`; shifts), `wzr` for a stored zero, a
-  constant index as an offset; moves forwarded, results computed in place, self moves
-  (a W one when its cleared upper half is not read) and a store's reload deleted;
-  `add` folded into the addressing mode (`[x, #imm]`, `[x, x, lsl #s]`,
-  `[x, w, sxtw #s]`), `sxtw` into the scaling `add`; `mul`+`add`/`sub` to
-  `madd`/`msub`; adjacent `ldr`/`str` to `ldp`/`stp`, last; `cmp #0` + `b.eq` to `cbz`;
-  branch over jump, jump to next label, code after a jump. The compare-and-branch
-  fusion is instruction selection's (`gen_compare_branch`): a comparison whose only
-  use is the next conditional jump becomes `cmp`/`fcmp` + `b.cond`, with no 0/1 value.
-
 ## Phase 6 — finishing
 
 - **A27. Driver.** `vcc -t aarch64`: `vcpp -t aarch64`, `vparse`,
