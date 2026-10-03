@@ -143,5 +143,16 @@ void gen_return(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// The condition of comparison `op`, or -1 when it is not one.
+int compare_cond(Tac_BinaryOperator op, bool is_unsigned);
+// Whether operation `op` on type `t` is unsigned: by the operator, as the
+// operands' types may differ once copy propagation has removed a cast, or a pointer.
+bool unsigned_operation(const Tac_Type *t, Tac_BinaryOperator op);
+// reg = 1 when condition `cond` holds, else 0; the flags are kept.
+void set_cond(Gen *g, int reg, int cond);
+// Operand 2 of `op` for integer value `v` of type `t`: a modified immediate when the
+// constant is one, or when its negation (add, sub, cmp) or complement (and) is, with
+// *op changed to the counterpart; else core register `scratch`, loaded.
+A32_Operand operand2(Gen *g, A32_Op *op, const Tac_Val *v, const Tac_Type *t, int scratch);
 
 #endif // ARM32_INTERNAL_H

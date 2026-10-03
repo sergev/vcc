@@ -91,7 +91,10 @@ typedef struct {
     X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(PUSH, "push") X(POP, "pop")             \
     X(BX, "bx") X(VLDR, "vldr") X(VSTR, "vstr") X(VMOV, "vmov") X(VPUSH, "vpush")           \
     X(VPOP, "vpop") X(SXTB, "sxtb") X(SXTH, "sxth") X(UXTB, "uxtb") X(UXTH, "uxth")       \
-    X(EPILOGUE, "<epilogue>")
+    X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc") X(AND, "and") X(ORR, "orr")     \
+    X(EOR, "eor") X(BIC, "bic") X(MUL, "mul") X(MLA, "mla") X(MLS, "mls")                   \
+    X(UMULL, "umull") X(SDIV, "sdiv") X(UDIV, "udiv") X(LSL, "lsl") X(LSR, "lsr")           \
+    X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(EPILOGUE, "<epilogue>")
 
 typedef enum {
 #define A32_ENUM(op, mnem) A32_##op,
