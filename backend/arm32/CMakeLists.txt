@@ -19,10 +19,6 @@ target_link_libraries(arm32 backend_common tac libutil)
 # Tests for the ARM32 backend: golden assembly, run tests on qemu, and the shared
 # book suite.  Run tests skip themselves when the ARM32 tools are absent.
 #
-# The book chapters the code generator handles so far.
-set(ARM32_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER ARM32_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-8])_tests[0-9]*\\.cpp$")
-
 add_executable(arm32-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
@@ -39,7 +35,7 @@ add_executable(arm32-tests
     test/stdarg_tests.cpp
     test/interop_tests.cpp
     test/run_tests.cpp
-    ${ARM32_BOOK_SOURCES}
+    ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(arm32-tests arm32 parser translator semantic GTest::gtest_main
     test_util backend_test_util)

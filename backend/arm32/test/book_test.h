@@ -1,7 +1,6 @@
 // The ARM32 fixture for the shared "Writing a C Compiler" suite
 // (backend/common/test/book/): programs run on bare-metal qemu, each also compiled by
-// clang and the two outputs compared.  The chapters are enabled in CMakeLists.txt as
-// the code generator reaches them.
+// clang and the two outputs compared.
 #pragma once
 
 #include "arm32_test.h"
