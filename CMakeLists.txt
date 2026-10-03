@@ -61,7 +61,7 @@ endif()
 # anywhere on the line.  Exposed to all subdirectories as SystemCpp (always
 # invoked with -E).  A target's headers are its own directory (BESM6_INCLUDE_DIR,
 # RISCV_INCLUDE_DIR, RISCV32_INCLUDE_DIR, AARCH64_INCLUDE_DIR, ARM32_INCLUDE_DIR), then the data-model ones
-# (LP64_INCLUDE_DIR for riscv64 and aarch64, ILP32_INCLUDE_DIR for riscv32), and last the target-neutral
+# (LP64_INCLUDE_DIR for riscv64 and aarch64, ILP32_INCLUDE_DIR for riscv32 and arm32), and last the target-neutral
 # LIBC_COMMON_INCLUDE_DIR.
 #
 set(SystemCpp ${CMAKE_C_COMPILER})

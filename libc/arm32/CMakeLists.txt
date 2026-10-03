@@ -26,6 +26,29 @@ set(ARM32_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
 set(ARM32_TARGET_FLAGS --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16
     CACHE INTERNAL "")
 
+# Standard-library header check, as for riscv32 ...
+add_test(
+    NAME arm32-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            ${SystemCpp}
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
+            ${ARM32_INCLUDE_DIR}
+            ${ILP32_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
+# ... and the same through our own preprocessor.
+add_test(
+    NAME arm32-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-tarm32
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${ARM32_INCLUDE_DIR}
+            ${ILP32_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
 if(NOT ARM32_TOOLS_FOUND)
     message(STATUS "No ARM32 clang/llvm-ar: the ARM32 runtime is not built")
     return()
@@ -54,15 +77,12 @@ foreach(name console malloc aeabi_divmod aeabi_long aeabi_conv aeabi_mem)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genarm32 -> clang, as the code generator
-# reaches them (backend/arm32/Plan.md).  Until the ARM32 headers are complete (V21),
-# the riscv32 ones serve after them: the same ILP32 data model but for wchar_t and
-# long double.
-file(GLOB ARM32_LIBC_HEADERS ${ARM32_INCLUDE_DIR}/*.h ${RISCV32_INCLUDE_DIR}/*.h
-     ${ILP32_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+# reaches them (backend/arm32/Plan.md).
+file(GLOB ARM32_LIBC_HEADERS ${ARM32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
+     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(arm32_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${ARM32_INCLUDE_DIR} -I${RISCV32_INCLUDE_DIR}
-                -I${ILP32_INCLUDE_DIR}
+        COMMAND ${SystemCpp} -E -nostdinc -I${ARM32_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR}
                 -I${LIBC_COMMON_INCLUDE_DIR}
                 ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast

@@ -259,3 +259,52 @@ int their_copy(struct big *dst, struct big *src) { *dst = *src; return dst->a[39
     EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
     EXPECT_EQ(63, exit_status);
 }
+
+// Our headers against clang's own: the same constants, types and layouts.
+TEST_F(Arm32Test, HeadersAgreeWithClang)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    std::string values = R"(
+#include <float.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+enum { NI = 20, NF = 9 };
+void NAME(long long *i, long double *f)
+{
+    long long iv[NI] = { sizeof(wchar_t), (wchar_t)-1 > 0, WCHAR_MIN, WCHAR_MAX,
+                         WINT_MIN, WINT_MAX, sizeof(max_align_t), _Alignof(max_align_t),
+                         SIZE_MAX, PTRDIFF_MIN, PTRDIFF_MAX, INTPTR_MIN, UINTPTR_MAX,
+                         INT64_MIN, UINT32_MAX, CHAR_MIN, CHAR_MAX, LONG_MAX,
+                         LDBL_MANT_DIG * 10000 + LDBL_MAX_EXP, DECIMAL_DIG + LDBL_DIG * 100 };
+    long double fv[NF] = { LDBL_EPSILON, LDBL_MIN, LDBL_MAX, LDBL_TRUE_MIN, DBL_EPSILON,
+                           DBL_MAX, FLT_EPSILON, FLT_MAX, LDBL_MIN_10_EXP + LDBL_MAX_10_EXP };
+    for (int k = 0; k < NI; k++)
+        i[k] = iv[k];
+    for (int k = 0; k < NF; k++)
+        f[k] = fv[k];
+}
+)";
+    std::string ours   = values;
+    std::string theirs = values;
+    ours.replace(ours.find("NAME"), 4, "our_values");
+    theirs.replace(theirs.find("NAME"), 4, "their_values");
+    ours += R"(
+void their_values(long long *i, long double *f);
+int main(void)
+{
+    long long oi[NI], ti[NI];
+    long double of[NF], tf[NF];
+    our_values(oi, of);
+    their_values(ti, tf);
+    for (int k = 0; k < NI; k++)
+        if (oi[k] != ti[k])
+            return 1 + k;
+    for (int k = 0; k < NF; k++)
+        if (of[k] != tf[k])
+            return 100 + k;
+    return 0;
+})";
+    EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
+    EXPECT_EQ(0, exit_status);
+}

@@ -2,7 +2,8 @@
 
 The C11 headers that depend only on the ILP32 data model shared by riscv32 and arm32:
 `inttypes.h`, `limits.h`, `math.h`.  They are searched after the target's own
-directory ([libc/riscv32/include](../../riscv32/include)) and before
+directory ([libc/riscv32/include](../../riscv32/include) or
+[libc/arm32/include](../../arm32/include)) and before
 [libc/common/include](../../common/include):
 
 ```sh
