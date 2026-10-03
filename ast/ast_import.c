@@ -499,7 +499,7 @@ Expr *import_expr(WFILE *input)
     check_input(input, "expr tag");
     if (tag == TAG_EOL)
         return NULL;
-    if (tag < TAG_EXPR || tag > TAG_EXPR + EXPR_GENERIC) {
+    if (tag < TAG_EXPR || tag > TAG_EXPR + EXPR_VA_CLASS) {
         fprintf(stderr, "Error: Expected TAG_EXPR, got 0x%zx\n", tag);
         exit(1);
     }

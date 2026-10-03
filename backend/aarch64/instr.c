@@ -32,14 +32,33 @@ static void gen_jump(Gen *g, const char *tac)
     xfree(l);
 }
 
+// x`reg` = 0 when long double `v` is zero of either sign, else nonzero: its two
+// doublewords or'ed, the sign bit shifted out.  x10 is the temporary.
+static void ld_nonzero(Gen *g, int reg, const Tac_Val *v)
+{
+    if (v->kind == TAC_VAL_CONSTANT) {
+        Float128 q = v->u.constant->u.long_double_val;
+        gen_li(g, reg, A64_X, (q.lo | q.hi << 1) != 0);
+        return;
+    }
+    int base;
+    int64_t off;
+    name_addr(g, v->u.var_name, T3, &base, &off);
+    A64_Operand r = a64_reg(reg, A64_X);
+    emit2(g, A64_LDR, r, mem(g, base, off, 8));
+    emit2(g, A64_LDR, a64_reg(T1, A64_X), mem(g, base, off + 8, 8));
+    emit3(g, A64_ORR, r, r, a64_shift(T1, A64_X, A64_SHIFT_LSL, 1));
+}
+
 // Branch to `target` when `cond` is zero (or nonzero).
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
-    char *l = label_name(target);
-    if (a64_is_fp(t)) {
+    char *l           = label_name(target);
+    if (a64_is_ld(t)) {
+        ld_nonzero(g, T0, cond);
+        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, A64_X), a64_sym(l, 0));
+    } else if (a64_is_fp(t)) {
         // A NaN is not zero: unordered leaves Z clear.
         load_val(g, F0, cond);
         emit2(g, A64_FCMP, a64_reg(F0, a64_width(t)), a64_fzero());
@@ -295,11 +314,37 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     store_val(g, F0, in->u.unary.dst);
 }
 
+// A long double negation (its sign bit flipped in a copy), or `!`.
+static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Val *dst = in->u.unary.dst;
+    if (in->u.unary.op == TAC_UNARY_NOT) {
+        ld_nonzero(g, T0, in->u.unary.src);
+        emit2(g, A64_CMP, a64_reg(T0, A64_X), a64_imm(0));
+        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(A64_EQ));
+        store_val(g, T0, dst);
+        return;
+    }
+    if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
+        fatal_error("aarch64: %s: bad long double unary operator", gen_name(g));
+    gen_copy(g, in->u.unary.src, dst);
+    int base;
+    int64_t off;
+    name_addr(g, dst->u.var_name, T4, &base, &off);
+    A64_Operand hi = a64_reg(T0, A64_X);
+    emit2(g, A64_LDR, hi, mem(g, base, off + 8, 8));
+    gen_li(g, T1, A64_X, INT64_MIN);
+    emit3(g, A64_EOR, hi, hi, a64_reg(T1, A64_X));
+    emit2(g, A64_STR, hi, mem(g, base, off + 8, 8));
+}
+
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
+    if (a64_is_ld(t)) {
+        gen_ld_unary(g, in);
+        return;
+    }
     if (a64_is_fp(t)) {
         gen_fp_unary(g, in, t);
         return;
@@ -490,11 +535,59 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     store_val(g, F0, in->u.binary.dst);
 }
 
+// Long double arithmetic and comparison: a call to the runtime (libgcc names), the
+// operands in q0 and q1, the result in q0.  A comparison routine returns an int in w0,
+// to compare against zero: unordered operands make each false but `!=`.
+static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
+{
+    static const struct {
+        Tac_BinaryOperator op;
+        const char *name;
+        int cond;
+    } ops[] = {
+        { TAC_BINARY_ADD, "__addtf3", -1 },
+        { TAC_BINARY_ADD_DOUBLE, "__addtf3", -1 },
+        { TAC_BINARY_SUBTRACT, "__subtf3", -1 },
+        { TAC_BINARY_SUBTRACT_DOUBLE, "__subtf3", -1 },
+        { TAC_BINARY_MULTIPLY, "__multf3", -1 },
+        { TAC_BINARY_MULTIPLY_DOUBLE, "__multf3", -1 },
+        { TAC_BINARY_DIVIDE, "__divtf3", -1 },
+        { TAC_BINARY_DIVIDE_DOUBLE, "__divtf3", -1 },
+        { TAC_BINARY_EQUAL, "__eqtf2", A64_EQ },
+        { TAC_BINARY_NOT_EQUAL, "__netf2", A64_NE },
+        { TAC_BINARY_LESS_THAN, "__lttf2", A64_LT },
+        { TAC_BINARY_LESS_THAN_DOUBLE, "__lttf2", A64_LT },
+        { TAC_BINARY_LESS_OR_EQUAL, "__letf2", A64_LE },
+        { TAC_BINARY_LESS_OR_EQUAL_DOUBLE, "__letf2", A64_LE },
+        { TAC_BINARY_GREATER_THAN, "__gttf2", A64_GT },
+        { TAC_BINARY_GREATER_THAN_DOUBLE, "__gttf2", A64_GT },
+        { TAC_BINARY_GREATER_OR_EQUAL, "__getf2", A64_GE },
+        { TAC_BINARY_GREATER_OR_EQUAL_DOUBLE, "__getf2", A64_GE },
+    };
+    size_t i = 0;
+    while (i < sizeof(ops) / sizeof(ops[0]) && ops[i].op != in->u.binary.op)
+        i++;
+    if (i == sizeof(ops) / sizeof(ops[0]))
+        fatal_error("aarch64: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
+    load_val(g, A64_V(0), in->u.binary.src1);
+    load_val(g, A64_V(1), in->u.binary.src2);
+    emit1(g, A64_BL, a64_sym(ops[i].name, 0));
+    if (ops[i].cond < 0) {
+        store_val(g, A64_V(0), in->u.binary.dst);
+        return;
+    }
+    emit2(g, A64_CMP, a64_reg(A64_X(0), A64_W), a64_imm(0));
+    emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(ops[i].cond));
+    store_val(g, T0, in->u.binary.dst);
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
+    if (a64_is_ld(t)) {
+        gen_ld_binary(g, in);
+        return;
+    }
     if (a64_is_fp(t)) {
         gen_fp_binary(g, in, t);
         return;
@@ -516,8 +609,6 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
-    if (a64_is_ld(st) || a64_is_ld(dt))
-        fatal_error("aarch64: %s: long double is not implemented yet", gen_name(g));
     bool sfp = a64_is_fp(st), dfp = a64_is_fp(dt);
     int s = sfp ? F0 : T0, d = dfp ? F1 : T1;
     load_val(g, s, src);
@@ -533,6 +624,33 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
     emit2(g, op, a64_reg(d, dfp ? a64_width(dt) : int_width(dt)),
           a64_reg(s, sfp ? a64_width(st) : int_width(st)));
     store_val(g, d, dst);
+}
+
+// A conversion to or from long double: a call to the runtime, the value in x0/w0, s0/d0
+// or q0 both ways.  An integer is signed or unsigned by the conversion's kind or the
+// destination's type, as above.
+static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+{
+    const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
+    const Tac_Type *other = a64_is_ld(st) ? dt : st;
+    bool w = a64_size(other) <= 4, fp = a64_is_fp(other);
+    const char *name;
+    if (a64_is_ld(st)) {
+        bool u = a64_is_unsigned(dt);
+        if (fp)
+            name = a64_is_double(dt) ? "__trunctfdf2" : "__trunctfsf2";
+        else
+            name = w ? (u ? "__fixunstfsi" : "__fixtfsi") : (u ? "__fixunstfdi" : "__fixtfdi");
+    } else {
+        bool u = kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
+        if (fp)
+            name = a64_is_double(st) ? "__extenddftf2" : "__extendsftf2";
+        else
+            name = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
+    }
+    load_val(g, a64_is_ld(st) || fp ? A64_V(0) : A64_X(0), src);
+    emit1(g, A64_BL, a64_sym(name, 0));
+    store_val(g, a64_is_ld(dt) || fp ? A64_V(0) : A64_X(0), dst);
 }
 
 // dst = &src, of a named object or function.
@@ -581,6 +699,16 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
     case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
         gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

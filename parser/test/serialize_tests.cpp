@@ -29,6 +29,23 @@ TEST_F(ParserTest, ExportSimpleFunction)
     free_program(deserialized);
 }
 
+// The last expression kind, __builtin_va_class, survives a round trip.
+TEST_F(ParserTest, ExportVaClass)
+{
+    program = parse(CreateTempFile(R"(
+int f(void) { return __builtin_va_class(double) + _Generic(1, int: 2); }
+)"));
+    ASSERT_NE(nullptr, program);
+
+    int fd = CreateAstFile();
+    export_ast(fd, program);
+
+    Program *deserialized = import_ast(fd);
+    EXPECT_TRUE(compare_program(program, deserialized));
+    close(fd);
+    free_program(deserialized);
+}
+
 #if 0
 TEST_F(ParserTest, ExportComplexType)
 {

@@ -31,8 +31,7 @@ long double g(long double y) { return f(y); }
 
 // Arguments: HFAs of each FP type, a union and an array member, an HFA that no longer
 // fits v0-v7 (whole on the stack, and none after it in a v register), and HFA and long
-// double results, both ways with clang.  Our side only moves long doubles: clang's
-// ld_part does their arithmetic.
+// double results, both ways with clang.
 TEST_F(Aarch64Test, RunHfaInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();

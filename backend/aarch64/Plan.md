@@ -61,11 +61,15 @@ and the harness runs qemu under a short timeout regardless.
 
 ## Phase 4 — `long double`, library and headers
 
-- **A21. binary128 `long double`.** Values in `q` registers and 16-byte slots; moves
-  between `q` and an X pair (`fmov x, d` / `mov x, v.d[1]`) only where a helper needs
-  it. Arithmetic, comparisons and conversions call the routines of `libc/common/float128.c`,
-  compiled for AArch64, so folded and computed values agree as on RISC-V. A
-  `float128_tests` run like RISC-V's, against the same exact cases.
+- **A21. binary128 `long double`. Done.** Values live in 16-byte slots and travel in
+  `q` registers; no X pair is needed. Arithmetic, comparisons and conversions call the
+  routines of `libc/common/float128.c` (operands in `q0`/`q1`, an integer in `x0`/`w0`,
+  a comparison's int tested with `cmp w0, #0` + `cset`), so folded and computed values
+  agree as on RISC-V. Negation flips the sign bit of a copy; a zero test ors the two
+  doublewords, the sign shifted out. `libc.a` now has the `printf` family too.
+  `float128_tests` runs RISC-V's exact cases, plus interop with clang both ways. The
+  AST importer rejected `EXPR_VA_CLASS` (its range check ended at `EXPR_GENERIC`),
+  found by the first libc source with `va_arg`, `doprnt.c`.
 - **A22. Headers.** Move the six LP64 data-model headers (`float.h`, `inttypes.h`,
   `limits.h`, `math.h`, `stddef.h`, `stdint.h` of `libc/riscv64/include`) to
   `libc/lp64/include/`, searched between the target's own and `libc/common/include`

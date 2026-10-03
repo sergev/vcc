@@ -51,6 +51,8 @@ endforeach()
 # C sources, through cpp -> parse -> lower -> genaarch64 -> clang.  The headers are
 # AArch64's stdarg.h, then the riscv64 ones, the same LP64 data model, until AArch64
 # has all its own (Plan.md, A22).
+# float128.c includes the compiler's own binary128 code.
+set(AARCH64_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
 file(GLOB AARCH64_LIBC_HEADERS ${AARCH64_INCLUDE_DIR}/*.h ${RISCV_INCLUDE_DIR}/*.h
     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(aarch64_compile_libc_c name srcdir)
@@ -62,19 +64,15 @@ macro(aarch64_compile_libc_c name srcdir)
         COMMAND lower -t aarch64 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genaarch64 ${out}/${name}.tac ${out}/${name}.s
         COMMAND ${RISCV_CLANG} ${AARCH64_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
-        DEPENDS ${srcdir}/${name}.c ${AARCH64_LIBC_HEADERS} parse lower genaarch64
+        DEPENDS ${srcdir}/${name}.c ${AARCH64_LIBC_HEADERS} ${AARCH64_LIBC_EXTRA_DEPS} parse lower
+                genaarch64
         COMMENT "Compiling ${name}.c -> ${name}.o (AArch64)")
     list(APPEND AARCH64_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# Not yet the printf family: it needs __doprnt, which needs variadic functions (A18).
-set(AARCH64_LIBC_C ${LIBC_C_COMMON})
-list(REMOVE_ITEM AARCH64_LIBC_C printf snprintf sprintf)
-foreach(name ${AARCH64_LIBC_C})
+foreach(name ${LIBC_C_COMMON} ${LIBC_C_IEEE})
     aarch64_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-# The binary128 long double helpers (__addtf3, ...), not yet doprnt.
-aarch64_compile_libc_c(float128 ${LIBC_COMMON_DIR})
 aarch64_compile_libc_c(va_arg ${src})
 foreach(name ${LIBC_C_LP64})
     aarch64_compile_libc_c(${name} ${LIBC_LP64_DIR})

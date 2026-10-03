@@ -1,8 +1,7 @@
 //
 // AAPCS64 interop with clang over a table of signatures, both ways: the same source,
 // one copy compiled by us (names prefixed our_) and one by clang -O1 (their_), each
-// calling the other's.  Our side does no long double arithmetic yet (A21): clang's
-// ld_val does it.
+// calling the other's.
 //
 #include "aarch64_test.h"
 
