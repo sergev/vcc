@@ -38,13 +38,16 @@ protected:
                               "" })
     {
         // The defaults; a test may change them.
-        arm32_regalloc = true;
+        arm32_regalloc      = true;
+        arm32_frame_pointer = false;
     }
 
-    // Pin instruction selection itself: every variable in its slot.
+    // Pin instruction selection itself: every variable in its slot, the frame addressed
+    // from r11.
     static void NaiveSelection()
     {
-        arm32_regalloc = false;
+        arm32_regalloc      = false;
+        arm32_frame_pointer = true;
     }
 
     // Assembly of every toplevel of the translation unit.

@@ -340,7 +340,7 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
     if (s && s->reg >= 0)
         fatal_error("arm32: %s: %s is in a register", gen_name(g), name);
     if (s) {
-        *base = A32_FP;
+        *base = FB;
         *off  = s->offset;
         return;
     }
@@ -790,20 +790,35 @@ static A32_Block *redirect(Gen *g, A32_Block *b)
     return tail;
 }
 
-// What the body needs saved, found by a look at its instructions.
+// What the body needs saved, found by a look at its instructions, and how the frame is
+// laid out: from r11 (a frame record), or from sp.
 typedef struct {
-    bool frame;     // the frame record: a slot, a call, sp or lr in use
+    bool sp;        // addressed from sp
+    bool frame;     // anything to set up at all
+    bool fb;        // the frame base in use: a slot or a stack argument
+    bool calls;     // a bl or blx: lr changes
+    bool lr;        // lr in use as a scratch register
+    bool sp_used;   // the outgoing area
     bool r10;       // the third scratch register
-    unsigned dmask; // the VFP registers saved, as d registers: d8-d15, a range
-    int core;       // the bytes of r4-r9 saved with the frame record
-    int locals;     // those and the slots' bytes, 8-aligned
-    int saves;      // the bytes of the VFP registers and r10 saved below them
+    unsigned dmask; // the VFP registers saved, as d registers: a range of d8-d15
+    int locals;     // the slots' bytes (with r4-r9 of a frame record), 8-aligned
+    // From r11:
+    int core;  // the bytes of r4-r9 pushed with the frame record
+    int saves; // the bytes of the VFP registers and r10 saved below the slots
+    // From sp:
+    unsigned push; // the core registers pushed: r4-r11 in use, and lr
+    int below;     // the bytes of the slots and the outgoing area, below the saves
+    int size;      // the bytes below the incoming arguments (and r0-r3 of a variadic)
 } Frame;
 
 static void note_reg(Frame *fr, int reg)
 {
-    if (reg == A32_FP || reg == A32_SP || reg == A32_LR)
-        fr->frame = true;
+    if (reg == FB)
+        fr->fb = true;
+    else if (reg == A32_SP)
+        fr->sp_used = true;
+    else if (reg == A32_LR)
+        fr->lr = true;
     else if (reg == T2)
         fr->r10 = true;
     else if (reg >= F0 && reg < F1 + 2)
@@ -812,11 +827,11 @@ static void note_reg(Frame *fr, int reg)
 
 static Frame scan_body(const Gen *g)
 {
-    Frame fr = { 0 };
+    Frame fr = { .sp = g->sp_frame };
     for (const A32_Block *b = g->fn->blocks; b; b = b->next) {
         for (const A32_Instr *in = b->head; in; in = in->next) {
             if (in->op == A32_BL || in->op == A32_BLX)
-                fr.frame = true; // lr changes
+                fr.calls = true;
             for (int i = 0; i < A32_MAX_OPERANDS; i++) {
                 const A32_Operand *o = &in->opnd[i];
                 if (o->kind == A32_OPND_REG || o->kind == A32_OPND_MEM || o->kind == A32_OPND_SHIFT)
@@ -832,38 +847,145 @@ static Frame scan_body(const Gen *g)
         int lo = __builtin_ctz(fr.dmask), hi = 31 - __builtin_clz(fr.dmask);
         fr.dmask = (2u << hi) - (1u << lo);
     }
-    fr.core   = 4 * __builtin_popcount(g->saved_core);
-    fr.locals = (g->locals_size + 7) / 8 * 8;
-    fr.saves  = 8 * __builtin_popcount(fr.dmask) + (fr.r10 ? 4 : 0);
-    if (fr.locals || fr.core || g->outgoing || fr.r10 || fr.dmask || g->tl->u.function.variadic)
-        fr.frame = true;
+    bool variadic = g->tl->u.function.variadic;
+    int vfp       = 8 * __builtin_popcount(fr.dmask);
+    fr.locals     = (g->locals_size + 7) / 8 * 8;
+    if (!fr.sp) {
+        fr.core  = 4 * __builtin_popcount(g->saved_core);
+        fr.saves = vfp + (fr.r10 ? 4 : 0);
+        fr.frame = fr.calls || fr.fb || fr.sp_used || fr.lr || fr.locals || fr.core ||
+                   g->outgoing || fr.r10 || fr.dmask || variadic;
+        return fr;
+    }
+    // sp stays 8-byte aligned for a call, and for the slots' alignment: by one more
+    // register pushed, as clang does, while there is one.
+    fr.push  = g->saved_core | (fr.r10 ? 1u << T2 : 0) | (fr.calls || fr.lr ? 1u << A32_LR : 0);
+    fr.below = (g->outgoing + 7) / 8 * 8 + fr.locals;
+    fr.size  = 4 * __builtin_popcount(fr.push) + vfp + fr.below;
+    if ((fr.calls || fr.locals) && fr.size % 8) {
+        int pad = A32_FP;
+        while (pad >= A32_R4 && (fr.push & 1u << pad))
+            pad--;
+        if (pad >= A32_R4)
+            fr.push |= 1u << pad;
+        else
+            fr.below += 4;
+        fr.size += 4;
+    }
+    fr.frame = fr.size > 0 || variadic;
     return fr;
 }
 
-// The return sequence: the registers saved below the slots back, then sp, r4-r9, r11
-// and pc as on entry; or just `bx lr` without a frame.  A variadic function drops its
-// r0-r3 too.
+// The sp offset of frame offset `off` (from where r11 would point), or -1: a stack
+// argument above everything the function pushed, a slot just above the outgoing area.
+static int64_t sp_offset(const Gen *g, const Frame *fr, int64_t off)
+{
+    if (off >= 8)
+        return fr->size + off - 8;
+    if (off < 0 && off >= -fr->locals)
+        return (g->outgoing + 7) / 8 * 8 + fr->locals + off;
+    return -1;
+}
+
+// Whether every use of the frame base in the body can be rebased onto sp (a memory
+// operand that still fits its instruction, or an add or sub of an immediate that is
+// still one); with `apply`, do it.
+static bool rebase_to_sp(Gen *g, const Frame *fr, bool apply)
+{
+    for (A32_Block *b = g->fn->blocks; b; b = b->next) {
+        for (A32_Instr *in = b->head; in; in = in->next) {
+            for (int i = 0; i < A32_MAX_OPERANDS; i++) {
+                A32_Operand *o = &in->opnd[i];
+                if (o->kind != A32_OPND_REG && o->kind != A32_OPND_MEM && o->kind != A32_OPND_SHIFT)
+                    continue;
+                if ((o->kind != A32_OPND_REG && o->reg2 == FB) ||
+                    (o->kind == A32_OPND_SHIFT && o->reg == FB))
+                    return false;
+                if (o->reg != FB)
+                    continue;
+                if (o->kind == A32_OPND_MEM) {
+                    int64_t off = sp_offset(g, fr, o->imm);
+                    if (o->sub != A32_MEM_OFFSET || off < 0 || !fits(in->op, off))
+                        return false;
+                    if (apply) {
+                        o->reg = A32_SP;
+                        o->imm = off;
+                    }
+                    continue;
+                }
+                if (i != 1 || (in->op != A32_ADD && in->op != A32_SUB) ||
+                    in->opnd[2].kind != A32_OPND_IMM || in->opnd[3].kind != A32_OPND_NONE)
+                    return false;
+                int64_t off = sp_offset(g, fr, in->op == A32_SUB ? -in->opnd[2].imm : in->opnd[2].imm);
+                if (off < 0 || !a32_operand2_imm((uint32_t)off))
+                    return false;
+                if (apply) {
+                    in->op      = A32_ADD;
+                    o->reg      = A32_SP;
+                    in->opnd[2] = a32_imm(off);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+// The frame base is r11.
+static void base_on_r11(Gen *g)
+{
+    for (A32_Block *b = g->fn->blocks; b; b = b->next) {
+        for (A32_Instr *in = b->head; in; in = in->next) {
+            for (int i = 0; i < A32_MAX_OPERANDS; i++) {
+                A32_Operand *o = &in->opnd[i];
+                if (o->kind != A32_OPND_REG && o->kind != A32_OPND_MEM && o->kind != A32_OPND_SHIFT)
+                    continue;
+                if (o->reg == FB)
+                    o->reg = A32_FP;
+                if (o->kind != A32_OPND_REG && o->reg2 == FB)
+                    o->reg2 = A32_FP;
+            }
+        }
+    }
+}
+
+// The return sequence; just `bx lr` without a frame.  From r11: the registers saved
+// below the slots back, then sp, r4-r9, r11 and pc as on entry.  From sp: sp back over
+// the slots, then the saved registers, lr into pc.  A variadic function drops its r0-r3
+// too, and returns through lr.
 static void epilogue(Gen *g, const Frame *fr)
 {
+    bool variadic = g->tl->u.function.variadic;
     if (!fr->frame) {
         emit1(g, A32_BX, a32_reg(A32_LR));
         return;
     }
-    if (fr->saves) {
-        gen_addr(g, A32_SP, A32_FP, -(fr->locals + fr->saves));
-        if (fr->r10)
-            emit1(g, A32_POP, a32_reglist(1u << T2));
+    unsigned push;
+    if (fr->sp) {
+        if (fr->below)
+            gen_addr(g, A32_SP, A32_SP, fr->below);
         if (fr->dmask)
             emit1(g, A32_VPOP, a32_dreglist(fr->dmask));
+        push = fr->push;
+    } else {
+        if (fr->saves) {
+            gen_addr(g, A32_SP, A32_FP, -(fr->locals + fr->saves));
+            if (fr->r10)
+                emit1(g, A32_POP, a32_reglist(1u << T2));
+            if (fr->dmask)
+                emit1(g, A32_VPOP, a32_dreglist(fr->dmask));
+        }
+        gen_addr(g, A32_SP, A32_FP, -fr->core);
+        push = g->saved_core | 1u << A32_FP | 1u << A32_LR;
     }
-    gen_addr(g, A32_SP, A32_FP, -fr->core);
-    if (g->tl->u.function.variadic) {
-        emit1(g, A32_POP, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_LR));
-        emit3(g, A32_ADD, a32_reg(A32_SP), a32_reg(A32_SP), a32_imm(16));
-        emit1(g, A32_BX, a32_reg(A32_LR));
+    if (!variadic && (push & 1u << A32_LR)) {
+        emit1(g, A32_POP, a32_reglist((push & ~(1u << A32_LR)) | 1u << A32_PC));
         return;
     }
-    emit1(g, A32_POP, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_PC));
+    if (push)
+        emit1(g, A32_POP, a32_reglist(push));
+    if (variadic)
+        emit3(g, A32_ADD, a32_reg(A32_SP), a32_reg(A32_SP), a32_imm(16));
+    emit1(g, A32_BX, a32_reg(A32_LR));
 }
 
 // Replace each epilogue marker by the return sequence.
@@ -891,17 +1013,32 @@ static void expand_epilogues(Gen *g, const Frame *fr)
     }
 }
 
-// push {r4-r9 in use, r11, lr}; r11 = the address of the saved r11; the slots; the
-// VFP registers and r10 in use; the outgoing area, with sp 8-byte aligned.  A variadic
-// function first pushes r0-r3, which then lie just below its stack arguments: one
-// area of all its arguments, from r11 + 8.
-void gen_prologue(Gen *g)
+// A variadic function first pushes r0-r3, which then lie just below its stack
+// arguments: one area of all its arguments, from r11 + 8.  From r11: push {r4-r9 in
+// use, r11, lr}; r11 = the address of the saved r11; the slots; the VFP registers and
+// r10 in use; the outgoing area, with sp 8-byte aligned.  From sp: push the core
+// registers in use and lr, vpush the VFP ones, and move sp over the slots and the
+// outgoing area; nothing at all in a function that needs none of it.
+bool gen_prologue(Gen *g)
 {
-    Frame fr        = scan_body(g);
+    Frame fr = scan_body(g);
+    if (fr.sp && !rebase_to_sp(g, &fr, false))
+        return false;
+    if (fr.sp)
+        rebase_to_sp(g, &fr, true);
+    else
+        base_on_r11(g);
     A32_Block *tail = redirect(g, g->prologue);
     if (g->tl->u.function.variadic)
         emit1(g, A32_PUSH, a32_reglist(0xf));
-    if (fr.frame) {
+    if (fr.sp) {
+        if (fr.push)
+            emit1(g, A32_PUSH, a32_reglist(fr.push));
+        if (fr.dmask)
+            emit1(g, A32_VPUSH, a32_dreglist(fr.dmask));
+        if (fr.below)
+            gen_addr(g, A32_SP, A32_SP, -fr.below);
+    } else if (fr.frame) {
         emit1(g, A32_PUSH, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_LR));
         gen_addr(g, A32_FP, A32_SP, fr.core);
         if (fr.locals > fr.core)
@@ -916,4 +1053,5 @@ void gen_prologue(Gen *g)
     }
     g->fn->tail = tail;
     expand_epilogues(g, &fr);
+    return true;
 }

@@ -8,6 +8,7 @@
 
 static const BackendFlag flags[] = {
     { "no-regalloc", "keep every variable in memory" },
+    { "frame-pointer", "address the frame from r11, with a frame record" },
     { NULL, NULL },
 };
 
@@ -15,6 +16,8 @@ static void flag(int index)
 {
     if (index == 0)
         arm32_regalloc = false;
+    else
+        arm32_frame_pointer = true;
 }
 
 static const char *output_ext(void)

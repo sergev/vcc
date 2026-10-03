@@ -7,14 +7,15 @@
 
 #include "internal.h"
 
-bool arm32_regalloc = true;
+bool arm32_regalloc      = true;
+bool arm32_frame_pointer = false;
 
-// The saved r4-r9 in use first, just below r11; then a register or a slot for every
-// parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment than the
-// type.
+// With r11, the saved r4-r9 in use first, just below it; then a register or a slot for
+// every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment than
+// the type.
 static void layout_frame(Gen *g)
 {
-    g->locals_size = 4 * __builtin_popcount(g->saved_core);
+    g->locals_size = g->sp_frame ? 0 : 4 * __builtin_popcount(g->saved_core);
     gen_params(g);
     StringMap allocs;
     map_init(&allocs);
@@ -45,21 +46,33 @@ static void layout_frame(Gen *g)
     map_destroy(&allocs);
 }
 
-static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
+// The function, its frame addressed from sp when it can be (`sp_frame`); false when not.
+static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool sp_frame)
 {
-    Gen g;
-    gen_init(&g, program, tl);
+    gen_init(g, program, tl);
+    g->sp_frame = sp_frame;
     if (arm32_regalloc)
-        gen_regalloc(&g);
-    layout_frame(&g);
+        gen_regalloc(g);
+    layout_frame(g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
-        gen_instr(&g, in);
+        gen_instr(g, in);
         last = in;
     }
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
-        gen_epilogue(&g); // falling off the end
-    gen_prologue(&g);
+        gen_epilogue(g); // falling off the end
+    return gen_prologue(g);
+}
+
+// Addressed from sp unless asked for r11, or some offset does not fit from sp: then
+// again, with r11.
+static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
+{
+    Gen g;
+    if (!gen_body(&g, program, tl, !arm32_frame_pointer)) {
+        gen_done(&g);
+        gen_body(&g, program, tl, false);
+    }
     a32_emit_func(out, g.fn);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)

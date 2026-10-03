@@ -10,8 +10,10 @@
 extern "C" {
 #endif
 
-// Code generation options (genarm32 flags), all on by default.
-extern bool arm32_regalloc; // registers for scalar variables (else all in slots)
+// Code generation options (genarm32 flags); every one is on by default but the frame
+// pointer.
+extern bool arm32_regalloc;      // registers for scalar variables (else all in slots)
+extern bool arm32_frame_pointer; // the frame addressed from r11, a frame record in it
 
 // Translate one TAC toplevel to ARM32 assembly on `out`.  `program` heads the whole
 // translation unit, lowered with -t arm32; the module header goes out with it.

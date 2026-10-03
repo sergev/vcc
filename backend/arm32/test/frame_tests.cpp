@@ -1,5 +1,6 @@
 //
-// ARM32 frame: slots below r11, copies through scratch registers, large frames.
+// ARM32 frame: slots below r11 or above sp, copies through scratch registers, large
+// frames, leaf functions without one.
 //
 #include <regex>
 
@@ -152,4 +153,107 @@ long long g(void) { long long a = 0x700000005LL; long long b = a; return b; }
 int main(void) { return 9; }
 )"));
     EXPECT_EQ(9, exit_status);
+}
+
+// A leaf that needs no stack has no prologue at all.
+TEST_F(Arm32Test, LeafWithoutFrame)
+{
+    EXPECT_EQ("mul r0, r0, r1\nadd r0, r0, #1\nbx lr\n", Code(CompileToArm32(R"(
+int leaf(int a, int b) { return a * b + 1; }
+)")));
+}
+
+// Slots are addressed from sp, above the outgoing area; sp stays 8-byte aligned by one
+// more register pushed.
+TEST_F(Arm32Test, SlotsFromSp)
+{
+    EXPECT_EQ(R"(push {r11, lr}
+sub sp, sp, #8
+str r0, [sp, #4]
+add r0, sp, #4
+bl take
+ldr r0, [sp, #4]
+add sp, sp, #8
+pop {r11, pc}
+)",
+              Code(CompileToArm32(R"(
+void take(int *);
+int slot(int x) { int y = x; take(&y); return y; }
+)")));
+}
+
+// A stack argument is read above what the function pushed; a leaf saves only the
+// callee-saved register it uses.
+TEST_F(Arm32Test, StackArgumentFromSp)
+{
+    EXPECT_EQ("push {r4}\nldr r4, [sp, #4]\nadd r0, r0, r4\npop {r4}\nbx lr\n",
+              Code(CompileToArm32(R"(
+int stackarg(int a, int b, int c, int d, int e) { return a + e; }
+)")));
+}
+
+// A variadic function's r0-r3 and stack arguments, from sp too.
+TEST_F(Arm32Test, VariadicFromSp)
+{
+    EXPECT_EQ("push {r0, r1, r2, r3}\nldr r0, [sp]\nadd sp, sp, #16\nbx lr\n",
+              Code(CompileToArm32(R"(
+int first(int n, ...) { return n; }
+)")));
+}
+
+// An offset that does not fit its instruction from sp (here a halfword 302 bytes up):
+// the function is generated again, addressed from r11.
+TEST_F(Arm32Test, FrameFallsBackToR11)
+{
+    std::string code = Code(CompileToArm32(R"(
+void take(void *);
+struct s { char pad[300]; short h; };
+int far_half(void) { struct s v; take(&v); return v.h; }
+)"));
+    EXPECT_NE(std::string::npos, code.find("push {r11, lr}\nmov r11, sp\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldrsh r0, [r11, #-2]\n")) << code;
+}
+
+// Frames of every shape, from sp and from r11, run: large ones, stack arguments, a
+// variadic function, values in r11.
+TEST_F(Arm32Test, RunFrames)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    CompileAndRunArm32(R"(
+#include <stdarg.h>
+void take(void *p) { (void)p; }
+struct s { char pad[300]; short h; };
+int far_half(short k) { struct s v; v.h = k; take(&v); return v.h; }
+int huge(int k) { char buf[5000]; int x = k; take(&x); buf[4999] = 3; take(buf); return x + buf[4999]; }
+int many(int a, int b, int c, int d, int e, long long f, double g, int h)
+{
+    int x = a + b, y = c + d, z = e + h;
+    take(&x);
+    return x + y + z + (int)f + (int)g;
+}
+int vsum(int n, ...)
+{
+    va_list ap;
+    va_start(ap, n);
+    int s = 0;
+    for (int i = 0; i < n; i++)
+        s += va_arg(ap, int);
+    va_end(ap);
+    return s;
+}
+int id(int x) { return x; }
+int keep9(int k)
+{
+    int a = id(k), b = id(k + 1), c = id(k + 2), d = id(k + 3), e = id(k + 4), f = id(k + 5);
+    int g = id(k + 6), h = id(k + 7);
+    return id(a + b + c + d + e + f + g + h) + a * h;
+}
+int main(void)
+{
+    return (far_half(-7) == -7) + 2 * (huge(5) == 8) +
+           4 * (many(1, 2, 3, 4, 5, 6, 7.5, 8) == 3 + 7 + 13 + 6 + 7) +
+           8 * (vsum(4, 1, 2, 3, 4) == 10) + 16 * (keep9(1) == 36 + 8);
+}
+)");
+    EXPECT_EQ(31, exit_status);
 }

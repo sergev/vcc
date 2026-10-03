@@ -263,7 +263,7 @@ void gen_params(Gen *g)
             g->ret_ptr = 8;
         } else {
             g->ret_ptr = alloc_slot(g, NULL, NULL, 4, 4);
-            emit2(g, A32_STR, a32_reg(A32_R0), mem(g, A32_STR, A32_FP, g->ret_ptr, T0));
+            emit2(g, A32_STR, a32_reg(A32_R0), mem(g, A32_STR, FB, g->ret_ptr, T0));
         }
         s.next_core = 1;
     }
@@ -290,7 +290,7 @@ void gen_params(Gen *g)
         if (a.esize && a32_is_aggregate(t)) {
             int off = alloc_slot(g, p->name, t, a32_size(t), a32_align(t));
             for (int k = 0; k < a.nregs; k++)
-                store_mem(g, elem_reg(a.reg, a.esize, k), elem_type(a.esize), A32_FP,
+                store_mem(g, elem_reg(a.reg, a.esize, k), elem_type(a.esize), FB,
                           off + k * a.esize, T0);
             continue;
         }
@@ -299,18 +299,18 @@ void gen_params(Gen *g)
             int size = a32_size(t);
             int off  = alloc_slot(g, p->name, t, round_up(size, 4), a32_align(t));
             for (int i = 0; i < a.nregs; i++)
-                emit2(g, A32_STR, a32_reg(a.reg + i), mem(g, A32_STR, A32_FP, off + 4 * i, T0));
+                emit2(g, A32_STR, a32_reg(a.reg + i), mem(g, A32_STR, FB, off + 4 * i, T0));
             if (size > 4 * a.nregs)
-                gen_memcopy(g, A32_FP, off + 4 * a.nregs, A32_FP, 8 + a.stack, size - 4 * a.nregs,
+                gen_memcopy(g, FB, off + 4 * a.nregs, FB, 8 + a.stack, size - 4 * a.nregs,
                             4);
             continue;
         }
         int off = alloc_slot(g, p->name, t, a32_size(t), a32_align(t));
         if (a.nregs == 2) {
-            emit2(g, A32_STR, a32_reg(a.reg), mem(g, A32_STR, A32_FP, off, T0));
-            emit2(g, A32_STR, a32_reg(a.reg + 1), mem(g, A32_STR, A32_FP, off + 4, T0));
+            emit2(g, A32_STR, a32_reg(a.reg), mem(g, A32_STR, FB, off, T0));
+            emit2(g, A32_STR, a32_reg(a.reg + 1), mem(g, A32_STR, FB, off + 4, T0));
         } else {
-            store_mem(g, a.reg, t, A32_FP, off, T0);
+            store_mem(g, a.reg, t, FB, off, T0);
         }
     }
     parallel_move(g, moves, nmoves);
@@ -325,10 +325,10 @@ void gen_params(Gen *g)
             continue;
         int off = 8 + (!variadic ? a.stack : a.nregs ? 4 * (a.reg - A32_R0) : 16 + a.stack);
         if (hi >= 0) {
-            emit2(g, A32_LDR, a32_reg(reg), mem(g, A32_LDR, A32_FP, off, reg));
-            emit2(g, A32_LDR, a32_reg(hi), mem(g, A32_LDR, A32_FP, off + 4, hi));
+            emit2(g, A32_LDR, a32_reg(reg), mem(g, A32_LDR, FB, off, reg));
+            emit2(g, A32_LDR, a32_reg(hi), mem(g, A32_LDR, FB, off + 4, hi));
         } else {
-            load_mem(g, reg, p->type, A32_FP, off);
+            load_mem(g, reg, p->type, FB, off);
         }
     }
 }
@@ -540,7 +540,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         if (dst) {
             name_addr(g, dst->u.var_name, A32_R0, &base, &off);
         } else {
-            base = A32_FP;
+            base = FB;
             off  = alloc_slot(g, NULL, NULL, a32_size(ret), a32_align(ret));
         }
         gen_addr(g, A32_R0, base, off);
@@ -601,7 +601,7 @@ void gen_return(Gen *g, const Tac_Val *v)
         } else if (a32_is_aggregate(rt) && g->ret_ptr) {
             int base;
             int64_t off;
-            emit2(g, A32_LDR, a32_reg(T1), mem(g, A32_LDR, A32_FP, g->ret_ptr, T1));
+            emit2(g, A32_LDR, a32_reg(T1), mem(g, A32_LDR, FB, g->ret_ptr, T1));
             name_addr(g, v->u.var_name, T2, &base, &off);
             gen_memcopy(g, T1, 0, base, off, a32_size(rt), a32_align(rt));
         } else if (a32_is_aggregate(rt)) {

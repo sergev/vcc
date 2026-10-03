@@ -1,6 +1,7 @@
 //
 // Register allocation for ARM32: the target side of backend/common/regalloc.c.
-// Candidates get callee-saved registers, r4-r9 or d8-d13, so they survive calls and
+// Candidates get callee-saved registers, r4-r9 (and r11 when the frame is addressed
+// from sp) or d8-d13, so they survive calls and
 // keep clear of the scratch registers (r10, r12, lr, d14, d15).  A value not live
 // across a call may also take the argument registers r0-r3 and d0-d7, first: selection
 // never uses them as scratch, and only a call (or a runtime call) writes them.  A
@@ -20,14 +21,14 @@
 // argument count.
 static const int int_pool[] = { RA(A32_R0),     RA(A32_R0 + 1), RA(A32_R0 + 2), RA(A32_R0 + 3),
                                 RA(A32_R4),     RA(A32_R4 + 1), RA(A32_R4 + 2), RA(A32_R4 + 3),
-                                RA(A32_R4 + 4), RA(A32_R9) };
+                                RA(A32_R4 + 4), RA(A32_R9),     RA(A32_FP) };
 static const int fp_pool[]  = { RA(A32_DREG(0)),  RA(A32_DREG(1)),  RA(A32_DREG(2)),
                                 RA(A32_DREG(3)),  RA(A32_DREG(4)),  RA(A32_DREG(5)),
                                 RA(A32_DREG(6)),  RA(A32_DREG(7)),  RA(A32_DREG(8)),
                                 RA(A32_DREG(9)),  RA(A32_DREG(10)), RA(A32_DREG(11)),
                                 RA(A32_DREG(12)), RA(A32_DREG(13)) };
 
-#define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))
+#define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))  // r11 last
 #define NFP  ((int)(sizeof(fp_pool) / sizeof(fp_pool[0])))
 
 typedef struct {
@@ -73,7 +74,7 @@ static void get_call_hints(void *arg, const Flow *f, const Tac_Instruction *in, 
 
 static void note_saved(Gen *g, int reg)
 {
-    if (reg >= A32_R4 && reg <= A32_R9)
+    if ((reg >= A32_R4 && reg <= A32_R9) || reg == A32_FP)
         g->saved_core |= 1u << reg;
     else if (reg >= A32_DREG(8) && reg <= A32_DREG(13))
         g->saved_vfp |= 1u << (reg - A32_S0) / 2;
@@ -95,7 +96,7 @@ void gen_regalloc(Gen *g)
     Target target        = { .g = g };
     RegAlloc_Target desc = {
         .int_pool     = int_pool,
-        .nint         = NINT,
+        .nint         = g->sp_frame ? NINT : NINT - 1,
         .int_narg     = 4,
         .fp_pool      = fp_pool,
         .nfp          = NFP,

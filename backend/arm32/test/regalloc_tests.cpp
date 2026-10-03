@@ -26,11 +26,29 @@ add r3, r3, #1
     EXPECT_EQ(std::string::npos, code.find("[r11, #-")) << code;
 }
 
-// A value live across a call takes a callee-saved register, pushed with the frame
-// record; r11 then points at the saved r11.
+// A value live across a call takes a callee-saved register, pushed with lr and popped
+// with pc.
 TEST_F(Arm32Test, CalleeSavedAcrossCall)
 {
     std::string code = Code(CompileToArm32(R"(
+int g(int);
+int keep(int a, int b) { int x = g(a); return x + b; }
+)"));
+    EXPECT_EQ(R"(push {r4, lr}
+mov r4, r1
+bl g
+add r0, r0, r4
+pop {r4, pc}
+)",
+              code);
+}
+
+// With a frame record asked for, the callee-saved registers are pushed with it, and r11
+// points at the saved r11.
+TEST_F(Arm32Test, CalleeSavedWithFrameRecord)
+{
+    arm32_frame_pointer = true;
+    std::string code    = Code(CompileToArm32(R"(
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
 )"));

@@ -10,13 +10,17 @@
 // r11, any other name at its symbol.  An instruction works on registers directly, and
 // goes through scratch registers for operands in memory.
 //
-// Frame (r11 = the address of the saved r11, 8-byte aligned):
+// Frame, addressed through a frame base (FB) that becomes either r11 or sp plus an
+// offset.  With r11 (the address of the saved r11, 8-byte aligned):
 //   r11 + 8 ...      incoming stack arguments
 //   r11 + 4          saved lr
 //   r11 + 0          saved r11
 //   r11 - ...        saved r4-r9 in use (pushed with r11 and lr), then slots
 //   below them       the callee-saved VFP registers in use, then r10
 //   sp + 0 ...       outgoing stack arguments
+// From sp, r11 is an ordinary callee-saved register; the core registers in use (r10
+// too) and lr are pushed with one push, the VFP ones with one vpush, then come the
+// slots and the outgoing area.  A function that needs none of it has no frame.
 //
 // A value in a register is in canonical form: an integer of 32 bits or fewer extended
 // to 32 bits by its own type (AAPCS has the sender extend, and the receiver relies on
@@ -42,6 +46,7 @@ enum {
     T2 = A32_R10,
     F0 = A32_S0 + 28, // d14
     F1 = A32_S0 + 30, // d15
+    FB = A32_VREG,    // the frame base: r11, or sp plus an offset once the frame is known
 };
 
 // d<k> and s<k> as register numbers.
@@ -69,6 +74,7 @@ typedef struct {
     StringMap regs_hi; // name → its high word's register + 1
     unsigned saved_core; // r4-r9 in use, a bit each
     unsigned saved_vfp;  // d8-d13 in use, a bit per d register
+    bool sp_frame;       // the frame addressed from sp, r11 free for values
 } Gen;
 
 //
@@ -186,8 +192,10 @@ void store_pair(Gen *g, const Tac_Val *dst, int lo, int hi);
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align);
 // The return sequence, filled in once the frame is known.
 void gen_epilogue(Gen *g);
-// Fill the prologue and the epilogues.
-void gen_prologue(Gen *g);
+// Fill the prologue and the epilogues.  False, changing nothing, when the frame was to
+// be addressed from sp but some use of the frame base cannot be: the function is then
+// generated again with r11.
+bool gen_prologue(Gen *g);
 
 //
 // Register allocation (regalloc.c): fills g->regs and the callee-saved registers used.
