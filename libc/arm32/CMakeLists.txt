@@ -1,7 +1,8 @@
 #
-# ARM32 runtime for bare-metal qemu `virt` (see backend/arm32/Plan.md).  For now only
-# the tools: the clang, llvm-ar and ld.lld libc/riscv64 found, when that clang has the
-# 32-bit ARM target, and qemu-system-arm.
+# ARM32 runtime for bare-metal qemu `virt` (see backend/arm32/Plan.md): crt0.o,
+# crt0-status.o (prints main's result, for the book run tests) and libc.a, for now the
+# assembly leaves only.  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
+# that clang has the 32-bit ARM target; qemu-system-arm runs the programs.
 #
 find_program(ARM32_QEMU NAMES qemu-system-arm)
 
@@ -20,6 +21,9 @@ set(ARM32_CLANG ${RISCV_CLANG} CACHE INTERNAL "")
 set(ARM32_LD ${RISCV_LD} CACHE INTERNAL "")
 set(ARM32_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(ARM32_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
+# ARMv7-A with hardware divide, ARM state, AAPCS-VFP; our code uses VFPv3-D16 only.
+set(ARM32_TARGET_FLAGS --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16
+    CACHE INTERNAL "")
 
 if(NOT ARM32_TOOLS_FOUND)
     message(STATUS "No ARM32 clang/llvm-ar: the ARM32 runtime is not built")
@@ -28,3 +32,29 @@ endif()
 if(NOT ARM32_QEMU)
     message(STATUS "No qemu-system-arm: the ARM32 run tests will be skipped")
 endif()
+
+set(ARM32_ASFLAGS ${ARM32_TARGET_FLAGS} -c)
+set(src ${CMAKE_CURRENT_SOURCE_DIR})
+set(out ${CMAKE_CURRENT_BINARY_DIR})
+
+add_custom_command(OUTPUT ${out}/crt0.o
+    COMMAND ${RISCV_CLANG} ${ARM32_ASFLAGS} -o ${out}/crt0.o ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+add_custom_command(OUTPUT ${out}/crt0-status.o
+    COMMAND ${RISCV_CLANG} ${ARM32_ASFLAGS} -DPRINT_STATUS -o ${out}/crt0-status.o ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+# Assembly leaves.
+set(ARM32_LIBC_OBJS "")
+foreach(name console malloc aeabi)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${RISCV_CLANG} ${ARM32_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
+        DEPENDS ${src}/${name}.s)
+    list(APPEND ARM32_LIBC_OBJS ${out}/${name}.o)
+endforeach()
+
+add_custom_command(OUTPUT ${out}/libc.a
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
+    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${ARM32_LIBC_OBJS}
+    DEPENDS ${ARM32_LIBC_OBJS})
+add_custom_target(arm32-libc ALL
+    DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
