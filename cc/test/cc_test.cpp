@@ -180,8 +180,10 @@ protected:
         std::vector<std::string> argv = { VCC_COMMAND };
         if (std_headers) {
             argv.insert(argv.end(), { "-nostdinc",
-                                      std::string("-I") + (besm6 ? BESM6_INCLUDE_DIR : RISCV_INCLUDE_DIR),
-                                      std::string("-I") + COMMON_INCLUDE_DIR });
+                                      std::string("-I") + (besm6 ? BESM6_INCLUDE_DIR : RISCV_INCLUDE_DIR) });
+            if (!besm6)
+                argv.push_back(std::string("-I") + LP64_INCLUDE_DIR);
+            argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
         }
         argv.insert(argv.end(), args.begin(), args.end());
 
@@ -219,7 +221,8 @@ protected:
         const char *target_inc = target == "besm6"     ? BESM6_INCLUDE_DIR
                                  : target == "riscv32" ? RISCV32_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
-        for (const char *inc : { target_inc, COMMON_INCLUDE_DIR }) {
+        const char *lp64_inc = target == "riscv64" ? LP64_INCLUDE_DIR : target_inc;
+        for (const char *inc : { target_inc, lp64_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
                 if (!fs::exists(to))

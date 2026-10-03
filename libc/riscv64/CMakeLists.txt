@@ -34,6 +34,7 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${RISCV_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 # ... and the same through our own preprocessor (cpp/, installed as vcpp).
 add_test(
@@ -44,11 +45,12 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
             ${RISCV_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
-# All the headers, the RISC-V and the shared ones, go into one directory: unlike
-# BESM-6, no other project provides a libc for this target.
-file(GLOB RISCV_TARGET_HEADERS ${RISCV_INCLUDE_DIR}/*.h)
+# All the headers, the RISC-V, the LP64 and the shared ones, go into one directory:
+# unlike BESM-6, no other project provides a libc for this target.
+file(GLOB RISCV_TARGET_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h)
 file(GLOB RISCV_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 install(FILES ${RISCV_TARGET_HEADERS} ${RISCV_COMMON_HEADERS} DESTINATION share/vcc/riscv64/include)
 
@@ -79,10 +81,12 @@ endforeach()
 # C sources, through cpp -> parse -> lower -> genriscv -> clang.
 # float128.c includes the compiler's own binary128 code.
 set(RISCV_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
-file(GLOB RISCV_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+file(GLOB RISCV_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
+    ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(riscv_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR}
+        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV_INCLUDE_DIR} -I${LP64_INCLUDE_DIR}
+                -I${LIBC_COMMON_INCLUDE_DIR}
                 ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
         COMMAND lower -t riscv64 ${out}/${name}.ast ${out}/${name}.tac

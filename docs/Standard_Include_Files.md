@@ -1,10 +1,12 @@
 # Standard Include Files
 
 This article is a guided tour of the C11 standard-library headers that ship with VCC, as
-a RISC-V (riscv64) programmer sees them. They live in two source directories:
-[`libc/riscv64/include/`](../libc/riscv64/include/) holds the headers that depend on the
-target's data model, and [`libc/common/include/`](../libc/common/include/) the
-target-neutral rest, searched second. `make install` copies both into one directory,
+a RISC-V (riscv64) programmer sees them. They live in three source directories:
+[`libc/riscv64/include/`](../libc/riscv64/include/) holds the headers that are the
+target's own, [`libc/lp64/include/`](../libc/lp64/include/) those that depend only on the
+LP64 data model (shared with aarch64), searched second, and
+[`libc/common/include/`](../libc/common/include/) the target-neutral rest, searched
+last. `make install` copies all three into one directory,
 `share/vcc/riscv64/include/`. The article explains what each header is *for*, what it
 *declares*, how the headers *relate* to one another, and how the RISC-V LP64D data model
 shapes the values they define.
@@ -65,7 +67,7 @@ which translation phases 1–4 are already done: it understands `#`-line markers
 preprocessor first, and the preprocessed result fed to the toolchain. In the build tree:
 
 ```sh
-cc -E -nostdinc -Ilibc/riscv64/include -Ilibc/common/include prog.c -o prog.i
+cc -E -nostdinc -Ilibc/riscv64/include -Ilibc/lp64/include -Ilibc/common/include prog.c -o prog.i
 build/parse  prog.i prog.ast
 build/lower  -t riscv64 prog.ast prog.tac
 build/backend/genriscv prog.tac prog.s

@@ -104,8 +104,8 @@ protected:
     std::string ClangRunBook(const std::string &src)
     {
         return Run("", "crt0-status.o", &src,
-                   { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_TARGET_INCLUDE_DIR,
-                     "-I", TEST_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
+                   { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
+                     TEST_LP64_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
                    ".clang");
     }
 };

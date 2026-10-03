@@ -44,13 +44,11 @@ target_link_libraries(aarch64-tests aarch64 parser translator semantic GTest::gt
 if(AARCH64_TOOLS_FOUND)
     add_dependencies(aarch64-tests aarch64-libc)
 endif()
-# The AArch64 headers come with the code that needs them (Plan.md, A22): so far
-# stdarg.h, ahead of the riscv64 ones, the same LP64 data model.
 target_compile_definitions(aarch64-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
-    TEST_TARGET_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
-    TEST_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
+    TEST_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
+    TEST_LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     AARCH64_TOOLS_FOUND=$<BOOL:${AARCH64_TOOLS_FOUND}>
     AARCH64_CLANG="${AARCH64_CLANG}"

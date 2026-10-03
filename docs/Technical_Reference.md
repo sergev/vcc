@@ -55,7 +55,7 @@ pass `-` as the output argument for stdout.
 A complete RISC-V compilation in the build tree:
 
 ```bash
-./build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv64/include -Ilibc/common/include hello.c hello.i
+./build/cpp/cpp -t riscv64 -nostdinc -Ilibc/riscv64/include -Ilibc/lp64/include -Ilibc/common/include hello.c hello.i
 ./build/parse hello.i hello.ast
 ./build/lower -t riscv64 hello.ast hello.tac
 ./build/backend/genriscv hello.tac hello.s
@@ -87,7 +87,8 @@ The build itself (libc, test fixtures) still preprocesses with the system `cc -E
 ### `parse` (parser)
 
 **Input:** one C source file, already preprocessed (by `cpp` or the system `cc -E`).
-The standard headers are in `libc/riscv64/include/` (data-model dependent) and
+The standard headers are in `libc/riscv64/include/` (the target's own),
+`libc/lp64/include/` (the LP64 data model, shared with AArch64) and
 `libc/common/include/` (target-neutral), and are expanded by an external preprocessor
 first — use `cpp` or the C compiler's `cc -E`, not a traditional system `cpp`, which
 only honors column-1 directives. `# line` markers are consumed, so diagnostics keep original line
@@ -338,7 +339,9 @@ instruction selection on its own.
 | `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
 | `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
-| `libc/riscv64/include/` | Data-model-dependent headers (`float.h`, `limits.h`, `stdint.h`, `stdarg.h`, …) |
+| `libc/riscv64/include/` | RISC-V's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
+| `libc/lp64/include/` | LP64 data-model headers shared by riscv64 and aarch64 (`float.h`, `inttypes.h`, `limits.h`, `math.h`) |
+| `libc/aarch64/include/` | AArch64's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |
 

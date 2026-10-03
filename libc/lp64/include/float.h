@@ -1,8 +1,9 @@
 /*
- * <float.h> — characteristics of floating types (C11 §7.7), RISC-V LP64 target.
+ * <float.h> — characteristics of floating types (C11 §7.7), LP64 targets
+ * (RISC-V, AArch64).
  *
  * float and double are IEEE-754 binary32 and binary64; long double is binary128
- * (the psABI's choice), computed in software by the runtime (float128.c).
+ * (both psABIs' choice), computed in software by the runtime (float128.c).
  */
 #ifndef _FLOAT_H
 #define _FLOAT_H

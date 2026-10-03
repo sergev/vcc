@@ -29,6 +29,7 @@ target_compile_definitions(backend-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
     TEST_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
+    TEST_LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}")
 test_chdir_to_bindir(backend-tests)
 gtest_discover_tests(backend-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)

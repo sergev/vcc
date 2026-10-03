@@ -222,11 +222,13 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/common/include/`).**
+**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/lp64/include/`, `libc/common/include/`).**
 C11 standard-library headers: each target's directory holds the headers that depend on its
 data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
-`setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`), and `libc/common/include/` the target-neutral
-rest, searched second (the freestanding subset is complete; the hosted subset declares the
+`setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`) — except that riscv64 and aarch64 share
+`float.h`/`inttypes.h`/`limits.h`/`math.h` in `libc/lp64/include/`, searched second
+(`wchar_t` keeps `stddef.h`/`stdint.h` apart) — and `libc/common/include/` the target-neutral
+rest, searched last (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 `parse` has no preprocessor, so these are consumed by a preprocessor first: our own
 `cpp` (`cpp/`, installed as `vcpp`; `-t besm6|riscv64` selects the target macros and the

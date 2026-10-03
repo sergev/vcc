@@ -122,8 +122,8 @@ qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none
 ```
 
 Without installing, use `build/parse`, `build/lower`, `build/backend/genriscv`, the
-headers in `libc/riscv64/include` and `libc/common/include`, and the library in
-`build/libc/riscv64/`.
+headers in `libc/riscv64/include`, `libc/lp64/include` and `libc/common/include`, and
+the library in `build/libc/riscv64/`.
 
 To read the intermediate code, run `lower` with `--yaml`.
 

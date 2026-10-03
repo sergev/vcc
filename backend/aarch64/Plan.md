@@ -70,12 +70,14 @@ and the harness runs qemu under a short timeout regardless.
   `float128_tests` runs RISC-V's exact cases, plus interop with clang both ways. The
   AST importer rejected `EXPR_VA_CLASS` (its range check ended at `EXPR_GENERIC`),
   found by the first libc source with `va_arg`, `doprnt.c`.
-- **A22. Headers.** Move the six LP64 data-model headers (`float.h`, `inttypes.h`,
-  `limits.h`, `math.h`, `stddef.h`, `stdint.h` of `libc/riscv64/include`) to
-  `libc/lp64/include/`, searched between the target's own and `libc/common/include`
-  (for `riscv64` too); `libc/aarch64/include/` then holds `setjmp.h` and the A18
-  `stdarg.h`. An `aarch64-headers` CTest and its `-cpp`
-  twin, like `riscv-headers`.
+- **A22. Headers. Done.** `float.h`, `inttypes.h`, `limits.h` and `math.h` moved from
+  `libc/riscv64/include` to `libc/lp64/include/`, searched between the target's own and
+  `libc/common/include` (riscv64 too; installed into its one include directory).
+  `stddef.h` and `stdint.h` stay per target, against the plan: `wchar_t` is `int` on
+  RISC-V but `unsigned int` under AAPCS64. `libc/aarch64/include/` holds those two,
+  `setjmp.h` (declarations only, as on RISC-V) and `stdarg.h`. The test fixtures take
+  the LP64 directory through an optional `TEST_LP64_INCLUDE_DIR`. `aarch64-headers`
+  CTest and its `-cpp` twin, like `riscv-headers`.
 - **A23. Libc.** Build the C sources (`libc/common`, `LIBC_C_IEEE`, `libc/lp64`) with
   our compiler into `libc.a`; add malloc's run test; port the RISC-V `printf_tests`/
   `str_tests`/`mem_tests`/`math_tests` (host libc output as expectation).

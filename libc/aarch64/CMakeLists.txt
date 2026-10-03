@@ -21,8 +21,27 @@ set(AARCH64_CLANG ${RISCV_CLANG} CACHE INTERNAL "")
 set(AARCH64_LD ${RISCV_LD} CACHE INTERNAL "")
 set(AARCH64_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(AARCH64_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
-# The AArch64 headers so far (stdarg.h), searched ahead of the riscv64 ones.
-set(AARCH64_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
+# Standard-library header check, as for riscv64.  Needs no AArch64 tools.
+add_test(
+    NAME aarch64-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            ${SystemCpp}
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
+            ${AARCH64_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+# ... and the same through our own preprocessor.
+add_test(
+    NAME aarch64-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-taarch64
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${AARCH64_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
 
 if(NOT AARCH64_TOOLS_FOUND)
     message(STATUS "No AArch64 clang/llvm-ar: the AArch64 runtime is not built")
@@ -48,16 +67,14 @@ foreach(name console malloc)
     list(APPEND AARCH64_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genaarch64 -> clang.  The headers are
-# AArch64's stdarg.h, then the riscv64 ones, the same LP64 data model, until AArch64
-# has all its own (Plan.md, A22).
+# C sources, through cpp -> parse -> lower -> genaarch64 -> clang.
 # float128.c includes the compiler's own binary128 code.
 set(AARCH64_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
-file(GLOB AARCH64_LIBC_HEADERS ${AARCH64_INCLUDE_DIR}/*.h ${RISCV_INCLUDE_DIR}/*.h
+file(GLOB AARCH64_LIBC_HEADERS ${AARCH64_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(aarch64_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${AARCH64_INCLUDE_DIR} -I${RISCV_INCLUDE_DIR}
+        COMMAND ${SystemCpp} -E -nostdinc -I${AARCH64_INCLUDE_DIR} -I${LP64_INCLUDE_DIR}
                 -I${LIBC_COMMON_INCLUDE_DIR}
                 ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast

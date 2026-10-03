@@ -94,7 +94,7 @@ here computes it, so its arithmetic is done in software by `libc/common/float128
 Unsigned variants have the size and alignment of their signed counterparts, and all
 integer types use their full width for the value: `int` is 32 bits, `long` 64.
 
-The headers in `libc/riscv64/include/` spell out the same choices:
+The headers in `libc/riscv64/include/` and `libc/lp64/include/` spell out the same choices:
 
 | Header       | Definitions |
 |--------------|-------------|
