@@ -1025,6 +1025,9 @@ static bool eval_const(const Expr *e, ConstVal *out)
     case EXPR_ALIGNOF:
         cv_set_int(out, TYPE_ULONG, get_alignment(e->u.align_of));
         return true;
+    case EXPR_VA_CLASS:
+        cv_set_int(out, TYPE_INT, va_class_of(e->u.va_class));
+        return true;
     default:
         return false;
     }

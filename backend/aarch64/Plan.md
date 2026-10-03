@@ -133,32 +133,34 @@ with pointers), not all at once in A23.
   result in `v0`–`v3`. `long double` values are passed and returned in `q` registers
   (moved only; their arithmetic is still A21's), and a constant one is built through
   a slot. `libc.a` gains `float128.c`, compiled by us. Run against clang both ways.
-- **A18. Variadic functions and `<stdarg.h>`.**
-  - Callers: nothing special — variadic arguments follow the normal rules (an HFA is
-    classified as usual, a `float` is promoted to `double` by the frontend).
-  - Callees: the prologue of a function with `...` saves `x<n>`–`x7` (8 bytes each) and
-    `q<m>`–`q7` (16 bytes each) past the named arguments into the general and vector
-    save areas.
-  - `va_start` is a backend-intercepted call, `__builtin_va_start(&ap)`, declared in
-    `<stdarg.h>` (the mechanism the `__besm6_*` intrinsics use): it fills the five
-    fields from the frame. `va_copy` is a struct copy; `va_end` nothing.
-  - `__builtin_va_class(T)`, a frontend builtin taking a type name like `sizeof`, and
-    like it an integer constant expression folded in the semantic pass. It encodes
-    the type's AAPCS64 argument class: general registers, by reference (an aggregate
-    over 16 bytes, not an HFA), or FP registers with the element size (4, 8 or 16) and
-    count (1–4) — so a scalar `float`/`double`/`long double` and an HFA struct are the
-    same case. The classification is a target property, reached through the target
-    descriptor (the way `immediate_args` is), and is the same function the backend
-    uses for calls (A17), so the two cannot disagree. Parser, semantic and
-    `translator` tests; a target without one rejects the builtin.
-  - `va_arg(ap, T)` is a header macro over a runtime helper
-    `__va_arg(&ap, sizeof(T), _Alignof(T), __builtin_va_class(T))` returning the
-    argument's address: it takes the next general or vector save-area slots (an HFA's
-    members are spread one per `q` slot, so the helper gathers them into a
-    temporary), or falls back to `__stack`, and fetches a by-reference aggregate
-    through its pointer.
-  - `va_list` passed to a clang-compiled `vprintf`, and ours receiving clang's, are
-    covered by A19.
+- **A18. Variadic functions and `<stdarg.h>`. Done.**
+  - Callers: nothing special — variadic arguments follow the normal rules.
+  - Callees: the prologue of a function with `...` saves `x<n>`–`x7` and `q<m>`–`q7`
+    past the named arguments at the ends of a 64-byte general and a 128-byte vector
+    save area.
+  - `va_start(ap)` is `__va_start(&ap)`, expanded in place by the code generator: it
+    fills the five fields of the AAPCS64 `va_list` from the frame. (Not
+    `__builtin_va_start`: clang reads the same header in the book comparison, and that
+    name is its own builtin.) `va_copy` is a struct copy; `va_end` nothing.
+  - `__builtin_va_class(T)`: a keyword and an AST node (`EXPR_VA_CLASS`), typechecked
+    and folded like `_Alignof`, an `int` constant. Its value is the target's
+    `Target.va_class` applied to the TAC form of `T` — for `aarch64`
+    `tac_aapcs64_class`, the function the backend classifies arguments with (A17), so
+    the two cannot disagree. Translating an AST type to a TAC type moved from the
+    translator to `semantic/tac_type.c` for it. A target without one rejects the
+    builtin. Parser, semantic and translator tests.
+  - `va_arg(ap, T)` is `*(T *)__va_arg(&ap, sizeof(T), _Alignof(T),
+    __builtin_va_class(T), &(T){ 0 })`: the runtime helper (`libc/aarch64/va_arg.c`,
+    AAPCS64 B.4) takes the next general or vector save-area slots, or falls back to
+    `__stack`, fetches a by-reference aggregate through its pointer, and gathers an
+    HFA's members, one per `q` slot, into the compound literal.
+  - `<stdarg.h>` is the first header of `libc/aarch64/include`, searched ahead of the
+    riscv64 ones (A22 moves the rest); the test fixtures take it through an optional
+    `TEST_TARGET_INCLUDE_DIR`.
+  - The `printf` family still waits: `__doprnt` converts a `long double` argument to
+    `double`, which is A21's.
+  - The scanner's keyword table had `__func__` out of `strcmp` order (found by luck by
+    the binary search); `__builtin_va_class` exposed it.
 - **A19. Interop tests** with clang in both directions over a table of signatures:
   mixed int/FP, narrow ints (both extension directions), HFAs, small and large
   structs, struct results, `long double`, many arguments, variadics both ways (HFA

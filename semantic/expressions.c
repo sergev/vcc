@@ -809,6 +809,17 @@ static Expr *typecheck_expr(Expr *e)
         e->type = new_type(TYPE_ULONG, __func__, __FILE__, __LINE__);
         return e;
     }
+    case EXPR_VA_CLASS: {
+        if (!target_config->va_class)
+            fatal_error("__builtin_va_class is not supported on target %s", target_config->name);
+        e->u.va_class = check_type_name(e->u.va_class);
+        if (!is_complete(e->u.va_class)) {
+            fatal_error("Can't apply __builtin_va_class to incomplete type");
+        }
+        free_type(e->type);
+        e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__);
+        return e;
+    }
     case EXPR_FIELD_ACCESS: {
         Expr *strct        = typecheck_and_decay(e->u.field_access.expr);
         const Type *strct_ty = unalias(strct->type);

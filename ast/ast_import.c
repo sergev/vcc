@@ -585,6 +585,9 @@ Expr *import_expr(WFILE *input)
     case EXPR_ALIGNOF:
         expr->u.align_of = import_type(input);
         break;
+    case EXPR_VA_CLASS:
+        expr->u.va_class = import_type(input);
+        break;
     case EXPR_GENERIC:
         expr->u.generic.controlling_expr = import_expr(input);
         GenericAssoc **next_gasc         = &expr->u.generic.associations;

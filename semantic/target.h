@@ -32,6 +32,8 @@ typedef struct {
 // bit.  BESM-6 therefore gives _Bool int's representation (one word); the
 // byte-addressed targets keep the 1-byte _Bool their ABIs specify.
 //
+struct Tac_Type;
+
 typedef struct {
     const char *name;
     size_t bool_size, bool_align;
@@ -70,6 +72,9 @@ typedef struct {
     int struct_args_split;
     // Intrinsics with an immediate first argument, terminated by a NULL name; NULL if none.
     const ImmediateArg *immediate_args;
+    // The value of __builtin_va_class(T): the ABI's argument class of T, which va_arg
+    // hands to the runtime; NULL on a target without one (the builtin is rejected).
+    int (*va_class)(const struct Tac_Type *t);
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

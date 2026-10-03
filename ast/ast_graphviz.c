@@ -745,6 +745,9 @@ static void export_expr(FILE *fd, Expr *expr, int parent_id)
     case EXPR_ALIGNOF:
         fprintf(fd, "alignof");
         break;
+    case EXPR_VA_CLASS:
+        fprintf(fd, "va_class");
+        break;
     case EXPR_GENERIC:
         fprintf(fd, "generic");
         break;
@@ -823,6 +826,9 @@ static void export_expr(FILE *fd, Expr *expr, int parent_id)
         break;
     case EXPR_ALIGNOF:
         export_type(fd, expr->u.align_of, id);
+        break;
+    case EXPR_VA_CLASS:
+        export_type(fd, expr->u.va_class, id);
         break;
     case EXPR_GENERIC:
         export_expr(fd, expr->u.generic.controlling_expr, id);

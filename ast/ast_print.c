@@ -46,6 +46,7 @@ static const char *expr_kind_str[] = {
     [EXPR_SIZEOF_TYPE]  = "SizeofType",
     [EXPR_ALIGNOF]      = "Alignof",
     [EXPR_GENERIC]      = "Generic",
+    [EXPR_VA_CLASS]     = "VaClass",
 };
 
 static const char *stmt_kind_str[] = { [STMT_EXPR] = "Expression",  [STMT_IF] = "If",
@@ -495,6 +496,9 @@ void print_expression(FILE *fd, const Expr *expr, int indent)
         break;
     case EXPR_ALIGNOF:
         print_type(fd, expr->u.align_of, indent + 2);
+        break;
+    case EXPR_VA_CLASS:
+        print_type(fd, expr->u.va_class, indent + 2);
         break;
     case EXPR_GENERIC:
         print_expression(fd, expr->u.generic.controlling_expr, indent + 2);

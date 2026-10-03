@@ -62,6 +62,12 @@ typedef struct {
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
     int ret_ptr;       // slot of the result address that came in x8, or 0
+    // A variadic function: what va_start puts in a va_list (offsets from x29).
+    struct {
+        int stack;            // the first variadic argument on the stack
+        int gr_top, vr_top;   // the ends of the save areas of x0-x7 and q0-q7
+        int gr_offs, vr_offs; // minus the bytes of each left for variadic arguments
+    } va;
 } Gen;
 
 //

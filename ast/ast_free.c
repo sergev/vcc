@@ -274,6 +274,7 @@ void free_expression(Expr *expr)
             break;
         case EXPR_SIZEOF_TYPE:
         case EXPR_ALIGNOF:
+        case EXPR_VA_CLASS:
             free_type(expr->u.sizeof_type);
             break;
         case EXPR_GENERIC:

@@ -175,6 +175,18 @@ TEST_F(ParserTest, ParseAlignof)
     EXPECT_EQ(TYPE_INT, stmt->u.expr->u.align_of->kind);
 }
 
+// __builtin_va_class(type): a type name, like _Alignof
+TEST_F(ParserTest, ParseVaClass)
+{
+    DeclOrStmt *body = GetFunctionBody("void f() { __builtin_va_class(double); }");
+    EXPECT_EQ(body->kind, DECL_OR_STMT_STMT);
+    Stmt *stmt = body->u.stmt;
+
+    EXPECT_EQ(STMT_EXPR, stmt->kind);
+    EXPECT_EQ(EXPR_VA_CLASS, stmt->u.expr->kind);
+    EXPECT_EQ(TYPE_DOUBLE, stmt->u.expr->u.va_class->kind);
+}
+
 // Test binary operator: x * y
 TEST_F(ParserTest, ParseBinaryMul)
 {

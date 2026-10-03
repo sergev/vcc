@@ -355,6 +355,7 @@ Expr *clone_expression(const Expr *expr)
         break;
     case EXPR_SIZEOF_TYPE:
     case EXPR_ALIGNOF:
+    case EXPR_VA_CLASS:
         result->u.sizeof_type = clone_type(expr->u.sizeof_type, __func__, __FILE__, __LINE__);
         break;
     case EXPR_GENERIC:

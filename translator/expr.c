@@ -1550,6 +1550,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         return val_int(get_size(e->u.sizeof_type));
     case EXPR_ALIGNOF:
         return val_int(get_alignment(e->u.align_of));
+    case EXPR_VA_CLASS:
+        return val_int(va_class_of(e->u.va_class));
     case EXPR_FIELD_ACCESS: {
         const Expr *base = e->u.field_access.expr;
         int offset       = e->u.field_access.offset;

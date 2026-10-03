@@ -138,7 +138,7 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dst_name, int dst_off
 //
 // Type conversion (translate.c)
 //
-Tac_Type *ast_type_to_tac_type(const Type *t);
+// ast_type_to_tac_type is semantic's (semantic.h).
 // Pointer to `target` (takes ownership).
 Tac_Type *tac_type_ptr(Tac_Type *target);
 // Pointer to the TAC form of AST type `t`.

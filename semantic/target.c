@@ -1,5 +1,7 @@
 #include "target.h"
 
+#include "tac.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -90,8 +92,11 @@ static const Target targets[] = {
       0,   // plain char unsigned (AAPCS64)
       0,   // signed >> arithmetic
       1,   // aggregate_align (1)
-      SIZE_MAX }, // struct_return_max: never lowered by the front end; the backend
-                  // passes a large result's address in x8, not as an argument
+      SIZE_MAX, // struct_return_max: never lowered by the front end; the backend
+                // passes a large result's address in x8, not as an argument
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      tac_aapcs64_class }, // va_class
 
     { "x86_64",
       1, 1,   // _Bool

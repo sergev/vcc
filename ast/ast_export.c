@@ -439,6 +439,9 @@ void export_expr(WFILE *fd, Expr *expr)
     case EXPR_ALIGNOF:
         export_type(fd, expr->u.align_of);
         break;
+    case EXPR_VA_CLASS:
+        export_type(fd, expr->u.va_class);
+        break;
     case EXPR_GENERIC:
         export_expr(fd, expr->u.generic.controlling_expr);
         for (GenericAssoc *ga = expr->u.generic.associations; ga; ga = ga->next) {

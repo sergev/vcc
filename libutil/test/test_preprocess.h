@@ -8,7 +8,8 @@
 //
 // The preprocessor (the C compiler, invoked with -E) and the include directory
 // come from CMake via the TEST_CPP, TEST_INCLUDE_DIR (the target's headers) and
-// TEST_COMMON_INCLUDE_DIR (the shared ones, searched second) compile definitions;
+// TEST_COMMON_INCLUDE_DIR (the shared ones, searched second) compile definitions,
+// and the optional TEST_TARGET_INCLUDE_DIR, searched first (AArch64's own headers);
 // the macros are expanded in the including test translation unit, so only test
 // targets need to define them.
 //
@@ -72,8 +73,11 @@ inline std::string preprocess_source(const std::string &src)
         // -E: preprocess only; -x c: the mkstemp file has no .c suffix.  Line
         // markers are kept (no -P): our scanner consumes them and they preserve
         // original line numbers for diagnostics.
-        std::string cmd = TEST_CPP " -E -x c -nostdinc -I" TEST_INCLUDE_DIR
-                          " -I" TEST_COMMON_INCLUDE_DIR " ";
+        std::string cmd = TEST_CPP " -E -x c -nostdinc";
+#ifdef TEST_TARGET_INCLUDE_DIR
+        cmd += " -I" TEST_TARGET_INCLUDE_DIR; // searched ahead of TEST_INCLUDE_DIR
+#endif
+        cmd += " -I" TEST_INCLUDE_DIR " -I" TEST_COMMON_INCLUDE_DIR " ";
         cmd += path;
         cmd += " 2>/dev/null";
 

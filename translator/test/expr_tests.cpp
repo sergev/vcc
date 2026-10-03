@@ -524,6 +524,28 @@ TEST_F(TranslateTestX86, AlignofDouble)
 )");
 }
 
+// __builtin_va_class: the AAPCS64 class of a type, as a constant (two floats: an HFA
+// of 4-byte elements, 4 * 8 + 2).
+TEST_F(TranslateTest, VaClassAarch64)
+{
+    target_config    = target_lookup("aarch64");
+    std::string yaml = CompileToYaml(
+        "int f(void) { return __builtin_va_class(struct { float a, b; }); }");
+    EXPECT_EQ(yaml, R"(- toplevel:
+  kind: function
+  name: f
+  global: true
+  body:
+    - instruction:
+      kind: return
+      src:
+        kind: constant
+        const:
+          kind: int
+          value: 34
+)");
+}
+
 // ---------------------------------------------------------------------------
 // _Generic expressions — task #5
 // ---------------------------------------------------------------------------

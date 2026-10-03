@@ -46,6 +46,7 @@ enum {
     TOKEN_WHILE,                // while
     TOKEN_ALIGNAS,              // _Alignas
     TOKEN_ALIGNOF,              // _Alignof
+    TOKEN_VA_CLASS,             // __builtin_va_class
     TOKEN_ATOMIC,               // _Atomic
     TOKEN_BOOL,                 // _Bool
     TOKEN_COMPLEX,              // _Complex

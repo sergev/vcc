@@ -333,6 +333,8 @@ bool compare_expr(const Expr *a, const Expr *b)
         return compare_type(a->u.sizeof_type, b->u.sizeof_type);
     case EXPR_ALIGNOF:
         return compare_type(a->u.align_of, b->u.align_of);
+    case EXPR_VA_CLASS:
+        return compare_type(a->u.va_class, b->u.va_class);
     case EXPR_GENERIC:
         if (!compare_expr(a->u.generic.controlling_expr, b->u.generic.controlling_expr))
             return false;

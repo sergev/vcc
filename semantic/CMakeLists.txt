@@ -19,6 +19,7 @@ add_library(semantic STATIC
     label_loops.c
     resolve_labels.c
     target.c
+    tac_type.c
 )
 target_include_directories(semantic PUBLIC .)
 target_link_libraries(semantic tac ast libutil)

@@ -75,6 +75,10 @@ bool type_is_volatile(const Type *t);
 int round_away_from_zero(int alignment, int size);
 Type *resolve_typedef_names(Type *t);
 const Type *unalias(const Type *t);
+// The TAC form of type `t`, struct members included (tac_type.c).
+Tac_Type *ast_type_to_tac_type(const Type *t);
+// __builtin_va_class(t) on the active target (Target.va_class).
+int va_class_of(const Type *t);
 
 #ifdef __cplusplus
 }

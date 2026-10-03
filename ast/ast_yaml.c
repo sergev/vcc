@@ -880,6 +880,12 @@ static void export_expr(FILE *fd, Expr *expr, int level)
         fprintf(fd, "type:\n");
         export_type(fd, expr->u.align_of, level + 2);
         break;
+    case EXPR_VA_CLASS:
+        fprintf(fd, "va_class\n");
+        print_indent(fd, level + 1);
+        fprintf(fd, "type:\n");
+        export_type(fd, expr->u.va_class, level + 2);
+        break;
     case EXPR_GENERIC:
         fprintf(fd, "generic\n");
         print_indent(fd, level + 1);

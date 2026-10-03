@@ -1,4 +1,5 @@
 #include "typecheck_fixture.h"
+#include "target.h"
 
 TEST_F(TypecheckTest, SysacctNamei)
 {
@@ -247,6 +248,29 @@ TEST_F(TypecheckTest, VarInitAlignof)
 {
     ParseProgram("int foo = _Alignof(int);");
     typecheck_program(program);
+}
+
+// __builtin_va_class is an integer constant expression on a target with an argument
+// classification (AAPCS64), and rejected on one without.
+TEST_F(TypecheckTest, VaClassFolds)
+{
+    const Target *saved = target_config;
+    target_config       = target_lookup("aarch64");
+    ParseProgram(R"(
+struct hfa { double d[3]; };
+int c[__builtin_va_class(struct hfa)];
+_Static_assert(__builtin_va_class(struct hfa) == 8 * 8 + 3, "an HFA of three doubles");
+_Static_assert(__builtin_va_class(long) == 0, "general registers");
+_Static_assert(__builtin_va_class(struct { long a, b, c; }) == 1, "by reference");
+)");
+    typecheck_program(program);
+    target_config = saved;
+}
+
+TEST_F(TypecheckTest, VaClassNeedsTarget)
+{
+    ParseProgram("int c = __builtin_va_class(int);");
+    EXPECT_DEATH(typecheck_program(program), "__builtin_va_class is not supported");
 }
 
 TEST_F(TypecheckTest, StaticInitShortArray)

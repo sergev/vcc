@@ -157,7 +157,6 @@ static int compare(const void *a, const void *b)
 static int is_keyword(const char *str)
 {
     static const struct keyword keywords[] = {
-        { "__func__", TOKEN_FUNC_NAME },
         { "_Alignas", TOKEN_ALIGNAS },
         { "_Alignof", TOKEN_ALIGNOF },
         { "_Atomic", TOKEN_ATOMIC },
@@ -168,6 +167,8 @@ static int is_keyword(const char *str)
         { "_Noreturn", TOKEN_NORETURN },
         { "_Static_assert", TOKEN_STATIC_ASSERT },
         { "_Thread_local", TOKEN_THREAD_LOCAL },
+        { "__builtin_va_class", TOKEN_VA_CLASS },
+        { "__func__", TOKEN_FUNC_NAME },
         { "auto", TOKEN_AUTO },
         { "break", TOKEN_BREAK },
         { "case", TOKEN_CASE },
@@ -204,7 +205,7 @@ static int is_keyword(const char *str)
         { "while", TOKEN_WHILE },
     };
 
-    // Perform binary search
+    // Perform binary search: the table is in strcmp order ('_' sorts after 'Z').
     const struct keyword *result = bsearch(str, keywords, sizeof(keywords) / sizeof(keywords[0]),
                                            sizeof(keywords[0]), compare);
     if (!result) {
@@ -796,6 +797,7 @@ const char *token_name(int token)
     case TOKEN_WHILE:                return "'while'";
     case TOKEN_ALIGNAS:              return "'_Alignas'";
     case TOKEN_ALIGNOF:              return "'_Alignof'";
+    case TOKEN_VA_CLASS:             return "'__builtin_va_class'";
     case TOKEN_ATOMIC:               return "'_Atomic'";
     case TOKEN_BOOL:                 return "'_Bool'";
     case TOKEN_COMPLEX:              return "'_Complex'";

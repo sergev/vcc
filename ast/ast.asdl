@@ -76,6 +76,9 @@ module AST {
          | SizeofType(Type type)
          | Alignof(Type type)
          | Generic(Expr controlling_expr, GenericAssoc* associations)
+         -- __builtin_va_class(type): the target's argument class of `type`, an integer
+         -- constant (AArch64: tac_aapcs64_class), for <stdarg.h>'s va_arg
+         | VaClass(Type type)
          attributes(Type? type)
 
     Literal = Int(int val)

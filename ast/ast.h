@@ -267,7 +267,8 @@ typedef enum {
     EXPR_SIZEOF_EXPR,
     EXPR_SIZEOF_TYPE,
     EXPR_ALIGNOF,
-    EXPR_GENERIC
+    EXPR_GENERIC,
+    EXPR_VA_CLASS // __builtin_va_class(type): the target's argument class, for va_arg
 } ExprKind;
 
 typedef enum {
@@ -376,6 +377,7 @@ struct Expr {
         Expr *sizeof_expr;
         Type *sizeof_type;
         Type *align_of;
+        Type *va_class;
         struct {
             Expr *controlling_expr;
             GenericAssoc *associations;

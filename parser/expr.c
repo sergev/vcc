@@ -140,7 +140,8 @@ static bool is_constant_expression(const Expr *expression)
         return true;
 
     case EXPR_ALIGNOF:
-        /* _Alignof(type) is always constant */
+    case EXPR_VA_CLASS:
+        /* _Alignof(type) and __builtin_va_class(type) are always constant */
         return true;
 
     case EXPR_GENERIC:
@@ -675,6 +676,13 @@ Expr *parse_unary_expression()
         expect_token(TOKEN_LPAREN);
         Expr *result       = new_expression(EXPR_ALIGNOF);
         result->u.align_of = parse_type_name();
+        expect_token(TOKEN_RPAREN);
+        return result;
+    } else if (current_token == TOKEN_VA_CLASS) {
+        advance_token();
+        expect_token(TOKEN_LPAREN);
+        Expr *result       = new_expression(EXPR_VA_CLASS);
+        result->u.va_class = parse_type_name();
         expect_token(TOKEN_RPAREN);
         return result;
     } else {

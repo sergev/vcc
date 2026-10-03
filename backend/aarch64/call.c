@@ -17,6 +17,8 @@
 // HFA in v0-v3, up to 16 bytes in x0/x1; a larger one is written through the address
 // the caller passes in x8.
 //
+#include <string.h>
+
 #include "codegen.h"
 #include "internal.h"
 #include "xalloc.h"
@@ -124,6 +126,43 @@ static int piece_size(int size, int i)
     return size - 8 * i < 8 ? size - 8 * i : 8;
 }
 
+// A variadic function saves the argument registers the named parameters left, x<n>-x7
+// and q<m>-q7, at the ends of two save areas, where va_arg finds them (AAPCS64 B.4).
+static void save_varargs(Gen *g, const ArgState *s)
+{
+    int gr = alloc_slot(g, NULL, NULL, 64, 16);
+    int vr = alloc_slot(g, NULL, NULL, 128, 16);
+    for (int i = s->next_int; i < 8; i++)
+        emit2(g, A64_STR, a64_reg(A64_X(i), A64_X), mem(g, A64_FP, gr + 8 * i, 8));
+    for (int i = s->next_fp; i < 8; i++)
+        emit2(g, A64_STR, a64_reg(A64_V(i), A64_Q), mem(g, A64_FP, vr + 16 * i, 16));
+    g->va.stack   = 16 + s->stack;
+    g->va.gr_top  = gr + 64;
+    g->va.vr_top  = vr + 128;
+    g->va.gr_offs = -8 * (8 - s->next_int);
+    g->va.vr_offs = -16 * (8 - s->next_fp);
+}
+
+// va_start(ap), a call of __va_start(&ap): fill the va_list
+// { __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }.
+static void gen_va_start(Gen *g, const Tac_Instruction *in)
+{
+    if (!g->tl->u.function.variadic)
+        fatal_error("aarch64: %s: va_start in a function without ...", gen_name(g));
+    if (!in->u.fun_call.args || in->u.fun_call.args->next)
+        fatal_error("aarch64: %s: __va_start takes one argument", gen_name(g));
+    load_val(g, T0, in->u.fun_call.args);
+    const int field[3] = { g->va.stack, g->va.gr_top, g->va.vr_top };
+    for (int i = 0; i < 3; i++) {
+        gen_addr(g, T1, A64_FP, field[i]);
+        emit2(g, A64_STR, a64_reg(T1, A64_X), a64_mem(T0, 8 * i));
+    }
+    gen_li(g, T1, A64_W, g->va.gr_offs);
+    emit2(g, A64_STR, a64_reg(T1, A64_W), a64_mem(T0, 24));
+    gen_li(g, T1, A64_W, g->va.vr_offs);
+    emit2(g, A64_STR, a64_reg(T1, A64_W), a64_mem(T0, 28));
+}
+
 // Each parameter gets a slot: one passed in registers is stored there, one on the
 // stack is read where the caller put it (above the frame record), one passed by
 // reference is copied in from the caller's copy.
@@ -161,6 +200,8 @@ void gen_params(Gen *g)
             store_mem(g, a.reg[0], t, A64_FP, off);
         }
     }
+    if (g->tl->u.function.variadic)
+        save_varargs(g, &s);
 }
 
 // Load the doublewords of aggregate `name` into registers `reg`.
@@ -239,6 +280,10 @@ static void arg_to_regs(Gen *g, const Arg *a)
 
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (!in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0) {
+        gen_va_start(g, in);
+        return;
+    }
     const Tac_Type *ft   = in->u.fun_call.fun_type;
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     const Tac_Val *dst   = in->u.fun_call.dst;
