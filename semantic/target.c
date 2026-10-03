@@ -76,7 +76,12 @@ static const Target targets[] = {
       16, 32, 32, 64, // signed bits
       0,   // plain char unsigned (ARM EABI)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      SIZE_MAX, // struct_return_max: never lowered by the front end; the backend
+                // returns an HFA in VFP registers although it is wider than 4 bytes
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL },   // va_class: va_arg is a pointer walk, no argument classes
 
     { "aarch64",
       1, 1,   // _Bool

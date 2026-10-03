@@ -23,7 +23,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64` or `besm6`. Selects the predefined macros and the standard include directory. |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32` or `besm6`. Selects the predefined macros and the standard include directory. |
 | `-Ipath` | Add a directory to the header search list (up to 8). |
 | `-nostdinc` | Do not search the target's standard include directory. |
 | `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |
@@ -59,6 +59,7 @@ build/cpp/cpp -t besm6 -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog
 | `riscv64` | `__riscv`, `__riscv_xlen` = 64, `__LP64__`, `_LP64`, `__riscv_float_abi_double`, `__riscv_mul`, `__riscv_div` | `<prefix>/share/vcc/riscv64/include` |
 | `riscv32` | `__riscv`, `__riscv_xlen` = 32, `__ILP32__`, `_ILP32`, `__riscv_float_abi_double`, `__riscv_mul`, `__riscv_div` | `<prefix>/share/vcc/riscv32/include` |
 | `aarch64` | `__aarch64__`, `__ARM_ARCH` = 8, `__ARM_64BIT_STATE`, `__LP64__`, `_LP64`, `__CHAR_UNSIGNED__`, `__ELF__` | `<prefix>/share/vcc/aarch64/include` |
+| `arm32` | `__arm__`, `__ARM_ARCH` = 7, `__ARM_ARCH_7A__`, `__ARM_ARCH_PROFILE` = `'A'`, `__ARM_32BIT_STATE`, `__ARM_EABI__`, `__ARMEL__`, `__ARM_PCS_VFP`, `__VFP_FP__`, `__ARM_FP` = `0xe`, `__ARM_FEATURE_IDIV`, `__ILP32__`, `_ILP32`, `__CHAR_UNSIGNED__`, `__WCHAR_UNSIGNED__`, `__ELF__` | `<prefix>/share/vcc/arm32/include` |
 | `besm6` | `besm6`, `__besm6__` | `<prefix>/share/vcc/besm6/include` |
 
 The RISC-V set is a subset of clang's, so a header written for clang takes the same
