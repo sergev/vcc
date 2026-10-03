@@ -201,3 +201,22 @@ int main(void)
 )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A value computed into a callee-saved register and returned on one path is read on
+// the other: the peephole pass must not compute it into a0 across the branch.
+TEST_F(RiscvTest, RegallocValueReadPastBranchRun)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+int g(int y) { return y + 1; }
+int f(int a, int b)
+{
+    int x = a * 3;
+    if (b)
+        return x;
+    return g(x) + x;
+}
+int main(void) { return f(2, 1) * 10 + f(2, 0); }
+)"));
+    EXPECT_EQ(6 * 10 + 13, exit_status);
+}

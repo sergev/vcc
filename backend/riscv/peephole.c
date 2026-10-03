@@ -353,7 +353,8 @@ static bool move_back(Rv_Instr *mv)
 }
 
 // `in` computes into t, and a later `mv d, t` is the last read of it: compute into d,
-// when d is neither read nor written in between.  The reads of t in between read d.
+// when d is neither read nor written in between, nor (t not scratch) a branch passed:
+// t may be read beyond it.  The reads of t in between read d.
 static bool compute_in_place(Rv_Instr *in)
 {
     int t = in->opnd[0].reg;
@@ -371,7 +372,8 @@ static bool compute_in_place(Rv_Instr *in)
             delete_at(link);
             return true;
         }
-        if (writes(n, t) || is_call(n->op))
+        if (writes(n, t) || is_call(n->op) ||
+            (!is_scratch(t) && (is_branch(n->op) || n->op == RV_J)))
             return false;
     }
     return false;
