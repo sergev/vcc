@@ -1,5 +1,5 @@
 /*
- * <math.h> — mathematics (C11 §7.12), RISC-V ILP32 target.
+ * <math.h> — mathematics (C11 §7.12), ILP32 targets (RISC-V, ARM32).
  *
  * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax() and fma() are
  * implemented in libc.a; the rest are declared for future implementation (TODO).

@@ -124,8 +124,8 @@ qemu-system-riscv32 -M virt -bios none -display none -serial stdio -monitor none
     -kernel hello32.elf
 ```
 
-By hand, the 32-bit chain is the same with `cpp -t riscv32` and `libc/riscv32/include`,
-`lower -t riscv32` and `genriscv --rv32`. How to assemble, link and run the result is in
+By hand, the 32-bit chain is the same with `cpp -t riscv32` and `libc/riscv32/include`
+(then `libc/ilp32/include` in place of `libc/lp64/include`), `lower -t riscv32` and `genriscv --rv32`. How to assemble, link and run the result is in
 [docs/Riscv_Backend.md](docs/Riscv_Backend.md).
 
 For AArch64, add `-t aarch64` and run it under `qemu-system-aarch64`, which exits with
@@ -191,7 +191,8 @@ AArch64, `long double` is IEEE binary128, computed in software. On 32-bit RISC-V
 computed inline in register pairs, with division and the conversions to and from
 floating point in the runtime (the routines clang's code calls too). The portable part of
 the library lives in [libc/common/](libc/common/) and is shared by every target, and
-[libc/lp64/](libc/lp64/) holds what riscv64 and aarch64 share; each target has its own
+[libc/lp64/](libc/lp64/) holds what riscv64 and aarch64 share, [libc/ilp32/](libc/ilp32/)
+what the 32-bit targets share; each target has its own
 directory for the rest ([libc/riscv64/](libc/riscv64/), [libc/riscv32/](libc/riscv32/),
 [libc/aarch64/](libc/aarch64/)).
 

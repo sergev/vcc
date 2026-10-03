@@ -28,10 +28,11 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${RISCV32_INCLUDE_DIR}
+            ${ILP32_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
 # All the headers, as for riscv64.
-file(GLOB RISCV32_TARGET_HEADERS ${RISCV32_INCLUDE_DIR}/*.h)
+file(GLOB RISCV32_TARGET_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h)
 file(GLOB RISCV32_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 install(FILES ${RISCV32_TARGET_HEADERS} ${RISCV32_COMMON_HEADERS}
         DESTINATION share/vcc/riscv32/include)
@@ -45,6 +46,7 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
             ${RISCV32_INCLUDE_DIR}
+            ${ILP32_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
 if(NOT RISCV32_TOOLS_FOUND)
@@ -74,10 +76,12 @@ endforeach()
 
 # C sources, through cpp -> parse -> lower -> genriscv --rv32 -> clang.
 set(RISCV32_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
-file(GLOB RISCV32_LIBC_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+file(GLOB RISCV32_LIBC_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
+     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(riscv32_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV32_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR}
+        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV32_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR}
+                -I${LIBC_COMMON_INCLUDE_DIR}
                 ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
         COMMAND lower -t riscv32 ${out}/${name}.ast ${out}/${name}.tac
@@ -96,8 +100,8 @@ endforeach()
 foreach(name ${LIBC_C_IEEE})
     riscv32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-foreach(name frexp ldexp modf int64)
-    riscv32_compile_libc_c(${name} ${src})
+foreach(name ${LIBC_C_ILP32})
+    riscv32_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a

@@ -1,12 +1,13 @@
 # RISC-V 32-bit standard library headers
 
-The C11 headers that depend on the RISC-V ILP32 data model: `float.h`, `inttypes.h`,
-`limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`.  The
-target-neutral headers are in [libc/common/include](../../common/include), which is
-searched second:
+The C11 headers that are RISC-V's own on ILP32: `float.h`, `setjmp.h`, `stdarg.h`,
+`stddef.h`, `stdint.h`.  Those shared with the other ILP32 target (`inttypes.h`,
+`limits.h`, `math.h`) are in [libc/ilp32/include](../../ilp32/include), searched
+second, and the target-neutral ones in [libc/common/include](../../common/include),
+searched last:
 
 ```sh
-cc -E -nostdinc -I libc/riscv32/include -I libc/common/include prog.c prog.i
+cc -E -nostdinc -I libc/riscv32/include -I libc/ilp32/include -I libc/common/include prog.c prog.i
 ```
 
 `int`, `long` and pointers are 32 bits, `long long` 64, plain `char` unsigned; `float`

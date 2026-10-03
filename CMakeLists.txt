@@ -60,8 +60,8 @@ endif()
 # only recognises a '#' directive in column 1, whereas `cc -E` accepts directives
 # anywhere on the line.  Exposed to all subdirectories as SystemCpp (always
 # invoked with -E).  A target's headers are its own directory (BESM6_INCLUDE_DIR,
-# RISCV_INCLUDE_DIR, RISCV32_INCLUDE_DIR, AARCH64_INCLUDE_DIR), for riscv64 and aarch64
-# then the LP64 data-model ones (LP64_INCLUDE_DIR), and last the target-neutral
+# RISCV_INCLUDE_DIR, RISCV32_INCLUDE_DIR, AARCH64_INCLUDE_DIR), then the data-model ones
+# (LP64_INCLUDE_DIR for riscv64 and aarch64, ILP32_INCLUDE_DIR for riscv32), and last the target-neutral
 # LIBC_COMMON_INCLUDE_DIR.
 #
 set(SystemCpp ${CMAKE_C_COMPILER})
@@ -70,6 +70,7 @@ set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv64/include)
 set(RISCV32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv32/include)
 set(AARCH64_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/aarch64/include)
 set(LP64_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/lp64/include)
+set(ILP32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/ilp32/include)
 set(LIBC_COMMON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/common/include)
 
 # Download GoogleTest

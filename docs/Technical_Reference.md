@@ -362,9 +362,11 @@ instruction selection on its own.
 | `libc/common/doprnt.c` | The `printf` engine for the byte-addressed IEEE-754 targets |
 | `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
 | `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |
+| `libc/ilp32/frexp.c`, `ldexp.c`, `modf.c`, `int64.c` | Bit-level math and the `long long` division and conversions for ILP32 targets |
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
 | `libc/riscv64/include/` | RISC-V's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/lp64/include/` | LP64 data-model headers shared by riscv64 and aarch64 (`float.h`, `inttypes.h`, `limits.h`, `math.h`) |
+| `libc/ilp32/include/` | ILP32 data-model headers shared by riscv32 and arm32 (`inttypes.h`, `limits.h`, `math.h`) |
 | `libc/aarch64/include/` | AArch64's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |

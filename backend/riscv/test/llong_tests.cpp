@@ -1,5 +1,5 @@
 // long long on rv32: the inline register-pair sequences and the runtime routines
-// (libc/riscv32/int64.c), against the same operations done by the host.  Built into
+// (libc/ilp32/int64.c), against the same operations done by the host.  Built into
 // riscv32-tests only.
 #include <cinttypes>
 #include <cstring>

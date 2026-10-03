@@ -2,7 +2,7 @@
 // 64-bit integers on rv32: a long long lives in an 8-byte slot, the low word first,
 // and is operated on in register pairs by inline sequences of t0-t4.  Division,
 // remainder and the conversions with float and double call the runtime, under the
-// libgcc names (libc/riscv32/int64.c).
+// libgcc names (libc/ilp32/int64.c).
 //
 #include "codegen.h"
 #include "internal.h"

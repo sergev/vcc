@@ -120,8 +120,8 @@ protected:
     {
         return Run("", "crt0-status.o", &src,
                    { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR,
-#ifdef TEST_LP64_INCLUDE_DIR
-                     "-I", TEST_LP64_INCLUDE_DIR,
+#ifdef TEST_MODEL_INCLUDE_DIR
+                     "-I", TEST_MODEL_INCLUDE_DIR,
 #endif
                      "-I", TEST_COMMON_INCLUDE_DIR },
                    ".clang");

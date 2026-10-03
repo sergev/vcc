@@ -9,8 +9,8 @@
 // The preprocessor (the C compiler, invoked with -E) and the include directory
 // come from CMake via the TEST_CPP, TEST_INCLUDE_DIR (the target's headers) and
 // TEST_COMMON_INCLUDE_DIR (the shared ones, searched last) compile definitions, and
-// the optional TEST_LP64_INCLUDE_DIR, searched between them (the LP64 data-model
-// headers of riscv64 and aarch64); the macros are expanded in the including test translation unit, so only test
+// the optional TEST_MODEL_INCLUDE_DIR, searched between them (the data-model headers:
+// libc/lp64 for riscv64 and aarch64, libc/ilp32 for riscv32); the macros are expanded in the including test translation unit, so only test
 // targets need to define them.
 //
 // Preprocessing is conditional: a snippet with no preprocessing directive is
@@ -74,8 +74,8 @@ inline std::string preprocess_source(const std::string &src)
         // markers are kept (no -P): our scanner consumes them and they preserve
         // original line numbers for diagnostics.
         std::string cmd = TEST_CPP " -E -x c -nostdinc -I" TEST_INCLUDE_DIR;
-#ifdef TEST_LP64_INCLUDE_DIR
-        cmd += " -I" TEST_LP64_INCLUDE_DIR;
+#ifdef TEST_MODEL_INCLUDE_DIR
+        cmd += " -I" TEST_MODEL_INCLUDE_DIR;
 #endif
         cmd += " -I" TEST_COMMON_INCLUDE_DIR " ";
         cmd += path;

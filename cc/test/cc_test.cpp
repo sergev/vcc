@@ -234,9 +234,10 @@ protected:
                                  : target == "riscv32" ? RISCV32_INCLUDE_DIR
                                  : target == "aarch64" ? AARCH64_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
-        const char *lp64_inc =
-            target == "riscv64" || target == "aarch64" ? LP64_INCLUDE_DIR : target_inc;
-        for (const char *inc : { target_inc, lp64_inc, COMMON_INCLUDE_DIR }) {
+        const char *model_inc = target == "riscv64" || target == "aarch64" ? LP64_INCLUDE_DIR
+                                : target == "riscv32"                         ? ILP32_INCLUDE_DIR
+                                                                              : target_inc;
+        for (const char *inc : { target_inc, model_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
                 if (!fs::exists(to))

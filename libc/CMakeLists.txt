@@ -19,6 +19,10 @@ set(LIBC_C_IEEE doprnt float128)
 # C sources that assume LP64: a 64-bit long holds a double's bits (riscv64, aarch64).
 set(LIBC_LP64_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lp64)
 set(LIBC_C_LP64 frexp ldexp modf)
+# ... and those that assume ILP32: a double is two 32-bit words, and long long has
+# its division and conversions in software (riscv32).
+set(LIBC_ILP32_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ilp32)
+set(LIBC_C_ILP32 frexp ldexp modf int64)
 
 add_subdirectory(besm6)
 # riscv32 shares sources with riscv64, and uses the tools riscv64 found.

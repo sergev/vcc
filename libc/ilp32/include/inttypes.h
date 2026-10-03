@@ -1,6 +1,6 @@
 /*
- * <inttypes.h> — format conversion of integer types (C11 §7.8), RISC-V ILP32
- * target.  The 64-bit and max types are long long, the pointer types long.
+ * <inttypes.h> — format conversion of integer types (C11 §7.8), ILP32
+ * targets (RISC-V, ARM32).  The 64-bit and max types are long long, the pointer types long.
  */
 #ifndef _INTTYPES_H
 #define _INTTYPES_H

@@ -1,5 +1,5 @@
 /*
- * 64-bit integer runtime for rv32, under the libgcc names the code generator calls
+ * 64-bit integer runtime for ILP32 targets, under the libgcc names the code generator calls
  * (backend/riscv/llong.c): division and remainder, and the conversions between long
  * long and float or double.  Everything else on long long is inline.
  */

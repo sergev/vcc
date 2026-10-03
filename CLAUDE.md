@@ -226,12 +226,13 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/lp64/include/`, `libc/common/include/`).**
+**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/common/include/`).**
 C11 standard-library headers: each target's directory holds the headers that depend on its
 data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
 `setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`) — except that riscv64 and aarch64 share
-`float.h`/`inttypes.h`/`limits.h`/`math.h` in `libc/lp64/include/`, searched second
-(`wchar_t` keeps `stddef.h`/`stdint.h` apart) — and `libc/common/include/` the target-neutral
+`float.h`/`inttypes.h`/`limits.h`/`math.h` in `libc/lp64/include/`, and riscv32 (with arm32 to
+come) `inttypes.h`/`limits.h`/`math.h` in `libc/ilp32/include/`, searched second
+(`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`) — and `libc/common/include/` the target-neutral
 rest, searched last (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 `parse` has no preprocessor, so these are consumed by a preprocessor first: our own
@@ -247,7 +248,8 @@ preprocess and parse every header to catch syntax errors; their `besm-headers-cp
 `riscv-headers-cpp` twins do the same through our `cpp` (`CPPFLAGS=-t<target>`). The unit-test fixtures preprocess
 their C snippets automatically via `libutil/test/test_preprocess.h` (using the CMake
 `TEST_CPP`/`TEST_INCLUDE_DIR`/`TEST_COMMON_INCLUDE_DIR` defines, plus the optional
-`TEST_LP64_INCLUDE_DIR` for riscv64 and aarch64), so
+`TEST_MODEL_INCLUDE_DIR`: `libc/lp64/include` for riscv64 and aarch64, `libc/ilp32/include`
+for riscv32), so
 tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>` is
 functional (BESM-6: word-pointer `va_list`, covered by `stdarg_tests.cpp`; RISC-V: a byte
 pointer over the register save area, covered by the RISC-V run and interop tests; AArch64:
