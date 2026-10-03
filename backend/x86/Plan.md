@@ -150,17 +150,23 @@ instruction's pattern (X14).
     compare with.
   - Note the double rounding (exact → 113 → 64 bits) where it can differ from one
     rounding, and pin it with a test.
-- **X3. TAC audit for `x86_64`.** Run the test corpus through `lower -t x86_64`: chapter
-  sources, translator fixtures, libc sources. Two combinations are new:
-  - **A byte-addressed target with signed plain `char`.** riscv*, aarch64 and arm32 all
-    have unsigned `char`. Watch char promotion and folding, `'\xff'`, string and
-    `char[]` static initializers, and the libc sources (`doprnt`, `strcmp`, anything
-    that compares a `char` with a value ≥ 0x80 or indexes by one).
-  - **A 16-byte `long double` holding 10 significant bytes.** Watch static initializers,
-    struct layout with a `long double` member, `_Alignof(long double)` = 16, and the
-    `LONG_DOUBLE_*` conversions.
+- **X3. TAC audit for `x86_64`. Done, no defects.** All 4160 C sources of the test
+  corpus (the book and interop programs of every backend, the semantic fixtures, every
+  `libc/common` and `libc/lp64` source) lowered for `aarch64` and `x86_64` give
+  identical TAC, `lower --verify` passing on both, except where expected:
+  - plain `char` is `schar`, so its conversions sign-extend, `'\xff'` folds to -1, and
+    `char` → FP is the signed conversion;
+  - `long double` constants fold at x87 precision (X2): `1.0L/3` is
+    `0x1.5555555555555556p-2`;
+  - the semantic suite's negative tests fail alike on both, apart from the two
+    `__builtin_va_class` tests (x86_64 has no `va_class` until X17) and X2's two
+    precision tests, one per target.
 
-  Fix what is found in shared code and list it here.
+  An *unfolded* `long double` literal keeps its binary128 bits in TAC, as on the other
+  targets; the backend rounds it with `f128_to_x87` (X12, X14). The libc routines
+  compare characters as `unsigned char` (`strcmp`, `memcmp`) or `char` with `char`
+  (`strchr`), and `doprnt` casts explicitly, so none depends on the signedness of plain
+  `char`.
 - **X4. CMake detection.** In `libc/x86_64/CMakeLists.txt`:
   - Find `qemu-system-x86_64`, check that the clang already used for RISC-V lists
     `x86-64` (`--print-targets`), and find `x86_64-elf-as` (optional). Set
