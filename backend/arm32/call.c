@@ -6,8 +6,10 @@
 // d7), so a float may fill the gap a double's alignment left; once one goes on the
 // stack, no later FP value takes a VFP register.  A stack value takes 4 bytes, 8 for
 // one of 8-byte alignment, which then is 8-aligned.  The sender extends a narrow value
-// to 32 bits.  A variadic callee takes all its arguments, the named ones too, under
-// the base standard: a float as an integer, a double as a long long.
+// to 32 bits.  A variadic function takes all its arguments, the named ones too, under
+// the base standard: a float as an integer, a double as a long long; and so returns
+// its result, a float in r0, a double in r0:r1.  It saves r0-r3 below its stack
+// arguments (gen_prologue), so they are read in place, all in one area.
 //
 // A structure or union goes by value in the next core registers, a word each, from
 // an even one when it is 8-byte aligned; one that does not fit is split between the
@@ -212,15 +214,19 @@ static bool is_variadic(const Tac_Type *fun_type)
 }
 
 // Each parameter gets a slot: one passed in registers is stored there, one on the stack
-// is read where the caller put it, above the frame record.
+// is read where the caller put it, above the frame record.  A variadic function's are
+// all read where they are, in the area of its saved r0-r3 and its stack arguments.
 void gen_params(Gen *g)
 {
-    if (g->tl->u.function.variadic)
-        fatal_error("arm32: %s: a variadic function is not implemented yet", gen_name(g));
-    ArgState s = arg_state(true);
+    bool variadic = g->tl->u.function.variadic;
+    ArgState s    = arg_state(!variadic);
     if (indirect_result(ret_type(g->tl->u.function.type), s.vfp)) {
-        g->ret_ptr = alloc_slot(g, NULL, NULL, 4, 4);
-        emit2(g, A32_STR, a32_reg(A32_R0), mem(g, A32_STR, A32_FP, g->ret_ptr, T0));
+        if (variadic) {
+            g->ret_ptr = 8;
+        } else {
+            g->ret_ptr = alloc_slot(g, NULL, NULL, 4, 4);
+            emit2(g, A32_STR, a32_reg(A32_R0), mem(g, A32_STR, A32_FP, g->ret_ptr, T0));
+        }
         s.next_core = 1;
     }
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
@@ -228,6 +234,10 @@ void gen_params(Gen *g)
         if (!t)
             fatal_error("arm32: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
+        if (variadic) {
+            place_slot(g, p->name, t, 8 + (a.nregs ? 4 * (a.reg - A32_R0) : 16 + a.stack));
+            continue;
+        }
         if (!a.nregs) {
             place_slot(g, p->name, t, 8 + a.stack);
             continue;
@@ -418,9 +428,10 @@ void gen_return(Gen *g, const Tac_Val *v)
     if (v) {
         const Tac_Type *t  = val_type(g, v);
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
+        bool vfp           = !g->tl->u.function.variadic;
         if (!rt || rt->kind == TAC_TYPE_VOID)
             rt = t;
-        if (vfp_aggregate(rt, true)) {
+        if (vfp_aggregate(rt, vfp)) {
             int64_t off;
             int base  = piece_base(g, v->u.var_name, T1, &off);
             int esize = elem_size(rt);
@@ -436,11 +447,11 @@ void gen_return(Gen *g, const Tac_Val *v)
             int64_t off;
             int base = piece_base(g, v->u.var_name, T1, &off);
             load_piece(g, A32_R0, base, off, a32_size(rt));
-        } else if (a32_is_fp(rt) && v->kind == TAC_VAL_CONSTANT)
+        } else if (a32_is_fp(rt) && vfp && v->kind == TAC_VAL_CONSTANT)
             load_fp_const(g, A32_S0, v->u.constant, rt, A32_R0, A32_R0 + 1);
-        else if (a32_is_fp(rt))
+        else if (a32_is_fp(rt) && vfp)
             load_val(g, A32_S0, v);
-        else if (a32_is_pair(rt)) {
+        else if (a32_size(rt) == 8) {
             load_word(g, A32_R0, v, rt, 0);
             load_word(g, A32_R0 + 1, v, rt, 1);
         } else {

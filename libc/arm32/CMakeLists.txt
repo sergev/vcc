@@ -54,13 +54,15 @@ foreach(name console malloc aeabi_divmod aeabi_long aeabi_conv aeabi_mem)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genarm32 -> clang, as the code generator
-# reaches them (backend/arm32/Plan.md).  Until the ARM32 headers come (V21), the
-# riscv32 ones serve: the same ILP32 data model but for wchar_t and long double.
-file(GLOB ARM32_LIBC_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
-     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+# reaches them (backend/arm32/Plan.md).  Until the ARM32 headers are complete (V21),
+# the riscv32 ones serve after them: the same ILP32 data model but for wchar_t and
+# long double.
+file(GLOB ARM32_LIBC_HEADERS ${ARM32_INCLUDE_DIR}/*.h ${RISCV32_INCLUDE_DIR}/*.h
+     ${ILP32_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(arm32_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${SystemCpp} -E -nostdinc -I${RISCV32_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR}
+        COMMAND ${SystemCpp} -E -nostdinc -I${ARM32_INCLUDE_DIR} -I${RISCV32_INCLUDE_DIR}
+                -I${ILP32_INCLUDE_DIR}
                 -I${LIBC_COMMON_INCLUDE_DIR}
                 ${srcdir}/${name}.c -o ${out}/${name}.i
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
@@ -72,8 +74,8 @@ macro(arm32_compile_libc_c name srcdir)
     list(APPEND ARM32_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar strcat
-             strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr strtok)
+# No float128: long double is a double here.
+foreach(name ${LIBC_C_COMMON} doprnt)
     arm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 foreach(name ${LIBC_C_ILP32})

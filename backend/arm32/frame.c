@@ -591,13 +591,13 @@ static Frame scan_body(const Gen *g)
     }
     fr.locals = (g->locals_size + 7) / 8 * 8;
     fr.saves  = 8 * __builtin_popcount(fr.dmask) + (fr.r10 ? 4 : 0);
-    if (fr.locals || g->outgoing || fr.r10 || fr.dmask)
+    if (fr.locals || g->outgoing || fr.r10 || fr.dmask || g->tl->u.function.variadic)
         fr.frame = true;
     return fr;
 }
 
 // The return sequence: the saved scratch registers back, then sp, r11 and pc as on
-// entry; or just `bx lr` without a frame.
+// entry; or just `bx lr` without a frame.  A variadic function drops its r0-r3 too.
 static void epilogue(Gen *g, const Frame *fr)
 {
     if (!fr->frame) {
@@ -612,6 +612,12 @@ static void epilogue(Gen *g, const Frame *fr)
             emit1(g, A32_VPOP, a32_dreglist(fr->dmask));
     }
     emit2(g, A32_MOV, a32_reg(A32_SP), a32_reg(A32_FP));
+    if (g->tl->u.function.variadic) {
+        emit1(g, A32_POP, a32_reglist(1u << A32_FP | 1u << A32_LR));
+        emit3(g, A32_ADD, a32_reg(A32_SP), a32_reg(A32_SP), a32_imm(16));
+        emit1(g, A32_BX, a32_reg(A32_LR));
+        return;
+    }
     emit1(g, A32_POP, a32_reglist(1u << A32_FP | 1u << A32_PC));
 }
 
@@ -641,11 +647,14 @@ static void expand_epilogues(Gen *g, const Frame *fr)
 }
 
 // push {r11, lr}; mov r11, sp; the slots; the scratch registers in use; the outgoing
-// area, with sp 8-byte aligned.
+// area, with sp 8-byte aligned.  A variadic function first pushes r0-r3, which then
+// lie just below its stack arguments: one area of all its arguments, from r11 + 8.
 void gen_prologue(Gen *g)
 {
     Frame fr        = scan_body(g);
     A32_Block *tail = redirect(g, g->prologue);
+    if (g->tl->u.function.variadic)
+        emit1(g, A32_PUSH, a32_reglist(0xf));
     if (fr.frame) {
         emit1(g, A32_PUSH, a32_reglist(1u << A32_FP | 1u << A32_LR));
         emit2(g, A32_MOV, a32_reg(A32_FP), a32_reg(A32_SP));
