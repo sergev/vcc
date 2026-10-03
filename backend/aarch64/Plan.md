@@ -67,9 +67,10 @@ and the harness runs qemu under a short timeout regardless.
   (`ARCH_LLVM`, a clang triple per target, `-march`/`-mabi` only for RISC-V), so `-T`
   now works for every target but the BESM-6. `cc-tests`: `-S`, separate compilation
   with a `.S` and a run, and a staged prefix.
-- **A28. Install.** `genaarch64` as `vgenaarch64`; `crt0.o`, `libc.a`, `link.ld` and
-  the headers under `share/vcc/aarch64/`, only when the AArch64 clang/llvm-ar were
-  found.
+- **A28. Install. Done.** `genaarch64` as `vgenaarch64`; the AArch64, LP64 and shared
+  headers into `share/vcc/aarch64/include` (always, as for riscv64), and `crt0.o`,
+  `libc.a` and `link.ld` into `share/vcc/aarch64/lib` when the AArch64 clang/llvm-ar
+  were found.
 - **A29. Documentation.** `docs/Aarch64_Backend.md` in the style of
   `docs/Riscv_Backend.md` (target, how code is generated, frame, calls, runtime, running
   a program by hand under qemu), README and CLAUDE.md for three targets. This plan is

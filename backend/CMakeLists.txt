@@ -31,3 +31,5 @@ add_executable(genaarch64
     aarch64/main.c
 )
 target_link_libraries(genaarch64 aarch64 backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genaarch64> DESTINATION bin RENAME vgenaarch64)

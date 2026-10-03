@@ -43,6 +43,13 @@ add_test(
             ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, the AArch64, the LP64 and the shared ones, go into one directory,
+# as for riscv64.
+file(GLOB AARCH64_TARGET_HEADERS ${AARCH64_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h)
+file(GLOB AARCH64_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${AARCH64_TARGET_HEADERS} ${AARCH64_COMMON_HEADERS}
+        DESTINATION share/vcc/aarch64/include)
+
 if(NOT AARCH64_TOOLS_FOUND)
     message(STATUS "No AArch64 clang/llvm-ar: the AArch64 runtime is not built")
     return()
@@ -101,3 +108,6 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${AARCH64_LIBC_OBJS})
 add_custom_target(aarch64-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+# The runtime, with the linker script for qemu `virt`.
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/aarch64/lib)
