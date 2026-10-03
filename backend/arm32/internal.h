@@ -60,6 +60,7 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int locals_size;   // bytes of slots below the frame record
     int outgoing;      // bytes of the outgoing argument area
+    int ret_ptr;       // slot of the result address that came in r0, or 0
 } Gen;
 
 //
