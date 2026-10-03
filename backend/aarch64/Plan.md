@@ -59,30 +59,6 @@ and the harness runs qemu under a short timeout regardless.
   AAPCS64 structure `{ __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }` — the
   largest difference from RISC-V (A18).
 
-## Phase 4 — `long double`, library and headers
-
-- **A21. binary128 `long double`. Done.** Values live in 16-byte slots and travel in
-  `q` registers; no X pair is needed. Arithmetic, comparisons and conversions call the
-  routines of `libc/common/float128.c` (operands in `q0`/`q1`, an integer in `x0`/`w0`,
-  a comparison's int tested with `cmp w0, #0` + `cset`), so folded and computed values
-  agree as on RISC-V. Negation flips the sign bit of a copy; a zero test ors the two
-  doublewords, the sign shifted out. `libc.a` now has the `printf` family too.
-  `float128_tests` runs RISC-V's exact cases, plus interop with clang both ways. The
-  AST importer rejected `EXPR_VA_CLASS` (its range check ended at `EXPR_GENERIC`),
-  found by the first libc source with `va_arg`, `doprnt.c`.
-- **A22. Headers. Done.** `float.h`, `inttypes.h`, `limits.h` and `math.h` moved from
-  `libc/riscv64/include` to `libc/lp64/include/`, searched between the target's own and
-  `libc/common/include` (riscv64 too; installed into its one include directory).
-  `stddef.h` and `stdint.h` stay per target, against the plan: `wchar_t` is `int` on
-  RISC-V but `unsigned int` under AAPCS64. `libc/aarch64/include/` holds those two,
-  `setjmp.h` (declarations only, as on RISC-V) and `stdarg.h`. The test fixtures take
-  the LP64 directory through an optional `TEST_LP64_INCLUDE_DIR`. `aarch64-headers`
-  CTest and its `-cpp` twin, like `riscv-headers`.
-- **A23. Libc. Done.** `libc.a` holds every C source of `libc/common`, `LIBC_C_IEEE`
-  (`doprnt`, `float128`) and `libc/lp64`, all compiled by us, plus `va_arg.c`; malloc's
-  run test came back in A15. RISC-V's `printf_tests`/`str_tests`/`mem_tests`/
-  `math_tests` run unchanged on AArch64 (host libc output as expectation).
-
 ## Phase 5 — code quality
 
 - **A24. Register allocation** on `backend/common/regalloc.c`: `x0`–`x7`/`v0`–`v7` for values not
