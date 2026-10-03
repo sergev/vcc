@@ -180,6 +180,15 @@ TEST_F(Predefined, Arm32Target) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "arm32"}));
 }
 
+// Signed plain char: no __CHAR_UNSIGNED__.
+TEST_F(Predefined, X86_64Target) {
+    EXPECT_TRUE(TokensAre("#if __x86_64__ && __x86_64 && __amd64__ && __LP64__ && _LP64 && "
+                          "__SSE2__ && __SSE2_MATH__ && __code_model_small__ && __ELF__ && "
+                          "!defined(__CHAR_UNSIGNED__) && !defined(__aarch64__) && "
+                          "!defined(__riscv)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "x86_64"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"

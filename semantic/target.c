@@ -116,7 +116,13 @@ static const Target targets[] = {
       16, 32, 64, 64, // signed bits
       1,   // plain char signed (x86-64 System V)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      SIZE_MAX, // struct_return_max: never lowered by the front end; the backend
+                // classifies a result by eightbyte, and returns a large result's
+                // address (passed in rdi) in rax
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL },   // va_class
 
     { "riscv32",
       1, 1,   // _Bool
