@@ -7,6 +7,7 @@
 // A power-of-two scale is a shifted add (the front end has widened the int index).
 TEST_F(Aarch64Test, AddPointerScaledIndex)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 long f(long *p) { int i = -1; return p[i]; }
@@ -22,6 +23,7 @@ add x9, x9, x10, lsl #3
 // A scale that is not a power of two is a multiply.
 TEST_F(Aarch64Test, AddPointerOddScale)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 struct s { char c[3]; };
@@ -35,6 +37,7 @@ add x9, x9, x10
 
 TEST_F(Aarch64Test, LoadAndStoreThroughPointers)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 void f(unsigned char *p, short *q) { *p = *q; }

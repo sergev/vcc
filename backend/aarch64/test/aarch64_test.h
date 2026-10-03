@@ -35,6 +35,19 @@ protected:
                                   "none", "-serial", "stdio", "-monitor", "none", "-semihosting" },
                                 "" })
     {
+        // The defaults; a test may change them.
+        aarch64_regalloc      = true;
+        aarch64_peephole      = true;
+        aarch64_frame_pointer = false;
+    }
+
+    // Pin instruction selection itself: every variable in its slot, a frame record in
+    // every function, no peephole pass.
+    static void NaiveSelection()
+    {
+        aarch64_regalloc      = false;
+        aarch64_peephole      = false;
+        aarch64_frame_pointer = true;
     }
 
     // Assembly of every toplevel of the translation unit.

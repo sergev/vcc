@@ -5,6 +5,7 @@
 
 TEST_F(Aarch64Test, ConditionalJump)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code =
         Code(CompileToAarch64("int f(void) { int a = 3; if (a) return 1; return 2; }"));
@@ -15,6 +16,7 @@ cbz w9, .L)"))
 
 TEST_F(Aarch64Test, LoopJumpsBack)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string s = CompileToAarch64(R"(
 long f(void) {

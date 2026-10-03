@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -163,11 +164,68 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     emit2(g, A64_STR, a64_reg(T1, A64_W), a64_mem(T0, 28));
 }
 
-// Each parameter gets a slot: one passed in registers is stored there, one on the
-// stack is read where the caller put it (above the frame record), one passed by
-// reference is copied in from the caller's copy.
+// A move of a value of type `type` between registers of one file, as if at once with
+// the others; with `canon`, an integer arrives in the canonical form of its type (a
+// parameter: AAPCS64 leaves the upper bits unspecified).
+typedef struct {
+    int dst, src;
+    const Tac_Type *type;
+    bool canon;
+} Move;
+
+static void emit_move(Gen *g, const Move *m)
+{
+    if (m->canon && !a64_is_fpreg(m->dst))
+        gen_canon(g, m->dst, m->src, m->type);
+    else
+        move_reg(g, m->dst, m->src, m->type);
+}
+
+// Make all moves as if at once: a move goes when no other still reads its
+// destination; a cycle is broken through a scratch register.
+static void parallel_move(Gen *g, Move *m, int n)
+{
+    static const Tac_Type wide_int = { .kind = TAC_TYPE_LONG }, wide_fp = { .kind = TAC_TYPE_DOUBLE };
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            bool blocked = false;
+            for (int j = 0; j < n && !blocked; j++)
+                blocked = j != i && m[j].src == m[i].dst;
+            if (!blocked)
+                pick = i;
+        }
+        if (pick < 0) {
+            bool fp = a64_is_fpreg(m[0].src);
+            int tmp = fp ? F0 : T0;
+            move_reg(g, tmp, m[0].src, fp ? &wide_fp : &wide_int);
+            m[0].src = tmp;
+            continue;
+        }
+        emit_move(g, &m[pick]);
+        m[pick] = m[--n];
+    }
+}
+
+void param_hints(const Gen *g, StringMap *hints)
+{
+    ArgState s = { 0 };
+    for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        if (a.nregs == 1 && !a.by_ref && !a64_is_aggregate(p->type) && !a64_is_ld(p->type))
+            map_insert(hints, p->name, a.reg[0], 0);
+    }
+}
+
+// Each parameter gets a register or a slot: one passed in a register is moved to its
+// own, or stored to its slot; one on the stack is loaded, or read where the caller put
+// it (above the frame record); one passed by reference is copied in from the caller's
+// copy.  The stores come first, then the variadic save areas, then the moves as if at
+// once (an allocated register may be another argument register), then the loads.
 void gen_params(Gen *g)
 {
+    Move moves[16];
+    int nmoves = 0;
     if (indirect_result(ret_type(g->tl->u.function.type))) {
         g->ret_ptr = alloc_slot(g, NULL, NULL, 8, 8);
         emit2(g, A64_STR, a64_reg(A64_X8, A64_X), mem(g, A64_FP, g->ret_ptr, 8));
@@ -178,6 +236,13 @@ void gen_params(Gen *g)
         if (!t)
             fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
+        int preg = assigned_reg(g, p->name);
+        if (preg) {
+            place_reg(g, p->name, t, preg);
+            if (a.nregs)
+                moves[nmoves++] = (Move){ preg, a.reg[0], t, true };
+            continue;
+        }
         if (!a.nregs && !a.by_ref) {
             place_slot(g, p->name, t, 16 + a.stack);
             continue;
@@ -202,6 +267,15 @@ void gen_params(Gen *g)
     }
     if (g->tl->u.function.variadic)
         save_varargs(g, &s);
+    parallel_move(g, moves, nmoves);
+
+    s = (ArgState){ 0 };
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        int preg = assigned_reg(g, p->name);
+        if (preg && !a.nregs)
+            load_mem(g, preg, p->type, A64_FP, 16 + a.stack);
+    }
 }
 
 // Load the doublewords of aggregate `name` into registers `reg`.
@@ -256,7 +330,17 @@ static void arg_to_stack(Gen *g, Arg *a)
     store_mem(g, r, a->as, A64_SP, a->loc.stack);
 }
 
-// Load argument `a`'s registers.
+// A move for argument `a` when it is a scalar already in a register, going in one.
+static bool arg_move(const Gen *g, const Arg *a, Move *m)
+{
+    int src = var_reg(g, a->v);
+    if (!src || a->loc.by_ref || a->loc.nregs != 1 || a64_is_aggregate(a->type))
+        return false;
+    *m = (Move){ a->loc.reg[0], src, a->type, false };
+    return true;
+}
+
+// Load argument `a`'s registers from memory or a constant.
 static void arg_to_regs(Gen *g, const Arg *a)
 {
     const ArgLoc *l = &a->loc;
@@ -288,6 +372,12 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     const Tac_Val *dst   = in->u.fun_call.dst;
     const Tac_Type *ret  = ret_type(ft);
+    // The callee's address first, in x13: the argument registers are about to change,
+    // and nothing that sets up the arguments uses x13.
+    if (in->u.fun_call.indirect) {
+        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
+        load_val(g, T4, &fp);
+    }
     if (!ret && dst)
         ret = val_type(g, dst);
     int nargs = 0;
@@ -296,8 +386,9 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     Arg *args  = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
     ArgState s = { 0 };
     int i      = 0;
-    // Every argument is in memory or a constant: the stack ones and the copies first,
-    // through the scratch registers, then the register ones straight into place.
+    // The stack parts and the copies first, through the scratch registers; then the
+    // arguments already in registers, moved as if at once; then the rest loaded straight
+    // into place.
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
         Arg *a  = &args[i];
         a->v    = v;
@@ -313,8 +404,17 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             want = want->next;
         arg_to_stack(g, a);
     }
+    Move moves[16];
+    int nmoves = 0;
     for (i = 0; i < nargs; i++)
-        arg_to_regs(g, &args[i]);
+        if (arg_move(g, &args[i], &moves[nmoves]))
+            nmoves++;
+    parallel_move(g, moves, nmoves);
+    for (i = 0; i < nargs; i++) {
+        Move m;
+        if (!arg_move(g, &args[i], &m))
+            arg_to_regs(g, &args[i]);
+    }
     xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
@@ -332,9 +432,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     }
 
     if (in->u.fun_call.indirect) {
-        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
-        load_val(g, T0, &fp);
-        emit1(g, A64_BLR, a64_reg(T0, A64_X));
+        emit1(g, A64_BLR, a64_reg(T4, A64_X));
     } else {
         emit1(g, A64_BL, a64_sym(in->u.fun_call.fun_name, 0));
     }
@@ -343,7 +441,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Type *t = val_type(g, dst);
     int esize;
     int n = tac_aapcs64_hfa(t, &esize);
-    if (n) {
+    if (n && a64_is_aggregate(t)) {
         static const int vregs[4] = { A64_V(0), A64_V(1), A64_V(2), A64_V(3) };
         int base;
         int64_t off;
@@ -360,7 +458,30 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             store_bytes(g, A64_X(k), base, off + 8 * k, piece_size(size, k));
         return;
     }
-    store_val(g, a64_is_fp(t) ? A64_V0 : A64_X0, dst);
+    if (a64_is_fp(t) || a64_is_ld(t))
+        store_val(g, A64_V0, dst);
+    else
+        store_int(g, A64_X0, dst);
+}
+
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+{
+    ArgState s = { 0 };
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
+        int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
+        const Tac_Type *t = var >= 0 ? f->types[var] : val_type(g, v);
+        if (!t)
+            return;
+        ArgLoc a = classify(&s, t);
+        if (var >= 0 && !hint[var] && a.nregs == 1 && !a.by_ref && !a64_is_aggregate(t) &&
+            !a64_is_ld(t))
+            hint[var] = a.reg[0];
+    }
+    const Tac_Val *dst = in->u.fun_call.dst;
+    int var            = dst ? flow_var(f, dst->u.var_name) : -1;
+    const Tac_Type *t  = var >= 0 ? f->types[var] : NULL;
+    if (t && !hint[var] && !a64_is_aggregate(t) && !a64_is_ld(t))
+        hint[var] = a64_is_fp(t) ? A64_V0 : A64_X0;
 }
 
 void gen_return(Gen *g, const Tac_Val *v)

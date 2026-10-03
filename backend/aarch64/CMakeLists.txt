@@ -9,6 +9,7 @@ add_library(aarch64 STATIC
     call.c
     data.c
     codegen.c
+    regalloc.c
 )
 target_include_directories(aarch64 PUBLIC .)
 target_link_libraries(aarch64 backend_common tac libutil)
@@ -34,6 +35,7 @@ add_executable(aarch64-tests
     test/struct_tests.cpp
     test/hfa_tests.cpp
     test/float128_tests.cpp
+    test/regalloc_tests.cpp
     test/stdarg_tests.cpp
     test/interop_tests.cpp
     test/run_tests.cpp

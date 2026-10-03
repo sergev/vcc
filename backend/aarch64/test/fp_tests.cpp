@@ -6,6 +6,7 @@
 
 TEST_F(Aarch64Test, DoubleArithmetic)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 double f(void) { double a = 1.5; double b = 2.0; return a * b + a; }
@@ -20,6 +21,7 @@ fmul d16, d16, d17
 // fcmp sets C and V on a NaN, so < and <= use mi and ls.
 TEST_F(Aarch64Test, FloatCompare)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 int f(void) { float a = 1.0f; float b = 2.0f; return (a < b) + (a <= b); }
@@ -30,6 +32,7 @@ int f(void) { float a = 1.0f; float b = 2.0f; return (a < b) + (a <= b); }
 
 TEST_F(Aarch64Test, FloatingPointCondition)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 int f(void) { double d = 0.5; if (d) return 1; return 2; }
@@ -39,6 +42,7 @@ int f(void) { double d = 0.5; if (d) return 1; return 2; }
 
 TEST_F(Aarch64Test, FloatingPointConversions)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 long f(void) {

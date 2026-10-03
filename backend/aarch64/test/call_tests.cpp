@@ -8,6 +8,7 @@
 // x0-x7, the result taken from w0.
 TEST_F(Aarch64Test, CallAndParameters)
 {
+    NaiveSelection();
     std::string code = Code(CompileToAarch64(R"(
 int add(int a, long b) { return a + b; }
 int main(void) { return add(1, 2); }
@@ -25,6 +26,7 @@ bl add
 // above its frame record.
 TEST_F(Aarch64Test, StackArguments)
 {
+    NaiveSelection();
     std::string code = Code(CompileToAarch64(R"(
 int tenth(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j) { return i + j; }
 int main(void) { return tenth(1, 2, 3, 4, 5, 6, 7, 8, 9, 10); }

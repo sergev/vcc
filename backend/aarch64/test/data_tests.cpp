@@ -42,6 +42,7 @@ zeros:
 // A global is reached through its page address and the low 12 bits.
 TEST_F(Aarch64Test, GlobalAccess)
 {
+    NaiveSelection();
     std::string code = Code(CompileToAarch64(R"(
 int counter;
 int bump(void) { counter = counter + 1; return counter; }

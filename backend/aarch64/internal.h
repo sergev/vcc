@@ -5,21 +5,24 @@
 // x9-x15, x16/x17 and v16-v31 are scratch; x19-x28 and the low halves of v8-v15 are
 // callee-saved; x18 is never used; x29 is the frame pointer, x30 the link register.
 //
-// Every `%` name lives in a slot at a fixed offset from x29, any other name at its
-// symbol.  An instruction loads its operands into scratch registers, computes, and
-// stores the result.
+// A scalar `%` name that is never in memory may get a register (regalloc.c): an
+// argument register unless it is live across a call, else a callee-saved one.  Any
+// other `%` name lives in a slot at a fixed offset from x29, any other name at its
+// symbol.  An instruction works on registers directly, and goes through scratch
+// registers for operands in memory.
 //
 // Frame (x29 = sp after the frame record is pushed, 16-byte aligned):
 //   x29 + 16 ...     incoming stack arguments
 //   x29 + 8          saved x30
 //   x29 + 0          saved x29
-//   x29 - ...        slots
+//   x29 - ...        saved x19-x28/d8-d15 in use, in pairs, then slots
 //   sp + 0 ...       outgoing stack arguments
 //
-// A value in a register: a type of 32 bits or fewer in the W view, extended to 32 bits
-// by its own type (the upper half zero, as every W write leaves it); a 64-bit one in
-// the X view; float and double in S and D.  AAPCS64 leaves the upper bits of a narrow
-// argument or result unspecified, so whoever receives one extends it.
+// A value in a register is in canonical form: a type of 32 bits or fewer in the W
+// view, the upper half zero (as every W write leaves it), a narrower one extended to
+// 32 bits by its own type; a 64-bit one in the X view; float and double in S and D.
+// AAPCS64 leaves the upper bits of a narrow argument or result unspecified, so
+// whoever receives one extends it.
 //
 // Scratch registers: x9-x11 and v16-v18 hold operands, x12/x13 the addresses of an
 // aggregate copy, x14 the address of a global, x16 a large offset or address, x17 the
@@ -49,6 +52,7 @@ enum {
 typedef struct {
     const Tac_Type *type;
     int offset; // from x29
+    int reg;    // allocated register, or 0 for the slot
 } Slot;
 
 typedef struct {
@@ -62,6 +66,10 @@ typedef struct {
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
     int ret_ptr;       // slot of the result address that came in x8, or 0
+    StringMap regs;    // name → allocated register (regalloc.c)
+    int nsaved;        // callee-saved registers in use
+    int saved_reg[32];
+    int saved_off[32]; // their save slots
     // A variadic function: what va_start puts in a va_list (offsets from x29).
     struct {
         int stack;            // the first variadic argument on the stack
@@ -93,7 +101,13 @@ const char *gen_name(const Gen *g);
 int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int align);
 // Give `name` a slot at a fixed offset (an incoming stack argument).
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset);
+// Keep `name` in register `reg`.
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg);
 const Slot *find_slot(const Gen *g, const char *name);
+// The register allocated to `name` by gen_regalloc, or 0.
+int assigned_reg(const Gen *g, const char *name);
+// The register holding variable `v`, or 0 when it is in memory or a constant.
+int var_reg(const Gen *g, const Tac_Val *v);
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
 const Tac_Type *name_type(const Gen *g, const char *name);
 // A memory operand for base + off, accessing `size` bytes; through ip0 when the offset
@@ -108,9 +122,21 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off);
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off);
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off);
 // Load scalar value `v` into `reg`, in the view of its own type; store `reg` into a
-// variable, in the view of the variable's type.
+// variable, in the view of the variable's type (into a register: brought to its
+// canonical form, unless it is that register).
 void load_val(Gen *g, int reg, const Tac_Val *v);
 void store_val(Gen *g, int reg, const Tac_Val *v);
+// Store integer `reg` into `v`, a register always brought to canonical form: `reg` may
+// be the variable's own register, computed in place.
+void store_int(Gen *g, int reg, const Tac_Val *v);
+// The register holding `v`: its own, or `scratch` after loading it.
+int use_val(Gen *g, int scratch, const Tac_Val *v);
+// The register to compute `v` into: its own, or `scratch` (then store it).
+int def_reg(const Gen *g, int scratch, const Tac_Val *v);
+// dst = src, registers of one file, at the view of type `t`; nothing when the same.
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
+// dst = integer src in the canonical form of type `t`.
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
 // Load integer value `v` into `reg` for an operation on type `t`: a variable as its own
 // type, a constant converted to `t` (its own kind may differ).
 void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t);
@@ -137,10 +163,22 @@ void gen_epilogue(Gen *g);
 void gen_prologue(Gen *g);
 
 //
+// Register allocation (regalloc.c): fills g->regs and the callee-saved registers used.
+//
+void gen_regalloc(Gen *g);
+
+//
 // Calls, parameters and returns (call.c)
 //
-// A slot for each parameter, stored from its register or placed over its stack slot.
+// A register or a slot for each parameter: moved from its argument register, stored
+// from it, or placed over its stack slot.
 void gen_params(Gen *g);
+// The incoming register of each scalar parameter passed in a register of its class.
+void param_hints(const Gen *g, StringMap *hints);
+// Hints for a call: each scalar argument variable its argument register, the result
+// x0/v0; only where hint[var] is still 0 (indexed by flow variable).
+struct Flow;
+void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 
@@ -155,5 +193,10 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls a runtime routine (long double arithmetic and conversions);
+// `type_of(arg, v)` gives the type of operand `v`.  Sets *dst to its result.
+typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst);
 
 #endif // AARCH64_INTERNAL_H

@@ -6,9 +6,21 @@
 #include "codegen.h"
 #include "driver.h"
 
+static const BackendFlag flags[] = {
+    { "no-regalloc", "keep every variable in memory" },
+    { "no-peephole", "skip the peephole pass" },
+    { "frame-pointer", "keep a frame record and x29 in every function" },
+    { NULL, NULL },
+};
+
 static void flag(int index)
 {
-    (void)index; // no backend flags yet
+    if (index == 0)
+        aarch64_regalloc = false;
+    else if (index == 1)
+        aarch64_peephole = false;
+    else
+        aarch64_frame_pointer = true;
 }
 
 static const char *output_ext(void)
@@ -18,6 +30,6 @@ static const char *output_ext(void)
 
 int main(int argc, char *argv[])
 {
-    static const Backend aarch64 = { NULL, flag, output_ext, aarch64_codegen };
+    static const Backend aarch64 = { flags, flag, output_ext, aarch64_codegen };
     return backend_main(argc, argv, &aarch64);
 }

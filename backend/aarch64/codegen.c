@@ -7,10 +7,26 @@
 
 #include "internal.h"
 
-// A slot for every parameter and local: an ALLOCATE_LOCAL may ask for more room or
-// alignment than the type.
+bool aarch64_regalloc      = true;
+bool aarch64_peephole      = true;
+bool aarch64_frame_pointer = false;
+
+// Save slots for the callee-saved registers in use, a pair in 16 bytes; then a
+// register or a slot for every parameter and local.  An ALLOCATE_LOCAL may ask for
+// more room or alignment than the type.
 static void layout_frame(Gen *g)
 {
+    for (int i = 0; i < g->nsaved; i += 2) {
+        int off = alloc_slot(g, NULL, NULL, 16, 16);
+        // A pair is two registers of one file; a lone one takes the first half.
+        g->saved_off[i] = off;
+        if (i + 1 < g->nsaved) {
+            if (a64_is_fpreg(g->saved_reg[i]) == a64_is_fpreg(g->saved_reg[i + 1]))
+                g->saved_off[i + 1] = off + 8;
+            else
+                g->saved_off[i + 1] = alloc_slot(g, NULL, NULL, 16, 16);
+        }
+    }
     gen_params(g);
     StringMap allocs;
     map_init(&allocs);
@@ -21,6 +37,11 @@ static void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
+        int reg = assigned_reg(g, p->name);
+        if (reg) {
+            place_reg(g, p->name, p->type, reg);
+            continue;
+        }
         int size  = a64_size(p->type);
         int align = a64_align(p->type);
         intptr_t v;
@@ -40,6 +61,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    if (aarch64_regalloc)
+        gen_regalloc(&g);
     layout_frame(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {

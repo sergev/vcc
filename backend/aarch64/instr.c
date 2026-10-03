@@ -1,6 +1,6 @@
 //
-// Instruction selection: one TAC instruction at a time, its operands loaded into
-// scratch registers and its result stored back.
+// Instruction selection: one TAC instruction at a time, on the allocated registers of
+// its operands, or scratch registers for those in memory.
 //
 #include <string.h>
 
@@ -60,12 +60,11 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
         emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, A64_X), a64_sym(l, 0));
     } else if (a64_is_fp(t)) {
         // A NaN is not zero: unordered leaves Z clear.
-        load_val(g, F0, cond);
-        emit2(g, A64_FCMP, a64_reg(F0, a64_width(t)), a64_fzero());
+        emit2(g, A64_FCMP, a64_reg(use_val(g, F0, cond), a64_width(t)), a64_fzero());
         emit2(g, A64_BCOND, a64_cond(if_zero ? A64_EQ : A64_NE), a64_sym(l, 0));
     } else {
-        load_val(g, T0, cond);
-        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, a64_width(t)), a64_sym(l, 0));
+        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(use_val(g, T0, cond), a64_width(t)),
+              a64_sym(l, 0));
     }
     xfree(l);
 }
@@ -94,18 +93,20 @@ static void store_wide(Gen *g, const Tac_Val *src, const Tac_Type *t, int base, 
     gen_memcopy(g, base, off, sbase, soff, a64_size(t), a64_align(t));
 }
 
-// Load scalar `v` of type `t` into a scratch register of its class; returns it.
-static int load_scalar(Gen *g, const Tac_Val *v, const Tac_Type *t)
+// The register holding scalar `v` for an operation on type `t`: its own, or a scratch
+// register of its class after loading it (a constant as type `t`).
+static int use_scalar(Gen *g, const Tac_Val *v, const Tac_Type *t)
 {
-    if (a64_is_fp(t)) {
-        load_val(g, F0, v);
-        return F0;
+    if (a64_is_fp(t))
+        return use_val(g, F0, v);
+    if (v->kind == TAC_VAL_CONSTANT) {
+        load_const_as(g, T0, v->u.constant, t);
+        return T0;
     }
-    load_int_as(g, T0, v, t);
-    return T0;
+    return use_val(g, T0, v);
 }
 
-// dst = src, for any type.
+// dst = src, for any type.  A constant goes straight into a register variable.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
@@ -116,7 +117,13 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
         store_wide(g, src, t, base, off);
         return;
     }
-    store_val(g, load_scalar(g, src, t), dst);
+    int d = var_reg(g, dst);
+    if (d && src->kind == TAC_VAL_CONSTANT && !a64_is_fp(t))
+        load_const_as(g, d, src->u.constant, t);
+    else if (d && src->kind == TAC_VAL_CONSTANT)
+        load_val(g, d, src);
+    else
+        store_val(g, use_scalar(g, src, t), dst);
 }
 
 // The type stored through pointer value `ptr`, or NULL when not known.
@@ -130,16 +137,16 @@ static const Tac_Type *pointee(Gen *g, const Tac_Val *ptr)
 static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    load_val(g, T3, src_ptr);
+    int p             = use_val(g, T3, src_ptr);
     if (is_wide(t)) {
         int base;
         int64_t off;
         name_addr(g, dst->u.var_name, T4, &base, &off);
-        gen_memcopy(g, base, off, T3, 0, a64_size(t), a64_align(t));
+        gen_memcopy(g, base, off, p, 0, a64_size(t), a64_align(t));
         return;
     }
-    int d = a64_is_fp(t) ? F0 : T0;
-    load_mem(g, d, t, T3, 0);
+    int d = def_reg(g, a64_is_fp(t) ? F0 : T0, dst);
+    load_mem(g, d, t, p, 0);
     store_val(g, d, dst);
 }
 
@@ -150,12 +157,12 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
     if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
         (a64_is_aggregate(t) && !a64_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
-    load_val(g, T4, dst_ptr);
+    int p = use_val(g, T4, dst_ptr);
     if (is_wide(t)) {
-        store_wide(g, src, t, T4, 0);
+        store_wide(g, src, t, p, 0);
         return;
     }
-    store_mem(g, load_scalar(g, src, t), t, T4, 0);
+    store_mem(g, use_scalar(g, src, t), t, p, 0);
 }
 
 // dst = ptr + index * scale (bytes).  An index narrower than 64 bits is extended by its
@@ -164,31 +171,35 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
 {
     int scale          = in->u.add_ptr.scale;
     const Tac_Type *it = val_type(g, in->u.add_ptr.index);
-    load_val(g, T0, in->u.add_ptr.ptr);
-    load_val(g, T1, in->u.add_ptr.index);
-    A64_Operand i = a64_reg(T1, A64_X);
-    if (a64_size(it) <= 4 && !a64_is_unsigned(it))
-        emit2(g, A64_SXTW, i, a64_reg(T1, A64_W));
+    int p              = use_val(g, T0, in->u.add_ptr.ptr);
+    int i              = use_val(g, T1, in->u.add_ptr.index);
+    if (a64_size(it) <= 4 && !a64_is_unsigned(it)) {
+        emit2(g, A64_SXTW, a64_reg(T1, A64_X), a64_reg(i, A64_W));
+        i = T1;
+    }
     int shift = 0;
     while ((1 << shift) < scale)
         shift++;
     if ((1 << shift) != scale) {
         gen_li(g, T2, A64_X, scale);
-        emit3(g, A64_MUL, i, i, a64_reg(T2, A64_X));
+        emit3(g, A64_MUL, a64_reg(T1, A64_X), a64_reg(i, A64_X), a64_reg(T2, A64_X));
+        i     = T1;
         shift = 0;
     }
-    A64_Operand p = a64_reg(T0, A64_X);
-    emit3(g, A64_ADD, p, p, shift ? a64_shift(T1, A64_X, A64_SHIFT_LSL, shift) : i);
-    store_val(g, T0, in->u.add_ptr.dst);
+    int d = def_reg(g, T0, in->u.add_ptr.dst);
+    emit3(g, A64_ADD, a64_reg(d, A64_X), a64_reg(p, A64_X),
+          shift ? a64_shift(i, A64_X, A64_SHIFT_LSL, shift) : a64_reg(i, A64_X));
+    store_val(g, d, in->u.add_ptr.dst);
 }
 
 // dst = a - b, a byte count.
 static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
 {
-    load_val(g, T0, in->u.ptr_diff.ptr_a);
-    load_val(g, T1, in->u.ptr_diff.ptr_b);
-    emit3(g, A64_SUB, a64_reg(T0, A64_X), a64_reg(T0, A64_X), a64_reg(T1, A64_X));
-    store_val(g, T0, in->u.ptr_diff.dst);
+    int a = use_val(g, T0, in->u.ptr_diff.ptr_a);
+    int b = use_val(g, T1, in->u.ptr_diff.ptr_b);
+    int d = def_reg(g, T0, in->u.ptr_diff.dst);
+    emit3(g, A64_SUB, a64_reg(d, A64_X), a64_reg(a, A64_X), a64_reg(b, A64_X));
+    store_val(g, d, in->u.ptr_diff.dst);
 }
 
 // The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
@@ -237,7 +248,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
         store_wide(g, src, t, base, off);
         return;
     }
-    store_mem(g, load_scalar(g, src, t), t, base, off);
+    store_mem(g, use_scalar(g, src, t), t, base, off);
 }
 
 // Member load: dst = aggregate `src` at byte `offset`.
@@ -257,7 +268,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
         gen_memcopy(g, dbase, doff, base, off, a64_size(t), a64_align(t));
         return;
     }
-    int d = a64_is_fp(t) ? F0 : T0;
+    int d = def_reg(g, a64_is_fp(t) ? F0 : T0, dst);
     load_mem(g, d, t, base, off);
     store_val(g, d, dst);
 }
@@ -268,9 +279,10 @@ static A64_Width int_width(const Tac_Type *t)
     return a64_size(t) <= 4 ? A64_W : A64_X;
 }
 
-// An integer conversion.  A store truncates to the destination's width; a load
-// extends by the source's own type, so an extension is explicit only where that
-// differs: a sign extension of a narrow unsigned source (copy propagation may have
+// An integer conversion.  A store truncates to the destination's width, and a move
+// into a register brings the value to its canonical form; a value in a register or
+// loaded is extended by the source's own type, so an extension is explicit only where
+// that differs: a sign extension of a narrow unsigned source (copy propagation may have
 // removed its cast to a signed type) or into 64 bits, a zero extension of a signed one.
 static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
                             Tac_InstructionKind kind)
@@ -278,40 +290,40 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     int ssize    = a64_size(st);
     A64_Width dw = int_width(dt);
-    load_val(g, T0, src);
-    A64_Operand d = a64_reg(T0, dw), s = a64_reg(T0, A64_W);
-    if (kind == TAC_INSTRUCTION_SIGN_EXTEND) {
-        if (ssize == 1)
-            emit2(g, A64_SXTB, d, s);
-        else if (ssize == 2)
-            emit2(g, A64_SXTH, d, s);
-        else if (ssize == 4 && dw == A64_X)
-            emit2(g, A64_SXTW, d, s);
-    } else if (kind == TAC_INSTRUCTION_ZERO_EXTEND) {
-        if (ssize == 1)
-            emit2(g, A64_UXTB, s, s);
-        else if (ssize == 2)
-            emit2(g, A64_UXTH, s, s);
-        // A W register's upper half is already zero.
+    int s        = use_val(g, T0, src);
+    int d        = def_reg(g, T0, dst);
+    A64_Op op    = A64_RET;
+    if (kind == TAC_INSTRUCTION_SIGN_EXTEND)
+        op = ssize == 1 ? A64_SXTB : ssize == 2 ? A64_SXTH : ssize == 4 && dw == A64_X ? A64_SXTW : op;
+    else if (kind == TAC_INSTRUCTION_ZERO_EXTEND)
+        op = ssize == 1 ? A64_UXTB : ssize == 2 ? A64_UXTH : op; // a W value's upper half is zero
+    if (op == A64_RET) {
+        store_int(g, s, dst);
+        return;
     }
-    store_val(g, T0, dst);
+    emit2(g, op, a64_reg(d, op == A64_SXTB || op == A64_SXTH || op == A64_SXTW ? dw : A64_W),
+          a64_reg(s, A64_W));
+    store_int(g, d, dst);
 }
 
 // A floating-point negation, or `!` (equal to zero, a NaN is not).
 static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
-    A64_Operand f = a64_reg(F0, a64_width(t));
-    load_val(g, F0, in->u.unary.src);
+    A64_Width w        = a64_width(t);
+    int s              = use_val(g, F0, in->u.unary.src);
+    const Tac_Val *dst = in->u.unary.dst;
     if (in->u.unary.op == TAC_UNARY_NOT) {
-        emit2(g, A64_FCMP, f, a64_fzero());
-        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(A64_EQ));
-        store_val(g, T0, in->u.unary.dst);
+        int d = def_reg(g, T0, dst);
+        emit2(g, A64_FCMP, a64_reg(s, w), a64_fzero());
+        emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(A64_EQ));
+        store_int(g, d, dst);
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("aarch64: %s: bad floating-point unary operator", gen_name(g));
-    emit2(g, A64_FNEG, f, f);
-    store_val(g, F0, in->u.unary.dst);
+    int d = def_reg(g, F0, dst);
+    emit2(g, A64_FNEG, a64_reg(d, w), a64_reg(s, w));
+    store_val(g, d, dst);
 }
 
 // A long double negation (its sign bit flipped in a copy), or `!`.
@@ -322,7 +334,7 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         ld_nonzero(g, T0, in->u.unary.src);
         emit2(g, A64_CMP, a64_reg(T0, A64_X), a64_imm(0));
         emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(A64_EQ));
-        store_val(g, T0, dst);
+        store_int(g, T0, dst);
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
@@ -349,26 +361,27 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_fp_unary(g, in, t);
         return;
     }
-    A64_Width w = int_width(t);
-    load_int_as(g, T0, in->u.unary.src, t);
-    A64_Operand r = a64_reg(T0, w);
+    A64_Width w   = int_width(t);
+    int s         = use_scalar(g, in->u.unary.src, t);
+    int d         = def_reg(g, T0, in->u.unary.dst);
+    A64_Operand r = a64_reg(d, w), a = a64_reg(s, w);
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED:
-        emit2(g, A64_NEG, r, r);
+        emit2(g, A64_NEG, r, a);
         break;
     case TAC_UNARY_COMPLEMENT:
     case TAC_UNARY_COMPLEMENT_UNSIGNED:
-        emit2(g, A64_MVN, r, r);
+        emit2(g, A64_MVN, r, a);
         break;
     case TAC_UNARY_NOT:
-        emit2(g, A64_CMP, r, a64_imm(0));
-        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(A64_EQ));
+        emit2(g, A64_CMP, a, a64_imm(0));
+        emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(A64_EQ));
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
         fatal_error("aarch64: %s: NEGATE_DOUBLE of an integer", gen_name(g));
     }
-    store_val(g, T0, in->u.unary.dst);
+    store_int(g, d, in->u.unary.dst);
 }
 
 // Whether operator `op` is unsigned whatever its operands' types: they may differ in
@@ -472,15 +485,13 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool is_unsigned, A64_W
     }
 }
 
-// A floating-point operator: arithmetic leaves its result in v16, a comparison 0/1 in
-// w9.  fcmp sets C and V for unordered operands, so mi and ls are false for a NaN where
-// lt and le would not be.
+// A floating-point operator.  fcmp sets C and V for unordered operands, so mi and ls
+// are false for a NaN where lt and le would not be.
 static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
     A64_Width w    = a64_width(t);
-    A64_Operand fa = a64_reg(F0, w), fb = a64_reg(F1, w);
-    load_val(g, F0, in->u.binary.src1);
-    load_val(g, F1, in->u.binary.src2);
+    A64_Operand fa = a64_reg(use_val(g, F0, in->u.binary.src1), w);
+    A64_Operand fb = a64_reg(use_val(g, F1, in->u.binary.src2), w);
     A64_Op op = A64_RET;
     int cond  = -1;
     switch (in->u.binary.op) {
@@ -525,14 +536,17 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     default:
         fatal_error("aarch64: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
+    const Tac_Val *dst = in->u.binary.dst;
     if (cond >= 0) {
+        int d = def_reg(g, T0, dst);
         emit2(g, A64_FCMP, fa, fb);
-        emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(cond));
-        store_val(g, T0, in->u.binary.dst);
+        emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(cond));
+        store_int(g, d, dst);
         return;
     }
-    emit3(g, op, fa, fa, fb);
-    store_val(g, F0, in->u.binary.dst);
+    int d = def_reg(g, F0, dst);
+    emit3(g, op, a64_reg(d, w), fa, fb);
+    store_val(g, d, dst);
 }
 
 // Long double arithmetic and comparison: a call to the runtime (libgcc names), the
@@ -578,7 +592,7 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
     }
     emit2(g, A64_CMP, a64_reg(A64_X(0), A64_W), a64_imm(0));
     emit2(g, A64_CSET, a64_reg(T0, A64_W), a64_cond(ops[i].cond));
-    store_val(g, T0, in->u.binary.dst);
+    store_int(g, T0, in->u.binary.dst);
 }
 
 static void gen_binary(Gen *g, const Tac_Instruction *in)
@@ -596,10 +610,18 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Tac_BinaryOperator op = in->u.binary.op;
     bool shift            = op == TAC_BINARY_LEFT_SHIFT || op == TAC_BINARY_RIGHT_SHIFT ||
                             op == TAC_BINARY_RIGHT_SHIFT_LOGICAL;
-    load_int_as(g, T0, in->u.binary.src1, t);
-    load_int_as(g, T1, in->u.binary.src2, shift ? val_type(g, in->u.binary.src2) : t);
-    gen_int_binop(g, op, t->kind == TAC_TYPE_POINTER || unsigned_op(op), int_width(t), T0, T0, T1);
-    store_val(g, T0, in->u.binary.dst);
+    int a = use_scalar(g, in->u.binary.src1, t);
+    int b;
+    const Tac_Val *src2 = in->u.binary.src2;
+    if (src2->kind == TAC_VAL_CONSTANT) {
+        load_const_as(g, T1, src2->u.constant, shift ? val_type(g, src2) : t);
+        b = T1;
+    } else {
+        b = use_val(g, T1, src2);
+    }
+    int d = def_reg(g, T0, in->u.binary.dst);
+    gen_int_binop(g, op, t->kind == TAC_TYPE_POINTER || unsigned_op(op), int_width(t), d, a, b);
+    store_int(g, d, in->u.binary.dst);
 }
 
 // An int/FP or float/double conversion.  To an integer it truncates toward zero, into
@@ -610,8 +632,8 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     bool sfp = a64_is_fp(st), dfp = a64_is_fp(dt);
-    int s = sfp ? F0 : T0, d = dfp ? F1 : T1;
-    load_val(g, s, src);
+    int s    = use_val(g, sfp ? F0 : T0, src);
+    int d    = def_reg(g, dfp ? F1 : T1, dst);
     A64_Op op;
     if (sfp && dfp) {
         op = A64_FCVT;
@@ -623,7 +645,10 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
     }
     emit2(g, op, a64_reg(d, dfp ? a64_width(dt) : int_width(dt)),
           a64_reg(s, sfp ? a64_width(st) : int_width(st)));
-    store_val(g, d, dst);
+    if (dfp)
+        store_val(g, d, dst);
+    else
+        store_int(g, d, dst);
 }
 
 // A conversion to or from long double: a call to the runtime, the value in x0/w0, s0/d0
@@ -650,7 +675,10 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
     }
     load_val(g, a64_is_ld(st) || fp ? A64_V(0) : A64_X(0), src);
     emit1(g, A64_BL, a64_sym(name, 0));
-    store_val(g, a64_is_ld(dt) || fp ? A64_V(0) : A64_X(0), dst);
+    if (a64_is_ld(dt) || fp)
+        store_val(g, A64_V(0), dst);
+    else
+        store_int(g, A64_X(0), dst);
 }
 
 // dst = &src, of a named object or function.
@@ -658,9 +686,34 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     int base;
     int64_t off;
-    name_addr(g, src->u.var_name, T0, &base, &off);
-    gen_addr(g, T0, base, off);
-    store_val(g, T0, dst);
+    int d = def_reg(g, T0, dst);
+    name_addr(g, src->u.var_name, d, &base, &off);
+    gen_addr(g, d, base, off);
+    store_val(g, d, dst);
+}
+
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst)
+{
+    switch (in->kind) {
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        *dst = in->u.long_double_to_int.dst;
+        return true;
+    case TAC_INSTRUCTION_BINARY: {
+        *dst              = in->u.binary.dst;
+        const Tac_Type *t = type_of(arg, in->u.binary.src1);
+        return t && a64_is_ld(t);
+    }
+    default:
+        return false;
+    }
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

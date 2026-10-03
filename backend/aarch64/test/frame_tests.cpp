@@ -8,6 +8,7 @@
 // A local in a slot: stored, then loaded for the return.
 TEST_F(Aarch64Test, LocalSlot)
 {
+    NaiveSelection();
     DisableOptimization();
     EXPECT_EQ(R"(stp x29, x30, [sp, #-16]!
 mov x29, sp
@@ -25,6 +26,7 @@ ret
 // Each width loads and stores as itself; a char by its signedness.
 TEST_F(Aarch64Test, SlotWidths)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToAarch64(R"(
 long f(void) {
@@ -42,6 +44,7 @@ long f(void) {
 // Offsets beyond ldur's reach go through ip0: sub with lsl #12 and a remainder.
 TEST_F(Aarch64Test, LargeFrameOffsets)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string src = "long f(void) {\n";
     for (int i = 0; i < 600; i++)

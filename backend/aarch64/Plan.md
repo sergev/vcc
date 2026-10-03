@@ -61,9 +61,15 @@ and the harness runs qemu under a short timeout regardless.
 
 ## Phase 5 — code quality
 
-- **A24. Register allocation** on `backend/common/regalloc.c`: `x0`–`x7`/`v0`–`v7` for values not
-  live across a call, `x19`–`x28`/`v8`–`v15` otherwise, saved with `stp`/`ldp` pairs
-  only when used. The ch. 20 tests pass.
+- **A24. Register allocation. Done.** On `backend/common/regalloc.c` (`regalloc.c`):
+  `x0`–`x7`/`v0`–`v7` for values not live across a call (nor a long double runtime
+  call), `x19`–`x28`/`v8`–`v15` otherwise, saved with `stp`/`ldp` pairs only when used.
+  A register holds an integer in canonical form (W view with the upper half zero,
+  `char`/`short` extended by type), so a parameter is extended on arrival and a call
+  result on return; parameters and register arguments go through a parallel move.
+  `--no-regalloc`, `--no-peephole` and `--frame-pointer` flags as on RISC-V; the
+  selection goldens pin the naive code with `NaiveSelection()`. All book chapters pass,
+  20 included.
 - **A25. Leaf functions** with no frame and no stack; slots addressed from `sp` when
   the offsets fit, as on RISC-V.
 - **A26. Peephole**: immediate operands (`add`/`sub`/`cmp` with 12 bits, a bitmask

@@ -111,6 +111,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     a64_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->regs);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -140,6 +141,7 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->regs);
     a64_free_func(g->fn);
 }
 
@@ -148,11 +150,12 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
     s->offset = offset;
+    s->reg    = reg;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -165,19 +168,38 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->locals_size;
     if (name)
-        insert_slot(g, name, type, offset);
+        insert_slot(g, name, type, offset, 0);
     return offset;
 }
 
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
 {
-    insert_slot(g, name, type, offset);
+    insert_slot(g, name, type, offset, 0);
+}
+
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg)
+{
+    insert_slot(g, name, type, 0, reg);
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
 {
     intptr_t v;
     return map_get(&g->frame, name, &v) ? (const Slot *)v : NULL;
+}
+
+int assigned_reg(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->regs, name, &v) ? (int)v : 0;
+}
+
+int var_reg(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return 0;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->reg : 0;
 }
 
 const Tac_Type *name_type(const Gen *g, const char *name)
@@ -312,6 +334,8 @@ void gen_addr(Gen *g, int reg, int base, int64_t off)
 void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->reg)
+        fatal_error("aarch64: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = A64_FP;
         *off  = s->offset;
@@ -423,8 +447,35 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
     }
 }
 
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    if (dst == src)
+        return;
+    A64_Width w = a64_width(t);
+    emit2(g, a64_is_fpreg(dst) ? A64_FMOV : A64_MOV, a64_reg(dst, w), a64_reg(src, w));
+}
+
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    int size      = a64_size(t);
+    A64_Operand d = a64_reg(dst, A64_W), s = a64_reg(src, A64_W);
+    if (size == 1)
+        emit2(g, a64_is_unsigned(t) ? A64_UXTB : A64_SXTB, d, s);
+    else if (size == 2)
+        emit2(g, a64_is_unsigned(t) ? A64_UXTH : A64_SXTH, d, s);
+    else if (size == 4)
+        emit2(g, A64_MOV, d, s); // the upper half zero, even in place
+    else
+        move_reg(g, dst, src, t);
+}
+
 void load_val(Gen *g, int reg, const Tac_Val *v)
 {
+    int r = var_reg(g, v);
+    if (r) {
+        move_reg(g, reg, r, val_type(g, v));
+        return;
+    }
     if (v->kind == TAC_VAL_CONSTANT) {
         const Tac_Const *c = v->u.constant;
         if (a64_is_fpreg(reg))
@@ -448,13 +499,49 @@ void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t)
         load_val(g, reg, v);
 }
 
+int use_val(Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    if (r)
+        return r;
+    load_val(g, scratch, v);
+    return scratch;
+}
+
+int def_reg(const Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    return r ? r : scratch;
+}
+
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
+    int r = var_reg(g, v);
+    if (r) {
+        const Tac_Type *t = val_type(g, v);
+        if (r == reg)
+            return;
+        if (a64_is_fpreg(r))
+            move_reg(g, r, reg, t);
+        else
+            gen_canon(g, r, reg, t);
+        return;
+    }
     int base;
     int64_t off;
     const Tac_Type *t = name_type(g, v->u.var_name);
     name_addr(g, v->u.var_name, T5, &base, &off);
     store_mem(g, reg, t, base, off);
+}
+
+void store_int(Gen *g, int reg, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    const Tac_Type *t = val_type(g, v);
+    if (r && a64_size(t) < 4)
+        gen_canon(g, r, reg, t);
+    else
+        store_val(g, reg, v);
 }
 
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align)
@@ -516,9 +603,29 @@ static A64_Block *redirect(Gen *g, A64_Block *b)
     return tail;
 }
 
-// The frame teardown: sp back to the frame record, which is popped.
+// Save or restore the callee-saved registers in use: a pair of one file with stp/ldp,
+// a lone one with str/ldr.  layout_frame gives a pair adjacent slots.
+static void save_regs(Gen *g, bool restore)
+{
+    for (int i = 0; i < g->nsaved;) {
+        int r     = g->saved_reg[i];
+        A64_Width w = a64_is_fpreg(r) ? A64_D : A64_X;
+        if (i + 1 < g->nsaved && g->saved_off[i + 1] == g->saved_off[i] + 8) {
+            emit3(g, restore ? A64_LDP : A64_STP, a64_reg(r, w), a64_reg(g->saved_reg[i + 1], w),
+                  a64_mem(A64_FP, g->saved_off[i]));
+            i += 2;
+        } else {
+            emit2(g, restore ? A64_LDR : A64_STR, a64_reg(r, w), mem(g, A64_FP, g->saved_off[i], 8));
+            i++;
+        }
+    }
+}
+
+// The frame teardown: the saved registers back, sp back to the frame record, which is
+// popped.
 static void epilogue(Gen *g)
 {
+    save_regs(g, true);
     emit2(g, A64_MOV, a64_reg(A64_SP, A64_X), a64_reg(A64_FP, A64_X));
     emit3(g, A64_LDP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_post(A64_SP, 16));
 }
@@ -556,6 +663,7 @@ void gen_prologue(Gen *g)
     emit2(g, A64_MOV, a64_reg(A64_FP, A64_X), a64_reg(A64_SP, A64_X));
     if (rest)
         gen_addr(g, A64_SP, A64_SP, -rest);
+    save_regs(g, false);
     g->fn->tail = tail;
     expand_epilogues(g);
 }

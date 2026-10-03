@@ -10,6 +10,7 @@
     TEST_F(Aarch64Test, name)                                      \
     {                                                              \
         DisableOptimization();                                     \
+        NaiveSelection();                                          \
         std::string code = Code(CompileToAarch64(src));            \
         EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
