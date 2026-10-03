@@ -426,7 +426,7 @@ run by `make run` (see **Build & Test** above).
 - [docs/Memory_Allocation.md](docs/Memory_Allocation.md) — memory allocator (`xalloc`) design and usage
 - [docs/String_Map.md](docs/String_Map.md) — `libutil/string_map` key-value store
 - [docs/Word_Oriented_IO.md](docs/Word_Oriented_IO.md) — word-oriented I/O (`wio`) for binary IR streams
-- [backend/x86/TODO.md](backend/x86/TODO.md) — x86_64 backend work plan with effort estimates
+- [backend/x86/Plan.md](backend/x86/Plan.md) — x86-64 backend development plan (steps X1–X28)
 - [backend/besm6/TODO.md](backend/besm6/TODO.md) — BESM-6 backend work plan with effort estimates
 - [backend/besm6/Besm6_Data_Representation.md](backend/besm6/Besm6_Data_Representation.md) — BESM-6 data representation: bit layouts, ranges, and sizeof for every C scalar type
 - [backend/besm6/Besm6_Calling_Conventions.md](backend/besm6/Besm6_Calling_Conventions.md) — BESM-6 C calling convention (registers, b/save, b/ret)
