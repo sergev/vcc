@@ -108,6 +108,40 @@ the plan:
   `mem_tests`, `math_tests`). `PrintfLongDouble` adds `%Lf`/`%Le`/`%Lg` after an `int`
   hole and around a `long long`.
 
+Phase 5 is done. Scalars live in registers, a frame is addressed from sp (r11 free for
+values) and a leaf without one has no prologue, and a peephole pass cleans up; the
+whole book, the interop tables and libc (compiled with all of it) pass. `genarm32` has
+`--no-regalloc`, `--frame-pointer` and `--no-peephole`; the selection goldens run
+under `NaiveSelection()`, all three. Findings and changes against the plan:
+- **The allocator takes 0 for "no register"**, and r0 is register 0: `regalloc.c`
+  numbers registers from 1 on its side. Pools: r0-r3 then r4-r9 (and r11 with an sp
+  frame), d0-d7 then d8-d13; a float takes a d register's even half.
+- **Parallel moves** (`parallel_move`) carry parameters, arguments, runtime-call
+  arguments and pairs: moves of core registers, of s or d registers (a register set
+  per move, so an s inside a d blocks it), and of words of a double into core
+  registers; a cycle is broken through r12/lr or d14/d15. A callee's address in an
+  argument register goes to r10 with them.
+- **A long long computed into registers** may overwrite a source word still to be
+  read: the low word goes to r12, the high one to lr, b's high word is loaded into the
+  destination's high register last.
+- **The long long runtime calls** (multiply, divide, remainder, variable shifts, the
+  conversions with FP) are calls to the allocator: they clobber r0-r3 and d0-d7.
+- **The frame base is a pseudo register** during selection. Afterwards each use is
+  rebased onto sp (a memory offset that must still fit, an add or sub whose immediate
+  must still be one) or becomes r11; when one does not fit (a halfword 300 bytes up,
+  a frame over 4 KiB), the function is generated again with r11. Saved registers go in
+  one push with lr; sp alignment is kept by pushing one more register, as clang does.
+- **The peephole pass computes register liveness** over the function's blocks (the
+  return reads just the result registers), not only to the end of a block. Rules: move
+  forwarding, compute in place, a move back to its source, reload of a stored value,
+  address, shift, mla/mls and tst folding, branch cleanup, and conditional execution of
+  up to four instructions a side, across labels nothing branches to. Compares fuse
+  with their branch at selection (int, long long, FP; the inverse condition is right
+  for a NaN). ldm/stm is not done.
+- **ldrd/strd pair frame slots only at word-aligned offsets**: a slot of a byte struct
+  passed in registers is stored as words at any offset, which ldr and str tolerate
+  and ldrd does not (book `StructSizes2` faulted).
+
 ## Target and decisions
 
 | Decision | Choice | Why |
@@ -199,25 +233,6 @@ A `float` occupies a whole `d` register in the allocator's view (its even `s` ha
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
 
-## Phase 5 — code quality
-
-- **V23. Register allocation** on `backend/common/regalloc.c`, with the pools of the
-  register table. The pair hook RV32 added carries `long long`. Callee-saved core
-  registers are pushed with the frame record in one `push`/`pop`, VFP ones with one
-  `vpush`/`vpop` of the used range. The ch. 20 tests keep passing.
-- **V24. Leaf functions and sp-addressed frames.** A leaf that needs no stack has no
-  prologue at all and returns with `bx lr`. Without `--frame-pointer`, slots are
-  addressed from `sp` and `r11` joins the allocator's pool, as on AArch64.
-- **V25. Peephole.** Immediate and shifted-register operand2 forms (`add r0, r1, r2,
-  lsl #2`), `cmn`/`bic`/`mvn` for constants that fit only complemented or negated,
-  copies followed into their uses, no reload of a value just stored, adjacent slots
-  through `ldrd`/`strd` (an even/odd pair, word-aligned) or `ldm`/`stm`, `mla`/`mls`,
-  `tst` for a mask test, the `pop {…, pc}` return, branch over jump, and no jump to the
-  next line. **Conditional execution** replaces a short diamond (`if (c) x = a; else x =
-  b;`, `?:`, `min`/`max` shapes) with predicated instructions — the one optimization
-  AArch64 had no counterpart for, limited to a few instructions per arm, with no call
-  and nothing that sets flags.
-
 ## Phase 6 — finishing
 
 - **V26. Driver.** `vcc -t arm32`: `vcpp -t arm32`, `vparse`, `vlower -t arm32`,
@@ -243,12 +258,13 @@ registers, for back-filling.
 
 ## Risks
 
-- **Scratch registers** (r12, lr, r10) must stay out of the allocator's pools at V23,
-  and r10 out of the callee-saved pool. Mitigation: the register table above.
+- **Scratch registers** (r12, lr, r10, d14, d15) must stay out of the allocator's
+  pools; the peephole pass may rename only into registers already in use. Mitigation:
+  the register table above.
 - **AAPCS-VFP argument rules** — back-filling, the closed-VFP-after-stack rule, the
   even-pair rule, the `r3`/stack split, and the switch to the base standard for
   variadics — are each easy to get almost right. Mitigation: V19's interop table, with
-  clang as the oracle in both directions; V23–V25 must keep it green.
+  clang as the oracle in both directions, green through V23–V25.
 - **`s`/`d` aliasing** would corrupt values silently if two allocator units overlapped.
   Mitigation: the allocator sees only `d` registers, a `float` living in the even half,
   and only call setup (`call.c`) names odd `s` registers. A regalloc test pins that.
