@@ -141,6 +141,13 @@ void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //
+// Static data (data.c)
+//
+// `alignment` (from _Alignas) is used when stricter than the type's.
+void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
+                          const Tac_StaticInit *init, bool readonly, int alignment);
+
+//
 // 64-bit integers (llong.c)
 //
 void gen_ll_binary(Gen *g, const Tac_Instruction *in);

@@ -39,6 +39,7 @@ protected:
             { "Chapter11_Simple", L },
             { "Chapter11_StaticLong", L },
             { "Chapter11_SwitchLong", "duplicate case values when long has 32 bits" },
+            { "Chapter11_CompoundAssignToInt", "__aeabi_ldivmod: int64.c joins libc.a in V14" },
             { "Chapter11_TypeSpecifiers", L },
             { "Chapter12_ArithmeticOps", L },
             { "Chapter12_ArithmeticWraparound", L },

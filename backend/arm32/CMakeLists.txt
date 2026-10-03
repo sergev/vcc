@@ -9,6 +9,7 @@ add_library(arm32 STATIC
     instr.c
     llong.c
     call.c
+    data.c
 )
 target_include_directories(arm32 PUBLIC .)
 target_link_libraries(arm32 backend_common tac libutil)
@@ -19,7 +20,7 @@ target_link_libraries(arm32 backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(ARM32_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER ARM32_BOOK_SOURCES INCLUDE REGEX "/chapter[1-9]_tests\\.cpp$")
+list(FILTER ARM32_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-2])_tests\\.cpp$")
 
 add_executable(arm32-tests
     test/emit_tests.cpp
@@ -29,6 +30,7 @@ add_executable(arm32-tests
     test/flow_tests.cpp
     test/llong_tests.cpp
     test/call_tests.cpp
+    test/data_tests.cpp
     test/run_tests.cpp
     ${ARM32_BOOK_SOURCES}
 )
