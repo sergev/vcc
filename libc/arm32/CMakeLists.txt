@@ -1,5 +1,5 @@
 #
-# ARM32 runtime for bare-metal qemu `virt` (see backend/arm32/Plan.md): crt0.o,
+# ARM32 runtime for bare-metal qemu `virt` (see docs/Arm32_Backend.md): crt0.o,
 # crt0-status.o (prints main's result, for the book run tests) and libc.a: the
 # assembly leaves, and the C library compiled by our own code generator.  Uses the
 # clang, llvm-ar and ld.lld libc/riscv64 found, when that clang has the 32-bit ARM
@@ -83,8 +83,7 @@ foreach(name console malloc aeabi_divmod aeabi_long aeabi_conv aeabi_mem)
     list(APPEND ARM32_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genarm32 -> clang, as the code generator
-# reaches them (backend/arm32/Plan.md).
+# C sources, through cpp -> parse -> lower -> genarm32 -> clang.
 file(GLOB ARM32_LIBC_HEADERS ${ARM32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
      ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(arm32_compile_libc_c name srcdir)

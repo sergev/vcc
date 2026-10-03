@@ -1,6 +1,6 @@
 //
 // ARM32 structs: member access, copies, and passing and returning them by value
-// (AAPCS composites other than homogeneous FP aggregates, which come with V17).
+// (AAPCS composites other than homogeneous FP aggregates, which hfa_tests.cpp covers).
 //
 #include "arm32_test.h"
 

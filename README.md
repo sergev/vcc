@@ -13,8 +13,9 @@ optimizer stay as they are.
 | RISC-V 64     | complete | RV64IMFD, standard LP64D calling convention; links with clang's objects |
 | RISC-V 32     | complete | RV32IMFD, ILP32D (`-t riscv32`); the same code generator                |
 | AArch64       | complete | ARMv8-A, standard AAPCS64 calling convention (`-t aarch64`); links with clang's objects |
+| ARM32         | complete | ARMv7-A, AAPCS-VFP hard-float calling convention (`-t arm32`); links with clang's objects |
 | BESM-6        | complete | 48-bit word-addressed mainframe; three assembler dialects               |
-| x86-64, ARM32, others | design notes | sketches under [backend/](backend/)                          |
+| x86-64, others | design notes | sketches under [backend/](backend/)                          |
 
 The working targets could hardly be further apart — modern byte-addressed RISC machines
 and a word-addressed machine with its own floating-point format and character set —
@@ -62,6 +63,7 @@ The compiler is not one binary but several, run one after another:
 | `lower`    | a syntax tree | three-address code (`.tac`) |
 | `genriscv` | TAC           | RISC-V assembly             |
 | `genaarch64` | TAC         | AArch64 assembly            |
+| `genarm32` | TAC           | ARM32 assembly              |
 | `genbesm`  | TAC           | BESM-6 assembly             |
 
 `cpp` and `lower` take the target with `-t` (for example `-t riscv64`): `cpp` for the
@@ -80,16 +82,16 @@ Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too
 
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
 chain: `vcc -o hello.elf hello.c` preprocesses, compiles, assembles with clang and links
-with `ld.lld` for RISC-V and AArch64 (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
+with `ld.lld` for RISC-V and ARM (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
 `-o`, `-D`, `-I`, `-L` and `-l`.
 
 ## Getting started
 
 **You need** CMake 3.10 or newer and a C11 compiler. Building the tests also needs a C++17
 compiler and, the first time you configure, network access so CMake can download
-GoogleTest. The RISC-V and AArch64 runtimes and run tests need a clang with those
-targets, `ld.lld`, and `qemu-system-riscv64`, `qemu-system-riscv32` and
-`qemu-system-aarch64` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those tests are skipped, as are the tests of any other target whose
+GoogleTest. The RISC-V and ARM runtimes and run tests need a clang with those
+targets, `ld.lld`, and `qemu-system-riscv64`, `qemu-system-riscv32`,
+`qemu-system-aarch64` and `qemu-system-arm` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those tests are skipped, as are the tests of any other target whose
 tools are missing.
 
 ```bash
@@ -139,7 +141,20 @@ qemu-system-aarch64 -M virt -cpu cortex-a57 -display none -serial stdio -monitor
 
 By hand, it is `cpp -t aarch64` with `libc/aarch64/include` (then `libc/lp64/include` and
 `libc/common/include`), `lower -t aarch64` and `genaarch64`; see
-[docs/Aarch64_Backend.md](docs/Aarch64_Backend.md). BESM-6 works the same way with
+[docs/Aarch64_Backend.md](docs/Aarch64_Backend.md).
+
+For 32-bit ARM, add `-t arm32` and run it under `qemu-system-arm`, which also exits with
+`main`'s result:
+
+```bash
+vcc -t arm32 -o hello-arm.elf hello.c
+qemu-system-arm -M virt -cpu cortex-a15 -display none -serial stdio -monitor none \
+    -semihosting -kernel hello-arm.elf
+```
+
+By hand, it is `cpp -t arm32` with `libc/arm32/include` (then `libc/ilp32/include` and
+`libc/common/include`), `lower -t arm32` and `genarm32`; see
+[docs/Arm32_Backend.md](docs/Arm32_Backend.md). BESM-6 works the same way with
 `-t besm6` and its own code generator.
 
 To read what happened at any stage, ask for YAML instead:
@@ -171,11 +186,12 @@ libraries and headers go into their own directory under `share/vcc/`.
 | `bin/vgenriscv64`              | the RISC-V code generator                       |
 | `bin/vgenriscv32`              | the same, for 32-bit RISC-V                     |
 | `bin/vgenaarch64`              | the AArch64 code generator                      |
+| `bin/vgenarm32`                | the ARM32 code generator                        |
 | `bin/vgenbesm6`                | the BESM-6 code generator                       |
 | `share/vcc/<target>/include/`  | the target's C headers                          |
 | `share/vcc/<target>/lib/`      | the target's runtime and C library              |
 
-For RISC-V and AArch64, `lib/` holds `crt0.o`, `libc.a` and the qemu linker script, and
+For RISC-V and ARM, `lib/` holds `crt0.o`, `libc.a` and the qemu linker script, and
 `include/` every C header. For BESM-6, which has its own operating system with its own C library
 (the [v7besm](https://github.com/besm6/v7besm) Unix port), only what describes the
 compiler itself is installed: the freestanding C11 headers, the intrinsics header and the
@@ -187,14 +203,15 @@ Programs compiled here have a usable C library: `printf`, `sprintf` and `snprint
 `puts`, `putchar` and console input; the whole of `<string.h>` and the `mem*` family;
 `malloc` and friends; `atoi`; `exit`; math helpers (`fabs`, `fmin`, `fmax`, `fma`,
 `modf`, `frexp`, `ldexp`); and working variable arguments (`<stdarg.h>`). On RISC-V and
-AArch64, `long double` is IEEE binary128, computed in software. On 32-bit RISC-V, `long long` is
-computed inline in register pairs, with division and the conversions to and from
-floating point in the runtime (the routines clang's code calls too). The portable part of
+AArch64, `long double` is IEEE binary128, computed in software. On 32-bit RISC-V and ARM32, `long long`
+is computed inline in register pairs, with division and the conversions to and from
+floating point in the runtime (the routines clang's code calls too); on ARM32,
+`long double` is a `double`. The portable part of
 the library lives in [libc/common/](libc/common/) and is shared by every target, and
 [libc/lp64/](libc/lp64/) holds what riscv64 and aarch64 share, [libc/ilp32/](libc/ilp32/)
 what the 32-bit targets share; each target has its own
 directory for the rest ([libc/riscv64/](libc/riscv64/), [libc/riscv32/](libc/riscv32/),
-[libc/aarch64/](libc/aarch64/)).
+[libc/aarch64/](libc/aarch64/), [libc/arm32/](libc/arm32/)).
 
 ## Documentation
 
@@ -227,6 +244,12 @@ source tree.
 | Document                                           | What it covers                                                     |
 | -------------------------------------------------- | ------------------------------------------------------------------ |
 | [docs/Aarch64_Backend.md](docs/Aarch64_Backend.md) | The code generator, AAPCS64 calls and variadics, frames, and running under qemu |
+
+### ARM32 target
+
+| Document                                       | What it covers                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------- |
+| [docs/Arm32_Backend.md](docs/Arm32_Backend.md) | The code generator, AAPCS-VFP calls and variadics, frames, and running under qemu |
 
 ## License
 

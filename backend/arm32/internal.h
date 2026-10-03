@@ -1,5 +1,5 @@
 //
-// ARM32 code generator internals (AAPCS-VFP; see backend/arm32/Plan.md).
+// ARM32 code generator internals (AAPCS-VFP; see docs/Arm32_Backend.md).
 //
 // Registers: r0-r3/s0-s15 (d0-d7) carry arguments and results; r4-r11 and d8-d15 are
 // callee-saved; r11 is the frame pointer, r13 sp, r14 lr, r15 pc.
