@@ -35,6 +35,59 @@ static bool is_noreturn(const DeclSpec *spec)
 
 // An alignment the target can give: a power of two, or a multiple of its strictest
 // scalar alignment (BESM-6 aligns to its 6-byte word).
+// The automatic locals of the function being checked.  Shadowing is forbidden, but
+// sibling blocks may each declare a name, and the translator puts all of a function's
+// locals in one namespace (`%name`).  A repeat of the same type shares the earlier
+// name, its lifetime being disjoint; a repeat of another type gets the backend name
+// `name$N`, as a static local does, and references are rewritten to it like theirs.
+typedef struct AutoLocal {
+    struct AutoLocal *next;
+    char *source; // source name (owned)
+    char *name;   // backend name (owned)
+    Type *type;   // owned; NULL for an array sized by its initializer
+} AutoLocal;
+
+static AutoLocal *auto_locals;
+
+static void auto_locals_clear(void)
+{
+    while (auto_locals) {
+        AutoLocal *next = auto_locals->next;
+        xfree(auto_locals->source);
+        xfree(auto_locals->name);
+        if (auto_locals->type)
+            free_type(auto_locals->type);
+        xfree(auto_locals);
+        auto_locals = next;
+    }
+}
+
+// The backend name of automatic local `source` of type `type` (NULL when its size
+// comes from the initializer, so it matches no earlier one).
+static const char *auto_local_name(const char *source, const Type *type)
+{
+    int count = 0;
+    for (const AutoLocal *a = auto_locals; a; a = a->next) {
+        if (strcmp(a->source, source) != 0)
+            continue;
+        if (type && a->type && compare_type(type, a->type))
+            return a->name;
+        count++;
+    }
+    char name[256];
+    if (count == 0)
+        snprintf(name, sizeof(name), "%s", source);
+    else
+        snprintf(name, sizeof(name), "%s$%d", source, count);
+    AutoLocal *a = xalloc(sizeof(AutoLocal), __func__, __FILE__, __LINE__);
+    a->source    = xstrdup(source);
+    a->name      = xstrdup(name);
+    a->type      = type ? clone_type(type, __func__, __FILE__, __LINE__) : NULL;
+    a->next      = auto_locals;
+    auto_locals  = a;
+    return a->name;
+}
+
 static bool valid_alignment(long a)
 {
     size_t max = target_config->ldouble_align;
@@ -553,12 +606,23 @@ static void typecheck_local_var_decl(const Declaration *d)
         }
         bool unsized = unalias(var_type)->kind == TYPE_ARRAY && !unalias(var_type)->u.array.size;
         symtab_add_automatic_var_type(decl->name, var_type, scope_level);
+        Symbol *sym          = symtab_get(decl->name);
+        const char *backend  = auto_local_name(decl->name, unsized ? NULL : var_type);
+        bool renamed         = strcmp(decl->name, backend) != 0;
+        if (renamed) {
+            // Set before the initializer, which may refer to the variable itself.
+            xfree(sym->name);
+            sym->name = xstrdup(backend);
+        }
         decl->init = typecheck_init(var_type, decl->init);
         if (unsized) {
             // The initializer gave the array its length; refresh the symbol's copy.
-            Symbol *sym = symtab_get(decl->name);
             free_type(sym->type);
             sym->type = clone_type(var_type, __func__, __FILE__, __LINE__);
+        }
+        if (renamed) {
+            xfree(decl->name);
+            decl->name = xstrdup(backend);
         }
     }
 }
@@ -827,6 +891,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
         }
 
         static_locals_set_function(NULL);
+        auto_locals_clear();
         scope_decrement();
     }
     free_type(d->u.function.type);

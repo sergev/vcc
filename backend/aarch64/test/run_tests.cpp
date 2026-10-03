@@ -78,3 +78,31 @@ main:
         << out;
     EXPECT_NE(std::string::npos, out.find("far=0000000080000000")) << out;
 }
+
+// Same-named locals of different types in sibling blocks each get their own slot.
+TEST_F(Aarch64Test, RunSiblingBlockLocals)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    CompileAndRunAarch64(R"(
+struct a { int x; };
+struct b { long x, y; };
+long f(int c)
+{
+    if (c) {
+        struct a s = { 1 };
+        return s.x;
+    } else {
+        struct b s = { 2, 3 };
+        return s.y;
+    }
+}
+int main(void)
+{
+    double t = 0.5;
+    { int t2 = 7; t += t2; }
+    { double t2 = 0.25; t += t2; }
+    return (int)(f(1) + f(0) * 10 + t * 4);
+}
+)");
+    EXPECT_EQ(62, exit_status);
+}

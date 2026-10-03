@@ -525,3 +525,27 @@ TEST_F(TranslateTestRiscv, AlignasTwice)
 {
     EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"), "More than one _Alignas");
 }
+
+// Sibling blocks may declare the same name.  A repeat of another type gets its own
+// local, `%name$N`; a repeat of the same type shares the first one.
+TEST_F(TranslateTestX86, SiblingBlockLocals)
+{
+    std::string yaml = CompileUnitToTypedYaml(R"(
+struct a { int x; };
+struct b { long x, y; };
+long f(int c)
+{
+    if (c) { struct a s = { 1 }; return s.x; }
+    if (c > 1) { struct b s = { 2, 3 }; return s.y; }
+    if (c > 2) { struct a s = { 4 }; return s.x; }
+    { int n[] = { 1, 2 }; c += n[1]; }
+    { int n[] = { 1, 2, 3 }; c += n[2]; }
+    return c;
+}
+)");
+    EXPECT_TRUE(Has(yaml, "    - local: %s\n      type: struct a(4,4)\n")) << yaml;
+    EXPECT_TRUE(Has(yaml, "    - local: %s$1\n      type: struct b(16,8)\n")) << yaml;
+    EXPECT_FALSE(Has(yaml, "%s$2")) << yaml;
+    EXPECT_TRUE(Has(yaml, "    - local: %n\n      type: [2]int\n")) << yaml;
+    EXPECT_TRUE(Has(yaml, "    - local: %n$1\n      type: [3]int\n")) << yaml;
+}
