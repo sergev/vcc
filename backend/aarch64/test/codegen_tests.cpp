@@ -10,11 +10,7 @@ TEST_F(Aarch64Test, ReturnConstant)
     .p2align 2
     .type   main, @function
 main:
-    stp     x29, x30, [sp, #-16]!
-    mov     x29, sp
     mov     w0, #2
-    mov     sp, x29
-    ldp     x29, x30, [sp], #16
     ret
     .size   main, .-main
 )",
@@ -28,15 +24,12 @@ TEST_F(Aarch64Test, StaticFunctionIsLocal)
     EXPECT_NE(std::string::npos, s.find("f:\n")) << s;
 }
 
-// The frame record pushed and popped around every function body.
-#define PRO "stp x29, x30, [sp, #-16]!\nmov x29, sp\n"
-#define EPI "mov sp, x29\nldp x29, x30, [sp], #16\nret\n"
-
+// A leaf function that needs no stack has no frame: the body, then ret.
 // Each test compiles one translation unit: the fixture's symbol table lives per test.
-#define EXPECT_CODE(name, body, src)                          \
-    TEST_F(Aarch64Test, name)                                 \
-    {                                                         \
-        EXPECT_EQ(PRO body EPI, Code(CompileToAarch64(src))); \
+#define EXPECT_CODE(name, body, src)                           \
+    TEST_F(Aarch64Test, name)                                  \
+    {                                                          \
+        EXPECT_EQ(body "ret\n", Code(CompileToAarch64(src))); \
     }
 
 EXPECT_CODE(VoidReturn, "", "void f(void) { return; }")

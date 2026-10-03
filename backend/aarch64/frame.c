@@ -603,35 +603,67 @@ static A64_Block *redirect(Gen *g, A64_Block *b)
     return tail;
 }
 
+// How the frame is addressed: none at all, from x29 (the frame record), or from sp,
+// `size` bytes below the caller's sp.
+typedef enum { FRAME_NONE, FRAME_FP, FRAME_SP } FrameKind;
+
+typedef struct {
+    FrameKind kind;
+    int size;   // FRAME_SP: the bytes below the caller's sp
+    int rest;   // the slots and outgoing area, below where x29 would point
+    bool calls; // x30 must be saved
+} Frame;
+
+// The sp offset of x29 offset `off`.  x29 would be at sp + rest: a slot is below it,
+// and when there are calls the 16 bytes of the frame record above it hold x30.  Without
+// calls there is no record, and the incoming stack arguments start at sp + size.
+static int64_t sp_offset(const Frame *fr, int64_t off)
+{
+    return off < 16 ? off + fr->rest : off - 16 + fr->size;
+}
+
+// The base and offset of frame offset `off`, relative to x29.
+static A64_Operand frame_mem(const Frame *fr, int64_t off)
+{
+    return fr->kind == FRAME_SP ? a64_mem(A64_SP, sp_offset(fr, off)) : a64_mem(A64_FP, off);
+}
+
 // Save or restore the callee-saved registers in use: a pair of one file with stp/ldp,
 // a lone one with str/ldr.  layout_frame gives a pair adjacent slots.
-static void save_regs(Gen *g, bool restore)
+static void save_regs(Gen *g, const Frame *fr, bool restore)
 {
     for (int i = 0; i < g->nsaved;) {
-        int r     = g->saved_reg[i];
+        int r       = g->saved_reg[i];
         A64_Width w = a64_is_fpreg(r) ? A64_D : A64_X;
         if (i + 1 < g->nsaved && g->saved_off[i + 1] == g->saved_off[i] + 8) {
             emit3(g, restore ? A64_LDP : A64_STP, a64_reg(r, w), a64_reg(g->saved_reg[i + 1], w),
-                  a64_mem(A64_FP, g->saved_off[i]));
+                  frame_mem(fr, g->saved_off[i]));
             i += 2;
         } else {
-            emit2(g, restore ? A64_LDR : A64_STR, a64_reg(r, w), mem(g, A64_FP, g->saved_off[i], 8));
+            emit2(g, restore ? A64_LDR : A64_STR, a64_reg(r, w), frame_mem(fr, g->saved_off[i]));
             i++;
         }
     }
 }
 
-// The frame teardown: the saved registers back, sp back to the frame record, which is
-// popped.
-static void epilogue(Gen *g)
+// The frame teardown: the saved registers back, then sp (and x29, x30) as on entry.
+static void epilogue(Gen *g, const Frame *fr)
 {
-    save_regs(g, true);
+    if (fr->kind == FRAME_NONE)
+        return;
+    save_regs(g, fr, true);
+    if (fr->kind == FRAME_SP) {
+        if (fr->calls)
+            emit2(g, A64_LDR, a64_reg(A64_LR, A64_X), frame_mem(fr, 8));
+        gen_addr(g, A64_SP, A64_SP, fr->size);
+        return;
+    }
     emit2(g, A64_MOV, a64_reg(A64_SP, A64_X), a64_reg(A64_FP, A64_X));
     emit3(g, A64_LDP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_post(A64_SP, 16));
 }
 
 // Replace each epilogue marker by the frame teardown.
-static void expand_epilogues(Gen *g)
+static void expand_epilogues(Gen *g, const Frame *fr)
 {
     for (A64_Block *b = g->fn->blocks; b; b = b->next) {
         for (A64_Instr **link = &b->head; *link;) {
@@ -642,11 +674,15 @@ static void expand_epilogues(Gen *g)
             }
             A64_Block seq   = { 0 };
             A64_Block *tail = redirect(g, &seq);
-            epilogue(g);
-            g->fn->tail    = tail;
-            seq.tail->next = marker->next;
-            *link          = seq.head;
-            link           = &seq.tail->next;
+            epilogue(g, fr);
+            g->fn->tail = tail;
+            if (seq.head) {
+                seq.tail->next = marker->next;
+                *link          = seq.head;
+                link           = &seq.tail->next;
+            } else {
+                *link = marker->next;
+            }
             xfree(marker);
         }
         b->tail = b->head;
@@ -655,15 +691,166 @@ static void expand_epilogues(Gen *g)
     }
 }
 
+static bool uses_reg(const A64_Instr *in, int reg)
+{
+    for (int i = 0; i < A64_MAX_OPERANDS; i++) {
+        const A64_Operand *o = &in->opnd[i];
+        if ((o->kind == A64_OPND_REG || o->kind == A64_OPND_MEM || o->kind == A64_OPND_SHIFT ||
+             o->kind == A64_OPND_EXT) &&
+            o->reg == reg)
+            return true;
+    }
+    return false;
+}
+
+static bool has_calls(const Gen *g)
+{
+    for (const A64_Block *b = g->fn->blocks; b; b = b->next)
+        for (const A64_Instr *in = b->head; in; in = in->next)
+            if (in->op == A64_BL || in->op == A64_BLR)
+                return true;
+    return false;
+}
+
+// Whether the body needs no frame: it makes no call, saves no register, and never uses
+// x29 (no slot, no stack argument) or sp.
+static bool is_leaf(const Gen *g)
+{
+    if (g->nsaved > 0 || has_calls(g))
+        return false;
+    for (const A64_Block *b = g->fn->blocks; b; b = b->next)
+        for (const A64_Instr *in = b->head; in; in = in->next)
+            if (uses_reg(in, A64_FP) || uses_reg(in, A64_SP))
+                return false;
+    return true;
+}
+
+// The bytes an ldr/str-family instruction accesses, from its opcode and register view.
+static int access_size(const A64_Instr *in)
+{
+    static const int width_bytes[] = { [A64_W] = 4, [A64_X] = 8, [A64_S] = 4, [A64_D] = 8,
+                                       [A64_Q] = 16 };
+    switch (in->op) {
+    case A64_LDRB:
+    case A64_LDRSB:
+    case A64_STRB:
+        return 1;
+    case A64_LDRH:
+    case A64_LDRSH:
+    case A64_STRH:
+        return 2;
+    case A64_LDRSW:
+        return 4;
+    default:
+        return width_bytes[in->opnd[0].width];
+    }
+}
+
+// Whether x29-relative operand `i` of `in` can be rebased onto sp, at sp offset `off`;
+// with `apply`, do it.  A memory operand must still fit its instruction; an address
+// computation is `add`/`sub rd, x29, #imm` or `mov rd, x29`, which become `add rd, sp,
+// #off`.
+static bool rebase(A64_Instr *in, int i, int64_t off, bool apply)
+{
+    A64_Operand *o = &in->opnd[i];
+    if (o->kind == A64_OPND_MEM) {
+        if (o->sub != A64_MEM_OFFSET)
+            return false;
+        bool ok;
+        if (in->op == A64_LDP || in->op == A64_STP)
+            ok = off % 8 == 0 && off >= -512 && off <= 504;
+        else
+            ok = fits_ldst(off, access_size(in));
+        if (ok && apply) {
+            o->reg = A64_SP;
+            o->imm = off;
+        }
+        return ok;
+    }
+    if (o->kind != A64_OPND_REG || i != 1 || off < 0 || off > 4095)
+        return false;
+    bool addsub = (in->op == A64_ADD || in->op == A64_SUB) && in->opnd[2].kind == A64_OPND_IMM &&
+                  in->opnd[3].kind == A64_OPND_NONE;
+    if (!addsub && !(in->op == A64_MOV && o->width == A64_X))
+        return false;
+    if (apply) {
+        in->op     = A64_ADD;
+        o->reg     = A64_SP;
+        in->opnd[2] = a64_imm(off);
+    }
+    return true;
+}
+
+// The x29 offset operand `i` of `in` stands for.
+static int64_t fp_offset(const A64_Instr *in, int i)
+{
+    const A64_Operand *o = &in->opnd[i];
+    if (o->kind == A64_OPND_MEM)
+        return o->imm;
+    if (in->op == A64_MOV)
+        return 0;
+    return in->op == A64_SUB ? -in->opnd[2].imm : in->opnd[2].imm;
+}
+
+// Address the body's frame from sp, as `fr` says, when every use of x29 can be
+// rebased; else change nothing.
+static bool rebase_to_sp(Gen *g, const Frame *fr)
+{
+    for (int pass = 0; pass < 2; pass++) {
+        for (A64_Block *b = g->fn->blocks; b; b = b->next) {
+            for (A64_Instr *in = b->head; in; in = in->next) {
+                for (int i = 0; i < A64_MAX_OPERANDS; i++) {
+                    A64_Operand *o = &in->opnd[i];
+                    if (o->reg != A64_FP || (o->kind != A64_OPND_REG && o->kind != A64_OPND_MEM &&
+                                             o->kind != A64_OPND_SHIFT && o->kind != A64_OPND_EXT))
+                        continue;
+                    if (o->kind == A64_OPND_SHIFT || o->kind == A64_OPND_EXT)
+                        return false;
+                    if (!rebase(in, i, sp_offset(fr, fp_offset(in, i)), pass == 1))
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+// Whether the save slots of the callee-saved registers fit their stp/str from sp.
+static bool saves_fit(const Gen *g, const Frame *fr)
+{
+    for (int i = 0; i < g->nsaved; i++) {
+        int64_t off = sp_offset(fr, g->saved_off[i]);
+        if (off % 8 != 0 || off > 504)
+            return false;
+    }
+    return true;
+}
+
+// Fill the prologue and the epilogues, now that the frame is known.  A leaf function
+// that needs no stack has none; otherwise, unless asked for a frame record, the frame
+// is addressed from sp when every x29 offset can be, and x30 saved only with calls.
 void gen_prologue(Gen *g)
 {
+    Frame fr        = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, has_calls(g) };
     A64_Block *tail = redirect(g, g->prologue);
-    int rest        = (g->locals_size + g->outgoing + 15) / 16 * 16;
-    emit3(g, A64_STP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_pre(A64_SP, -16));
-    emit2(g, A64_MOV, a64_reg(A64_FP, A64_X), a64_reg(A64_SP, A64_X));
-    if (rest)
-        gen_addr(g, A64_SP, A64_SP, -rest);
-    save_regs(g, false);
+    fr.size         = fr.rest + (fr.calls ? 16 : 0);
+    if (!aarch64_frame_pointer && is_leaf(g)) {
+        // nothing
+    } else if (!aarch64_frame_pointer && fr.size <= 4095 && saves_fit(g, &fr) &&
+               rebase_to_sp(g, &fr)) {
+        fr.kind = FRAME_SP;
+        gen_addr(g, A64_SP, A64_SP, -fr.size);
+        if (fr.calls)
+            emit2(g, A64_STR, a64_reg(A64_LR, A64_X), frame_mem(&fr, 8));
+        save_regs(g, &fr, false);
+    } else {
+        fr.kind = FRAME_FP;
+        emit3(g, A64_STP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_pre(A64_SP, -16));
+        emit2(g, A64_MOV, a64_reg(A64_FP, A64_X), a64_reg(A64_SP, A64_X));
+        if (fr.rest)
+            gen_addr(g, A64_SP, A64_SP, -fr.rest);
+        save_regs(g, &fr, false);
+    }
     g->fn->tail = tail;
-    expand_epilogues(g);
+    expand_epilogues(g, &fr);
 }

@@ -27,7 +27,7 @@ add x4, x4, x2
 }
 
 // A value live across a call takes a callee-saved register, saved in the prologue and
-// restored in the epilogue.
+// restored in the epilogue; the frame, addressed from sp, keeps x30 above the slots.
 TEST_F(Aarch64Test, CalleeSavedAcrossCall)
 {
     aarch64_peephole = false;
@@ -35,13 +35,19 @@ TEST_F(Aarch64Test, CalleeSavedAcrossCall)
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(str x19, [x29, #-16]
+    EXPECT_EQ(R"(sub sp, sp, #32
+str x30, [sp, #24]
+str x19, [sp]
 mov w0, w0
 mov w19, w1
 bl g
 add w0, w0, w19
-ldr x19, [x29, #-16]
-)")) << code;
+ldr x19, [sp]
+ldr x30, [sp, #24]
+add sp, sp, #32
+ret
+)",
+              code);
 }
 
 // Floating-point values in v registers, the result computed in place.
@@ -119,4 +125,60 @@ int main(void)
 }
 )");
     EXPECT_EQ(15, exit_status);
+}
+
+// Frames (A25): a leaf that needs no stack has none; another function's frame is
+// addressed from sp, x30 saved only when it calls; --frame-pointer keeps the record.
+TEST_F(Aarch64Test, LeafHasNoFrame)
+{
+    EXPECT_EQ("fmul d0, d0, d1\nfadd d0, d0, d2\nret\n", Code(CompileToAarch64(R"(
+double dot(double a, double b, double c) { return a * b + c; }
+)")));
+}
+
+TEST_F(Aarch64Test, LeafSlotsFromSp)
+{
+    std::string code = Code(CompileToAarch64(R"(
+int pick(int i) { int a[3] = { 4, 5, 6 }; return a[i]; }
+)"));
+    EXPECT_EQ(0u, code.find("sub sp, sp, #16\n")) << code;
+    EXPECT_EQ(std::string::npos, code.find("x30")) << code;
+    EXPECT_EQ(std::string::npos, code.find("x29")) << code;
+    EXPECT_NE(std::string::npos, code.find("add sp, sp, #16\nret\n")) << code;
+}
+
+TEST_F(Aarch64Test, FramePointerFlag)
+{
+    aarch64_frame_pointer = true;
+    EXPECT_EQ(R"(stp x29, x30, [sp, #-16]!
+mov x29, sp
+fmul d0, d0, d1
+fadd d0, d0, d2
+mov sp, x29
+ldp x29, x30, [sp], #16
+ret
+)",
+              Code(CompileToAarch64("double dot(double a, double b, double c) { return a * b + c; }")));
+}
+
+// A frame too large for sp offsets keeps x29; stack arguments and big arrays run right
+// either way.
+TEST_F(Aarch64Test, RunLargeAndSmallFrames)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    CompileAndRunAarch64(R"(
+long many(long a, long b, long c, long d, long e, long f, long g, long h, long i, long j)
+{
+    return i * 10 + j;
+}
+int big(int k)
+{
+    char buf[10000];
+    for (int i = 0; i < 10000; i++)
+        buf[i] = (char)i;
+    return buf[k] + many(0, 0, 0, 0, 0, 0, 0, 0, 3, 4);
+}
+int main(void) { return big(9999 - 256 * 39) + many(1, 2, 3, 4, 5, 6, 7, 8, 9, 1); }
+)");
+    EXPECT_EQ(15 + 34 + 91, exit_status);
 }

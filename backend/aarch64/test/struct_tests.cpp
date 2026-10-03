@@ -7,6 +7,7 @@
 // A 12-byte struct goes in two X registers: a whole doubleword, then 4 bytes.
 TEST_F(Aarch64Test, SmallStructInRegisters)
 {
+    aarch64_frame_pointer = true; // slots at x29 offsets
     std::string code = Code(CompileToAarch64(R"(
 struct s { int a, b, c; };
 int f(struct s v);
@@ -21,6 +22,7 @@ int g(void) { struct s v = { 1, 2, 3 }; return f(v); }
 // the callee saves it on entry and copies the value there.
 TEST_F(Aarch64Test, LargeStructResultThroughX8)
 {
+    aarch64_frame_pointer = true; // slots at x29 offsets
     std::string code = Code(CompileToAarch64(R"(
 struct big { long a, b, c; };
 struct big make(long x) { struct big r = { x, x + 1, x + 2 }; return r; }

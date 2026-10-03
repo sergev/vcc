@@ -70,8 +70,12 @@ and the harness runs qemu under a short timeout regardless.
   `--no-regalloc`, `--no-peephole` and `--frame-pointer` flags as on RISC-V; the
   selection goldens pin the naive code with `NaiveSelection()`. All book chapters pass,
   20 included.
-- **A25. Leaf functions** with no frame and no stack; slots addressed from `sp` when
-  the offsets fit, as on RISC-V.
+- **A25. Leaf functions. Done.** A function that makes no call, saves no register and
+  never touches x29 or sp has no prologue at all. Otherwise, when every x29 offset
+  still fits its instruction from sp (`gen_prologue`'s `rebase_to_sp`), there is no
+  frame record: `sub sp`, x30 saved above the slots only when there are calls, the
+  incoming stack arguments right above the frame. Larger frames keep x29, and so does
+  every function under `--frame-pointer`.
 - **A26. Peephole**: immediate operands (`add`/`sub`/`cmp` with 12 bits, a bitmask
   immediate encoder for `and`/`orr`/`eor`), redundant moves and reloads, `ldr`/`str` pairs to `ldp`/`stp`,
   `add` folded into the addressing mode, `mul`+`add` to `madd`, `cmp #0` + `b.eq` to

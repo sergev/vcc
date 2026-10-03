@@ -236,6 +236,7 @@ TEST_F(Float128Test, InteropClangCallsUs)
 // in q0; a comparison routine's int is tested against zero.
 TEST_F(Float128Test, CallsRuntime)
 {
+    aarch64_frame_pointer = true; // slots at x29 offsets
     std::string s = Code(CompileToAarch64(R"(
 long double f(long double a, long double b) { return a + b; }
 int g(long double a, long double b) { return a < b; }

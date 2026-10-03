@@ -7,6 +7,7 @@
 // Three floats go in s0-s2, one member each; the result comes back the same way.
 TEST_F(Aarch64Test, HfaInVRegisters)
 {
+    aarch64_frame_pointer = true; // slots at x29 offsets
     std::string code = Code(CompileToAarch64(R"(
 struct v3 { float x, y, z; };
 struct v3 f(struct v3 v);
@@ -21,6 +22,7 @@ float g(void) { struct v3 v = { 1, 2, 3 }; struct v3 r = f(v); return r.z; }
 // A long double goes in a q register, whole.
 TEST_F(Aarch64Test, LongDoubleInQRegister)
 {
+    aarch64_frame_pointer = true; // slots at x29 offsets
     std::string code = Code(CompileToAarch64(R"(
 long double f(long double x);
 long double g(long double y) { return f(y); }
