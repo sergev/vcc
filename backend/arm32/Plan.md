@@ -15,6 +15,14 @@ output must not change; RISC-V and AArch64 output changes only where a step says
 
 Step IDs are stable: a finished step is marked done, never renumbered. The prefix is
 `V` (for ARMv7), since `A` (AArch64), `R` (RISC-V) and `B` (Bemsh) are taken.
+`make run` stays green after every V-step.
+
+Phase 0 is done: `cpp -t arm32` predefines clang's macros for the triple, the `arm32`
+descriptor leaves every struct result to the backend (`struct_return_max = SIZE_MAX`),
+the frontend lowers the whole test corpus for `arm32` with no defect, RV32's ILP32
+runtime and headers are shared in `libc/ilp32/`, and `libc/arm32/CMakeLists.txt` finds
+the tools (`ARM32_TOOLS_FOUND`, `ARM32_CLANG`, `ARM32_LD`, `ARM32_QEMU`,
+`ARM32_LIB_DIR`, `ARM32_LINK_SCRIPT`).
 
 ## Target and decisions
 
@@ -108,41 +116,6 @@ the case.
 A `float` occupies a whole `d` register in the allocator's view (its even `s` half), so
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
-
-## Phase 0 — groundwork
-
-- **V1. Target plumbing.** Review the `arm32` descriptor in `semantic/target.c` and give
-  it the tail fields the others have: `struct_return_max = SIZE_MAX`, so the frontend
-  never lowers a struct result (the backend owns every one, because an HFA result
-  returns in VFP registers although it is wider than 4 bytes), and `va_class = NULL`.
-  Teach `cpp -t arm32` its predefined macros, taken from clang's `-dM -E` for the
-  triple: `__arm__`, `__ARM_ARCH=7`, `__ARM_ARCH_7A__`, `__ARM_ARCH_PROFILE='A'`,
-  `__ARM_EABI__`, `__ARMEL__`, `__ARM_PCS_VFP`, `__VFP_FP__`, `__ARM_FP`,
-  `__ARM_FEATURE_IDIV`, `__ILP32__`/`_ILP32` (check clang), `__CHAR_UNSIGNED__`,
-  `__WCHAR_UNSIGNED__`, `__ELF__`, the `__SIZEOF_*__` set. Add a test in
-  `test_predefined_macros.cpp`. `lower -t arm32` already accepts the name.
-- **V2. TAC audit for `arm32`. Done, no defects.** All 1551 C sources of the test
-  corpus (book programs, backend, translator, optimizer and semantic fixtures, every
-  libc source) lowered for `riscv32` and `arm32` — the two differ only in `long double`
-  — give identical TAC except where expected: `long double` constants folded in
-  `double` precision (`0.1L == 0.1` folds to 1, as clang computes), its 8-byte size and
-  alignment, and struct results no longer lowered to a `%.ret` parameter (V1).
-  `lower --verify` passes on all of them. An *unfolded* `long double` literal keeps its
-  binary128 bits in TAC; as on BESM-6, that is the contract (see V14).
-- **V3. Share the ILP32 runtime.** `libc/riscv32/int64.c`, `frexp.c`, `ldexp.c`,
-  `modf.c` assume only 32-bit `long`. Move them to a new `libc/ilp32/` (the counterpart
-  of `libc/lp64/`). Do the same for the headers identical between `riscv32` and `arm32`
-  (`limits.h`, `inttypes.h`, `math.h` — check each), into `libc/ilp32/include/`, searched
-  between the target's directory and `libc/common/include/`. `float.h` (the `LDBL_*`
-  values), `stddef.h`/`stdint.h` (`wchar_t`) and `stdarg.h` stay per target. RV32 output
-  and tests unchanged.
-- **V4. CMake detection.** Find `qemu-system-arm`, and check that the clang already used
-  for RISC-V lists the `arm` target (`--print-targets`), setting `ARM32_TOOLS_FOUND`,
-  `ARM32_CLANG`, `ARM32_LIB_DIR` like `libc/aarch64/CMakeLists.txt`. The qemu fixture is
-  already shared (`backend/common/test/qemu_test.h`), so no extraction is needed this
-  time; V7 only adds a `QemuConfig`.
-
-`make run` stays green after every V-step.
 
 ## Phase 1 — skeleton
 
@@ -290,8 +263,7 @@ book chapters pass and a few golden tests pin the selected instructions.
 
 - **V21. Headers.** `libc/arm32/include/`: `float.h` (`LDBL_*` equal to `DBL_*`),
   `stddef.h` and `stdint.h` (unsigned `wchar_t`), `setjmp.h` (`r4`–`r11`, `sp`, `lr`,
-  `d8`–`d15`), and the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` (V3)
-  and `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
+  `d8`–`d15`), and the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
   `riscv32-headers`.
 - **V22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests` (host libc output as expectation). `printf("%Lf")` exercises the 8-byte
@@ -360,6 +332,3 @@ book chapters pass and a few golden tests pin the selected instructions.
 - **crt0** — MMU, caches, exception vectors — fails as a hang or a fault far from its
   cause. Mitigation: the reporting vector table, the run timeout, and V5 tested on its
   own first, as on AArch64.
-- **V2's new combination** (byte-addressed, `long double` = `double`) can expose
-  frontend paths that until now assumed one implies BESM-6. Mitigation: the audit runs
-  before any backend code, and the fixes land in shared code with tests on both sides.
