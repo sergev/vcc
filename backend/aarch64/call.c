@@ -1,16 +1,21 @@
 //
 // Calls, parameters and return values: AAPCS64.  An integer or pointer goes in the next
-// of x0-x7, a float or double in the next of v0-v7; once a class runs out, its values
-// go on the stack, each in an 8-byte slot, in order.  A variadic argument goes as a
-// named one would.  Neither side extends a narrow value: the receiver does (a store to
-// a slot truncates, a load extends by type).
+// of x0-x7, a float, double or long double in the next of v0-v7; once a class runs
+// out, its values go on the stack, each in an 8-byte slot (16-byte aligned for a long
+// double), in order.  A variadic argument goes as a named one would.  Neither side
+// extends a narrow value: the receiver does (a store to a slot truncates, a load
+// extends by type).
 //
-// A struct or union of up to 16 bytes goes in one or two X registers, the pair starting
-// at an even register when it is 16-byte aligned; when there are not enough left, it
-// goes whole on the stack (rounded up to 8 bytes, aligned to 8 or 16) and no later
-// argument takes an X register.  A larger one is copied by the caller and passed as a
-// pointer to the copy, as an integer is.  A result of up to 16 bytes comes back in
-// x0/x1; a larger one is written through the address the caller passes in x8.
+// A homogeneous float aggregate (1-4 members of one FP type, tac_aapcs64_hfa) goes in
+// that many consecutive v registers, a member in each, or whole on the stack when they
+// do not all fit, and then no later argument takes a v register.  Another struct or
+// union of up to 16 bytes goes in one or two X registers, the pair starting at an even
+// register when it is 16-byte aligned; when there are not enough left, it goes whole on
+// the stack (rounded up to 8 bytes, aligned to 8 or 16) and no later argument takes an
+// X register.  A larger one is copied by the caller and passed as a pointer to the
+// copy, as an integer is.  A result comes back the way the first argument would go: an
+// HFA in v0-v3, up to 16 bytes in x0/x1; a larger one is written through the address
+// the caller passes in x8.
 //
 #include "codegen.h"
 #include "internal.h"
@@ -18,8 +23,9 @@
 
 // Where one argument goes.
 typedef struct {
-    int nregs;   // 1 or 2 registers, or 0 for the stack
-    int reg[2];  // registers
+    int nregs;   // 1-4 registers, or 0 for the stack
+    int reg[4];  // registers
+    int esize;   // v registers: the bytes of the element each holds; 0 for X registers
     int stack;   // byte offset in the argument area
     bool by_ref; // a pointer to a copy goes there instead
 } ArgLoc;
@@ -40,14 +46,26 @@ static void on_stack(ArgState *s, ArgLoc *a, int size, int align)
     s->stack += round_up(size, 8);
 }
 
-static ArgLoc classify(Gen *g, ArgState *s, const Tac_Type *t)
+static ArgLoc classify(ArgState *s, const Tac_Type *t)
 {
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: passing a long double is not implemented yet", gen_name(g));
     ArgLoc a = { 0 };
     int size = a64_size(t);
+    int esize;
+    int n = tac_aapcs64_hfa(t, &esize);
+    if (n) {
+        if (s->next_fp + n <= 8) {
+            a.nregs = n;
+            a.esize = esize;
+            for (int i = 0; i < n; i++)
+                a.reg[i] = A64_V(s->next_fp++);
+        } else {
+            s->next_fp = 8;
+            on_stack(s, &a, size, a64_align(t));
+        }
+        return a;
+    }
     if (a64_is_aggregate(t) && size <= 16) {
-        int n = (size + 7) / 8;
+        n = (size + 7) / 8;
         if (a64_align(t) == 16 && s->next_int % 2)
             s->next_int++;
         if (s->next_int + n <= 8) {
@@ -61,10 +79,7 @@ static ArgLoc classify(Gen *g, ArgState *s, const Tac_Type *t)
         return a;
     }
     a.by_ref = a64_is_aggregate(t);
-    if (a64_is_fp(t) && s->next_fp < 8) {
-        a.nregs  = 1;
-        a.reg[0] = A64_V(s->next_fp++);
-    } else if (!a64_is_fp(t) && s->next_int < 8) {
+    if (s->next_int < 8) {
         a.nregs  = 1;
         a.reg[0] = A64_X(s->next_int++);
     } else {
@@ -81,7 +96,26 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
 // Whether a result of type `t` is written through the address in x8.
 static bool indirect_result(const Tac_Type *t)
 {
-    return t && a64_is_aggregate(t) && a64_size(t) > 16;
+    return t && tac_aapcs64_class(t) == TAC_AAPCS64_BY_REF;
+}
+
+// The register view of an FP element of `esize` bytes.
+static A64_Width elem_width(int esize)
+{
+    return esize == 4 ? A64_S : esize == 8 ? A64_D : A64_Q;
+}
+
+// Load the elements of an HFA at base + off into v registers `reg`, or store them.
+static void load_elems(Gen *g, const int *reg, int n, int esize, int base, int64_t off)
+{
+    for (int i = 0; i < n; i++)
+        emit2(g, A64_LDR, a64_reg(reg[i], elem_width(esize)), mem(g, base, off + i * esize, esize));
+}
+
+static void store_elems(Gen *g, const int *reg, int n, int esize, int base, int64_t off)
+{
+    for (int i = 0; i < n; i++)
+        emit2(g, A64_STR, a64_reg(reg[i], elem_width(esize)), mem(g, base, off + i * esize, esize));
 }
 
 // The bytes of doubleword `i` of an aggregate of `size` bytes.
@@ -104,7 +138,7 @@ void gen_params(Gen *g)
         const Tac_Type *t = p->type;
         if (!t)
             fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
-        ArgLoc a = classify(g, &s, t);
+        ArgLoc a = classify(&s, t);
         if (!a.nregs && !a.by_ref) {
             place_slot(g, p->name, t, 16 + a.stack);
             continue;
@@ -118,6 +152,8 @@ void gen_params(Gen *g)
             else
                 emit2(g, A64_LDR, a64_reg(T3, A64_X), mem(g, A64_FP, 16 + a.stack, 8));
             gen_memcopy(g, A64_FP, off, src, 0, size, a64_align(t));
+        } else if (a.esize) {
+            store_elems(g, a.reg, a.nregs, a.esize, A64_FP, off);
         } else if (a64_is_aggregate(t)) {
             for (int i = 0; i < a.nregs; i++)
                 store_bytes(g, a.reg[i], A64_FP, off + 8 * i, piece_size(size, i));
@@ -163,15 +199,16 @@ static void arg_to_stack(Gen *g, Arg *a)
     }
     if (a->loc.nregs)
         return;
-    if (a64_is_aggregate(t)) {
+    if (a64_is_aggregate(t) || (a64_is_ld(t) && a->v->kind == TAC_VAL_VAR)) {
         int base;
         int64_t off;
         name_addr(g, a->v->u.var_name, T3, &base, &off);
         gen_memcopy(g, A64_SP, a->loc.stack, base, off, a64_size(t), a64_align(t));
         return;
     }
-    int r = a64_is_fp(t) ? F0 : T0;
-    if (a64_is_fp(t))
+    bool fp = a64_is_fp(t) || a64_is_ld(t);
+    int r   = fp ? F0 : T0;
+    if (fp)
         load_val(g, r, a->v);
     else
         load_int_as(g, r, a->v, a->as);
@@ -184,14 +221,20 @@ static void arg_to_regs(Gen *g, const Arg *a)
     const ArgLoc *l = &a->loc;
     if (!l->nregs)
         return;
-    if (l->by_ref)
+    if (l->by_ref) {
         gen_addr(g, l->reg[0], A64_FP, a->copy);
-    else if (a64_is_aggregate(a->type))
+    } else if (l->esize && a64_is_aggregate(a->type)) {
+        int base;
+        int64_t off;
+        name_addr(g, a->v->u.var_name, T5, &base, &off);
+        load_elems(g, l->reg, l->nregs, l->esize, base, off);
+    } else if (a64_is_aggregate(a->type)) {
         load_pieces(g, a->v->u.var_name, a->type, l->reg, l->nregs);
-    else if (a64_is_fp(a->type))
+    } else if (l->esize) {
         load_val(g, l->reg[0], a->v);
-    else
+    } else {
         load_int_as(g, l->reg[0], a->v, a->as);
+    }
 }
 
 void gen_call(Gen *g, const Tac_Instruction *in)
@@ -215,10 +258,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         a->v    = v;
         a->type = val_type(g, v);
         // A constant takes the declared parameter type, when there is one.
-        a->as   = want && !a64_is_fp(a->type) && !a64_is_fp(want) && !a64_is_aggregate(want)
+        a->as   = want && !a64_is_fp(a->type) && !a64_is_ld(a->type) && !a64_is_fp(want) &&
+                          !a64_is_ld(want) && !a64_is_aggregate(want)
                       ? want
                       : a->type;
-        a->loc  = classify(g, &s, a->type);
+        a->loc  = classify(&s, a->type);
         a->copy = 0;
         if (want)
             want = want->next;
@@ -252,8 +296,16 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     if (!dst || indirect_result(ret))
         return;
     const Tac_Type *t = val_type(g, dst);
-    if (a64_is_ld(t))
-        fatal_error("aarch64: %s: a long double result is not implemented yet", gen_name(g));
+    int esize;
+    int n = tac_aapcs64_hfa(t, &esize);
+    if (n) {
+        static const int vregs[4] = { A64_V(0), A64_V(1), A64_V(2), A64_V(3) };
+        int base;
+        int64_t off;
+        name_addr(g, dst->u.var_name, T5, &base, &off);
+        store_elems(g, vregs, n, esize, base, off);
+        return;
+    }
     if (a64_is_aggregate(t)) {
         int base;
         int64_t off;
@@ -269,11 +321,19 @@ void gen_call(Gen *g, const Tac_Instruction *in)
 void gen_return(Gen *g, const Tac_Val *v)
 {
     if (v) {
-        const Tac_Type *t = val_type(g, v);
-        if (a64_is_ld(t))
-            fatal_error("aarch64: %s: returning a long double is not implemented yet", gen_name(g));
+        const Tac_Type *t  = val_type(g, v);
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
-        if (a64_is_aggregate(t) && g->ret_ptr) {
+        int esize;
+        int n = tac_aapcs64_hfa(t, &esize);
+        if (n && a64_is_aggregate(t)) {
+            static const int vregs[4] = { A64_V(0), A64_V(1), A64_V(2), A64_V(3) };
+            int base;
+            int64_t off;
+            name_addr(g, v->u.var_name, T3, &base, &off);
+            load_elems(g, vregs, n, esize, base, off);
+        } else if (a64_is_ld(t)) {
+            load_val(g, A64_V0, v);
+        } else if (a64_is_aggregate(t) && g->ret_ptr) {
             int base;
             int64_t off;
             emit2(g, A64_LDR, a64_reg(T4, A64_X), mem(g, A64_FP, g->ret_ptr, 8));

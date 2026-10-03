@@ -32,6 +32,7 @@ add_executable(aarch64-tests
     test/fp_tests.cpp
     test/ptr_tests.cpp
     test/struct_tests.cpp
+    test/hfa_tests.cpp
     test/run_tests.cpp
     ${AARCH64_BOOK_SOURCES}
 )

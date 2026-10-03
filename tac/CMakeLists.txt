@@ -12,6 +12,7 @@ add_library(tac STATIC
     tac_graphviz.c
     tac_walk.c
     tac_verify.c
+    tac_abi.c
 )
 target_include_directories(tac PUBLIC .)
 target_link_libraries(tac libutil)

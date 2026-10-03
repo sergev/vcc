@@ -632,6 +632,18 @@ void tac_visit_names(const Tac_Instruction *in, Tac_NameVisitor fn, void *arg);
 bool tac_static_superseded(const Tac_TopLevel *program, const Tac_TopLevel *tl);
 
 //
+// AAPCS64 argument classes (tac_abi.c): in general registers, by reference to a copy
+// (an aggregate over 16 bytes), or in FP registers as `count` (1-4) elements of `esize`
+// (4, 8 or 16) bytes each, encoded esize * 8 + count — a float, double or long double
+// and a homogeneous float aggregate alike.  The value of __builtin_va_class.
+//
+enum { TAC_AAPCS64_GENERAL = 0, TAC_AAPCS64_BY_REF = 1 };
+int tac_aapcs64_class(const Tac_Type *t);
+// The element count of `t` as a homogeneous float aggregate (a lone FP scalar is one),
+// with the element size in *esize; 0 when it is none.
+int tac_aapcs64_hfa(const Tac_Type *t, int *esize);
+
+//
 // Verify
 //
 // Byte sizes on the target: of each scalar kind (indexed by Tac_TypeKind, up to

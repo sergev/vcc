@@ -88,6 +88,8 @@ bool a64_is_aggregate(const Tac_Type *t)
 
 A64_Width a64_width(const Tac_Type *t)
 {
+    if (a64_is_ld(t))
+        return A64_Q;
     if (a64_is_fp(t))
         return a64_is_double(t) ? A64_D : A64_S;
     return a64_size(t) <= 4 ? A64_W : A64_X;
@@ -325,7 +327,7 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (a64_is_ld(t) || a64_is_aggregate(t))
+    if ((a64_is_ld(t) && !a64_is_fpreg(reg)) || a64_is_aggregate(t))
         fatal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
     int size = a64_size(t);
     A64_Op op;
@@ -343,7 +345,7 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
-    if (a64_is_ld(t) || a64_is_aggregate(t))
+    if ((a64_is_ld(t) && !a64_is_fpreg(reg)) || a64_is_aggregate(t))
         fatal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
     int size  = a64_size(t);
     A64_Op op = A64_STR;
@@ -406,6 +408,16 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
         memcpy(&bits, &c->u.double_val, 8);
         gen_li(g, IP1, A64_X, (int64_t)bits);
         emit2(g, A64_FMOV, a64_reg(reg, A64_D), a64_reg(IP1, A64_X));
+    } else if (c->kind == TAC_CONST_LONG_DOUBLE) {
+        // Its two doublewords through a slot.
+        Float128 q = c->u.long_double_val;
+        int slot   = alloc_slot(g, NULL, NULL, 16, 16);
+        gen_addr(g, IP0, A64_FP, slot);
+        gen_li(g, IP1, A64_X, (int64_t)q.lo);
+        emit2(g, A64_STR, a64_reg(IP1, A64_X), a64_mem(IP0, 0));
+        gen_li(g, IP1, A64_X, (int64_t)q.hi);
+        emit2(g, A64_STR, a64_reg(IP1, A64_X), a64_mem(IP0, 8));
+        emit2(g, A64_LDR, a64_reg(reg, A64_Q), a64_mem(IP0, 0));
     } else {
         fatal_error("aarch64: integer constant in an FP register");
     }

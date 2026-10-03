@@ -68,6 +68,8 @@ list(REMOVE_ITEM AARCH64_LIBC_C printf snprintf sprintf)
 foreach(name ${AARCH64_LIBC_C})
     aarch64_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
+# The binary128 long double helpers (__addtf3, ...), not yet doprnt.
+aarch64_compile_libc_c(float128 ${LIBC_COMMON_DIR})
 foreach(name ${LIBC_C_LP64})
     aarch64_compile_libc_c(${name} ${LIBC_LP64_DIR})
 endforeach()

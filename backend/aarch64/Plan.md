@@ -125,9 +125,14 @@ with pointers), not all at once in A23.
 
 ## Phase 3 — ABI conformance
 
-- **A17. Full aggregate classification.** HFAs in `v` registers, ≤ 16 bytes in one or
-  two X registers, larger by reference to a caller copy, results through `x8`, the
-  no-split rule, stack arguments after the registers.
+- **A17. Full aggregate classification. Done.** `tac_aapcs64_class`/`tac_aapcs64_hfa`
+  (`tac/tac_abi.c`, in the `tac` library so the semantic pass reaches it too, A18):
+  an HFA — 1–4 members of one FP type, through arrays, nested structs and unions, no
+  padding — goes in consecutive `v` registers, a member in each (`s`, `d` or `q`), or
+  whole on the stack once they do not all fit, and then no later `v` register; the
+  result in `v0`–`v3`. `long double` values are passed and returned in `q` registers
+  (moved only; their arithmetic is still A21's), and a constant one is built through
+  a slot. `libc.a` gains `float128.c`, compiled by us. Run against clang both ways.
 - **A18. Variadic functions and `<stdarg.h>`.**
   - Callers: nothing special — variadic arguments follow the normal rules (an HFA is
     classified as usual, a `float` is promoted to `double` by the frontend).
