@@ -563,7 +563,7 @@ static Frame scan_body(const Gen *g)
     Frame fr = { 0 };
     for (const A32_Block *b = g->fn->blocks; b; b = b->next) {
         for (const A32_Instr *in = b->head; in; in = in->next) {
-            if (in->op == A32_BL)
+            if (in->op == A32_BL || in->op == A32_BLX)
                 fr.frame = true; // lr changes
             for (int i = 0; i < A32_MAX_OPERANDS; i++) {
                 const A32_Operand *o = &in->opnd[i];

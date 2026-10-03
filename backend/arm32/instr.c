@@ -74,6 +74,16 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     store_val(g, T0, dst);
 }
 
+// dst = &src, of a named object or function.
+static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
+{
+    int base;
+    int64_t off;
+    name_addr(g, src->u.var_name, T0, &base, &off);
+    gen_addr(g, T0, base, off);
+    store_val(g, T0, dst);
+}
+
 // An integer conversion.  A store truncates to the destination's width; a loaded value
 // is extended by the source's own type, so an extension is explicit only where that
 // differs: a sign extension of a narrow unsigned source (copy propagation may have
@@ -369,11 +379,20 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
         gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        gen_get_address(g, in->u.get_address.src, in->u.get_address.dst);
+        break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);
         break;
     case TAC_INSTRUCTION_BINARY:
         gen_binary(g, in);
+        break;
+    case TAC_INSTRUCTION_FUN_CALL:
+    case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+        gen_call(g, in);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame

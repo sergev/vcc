@@ -137,6 +137,7 @@ void gen_prologue(Gen *g);
 // Calls, parameters and returns (call.c)
 //
 void gen_params(Gen *g);
+void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //
