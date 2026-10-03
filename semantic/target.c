@@ -122,7 +122,8 @@ static const Target targets[] = {
                 // address (passed in rdi) in rax
       0,        // struct_args_split
       NULL,     // immediate_args
-      NULL },   // va_class
+      NULL,     // va_class
+      64 },     // ldouble_mant_dig: the x87 extended format
 
     { "riscv32",
       1, 1,   // _Bool
@@ -227,6 +228,12 @@ void target_list(void)
 int target_word_addressed(void)
 {
     return target_config->aggregate_align > 1;
+}
+
+Float128 target_ld_round(Float128 q)
+{
+    int mant = target_config ? target_config->ldouble_mant_dig : 0;
+    return mant ? f128_round(q, mant) : q;
 }
 
 int64_t sign_narrow(uint64_t bits, int w)

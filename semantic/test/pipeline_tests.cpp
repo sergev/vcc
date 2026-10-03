@@ -181,6 +181,24 @@ TEST_F(PipelineTest, StaticAssertAtFileScopePasses)
     EXPECT_NE(symtab_get("x"), nullptr);
 }
 
+// A long double constant folds at the target's precision: 0.1L and a value 1e-22 away
+// are one x87 value (64-bit significand), but two binary128 ones.
+TEST_F(PipelineTest, LongDoubleFoldsAtX87Precision)
+{
+    const Target *saved = target_config;
+    target_config       = target_lookup("x86_64");
+    RunPipeline("_Static_assert(0.1L == 0.1000000000000000000001L, \"x87\"); int x;");
+    target_config = saved;
+}
+
+TEST_F(PipelineTest, LongDoubleFoldsAtBinary128Precision)
+{
+    const Target *saved = target_config;
+    target_config       = target_lookup("riscv64");
+    RunPipeline("_Static_assert(0.1L != 0.1000000000000000000001L, \"binary128\"); int x;");
+    target_config = saved;
+}
+
 // A file-scope _Static_assert with a false condition is a compile-time error.
 TEST_F(PipelineTest, StaticAssertAtFileScopeFails)
 {

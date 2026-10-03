@@ -313,6 +313,27 @@ TEST_F(OptimizerTest, BinaryFoldLongDoublePrecision)
     EXPECT_EQ(0, f128_cmp(q, f128_from_double(1.0 / 3)));
 }
 
+// On x86_64 long double is the x87 format: operands and result are rounded to a 64-bit
+// significand.  0.1L * 3 is then round64(round64(0.1) * 3), not the binary128 product;
+// and 0.1L equals a constant 1e-22 away, which it does not in binary128.
+TEST_F(OptimizerTest, BinaryFoldLongDoubleX87)
+{
+    TargetGuard guard("x86_64");
+    Tac_Val *tenth = make_const_long_double(0);
+    tenth->u.constant->u.long_double_val = f128_from_string("0.1", nullptr);
+    Tac_Instruction *body = constant_fold(make_binary(TAC_BINARY_MULTIPLY_DOUBLE, tenth,
+                                                      make_const_long_double(3.0L), make_var("t")));
+    ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
+    Float128 q = body->u.copy.src->u.constant->u.long_double_val;
+    EXPECT_EQ(0x3ffd333333333333ULL, q.hi);
+    EXPECT_EQ(0x3334000000000000ULL, q.lo); // binary128 would give 0x3333333333333334
+
+    Tac_Val *a = make_const_long_double(0), *b = make_const_long_double(0);
+    a->u.constant->u.long_double_val = f128_from_string("0.1", nullptr);
+    b->u.constant->u.long_double_val = f128_from_string("0.1000000000000000000001", nullptr);
+    AssertFoldedInt(constant_fold(make_binary(TAC_BINARY_EQUAL, a, b, make_var("t"))), 1);
+}
+
 // The FP-specific binary ops the translator now emits for double/float operands fold
 // exactly like their plain counterparts.  1.5 * 2.5 → Copy(ConstDouble(3.75), t).
 TEST_F(OptimizerTest, BinaryFoldDoubleOpVariants)

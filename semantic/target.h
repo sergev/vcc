@@ -6,6 +6,8 @@
 extern "C" {
 #endif
 
+#include "float128.h"
+
 //
 // An intrinsic whose FIRST argument is an immediate field of the instruction word rather
 // than a value: it must be a compile-time constant in [lo, hi].  The semantic pass folds
@@ -75,6 +77,10 @@ typedef struct {
     // The value of __builtin_va_class(T): the ABI's argument class of T, which va_arg
     // hands to the runtime; NULL on a target without one (the builtin is rejected).
     int (*va_class)(const struct Tac_Type *t);
+    // The long double significand in bits, when it is neither binary128 nor double:
+    // 64 for the x87 extended format.  0 = binary128 when long double is wider than
+    // double, else double's.
+    int ldouble_mant_dig;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any
@@ -91,6 +97,11 @@ void target_list(void);
 // True when the smallest addressable unit is a machine word wider than a byte
 // (BESM-6): a scalar char then occupies a whole word, its value in the low byte.
 int target_word_addressed(void);
+
+// A long double constant, carried in binary128, rounded to the target's long double
+// significand (ldouble_mant_dig); unchanged where that is binary128 or double, which
+// the constant folders handle themselves.
+Float128 target_ld_round(Float128 q);
 
 // Sign-extend the low `w` bits of `bits` to a 64-bit signed value (w in (0,64)).
 // w<=0 or w>=64 means "no narrowing": return the full 64-bit pattern.  Both constant

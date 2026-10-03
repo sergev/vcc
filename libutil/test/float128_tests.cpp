@@ -88,3 +88,93 @@ TEST_F(Float128Test, Convert)
     EXPECT_EQ(1, f128_cmp(third, f128_from_double(1.0 / 3))); // the double rounds down
     EXPECT_EQ(2, f128_cmp(f128_div(f128_from_i64(0), f128_from_i64(0)), third));
 }
+
+// The x87 extended format of the x86-64 long double.  Expected values by exact rational
+// arithmetic: the decimal rounded to binary128 (as the scanner does), then to a 64-bit
+// significand on the x87 subnormal grid (2^-16445).
+static const struct {
+    const char *text;
+    uint64_t sig;
+    unsigned se; // sign and exponent
+} x87_cases[] = {
+    { "0.1", 0xcccccccccccccccdULL, 0x3ffb },
+    { "1.5", 0xc000000000000000ULL, 0x3fff },
+    { "-2", 0x8000000000000000ULL, 0xc000 },
+    { "3.14159265358979323846264338327950288", 0xc90fdaa22168c235ULL, 0x4000 },
+    { "0.333333333333333333333333333333333333", 0xaaaaaaaaaaaaaaabULL, 0x3ffd },
+    { "1e4932", 0xd72cb2a95c7ef6cdULL, 0x7ffe },
+    { "1.18973149535723176508575932662800702e+4932", 0x8000000000000000ULL, 0x7fff },
+    { "3.36210314311209350626267781732175260e-4932", 0x8000000000000000ULL, 0x0001 },
+    { "0x1p-16383", 0x4000000000000000ULL, 0x0000 },
+    { "0x1p-16445", 0x0000000000000001ULL, 0x0000 },
+    { "0x1p-16446", 0x0000000000000000ULL, 0x0000 },
+    { "0x1.8p-16446", 0x0000000000000001ULL, 0x0000 },
+    { "1e-5000", 0x0000000000000000ULL, 0x0000 },
+    { "1e300", 0xbf21e44003acdd2dULL, 0x43e3 },
+    { "123456789012345678901234567890", 0xc77487fb61b9f077ULL, 0x405f },
+};
+
+static void x87_bytes(uint64_t sig, unsigned se, uint8_t out[10])
+{
+    for (int i = 0; i < 8; i++)
+        out[i] = (uint8_t)(sig >> (8 * i));
+    out[8] = (uint8_t)se;
+    out[9] = (uint8_t)(se >> 8);
+}
+
+// To x87 rounds to nearest even, over the whole range: the largest binary128 overflows,
+// subnormals land on the coarser grid, ties to even there too.  From is exact, and
+// f128_round(x, 64) is the value the bytes hold.
+TEST_F(Float128Test, X87)
+{
+    for (const auto &c : x87_cases) {
+        Float128 f = f128_from_string(c.text, nullptr);
+        uint8_t got[10], want[10];
+        f128_to_x87(f, got);
+        x87_bytes(c.sig, c.se, want);
+        EXPECT_EQ(0, memcmp(want, got, 10)) << c.text;
+        Float128 r = f128_round(f, 64), back = f128_from_x87(got);
+        EXPECT_EQ(r.hi, back.hi) << c.text;
+        EXPECT_EQ(r.lo, back.lo) << c.text;
+    }
+}
+
+// Infinities, NaNs and the encodings the 387 rejects (unnormal, pseudo-infinity).
+TEST_F(Float128Test, X87Special)
+{
+    uint8_t b[10];
+    char buf[F128_BUFSIZE];
+    f128_to_x87(f128_neg(f128_from_string("1e5000", nullptr)), b);
+    EXPECT_EQ(0xff, b[9]);
+    EXPECT_EQ(0x80, b[7]);
+    EXPECT_STREQ("-inf", f128_format(f128_from_x87(b), buf));
+    f128_to_x87(f128_div(f128_from_i64(0), f128_from_i64(0)), b);
+    EXPECT_EQ(0x7f, b[9] & 0x7f);
+    EXPECT_EQ(0xc0, b[7] & 0xc0); // quiet, integer bit set
+    EXPECT_TRUE(f128_is_nan(f128_from_x87(b)));
+    x87_bytes(0x4000000000000000ULL, 0x3fff, b); // unnormal: integer bit clear
+    EXPECT_TRUE(f128_is_nan(f128_from_x87(b)));
+    x87_bytes(0x0000000000000000ULL, 0x7fff, b); // pseudo-infinity
+    EXPECT_TRUE(f128_is_nan(f128_from_x87(b)));
+    x87_bytes(0x8000000000000000ULL, 0x0000, b); // pseudo-denormal: as exponent 1
+    EXPECT_STREQ("0x1p-16382", f128_format(f128_from_x87(b), buf));
+}
+
+// A long double constant goes decimal -> binary128 -> 64 bits: two roundings.  Here the
+// first lands exactly on a 64-bit tie, which then goes to even, where one rounding of
+// the exact value would round up.  Pinned so a change to that is noticed.
+TEST_F(Float128Test, X87DoubleRounding)
+{
+    Float128 f = f128_from_string("0x1.000000000000000100000000000001p0", nullptr);
+    char buf[F128_BUFSIZE];
+    EXPECT_STREQ("0x1p+0", f128_format(f128_round(f, 64), buf)); // exact: 0x1.0000000000000002p+0
+}
+
+// f128_round to 53 bits gives double's values.
+TEST_F(Float128Test, RoundToDouble)
+{
+    for (const char *t : { "0.1", "3.14159265358979323846264338327950288", "1e300", "-7.25e-300" }) {
+        Float128 f = f128_from_string(t, nullptr), r = f128_round(f, 53);
+        EXPECT_EQ(0, f128_cmp(f128_from_double(f128_to_double(f)), r)) << t;
+    }
+}

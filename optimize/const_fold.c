@@ -59,7 +59,7 @@ static bool const_is_zero(const Tac_Const *c)
     case TAC_CONST_DOUBLE:
         return c->u.double_val == 0.0;
     case TAC_CONST_LONG_DOUBLE:
-        return f128_is_zero(c->u.long_double_val);
+        return f128_is_zero(target_ld_round(c->u.long_double_val));
     case TAC_CONST_SCHAR:
         return c->u.char_val == 0;
     case TAC_CONST_UCHAR:
@@ -108,7 +108,7 @@ static Tac_Val *fold_unary_const(Tac_UnaryOperator op, const Tac_Const *src)
             break;
         case TAC_CONST_LONG_DOUBLE:
             rc                    = tac_new_const(src->kind);
-            rc->u.long_double_val = f128_neg(src->u.long_double_val);
+            rc->u.long_double_val = f128_neg(target_ld_round(src->u.long_double_val));
             break;
         case TAC_CONST_SCHAR:
             rc             = tac_new_const(src->kind);
@@ -387,6 +387,13 @@ static double round_float(double d)
     return d;
 }
 
+// A long double constant's value as the target holds it: an x87 long double has a
+// 64-bit significand, so a constant read from the source in binary128 is rounded first.
+static Float128 ld_value(const Tac_Const *c)
+{
+    return target_ld_round(c->u.long_double_val);
+}
+
 // Whether the target's long double is a double (BESM-6): then it folds as one.
 static bool ld_is_double(void)
 {
@@ -444,7 +451,7 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
         return NULL;
 
     if (c1->kind == TAC_CONST_LONG_DOUBLE) {
-        Float128 a = c1->u.long_double_val, b = c2->u.long_double_val;
+        Float128 a = ld_value(c1), b = ld_value(c2);
         int c      = f128_cmp(a, b); // 2 when unordered
         switch (op) {
         case TAC_BINARY_ADD:
@@ -476,7 +483,7 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
             return NULL;
         }
         Tac_Const *rc         = tac_new_const(TAC_CONST_LONG_DOUBLE);
-        rc->u.long_double_val = ld_arith(op, a, b);
+        rc->u.long_double_val = target_ld_round(ld_arith(op, a, b));
         Tac_Val *rv           = tac_new_val(TAC_VAL_CONSTANT);
         rv->u.constant        = rc;
         return rv;
@@ -918,7 +925,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             return NULL;
         rc            = tac_new_const(TAC_CONST_INT);
         rc->u.int_val =
-            sign_narrow((uint64_t)f128_to_i64(src->u.long_double_val, 64),
+            sign_narrow((uint64_t)f128_to_i64(ld_value(src), 64),
                         target_signed_bits(TAC_CONST_INT));
         break;
 
@@ -927,7 +934,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
             return NULL;
         rc             = tac_new_const(TAC_CONST_UINT);
         rc->u.uint_val =
-            unsigned_narrow(f128_to_u64(src->u.long_double_val, 64),
+            unsigned_narrow(f128_to_u64(ld_value(src), 64),
                             target_unsigned_bits(TAC_CONST_UINT));
         break;
 
@@ -958,8 +965,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
         rc              = tac_new_const(TAC_CONST_FLOAT);
-        rc->u.float_val = round_float(ld_is_double() ? f128_to_double(src->u.long_double_val)
-                                                     : (double)f128_to_float(src->u.long_double_val));
+        rc->u.float_val = round_float(ld_is_double() ? f128_to_double(ld_value(src))
+                                                     : (double)f128_to_float(ld_value(src)));
         break;
 
     case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
@@ -973,7 +980,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
         rc               = tac_new_const(TAC_CONST_DOUBLE);
-        rc->u.double_val = f128_to_double(src->u.long_double_val);
+        rc->u.double_val = f128_to_double(ld_value(src));
         break;
 
     default:

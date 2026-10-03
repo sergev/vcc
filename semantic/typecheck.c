@@ -616,6 +616,7 @@ static void cv_set_ld(ConstVal *out, Float128 q)
         cv_set_real(out, f128_to_double(q));
         return;
     }
+    q            = target_ld_round(q);
     out->is_real = true;
     out->is_ld   = true;
     out->q       = q;
