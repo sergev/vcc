@@ -140,6 +140,16 @@ void gen_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //
+// 64-bit integers (llong.c)
+//
+void gen_ll_binary(Gen *g, const Tac_Instruction *in);
+void gen_ll_unary(Gen *g, const Tac_Instruction *in);
+// Whether conversion `kind` is from an unsigned integer.
+bool from_unsigned(Tac_InstructionKind kind);
+// A conversion between long long and float or double.
+void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+
+//
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);

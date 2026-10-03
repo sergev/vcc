@@ -28,7 +28,7 @@ Phase 1 is done. `libc/arm32/` has `crt0.S` (vectors that report a fault and exi
 from SVC mode — the exception modes have no stack —, VFP on, `.bss` cleared, the
 short-descriptor identity map and the MMU and caches on, `PRINT_STATUS`), `console.s`
 (PL011, semihosting exit), `malloc.s`, `link.ld` (at `0x40010000`, `.ARM.exidx`
-placed), and `aeabi.s`: the RTABI helpers, which use the *base* standard even in a
+placed), and `aeabi_*.s`: the RTABI helpers, which use the *base* standard even in a
 hard-float program, so the conversions move values between the core and VFP registers
 around the hard-float C routines of `libc/ilp32/int64.c`. All of them were checked
 against the host through clang-compiled callers. `libc.a` is assembly only so far.
@@ -303,4 +303,4 @@ memory functions with pointers (V15), `printf` with variadics (V18).
   Mitigation: the allocator sees only `d` registers, a `float` living in the even half,
   and only call setup (V12, V17) names odd `s` registers. A regalloc test pins that.
 - **Missing RTABI symbols** surface only when clang-compiled code is linked. Mitigation:
-  `aeabi.s` provides the whole family up front, and V19 has a clang callee for each.
+  `aeabi_*.s` provide the whole family up front, and V19 has a clang callee for each.

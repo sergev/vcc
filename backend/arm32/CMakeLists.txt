@@ -7,6 +7,7 @@ add_library(arm32 STATIC
     codegen.c
     frame.c
     instr.c
+    llong.c
     call.c
 )
 target_include_directories(arm32 PUBLIC .)
@@ -26,6 +27,7 @@ add_executable(arm32-tests
     test/frame_tests.cpp
     test/int_tests.cpp
     test/flow_tests.cpp
+    test/llong_tests.cpp
     test/run_tests.cpp
     ${ARM32_BOOK_SOURCES}
 )

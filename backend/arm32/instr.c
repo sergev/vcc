@@ -117,6 +117,16 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     store_pair(g, dst, T0, T1);
 }
 
+// A conversion between an integer and FP.
+static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+{
+    if (a32_is_pair(val_type(g, src)) || a32_is_pair(val_type(g, dst))) {
+        gen_ll_fp_convert(g, src, dst, kind);
+        return;
+    }
+    fatal_error("arm32: %s: %s is not implemented yet", gen_name(g), tac_instruction_name(kind));
+}
+
 // Whether operator `op` is unsigned whatever its operands' types: they may differ in
 // signedness, once copy propagation has removed a cast.
 static bool unsigned_op(Tac_BinaryOperator op)
@@ -200,7 +210,11 @@ A32_Operand operand2(Gen *g, A32_Op *op, const Tac_Val *v, const Tac_Type *t, in
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    if (a32_is_fp(t) || a32_is_pair(t))
+    if (a32_is_pair(t)) {
+        gen_ll_unary(g, in);
+        return;
+    }
+    if (a32_is_fp(t))
         fatal_error("arm32: %s: unary operator on %d bytes is not implemented yet", gen_name(g),
                     a32_size(t));
     load_as(g, T0, in->u.unary.src, t);
@@ -227,7 +241,11 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
-    if (a32_is_fp(t) || a32_is_pair(t))
+    if (a32_is_pair(t)) {
+        gen_ll_binary(g, in);
+        return;
+    }
+    if (a32_is_fp(t))
         fatal_error("arm32: %s: binary operator on %d bytes is not implemented yet", gen_name(g),
                     a32_size(t));
     Tac_BinaryOperator op = in->u.binary.op;
@@ -336,6 +354,20 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_TRUNCATE:
     case TAC_INSTRUCTION_ZERO_EXTEND:
         gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);
