@@ -161,10 +161,14 @@ with pointers), not all at once in A23.
     `double`, which is A21's.
   - The scanner's keyword table had `__func__` out of `strcmp` order (found by luck by
     the binary search); `__builtin_va_class` exposed it.
-- **A19. Interop tests** with clang in both directions over a table of signatures:
-  mixed int/FP, narrow ints (both extension directions), HFAs, small and large
-  structs, struct results, `long double`, many arguments, variadics both ways (HFA
-  structs read by `va_arg` included), and a `va_list` handed across.
+- **A19. Interop tests. Done** (`interop_tests.cpp`, with `call_tests`, `fp_tests`,
+  `struct_tests` and `hfa_tests` before it): one source compiled by both sides, each
+  calling the other's copy — 18 interleaved int/FP arguments, narrow values both ways,
+  results of every class (3, 12 and 40-byte structs, HFAs of floats and doubles, a
+  `long double` alone and in a struct), and variadic functions both ways over every
+  class (HFAs read by `va_arg` included, past the registers onto the stack), with a
+  `va_list` handed across in both directions. `long double` arithmetic is clang's
+  until A21.
 - **A20. Differential book tests.** Every book program compiled by clang too, run under
   qemu, outputs compared — the RISC-V suite's comparison.
 
