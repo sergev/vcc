@@ -5,6 +5,9 @@ add_library(arm32 STATIC
     a32.c
     emit.c
     codegen.c
+    frame.c
+    instr.c
+    call.c
 )
 target_include_directories(arm32 PUBLIC .)
 target_link_libraries(arm32 backend_common tac libutil)
@@ -20,6 +23,7 @@ list(FILTER ARM32_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(arm32-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${ARM32_BOOK_SOURCES}
 )

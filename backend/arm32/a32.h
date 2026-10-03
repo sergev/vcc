@@ -84,7 +84,14 @@ typedef struct {
 } A32_Operand;
 
 // Opcode and mnemonic.  A condition and the S suffix go before any `.type` suffix.
-#define A32_OPS(X) X(MOV, "mov") X(MVN, "mvn") X(MOVW, "movw") X(MOVT, "movt") X(BX, "bx")
+// EPILOGUE is a marker the frame pass replaces by the function's return sequence.
+#define A32_OPS(X)                                                                         \
+    X(MOV, "mov") X(MVN, "mvn") X(MOVW, "movw") X(MOVT, "movt") X(ADD, "add") X(SUB, "sub") \
+    X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")       \
+    X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(PUSH, "push") X(POP, "pop")             \
+    X(BX, "bx") X(VLDR, "vldr") X(VSTR, "vstr") X(VMOV, "vmov") X(VPUSH, "vpush")           \
+    X(VPOP, "vpop") X(SXTB, "sxtb") X(SXTH, "sxth") X(UXTB, "uxtb") X(UXTH, "uxth")       \
+    X(EPILOGUE, "<epilogue>")
 
 typedef enum {
 #define A32_ENUM(op, mnem) A32_##op,
@@ -138,7 +145,8 @@ A32_Operand a32_mem_post(int base, int64_t offset);
 A32_Operand a32_mem_index(int base, int index, bool negative, int shift);
 A32_Operand a32_shift(int reg, A32_Shift shift, int amount);
 A32_Operand a32_shift_reg(int reg, A32_Shift shift, int amount_reg);
-A32_Operand a32_reglist(unsigned mask); // bit n is rn
+A32_Operand a32_reglist(unsigned mask);  // bit n is rn
+A32_Operand a32_dreglist(unsigned mask); // bit n is dn
 
 bool a32_is_vfp(int reg); // s0-s31
 // The assembler name of register `reg` at `width`, or NULL for a virtual register or

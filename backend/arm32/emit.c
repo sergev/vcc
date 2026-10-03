@@ -41,13 +41,14 @@ static void emit_reg(FILE *out, int reg, A32_Width width)
 
 static const char *const shifts[] = { "lsl", "lsr", "asr", "ror" };
 
-static void emit_reglist(FILE *out, unsigned mask)
+static void emit_reglist(FILE *out, unsigned mask, A32_Width width)
 {
     fputc('{', out);
     const char *sep = "";
     for (int r = 0; r <= A32_PC; r++) {
         if (mask & (1u << r)) {
-            fprintf(out, "%s%s", sep, a32_reg_name(r, A32_CORE));
+            fprintf(out, "%s%s", sep,
+                    width == A32_D ? a32_reg_name(A32_S0 + 2 * r, A32_D) : a32_reg_name(r, A32_CORE));
             sep = ", ";
         }
     }
@@ -105,7 +106,7 @@ static void emit_operand(FILE *out, const A32_Operand *o)
             fprintf(out, "#%" PRId64, o->imm);
         break;
     case A32_OPND_REGLIST:
-        emit_reglist(out, (unsigned)o->imm);
+        emit_reglist(out, (unsigned)o->imm, o->width);
         break;
     }
 }

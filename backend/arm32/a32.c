@@ -177,3 +177,10 @@ A32_Operand a32_reglist(unsigned mask)
 {
     return (A32_Operand){ .kind = A32_OPND_REGLIST, .imm = mask, .reg2 = -1 };
 }
+
+A32_Operand a32_dreglist(unsigned mask)
+{
+    A32_Operand o = a32_reglist(mask);
+    o.width       = A32_D;
+    return o;
+}

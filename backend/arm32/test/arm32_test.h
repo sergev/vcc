@@ -111,3 +111,11 @@ protected:
                    ".clang");
     }
 };
+
+// A golden test of the instruction lines of one translation unit (each test compiles
+// one: the fixture's symbol table lives per test).
+#define EXPECT_CODE(name, expected, src)                \
+    TEST_F(Arm32Test, name)                             \
+    {                                                   \
+        EXPECT_EQ(expected, Code(CompileToArm32(src))); \
+    }

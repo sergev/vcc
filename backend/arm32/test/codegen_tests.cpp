@@ -47,13 +47,6 @@ TEST_F(Arm32Test, StaticFunctionIsLocal)
     EXPECT_NE(std::string::npos, s.find("f:\n")) << s;
 }
 
-// Each test compiles one translation unit: the fixture's symbol table lives per test.
-#define EXPECT_CODE(name, expected, src)                \
-    TEST_F(Arm32Test, name)                             \
-    {                                                   \
-        EXPECT_EQ(expected, Code(CompileToArm32(src))); \
-    }
-
 EXPECT_CODE(VoidReturn, "bx lr\n", "void f(void) { return; }")
 EXPECT_CODE(VoidFallOff, "bx lr\n", "void f(void) { }")
 
