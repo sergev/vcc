@@ -83,6 +83,13 @@ bool HaveAarch64Run()
            access((std::string(AARCH64_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The same for ARM32.
+bool HaveArm32Run()
+{
+    return ARM32_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) && HaveTool(ARM32_QEMU) &&
+           access((std::string(ARM32_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
 // `stderr_file` when they are given (which is how the -v echo is captured).
@@ -178,22 +185,31 @@ protected:
     // path.  stdout lands in out.log, stderr in err.log.
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
-        bool besm6 = false, aarch64 = false;
+        bool besm6 = false, aarch64 = false, arm32 = false;
         for (size_t i = 0; i + 1 < args.size(); i++) {
             if (args[i] == "-t" && args[i + 1] == "besm6")
                 besm6 = true;
             if (args[i] == "-t" && args[i + 1] == "aarch64")
                 aarch64 = true;
+            if (args[i] == "-t" && args[i + 1] == "arm32")
+                arm32 = true;
         }
-        setenv("VCC_GEN", besm6 ? VCC_GENBESM_PATH : aarch64 ? VCC_GENAARCH64_PATH : VCC_GENRISCV_PATH,
+        setenv("VCC_GEN",
+               besm6     ? VCC_GENBESM_PATH
+               : aarch64 ? VCC_GENAARCH64_PATH
+               : arm32   ? VCC_GENARM32_PATH
+                         : VCC_GENRISCV_PATH,
                1);
 
         std::vector<std::string> argv = { VCC_COMMAND };
         if (std_headers) {
-            const char *inc = besm6 ? BESM6_INCLUDE_DIR : aarch64 ? AARCH64_INCLUDE_DIR : RISCV_INCLUDE_DIR;
+            const char *inc = besm6     ? BESM6_INCLUDE_DIR
+                              : aarch64 ? AARCH64_INCLUDE_DIR
+                              : arm32   ? ARM32_INCLUDE_DIR
+                                        : RISCV_INCLUDE_DIR;
             argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
             if (!besm6)
-                argv.push_back(std::string("-I") + LP64_INCLUDE_DIR);
+                argv.push_back(std::string("-I") + (arm32 ? ILP32_INCLUDE_DIR : LP64_INCLUDE_DIR));
             argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
         }
         argv.insert(argv.end(), args.begin(), args.end());
@@ -226,6 +242,7 @@ protected:
         fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv64");
         fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv32");
         fs::create_symlink(VCC_GENAARCH64_PATH, prefix + "/bin/vgenaarch64");
+        fs::create_symlink(VCC_GENARM32_PATH, prefix + "/bin/vgenarm32");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
@@ -233,10 +250,11 @@ protected:
         const char *target_inc = target == "besm6"     ? BESM6_INCLUDE_DIR
                                  : target == "riscv32" ? RISCV32_INCLUDE_DIR
                                  : target == "aarch64" ? AARCH64_INCLUDE_DIR
+                                 : target == "arm32"   ? ARM32_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
         const char *model_inc = target == "riscv64" || target == "aarch64" ? LP64_INCLUDE_DIR
-                                : target == "riscv32"                         ? ILP32_INCLUDE_DIR
-                                                                              : target_inc;
+                                : target == "riscv32" || target == "arm32" ? ILP32_INCLUDE_DIR
+                                                                           : target_inc;
         for (const char *inc : { target_inc, model_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
@@ -278,6 +296,16 @@ protected:
     {
         std::string out = Path("qemu.out");
         *status = RunProcess({ AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display", "none",
+                               "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
+                             out, Path("qemu.err"), 10);
+        return ReadFile(out);
+    }
+
+    // The same for an ARM32 ELF.
+    std::string RunQemuArm32(const std::string &elf, int *status)
+    {
+        std::string out = Path("qemu.out");
+        *status = RunProcess({ ARM32_QEMU, "-M", "virt", "-cpu", "cortex-a15", "-display", "none",
                                "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
                              out, Path("qemu.err"), 10);
         return ReadFile(out);
@@ -405,6 +433,42 @@ TEST_F(CcDriver, LinkAndRunAarch64)
         << Stderr();
     int status;
     EXPECT_EQ(RunQemuAarch64(Path("t.elf"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+}
+
+TEST_F(CcDriver, CompileToAssemblyArm32)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "arm32", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find(".syntax unified"), std::string::npos) << text;
+    EXPECT_NE(text.find("main:"), std::string::npos) << text;
+    EXPECT_NE(text.find("bl      printf"), std::string::npos) << text;
+}
+
+// Separate compilation for arm32, a .S among the sources, and the link of the build's
+// runtime by hand.
+TEST_F(CcDriver, LinkAndRunArm32)
+{
+    if (!HaveArm32Run())
+        GTEST_SKIP() << "ARM32 clang/ld.lld/qemu not found";
+    WriteSource("main.c", "#include <stdio.h>\n"
+                          "int twice(int);\n"
+                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S", "#ifdef __arm__\n"
+                           "        .globl  twice\n"
+                           "twice:  add     r0, r0, r0\n"
+                           "        bx      lr\n"
+                           "#endif\n");
+    ASSERT_EQ(Vcc({ "-t", "arm32", "-c", "main.c", "twice.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    std::string lib = ARM32_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "arm32", "-nostdlib", "-T", ARM32_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuArm32(Path("t.elf"), &status), "42\n");
     EXPECT_EQ(status, 3);
 }
 
@@ -632,6 +696,46 @@ TEST_F(CcDriver, StagedPrefixAarch64)
     EXPECT_NE(echo.find(prefix + "/bin/vgenaarch64 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" --target=aarch64-none-elf -c "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
+}
+
+// The same for arm32: -mcpu/-mfpu for clang, and the ILP32 headers with ARM's own.
+TEST_F(CcDriver, StagedPrefixArm32)
+{
+    if (!HaveArm32Run())
+        GTEST_SKIP() << "ARM32 clang/ld.lld/qemu not found";
+    std::string prefix = StagePrefix("arm32");
+    std::string lib = prefix + "/share/vcc/arm32/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(ARM32_LIB_DIR) + "/" + name, lib + "/" + name);
+    fs::create_symlink(ARM32_LINK_SCRIPT, lib + "/link.ld");
+
+    WriteSource("t.c", R"(#include <stdio.h>
+#include <limits.h>
+#include <stddef.h>
+int main(void)
+{
+    long long x = 1LL << 40;
+    printf("%d %d %lld %Lg\n", (int)sizeof(long), (int)sizeof(wchar_t), x, 2.5L);
+    return CHAR_MAX == 255 ? 7 : 1;
+}
+)");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "arm32", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuArm32(Path("t.elf"), &status), "4 4 1099511627776 2.5\n");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t arm32 -nostdinc -I" + prefix +
+                        "/share/vcc/arm32/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t arm32 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenarm32 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
 
 TEST_F(CcDriver, StagedPrefixMissingPass)
