@@ -41,6 +41,38 @@ soft-float object with a hard-float one silently. `arm32-tests` (`arm32_test.h` 
 `QemuTest`, `book_test.h`) runs chapter 1 of the book, compared with clang; until V21
 the test programs use the riscv32 headers.
 
+Phase 2 is done. `genarm32` selects every TAC instruction naively (`frame.c`,
+`instr.c`, `llong.c`, `fp.c`, `call.c`, `data.c`): each `%` name in a slot below r11,
+operands loaded into scratch registers, the result stored back. The frame is
+`push {r11, lr}`, the slots, then d14/d15 and r10 when used, and the outgoing area; a
+function using none of these returns with a bare `bx lr`. Book chapters 1–18 pass,
+compared with clang. Findings and changes against the plan:
+- **r10 is the third scratch register**, as the Risks foresaw. It holds an address while
+  r12 and lr hold the two words of a `long long` (stored to a global or a far slot), and
+  the third register of a copy between two addresses. It also holds the quotient of `%`
+  (`sdiv` + `mls`). It is callee-saved, so a function that uses it saves it.
+- **FP constants** use `vmov.f32`/`.f64 #imm` when they are VFP immediates (the
+  assembler wants a point, `#1.0`). Otherwise their bits go through core registers into
+  `vmov`, so there is no `.rodata` pool. A returned constant's bits go through r0/r1,
+  which needs no frame.
+- **The RTABI helpers are split into four objects** (`aeabi_divmod.s`, `aeabi_long.s`,
+  `aeabi_conv.s`, `aeabi_mem.s`). In one object, `__aeabi_lmul` dragged in references to
+  every C routine.
+- **`int64.c` joined `libc.a` at V15, not V11/V14.** It stores through pointers. Until
+  then the division and conversion run tests waited.
+- **The C sources in `libc.a` so far:** `putchar`, the string, memory and math
+  functions, `atoi`, `puts`, and `libc/ilp32` (`frexp`, `ldexp`, `modf`, `int64`). The
+  printf family waits for V18.
+- **Structs already follow AAPCS** for every composite that is not a homogeneous FP
+  aggregate, interop-tested with clang. They go in core registers (from an even one if
+  8-aligned) and split between r3 and the stack while that is still empty. A result of
+  up to 4 bytes comes back in r0, a larger one through the address in r0. HFAs travel
+  as plain composites until V17.
+- **Variadic calls** already use the base standard (a double in a core pair). A
+  variadic *definition* is V18.
+- The `long long` run tests are RV32's `llong_tests`, ported (host results as
+  expectation).
+
 ## Target and decisions
 
 | Decision | Choice | Why |
@@ -118,97 +150,28 @@ start:
 
 | Use | Core | VFP |
 |---|---|---|
-| Scratch for instruction selection | `r12`, `lr` (saved by any function that uses it) | `d14`, `d15` (`s28`–`s31`), saved like any callee-saved register when used |
+| Scratch for instruction selection | `r12`, `lr` (saved by any function that uses it), `r10` (saved when used) | `d14`, `d15` (`s28`–`s31`), saved like any callee-saved register when used |
 | Values not live across a call | `r0`–`r3` | `d0`–`d7` |
-| Values live across a call | `r4`–`r10` (`r11` too in a function without a frame pointer) | `d8`–`d13` |
+| Values live across a call | `r4`–`r9` (`r11` too in a function without a frame pointer) | `d8`–`d13` |
 
-Two integer scratch registers is few. It works because loads and stores leave the
+Two integer scratch registers carry most patterns because loads and stores leave the
 flags alone: a `long long` add from memory to memory is `ldr`/`ldr`/`adds`/`str`, then
 `ldr`/`ldr`/`adc`/`str` on `r12` and `lr`, with the carry surviving between the
 halves. A pattern that needs more (a 64×64 multiply, a variable 64-bit shift) calls its
-RTABI helper unless its operands are already in registers. If V8–V11 find a pattern
-that cannot fit, `r10` leaves the allocator's pool to become a third scratch; record
-the case.
+RTABI helper. `r10` is the third scratch for the cases Phase 2 found (above).
 
 A `float` occupies a whole `d` register in the allocator's view (its even `s` half), so
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
-
-## Phase 2 — instruction selection, book order
-
-Naive and correct first: every TAC variable in a frame slot, operands loaded into the
-scratch registers of the table above, result stored back. Each step is done when its
-book chapters pass and a few golden tests pin the selected instructions. The libc C
-sources join `libc.a` as the code generator can compile them, as on AArch64: `putchar`
-with calls (V12), `int64.c` with 64-bit integers and FP (V11, V14), the string and
-memory functions with pointers (V15), `printf` with variadics (V18).
-
-- **V8. Frame.** Slot layout from typed TAC, `ALLOCATE_LOCAL`, and 8-byte alignment.
-  The prologue is `push {…, r11, lr}` with `r11` as the frame pointer (ARM-state AAPCS
-  convention) and an even register count, then `vpush {d8–…}` when used. The epilogue
-  is `pop {…, r11, pc}`, which returns and interworks; a function that pushed nothing
-  returns with `bx lr`. Offset ranges differ by instruction: `ldr`/`str`/`ldrb`/`strb`
-  take ±4095, `ldrh`/`ldrsh`/`ldrsb`/`strh`/`ldrd`/`strd` ±255, `vldr`/`vstr` ±1020 in
-  multiples of 4. Beyond that the address goes through a scratch register. Constants
-  come from `mov`/`mvn` with an operand2 immediate, else `movw`, else `movw`+`movt`.
-- **V9. Integer ops** (ch. 2–4, 11, 12): an operand2 encoder (8 bits rotated right by
-  an even amount) decides when `add`/`sub`/`and`/`orr`/`eor`/`cmp` take an immediate.
-  It also tries the complement (`mvn`, `bic`) and the negation (`cmn`, `sub`↔`add`).
-  Then `rsb` for negation, `mvn` for `~`, `mul`, `sdiv`/`udiv`, and remainder as
-  `sdiv`+`mls`. Shifts are `lsl`/`lsr`/`asr` by immediate or register (C leaves an
-  amount ≥ 32 undefined, so the register form's 0..255 behaviour is fine). Comparisons
-  are `cmp`, then `mov<cond> rd, #1` and `mov<inv> rd, #0`. Width conversions use
-  `sxtb`/`sxth`/`uxtb`/`uxth`.
-- **V10. Control flow** (ch. 5–8): `.L` labels unique per TU, `b`, and `cmp` +
-  `b<cond>`; a test of zero is `cmp rN, #0` + `beq`/`bne` (ARM state has no `cbz`).
-- **V11. 64-bit integers.** `long long` in two words (low first), carried in register
-  pairs like RV32 (`backend/riscv/llong.c` is the model, not shared code: ARM has a
-  carry flag, so the sequences are far shorter). `adds`/`adc`, `subs`/`sbc`, `rsbs`/
-  `rsc` for negation, word-wise logic. Constant shifts are inline (`lsl`+`orr … lsr`
-  across the halves, and the ≥ 32 cases). Comparisons are `cmp` low, `sbcs` high and a
-  signed or unsigned condition; equality is `cmp` high, then `cmpeq` low. Widening is
-  `asr #31` or `mov #0` for the high word; narrowing takes the low word. Variable
-  shifts go to `__aeabi_llsl`/`llsr`/`lasr`, multiply to `__aeabi_lmul` (inline
-  `umull` + two `mla` once V23 has the operands in registers), and division and
-  remainder to `__aeabi_ldivmod`/`uldivmod`. Conversions with FP use the RTABI helpers
-  of the Decisions table.
-- **V12. Calls, scalar ABI** (ch. 9): `r0`–`r3`, even pairs for 64-bit values, `s`/`d`
-  registers with back-filling, 8-aligned stack slots, narrow arguments and results
-  extended by the sender, `bl` for direct calls (the linker turns it into `blx` for a
-  Thumb callee), `blx rN` for indirect ones, `FUN_CALL_NORETURN`. Parallel moves into
-  `r0`–`r3` and `d0`–`d7` are ordered so no source is clobbered before it is read.
-- **V13. Globals and static data** (ch. 10): `.data`, `.bss`, `.rodata`, every
-  `Tac_StaticInit` kind (`long long` and `double` as two words, low first), and
-  addresses as `movw`/`movt` of the symbol. No GOT or PIC in a static bare-metal link.
-  Static locals' `name$N` are spelled legally.
-- **V14. Floating point** (ch. 13): `vadd`/`vsub`/`vmul`/`vdiv`/`vneg`/`vabs` on `.f32`
-  and `.f64`. `vcvt` between them, and between them and `s32`/`u32` (native unsigned
-  conversions). Comparisons are `vcmp` + `vmrs APSR_nzcv, fpscr`, then a NaN-correct
-  condition (`mi`/`ls` for `<`/`<=`, as on AArch64). Constants come from `vmov.f32`/
-  `.f64 #imm` when the 8-bit FP immediate encodes them, else from `.rodata` through
-  `movw`/`movt` + `vldr`. `long double` is `double`: its TAC kinds map onto the `.f64`
-  forms and its conversions to and from `double` are copies. A `long double` constant
-  or static initializer may carry binary128 bits (an unfolded literal does), so it is
-  always read through `f128_to_double`, as the BESM-6 backend and the folder do, so unlike AArch64 there
-  is no binary128 phase at all.
-- **V15. Pointers, arrays, chars, strings** (ch. 14–16): loads and stores by width and
-  signedness (`ldrsb`/`ldrb`/`ldrsh`/`ldrh`), `ADD_PTR` with a scaled-register operand
-  (`add rd, rn, rm, lsl #2`) when the scale is a power of two, and the byte-pointer TAC
-  kinds as plain operations, as on RISC-V.
-- **V16. Structs** (ch. 17–18): member access via `COPY_*_OFFSET`, whole-aggregate
-  copies (word by word through `r12`/`lr`, a loop past a few words, then a byte or
-  halfword tail; `ldm`/`stm` blocks wait for V25), and struct arguments and results passed whole through
-  memory and the `r0` result address for now.
 
 ## Phase 3 — ABI conformance
 
 - **V17. Full aggregate classification.** One function, `tac_aapcs32_class` beside
   `tac_aapcs64_class` in `tac/tac_abi.c`, decides HFA or not (AAPCS counts `long
   double` as `double`, so a struct mixing the two is still homogeneous). It drives HFAs
-  in VFP registers (with back-filling and the stack-closes-VFP rule), other composites
-  in core registers with the even-register rule and the `r3`/stack split, the copy of a
-  large struct into the outgoing argument area, and results: ≤ 4 bytes in `r0`, HFAs in
-  `s0`–`s3`/`d0`–`d3`, the rest through the address in `r0`.
+  in VFP registers (with back-filling and the stack-closes-VFP rule) and HFA results in
+  `s0`–`s3`/`d0`–`d3`; `call.c`'s other composites (V16: core registers, the
+  `r3`/stack split, results in `r0` or through it) move onto it unchanged.
 - **V18. Variadic functions and `<stdarg.h>`.**
   - Calls to a variadic callee, direct or through a pointer, use the base standard: FP
     arguments in core registers and stack (a `float` already promoted to `double` by the
@@ -291,10 +254,8 @@ memory functions with pointers (V15), `printf` with variadics (V18).
 
 ## Risks
 
-- **Two integer scratch registers** may not be enough for every naive pattern (large
-  frame offsets on both a load and a store, 64-bit ops on memory operands).
-  Mitigation: flags survive loads and stores, the RTABI helpers absorb the wide cases,
-  and `r10` is the agreed third if needed.
+- **Scratch registers** (r12, lr, r10) must stay out of the allocator's pools at V23,
+  and r10 out of the callee-saved pool. Mitigation: the register table above.
 - **AAPCS-VFP argument rules** — back-filling, the closed-VFP-after-stack rule, the
   even-pair rule, the `r3`/stack split, and the switch to the base standard for
   variadics — are each easy to get almost right. Mitigation: V19's interop table,
