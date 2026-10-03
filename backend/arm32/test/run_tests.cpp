@@ -41,28 +41,33 @@ TEST_F(Arm32Test, RunBookStatusMin)
 TEST_F(Arm32Test, RuntimeUnalignedLoadFloatingPointDivide)
 {
     SKIP_IF_NO_ARM32_TOOLS();
-    EXPECT_EQ("", RunAssembly("    .syntax unified\n"
-                              "    .arm\n"
-                              "    .text\n"
-                              "    .globl  main\n"
-                              "main:\n"
-                              "    movw    r0, #:lower16:buf\n"
-                              "    movt    r0, #:upper16:buf\n"
-                              "    ldr     r1, [r0, #1]\n" // bytes 1-4 of {1, 4}
+    EXPECT_EQ("", RunAssembly(R"(    .syntax unified
+    .arm
+    .text
+    .globl  main
+main:
+    movw    r0, #:lower16:buf
+    movt    r0, #:upper16:buf
+    ldr     r1, [r0, #1]
+)" // bytes 1-4 of {1, 4}
                               "    lsr     r1, r1, #24\n"  // 4
-                              "    vmov.f64 d0, #1.5\n"
-                              "    vadd.f64 d0, d0, d0\n"
-                              "    vcvt.s32.f64 s0, d0\n"
-                              "    vmov    r2, s0\n" // 3
-                              "    mov     r3, #-42\n"
-                              "    mov     r12, #21\n"
-                              "    sdiv    r3, r3, r12\n" // -2
-                              "    add     r0, r1, r2\n"
-                              "    add     r0, r0, r3\n" // 4 + 3 - 2
-                              "    bx      lr\n"
-                              "    .data\n"
-                              "buf:\n"
-                              "    .word   1, 4\n"));
+                              R"(    vmov.f64 d0, #1.5
+    vadd.f64 d0, d0, d0
+    vcvt.s32.f64 s0, d0
+    vmov    r2, s0
+)" // 3
+                              R"(    mov     r3, #-42
+    mov     r12, #21
+    sdiv    r3, r3, r12
+)" // -2
+                              R"(    add     r0, r1, r2
+    add     r0, r0, r3
+)" // 4 + 3 - 2
+                              R"(    bx      lr
+    .data
+buf:
+    .word   1, 4
+)"));
     EXPECT_EQ(5, exit_status);
 }
 
@@ -70,14 +75,16 @@ TEST_F(Arm32Test, RuntimeUnalignedLoadFloatingPointDivide)
 TEST_F(Arm32Test, RuntimeExceptionReported)
 {
     SKIP_IF_NO_ARM32_TOOLS();
-    std::string out = RunAssembly("    .syntax unified\n"
-                                  "    .arm\n"
-                                  "    .text\n"
-                                  "    .globl  main\n"
-                                  "main:\n"
-                                  "    mov     r0, #0x80000000\n" // unmapped: translation fault
-                                  "    ldr     r1, [r0]\n"
-                                  "    bx      lr\n");
+    std::string out = RunAssembly(R"(    .syntax unified
+    .arm
+    .text
+    .globl  main
+main:
+    mov     r0, #0x80000000
+)" // unmapped: translation fault
+                                  R"(    ldr     r1, [r0]
+    bx      lr
+)");
     EXPECT_EQ(255, exit_status);
     EXPECT_NE(std::string::npos, out.find("exception: vector 00000004 lr=")) << out;
     EXPECT_NE(std::string::npos, out.find("dfsr=00000005 dfar=80000000")) << out;
@@ -88,13 +95,14 @@ TEST_F(Arm32Test, RuntimeExceptionReported)
 TEST_F(Arm32Test, RuntimeUndefinedInstructionReported)
 {
     SKIP_IF_NO_ARM32_TOOLS();
-    std::string out = RunAssembly("    .syntax unified\n"
-                                  "    .arm\n"
-                                  "    .text\n"
-                                  "    .globl  main\n"
-                                  "main:\n"
-                                  "    udf     #0\n"
-                                  "    bx      lr\n");
+    std::string out = RunAssembly(R"(    .syntax unified
+    .arm
+    .text
+    .globl  main
+main:
+    udf     #0
+    bx      lr
+)");
     EXPECT_EQ(255, exit_status);
     EXPECT_NE(std::string::npos, out.find("exception: vector 00000001 lr=")) << out;
 }

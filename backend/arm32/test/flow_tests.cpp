@@ -9,15 +9,19 @@ TEST_F(Arm32Test, IfElse)
     DisableOptimization();
     std::string code = Code(CompileToArm32(
         "int f(void) { int a = 3; int r; if (a) r = 1; else r = 2; return r; }"));
-    EXPECT_NE(std::string::npos, code.find("ldr r12, [r11, #-4]\ncmp r12, #0\nbeq .L")) << code;
-    EXPECT_NE(std::string::npos, code.find("\nb .L")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldr r12, [r11, #-4]
+cmp r12, #0
+beq .L)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(
+b .L)")) << code;
 }
 
 TEST_F(Arm32Test, LoopLabels)
 {
     DisableOptimization();
     std::string text = CompileToArm32("int f(void) { int a = 3; while (a) a = a - 1; return a; }");
-    EXPECT_NE(std::string::npos, text.find("\n.L")) << text;
+    EXPECT_NE(std::string::npos, text.find(R"(
+.L)")) << text;
 }
 
 // A long long is zero when the or of its words is.
@@ -26,7 +30,8 @@ TEST_F(Arm32Test, LongLongCondition)
     DisableOptimization();
     std::string code =
         Code(CompileToArm32("int f(void) { long long a = 3; if (a) return 1; return 2; }"));
-    EXPECT_NE(std::string::npos, code.find("orrs r12, r12, lr\nbeq .L")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(orrs r12, r12, lr
+beq .L)")) << code;
 }
 
 TEST_F(Arm32Test, RunLoops)

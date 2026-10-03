@@ -39,14 +39,27 @@ big:
 zeros:
     .zero   8
 )")) << s;
-    EXPECT_NE(std::string::npos, s.find("bytes:\n    .byte   1\n    .byte   2\n    .byte   3\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(bytes:
+    .byte   1
+    .byte   2
+    .byte   3
+)"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("d:\n    .word   0x00000000, 0x3ff80000\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(d:
+    .word   0x00000000, 0x3ff80000
+)")) << s;
     // A long double is the double nearest its binary128 value.
-    EXPECT_NE(std::string::npos, s.find("    .size   ld, 8\nld:\n    .word   0x9999999a, 0x3fb99999\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(    .size   ld, 8
+ld:
+    .word   0x9999999a, 0x3fb99999
+)"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("p:\n    .word   counter\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("q:\n    .word   arr+8\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(p:
+    .word   counter
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(q:
+    .word   arr+8
+)")) << s;
 }
 
 // A global is reached through its address, from movw and movt.
@@ -75,10 +88,16 @@ int next(void) { static int n = 10; n = n + 1; return n; }
 int other(void) { static int n = 20; return n; }
 )");
     size_t fn = s.find(".size   next, .-next");
-    size_t n  = s.find("\nn:\n    .word   10\n");
+    size_t n  = s.find(R"(
+n:
+    .word   10
+)");
     EXPECT_NE(std::string::npos, n) << s;
     EXPECT_LT(fn, n) << s;
-    EXPECT_NE(std::string::npos, s.find("\nn$1:\n    .word   20\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(
+n$1:
+    .word   20
+)")) << s;
 }
 
 TEST_F(Arm32Test, RunGlobalsAndStatics)

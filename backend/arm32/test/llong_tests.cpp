@@ -23,9 +23,13 @@ adc r12, r12, lr
 str r12, [r11, #-36]
 )",
                "long long f(void) { long long a = 1; long long b = 2; return a + b; }")
-EXPECT_SELECTS(LongLongSubtract, "subs r12, r12, lr\nstr r12, [r11, #-40]\n",
+EXPECT_SELECTS(LongLongSubtract, R"(subs r12, r12, lr
+str r12, [r11, #-40]
+)",
                "long long f(void) { long long a = 1; long long b = 2; return a - b; }")
-EXPECT_SELECTS(LongLongNegate, "rsbs r12, r12, #0\nrsc lr, lr, #0\n",
+EXPECT_SELECTS(LongLongNegate, R"(rsbs r12, r12, #0
+rsc lr, lr, #0
+)",
                "long long f(void) { long long a = 1; return -a; }")
 // A compare subtracts with the borrow: cmp of the low words, sbcs of the high ones.
 EXPECT_SELECTS(LongLongLess, R"(cmp r12, lr
@@ -55,7 +59,9 @@ orr lr, lr, r12, lsr #28
 lsl r12, r12, #4
 )",
                "long long f(void) { long long a = 1; return a << 4; }")
-EXPECT_SELECTS(LongLongShiftRightConstant40, "asr r12, lr, #8\nasr lr, lr, #31\n",
+EXPECT_SELECTS(LongLongShiftRightConstant40, R"(asr r12, lr, #8
+asr lr, lr, #31
+)",
                "long long f(void) { long long a = 1; return a >> 40; }")
 EXPECT_SELECTS(LongLongShiftVariable, "bl __aeabi_lasr\n",
                "long long f(void) { long long a = 1; int n = 3; return a >> n; }")
@@ -67,17 +73,24 @@ bl __aeabi_lmul
 str r0,)",
                "long long f(void) { long long a = 3; long long b = 4; return a * b; }")
 // The quotient comes back in r0:r1, the remainder in r2:r3.
-EXPECT_SELECTS(LongLongDivide, "bl __aeabi_ldivmod\nstr r0,",
+EXPECT_SELECTS(LongLongDivide, R"(bl __aeabi_ldivmod
+str r0,)",
                "long long f(void) { long long a = 7; long long b = 2; return a / b; }")
-EXPECT_SELECTS(UnsignedLongLongRemainder, "bl __aeabi_uldivmod\nstr r2,",
+EXPECT_SELECTS(UnsignedLongLongRemainder, R"(bl __aeabi_uldivmod
+str r2,)",
                "unsigned long long f(void) { unsigned long long a = 7; unsigned long long b = 2; "
                "return a % b; }")
 // The conversions with FP take and return a double in a core register pair.
-EXPECT_SELECTS(LongLongToDouble, "bl __aeabi_l2d\nstr r0, [r11, #-",
+EXPECT_SELECTS(LongLongToDouble, R"(bl __aeabi_l2d
+str r0, [r11, #-)",
                "double f(void) { long long a = 7; return a; }")
-EXPECT_SELECTS(FloatToUnsignedLongLong, "ldr r0, [r11, #-4]\nbl __aeabi_f2ulz\n",
+EXPECT_SELECTS(FloatToUnsignedLongLong, R"(ldr r0, [r11, #-4]
+bl __aeabi_f2ulz
+)",
                "unsigned long long f(void) { float a = 7; return a; }")
-EXPECT_SELECTS(SignExtendToLongLong, "ldr r12, [r11, #-4]\nmov lr, r12, asr #31\n",
+EXPECT_SELECTS(SignExtendToLongLong, R"(ldr r12, [r11, #-4]
+mov lr, r12, asr #31
+)",
                "long long f(void) { int a = -3; return a; }")
 
 TEST_F(Arm32Test, RunLongLongArithmetic)
@@ -111,3 +124,4 @@ int main(void) {
 })"));
     EXPECT_EQ(255, exit_status);
 }
+

@@ -109,8 +109,8 @@ void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off, int sc
 // The bits of integer or FP constant `c` converted to type `t`: an integer by C's
 // conversion, a long double read as the double it is here.
 uint64_t const_bits(const Tac_Const *c, const Tac_Type *t);
-// FP register `reg` = constant `c` of type `t`, its bits through core registers `lo`
-// (and `hi` for a double).
+// FP register `reg` = constant `c` of type `t`: a vmov immediate when it is one, else
+// its bits through core registers `lo` (and `hi` for a double).
 void load_fp_const(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t, int lo, int hi);
 // Load scalar value `v` into `reg`: a core register for an integer of at most 4 bytes
 // (or a float's bits), a VFP register at the width of its FP type.  `as` is the type a
@@ -156,6 +156,16 @@ void gen_ll_unary(Gen *g, const Tac_Instruction *in);
 bool from_unsigned(Tac_InstructionKind kind);
 // A conversion between long long and float or double.
 void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+
+//
+// Floating point (fp.c)
+//
+void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+void gen_fp_unary(Gen *g, const Tac_Instruction *in);
+// A conversion between int (of at most 32 bits), float and double.
+void gen_fp_convert32(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+// The flags of FP value `v` compared with zero.
+void fp_test_zero(Gen *g, const Tac_Val *v);
 
 //
 // Instruction selection (instr.c)

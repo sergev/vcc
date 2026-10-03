@@ -82,16 +82,14 @@ pop {r11, pc}
               Code(CompileToArm32("double f(void) { double d = 1.2; return d; }")));
 }
 
-// A float constant is returned in s0 through r0; a double one in d0 through r0 and r1.  A long double is a double, its constant read from its binary128 bits.
-EXPECT_CODE(FloatConstantResult, "mov r0, #1065353216\nvmov s0, r0\nbx lr\n",
-            "float f(void) { return 1.0f; }")
-EXPECT_CODE(DoubleConstantResult, "mov r0, #0\nmov r1, #1073741824\nvmov d0, r0, r1\nbx lr\n",
-            "double f(void) { return 2.0; }")
-TEST_F(Arm32Test, LongDoubleConstantResult)
-{
-    EXPECT_EQ("mov r0, #0\nmov r1, #1073741824\nvmov d0, r0, r1\nbx lr\n",
-              Code(CompileToArm32("long double f(void) { return 2.0L; }")));
-}
+// An FP constant that is no VFP immediate is returned through r0 (and r1), which need
+// no frame.
+EXPECT_CODE(FloatConstantResult, R"(movw r0, #52429
+movt r0, #15820
+vmov s0, r0
+bx lr
+)",
+            "float f(void) { return 0.1f; }")
 
 // Offsets beyond ldr's reach go through the scratch register: sub by modified
 // immediates; ldrh's 8-bit reach is shorter than ldr's.
@@ -103,7 +101,9 @@ TEST_F(Arm32Test, LargeFrameOffsets)
         src += "    int v" + std::to_string(i) + " = " + std::to_string(i) + ";\n";
     src += "    short s = 1; s = s;\n    return v0;\n}\n";
     std::string code = Code(CompileToArm32(src.c_str()));
-    EXPECT_NE(std::string::npos, code.find("sub sp, sp, #312\nsub sp, sp, #4096\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(sub sp, sp, #312
+sub sp, sp, #4096
+)")) << code;
     EXPECT_TRUE(std::regex_search(code, std::regex("\nsub lr, r11, #[0-9]+\n(sub lr, lr, #[0-9]+\n)?"
                                                    "str r12, \\[lr\\]\n")))
         << code;

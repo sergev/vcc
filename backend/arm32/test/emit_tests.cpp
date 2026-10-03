@@ -138,15 +138,16 @@ TEST_F(EmitTest, Function)
     a32_new_block(fn, ".L1");
     in          = a32_append(fn, A32_BX);
     in->opnd[0] = a32_reg(A32_LR);
-    EXPECT_EQ("    .text\n"
-              "    .globl  main\n"
-              "    .p2align 2\n"
-              "    .type   main, %function\n"
-              "main:\n"
-              "    mov     r0, #2\n"
-              ".L1:\n"
-              "    bx      lr\n"
-              "    .size   main, .-main\n",
+    EXPECT_EQ(R"(    .text
+    .globl  main
+    .p2align 2
+    .type   main, %function
+main:
+    mov     r0, #2
+.L1:
+    bx      lr
+    .size   main, .-main
+)",
               Capture([&](FILE *f) { a32_emit_func(f, fn); }));
     a32_free_func(fn);
 }

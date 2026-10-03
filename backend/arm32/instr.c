@@ -38,9 +38,9 @@ void gen_branch(Gen *g, int cond, const char *tac)
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
-    if (a32_is_fp(t))
-        fatal_error("arm32: %s: a floating-point condition is not implemented yet", gen_name(g));
-    if (a32_is_pair(t)) {
+    if (a32_is_fp(t)) {
+        fp_test_zero(g, cond); // a NaN is not zero: unordered leaves Z clear
+    } else if (a32_is_pair(t)) {
         load_word(g, T0, cond, t, 0);
         load_word(g, T1, cond, t, 1);
         emit3(g, A32_ORR, a32_reg(T0), a32_reg(T0), a32_reg(T1))->set_flags = true;
@@ -134,7 +134,7 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
         gen_ll_fp_convert(g, src, dst, kind);
         return;
     }
-    fatal_error("arm32: %s: %s is not implemented yet", gen_name(g), tac_instruction_name(kind));
+    gen_fp_convert32(g, src, dst, kind);
 }
 
 // Whether operator `op` is unsigned whatever its operands' types: they may differ in
@@ -224,9 +224,10 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_ll_unary(g, in);
         return;
     }
-    if (a32_is_fp(t))
-        fatal_error("arm32: %s: unary operator on %d bytes is not implemented yet", gen_name(g),
-                    a32_size(t));
+    if (a32_is_fp(t)) {
+        gen_fp_unary(g, in);
+        return;
+    }
     load_as(g, T0, in->u.unary.src, t);
     A32_Operand r = a32_reg(T0);
     switch (in->u.unary.op) {
@@ -255,9 +256,10 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         gen_ll_binary(g, in);
         return;
     }
-    if (a32_is_fp(t))
-        fatal_error("arm32: %s: binary operator on %d bytes is not implemented yet", gen_name(g),
-                    a32_size(t));
+    if (a32_is_fp(t)) {
+        gen_fp_binary(g, in);
+        return;
+    }
     Tac_BinaryOperator op = in->u.binary.op;
     const Tac_Val *b      = in->u.binary.src2;
     bool u                = unsigned_operation(t, op);
@@ -377,6 +379,12 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
     case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
     case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
         gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
     case TAC_INSTRUCTION_GET_ADDRESS:

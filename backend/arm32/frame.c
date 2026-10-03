@@ -421,6 +421,21 @@ uint64_t const_bits(const Tac_Const *c, const Tac_Type *t)
 void load_fp_const(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t, int lo, int hi)
 {
     uint64_t bits = const_bits(c, t);
+    double value;
+    if (a32_is_double(t)) {
+        memcpy(&value, &bits, 8);
+    } else {
+        float f;
+        uint32_t b = (uint32_t)bits;
+        memcpy(&f, &b, 4);
+        value = f;
+    }
+    if (a32_fp_imm(value)) {
+        bool d = a32_is_double(t);
+        emit2(g, d ? A32_VMOV_F64 : A32_VMOV_F32, d ? a32_dreg(reg) : a32_sreg(reg),
+              a32_fpimm(value));
+        return;
+    }
     gen_li(g, lo, (uint32_t)bits);
     if (!a32_is_double(t)) {
         emit2(g, A32_VMOV, a32_sreg(reg), a32_reg(lo));

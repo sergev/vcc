@@ -41,6 +41,7 @@ typedef enum {
     A32_OPND_NONE,
     A32_OPND_REG,     // reg at width
     A32_OPND_IMM,     // #imm
+    A32_OPND_FPIMM,   // #fp: a VFP immediate, the double's bits in imm
     A32_OPND_SYM,     // sym + imm, or #:lower16:/#:upper16: of it
     A32_OPND_MEM,     // [base, #±imm], [base, ±index{, shift #n}], pre/post-indexed
     A32_OPND_SHIFT,   // reg, shift #amount or reg, shift rs (operand2)
@@ -94,7 +95,16 @@ typedef struct {
     X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc") X(AND, "and") X(ORR, "orr")     \
     X(EOR, "eor") X(BIC, "bic") X(MUL, "mul") X(MLA, "mla") X(MLS, "mls")                   \
     X(UMULL, "umull") X(SDIV, "sdiv") X(UDIV, "udiv") X(LSL, "lsl") X(LSR, "lsr")           \
-    X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx") X(EPILOGUE, "<epilogue>")
+    X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx") X(VADD_F32, "vadd.f32") X(VADD_F64, "vadd.f64")          \
+    X(VSUB_F32, "vsub.f32") X(VSUB_F64, "vsub.f64") X(VMUL_F32, "vmul.f32")                 \
+    X(VMUL_F64, "vmul.f64") X(VDIV_F32, "vdiv.f32") X(VDIV_F64, "vdiv.f64")                 \
+    X(VNEG_F32, "vneg.f32") X(VNEG_F64, "vneg.f64") X(VCMP_F32, "vcmp.f32")                 \
+    X(VCMP_F64, "vcmp.f64") X(VMRS, "vmrs") X(VMOV_F32, "vmov.f32") X(VMOV_F64, "vmov.f64") \
+    X(VCVT_F64_F32, "vcvt.f64.f32") X(VCVT_F32_F64, "vcvt.f32.f64")                         \
+    X(VCVT_F32_S32, "vcvt.f32.s32") X(VCVT_F32_U32, "vcvt.f32.u32")                         \
+    X(VCVT_F64_S32, "vcvt.f64.s32") X(VCVT_F64_U32, "vcvt.f64.u32")                         \
+    X(VCVT_S32_F32, "vcvt.s32.f32") X(VCVT_U32_F32, "vcvt.u32.f32")                         \
+    X(VCVT_S32_F64, "vcvt.s32.f64") X(VCVT_U32_F64, "vcvt.u32.f64") X(EPILOGUE, "<epilogue>")
 
 typedef enum {
 #define A32_ENUM(op, mnem) A32_##op,
@@ -138,6 +148,9 @@ A32_Operand a32_reg(int reg);              // a core register
 A32_Operand a32_sreg(int reg);             // reg at single precision
 A32_Operand a32_dreg(int reg);             // reg (an even single) at double precision
 A32_Operand a32_imm(int64_t imm);
+A32_Operand a32_fpimm(double value);
+// Whether `value` is a VFP immediate: ±n/16 * 2^e with n in 16..31 and e in -3..4.
+bool a32_fp_imm(double value);
 A32_Operand a32_sym(const char *sym, int64_t offset);
 A32_Operand a32_lower16(const char *sym, int64_t offset);
 A32_Operand a32_upper16(const char *sym, int64_t offset);

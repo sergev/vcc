@@ -72,7 +72,7 @@ macro(arm32_compile_libc_c name srcdir)
     list(APPEND ARM32_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-foreach(name putchar)
+foreach(name fabs fma fmax fmin putchar)
     arm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 

@@ -3,6 +3,8 @@
 //
 #include "a32.h"
 
+#include <string.h>
+
 #include "xalloc.h"
 
 const char *const a32_mnemonic[A32_NUM_OPS] = {
@@ -105,6 +107,24 @@ A32_Operand a32_dreg(int reg)
 A32_Operand a32_imm(int64_t imm)
 {
     return (A32_Operand){ .kind = A32_OPND_IMM, .imm = imm, .reg2 = -1 };
+}
+
+A32_Operand a32_fpimm(double value)
+{
+    A32_Operand o = { .kind = A32_OPND_FPIMM, .reg2 = -1 };
+    memcpy(&o.imm, &value, sizeof value);
+    return o;
+}
+
+bool a32_fp_imm(double value)
+{
+    double m = value < 0 ? -value : value;
+    for (int e = -3; e <= 4; e++) {
+        double n = m * 16 / (e < 0 ? 1.0 / (1 << -e) : (double)(1 << e));
+        if (n >= 16 && n <= 31 && n == (double)(int)n)
+            return true;
+    }
+    return false;
 }
 
 static A32_Operand sym(const char *name, int64_t offset, A32_Reloc reloc)

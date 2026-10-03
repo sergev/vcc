@@ -85,6 +85,15 @@ static void emit_operand(FILE *out, const A32_Operand *o)
     case A32_OPND_IMM:
         fprintf(out, "#%" PRId64, o->imm);
         break;
+    case A32_OPND_FPIMM: {
+        double d;
+        memcpy(&d, &o->imm, sizeof d);
+        // The assembler takes an FP immediate only with a point.
+        char text[32];
+        snprintf(text, sizeof text, "%.9g", d);
+        fprintf(out, "#%s%s", text, strpbrk(text, ".e") ? "" : ".0");
+        break;
+    }
     case A32_OPND_SYM:
         if (o->sub == A32_RELOC_LOWER16)
             fputs("#:lower16:", out);
