@@ -24,6 +24,23 @@ runtime and headers are shared in `libc/ilp32/`, and `libc/arm32/CMakeLists.txt`
 the tools (`ARM32_TOOLS_FOUND`, `ARM32_CLANG`, `ARM32_LD`, `ARM32_QEMU`,
 `ARM32_LIB_DIR`, `ARM32_LINK_SCRIPT`).
 
+Phase 1 is done. `libc/arm32/` has `crt0.S` (vectors that report a fault and exit 255
+from SVC mode — the exception modes have no stack —, VFP on, `.bss` cleared, the
+short-descriptor identity map and the MMU and caches on, `PRINT_STATUS`), `console.s`
+(PL011, semihosting exit), `malloc.s`, `link.ld` (at `0x40010000`, `.ARM.exidx`
+placed), and `aeabi.s`: the RTABI helpers, which use the *base* standard even in a
+hard-float program, so the conversions move values between the core and VFP registers
+around the hard-float C routines of `libc/ilp32/int64.c`. All of them were checked
+against the host through clang-compiled callers. `libc.a` is assembly only so far.
+`genarm32` (`backend/arm32/`: `a32.h` IR, `emit.c`, `codegen.c`) returns integer
+constants; every module starts with a header (`.syntax unified`, `.arch armv7-a`,
+`.arch_extension idiv`, `.fpu vfpv3-d16`, the ABI `.eabi_attribute`s) whose ABI tags
+equal clang's — a plain `.s` gets none from the command line, and `.arch armv7ve`
+crashes clang's assembler. `ld.lld` does not check `Tag_ABI_VFP_args`: it links a
+soft-float object with a hard-float one silently. `arm32-tests` (`arm32_test.h` on
+`QemuTest`, `book_test.h`) runs chapter 1 of the book, compared with clang; until V21
+the test programs use the riscv32 headers.
+
 ## Target and decisions
 
 | Decision | Choice | Why |
@@ -48,7 +65,7 @@ Verified 2026-10-03 on this machine, with scratch programs (not in the tree):
 - **Alignment.** As on AArch64, **with the MMU off, an unaligned `ldr` faults**: memory is
   then Strongly-ordered. With a short-descriptor identity map in 1 MiB sections (below
   1 GiB Device, above it Normal write-back) and `SCTLR.M`/`C`/`I` set and `A` clear, the
-  same load succeeds. crt0 does that (V5).
+  same load succeeds. crt0 does that.
 - **Immediates.** `0xc06` is not an ARM immediate (8 bits rotated by an even amount), so
   the assembler rejected it. That is why V9's operand2 encoder is needed.
 - **Clang's data model for the triple:** `enum` is 4 bytes (no short enums), `wchar_t`
@@ -117,54 +134,14 @@ A `float` occupies a whole `d` register in the allocator's view (its even `s` ha
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
 
-## Phase 1 — skeleton
-
-- **V5. Runtime.** `libc/arm32/`:
-  - `crt0.S`: set `sp`. Point `VBAR` at a vector table whose every entry prints the
-    exception kind with `DFSR`/`DFAR`/`IFSR` and the faulting `lr`, then exits with a
-    distinctive status. Enable VFP (`CPACR`, `FPEXC`). Build the 4096-entry
-    short-descriptor level-1 identity map (Device below 1 GiB for the UART, Normal
-    write-back above it for RAM), set `TTBR0`/`TTBCR`/`DACR`, and enable the MMU and
-    caches with `SCTLR.A` clear (verified above). Clear `.bss`, call `main`, and pass
-    its result to `exit`. A `PRINT_STATUS` variant, as for the other targets.
-  - `console.s`: `putbyte` to the PL011 data register, and `exit` through `svc 0x123456`
-    `SYS_EXIT_EXTENDED`.
-  - `link.ld`: load at `0x40010000` (verified clear of qemu's DTB), stack and heap at
-    the top of a 128 MiB RAM, and `.ARM.exidx` placed (clang's objects carry unwind
-    index entries even for C).
-  - `malloc.s` (from RV32, whose 32-bit layout matches), the `libc/common` and
-    `libc/ilp32` sources built with our compiler, and `aeabi.s`. The latter holds the
-    RTABI entry points as thin wrappers: `__aeabi_uldivmod`/`ldivmod` around the
-    `int64.c` division, returning the remainder in `r2`:`r3`; the conversions and
-    shifts under their `__aeabi_` names; and `__aeabi_memcpy*`/`memmove*`/`memset*`
-    (note the `(dest, n, c)` argument order)/`memclr*` onto the C routines. Archived
-    with `llvm-ar` as `libc.a`.
-  - V5 is tested on its own before any compiled code depends on it: an unaligned load, a
-    VFP operation, a deliberate fault that must report rather than hang.
-- **V6. Skeleton.** `backend/arm32/` with `CMakeLists.txt`, `a32.h`, `a32.c`,
-  `codegen.c`, `emit.c`, `main.c` (on `backend/common/driver.c`), and `genarm32`. The
-  IR, `a32.h`, has a function, block, and instruction over virtual registers. Every
-  instruction carries a condition (default `al`) and an `S` flag. The operands are:
-  a core register, an `s` or `d` register, an immediate, a symbol with
-  `:lower16:`/`:upper16:`, an operand2 shifted register, memory `[base, #±off]` or
-  `[base, ±reg, lsl #n]` with pre/post-index, and a register list. The module header
-  emits `.syntax unified`, `.arm`, `.fpu vfpv3-d16`, and the `.eabi_attribute`s clang
-  writes for the triple (`Tag_ABI_VFP_args` above all). Check them with
-  `llvm-readelf -A` against a clang object, so `ld.lld` sees matching objects. Then
-  sections, `.globl`, `.type sym, %function`/`%object`, `.size`, `.p2align`, labels.
-- **V7. Run harness and first program.** `arm32_test.h` on `QemuTest`:
-  `CompileToArm32` (golden assembly) and `CompileAndRunArm32` (assemble, link with
-  crt0 and `libc.a`, run qemu with `-display none -serial stdio -monitor none
-  -semihosting` under a short timeout). Tests guard with `SKIP_IF_NO_ARM32_TOOLS()`;
-  the test binary is `arm32-tests`. The book suite gets an `arm32` `BookTest` with its
-  skip list, starting from RV32's ILP32 reasons. `int main(void) { return 2; }` runs
-  and returns 2.
-
 ## Phase 2 — instruction selection, book order
 
 Naive and correct first: every TAC variable in a frame slot, operands loaded into the
 scratch registers of the table above, result stored back. Each step is done when its
-book chapters pass and a few golden tests pin the selected instructions.
+book chapters pass and a few golden tests pin the selected instructions. The libc C
+sources join `libc.a` as the code generator can compile them, as on AArch64: `putchar`
+with calls (V12), `int64.c` with 64-bit integers and FP (V11, V14), the string and
+memory functions with pointers (V15), `printf` with variadics (V18).
 
 - **V8. Frame.** Slot layout from typed TAC, `ALLOCATE_LOCAL`, and 8-byte alignment.
   The prologue is `push {…, r11, lr}` with `r11` as the frame pointer (ARM-state AAPCS
@@ -263,8 +240,9 @@ book chapters pass and a few golden tests pin the selected instructions.
 
 - **V21. Headers.** `libc/arm32/include/`: `float.h` (`LDBL_*` equal to `DBL_*`),
   `stddef.h` and `stdint.h` (unsigned `wchar_t`), `setjmp.h` (`r4`–`r11`, `sp`, `lr`,
-  `d8`–`d15`), and the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
-  `riscv32-headers`.
+  `d8`–`d15`), and the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and
+  `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
+  `riscv32-headers`, and switch `arm32-tests` from the riscv32 headers to these.
 - **V22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests` (host libc output as expectation). `printf("%Lf")` exercises the 8-byte
   `long double` through `va_arg`.
@@ -325,10 +303,4 @@ book chapters pass and a few golden tests pin the selected instructions.
   Mitigation: the allocator sees only `d` registers, a `float` living in the even half,
   and only call setup (V12, V17) names odd `s` registers. A regalloc test pins that.
 - **Missing RTABI symbols** surface only when clang-compiled code is linked. Mitigation:
-  V5 provides the whole family up front, and V19 has a clang callee for each.
-- **Build-attribute mismatches** (`Tag_ABI_VFP_args`, FP and arch tags) can make
-  `ld.lld` reject or warn on a link of our objects with clang's. Mitigation: V6
-  compares `llvm-readelf -A` output with a clang object.
-- **crt0** — MMU, caches, exception vectors — fails as a hang or a fault far from its
-  cause. Mitigation: the reporting vector table, the run timeout, and V5 tested on its
-  own first, as on AArch64.
+  `aeabi.s` provides the whole family up front, and V19 has a clang callee for each.
