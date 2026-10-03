@@ -89,7 +89,8 @@ typedef struct {
 #define A32_OPS(X)                                                                         \
     X(MOV, "mov") X(MVN, "mvn") X(MOVW, "movw") X(MOVT, "movt") X(ADD, "add") X(SUB, "sub") \
     X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")       \
-    X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(PUSH, "push") X(POP, "pop")             \
+    X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(LDRD, "ldrd") X(STRD, "strd")           \
+    X(PUSH, "push") X(POP, "pop")                                                           \
     X(BX, "bx") X(VLDR, "vldr") X(VSTR, "vstr") X(VMOV, "vmov") X(VPUSH, "vpush")           \
     X(VPOP, "vpop") X(SXTB, "sxtb") X(SXTH, "sxth") X(UXTB, "uxtb") X(UXTH, "uxth")       \
     X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc") X(AND, "and") X(ORR, "orr")     \

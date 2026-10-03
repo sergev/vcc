@@ -102,11 +102,58 @@ static void store_word(Gen *g, int reg, const Tac_Val *dst, int half)
     emit2(g, A32_STR, a32_reg(reg), mem(g, A32_STR, base, off + 4 * half, T1));
 }
 
-// Words `half` of a and b into r12 and lr.
-static void load_halves(Gen *g, const Tac_Val *a, const Tac_Val *b, const Tac_Type *t, int half)
+// Word `half` of `v` as an operand2: an immediate when it is a constant's word that is
+// one, else a register (`scratch`, loaded).
+static A32_Operand word_operand(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *t, int half)
 {
-    load_word(g, T0, a, t, half);
-    load_word(g, T1, b, t, half);
+    if (v->kind == TAC_VAL_CONSTANT) {
+        uint32_t w = (uint32_t)(const_bits(v->u.constant, t) >> (32 * half));
+        if (a32_operand2_imm(w))
+            return a32_imm(w);
+    }
+    return a32_reg(use_word(g, scratch, v, t, half));
+}
+
+int gen_ll_compare(Gen *g, const Tac_Instruction *in)
+{
+    Tac_BinaryOperator op = in->u.binary.op;
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
+    bool u            = unsigned_operation(val_type(g, a), op);
+    const Tac_Type *t = u ? &ull : &ll;
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+    case TAC_BINARY_NOT_EQUAL: {
+        // The high words, then the low ones when those are equal.
+        int x = use_word(g, T0, a, t, 1);
+        emit2(g, A32_CMP, a32_reg(x), a32_reg(use_word(g, T1, b, t, 1)));
+        x = use_word(g, T0, a, t, 0);
+        emit2(g, A32_CMP, a32_reg(x), a32_reg(use_word(g, T1, b, t, 0)))->cond = A32_EQ;
+        return op == TAC_BINARY_EQUAL ? A32_EQ : A32_NE;
+    }
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED: {
+        // a - b by cmp and sbcs sets the flags of a 64-bit compare for lt/ge (lo/hs);
+        // gt and le compare b with a.
+        bool swap = op == TAC_BINARY_GREATER_THAN || op == TAC_BINARY_GREATER_THAN_UNSIGNED ||
+                    op == TAC_BINARY_LESS_OR_EQUAL || op == TAC_BINARY_LESS_OR_EQUAL_UNSIGNED;
+        const Tac_Val *x = swap ? b : a, *y = swap ? a : b;
+        bool less = op == TAC_BINARY_LESS_THAN || op == TAC_BINARY_LESS_THAN_UNSIGNED ||
+                    op == TAC_BINARY_GREATER_THAN || op == TAC_BINARY_GREATER_THAN_UNSIGNED;
+        int r = use_word(g, T0, x, t, 0);
+        emit2(g, A32_CMP, a32_reg(r), a32_reg(use_word(g, T1, y, t, 0)));
+        r = use_word(g, T0, x, t, 1);
+        op3(g, A32_SBC, T0, r, a32_reg(use_word(g, T1, y, t, 1)), true);
+        return less ? (u ? A32_LO : A32_LT) : (u ? A32_HS : A32_GE);
+    }
+    default:
+        return -1;
+    }
 }
 
 void gen_ll_binary(Gen *g, const Tac_Instruction *in)
@@ -143,14 +190,6 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
         return;
     case TAC_BINARY_EQUAL:
     case TAC_BINARY_NOT_EQUAL:
-        // The high words, then the low ones when those are equal.
-        load_halves(g, a, b, t, 1);
-        emit2(g, A32_CMP, a32_reg(T0), a32_reg(T1));
-        load_halves(g, a, b, t, 0);
-        emit2(g, A32_CMP, a32_reg(T0), a32_reg(T1))->cond = A32_EQ;
-        set_cond(g, T0, op == TAC_BINARY_EQUAL ? A32_EQ : A32_NE);
-        store_val(g, T0, dst);
-        return;
     case TAC_BINARY_LESS_THAN:
     case TAC_BINARY_LESS_THAN_UNSIGNED:
     case TAC_BINARY_GREATER_OR_EQUAL:
@@ -159,19 +198,10 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     case TAC_BINARY_GREATER_THAN_UNSIGNED:
     case TAC_BINARY_LESS_OR_EQUAL:
     case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED: {
-        // a - b by cmp and sbcs sets the flags of a 64-bit compare for lt/ge (lo/hs);
-        // gt and le compare b with a.
-        bool swap = op == TAC_BINARY_GREATER_THAN || op == TAC_BINARY_GREATER_THAN_UNSIGNED ||
-                    op == TAC_BINARY_LESS_OR_EQUAL || op == TAC_BINARY_LESS_OR_EQUAL_UNSIGNED;
-        const Tac_Val *x = swap ? b : a, *y = swap ? a : b;
-        bool less = op == TAC_BINARY_LESS_THAN || op == TAC_BINARY_LESS_THAN_UNSIGNED ||
-                    op == TAC_BINARY_GREATER_THAN || op == TAC_BINARY_GREATER_THAN_UNSIGNED;
-        load_halves(g, x, y, t, 0);
-        emit2(g, A32_CMP, a32_reg(T0), a32_reg(T1));
-        load_halves(g, x, y, t, 1);
-        op3(g, A32_SBC, T0, T0, a32_reg(T1), true);
-        set_cond(g, T0, less ? (u ? A32_LO : A32_LT) : (u ? A32_HS : A32_GE));
-        store_val(g, T0, dst);
+        int cond = gen_ll_compare(g, in);
+        int d    = def_reg(g, T0, dst);
+        set_cond(g, d, cond);
+        store_val(g, d, dst);
         return;
     }
     case TAC_BINARY_ADD:
@@ -196,11 +226,11 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     }
     if (var_reg(g, dst) < 0) {
         // Each word stored as it is computed: the flags carry over.
-        load_halves(g, a, b, t, 0);
-        op3(g, lo_op, T0, T0, a32_reg(T1), carry);
+        load_word(g, T0, a, t, 0);
+        op3(g, lo_op, T0, T0, word_operand(g, T1, b, t, 0), carry);
         store_word(g, T0, dst, 0);
-        load_halves(g, a, b, t, 1);
-        op3(g, hi_op, T0, T0, a32_reg(T1), false);
+        load_word(g, T0, a, t, 1);
+        op3(g, hi_op, T0, T0, word_operand(g, T1, b, t, 1), false);
         store_word(g, T0, dst, 1);
         return;
     }
@@ -209,9 +239,9 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     // (every other source word read by then); the flags carry over.  Moves and loads
     // leave them alone.
     int hi = var_reg_hi(g, dst);
-    op3(g, lo_op, T0, use_word(g, T0, a, t, 0), a32_reg(use_word(g, T1, b, t, 0)), carry);
+    op3(g, lo_op, T0, use_word(g, T0, a, t, 0), word_operand(g, T1, b, t, 0), carry);
     load_word(g, T1, a, t, 1);
-    op3(g, hi_op, T1, T1, a32_reg(use_word(g, hi, b, t, 1)), false);
+    op3(g, hi_op, T1, T1, word_operand(g, hi, b, t, 1), false);
     store_pair(g, dst, T0, T1);
 }
 

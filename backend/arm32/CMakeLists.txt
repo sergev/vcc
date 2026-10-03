@@ -12,6 +12,7 @@ add_library(arm32 STATIC
     call.c
     data.c
     regalloc.c
+    peephole.c
 )
 target_include_directories(arm32 PUBLIC .)
 target_link_libraries(arm32 backend_common tac libutil)
@@ -40,6 +41,7 @@ add_executable(arm32-tests
     test/mem_tests.cpp
     test/math_tests.cpp
     test/regalloc_tests.cpp
+    test/peephole_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )

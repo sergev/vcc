@@ -75,6 +75,8 @@ typedef struct {
     unsigned saved_core; // r4-r9 in use, a bit each
     unsigned saved_vfp;  // d8-d13 in use, a bit per d register
     bool sp_frame;       // the frame addressed from sp, r11 free for values
+    struct Flow *flow;   // with the peephole pass: the body's variables,
+    int *uses;           // and how many times each is read
 } Gen;
 
 //
@@ -218,6 +220,8 @@ struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
+// The registers that carry the function's result back, a bit each of r0-r15 and s0-s31.
+uint64_t result_regs(const Gen *g);
 
 //
 // Static data (data.c)
@@ -231,6 +235,9 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 //
 void gen_ll_binary(Gen *g, const Tac_Instruction *in);
 void gen_ll_unary(Gen *g, const Tac_Instruction *in);
+// Set the flags for long long comparison `in`; its condition, or -1 (nothing emitted)
+// when it is not one.
+int gen_ll_compare(Gen *g, const Tac_Instruction *in);
 // Whether conversion `kind` is from an unsigned integer.
 bool from_unsigned(Tac_InstructionKind kind);
 // A conversion between long long and float or double.
@@ -240,6 +247,8 @@ void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instr
 // Floating point (fp.c)
 //
 void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+// As gen_ll_compare, for an FP comparison.
+int gen_fp_compare(Gen *g, const Tac_Instruction *in);
 void gen_fp_unary(Gen *g, const Tac_Instruction *in);
 // A conversion between int (of at most 32 bits), float and double.
 void gen_fp_convert32(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
@@ -250,6 +259,12 @@ void fp_test_zero(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// Set the flags for comparison `in`, of any type; its condition, or -1 (nothing
+// emitted) when it is not one.
+int gen_compare(Gen *g, const Tac_Instruction *in);
+// A comparison `in` whose only use is conditional jump `next`: the compare and a
+// conditional branch in place of both; false, emitting nothing, when it is not one.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
 // The condition of comparison `op`, or -1 when it is not one.
 int compare_cond(Tac_BinaryOperator op, bool is_unsigned);
 // Whether operation `op` on type `t` is unsigned: by the operator, as the
@@ -270,5 +285,11 @@ bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
 // constant is one, or when its negation (add, sub, cmp) or complement (and) is, with
 // *op changed to the counterpart; else core register `scratch`, loaded.
 A32_Operand operand2(Gen *g, A32_Op *op, const Tac_Val *v, const Tac_Type *t, int scratch);
+
+//
+// Peephole pass (peephole.c), on the finished function
+//
+// `result` holds the registers a return reads (result_regs).
+void a32_peephole(A32_Func *fn, uint64_t result);
 
 #endif // ARM32_INTERNAL_H

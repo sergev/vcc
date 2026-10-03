@@ -5,10 +5,13 @@
 
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
+#include "xalloc.h"
 
 bool arm32_regalloc      = true;
 bool arm32_frame_pointer = false;
+bool arm32_peephole      = true;
 
 // With r11, the saved r4-r9 in use first, just below it; then a register or a slot for
 // every parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment than
@@ -46,6 +49,11 @@ static void layout_frame(Gen *g)
     map_destroy(&allocs);
 }
 
+static void count_use(int var, void *arg)
+{
+    ((int *)arg)[var]++;
+}
+
 // The function, its frame addressed from sp when it can be (`sp_frame`); false when not.
 static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool sp_frame)
 {
@@ -54,14 +62,34 @@ static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl
     if (arm32_regalloc)
         gen_regalloc(g);
     layout_frame(g);
+    if (arm32_peephole) {
+        g->flow = flow_build(tl);
+        g->uses = xalloc((g->flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+        memset(g->uses, 0, (g->flow->nvars + 1) * sizeof(int));
+        for (int i = 0; i < g->flow->ninstrs; i++)
+            flow_uses(g->flow, g->flow->instrs[i], count_use, g->uses);
+    }
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
-        gen_instr(g, in);
+        if (gen_compare_branch(g, in, in->next))
+            in = in->next;
+        else
+            gen_instr(g, in);
         last = in;
+    }
+    if (g->flow) {
+        flow_free(g->flow);
+        xfree(g->uses);
+        g->flow = NULL;
+        g->uses = NULL;
     }
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(g); // falling off the end
-    return gen_prologue(g);
+    if (!gen_prologue(g))
+        return false;
+    if (arm32_peephole)
+        a32_peephole(g->fn, result_regs(g));
+    return true;
 }
 
 // Addressed from sp unless asked for r11, or some offset does not fit from sp: then

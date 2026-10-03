@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -468,16 +469,13 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     bool u                = unsigned_operation(t, op);
     const Tac_Val *dst    = in->u.binary.dst;
     int dr                = def_reg(g, T0, dst);
-    A32_Operand d = a32_reg(dr), a = a32_reg(use_as(g, T0, in->u.binary.src1, t)), rb;
-    int cond = compare_cond(op, u);
+    int cond              = gen_compare(g, in);
     if (cond >= 0) {
-        A32_Op o       = A32_CMP;
-        A32_Operand ob = operand2(g, &o, b, t, T1);
-        emit2(g, o, a, ob);
         set_cond(g, dr, cond);
         store_val(g, dr, dst);
         return;
     }
+    A32_Operand d = a32_reg(dr), a = a32_reg(use_as(g, T0, in->u.binary.src1, t)), rb;
     A32_Op o;
     switch (op) {
     case TAC_BINARY_ADD:
@@ -543,6 +541,50 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     A32_Operand ob = operand2(g, &o, b, t, T1);
     emit3(g, o, d, a, ob);
     store_val(g, dr, dst);
+}
+
+int gen_compare(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *t = val_type(g, in->u.binary.src1);
+    if (a32_is_pair(t))
+        return gen_ll_compare(g, in);
+    if (a32_is_fp(t))
+        return gen_fp_compare(g, in);
+    Tac_BinaryOperator op = in->u.binary.op;
+    int cond              = compare_cond(op, unsigned_operation(t, op));
+    if (cond < 0)
+        return -1;
+    int a          = use_as(g, T0, in->u.binary.src1, t);
+    A32_Op o       = A32_CMP;
+    A32_Operand ob = operand2(g, &o, in->u.binary.src2, t, T1);
+    emit2(g, o, a32_reg(a), ob);
+    return cond;
+}
+
+// The conditions come in pairs, a condition and its inverse (eq/ne, hs/lo, ...): for FP
+// compares too, since unordered operands make each one used false but ne.
+static int invert_cond(int cond)
+{
+    return cond % 2 ? cond + 1 : cond - 1;
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
+    if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    int cond = gen_compare(g, in);
+    if (cond < 0)
+        return false;
+    gen_branch(g, next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ? invert_cond(cond) : cond,
+               next->u.jump_if_zero.target);
+    return true;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

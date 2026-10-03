@@ -581,6 +581,21 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         store_val(g, A32_R0, dst);
 }
 
+uint64_t result_regs(const Gen *g)
+{
+    const Tac_Type *rt = ret_type(g->tl->u.function.type);
+    bool vfp           = !g->tl->u.function.variadic;
+    if (!rt || rt->kind == TAC_TYPE_VOID)
+        return 0;
+    if (vfp_aggregate(rt, vfp))
+        return ((1ull << a32_size(rt) / 4) - 1) << A32_S0;
+    if (a32_is_fp(rt) && vfp)
+        return (a32_is_double(rt) ? 3ull : 1ull) << A32_S0;
+    if (!a32_is_aggregate(rt) && a32_size(rt) == 8)
+        return 3;
+    return 1; // r0: a scalar, a small aggregate, or the result's address
+}
+
 // An integer in r0 (the callee extends a narrow one), a long long in r0:r1, a float in
 // s0, a double in d0 (a constant's bits through r0 and r1, which need no frame); an
 // aggregate as the comment at the top says.

@@ -57,21 +57,32 @@ static int fp_compare_cond(Tac_BinaryOperator op)
     }
 }
 
+int gen_fp_compare(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *t = val_type(g, in->u.binary.src1);
+    int cond          = fp_compare_cond(in->u.binary.op);
+    if (cond < 0)
+        return -1;
+    int a = use_val(g, F0, in->u.binary.src1);
+    int b = use_val(g, F1, in->u.binary.src2);
+    emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, a), fp_reg(t, b));
+    vmrs(g);
+    return cond;
+}
+
 void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t  = val_type(g, in->u.binary.src1);
     const Tac_Val *dst = in->u.binary.dst;
-    int a    = use_val(g, F0, in->u.binary.src1);
-    int b    = use_val(g, F1, in->u.binary.src2);
-    int cond = fp_compare_cond(in->u.binary.op);
+    int cond           = gen_fp_compare(g, in);
     if (cond >= 0) {
-        emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, a), fp_reg(t, b));
-        vmrs(g);
         int d = def_reg(g, T0, dst);
         set_cond(g, d, cond);
         store_val(g, d, dst);
         return;
     }
+    int a = use_val(g, F0, in->u.binary.src1);
+    int b = use_val(g, F1, in->u.binary.src2);
     A32_Op op;
     switch (in->u.binary.op) {
     case TAC_BINARY_ADD:
