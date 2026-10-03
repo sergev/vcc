@@ -13,8 +13,12 @@
 // an even one when it is 8-byte aligned; one that does not fit is split between the
 // last of them and the stack while nothing is on the stack yet, else goes wholly on the
 // stack.  A result of up to 4 bytes comes back in r0; a larger one is written to the
-// address the caller passes in r0, ahead of the arguments.  (Homogeneous FP aggregates
-// in VFP registers come with V17.)
+// address the caller passes in r0, ahead of the arguments.
+//
+// A homogeneous FP aggregate (1-4 members of one FP type, tac_aapcs32_class) goes, as
+// an FP scalar does, in the lowest run of free consecutive s registers (d registers
+// for doubles) that holds it, else on the stack, closing the VFP registers; it comes
+// back in s0-s3 (d0-d3).  Under the base standard it is an ordinary aggregate.
 //
 #include <string.h>
 
@@ -24,8 +28,9 @@
 
 // Where one argument goes.
 typedef struct {
-    int nregs; // the core registers (1-4) or 1 VFP register; 0 for the stack
+    int nregs; // the core registers (1-4) or VFP elements (1-4); 0 for the stack
     int reg;   // the first register
+    int esize; // the bytes of a VFP element (4 or 8); 0 for core registers
     int stack; // byte offset in the argument area of what is on the stack
 } ArgLoc;
 
@@ -53,10 +58,35 @@ static void on_stack(ArgState *s, ArgLoc *a, int size, int align)
     s->stack += round_up(size, 4);
 }
 
+// The AAPCS class of `t`: an FP scalar or a homogeneous FP aggregate in VFP registers
+// under the VFP variant, else TAC_AAPCS32_CORE.
+static int vfp_class(const Tac_Type *t, bool vfp)
+{
+    return vfp ? tac_aapcs32_class(t) : TAC_AAPCS32_CORE;
+}
+
 static ArgLoc classify(ArgState *s, const Tac_Type *t)
 {
     ArgLoc a = { 0 };
     int size = a32_size(t);
+    int cls  = vfp_class(t, s->vfp);
+    if (cls != TAC_AAPCS32_CORE) {
+        // The lowest free run of singles, or of even-aligned pairs of them.
+        int count = cls % 8, esize = cls / 8, step = esize / 4;
+        unsigned want = (1u << (count * step)) - 1;
+        for (int i = 0; i + count * step <= 16; i += step) {
+            if ((s->sfree >> i & want) == want) {
+                s->sfree &= ~(want << i);
+                a.nregs = count;
+                a.reg   = A32_SREG(i);
+                a.esize = esize;
+                return a;
+            }
+        }
+        s->sfree = 0;
+        on_stack(s, &a, size, a32_align(t));
+        return a;
+    }
     if (a32_is_aggregate(t)) {
         int n = (size + 3) / 4;
         if (a32_align(t) >= 8 && s->next_core % 2)
@@ -75,22 +105,6 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t)
             s->next_core = 4;
             on_stack(s, &a, size, a32_align(t));
         }
-        return a;
-    }
-    if (s->vfp && a32_is_fp(t)) {
-        // The lowest free single, or even-aligned pair of them.
-        int n = a32_is_double(t) ? 2 : 1;
-        for (int i = 0; i < 16; i += n) {
-            unsigned want = (1u << n) - 1;
-            if ((s->sfree >> i & want) == want) {
-                s->sfree &= ~(want << i);
-                a.nregs = 1;
-                a.reg   = A32_SREG(i);
-                return a;
-            }
-        }
-        s->sfree = 0;
-        on_stack(s, &a, size, size);
         return a;
     }
     int n = size > 4 ? 2 : 1;
@@ -113,9 +127,35 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
 }
 
 // Whether a result of type `t` is written through the address passed in r0.
-static bool indirect_result(const Tac_Type *t)
+static bool indirect_result(const Tac_Type *t, bool vfp)
 {
-    return t && a32_is_aggregate(t) && a32_size(t) > 4;
+    return t && a32_is_aggregate(t) && a32_size(t) > 4 &&
+           vfp_class(t, vfp) == TAC_AAPCS32_CORE;
+}
+
+// Whether `t` is an aggregate in VFP registers, as an argument or a result.
+static bool vfp_aggregate(const Tac_Type *t, bool vfp)
+{
+    return a32_is_aggregate(t) && vfp_class(t, vfp) != TAC_AAPCS32_CORE;
+}
+
+// The type of a VFP element of `esize` bytes.
+static const Tac_Type *elem_type(int esize)
+{
+    static const Tac_Type f = { .kind = TAC_TYPE_FLOAT }, d = { .kind = TAC_TYPE_DOUBLE };
+    return esize == 4 ? &f : &d;
+}
+
+// The VFP register of element `k` of an aggregate starting at `reg`.
+static int elem_reg(int reg, int esize, int k)
+{
+    return reg + k * esize / 4;
+}
+
+// The element size of homogeneous FP aggregate `t`.
+static int elem_size(const Tac_Type *t)
+{
+    return tac_aapcs32_class(t) / 8;
 }
 
 // Load `size` (1..4) bytes at base + off into core register `reg`: a word at once,
@@ -178,7 +218,7 @@ void gen_params(Gen *g)
     if (g->tl->u.function.variadic)
         fatal_error("arm32: %s: a variadic function is not implemented yet", gen_name(g));
     ArgState s = arg_state(true);
-    if (indirect_result(ret_type(g->tl->u.function.type))) {
+    if (indirect_result(ret_type(g->tl->u.function.type), s.vfp)) {
         g->ret_ptr = alloc_slot(g, NULL, NULL, 4, 4);
         emit2(g, A32_STR, a32_reg(A32_R0), mem(g, A32_STR, A32_FP, g->ret_ptr, T0));
         s.next_core = 1;
@@ -190,6 +230,13 @@ void gen_params(Gen *g)
         ArgLoc a = classify(&s, t);
         if (!a.nregs) {
             place_slot(g, p->name, t, 8 + a.stack);
+            continue;
+        }
+        if (a.esize && a32_is_aggregate(t)) {
+            int off = alloc_slot(g, p->name, t, a32_size(t), a32_align(t));
+            for (int k = 0; k < a.nregs; k++)
+                store_mem(g, elem_reg(a.reg, a.esize, k), elem_type(a.esize), A32_FP,
+                          off + k * a.esize, T0);
             continue;
         }
         if (a32_is_aggregate(t)) {
@@ -224,7 +271,13 @@ typedef struct {
 static void load_arg_regs(Gen *g, const Arg *a)
 {
     const ArgLoc *l = &a->loc;
-    if (a32_is_aggregate(a->as)) {
+    if (l->esize && a32_is_aggregate(a->as)) {
+        int64_t off;
+        int base = piece_base(g, a->v->u.var_name, T1, &off);
+        for (int k = 0; k < l->nregs; k++)
+            load_mem(g, elem_reg(l->reg, l->esize, k), elem_type(l->esize), base,
+                     off + k * l->esize);
+    } else if (a32_is_aggregate(a->as)) {
         int64_t off;
         int base = piece_base(g, a->v->u.var_name, T1, &off);
         for (int i = 0; i < l->nregs; i++)
@@ -290,7 +343,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     int i      = 0;
     if (!ret && dst)
         ret = val_type(g, dst);
-    if (indirect_result(ret))
+    if (indirect_result(ret, vfp))
         s.next_core = 1;
     // The stack arguments first, through the scratch registers; then the registers,
     // each loaded straight into place.
@@ -301,7 +354,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         a->loc = classify(&s, a->as);
         if (want)
             want = want->next;
-        if (!a->loc.nregs || (a32_is_aggregate(a->as) && 4 * a->loc.nregs < a32_size(a->as)))
+        if (!a->loc.nregs ||
+            (!a->loc.esize && a32_is_aggregate(a->as) && 4 * a->loc.nregs < a32_size(a->as)))
             store_arg(g, a);
     }
     for (i = 0; i < nargs; i++)
@@ -310,7 +364,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
-    if (indirect_result(ret)) {
+    if (indirect_result(ret, vfp)) {
         // The result's address in r0: the destination, or a slot for an unused one.
         int base;
         int64_t off;
@@ -330,9 +384,18 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     } else {
         emit1(g, A32_BL, a32_sym(in->u.fun_call.fun_name, 0));
     }
-    if (!dst || indirect_result(ret))
+    if (!dst || indirect_result(ret, vfp))
         return;
     const Tac_Type *t = val_type(g, dst);
+    if (vfp_aggregate(t, vfp)) {
+        int64_t off;
+        int base = piece_base(g, dst->u.var_name, T1, &off);
+        int esize = elem_size(t);
+        for (int k = 0; k < a32_size(t) / esize; k++)
+            store_mem(g, elem_reg(A32_S0, esize, k), elem_type(esize), base, off + k * esize,
+                      T0);
+        return;
+    }
     if (a32_is_aggregate(t)) {
         int64_t off;
         int base = piece_base(g, dst->u.var_name, T1, &off);
@@ -357,7 +420,13 @@ void gen_return(Gen *g, const Tac_Val *v)
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
         if (!rt || rt->kind == TAC_TYPE_VOID)
             rt = t;
-        if (a32_is_aggregate(rt) && g->ret_ptr) {
+        if (vfp_aggregate(rt, true)) {
+            int64_t off;
+            int base  = piece_base(g, v->u.var_name, T1, &off);
+            int esize = elem_size(rt);
+            for (int k = 0; k < a32_size(rt) / esize; k++)
+                load_mem(g, elem_reg(A32_S0, esize, k), elem_type(esize), base, off + k * esize);
+        } else if (a32_is_aggregate(rt) && g->ret_ptr) {
             int base;
             int64_t off;
             emit2(g, A32_LDR, a32_reg(T1), mem(g, A32_LDR, A32_FP, g->ret_ptr, T1));

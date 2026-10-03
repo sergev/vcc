@@ -642,6 +642,14 @@ int tac_aapcs64_class(const Tac_Type *t);
 // The element count of `t` as a homogeneous float aggregate (a lone FP scalar is one),
 // with the element size in *esize; 0 when it is none.
 int tac_aapcs64_hfa(const Tac_Type *t, int *esize);
+//
+// AAPCS-VFP (32-bit) argument classes (tac_abi.c): in core registers and the stack, or
+// in VFP registers as `count` (1-4) elements of `esize` (4 or 8) bytes, encoded
+// esize * 8 + count — a float or double (long double is one) and a homogeneous float
+// aggregate alike.  Under the base standard (variadic) everything is TAC_AAPCS32_CORE.
+//
+enum { TAC_AAPCS32_CORE = 0 };
+int tac_aapcs32_class(const Tac_Type *t);
 
 //
 // Verify
