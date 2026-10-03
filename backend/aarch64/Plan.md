@@ -169,8 +169,10 @@ with pointers), not all at once in A23.
   class (HFAs read by `va_arg` included, past the registers onto the stack), with a
   `va_list` handed across in both directions. `long double` arithmetic is clang's
   until A21.
-- **A20. Differential book tests.** Every book program compiled by clang too, run under
-  qemu, outputs compared — the RISC-V suite's comparison.
+- **A20. Differential book tests. Done**, by the A8 harness: `BookTest` runs every
+  book program compiled by us and by clang -O0 under qemu, and compares the outputs
+  and exit statuses; all chapters are enabled, and the skip list is empty. No book
+  program uses `<stdarg.h>`, so clang reading our header there is harmless.
 
 ## Phase 4 — `long double`, library and headers
 
