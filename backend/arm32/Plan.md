@@ -38,8 +38,7 @@ constants; every module starts with a header (`.syntax unified`, `.arch armv7-a`
 equal clang's — a plain `.s` gets none from the command line, and `.arch armv7ve`
 crashes clang's assembler. `ld.lld` does not check `Tag_ABI_VFP_args`: it links a
 soft-float object with a hard-float one silently. `arm32-tests` (`arm32_test.h` on
-`QemuTest`, `book_test.h`) runs chapter 1 of the book, compared with clang; until V21
-the test programs use the riscv32 headers.
+`QemuTest`, `book_test.h`) runs chapter 1 of the book, compared with clang.
 
 Phase 2 is done. `genarm32` selects every TAC instruction naively (`frame.c`,
 `instr.c`, `llong.c`, `fp.c`, `call.c`, `data.c`): each `%` name in a slot below r11,
@@ -86,8 +85,6 @@ ILP32 skip list stays out). Findings and changes against the plan:
   too, in place in that one area (`r11 + 8` on), and returns a `float` in r0 and a
   `double` in r0:r1.
 - **`libc/arm32/include/stdarg.h`** came at V18, ahead of the other ARM32 headers.
-  `TEST_TARGET_INCLUDE_DIR` (`libutil/test/test_preprocess.h`) and the libc build put it
-  before the riscv32 headers. V21 drops that once the ARM32 directory is complete.
 - **`libc.a` has the printf family** (`printf`, `sprintf`, `snprintf`, `__doprnt`): all of
   `LIBC_C_COMMON` but no `float128`, since `long double` is a double.
 - **Clang-compiled code calls** `__aeabi_ldivmod`, `__aeabi_uldivmod`, `__aeabi_l2d`,
@@ -95,6 +92,21 @@ ILP32 skip list stays out). Findings and changes against the plan:
   `libc.a`; a run test checks each.
 - **Chapters 19 and 20** passed as soon as they were enabled; there is no chapter filter
   any more.
+
+Phase 4 is done. `libc/arm32/include/` has `float.h` (`LDBL_*` equal to `DBL_*`),
+`stddef.h` and `stdint.h` (unsigned `wchar_t`), `setjmp.h` (declarations only, as on
+the other targets) and `stdarg.h`; the rest comes from `libc/ilp32/include/` and
+`libc/common/include/`. The test programs and the libc build use them instead of the
+riscv32 ones, and `TEST_TARGET_INCLUDE_DIR` is gone again. Findings and changes against
+the plan:
+- **The headers are checked against clang's own** (`HeadersAgreeWithClang`): the
+  `wchar_t`, `wint_t`, `max_align_t`, size and pointer limits and every `LDBL_*` value
+  agree. clang's `wint_t` is `int`, so `WINT_MIN`/`WINT_MAX` stay signed.
+- **`arm32-headers` and `arm32-headers-cpp`** run whether or not the ARM tools are
+  found, as for riscv32.
+- **The AArch64 libc run tests passed unchanged** (`printf_tests`, `str_tests`,
+  `mem_tests`, `math_tests`). `PrintfLongDouble` adds `%Lf`/`%Le`/`%Lg` after an `int`
+  hole and around a `long long`.
 
 ## Target and decisions
 
@@ -186,18 +198,6 @@ RTABI helper. `r10` is the third scratch for the cases Phase 2 found (above).
 A `float` occupies a whole `d` register in the allocator's view (its even `s` half), so
 `s`/`d` aliasing never reaches the allocator. Call setup alone deals in single `s`
 registers, for back-filling.
-
-## Phase 4 — library and headers
-
-- **V21. Headers.** `libc/arm32/include/`: `float.h` (`LDBL_*` equal to `DBL_*`),
-  `stddef.h` and `stdint.h` (unsigned `wchar_t`), `setjmp.h` (`r4`–`r11`, `sp`, `lr`,
-  `d8`–`d15`), beside the V18 `stdarg.h`. The rest comes from `libc/ilp32/include/` and
-  `libc/common/include/`. Add an `arm32-headers` CTest and its `-cpp` twin, like
-  `riscv32-headers`, and switch `arm32-tests` and the libc build from the riscv32
-  headers to these (dropping `TEST_TARGET_INCLUDE_DIR`).
-- **V22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
-  `math_tests` (host libc output as expectation). `printf("%Lf")` exercises the 8-byte
-  `long double` through `va_arg`.
 
 ## Phase 5 — code quality
 
