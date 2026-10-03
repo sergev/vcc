@@ -21,6 +21,10 @@ struct QemuConfig {
     const char *lib_dir;           // crt0 objects and libc.a
     std::vector<std::string> qemu; // the command up to -kernel <exe>
     const char *scratch_suffix;    // keeps the scratch files of two widths apart
+    // Where main's result comes from: false, qemu's exit status (semihosting); true,
+    // the first byte written to the debug console (port 0xe9 on x86), which the run
+    // sends to a file of its own.  qemu's x86 exit device cannot carry a whole byte.
+    bool status_from_debugcon = false;
 };
 
 class QemuTest : public BackendTest {
@@ -105,7 +109,12 @@ protected:
         EXPECT_EQ(0, rc) << "ld.lld failed on " << exe_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
+        std::string status_path       = base + ".status";
         std::vector<std::string> qemu = config.qemu;
+        if (config.status_from_debugcon) {
+            std::remove(status_path.c_str());
+            qemu.insert(qemu.end(), { "-debugcon", "file:" + status_path });
+        }
         qemu.insert(qemu.end(), { "-kernel", exe_path });
         rc = RunWithTimeout(qemu, out_path, log_path, 5);
         if (rc < 0) {
@@ -115,6 +124,15 @@ protected:
             return "ERROR";
         }
         exit_status = rc;
+        if (config.status_from_debugcon) {
+            std::string status = ReadFile(status_path);
+            if (status.empty()) {
+                ADD_FAILURE() << "no exit status on the debug console of " << exe_path << ":\n"
+                              << ReadFile(log_path);
+                return "ERROR";
+            }
+            exit_status = (unsigned char)status[0];
+        }
         return ReadFile(out_path);
     }
 };
