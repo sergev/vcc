@@ -72,8 +72,12 @@ macro(arm32_compile_libc_c name srcdir)
     list(APPEND ARM32_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-foreach(name fabs fma fmax fmin putchar)
+foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar strcat
+             strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr strtok)
     arm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+foreach(name ${LIBC_C_ILP32})
+    arm32_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a
