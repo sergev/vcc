@@ -37,6 +37,7 @@ add_executable(arm32-tests
     test/struct_tests.cpp
     test/hfa_tests.cpp
     test/stdarg_tests.cpp
+    test/interop_tests.cpp
     test/run_tests.cpp
     ${ARM32_BOOK_SOURCES}
 )
