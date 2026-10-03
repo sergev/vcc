@@ -42,3 +42,5 @@ add_executable(genarm32
     arm32/main.c
 )
 target_link_libraries(genarm32 arm32 backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genarm32> DESTINATION bin RENAME vgenarm32)

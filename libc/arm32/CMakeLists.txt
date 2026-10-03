@@ -49,6 +49,13 @@ add_test(
             ${ILP32_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, the ARM32, the ILP32 and the shared ones, go into one directory,
+# as for riscv32.
+file(GLOB ARM32_TARGET_HEADERS ${ARM32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h)
+file(GLOB ARM32_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${ARM32_TARGET_HEADERS} ${ARM32_COMMON_HEADERS}
+        DESTINATION share/vcc/arm32/include)
+
 if(NOT ARM32_TOOLS_FOUND)
     message(STATUS "No ARM32 clang/llvm-ar: the ARM32 runtime is not built")
     return()
@@ -108,3 +115,6 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${ARM32_LIBC_OBJS})
 add_custom_target(arm32-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+# The runtime, with the linker script for qemu `virt`.
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/arm32/lib)
