@@ -121,12 +121,14 @@ registers, for back-filling.
   `__ARM_FEATURE_IDIV`, `__ILP32__`/`_ILP32` (check clang), `__CHAR_UNSIGNED__`,
   `__WCHAR_UNSIGNED__`, `__ELF__`, the `__SIZEOF_*__` set. Add a test in
   `test_predefined_macros.cpp`. `lower -t arm32` already accepts the name.
-- **V2. TAC audit for `arm32`.** Run the test corpus (chapter sources, translator
-  fixtures, libc sources) through `lower -t arm32`. This is a **new combination**: a
-  byte-addressed target whose `long double` is a `double`. Until now that held only for
-  word-addressed BESM-6. Watch the `ld_is_double`/`wide_ld` folding paths, the
-  `LONG_DOUBLE_*` conversions between two 8-byte types, static initializers of `long
-  double`, and `_Alignof(long double)`. Fix what is found in shared code and list it.
+- **V2. TAC audit for `arm32`. Done, no defects.** All 1551 C sources of the test
+  corpus (book programs, backend, translator, optimizer and semantic fixtures, every
+  libc source) lowered for `riscv32` and `arm32` — the two differ only in `long double`
+  — give identical TAC except where expected: `long double` constants folded in
+  `double` precision (`0.1L == 0.1` folds to 1, as clang computes), its 8-byte size and
+  alignment, and struct results no longer lowered to a `%.ret` parameter (V1).
+  `lower --verify` passes on all of them. An *unfolded* `long double` literal keeps its
+  binary128 bits in TAC; as on BESM-6, that is the contract (see V14).
 - **V3. Share the ILP32 runtime.** `libc/riscv32/int64.c`, `frexp.c`, `ldexp.c`,
   `modf.c` assume only 32-bit `long`. Move them to a new `libc/ilp32/` (the counterpart
   of `libc/lp64/`). Do the same for the headers identical between `riscv32` and `arm32`
@@ -235,7 +237,9 @@ book chapters pass and a few golden tests pin the selected instructions.
   condition (`mi`/`ls` for `<`/`<=`, as on AArch64). Constants come from `vmov.f32`/
   `.f64 #imm` when the 8-bit FP immediate encodes them, else from `.rodata` through
   `movw`/`movt` + `vldr`. `long double` is `double`: its TAC kinds map onto the `.f64`
-  forms and its conversions to and from `double` are copies, so unlike AArch64 there
+  forms and its conversions to and from `double` are copies. A `long double` constant
+  or static initializer may carry binary128 bits (an unfolded literal does), so it is
+  always read through `f128_to_double`, as the BESM-6 backend and the folder do, so unlike AArch64 there
   is no binary128 phase at all.
 - **V15. Pointers, arrays, chars, strings** (ch. 14–16): loads and stores by width and
   signedness (`ldrsb`/`ldrb`/`ldrsh`/`ldrh`), `ADD_PTR` with a scaled-register operand
