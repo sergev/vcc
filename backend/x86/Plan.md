@@ -117,67 +117,28 @@ result hint then points to `rax` only as a *move* target. A `long double` never 
 register: it lives in its 16-byte slot, and the x87 stack holds values only inside one
 instruction's pattern (X14).
 
-## Phase 0 — groundwork
-
-- **X1. Target plumbing.**
-  - Give the `x86_64` descriptor the tail fields the other targets have:
-    - `struct_return_max = SIZE_MAX`, so the backend owns every struct result: a
-      two-eightbyte result may come back in `rax`/`rdx`, `xmm0`/`xmm1` or a mix, and a
-      MEMORY result must also return its address in `rax`.
-    - `struct_args_split = 0`, `immediate_args = NULL`, and `va_class = NULL` until X17
-      supplies one.
-  - Fix the stale "Defaults to x86_64" comments in `semantic/target.h`/`target.c`.
-  - Teach `cpp -t x86_64` its predefined macros, taken from clang's `-dM -E` for the
-    triple: `__x86_64__`, `__x86_64`, `__amd64__`, `__amd64`, `__LP64__`, `_LP64`,
-    `__ELF__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`, `__SSE2_MATH__`,
-    `__code_model_small__`, the `__SIZEOF_*__` set (`__SIZEOF_LONG_DOUBLE__=16`) and
-    `__LDBL_MANT_DIG__=64`. Do not define `__SIZEOF_INT128__`, since we have no
-    `__int128`, and do not define `__CHAR_UNSIGNED__`.
-  - Add a test in `test_predefined_macros.cpp`. `lower -t x86_64` already accepts the
-    name.
-- **X2. An x87 `long double` in the frontend.** Today `ld_is_double()`
-  (`optimize/const_fold.c`) and `wide_ld()` (`semantic/typecheck.c`) choose between double
-  and binary128 by `ldouble_size` alone, so x86-64's 16-byte slot would fold as binary128.
-  The folded constants would then differ from what x87 computes.
-  - Add a descriptor field for the `long double` significand: 113, 64 or 53 bits. Make
-    both predicates and the folder use it. `ld_arith` and the conversions round each
-    binary128 result to 64 bits. The exponent ranges are equal (15 bits), so only the
-    significand is rounded.
-  - In `libutil/float128.c`, add `f128_to_x87`/`f128_from_x87` for the 10-byte extended
-    format: explicit integer bit, denormals, pseudo-denormals never produced, infinities
-    and NaNs. Test them in `libutil-tests` against exact cases from a script, as
-    `gen_float128_cases.py` does, because the host (arm64 macOS) has no 80-bit type to
-    compare with.
-  - Note the double rounding (exact → 113 → 64 bits) where it can differ from one
-    rounding, and pin it with a test.
-- **X3. TAC audit for `x86_64`. Done, no defects.** All 4160 C sources of the test
-  corpus (the book and interop programs of every backend, the semantic fixtures, every
-  `libc/common` and `libc/lp64` source) lowered for `aarch64` and `x86_64` give
-  identical TAC, `lower --verify` passing on both, except where expected:
-  - plain `char` is `schar`, so its conversions sign-extend, `'\xff'` folds to -1, and
-    `char` → FP is the signed conversion;
-  - `long double` constants fold at x87 precision (X2): `1.0L/3` is
-    `0x1.5555555555555556p-2`;
-  - the semantic suite's negative tests fail alike on both, apart from the two
-    `__builtin_va_class` tests (x86_64 has no `va_class` until X17) and X2's two
-    precision tests, one per target.
-
-  An *unfolded* `long double` literal keeps its binary128 bits in TAC, as on the other
-  targets; the backend rounds it with `f128_to_x87` (X12, X14). The libc routines
-  compare characters as `unsigned char` (`strcmp`, `memcmp`) or `char` with `char`
-  (`strchr`), and `doprnt` casts explicitly, so none depends on the signedness of plain
-  `char`.
-- **X4. CMake detection.** In `libc/x86_64/CMakeLists.txt`:
-  - Find `qemu-system-x86_64`, check that the clang already used for RISC-V lists
-    `x86-64` (`--print-targets`), and find `x86_64-elf-as` (optional). Set
-    `X86_TOOLS_FOUND`, `X86_CLANG`, `X86_LD`, `X86_LIB_DIR`, `X86_LINK_SCRIPT` and
-    `X86_GNU_AS`, like `libc/aarch64/CMakeLists.txt`.
-  - Teach the shared qemu fixture (`backend/common/test/qemu_test.h`) to take the exit
-    status from a file. A `QemuConfig` names it, with the test's scratch path
-    substituted into a `-debugcon file:<scratch>.status` argument. The other backends
-    leave it unset, and their tests and output are unchanged.
-
 `make run` stays green after every X-step.
+
+Phase 0 is done:
+- `cpp -t x86_64` predefines clang's architecture macros for the triple (no
+  `__CHAR_UNSIGNED__`).
+- The `x86_64` descriptor leaves every struct result to the backend
+  (`struct_return_max = SIZE_MAX`) and has no `va_class` yet (X17 supplies one).
+- **`long double` is the x87 format in the frontend.** The descriptor's
+  `ldouble_mant_dig = 64` makes both constant folders round every `long double` operand
+  and result to a 64-bit significand (`target_ld_round`, over `f128_round` in
+  `libutil/float128.c`). `f128_to_x87`/`f128_from_x87` convert to and from the 10-byte
+  format. The double rounding of a constant (decimal → binary128 → 64 bits) is pinned
+  by a test.
+- The whole test corpus lowers for `x86_64` with no defect: against `aarch64` the TAC
+  differs only by signed plain `char` and x87 folding. An *unfolded* `long double`
+  literal keeps its binary128 bits in TAC, and the backend rounds it with
+  `f128_to_x87`. No libc routine depends on the signedness of plain `char`.
+- `libc/x86_64/CMakeLists.txt` finds the tools (`X86_TOOLS_FOUND`, `X86_CLANG`,
+  `X86_LD`, `X86_QEMU`, `X86_GNU_AS`, `X86_LIB_DIR`, `X86_LINK_SCRIPT`,
+  `X86_TARGET_FLAGS`).
+- `QemuConfig.status_from_debugcon` makes the shared fixture pass `-debugcon
+  file:<scratch>.status` and take main's result from that file's first byte.
 
 ## Phase 1 — skeleton
 
@@ -232,7 +193,9 @@ instruction's pattern (X14).
     assembler.
   - `CompileAndRunX86`: assemble, link with crt0 and `libc.a`, and run
     `qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none -device
-    isa-debug-exit,iobase=0xf4,iosize=0x04 -debugcon file:…` under a short timeout.
+    isa-debug-exit,iobase=0xf4,iosize=0x04` under a short timeout, with
+    `status_from_debugcon` set so the fixture adds the `-debugcon` file and reads the
+    status from it.
   - Tests guard with `SKIP_IF_NO_X86_TOOLS()`, and the test binary is `x86-tests`.
   - The book suite gets an `x86_64` `BookTest` with its skip list, starting from
     AArch64's LP64 reasons.
@@ -287,7 +250,7 @@ the selected instructions.
     it is read.
 - **X12. Globals and static data** (ch. 10).
   - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind. A `long double` is
-    `.quad` significand + `.short` sign/exponent + `.zero 6`, from X2's `f128_to_x87`.
+    `.quad` significand + `.short` sign/exponent + `.zero 6`, from `f128_to_x87`.
   - Addresses are `lea sym(%rip)`, and accesses use `sym(%rip)` directly.
   - Static locals' `name$N` are spelled legally for both assemblers (`$` begins an
     immediate in AT&T syntax; check what AArch64 does).
@@ -484,7 +447,7 @@ the selected instructions.
 - **Two-operand forms** invite the "destination is the second source" bug (`d = a - d`).
   Mitigation: one helper in selection owns the rule, and a test per operator pins it
   with the operands in every aliasing arrangement.
-- **x87 `long double`.** Folded constants against computed values (X2's rounding), the
+- **x87 `long double`.** Folded constants against computed values (the double rounding of a constant), the
   control-word dance for truncation, and the x87 stack discipline at calls (empty, except
   `st(0)` for a result). An x87 stack left unbalanced fails far from its cause, as a NaN
   many calls later. Mitigation: values never stay on the x87 stack across TAC
@@ -496,7 +459,7 @@ the selected instructions.
 - **No callee-saved `xmm`.** FP-heavy code with calls spills around every call. That is
   the ABI, and clang pays it too; accept it, and keep the regalloc test from X23.
 - **Signed plain `char`** is new among our byte-addressed targets, and libc sources or
-  tests may quietly assume `char` ≥ 0. Mitigation: the X3 audit and the X22 string tests.
+  tests may quietly assume `char` ≥ 0. Mitigation: the Phase 0 audit found none in libc; the X22 string tests.
 - **crt0.** A 32→64-bit transition that goes wrong hangs or triple-faults silently (qemu
   resets). Mitigation: the sequence verified above, the IDT reporting handler installed
   before anything can fault in 64-bit mode, the run timeout, and X5 tested on its own.
