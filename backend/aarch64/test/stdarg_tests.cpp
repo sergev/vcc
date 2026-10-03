@@ -1,6 +1,6 @@
 //
 // AArch64 variadic functions: the register save areas, va_start, and va_arg over
-// every argument class (backend/aarch64/Plan.md, A18).
+// every argument class (docs/Aarch64_Backend.md, "Variadic functions").
 //
 #include "aarch64_test.h"
 

@@ -1,5 +1,5 @@
 //
-// AArch64 code generator internals (AAPCS64; see backend/aarch64/Plan.md).
+// AArch64 code generator internals (AAPCS64; see docs/Aarch64_Backend.md).
 //
 // Registers: x0-x7/v0-v7 carry arguments and results, x8 the indirect result address;
 // x9-x15, x16/x17 and v16-v31 are scratch; x19-x28 and the low halves of v8-v15 are

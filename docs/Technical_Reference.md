@@ -3,9 +3,10 @@
 This document lists repository layout, build details, components, tests, and development notes. The [README](../README.md) is the overview for new readers.
 
 VCC is one machine-independent C11 front end (scanner, parser, semantic analysis, TAC
-lowering and optimization) feeding per-target code generators. Two are complete:
-RISC-V RV64IMFD/LP64D (`genriscv`, see [Riscv_Backend.md](Riscv_Backend.md)) and
-BESM-6 (`genbesm`). The examples in this document use RISC-V; the other directories
+lowering and optimization) feeding per-target code generators. Three are complete:
+RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, see
+[Riscv_Backend.md](Riscv_Backend.md)), AArch64 AAPCS64 (`genaarch64`, see
+[Aarch64_Backend.md](Aarch64_Backend.md)) and BESM-6 (`genbesm`). The examples in this document use RISC-V; the other directories
 under `backend/` hold design notes only.
 
 ## Repository layout
@@ -45,6 +46,7 @@ vcc/
 | `parse` | `build/parse` | `bin/vparse` | preprocessed C | binary AST (`.ast`), YAML, DOT |
 | `lower` | `build/lower` | `bin/vlower` | binary AST | binary TAC (`.tac`), YAML, DOT |
 | `genriscv` | `build/backend/genriscv` | `bin/vgenriscv64` | binary TAC | RISC-V GNU assembly (`.s`) |
+| `genaarch64` | `build/backend/genaarch64` | `bin/vgenaarch64` | binary TAC (`-t aarch64`) | AArch64 GNU assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
 `parse` and `lower` are built from the root `CMakeLists.txt`, `cc` and `cpp` from
@@ -151,7 +153,9 @@ file `input.s`.
 per-toplevel loop are the shared `backend_main()` (`backend/common/driver.c`); a backend
 supplies only its flags, output extension and a per-toplevel `codegen` callback.
 
-`genbesm` uses the same driver; see [BESM-6 backend](#besm-6-backend-backendbesm6).
+`genaarch64` (TAC lowered with `-t aarch64`, assembled by `clang --target=aarch64-none-elf`)
+takes the same three flags (`--frame-pointer` keeps a frame record in every function), and
+`genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
 
 ### Installation
 
@@ -162,9 +166,10 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenbesm6` |
+| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
+| `share/vcc/aarch64/lib/`, `include/` | the same for AArch64 (the runtime only when the clang has an AArch64 target) |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
 | `share/vcc/besm6/include/` | the C11 freestanding headers and `besm6.h` (the hosted libc comes from [v7besm](https://github.com/besm6/v7besm)) |
 
@@ -298,6 +303,25 @@ Tests: `flow_tests.cpp` → `backend-tests`.
 
 Per function: register allocation, instruction selection, prologue/epilogue, peephole.
 For the frame layout, calls and runtime see [Riscv_Backend.md](Riscv_Backend.md).
+
+### AArch64 backend (`backend/aarch64/`)
+
+| File | Role |
+|------|------|
+| `a64.h`, `a64.c` | IR: functions as instruction lists over real registers |
+| `regalloc.c` | The target side of `backend/common/regalloc.c` |
+| `instr.c`, `call.c` | Instruction selection, compare-and-branch fusion; AAPCS64 calls (HFAs, x8 results, variadics, `long double`) |
+| `frame.c` | Stack slots, value access, prologue/epilogue (frameless leaves, sp-addressed frames) |
+| `peephole.c` | Peephole pass |
+| `data.c` | Static data |
+| `emit.c` | GNU assembly output |
+| `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
+| `main.c` | `genaarch64` entry |
+| `aarch64.asdl`, `aarch64.md` | Reference ISA description and its design notes (not used by the build) |
+| `test/*_tests.cpp` | GoogleTest suite (`aarch64-tests`) |
+
+The argument classification (`tac_aapcs64_class`) lives in `tac/tac_abi.c`, shared with
+the semantic pass's `__builtin_va_class`. See [Aarch64_Backend.md](Aarch64_Backend.md).
 
 **Walkthrough.** For
 
@@ -781,10 +805,11 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `optimizer-tests` | `optimize/test/const_fold_tests.cpp`, `type_conv_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `dead_store_tests.cpp`, `pipeline_tests.cpp` |
 | `backend-tests` | `backend/common/test/flow_tests.cpp` |
 | `riscv-tests` | `backend/riscv/test/*_tests.cpp` (emit, codegen golden assembly, frame, instr, register allocation, peephole, data, qemu run, clang interop, printf/str/mem/math libc, binary128 `long double`) and the book suite |
+| `aarch64-tests` | `backend/aarch64/test/*_tests.cpp` (golden assembly, qemu run, clang interop, HFAs, variadics, register allocation, peephole, libc, binary128 `long double`) and the book suite |
 | `besm-tests` | `backend/besm6/test/*_tests.cpp` (golden output for the three dialects, run tests under the `dubna` and `b6sim` simulators) and the book suite |
 
-Besides the GoogleTest cases, ctest runs the `riscv-headers` and `besm-headers`
-header checks, and their `-cpp` twins that preprocess with our own `cpp`. cppcheck, when installed, runs during the build, not under ctest.
+Besides the GoogleTest cases, ctest runs the `riscv-headers`, `aarch64-headers` and
+`besm-headers` header checks, and their `-cpp` twins that preprocess with our own `cpp`. cppcheck, when installed, runs during the build, not under ctest.
 
 `riscv-tests` runs programs on bare-metal `qemu-system-riscv64`, links VCC code with
 clang-compiled code in both directions, and compares every book program's output with
@@ -866,4 +891,5 @@ dot -Tpng tac.dot -o tac.png
 - **Book:** [Nora Sandler, *Writing a C Compiler*](https://nostarch.com/writing-c-compiler) — pedagogical pipeline similar to this project’s stages.
 - **C11 grammar:** Yacc/Lex heritage (e.g. Jeff Lee’s ANSI C grammar) updated toward C11; see `grammar/`.
 - **RISC-V:** [RISC-V ELF psABI](https://github.com/riscv-non-isa/riscv-elf-psabi-doc) — the LP64D calling convention `genriscv` follows.
+- **AArch64:** [AAPCS64](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst) — the procedure call standard `genaarch64` follows, `va_arg` (appendix B) included.
 - **BESM-6:** [v7besm](https://github.com/besm6/v7besm) (Unix v7 on BESM-6), [dubna](https://github.com/besm6/dubna) (Dubna monitor simulator).

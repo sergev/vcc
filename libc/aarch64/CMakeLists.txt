@@ -1,7 +1,7 @@
 #
 # AArch64 runtime for bare-metal qemu `virt`: crt0.o, crt0-status.o (prints main's
-# result, for the book run tests) and libc.a: the assembly leaves, and the C sources the
-# code generator compiles so far (the list grows with it; see backend/aarch64/Plan.md).
+# result, for the book run tests) and libc.a: the assembly leaves, and the C library
+# compiled by our own code generator (see docs/Aarch64_Backend.md).
 # Uses the clang, llvm-ar and ld.lld libc/riscv64 found; skipped when that clang has no
 # AArch64 target.
 #
