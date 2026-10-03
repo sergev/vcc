@@ -5,7 +5,9 @@
 
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
+#include "xalloc.h"
 
 bool aarch64_regalloc      = true;
 bool aarch64_peephole      = true;
@@ -57,6 +59,11 @@ static void layout_frame(Gen *g)
     map_destroy(&allocs);
 }
 
+static void count_use(int var, void *arg)
+{
+    ((int *)arg)[var]++;
+}
+
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
@@ -64,14 +71,30 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     if (aarch64_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);
+    if (aarch64_peephole) {
+        g.flow = flow_build(tl);
+        g.uses = xalloc((g.flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+        memset(g.uses, 0, (g.flow->nvars + 1) * sizeof(int));
+        for (int i = 0; i < g.flow->ninstrs; i++)
+            flow_uses(g.flow, g.flow->instrs[i], count_use, g.uses);
+    }
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
-        gen_instr(&g, in);
+        if (gen_compare_branch(&g, in, in->next))
+            in = in->next;
+        else
+            gen_instr(&g, in);
         last = in;
     }
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);
+    if (aarch64_peephole)
+        a64_peephole(g.fn);
+    if (g.flow) {
+        flow_free(g.flow);
+        xfree(g.uses);
+    }
     a64_emit_func(out, g.fn);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)

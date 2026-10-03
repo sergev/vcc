@@ -67,6 +67,8 @@ typedef struct {
     int outgoing;      // bytes of the outgoing argument area
     int ret_ptr;       // slot of the result address that came in x8, or 0
     StringMap regs;    // name → allocated register (regalloc.c)
+    struct Flow *flow; // with the peephole pass: the body's variables,
+    int *uses;         // and how many times each is read
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots
@@ -193,6 +195,14 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// A comparison `in` whose only use is conditional jump `next`: cmp (or fcmp) and a
+// b.cond in place of both; false, emitting nothing, when it is not one.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
+
+//
+// Peephole pass (peephole.c), on the finished function
+//
+void a64_peephole(A64_Func *fn);
 // Whether `in` calls a runtime routine (long double arithmetic and conversions);
 // `type_of(arg, v)` gives the type of operand `v`.  Sets *dst to its result.
 typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);

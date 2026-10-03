@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -487,13 +488,45 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool is_unsigned, A64_W
 
 // A floating-point operator.  fcmp sets C and V for unordered operands, so mi and ls
 // are false for a NaN where lt and le would not be.
+static int fp_compare_cond(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+        return A64_EQ;
+    case TAC_BINARY_NOT_EQUAL:
+        return A64_NE;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        return A64_MI;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
+        return A64_LS;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        return A64_GT;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
+        return A64_GE;
+    default:
+        return -1;
+    }
+}
+
 static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
-    A64_Width w    = a64_width(t);
-    A64_Operand fa = a64_reg(use_val(g, F0, in->u.binary.src1), w);
-    A64_Operand fb = a64_reg(use_val(g, F1, in->u.binary.src2), w);
-    A64_Op op = A64_RET;
-    int cond  = -1;
+    A64_Width w        = a64_width(t);
+    A64_Operand fa     = a64_reg(use_val(g, F0, in->u.binary.src1), w);
+    A64_Operand fb     = a64_reg(use_val(g, F1, in->u.binary.src2), w);
+    const Tac_Val *dst = in->u.binary.dst;
+    int cond           = fp_compare_cond(in->u.binary.op);
+    if (cond >= 0) {
+        int d = def_reg(g, T0, dst);
+        emit2(g, A64_FCMP, fa, fb);
+        emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(cond));
+        store_int(g, d, dst);
+        return;
+    }
+    A64_Op op;
     switch (in->u.binary.op) {
     case TAC_BINARY_ADD:
     case TAC_BINARY_ADD_DOUBLE:
@@ -511,38 +544,8 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     case TAC_BINARY_DIVIDE_DOUBLE:
         op = A64_FDIV;
         break;
-    case TAC_BINARY_EQUAL:
-        cond = A64_EQ;
-        break;
-    case TAC_BINARY_NOT_EQUAL:
-        cond = A64_NE;
-        break;
-    case TAC_BINARY_LESS_THAN:
-    case TAC_BINARY_LESS_THAN_DOUBLE:
-        cond = A64_MI;
-        break;
-    case TAC_BINARY_LESS_OR_EQUAL:
-    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
-        cond = A64_LS;
-        break;
-    case TAC_BINARY_GREATER_THAN:
-    case TAC_BINARY_GREATER_THAN_DOUBLE:
-        cond = A64_GT;
-        break;
-    case TAC_BINARY_GREATER_OR_EQUAL:
-    case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
-        cond = A64_GE;
-        break;
     default:
         fatal_error("aarch64: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
-    }
-    const Tac_Val *dst = in->u.binary.dst;
-    if (cond >= 0) {
-        int d = def_reg(g, T0, dst);
-        emit2(g, A64_FCMP, fa, fb);
-        emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(cond));
-        store_int(g, d, dst);
-        return;
     }
     int d = def_reg(g, F0, dst);
     emit3(g, op, a64_reg(d, w), fa, fb);
@@ -595,6 +598,18 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
     store_int(g, T0, in->u.binary.dst);
 }
 
+// The register holding integer operand 2 of binary `in`, on type `t` (a shift count
+// on its own type).
+static int use_operand2(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool shift)
+{
+    const Tac_Val *src2 = in->u.binary.src2;
+    if (src2->kind == TAC_VAL_CONSTANT) {
+        load_const_as(g, T1, src2->u.constant, shift ? val_type(g, src2) : t);
+        return T1;
+    }
+    return use_val(g, T1, src2);
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
@@ -611,14 +626,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     bool shift            = op == TAC_BINARY_LEFT_SHIFT || op == TAC_BINARY_RIGHT_SHIFT ||
                             op == TAC_BINARY_RIGHT_SHIFT_LOGICAL;
     int a = use_scalar(g, in->u.binary.src1, t);
-    int b;
-    const Tac_Val *src2 = in->u.binary.src2;
-    if (src2->kind == TAC_VAL_CONSTANT) {
-        load_const_as(g, T1, src2->u.constant, shift ? val_type(g, src2) : t);
-        b = T1;
-    } else {
-        b = use_val(g, T1, src2);
-    }
+    int b = use_operand2(g, in, t, shift);
     int d = def_reg(g, T0, in->u.binary.dst);
     gen_int_binop(g, op, t->kind == TAC_TYPE_POINTER || unsigned_op(op), int_width(t), d, a, b);
     store_int(g, d, in->u.binary.dst);
@@ -714,6 +722,47 @@ bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
     default:
         return false;
     }
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
+    if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    const Tac_Type *t     = val_type(g, in->u.binary.src1);
+    Tac_BinaryOperator op = in->u.binary.op;
+    int cond;
+    if (a64_is_ld(t)) {
+        return false;
+    } else if (a64_is_fp(t)) {
+        if ((cond = fp_compare_cond(op)) < 0)
+            return false;
+        A64_Width w = a64_width(t);
+        int a       = use_val(g, F0, in->u.binary.src1);
+        int b       = use_val(g, F1, in->u.binary.src2);
+        emit2(g, A64_FCMP, a64_reg(a, w), a64_reg(b, w));
+    } else {
+        if ((cond = compare_cond(op, t->kind == TAC_TYPE_POINTER || unsigned_op(op))) < 0)
+            return false;
+        A64_Width w = int_width(t);
+        int a       = use_scalar(g, in->u.binary.src1, t);
+        int b       = use_operand2(g, in, t, false);
+        emit2(g, A64_CMP, a64_reg(a, w), a64_reg(b, w));
+    }
+    // The conditions come in pairs, a condition and its inverse: for FP compares too,
+    // since unordered operands make each one used false but ne.
+    if (next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO)
+        cond ^= 1;
+    char *l = label_name(next->u.jump_if_zero.target);
+    emit2(g, A64_BCOND, a64_cond(cond), a64_sym(l, 0));
+    xfree(l);
+    return true;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

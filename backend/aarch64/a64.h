@@ -48,7 +48,7 @@ typedef enum {
     A64_OPND_REG,   // reg at width
     A64_OPND_IMM,   // #imm
     A64_OPND_SYM,   // sym + imm, or :lo12:sym + imm
-    A64_OPND_MEM,   // [reg, #imm], [reg, #imm]!, or [reg], #imm
+    A64_OPND_MEM,   // [reg, #imm], [reg, #imm]!, [reg], #imm, or [reg, index...]
     A64_OPND_SHIFT, // reg at width, shifted: lsl/lsr/asr #amount
     A64_OPND_EXT,   // reg at width, extended: uxtw/sxtw/... #amount
     A64_OPND_LSL,   // a bare "lsl #imm" (movz, movk)
@@ -69,7 +69,9 @@ typedef enum {
     A64_EXT_SXTX,
 } A64_Extend;
 
-typedef enum { A64_MEM_OFFSET, A64_MEM_PRE, A64_MEM_POST } A64_MemMode;
+// A64_MEM_INDEX: [reg, index], the index an X register shifted left by imm (lsl), or a
+// W register extended (`ext`, sxtw or uxtw) and shifted by imm.
+typedef enum { A64_MEM_OFFSET, A64_MEM_PRE, A64_MEM_POST, A64_MEM_INDEX } A64_MemMode;
 
 typedef enum {
     A64_EQ,
@@ -96,6 +98,9 @@ typedef struct {
     int sub;     // A64_Shift, A64_Extend, A64_MemMode or A64_Cond, by kind
     bool lo12;   // a symbol's :lo12: relocation
     char *sym;   // owned
+    int index;   // A64_MEM_INDEX: the index register, at index_width
+    A64_Width index_width;
+    int ext; // A64_MEM_INDEX with a W index: A64_Extend
 } A64_Operand;
 
 // Opcode and mnemonic.
@@ -108,7 +113,7 @@ typedef struct {
     X(SUB, "sub")                                                                                  \
     X(NEG, "neg") X(MUL, "mul") X(SDIV, "sdiv") X(UDIV, "udiv") X(MSUB, "msub") X(MADD, "madd")    \
         X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn") X(LSL, "lsl") X(LSR, "lsr")        \
-            X(ASR, "asr") X(CMP, "cmp") X(CSET, "cset") X(SXTB, "sxtb") X(SXTH, "sxth")            \
+            X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(CSET, "cset") X(SXTB, "sxtb") X(SXTH, "sxth")            \
                 X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth") X(LDR, "ldr") X(LDRB, "ldrb")      \
                     X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh") X(LDRSW, "ldrsw")          \
                         X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(LDP, "ldp") X(STP, "stp")  \
@@ -167,6 +172,8 @@ A64_Operand a64_lo12(const char *sym, int64_t offset);
 A64_Operand a64_mem(int base, int64_t offset);
 A64_Operand a64_mem_pre(int base, int64_t offset);
 A64_Operand a64_mem_post(int base, int64_t offset);
+// [base, index, lsl #shift] for an X index, [base, index, <ext> #shift] for a W one.
+A64_Operand a64_mem_index(int base, int index, A64_Width index_width, A64_Extend ext, int shift);
 A64_Operand a64_shift(int reg, A64_Width width, A64_Shift shift, int amount);
 A64_Operand a64_ext(int reg, A64_Width width, A64_Extend ext, int amount);
 A64_Operand a64_lsl(int amount);

@@ -8,6 +8,7 @@
 TEST_F(Aarch64Test, VariadicSavesRegisters)
 {
     aarch64_frame_pointer = true; // slots at x29 offsets
+    aarch64_peephole      = false; // the ABI, not its clean-up
     std::string code = Code(CompileToAarch64(R"(
 #include <stdarg.h>
 int f(int n, double d, ...) { va_list ap; va_start(ap, d); n = va_arg(ap, int); va_end(ap); return n; }

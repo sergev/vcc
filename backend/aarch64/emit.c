@@ -65,7 +65,17 @@ static void emit_operand(FILE *out, const A64_Operand *o)
     case A64_OPND_MEM:
         fputc('[', out);
         emit_reg(out, o->reg, A64_X);
-        if (o->sub == A64_MEM_POST)
+        if (o->sub == A64_MEM_INDEX) {
+            fputs(", ", out);
+            emit_reg(out, o->index, o->index_width);
+            if (o->index_width == A64_W)
+                fprintf(out, ", %s", extends[o->ext]);
+            else if (o->imm)
+                fputs(", lsl", out);
+            if (o->imm)
+                fprintf(out, " #%" PRId64, o->imm);
+            fputc(']', out);
+        } else if (o->sub == A64_MEM_POST)
             fprintf(out, "], #%" PRId64, o->imm);
         else if (o->imm || o->sub == A64_MEM_PRE)
             fprintf(out, ", #%" PRId64 "]%s", o->imm, o->sub == A64_MEM_PRE ? "!" : "");

@@ -237,6 +237,7 @@ TEST_F(Float128Test, InteropClangCallsUs)
 TEST_F(Float128Test, CallsRuntime)
 {
     aarch64_frame_pointer = true; // slots at x29 offsets
+    aarch64_peephole      = false; // the ABI, not its clean-up
     std::string s = Code(CompileToAarch64(R"(
 long double f(long double a, long double b) { return a + b; }
 int g(long double a, long double b) { return a < b; }

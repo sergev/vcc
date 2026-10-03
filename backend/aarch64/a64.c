@@ -117,6 +117,15 @@ A64_Operand a64_mem_post(int base, int64_t offset)
     return mem(base, offset, A64_MEM_POST);
 }
 
+A64_Operand a64_mem_index(int base, int index, A64_Width index_width, A64_Extend ext, int shift)
+{
+    A64_Operand o = mem(base, shift, A64_MEM_INDEX);
+    o.index       = index;
+    o.index_width = index_width;
+    o.ext         = ext;
+    return o;
+}
+
 A64_Operand a64_shift(int reg, A64_Width width, A64_Shift shift, int amount)
 {
     return (A64_Operand){
