@@ -4,16 +4,18 @@
 // Registers: r0-r3/s0-s15 (d0-d7) carry arguments and results; r4-r11 and d8-d15 are
 // callee-saved; r11 is the frame pointer, r13 sp, r14 lr, r15 pc.
 //
-// Every `%` name lives in a slot at a fixed offset from r11, any other name at its
-// symbol.  An instruction loads its operands into scratch registers, computes, and
-// stores the result back.
+// A scalar `%` name that is never in memory may get a register (regalloc.c): r0-r3 or
+// d0-d7 unless it is live across a call, else r4-r9 or d8-d13; a long long a pair of
+// core registers, any two.  Any other `%` name lives in a slot at a fixed offset from
+// r11, any other name at its symbol.  An instruction works on registers directly, and
+// goes through scratch registers for operands in memory.
 //
-// Frame (r11 = sp after the frame record is pushed, 8-byte aligned):
+// Frame (r11 = the address of the saved r11, 8-byte aligned):
 //   r11 + 8 ...      incoming stack arguments
 //   r11 + 4          saved lr
 //   r11 + 0          saved r11
-//   r11 - ...        slots
-//   below them       the callee-saved scratch registers in use: d14/d15, then r10
+//   r11 - ...        saved r4-r9 in use (pushed with r11 and lr), then slots
+//   below them       the callee-saved VFP registers in use, then r10
 //   sp + 0 ...       outgoing stack arguments
 //
 // A value in a register is in canonical form: an integer of 32 bits or fewer extended
@@ -49,6 +51,8 @@ enum {
 typedef struct {
     const Tac_Type *type;
     int offset; // from r11
+    int reg;    // allocated register, or -1 for the slot
+    int hi;     // a long long's high word's register
 } Slot;
 
 typedef struct {
@@ -61,6 +65,10 @@ typedef struct {
     int locals_size;   // bytes of slots below the frame record
     int outgoing;      // bytes of the outgoing argument area
     int ret_ptr;       // slot of the result address that came in r0, or 0
+    StringMap regs;    // name → allocated register + 1 (regalloc.c)
+    StringMap regs_hi; // name → its high word's register + 1
+    unsigned saved_core; // r4-r9 in use, a bit each
+    unsigned saved_vfp;  // d8-d13 in use, a bit per d register
 } Gen;
 
 //
@@ -84,7 +92,15 @@ const char *gen_name(const Gen *g);
 int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int align);
 // Give `name` a slot at a fixed offset (an incoming stack argument).
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset);
+// Keep `name` in register `reg` (and a long long's high word in `hi`).
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg, int hi);
 const Slot *find_slot(const Gen *g, const char *name);
+// The register allocated to `name` by gen_regalloc, or -1; its high word's in *hi.
+int assigned_reg(const Gen *g, const char *name, int *hi);
+// The register holding variable `v`, or -1 when it is in memory or a constant; a long
+// long's high word in var_reg_hi.
+int var_reg(const Gen *g, const Tac_Val *v);
+int var_reg_hi(const Gen *g, const Tac_Val *v);
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
 const Tac_Type *name_type(const Gen *g, const char *name);
 A32_Instr *emit0(Gen *g, A32_Op op);
@@ -119,8 +135,47 @@ void load_fp_const(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t, int l
 void load_val(Gen *g, int reg, const Tac_Val *v);
 void load_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as);
 // Store `reg` into variable `v` in the width of its type.  The address of a global
-// goes through r12, or lr when `reg` is r12.
+// goes through r12, or lr when `reg` is r12.  Into a register, a narrow integer is
+// brought to canonical form, even when `reg` is that register.
 void store_val(Gen *g, int reg, const Tac_Val *v);
+// dst = src, at the width of type `t`: between core registers, VFP ones, or a float's
+// bits between the two files; nothing when the same.
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
+// dst = core src in the canonical form of type `t`.
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
+// The register holding `v`, when it is one of the file of `scratch`; else `scratch`,
+// loaded (a constant converted to `as`, when not NULL).
+int use_val(Gen *g, int scratch, const Tac_Val *v);
+int use_as(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *as);
+// The register to compute `v` into: its own, when of the file of `scratch`; else
+// `scratch` (then store it).
+int def_reg(const Gen *g, int scratch, const Tac_Val *v);
+// Word `half` of 8-byte value `v`, as load_word: the register holding it, else
+// `scratch`, loaded.
+int use_word(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *as, int half);
+// Moves as if all at once (a source may be another's destination); a cycle is broken
+// through r12/lr or d14/d15.
+typedef enum {
+    MOVE_CORE,       // mov
+    MOVE_HI_SIGN,    // dst = src >> 31, the high word of a signed int
+    MOVE_S,          // vmov.f32
+    MOVE_D,          // vmov.f64
+    MOVE_S_TO_CORE,  // vmov r, s: a float, or a word of a double
+} MoveKind;
+typedef struct {
+    int dst, src;
+    MoveKind kind;
+} Move;
+void parallel_move(Gen *g, Move *m, int n);
+// Load core registers with words of values, as if at once: word `half` of `v` (as
+// load_word) into `reg`.  A word in a register is moved, the rest loaded after.
+typedef struct {
+    int reg;
+    const Tac_Val *v;
+    const Tac_Type *as;
+    int half;
+} WordLoad;
+void load_words(Gen *g, const WordLoad *w, int n);
 // Word `half` (0 low, 1 high) of 8-byte value `v` (a long long, or a narrower integer
 // converted to one; or a double's bits) into core register `reg`.
 void load_word(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as, int half);
@@ -135,9 +190,24 @@ void gen_epilogue(Gen *g);
 void gen_prologue(Gen *g);
 
 //
+// Register allocation (regalloc.c): fills g->regs and the callee-saved registers used.
+//
+void gen_regalloc(Gen *g);
+
+//
 // Calls, parameters and returns (call.c)
 //
+// A register or a slot for each parameter: moved from its argument register, stored
+// from it, or loaded from or placed over its stack slot.
 void gen_params(Gen *g);
+// The incoming register of each scalar parameter passed in a register of its class
+// (of a long long's high word in `hints_hi`), numbered from 1 as the allocator's.
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);
+// Hints for a call: each scalar argument variable its argument register, the result
+// r0/s0; only where hint[var] is still 0 (indexed by flow variable; a long long's high
+// word at var + nvars).  Registers are numbered from 1 there.
+struct Flow;
+void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 
@@ -181,6 +251,13 @@ bool unsigned_operation(const Tac_Type *t, Tac_BinaryOperator op);
 void gen_branch(Gen *g, int cond, const char *tac);
 // reg = 1 when condition `cond` holds, else 0; the flags are kept.
 void set_cond(Gen *g, int reg, int cond);
+// Whether `in` calls a runtime routine (the long long multiply, divide, remainder and
+// variable shifts, and the conversions between long long and FP), which clobbers
+// r0-r3, r12, lr and d0-d7; `type_of(arg, v)` gives the type of operand `v`.  Sets
+// *dst to its result.
+typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst);
 // Operand 2 of `op` for integer value `v` of type `t`: a modified immediate when the
 // constant is one, or when its negation (add, sub, cmp) or complement (and) is, with
 // *op changed to the counterpart; else core register `scratch`, loaded.

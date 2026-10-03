@@ -8,6 +8,7 @@
 // A local in a slot: stored, then loaded for the return.
 TEST_F(Arm32Test, LocalSlot)
 {
+    NaiveSelection();
     DisableOptimization();
     EXPECT_EQ(R"(push {r11, lr}
 mov r11, sp
@@ -24,6 +25,7 @@ pop {r11, pc}
 // Each width loads and stores as itself; a char by its signedness.
 TEST_F(Arm32Test, SlotWidths)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 int f(void) {
@@ -41,6 +43,7 @@ int f(void) {
 // An 8-byte value moves as two words, the low one first.
 TEST_F(Arm32Test, LongLongCopy)
 {
+    NaiveSelection();
     DisableOptimization();
     EXPECT_EQ(R"(push {r11, lr}
 mov r11, sp
@@ -65,6 +68,7 @@ pop {r11, pc}
 // A double needs no VFP register for a copy, and is returned in d0.
 TEST_F(Arm32Test, DoubleCopy)
 {
+    NaiveSelection();
     DisableOptimization();
     EXPECT_EQ(R"(push {r11, lr}
 mov r11, sp
@@ -95,6 +99,7 @@ bx lr
 // immediates; ldrh's 8-bit reach is shorter than ldr's.
 TEST_F(Arm32Test, LargeFrameOffsets)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string src = "int f(void) {\n";
     for (int i = 0; i < 1100; i++)

@@ -103,6 +103,8 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     a32_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->regs);
+    map_init(&g->regs_hi);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -132,6 +134,8 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->regs);
+    map_destroy(&g->regs_hi);
     a32_free_func(g->fn);
 }
 
@@ -140,11 +144,14 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg,
+                        int hi)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
     s->offset = offset;
+    s->reg    = reg;
+    s->hi     = hi;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -158,19 +165,47 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->locals_size;
     if (name)
-        insert_slot(g, name, type, offset);
+        insert_slot(g, name, type, offset, -1, -1);
     return offset;
 }
 
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
 {
-    insert_slot(g, name, type, offset);
+    insert_slot(g, name, type, offset, -1, -1);
+}
+
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg, int hi)
+{
+    insert_slot(g, name, type, 0, reg, hi);
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
 {
     intptr_t v;
     return map_get(&g->frame, name, &v) ? (const Slot *)v : NULL;
+}
+
+int assigned_reg(const Gen *g, const char *name, int *hi)
+{
+    intptr_t v;
+    *hi = map_get(&g->regs_hi, name, &v) ? (int)v - 1 : -1;
+    return map_get(&g->regs, name, &v) ? (int)v - 1 : -1;
+}
+
+int var_reg(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return -1;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->reg : -1;
+}
+
+int var_reg_hi(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return -1;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->hi : -1;
 }
 
 const Tac_Type *name_type(const Gen *g, const char *name)
@@ -302,6 +337,8 @@ A32_Operand mem(Gen *g, A32_Op op, int base, int64_t off, int scratch)
 void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->reg >= 0)
+        fatal_error("arm32: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = A32_FP;
         *off  = s->offset;
@@ -445,9 +482,40 @@ void load_fp_const(Gen *g, int reg, const Tac_Const *c, const Tac_Type *t, int l
     emit3(g, A32_VMOV, a32_dreg(reg), a32_reg(lo), a32_reg(hi));
 }
 
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    if (dst == src)
+        return;
+    bool dv = a32_is_vfp(dst), sv = a32_is_vfp(src);
+    if (!dv && !sv)
+        emit2(g, A32_MOV, a32_reg(dst), a32_reg(src));
+    else if (dv && sv && a32_is_double(t))
+        emit2(g, A32_VMOV_F64, a32_dreg(dst), a32_dreg(src));
+    else if (dv && sv)
+        emit2(g, A32_VMOV_F32, a32_sreg(dst), a32_sreg(src));
+    else
+        emit2(g, A32_VMOV, dv ? a32_sreg(dst) : a32_reg(dst), sv ? a32_sreg(src) : a32_reg(src));
+}
+
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    int size = a32_size(t);
+    if (size == 1)
+        emit2(g, a32_is_unsigned(t) ? A32_UXTB : A32_SXTB, a32_reg(dst), a32_reg(src));
+    else if (size == 2)
+        emit2(g, a32_is_unsigned(t) ? A32_UXTH : A32_SXTH, a32_reg(dst), a32_reg(src));
+    else
+        move_reg(g, dst, src, t);
+}
+
 void load_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as)
 {
     const Tac_Type *t = val_type(g, v);
+    int r             = var_reg(g, v);
+    if (r >= 0) {
+        move_reg(g, reg, r, t);
+        return;
+    }
     if (v->kind == TAC_VAL_CONSTANT) {
         if (!as)
             as = t;
@@ -470,6 +538,15 @@ void load_val(Gen *g, int reg, const Tac_Val *v)
 
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
+    int r = var_reg(g, v);
+    if (r >= 0) {
+        const Tac_Type *t = val_type(g, v);
+        if (!a32_is_vfp(r) && !a32_is_vfp(reg))
+            gen_canon(g, r, reg, t);
+        else
+            move_reg(g, r, reg, t);
+        return;
+    }
     int scratch = reg == T0 ? T1 : T0;
     int base;
     int64_t off;
@@ -477,9 +554,51 @@ void store_val(Gen *g, int reg, const Tac_Val *v)
     store_mem(g, reg, name_type(g, v->u.var_name), base, off, scratch);
 }
 
+// Whether a register of `reg`'s file holds `v`'s value.
+static bool same_file(const Gen *g, int reg, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    return r >= 0 && a32_is_vfp(r) == a32_is_vfp(reg);
+}
+
+int use_val(Gen *g, int scratch, const Tac_Val *v)
+{
+    return use_as(g, scratch, v, NULL);
+}
+
+int use_as(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *as)
+{
+    if (same_file(g, scratch, v))
+        return var_reg(g, v);
+    load_as(g, scratch, v, as);
+    return scratch;
+}
+
+int def_reg(const Gen *g, int scratch, const Tac_Val *v)
+{
+    return same_file(g, scratch, v) ? var_reg(g, v) : scratch;
+}
+
+int use_word(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *as, int half)
+{
+    if (var_reg_hi(g, v) >= 0)
+        return half ? var_reg_hi(g, v) : var_reg(g, v);
+    load_word(g, scratch, v, as, half);
+    return scratch;
+}
+
 void load_word(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as, int half)
 {
     const Tac_Type *t = val_type(g, v);
+    int r             = var_reg(g, v);
+    if (r >= 0 && var_reg_hi(g, v) >= 0) {
+        move_reg(g, reg, half ? var_reg_hi(g, v) : r, t);
+        return;
+    }
+    if (r >= 0 && a32_is_double(t)) {
+        emit2(g, A32_VMOV, a32_reg(reg), a32_sreg(r + half));
+        return;
+    }
     if (v->kind == TAC_VAL_CONSTANT) {
         gen_li(g, reg, (uint32_t)(const_bits(v->u.constant, as) >> (32 * half)));
         return;
@@ -507,12 +626,129 @@ static int other_scratch(int a, int b)
 
 void store_pair(Gen *g, const Tac_Val *dst, int lo, int hi)
 {
+    int r = var_reg(g, dst);
+    if (r >= 0 && a32_is_vfp(r)) {
+        emit3(g, A32_VMOV, a32_dreg(r), a32_reg(lo), a32_reg(hi));
+        return;
+    }
+    if (r >= 0) {
+        Move m[2] = { { r, lo, MOVE_CORE }, { var_reg_hi(g, dst), hi, MOVE_CORE } };
+        parallel_move(g, m, 2);
+        return;
+    }
     int scratch = other_scratch(lo, hi);
     int base;
     int64_t off;
     name_addr(g, dst->u.var_name, scratch, &base, &off);
     emit2(g, A32_STR, a32_reg(lo), mem(g, A32_STR, base, off, scratch));
     emit2(g, A32_STR, a32_reg(hi), mem(g, A32_STR, base, off + 4, scratch));
+}
+
+// The registers move `m` reads, or writes: a bit each of r0-r15 and s0-s31.
+static uint64_t footprint(int reg, bool d)
+{
+    return (d ? 3ull : 1ull) << reg;
+}
+
+static uint64_t src_set(const Move *m)
+{
+    return footprint(m->src, m->kind == MOVE_D);
+}
+
+static uint64_t dst_set(const Move *m)
+{
+    return footprint(m->dst, m->kind == MOVE_D);
+}
+
+static void emit_move(Gen *g, const Move *m)
+{
+    static const Tac_Type f = { .kind = TAC_TYPE_FLOAT }, d = { .kind = TAC_TYPE_DOUBLE },
+                          i = { .kind = TAC_TYPE_INT };
+    switch (m->kind) {
+    case MOVE_HI_SIGN:
+        emit2(g, A32_MOV, a32_reg(m->dst), a32_shift(m->src, A32_SHIFT_ASR, 31));
+        break;
+    case MOVE_D:
+        move_reg(g, m->dst, m->src, &d);
+        break;
+    case MOVE_S:
+    case MOVE_S_TO_CORE:
+        move_reg(g, m->dst, m->src, &f);
+        break;
+    default:
+        move_reg(g, m->dst, m->src, &i);
+        break;
+    }
+}
+
+// A move goes when no other still reads its destination.  When every one waits, one
+// whose source another writes has that source copied to a scratch register first.
+void parallel_move(Gen *g, Move *m, int n)
+{
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            bool blocked = false;
+            for (int j = 0; j < n && !blocked; j++)
+                blocked = j != i && (src_set(&m[j]) & dst_set(&m[i]));
+            if (!blocked)
+                pick = i;
+        }
+        if (pick >= 0) {
+            emit_move(g, &m[pick]);
+            m[pick] = m[--n];
+            continue;
+        }
+        int i = 0;
+        for (int k = 0; k < n; k++)
+            for (int j = 0; j < n; j++)
+                if (j != k && (src_set(&m[k]) & dst_set(&m[j])))
+                    i = k;
+        bool vfp = a32_is_vfp(m[i].src), d = m[i].kind == MOVE_D;
+        int tmp  = -1;
+        int cand[2] = { vfp ? F0 : T0, vfp ? F1 : T1 };
+        for (int c = 0; c < 2 && tmp < 0; c++) {
+            bool busy = false;
+            for (int j = 0; j < n; j++)
+                busy |= (src_set(&m[j]) & footprint(cand[c], vfp)) != 0;
+            if (!busy)
+                tmp = cand[c];
+        }
+        if (tmp < 0)
+            fatal_error("arm32: %s: no scratch register for a parallel move", gen_name(g));
+        Move save = { tmp, m[i].src, vfp ? (d ? MOVE_D : MOVE_S) : MOVE_CORE };
+        emit_move(g, &save);
+        m[i].src = tmp;
+    }
+}
+
+void load_words(Gen *g, const WordLoad *w, int n)
+{
+    Move m[8];
+    int nm = 0;
+    for (int i = 0; i < n; i++) {
+        const Tac_Type *t = val_type(g, w[i].v);
+        int r             = var_reg(g, w[i].v);
+        if (r < 0)
+            continue;
+        if (var_reg_hi(g, w[i].v) >= 0)
+            m[nm++] = (Move){ w[i].reg, w[i].half ? var_reg_hi(g, w[i].v) : r, MOVE_CORE };
+        else if (a32_is_vfp(r))
+            m[nm++] = (Move){ w[i].reg, r + w[i].half, MOVE_S_TO_CORE };
+        else if (!w[i].half)
+            m[nm++] = (Move){ w[i].reg, r, MOVE_CORE };
+        else if (!a32_is_unsigned(t))
+            m[nm++] = (Move){ w[i].reg, r, MOVE_HI_SIGN };
+    }
+    parallel_move(g, m, nm);
+    for (int i = 0; i < n; i++) {
+        int r = var_reg(g, w[i].v);
+        if (r < 0)
+            load_word(g, w[i].reg, w[i].v, w[i].as, w[i].half);
+        else if (w[i].half && var_reg_hi(g, w[i].v) < 0 && !a32_is_vfp(r) &&
+                 a32_is_unsigned(val_type(g, w[i].v)))
+            gen_li(g, w[i].reg, 0); // the high word of an unsigned int
+    }
 }
 
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align)
@@ -558,9 +794,10 @@ static A32_Block *redirect(Gen *g, A32_Block *b)
 typedef struct {
     bool frame;     // the frame record: a slot, a call, sp or lr in use
     bool r10;       // the third scratch register
-    unsigned dmask; // d14 and d15 in use, as d registers
-    int locals;     // the slots' bytes, 8-aligned
-    int saves;      // the bytes of the saved scratch registers
+    unsigned dmask; // the VFP registers saved, as d registers: d8-d15, a range
+    int core;       // the bytes of r4-r9 saved with the frame record
+    int locals;     // those and the slots' bytes, 8-aligned
+    int saves;      // the bytes of the VFP registers and r10 saved below them
 } Frame;
 
 static void note_reg(Frame *fr, int reg)
@@ -589,15 +826,23 @@ static Frame scan_body(const Gen *g)
             }
         }
     }
+    // One vpush of a range: from the lowest d register saved to the highest.
+    fr.dmask |= g->saved_vfp;
+    if (fr.dmask) {
+        int lo = __builtin_ctz(fr.dmask), hi = 31 - __builtin_clz(fr.dmask);
+        fr.dmask = (2u << hi) - (1u << lo);
+    }
+    fr.core   = 4 * __builtin_popcount(g->saved_core);
     fr.locals = (g->locals_size + 7) / 8 * 8;
     fr.saves  = 8 * __builtin_popcount(fr.dmask) + (fr.r10 ? 4 : 0);
-    if (fr.locals || g->outgoing || fr.r10 || fr.dmask || g->tl->u.function.variadic)
+    if (fr.locals || fr.core || g->outgoing || fr.r10 || fr.dmask || g->tl->u.function.variadic)
         fr.frame = true;
     return fr;
 }
 
-// The return sequence: the saved scratch registers back, then sp, r11 and pc as on
-// entry; or just `bx lr` without a frame.  A variadic function drops its r0-r3 too.
+// The return sequence: the registers saved below the slots back, then sp, r4-r9, r11
+// and pc as on entry; or just `bx lr` without a frame.  A variadic function drops its
+// r0-r3 too.
 static void epilogue(Gen *g, const Frame *fr)
 {
     if (!fr->frame) {
@@ -611,14 +856,14 @@ static void epilogue(Gen *g, const Frame *fr)
         if (fr->dmask)
             emit1(g, A32_VPOP, a32_dreglist(fr->dmask));
     }
-    emit2(g, A32_MOV, a32_reg(A32_SP), a32_reg(A32_FP));
+    gen_addr(g, A32_SP, A32_FP, -fr->core);
     if (g->tl->u.function.variadic) {
-        emit1(g, A32_POP, a32_reglist(1u << A32_FP | 1u << A32_LR));
+        emit1(g, A32_POP, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_LR));
         emit3(g, A32_ADD, a32_reg(A32_SP), a32_reg(A32_SP), a32_imm(16));
         emit1(g, A32_BX, a32_reg(A32_LR));
         return;
     }
-    emit1(g, A32_POP, a32_reglist(1u << A32_FP | 1u << A32_PC));
+    emit1(g, A32_POP, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_PC));
 }
 
 // Replace each epilogue marker by the return sequence.
@@ -646,9 +891,10 @@ static void expand_epilogues(Gen *g, const Frame *fr)
     }
 }
 
-// push {r11, lr}; mov r11, sp; the slots; the scratch registers in use; the outgoing
-// area, with sp 8-byte aligned.  A variadic function first pushes r0-r3, which then
-// lie just below its stack arguments: one area of all its arguments, from r11 + 8.
+// push {r4-r9 in use, r11, lr}; r11 = the address of the saved r11; the slots; the
+// VFP registers and r10 in use; the outgoing area, with sp 8-byte aligned.  A variadic
+// function first pushes r0-r3, which then lie just below its stack arguments: one
+// area of all its arguments, from r11 + 8.
 void gen_prologue(Gen *g)
 {
     Frame fr        = scan_body(g);
@@ -656,10 +902,10 @@ void gen_prologue(Gen *g)
     if (g->tl->u.function.variadic)
         emit1(g, A32_PUSH, a32_reglist(0xf));
     if (fr.frame) {
-        emit1(g, A32_PUSH, a32_reglist(1u << A32_FP | 1u << A32_LR));
-        emit2(g, A32_MOV, a32_reg(A32_FP), a32_reg(A32_SP));
-        if (fr.locals)
-            gen_addr(g, A32_SP, A32_SP, -fr.locals);
+        emit1(g, A32_PUSH, a32_reglist(g->saved_core | 1u << A32_FP | 1u << A32_LR));
+        gen_addr(g, A32_FP, A32_SP, fr.core);
+        if (fr.locals > fr.core)
+            gen_addr(g, A32_SP, A32_SP, -(fr.locals - fr.core));
         if (fr.dmask)
             emit1(g, A32_VPUSH, a32_dreglist(fr.dmask));
         if (fr.r10)

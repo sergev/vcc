@@ -6,6 +6,7 @@
 // A test of zero is a cmp and a conditional branch; labels are local (.L).
 TEST_F(Arm32Test, IfElse)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(
         "int f(void) { int a = 3; int r; if (a) r = 1; else r = 2; return r; }"));
@@ -27,6 +28,7 @@ TEST_F(Arm32Test, LoopLabels)
 // A long long is zero when the or of its words is.
 TEST_F(Arm32Test, LongLongCondition)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code =
         Code(CompileToArm32("int f(void) { long long a = 3; if (a) return 1; return 2; }"));

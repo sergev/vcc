@@ -6,6 +6,7 @@
 
 TEST_F(Arm32Test, DoubleArithmetic)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 double f(void) { double a = 1.5; double b = 2.0; return a * b + a; }
@@ -27,6 +28,7 @@ pop {r11, pc}
 // vcmp and vmrs; a NaN sets C and V, so < and <= use mi and ls.
 TEST_F(Arm32Test, FloatCompare)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 int f(void) { float a = 1.0f; float b = 2.0f; return (a < b) + (a <= b); }
@@ -43,6 +45,7 @@ movmi r12, #1
 
 TEST_F(Arm32Test, FloatingPointCondition)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 int f(void) { double d = 0.5; if (d) return 1; return 2; }
@@ -55,6 +58,7 @@ beq .L)"))
 
 TEST_F(Arm32Test, FloatingPointConversions)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 int f(void) {

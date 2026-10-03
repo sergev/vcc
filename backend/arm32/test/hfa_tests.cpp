@@ -9,6 +9,7 @@
 // A float, three doubles in d1-d3, two floats in s8-s9, and a float back-filling s1.
 TEST_F(Arm32Test, HfaArgumentsBackFill)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct f2 { float a, b; };
 struct d3 { double a, b, c; };
@@ -29,6 +30,7 @@ bl f
 // The callee stores the registers into its slots; an HFA result comes back in d0-d2.
 TEST_F(Arm32Test, HfaParametersAndResult)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct d3 { double a, b, c; };
 struct f2 { float a, b; };
@@ -53,6 +55,7 @@ vstr d0, )")) << code;
 // Not homogeneous: mixed float and double, an int member, or five members.
 TEST_F(Arm32Test, NotHfaInCoreRegisters)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct m { float a; double b; };
 struct f5 { float a[5]; };

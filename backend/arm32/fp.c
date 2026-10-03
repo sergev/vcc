@@ -26,8 +26,7 @@ static void vmrs(Gen *g)
 void fp_test_zero(Gen *g, const Tac_Val *v)
 {
     const Tac_Type *t = val_type(g, v);
-    load_val(g, F0, v);
-    emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, F0), a32_imm(0));
+    emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, use_val(g, F0, v)), a32_imm(0));
     vmrs(g);
 }
 
@@ -62,14 +61,15 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t  = val_type(g, in->u.binary.src1);
     const Tac_Val *dst = in->u.binary.dst;
-    load_val(g, F0, in->u.binary.src1);
-    load_val(g, F1, in->u.binary.src2);
+    int a    = use_val(g, F0, in->u.binary.src1);
+    int b    = use_val(g, F1, in->u.binary.src2);
     int cond = fp_compare_cond(in->u.binary.op);
     if (cond >= 0) {
-        emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, F0), fp_reg(t, F1));
+        emit2(g, fp_op(t, A32_VCMP_F32, A32_VCMP_F64), fp_reg(t, a), fp_reg(t, b));
         vmrs(g);
-        set_cond(g, T0, cond);
-        store_val(g, T0, dst);
+        int d = def_reg(g, T0, dst);
+        set_cond(g, d, cond);
+        store_val(g, d, dst);
         return;
     }
     A32_Op op;
@@ -93,8 +93,9 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
     default:
         fatal_error("arm32: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
-    emit3(g, op, fp_reg(t, F0), fp_reg(t, F0), fp_reg(t, F1));
-    store_val(g, F0, dst);
+    int d = def_reg(g, F0, dst);
+    emit3(g, op, fp_reg(t, d), fp_reg(t, a), fp_reg(t, b));
+    store_val(g, d, dst);
 }
 
 // A negation, or `!` (equal to zero, a NaN is not).
@@ -104,15 +105,16 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
     const Tac_Val *dst = in->u.unary.dst;
     if (in->u.unary.op == TAC_UNARY_NOT) {
         fp_test_zero(g, in->u.unary.src);
-        set_cond(g, T0, A32_EQ);
-        store_val(g, T0, dst);
+        int d = def_reg(g, T0, dst);
+        set_cond(g, d, A32_EQ);
+        store_val(g, d, dst);
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("arm32: %s: bad floating-point unary operator", gen_name(g));
-    load_val(g, F0, in->u.unary.src);
-    emit2(g, fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, F0), fp_reg(t, F0));
-    store_val(g, F0, dst);
+    int a = use_val(g, F0, in->u.unary.src), d = def_reg(g, F0, dst);
+    emit2(g, fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d), fp_reg(t, a));
+    store_val(g, d, dst);
 }
 
 // Between float and double, by vcvt; between them and an integer, through s28: the
@@ -124,28 +126,31 @@ void gen_fp_convert32(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instru
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     bool sfp = a32_is_fp(st), dfp = a32_is_fp(dt);
     if (sfp && dfp) {
-        load_val(g, F0, src);
+        int a = use_val(g, F0, src), d = def_reg(g, F0, dst);
         if (a32_is_double(st) != a32_is_double(dt))
-            emit2(g, a32_is_double(dt) ? A32_VCVT_F64_F32 : A32_VCVT_F32_F64, fp_reg(dt, F0),
-                  fp_reg(st, F0));
-        store_val(g, F0, dst);
+            emit2(g, a32_is_double(dt) ? A32_VCVT_F64_F32 : A32_VCVT_F32_F64, fp_reg(dt, d),
+                  fp_reg(st, a));
+        else
+            move_reg(g, d, a, dt);
+        store_val(g, d, dst);
         return;
     }
     if (dfp) {
         bool u = from_unsigned(kind);
-        load_val(g, T0, src);
-        emit2(g, A32_VMOV, a32_sreg(F0), a32_reg(T0));
+        emit2(g, A32_VMOV, a32_sreg(F0), a32_reg(use_val(g, T0, src)));
         A32_Op op = a32_is_double(dt) ? (u ? A32_VCVT_F64_U32 : A32_VCVT_F64_S32)
                                       : (u ? A32_VCVT_F32_U32 : A32_VCVT_F32_S32);
-        emit2(g, op, fp_reg(dt, F0), a32_sreg(F0));
-        store_val(g, F0, dst);
+        int d = def_reg(g, F0, dst);
+        emit2(g, op, fp_reg(dt, d), a32_sreg(F0));
+        store_val(g, d, dst);
         return;
     }
     bool u = a32_is_unsigned(dt);
-    load_val(g, F0, src);
+    int a  = use_val(g, F0, src);
     A32_Op op = a32_is_double(st) ? (u ? A32_VCVT_U32_F64 : A32_VCVT_S32_F64)
                                   : (u ? A32_VCVT_U32_F32 : A32_VCVT_S32_F32);
-    emit2(g, op, a32_sreg(F0), fp_reg(st, F0));
-    emit2(g, A32_VMOV, a32_reg(T0), a32_sreg(F0));
-    store_val(g, T0, dst);
+    emit2(g, op, a32_sreg(F0), fp_reg(st, a));
+    int d = def_reg(g, T0, dst);
+    emit2(g, A32_VMOV, a32_reg(d), a32_sreg(F0));
+    store_val(g, d, dst);
 }

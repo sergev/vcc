@@ -37,6 +37,14 @@ protected:
                                 "-serial", "stdio", "-monitor", "none", "-semihosting" },
                               "" })
     {
+        // The defaults; a test may change them.
+        arm32_regalloc = true;
+    }
+
+    // Pin instruction selection itself: every variable in its slot.
+    static void NaiveSelection()
+    {
+        arm32_regalloc = false;
     }
 
     // Assembly of every toplevel of the translation unit.
@@ -117,5 +125,6 @@ protected:
 #define EXPECT_CODE(name, expected, src)                \
     TEST_F(Arm32Test, name)                             \
     {                                                   \
+        NaiveSelection();                               \
         EXPECT_EQ(expected, Code(CompileToArm32(src))); \
     }

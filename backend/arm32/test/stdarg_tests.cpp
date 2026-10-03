@@ -8,6 +8,7 @@
 // return drops them again.
 TEST_F(Arm32Test, VariadicFrame)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 int first(int n, ...) { return n; }
 )"));
@@ -26,6 +27,7 @@ bx lr
 // A double result goes back in r0:r1, a long long parameter is at the even pair.
 TEST_F(Arm32Test, VariadicBaseStandardResult)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 double second(int n, long long k, ...) { return k; }
 )"));

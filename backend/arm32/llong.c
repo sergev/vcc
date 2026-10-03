@@ -26,17 +26,16 @@ static void bl(Gen *g, const char *name)
 // shift count).
 static void load_args(Gen *g, const Tac_Val *v, const Tac_Val *w, const Tac_Type *t, bool count)
 {
-    load_word(g, A32_R0, v, t, 0);
-    load_word(g, A32_R0 + 1, v, t, 1);
-    if (!w)
-        return;
-    const Tac_Type *wt = val_type(g, w);
-    if (count)
-        load_word(g, A32_R0 + 2, w, a32_size(wt) == 8 ? wt : &ll, 0);
-    else {
-        load_word(g, A32_R0 + 2, w, t, 0);
-        load_word(g, A32_R0 + 3, w, t, 1);
+    WordLoad l[4] = { { A32_R0, v, t, 0 }, { A32_R0 + 1, v, t, 1 } };
+    int n         = 2;
+    if (w && count) {
+        const Tac_Type *wt = val_type(g, w);
+        l[n++]             = (WordLoad){ A32_R0 + 2, w, a32_size(wt) == 8 ? wt : &ll, 0 };
+    } else if (w) {
+        l[n++] = (WordLoad){ A32_R0 + 2, w, t, 0 };
+        l[n++] = (WordLoad){ A32_R0 + 3, w, t, 1 };
     }
+    load_words(g, l, n);
 }
 
 // A shift of the pair in r12/lr by constant `n` (1..63).  Across the halves, the bits
@@ -195,13 +194,25 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     default:
         fatal_error("arm32: %s: bad long long operator %d", gen_name(g), op);
     }
-    // Each word stored as it is computed: the flags carry over.
-    load_halves(g, a, b, t, 0);
-    op3(g, lo_op, T0, T0, a32_reg(T1), carry);
-    store_word(g, T0, dst, 0);
-    load_halves(g, a, b, t, 1);
-    op3(g, hi_op, T0, T0, a32_reg(T1), false);
-    store_word(g, T0, dst, 1);
+    if (var_reg(g, dst) < 0) {
+        // Each word stored as it is computed: the flags carry over.
+        load_halves(g, a, b, t, 0);
+        op3(g, lo_op, T0, T0, a32_reg(T1), carry);
+        store_word(g, T0, dst, 0);
+        load_halves(g, a, b, t, 1);
+        op3(g, hi_op, T0, T0, a32_reg(T1), false);
+        store_word(g, T0, dst, 1);
+        return;
+    }
+    // Into registers, which may be those of a source word still to be read: the low
+    // word in r12, the high one in lr, b's high word loaded into dst's high register
+    // (every other source word read by then); the flags carry over.  Moves and loads
+    // leave them alone.
+    int hi = var_reg_hi(g, dst);
+    op3(g, lo_op, T0, use_word(g, T0, a, t, 0), a32_reg(use_word(g, T1, b, t, 0)), carry);
+    load_word(g, T1, a, t, 1);
+    op3(g, hi_op, T1, T1, a32_reg(use_word(g, hi, b, t, 1)), false);
+    store_pair(g, dst, T0, T1);
 }
 
 void gen_ll_unary(Gen *g, const Tac_Instruction *in)
@@ -268,4 +279,51 @@ void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instr
     }
     bl(g, name);
     store_pair(g, dst, A32_R0, A32_R0 + 1);
+}
+
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                  const Tac_Val **dst)
+{
+    switch (in->kind) {
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE: {
+        *dst                = in->u.int_to_double.dst;
+        const Tac_Type *src = type_of(arg, in->u.int_to_double.src);
+        const Tac_Type *res = type_of(arg, *dst);
+        return (src && a32_is_pair(src)) || (res && a32_is_pair(res));
+    }
+    case TAC_INSTRUCTION_BINARY: {
+        *dst              = in->u.binary.dst;
+        const Tac_Type *t = type_of(arg, in->u.binary.src1);
+        if (!t || !a32_is_pair(t))
+            return false;
+        switch (in->u.binary.op) {
+        case TAC_BINARY_MULTIPLY:
+        case TAC_BINARY_MULTIPLY_UNSIGNED:
+        case TAC_BINARY_DIVIDE:
+        case TAC_BINARY_DIVIDE_UNSIGNED:
+        case TAC_BINARY_REMAINDER:
+        case TAC_BINARY_REMAINDER_UNSIGNED:
+            return true;
+        case TAC_BINARY_LEFT_SHIFT:
+        case TAC_BINARY_RIGHT_SHIFT:
+        case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
+            return in->u.binary.src2->kind != TAC_VAL_CONSTANT;
+        default:
+            return false;
+        }
+    }
+    default:
+        return false;
+    }
 }

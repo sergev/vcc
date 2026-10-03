@@ -7,10 +7,14 @@
 
 #include "internal.h"
 
-// A slot for every parameter and local.  An ALLOCATE_LOCAL may ask for more room or
-// alignment than the type.
+bool arm32_regalloc = true;
+
+// The saved r4-r9 in use first, just below r11; then a register or a slot for every
+// parameter and local.  An ALLOCATE_LOCAL may ask for more room or alignment than the
+// type.
 static void layout_frame(Gen *g)
 {
+    g->locals_size = 4 * __builtin_popcount(g->saved_core);
     gen_params(g);
     StringMap allocs;
     map_init(&allocs);
@@ -21,6 +25,11 @@ static void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("arm32: %s: no type for %s", gen_name(g), p->name);
+        int hi, reg = assigned_reg(g, p->name, &hi);
+        if (reg >= 0) {
+            place_reg(g, p->name, p->type, reg, hi);
+            continue;
+        }
         int size  = a32_size(p->type);
         int align = a32_align(p->type);
         intptr_t v;
@@ -40,6 +49,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    if (arm32_regalloc)
+        gen_regalloc(&g);
     layout_frame(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {

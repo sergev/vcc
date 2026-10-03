@@ -8,6 +8,7 @@
 // there); an int-sized one is a word.
 TEST_F(Arm32Test, SmallStructInRegisters)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct s { char a, b, c; };
 struct w { short a; char b; };
@@ -25,6 +26,7 @@ bl f
 // split between r3 and the stack.
 TEST_F(Arm32Test, StructEvenAndSplit)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct a8 { long long x; };
 struct s12 { int a, b, c; };
@@ -43,6 +45,7 @@ ldr r3, [r11, #-4]
 // callee saves it on entry and copies the value there.
 TEST_F(Arm32Test, LargeStructResultThroughR0)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 struct big { int a, b, c; };
 struct big make(int x) { struct big r = { x, x + 1, x + 2 }; return r; }

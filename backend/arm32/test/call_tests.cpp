@@ -8,6 +8,7 @@
     TEST_F(Arm32Test, name)                                        \
     {                                                              \
         DisableOptimization();                                     \
+        NaiveSelection();                                          \
         std::string code = Code(CompileToArm32(src));              \
         EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
@@ -31,6 +32,7 @@ bl g
 // Once an FP value is on the stack, no later one takes a VFP register.
 TEST_F(Arm32Test, CallVfpClosed)
 {
+    NaiveSelection();
     std::string src = R"(void g(double, double, double, double, double, double, double, double, double, float);
 void f(void) { g(1, 2, 3, 4, 5, 6, 7, 8, 9, 10.0f); })";
     std::string code = Code(CompileToArm32(src.c_str()));
@@ -59,6 +61,7 @@ vstr d0, [r11, #-)",
 // A constant argument goes as its parameter type.
 TEST_F(Arm32Test, CallNarrowConstant)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32("void g(signed char c); void f(void) { g(-1); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mvn r0, #0
 bl g

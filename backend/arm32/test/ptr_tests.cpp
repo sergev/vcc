@@ -7,6 +7,7 @@
 // A power-of-two scale is a shifted add.
 TEST_F(Arm32Test, AddPointerScaledIndex)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 int f(int *p) { int i = -1; return p[i]; }
@@ -20,13 +21,15 @@ add r12, r12, lr, lsl #2
 // A scale that is not a power of two is a multiply.
 TEST_F(Arm32Test, AddPointerOddScale)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 struct s { char c[3]; };
 char f(struct s *p, unsigned i) { return p[i].c[0]; }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov lr, #3
-mul lr, r12, lr
+    EXPECT_NE(std::string::npos, code.find(R"(ldr lr, [r11, #-12]
+mov r12, #3
+mul lr, lr, r12
 ldr r12, [r11, #-4]
 add r12, r12, lr
 )")) << code;
@@ -35,6 +38,7 @@ add r12, r12, lr
 // A load goes through the pointer in r12, a store through the one in lr.
 TEST_F(Arm32Test, LoadAndStoreThroughPointers)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 void f(unsigned char *p, short *q) { *p = *q; }
@@ -48,6 +52,7 @@ ldrsh r12, [r12]
 // An 8-byte value moves through a pointer as two words.
 TEST_F(Arm32Test, LongLongThroughPointer)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToArm32(R"(
 long long f(long long *p) { return *p; }

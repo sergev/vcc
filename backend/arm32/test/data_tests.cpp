@@ -65,6 +65,7 @@ ld:
 // A global is reached through its address, from movw and movt.
 TEST_F(Arm32Test, GlobalAccess)
 {
+    NaiveSelection();
     std::string code = Code(CompileToArm32(R"(
 int counter;
 int bump(void) { counter = counter + 1; return counter; }

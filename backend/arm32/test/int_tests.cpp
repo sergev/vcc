@@ -9,6 +9,7 @@
     TEST_F(Arm32Test, name)                                        \
     {                                                              \
         DisableOptimization();                                     \
+        NaiveSelection();                                          \
         std::string code = Code(CompileToArm32(src));              \
         EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }

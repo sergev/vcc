@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -213,13 +214,50 @@ static bool is_variadic(const Tac_Type *fun_type)
     return fun_type && fun_type->kind == TAC_TYPE_FUN_TYPE && fun_type->u.fun_type.variadic;
 }
 
-// Each parameter gets a slot: one passed in registers is stored there, one on the stack
-// is read where the caller put it, above the frame record.  A variadic function's are
-// all read where they are, in the area of its saved r0-r3 and its stack arguments.
+// The move of a scalar of type `t` from argument register `from` (a pair from `from`
+// and the next) to its allocated register `reg` (`hi`); returns how many.
+static int param_moves(Move *m, const Tac_Type *t, int from, int reg, int hi)
+{
+    if (hi >= 0) {
+        m[0] = (Move){ reg, from, MOVE_CORE };
+        m[1] = (Move){ hi, from + 1, MOVE_CORE };
+        return 2;
+    }
+    if (a32_is_fp(t))
+        m[0] = (Move){ reg, from, a32_is_double(t) ? MOVE_D : MOVE_S };
+    else
+        m[0] = (Move){ reg, from, MOVE_CORE };
+    return 1;
+}
+
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
+{
+    if (g->tl->u.function.variadic)
+        return;
+    ArgState s = arg_state(true);
+    if (indirect_result(ret_type(g->tl->u.function.type), true))
+        s.next_core = 1;
+    for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        if (!a.nregs || a32_is_aggregate(p->type))
+            continue;
+        map_insert(hints, p->name, a.reg + 1, 0);
+        if (a.nregs == 2 && !a.esize)
+            map_insert(hints_hi, p->name, a.reg + 2, 0);
+    }
+}
+
+// Each parameter gets a register or a slot.  One passed in registers is stored to its
+// slot, or moved to its register; one on the stack is read where the caller put it,
+// above the frame record, or loaded.  A variadic function's are all in the area of its
+// saved r0-r3 and its stack arguments.  The stores come first, then the moves as if
+// at once (an allocated register may be another argument register), then the loads.
 void gen_params(Gen *g)
 {
     bool variadic = g->tl->u.function.variadic;
     ArgState s    = arg_state(!variadic);
+    Move moves[32];
+    int nmoves = 0;
     if (indirect_result(ret_type(g->tl->u.function.type), s.vfp)) {
         if (variadic) {
             g->ret_ptr = 8;
@@ -234,6 +272,13 @@ void gen_params(Gen *g)
         if (!t)
             fatal_error("arm32: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
+        int hi, reg = assigned_reg(g, p->name, &hi);
+        if (reg >= 0) {
+            place_reg(g, p->name, t, reg, hi);
+            if (a.nregs && !variadic)
+                nmoves += param_moves(moves + nmoves, t, a.reg, reg, hi);
+            continue;
+        }
         if (variadic) {
             place_slot(g, p->name, t, 8 + (a.nregs ? 4 * (a.reg - A32_R0) : 16 + a.stack));
             continue;
@@ -266,6 +311,24 @@ void gen_params(Gen *g)
             emit2(g, A32_STR, a32_reg(a.reg + 1), mem(g, A32_STR, A32_FP, off + 4, T0));
         } else {
             store_mem(g, a.reg, t, A32_FP, off, T0);
+        }
+    }
+    parallel_move(g, moves, nmoves);
+
+    s = arg_state(!variadic);
+    if (indirect_result(ret_type(g->tl->u.function.type), s.vfp))
+        s.next_core = 1;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        int hi, reg = assigned_reg(g, p->name, &hi);
+        if (reg < 0 || (a.nregs && !variadic))
+            continue;
+        int off = 8 + (!variadic ? a.stack : a.nregs ? 4 * (a.reg - A32_R0) : 16 + a.stack);
+        if (hi >= 0) {
+            emit2(g, A32_LDR, a32_reg(reg), mem(g, A32_LDR, A32_FP, off, reg));
+            emit2(g, A32_LDR, a32_reg(hi), mem(g, A32_LDR, A32_FP, off + 4, hi));
+        } else {
+            load_mem(g, reg, p->type, A32_FP, off);
         }
     }
 }
@@ -327,6 +390,42 @@ static void store_arg(Gen *g, const Arg *a)
     emit2(g, A32_STR, a32_reg(T0), mem(g, A32_STR, A32_SP, off, T1));
 }
 
+// The moves for argument `a` when it is a scalar in registers, going in registers;
+// returns how many (0: it is loaded instead).
+static int arg_moves(const Gen *g, const Arg *a, Move *m)
+{
+    const ArgLoc *l = &a->loc;
+    int r           = var_reg(g, a->v);
+    if (r < 0 || !l->nregs || a32_is_aggregate(a->as))
+        return 0;
+    const Tac_Type *t = val_type(g, a->v);
+    int hi            = var_reg_hi(g, a->v);
+    if (a32_is_vfp(l->reg)) {
+        m[0] = (Move){ l->reg, r, a32_is_double(t) ? MOVE_D : MOVE_S };
+        return 1;
+    }
+    if (l->nregs == 1) {
+        m[0] = (Move){ l->reg, r, a32_is_vfp(r) ? MOVE_S_TO_CORE : MOVE_CORE };
+        return 1;
+    }
+    if (hi >= 0) {
+        m[0] = (Move){ l->reg, r, MOVE_CORE };
+        m[1] = (Move){ l->reg + 1, hi, MOVE_CORE };
+        return 2;
+    }
+    if (a32_is_vfp(r)) { // a double under the base standard
+        m[0] = (Move){ l->reg, r, MOVE_S_TO_CORE };
+        m[1] = (Move){ l->reg + 1, r + 1, MOVE_S_TO_CORE };
+        return 2;
+    }
+    // An int widened to a long long: its high word the sign, or zero (loaded after).
+    m[0] = (Move){ l->reg, r, MOVE_CORE };
+    if (a32_is_unsigned(t))
+        return 1;
+    m[1] = (Move){ l->reg + 1, r, MOVE_HI_SIGN };
+    return 2;
+}
+
 // The type argument `v` is passed as: the declared parameter type, when there is one
 // and it is a scalar of the same class, else its own.
 static const Tac_Type *arg_type(const Gen *g, const Tac_Val *v, const Tac_Type *want)
@@ -336,6 +435,46 @@ static const Tac_Type *arg_type(const Gen *g, const Tac_Val *v, const Tac_Type *
         a32_is_pair(want) == a32_is_pair(t))
         return want;
     return t;
+}
+
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+{
+    const Tac_Type *ft   = in->u.fun_call.fun_type;
+    const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
+    const Tac_Type *ret  = ret_type(ft);
+    bool vfp             = !is_variadic(ft);
+    ArgState s           = arg_state(vfp);
+    const Tac_Val *dst   = in->u.fun_call.dst;
+    int dvar             = dst ? flow_var(f, dst->u.var_name) : -1;
+    if (!ret && dvar >= 0)
+        ret = f->types[dvar];
+    if (indirect_result(ret, vfp))
+        s.next_core = 1;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
+        int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
+        const Tac_Type *t = var >= 0 ? f->types[var] : val_type(g, v);
+        if (!t)
+            return;
+        if (want && !a32_is_aggregate(want) && a32_is_fp(want) == a32_is_fp(t) &&
+            a32_is_pair(want) == a32_is_pair(t))
+            t = want;
+        if (want)
+            want = want->next;
+        ArgLoc a = classify(&s, t);
+        if (var < 0 || !a.nregs || a32_is_aggregate(t) || a32_is_fp(t) != a32_is_vfp(a.reg))
+            continue;
+        if (!hint[var])
+            hint[var] = a.reg + 1;
+        if (a.nregs == 2 && !hint[var + f->nvars])
+            hint[var + f->nvars] = a.reg + 2;
+    }
+    const Tac_Type *t = dvar >= 0 ? f->types[dvar] : NULL;
+    if (!t || a32_is_aggregate(t) || (a32_is_fp(t) && !vfp))
+        return;
+    if (!hint[dvar])
+        hint[dvar] = (a32_is_fp(t) ? A32_S0 : A32_R0) + 1;
+    if (a32_is_pair(t) && !hint[dvar + f->nvars])
+        hint[dvar + f->nvars] = A32_R0 + 2;
 }
 
 void gen_call(Gen *g, const Tac_Instruction *in)
@@ -368,9 +507,29 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             (!a->loc.esize && a32_is_aggregate(a->as) && 4 * a->loc.nregs < a32_size(a->as)))
             store_arg(g, a);
     }
+    // The callee's address, when in an argument register, goes to r10 with the moves:
+    // nothing that loads the argument registers uses r10.
+    Move moves[32];
+    int nmoves = 0, fn_reg = -1;
+    if (in->u.fun_call.indirect) {
+        Tac_Val fv = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
+        fn_reg     = var_reg(g, &fv);
+        if (fn_reg >= A32_R0 && fn_reg < A32_R4) {
+            moves[nmoves++] = (Move){ T2, fn_reg, MOVE_CORE };
+            fn_reg          = T2;
+        }
+    }
     for (i = 0; i < nargs; i++)
-        if (args[i].loc.nregs)
+        nmoves += arg_moves(g, &args[i], moves + nmoves);
+    parallel_move(g, moves, nmoves);
+    for (i = 0; i < nargs; i++) {
+        Move m[2];
+        int k = args[i].loc.nregs ? arg_moves(g, &args[i], m) : -1;
+        if (k == 0)
             load_arg_regs(g, &args[i]);
+        else if (k == 1 && args[i].loc.nregs == 2)
+            gen_li(g, args[i].loc.reg + 1, 0); // an unsigned int widened
+    }
     xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
@@ -386,8 +545,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         }
         gen_addr(g, A32_R0, base, off);
     }
-    if (in->u.fun_call.indirect) {
-        // The callee's address last: loading an FP argument goes through r12.
+    if (in->u.fun_call.indirect && fn_reg >= 0) {
+        emit1(g, A32_BLX, a32_reg(fn_reg));
+    } else if (in->u.fun_call.indirect) {
+        // From memory, the callee's address last: loading an FP argument goes through r12.
         Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
         load_val(g, T0, &fp);
         emit1(g, A32_BLX, a32_reg(T0));
@@ -452,8 +613,8 @@ void gen_return(Gen *g, const Tac_Val *v)
         else if (a32_is_fp(rt) && vfp)
             load_val(g, A32_S0, v);
         else if (a32_size(rt) == 8) {
-            load_word(g, A32_R0, v, rt, 0);
-            load_word(g, A32_R0 + 1, v, rt, 1);
+            WordLoad w[2] = { { A32_R0, v, rt, 0 }, { A32_R0 + 1, v, rt, 1 } };
+            load_words(g, w, 2);
         } else {
             load_as(g, A32_R0, v, rt);
         }

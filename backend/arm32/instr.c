@@ -41,18 +41,18 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     if (a32_is_fp(t)) {
         fp_test_zero(g, cond); // a NaN is not zero: unordered leaves Z clear
     } else if (a32_is_pair(t)) {
-        load_word(g, T0, cond, t, 0);
-        load_word(g, T1, cond, t, 1);
-        emit3(g, A32_ORR, a32_reg(T0), a32_reg(T0), a32_reg(T1))->set_flags = true;
+        int lo = use_word(g, T0, cond, t, 0);
+        emit3(g, A32_ORR, a32_reg(T0), a32_reg(lo), a32_reg(use_word(g, T1, cond, t, 1)))
+            ->set_flags = true;
     } else {
-        load_val(g, T0, cond);
-        emit2(g, A32_CMP, a32_reg(T0), a32_imm(0));
+        emit2(g, A32_CMP, a32_reg(use_val(g, T0, cond)), a32_imm(0));
     }
     gen_branch(g, if_zero ? A32_EQ : A32_NE, target);
 }
 
-// dst = src, for any type: an aggregate copied as bytes, an 8-byte scalar as two
-// words, any other through r12.  A float or double needs no VFP register to move.
+// dst = src, for any type: an aggregate copied as bytes; into a register, loaded or
+// moved there; from a register, stored; else an 8-byte scalar as two words, any other
+// through r12.  A float or double in memory needs no VFP register to move.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
@@ -62,6 +62,27 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
         name_addr(g, src->u.var_name, T0, &sbase, &soff);
         name_addr(g, dst->u.var_name, T1, &dbase, &doff);
         gen_memcopy(g, dbase, doff, sbase, soff, a32_size(t), a32_align(t));
+        return;
+    }
+    int dr = var_reg(g, dst), sr = var_reg(g, src);
+    const Tac_Type *st = val_type(g, src);
+    if (dr >= 0 && var_reg_hi(g, dst) >= 0) {
+        WordLoad w[2] = { { dr, src, t, 0 }, { var_reg_hi(g, dst), src, t, 1 } };
+        load_words(g, w, 2);
+        return;
+    }
+    if (dr >= 0 && a32_is_vfp(dr) == a32_is_fp(st)) {
+        load_as(g, dr, src, t);
+        if (!a32_is_vfp(dr) && src->kind == TAC_VAL_VAR && st->kind != t->kind)
+            gen_canon(g, dr, dr, t);
+        return;
+    }
+    if (sr >= 0 && var_reg_hi(g, src) >= 0) {
+        store_pair(g, dst, sr, var_reg_hi(g, src));
+        return;
+    }
+    if (sr >= 0 && dr < 0 && a32_is_vfp(sr) == a32_is_fp(t)) {
+        store_val(g, sr, dst);
         return;
     }
     if (a32_size(t) == 8) {
@@ -93,15 +114,20 @@ static void store_to(Gen *g, const Tac_Val *src, const Tac_Type *t, int base, in
         gen_memcopy(g, base, off, sbase, soff, a32_size(t), a32_align(t));
         return;
     }
+    int r = var_reg(g, src);
+    if (r >= 0 && a32_is_vfp(r) && a32_is_fp(t) &&
+        a32_is_double(t) == a32_is_double(val_type(g, src))) {
+        store_mem(g, r, t, base, off, T2);
+        return;
+    }
     if (a32_size(t) == 8) {
         for (int half = 0; half < 2; half++) {
-            load_word(g, T0, src, t, half);
-            emit2(g, A32_STR, a32_reg(T0), mem(g, A32_STR, base, off + 4 * half, T2));
+            int w = use_word(g, T0, src, t, half);
+            emit2(g, A32_STR, a32_reg(w), mem(g, A32_STR, base, off + 4 * half, T2));
         }
         return;
     }
-    load_as(g, T0, src, t);
-    store_mem(g, T0, t, base, off, T2);
+    store_mem(g, use_as(g, T0, src, t), t, base, off, T2);
 }
 
 // Load the value of type `t` at base + off into variable `dst`.  `base` is not lr,
@@ -113,6 +139,20 @@ static void load_from(Gen *g, const Tac_Val *dst, const Tac_Type *t, int base, i
         int64_t doff;
         name_addr(g, dst->u.var_name, T2, &dbase, &doff);
         gen_memcopy(g, dbase, doff, base, off, a32_size(t), a32_align(t));
+        return;
+    }
+    int r = var_reg(g, dst), hi = var_reg_hi(g, dst);
+    if (hi >= 0) {
+        // The word in the base register last.
+        for (int k = 0; k < 2; k++) {
+            int half = (k == 0) == (base == r);
+            int reg  = half ? hi : r;
+            emit2(g, A32_LDR, a32_reg(reg), mem(g, A32_LDR, base, off + 4 * half, reg));
+        }
+        return;
+    }
+    if (r >= 0 && a32_is_vfp(r) == a32_is_fp(t)) {
+        load_mem(g, r, t, base, off);
         return;
     }
     if (a32_size(t) == 8) {
@@ -128,8 +168,7 @@ static void load_from(Gen *g, const Tac_Val *dst, const Tac_Type *t, int base, i
 // dst = *src_ptr.
 static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
-    load_val(g, T0, src_ptr);
-    load_from(g, dst, val_type(g, dst), T0, 0);
+    load_from(g, dst, val_type(g, dst), use_val(g, T0, src_ptr), 0);
 }
 
 // *dst_ptr = src, in the width of the pointee (or of src when that is not known).
@@ -139,8 +178,7 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
     if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
         (a32_is_aggregate(t) && !a32_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
-    load_val(g, T1, dst_ptr);
-    store_to(g, src, t, T1, 0);
+    store_to(g, src, t, use_val(g, T1, dst_ptr), 0);
 }
 
 // dst = ptr + index * scale (bytes): a shifted index for a power of two, else the index
@@ -150,37 +188,36 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
     int scale          = in->u.add_ptr.scale;
     const Tac_Val *idx = in->u.add_ptr.index;
     const Tac_Type *it = val_type(g, idx);
+    const Tac_Val *dst = in->u.add_ptr.dst;
+    int d              = def_reg(g, T0, dst);
     if (idx->kind == TAC_VAL_CONSTANT) {
         int64_t i = (int32_t)(uint32_t)const_bits(idx->u.constant, it);
-        load_val(g, T0, in->u.add_ptr.ptr);
-        gen_addr(g, T0, T0, i * scale);
-        store_val(g, T0, in->u.add_ptr.dst);
+        gen_addr(g, d, use_val(g, T0, in->u.add_ptr.ptr), i * scale);
+        store_val(g, d, dst);
         return;
     }
     int shift = 0;
     while ((1 << shift) < scale)
         shift++;
+    int i = a32_is_pair(it) ? use_word(g, T1, idx, it, 0) : use_val(g, T1, idx);
     if ((1 << shift) != scale) {
-        load_word(g, T0, idx, a32_is_pair(it) ? it : NULL, 0);
-        gen_li(g, T1, scale);
-        emit3(g, A32_MUL, a32_reg(T1), a32_reg(T0), a32_reg(T1));
+        gen_li(g, T0, scale);
+        emit3(g, A32_MUL, a32_reg(T1), a32_reg(i), a32_reg(T0));
+        i     = T1;
         shift = 0;
-    } else {
-        load_word(g, T1, idx, a32_is_pair(it) ? it : NULL, 0);
     }
-    load_val(g, T0, in->u.add_ptr.ptr);
-    emit3(g, A32_ADD, a32_reg(T0), a32_reg(T0),
-          shift ? a32_shift(T1, A32_SHIFT_LSL, shift) : a32_reg(T1));
-    store_val(g, T0, in->u.add_ptr.dst);
+    int p = use_val(g, T0, in->u.add_ptr.ptr);
+    emit3(g, A32_ADD, a32_reg(d), a32_reg(p), shift ? a32_shift(i, A32_SHIFT_LSL, shift) : a32_reg(i));
+    store_val(g, d, dst);
 }
 
 // dst = a - b, a byte count.
 static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
 {
-    load_val(g, T0, in->u.ptr_diff.ptr_a);
-    load_val(g, T1, in->u.ptr_diff.ptr_b);
-    emit3(g, A32_SUB, a32_reg(T0), a32_reg(T0), a32_reg(T1));
-    store_val(g, T0, in->u.ptr_diff.dst);
+    int a = use_val(g, T0, in->u.ptr_diff.ptr_a), b = use_val(g, T1, in->u.ptr_diff.ptr_b);
+    int d = def_reg(g, T0, in->u.ptr_diff.dst);
+    emit3(g, A32_SUB, a32_reg(d), a32_reg(a), a32_reg(b));
+    store_val(g, d, in->u.ptr_diff.dst);
 }
 
 // The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
@@ -242,11 +279,12 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 // dst = &src, of a named object or function.
 static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
+    int d = def_reg(g, T0, dst);
     int base;
     int64_t off;
-    name_addr(g, src->u.var_name, T0, &base, &off);
-    gen_addr(g, T0, base, off);
-    store_val(g, T0, dst);
+    name_addr(g, src->u.var_name, d, &base, &off);
+    gen_addr(g, d, base, off);
+    store_val(g, d, dst);
 }
 
 // An integer conversion.  A store truncates to the destination's width; a loaded value
@@ -262,34 +300,35 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
         gen_copy(g, src, dst); // converted as it is loaded
         return;
     }
-    if (a32_is_pair(st)) {
-        load_word(g, T0, src, st, 0);
-        if (a32_is_pair(dt)) {
-            load_word(g, T1, src, st, 1);
-            store_pair(g, dst, T0, T1);
-        } else {
-            store_val(g, T0, dst);
-        }
+    if (a32_is_pair(st) && a32_is_pair(dt)) {
+        gen_copy(g, src, dst);
         return;
     }
-    load_val(g, T0, src);
+    if (a32_is_pair(st)) {
+        store_val(g, use_word(g, T0, src, st, 0), dst);
+        return;
+    }
+    int r     = use_val(g, T0, src);
     int ssize = a32_size(st);
     A32_Op op = A32_EPILOGUE;
     if (kind == TAC_INSTRUCTION_SIGN_EXTEND && a32_is_unsigned(st))
         op = ssize == 1 ? A32_SXTB : ssize == 2 ? A32_SXTH : op;
     else if (kind == TAC_INSTRUCTION_ZERO_EXTEND && !a32_is_unsigned(st))
         op = ssize == 1 ? A32_UXTB : ssize == 2 ? A32_UXTH : op;
-    if (op != A32_EPILOGUE)
-        emit2(g, op, a32_reg(T0), a32_reg(T0));
+    if (op != A32_EPILOGUE) {
+        int d = a32_is_pair(dt) ? T0 : def_reg(g, T0, dst);
+        emit2(g, op, a32_reg(d), a32_reg(r));
+        r = d;
+    }
     if (!a32_is_pair(dt)) {
-        store_val(g, T0, dst);
+        store_val(g, r, dst);
         return;
     }
     if (kind == TAC_INSTRUCTION_SIGN_EXTEND)
-        emit2(g, A32_MOV, a32_reg(T1), a32_shift(T0, A32_SHIFT_ASR, 31));
+        emit2(g, A32_MOV, a32_reg(T1), a32_shift(r, A32_SHIFT_ASR, 31));
     else
         gen_li(g, T1, 0);
-    store_pair(g, dst, T0, T1);
+    store_pair(g, dst, r, T1);
 }
 
 // A conversion between an integer and FP.
@@ -378,8 +417,7 @@ A32_Operand operand2(Gen *g, A32_Op *op, const Tac_Val *v, const Tac_Type *t, in
             return a32_imm(ac);
         }
     }
-    load_as(g, scratch, v, t);
-    return a32_reg(scratch);
+    return a32_reg(use_as(g, scratch, v, t));
 }
 
 static void gen_unary(Gen *g, const Tac_Instruction *in)
@@ -393,25 +431,25 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_fp_unary(g, in);
         return;
     }
-    load_as(g, T0, in->u.unary.src, t);
-    A32_Operand r = a32_reg(T0);
+    A32_Operand a = a32_reg(use_as(g, T0, in->u.unary.src, t));
+    int d         = def_reg(g, T0, in->u.unary.dst);
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED:
-        emit3(g, A32_RSB, r, r, a32_imm(0));
+        emit3(g, A32_RSB, a32_reg(d), a, a32_imm(0));
         break;
     case TAC_UNARY_COMPLEMENT:
     case TAC_UNARY_COMPLEMENT_UNSIGNED:
-        emit2(g, A32_MVN, r, r);
+        emit2(g, A32_MVN, a32_reg(d), a);
         break;
     case TAC_UNARY_NOT:
-        emit2(g, A32_CMP, r, a32_imm(0));
-        set_cond(g, T0, A32_EQ);
+        emit2(g, A32_CMP, a, a32_imm(0));
+        set_cond(g, d, A32_EQ);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
         fatal_error("arm32: %s: NEGATE_DOUBLE of an integer", gen_name(g));
     }
-    store_val(g, T0, in->u.unary.dst);
+    store_val(g, d, in->u.unary.dst);
 }
 
 static void gen_binary(Gen *g, const Tac_Instruction *in)
@@ -428,15 +466,16 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Tac_BinaryOperator op = in->u.binary.op;
     const Tac_Val *b      = in->u.binary.src2;
     bool u                = unsigned_operation(t, op);
-    A32_Operand d = a32_reg(T0), a = a32_reg(T0), rb = a32_reg(T1);
-    load_as(g, T0, in->u.binary.src1, t);
+    const Tac_Val *dst    = in->u.binary.dst;
+    int dr                = def_reg(g, T0, dst);
+    A32_Operand d = a32_reg(dr), a = a32_reg(use_as(g, T0, in->u.binary.src1, t)), rb;
     int cond = compare_cond(op, u);
     if (cond >= 0) {
         A32_Op o       = A32_CMP;
         A32_Operand ob = operand2(g, &o, b, t, T1);
         emit2(g, o, a, ob);
-        set_cond(g, T0, cond);
-        store_val(g, T0, in->u.binary.dst);
+        set_cond(g, dr, cond);
+        store_val(g, dr, dst);
         return;
     }
     A32_Op o;
@@ -460,23 +499,23 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_BINARY_MULTIPLY:
     case TAC_BINARY_MULTIPLY_UNSIGNED:
-        load_as(g, T1, b, t);
+        rb = a32_reg(use_as(g, T1, b, t));
         emit3(g, A32_MUL, d, a, rb);
-        store_val(g, T0, in->u.binary.dst);
+        store_val(g, dr, dst);
         return;
     case TAC_BINARY_DIVIDE:
     case TAC_BINARY_DIVIDE_UNSIGNED:
-        load_as(g, T1, b, t);
+        rb = a32_reg(use_as(g, T1, b, t));
         emit3(g, u ? A32_UDIV : A32_SDIV, d, a, rb);
-        store_val(g, T0, in->u.binary.dst);
+        store_val(g, dr, dst);
         return;
     case TAC_BINARY_REMAINDER:
     case TAC_BINARY_REMAINDER_UNSIGNED:
         // a - (a / b) * b, the quotient in r10
-        load_as(g, T1, b, t);
+        rb = a32_reg(use_as(g, T1, b, t));
         emit3(g, u ? A32_UDIV : A32_SDIV, a32_reg(T2), a, rb);
         emit4(g, A32_MLS, d, a32_reg(T2), rb, a);
-        store_val(g, T0, in->u.binary.dst);
+        store_val(g, dr, dst);
         return;
     case TAC_BINARY_LEFT_SHIFT:
     case TAC_BINARY_RIGHT_SHIFT:
@@ -489,14 +528,13 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
             int n = (int)(const_bits(b->u.constant, ct) & 31);
             if (n)
                 emit3(g, s, d, a, a32_imm(n));
-        } else {
-            if (a32_is_pair(ct))
-                load_word(g, T1, b, ct, 0);
             else
-                load_val(g, T1, b);
+                move_reg(g, dr, a.reg, t);
+        } else {
+            rb = a32_reg(a32_is_pair(ct) ? use_word(g, T1, b, ct, 0) : use_val(g, T1, b));
             emit3(g, s, d, a, rb);
         }
-        store_val(g, T0, in->u.binary.dst);
+        store_val(g, dr, dst);
         return;
     }
     default:
@@ -504,7 +542,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     }
     A32_Operand ob = operand2(g, &o, b, t, T1);
     emit3(g, o, d, a, ob);
-    store_val(g, T0, in->u.binary.dst);
+    store_val(g, dr, dst);
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)
