@@ -5,8 +5,8 @@
 # StagedPrefix cases instead build a miniature installation (bin/ and
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
 # what checks the relocatable lookup.  Cases that assemble, link or run need
-# clang, ld.lld and qemu-system-riscv64 (or b6as/b6ld for the BESM-6) and are
-# skipped without them.
+# clang, ld.lld and qemu-system-riscv64 or -aarch64 (or b6as/b6ld for the BESM-6)
+# and are skipped without them.
 #
 add_executable(cc-tests cc_test.cpp)
 target_link_libraries(cc-tests PRIVATE GTest::gtest_main)
@@ -18,9 +18,11 @@ target_compile_definitions(cc-tests PRIVATE
     VCC_LOWER_PATH="$<TARGET_FILE:lower>"
     VCC_GENBESM_PATH="$<TARGET_FILE:genbesm>"
     VCC_GENRISCV_PATH="$<TARGET_FILE:genriscv>"
+    VCC_GENAARCH64_PATH="$<TARGET_FILE:genaarch64>"
     BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}"
     RISCV_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
     RISCV32_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
+    AARCH64_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
     LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     RISCV_TOOLS_FOUND=$<BOOL:${RISCV_TOOLS_FOUND}>
@@ -30,12 +32,19 @@ target_compile_definitions(cc-tests PRIVATE
     RISCV_LIB_DIR="${RISCV_LIB_DIR}"
     RISCV_LINK_SCRIPT="${RISCV_LINK_SCRIPT}"
     RISCV32_QEMU="${RISCV32_QEMU}"
-    RISCV32_LIB_DIR="${RISCV32_LIB_DIR}")
-add_dependencies(cc-tests cc cpp parse lower genbesm genriscv)
+    RISCV32_LIB_DIR="${RISCV32_LIB_DIR}"
+    AARCH64_TOOLS_FOUND=$<BOOL:${AARCH64_TOOLS_FOUND}>
+    AARCH64_QEMU="${AARCH64_QEMU}"
+    AARCH64_LIB_DIR="${AARCH64_LIB_DIR}"
+    AARCH64_LINK_SCRIPT="${AARCH64_LINK_SCRIPT}")
+add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64)
 if(RISCV_TOOLS_FOUND)
     add_dependencies(cc-tests riscv-libc)
 endif()
 if(RISCV32_TOOLS_FOUND)
     add_dependencies(cc-tests riscv32-libc)
+endif()
+if(AARCH64_TOOLS_FOUND)
+    add_dependencies(cc-tests aarch64-libc)
 endif()
 gtest_discover_tests(cc-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

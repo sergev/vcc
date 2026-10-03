@@ -61,9 +61,12 @@ and the harness runs qemu under a short timeout regardless.
 
 ## Phase 6 — finishing
 
-- **A27. Driver.** `vcc -t aarch64`: `vcpp -t aarch64`, `vparse`,
+- **A27. Driver. Done.** `vcc -t aarch64`: `vcpp -t aarch64`, `vparse`,
   `vlower -t aarch64`, `vgenaarch64`, `clang --target=aarch64-none-elf -c`,
-  `ld.lld -T link.ld crt0.o … -lc`; `cc-tests` cases including a staged prefix.
+  `ld.lld -T link.ld crt0.o … -lc`. The RISC-V path became the clang path
+  (`ARCH_LLVM`, a clang triple per target, `-march`/`-mabi` only for RISC-V), so `-T`
+  now works for every target but the BESM-6. `cc-tests`: `-S`, separate compilation
+  with a `.S` and a run, and a staged prefix.
 - **A28. Install.** `genaarch64` as `vgenaarch64`; `crt0.o`, `libc.a`, `link.ld` and
   the headers under `share/vcc/aarch64/`, only when the AArch64 clang/llvm-ar were
   found.

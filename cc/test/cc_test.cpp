@@ -75,6 +75,14 @@ bool HaveRiscvRun()
     return HaveRiscvLink() && HaveTool(RISCV_QEMU);
 }
 
+// The same clang and ld.lld, with an AArch64 target, the AArch64 runtime and qemu.
+bool HaveAarch64Run()
+{
+    return AARCH64_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) &&
+           HaveTool(AARCH64_QEMU) &&
+           access((std::string(AARCH64_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
 // `stderr_file` when they are given (which is how the -v echo is captured).
@@ -170,17 +178,20 @@ protected:
     // path.  stdout lands in out.log, stderr in err.log.
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
-        bool besm6 = false;
+        bool besm6 = false, aarch64 = false;
         for (size_t i = 0; i + 1 < args.size(); i++) {
             if (args[i] == "-t" && args[i + 1] == "besm6")
                 besm6 = true;
+            if (args[i] == "-t" && args[i + 1] == "aarch64")
+                aarch64 = true;
         }
-        setenv("VCC_GEN", besm6 ? VCC_GENBESM_PATH : VCC_GENRISCV_PATH, 1);
+        setenv("VCC_GEN", besm6 ? VCC_GENBESM_PATH : aarch64 ? VCC_GENAARCH64_PATH : VCC_GENRISCV_PATH,
+               1);
 
         std::vector<std::string> argv = { VCC_COMMAND };
         if (std_headers) {
-            argv.insert(argv.end(), { "-nostdinc",
-                                      std::string("-I") + (besm6 ? BESM6_INCLUDE_DIR : RISCV_INCLUDE_DIR) });
+            const char *inc = besm6 ? BESM6_INCLUDE_DIR : aarch64 ? AARCH64_INCLUDE_DIR : RISCV_INCLUDE_DIR;
+            argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
             if (!besm6)
                 argv.push_back(std::string("-I") + LP64_INCLUDE_DIR);
             argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
@@ -214,14 +225,17 @@ protected:
         fs::create_symlink(VCC_GENBESM_PATH, prefix + "/bin/vgenbesm6");
         fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv64");
         fs::create_symlink(VCC_GENRISCV_PATH, prefix + "/bin/vgenriscv32");
+        fs::create_symlink(VCC_GENAARCH64_PATH, prefix + "/bin/vgenaarch64");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
         fs::create_directories(share + "/lib");
         const char *target_inc = target == "besm6"     ? BESM6_INCLUDE_DIR
                                  : target == "riscv32" ? RISCV32_INCLUDE_DIR
+                                 : target == "aarch64" ? AARCH64_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
-        const char *lp64_inc = target == "riscv64" ? LP64_INCLUDE_DIR : target_inc;
+        const char *lp64_inc =
+            target == "riscv64" || target == "aarch64" ? LP64_INCLUDE_DIR : target_inc;
         for (const char *inc : { target_inc, lp64_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
@@ -254,6 +268,17 @@ protected:
                               "-serial", "stdio", "-monitor", "none", "-kernel", elf },
                             out, Path("qemu.err"), 10);
         EXPECT_GE(rc, 0) << "qemu failed:\n" << ReadFile(Path("qemu.err"));
+        return ReadFile(out);
+    }
+
+    // Run a linked AArch64 ELF under qemu `virt`, main's result through semihosting;
+    // returns its UART output, the exit status in *status.
+    std::string RunQemuAarch64(const std::string &elf, int *status)
+    {
+        std::string out = Path("qemu.out");
+        *status = RunProcess({ AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display", "none",
+                               "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
+                             out, Path("qemu.err"), 10);
         return ReadFile(out);
     }
 };
@@ -346,6 +371,42 @@ TEST_F(CcDriver, CompileToAssemblyRiscv64)
     EXPECT_NE(text.find("ret"), std::string::npos) << text;
 }
 
+TEST_F(CcDriver, CompileToAssemblyAarch64)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "aarch64", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find("main:"), std::string::npos) << text;
+    EXPECT_NE(text.find("bl      printf"), std::string::npos) << text;
+    EXPECT_NE(text.find("ret"), std::string::npos) << text;
+}
+
+// Separate compilation for aarch64, a .S among the sources, and the link of the build's
+// runtime by hand.
+TEST_F(CcDriver, LinkAndRunAarch64)
+{
+    if (!HaveAarch64Run())
+        GTEST_SKIP() << "AArch64 clang/ld.lld/qemu not found";
+    WriteSource("main.c", "#include <stdio.h>\n"
+                          "int twice(int);\n"
+                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S", "#ifdef __aarch64__\n"
+                           "        .globl  twice\n"
+                           "twice:  add     w0, w0, w0\n"
+                           "        ret\n"
+                           "#endif\n");
+    ASSERT_EQ(Vcc({ "-t", "aarch64", "-c", "main.c", "twice.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    std::string lib = AARCH64_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "aarch64", "-nostdlib", "-T", AARCH64_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuAarch64(Path("t.elf"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+}
+
 TEST_F(CcDriver, CompileToAssemblyBesm6)
 {
     WriteSource("t.c", "int main(void)\n{\n    return 42;\n}\n");
@@ -404,7 +465,7 @@ TEST_F(CcDriver, RejectsLinkScriptForBesm6)
 {
     WriteSource("t.o", "");
     EXPECT_NE(Vcc({ "-t", "besm6", "-T", "x.ld", "t.o" }), 0);
-    EXPECT_NE(Stderr().find("-T is only supported for RISC-V"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("-T is not supported for besm6"), std::string::npos) << Stderr();
 }
 
 TEST_F(CcDriver, RejectsNoInputs)
@@ -534,6 +595,42 @@ TEST_F(CcDriver, StagedPrefixRiscv32)
     EXPECT_NE(echo.find(prefix + "/bin/vgenriscv32 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" --target=riscv32 -march=rv32imfd -mabi=ilp32d "), std::string::npos)
         << echo;
+}
+
+// The same for aarch64: clang without -march/-mabi, and the exit status through
+// semihosting.
+TEST_F(CcDriver, StagedPrefixAarch64)
+{
+    if (!HaveAarch64Run())
+        GTEST_SKIP() << "AArch64 clang/ld.lld/qemu not found";
+    std::string prefix = StagePrefix("aarch64");
+    std::string lib = prefix + "/share/vcc/aarch64/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(AARCH64_LIB_DIR) + "/" + name, lib + "/" + name);
+    fs::create_symlink(AARCH64_LINK_SCRIPT, lib + "/link.ld");
+
+    WriteSource("t.c", "#include <stdio.h>\n"
+                       "#include <limits.h>\n"
+                       "#include <stddef.h>\n"
+                       "int main(void)\n"
+                       "{\n"
+                       "    printf(\"%d %d %Lg\\n\", (int)sizeof(long), (int)sizeof(wchar_t), 2.5L);\n"
+                       "    return CHAR_MAX == 255 ? 7 : 1;\n"
+                       "}\n");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuAarch64(Path("t.elf"), &status), "8 4 2.5\n");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t aarch64 -nostdinc -I" + prefix +
+                        "/share/vcc/aarch64/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t aarch64 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenaarch64 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" --target=aarch64-none-elf -c "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
 }
 
 TEST_F(CcDriver, StagedPrefixMissingPass)
