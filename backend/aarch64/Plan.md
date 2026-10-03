@@ -78,9 +78,10 @@ and the harness runs qemu under a short timeout regardless.
   `setjmp.h` (declarations only, as on RISC-V) and `stdarg.h`. The test fixtures take
   the LP64 directory through an optional `TEST_LP64_INCLUDE_DIR`. `aarch64-headers`
   CTest and its `-cpp` twin, like `riscv-headers`.
-- **A23. Libc.** Build the C sources (`libc/common`, `LIBC_C_IEEE`, `libc/lp64`) with
-  our compiler into `libc.a`; add malloc's run test; port the RISC-V `printf_tests`/
-  `str_tests`/`mem_tests`/`math_tests` (host libc output as expectation).
+- **A23. Libc. Done.** `libc.a` holds every C source of `libc/common`, `LIBC_C_IEEE`
+  (`doprnt`, `float128`) and `libc/lp64`, all compiled by us, plus `va_arg.c`; malloc's
+  run test came back in A15. RISC-V's `printf_tests`/`str_tests`/`mem_tests`/
+  `math_tests` run unchanged on AArch64 (host libc output as expectation).
 
 ## Phase 5 — code quality
 
