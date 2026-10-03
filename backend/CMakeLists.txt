@@ -2,6 +2,7 @@ add_subdirectory(common)
 add_subdirectory(besm6)
 add_subdirectory(riscv)
 add_subdirectory(aarch64)
+add_subdirectory(arm32)
 
 #
 # `genbesm` executable
@@ -33,3 +34,11 @@ add_executable(genaarch64
 target_link_libraries(genaarch64 aarch64 backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genaarch64> DESTINATION bin RENAME vgenaarch64)
+
+#
+# `genarm32` executable
+#
+add_executable(genarm32
+    arm32/main.c
+)
+target_link_libraries(genarm32 arm32 backend_common)
