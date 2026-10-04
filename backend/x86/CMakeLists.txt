@@ -35,6 +35,10 @@ add_executable(x86-tests
     test/stdarg_tests.cpp
     test/interop_tests.cpp
     test/book_x86_tests.cpp
+    test/printf_tests.cpp
+    test/str_tests.cpp
+    test/mem_tests.cpp
+    test/math_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
