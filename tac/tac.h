@@ -159,7 +159,9 @@ typedef enum {
     TAC_UNARY_NOT,
     TAC_UNARY_NEGATE_UNSIGNED,    // negate, 48-bit modular (unsigned operand)
     TAC_UNARY_NEGATE_DOUBLE,      // negate, floating-point operand
-    TAC_UNARY_COMPLEMENT_UNSIGNED // complement, full 48-bit flip (unsigned operand)
+    TAC_UNARY_COMPLEMENT_UNSIGNED, // complement, full 48-bit flip (unsigned operand)
+    TAC_UNARY_SQRT_DOUBLE          // square root of a double: a call of the C library's
+                                   // sqrt, on a target where it is one instruction
 } Tac_UnaryOperator;
 
 typedef enum {

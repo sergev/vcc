@@ -121,10 +121,11 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         store_val(g, d, dst);
         return;
     }
-    if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
+    bool is_sqrt = in->u.unary.op == TAC_UNARY_SQRT_DOUBLE;
+    if (!is_sqrt && in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("arm32: %s: bad floating-point unary operator", gen_name(g));
     int a = use_val(g, F0, in->u.unary.src), d = def_reg(g, F0, dst);
-    emit2(g, fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d), fp_reg(t, a));
+    emit2(g, is_sqrt ? A32_VSQRT_F64 : fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d), fp_reg(t, a));
     store_val(g, d, dst);
 }
 

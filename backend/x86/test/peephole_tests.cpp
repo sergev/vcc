@@ -1,7 +1,7 @@
 //
 // x86-64 peephole pass and compare-and-branch fusion: moves folded into their uses and
 // results computed where they are moved, loads and addresses folded into the
-// instructions that use them, reloads deleted, test for zero and masks, branch
+// instructions that use them (sqrtsd included), reloads deleted, test for zero and masks, branch
 // cleanup, and cmov for short triangles and diamonds.
 //
 #include "x86_test.h"
@@ -57,6 +57,15 @@ TEST_F(X86Test, AddressFolded)
     EXPECT_EQ("movl 4(%rdi,%rsi,8), %eax\nret\n", Code(CompileToX86(R"(
 struct s { int a, b; };
 int get(struct s *p, long i) { return p[i].b; }
+)")));
+}
+
+// A load folds into sqrtsd even into its destination, which sqrtsd only writes.
+TEST_F(X86Test, SqrtFromMemory)
+{
+    EXPECT_EQ("sqrtsd (%rdi), %xmm0\nret\n", Code(CompileToX86(R"(
+#include <math.h>
+double rootp(const double *p) { return sqrt(*p); }
 )")));
 }
 

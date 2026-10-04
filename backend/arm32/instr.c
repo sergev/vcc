@@ -448,7 +448,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         set_cond(g, d, A32_EQ);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
-        fatal_error("arm32: %s: NEGATE_DOUBLE of an integer", gen_name(g));
+    case TAC_UNARY_SQRT_DOUBLE:
+        fatal_error("arm32: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_val(g, d, in->u.unary.dst);
 }

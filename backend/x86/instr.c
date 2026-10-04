@@ -242,7 +242,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_setcc(g, T0, X86_CC_E);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
-        fatal_error("x86: %s: NEGATE_DOUBLE of an integer", gen_name(g));
+    case TAC_UNARY_SQRT_DOUBLE:
+        fatal_error("x86: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_val(g, reg, in->u.unary.dst);
 }

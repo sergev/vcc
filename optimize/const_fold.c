@@ -23,6 +23,7 @@
 // See docs/TAC_Optimization.md §"Constant folding".
 // ============================================================================
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -148,6 +149,15 @@ static Tac_Val *fold_unary_const(Tac_UnaryOperator op, const Tac_Const *src)
         }
         break;
     }
+    case TAC_UNARY_SQRT_DOUBLE:
+        // The host's sqrt is IEEE, correctly rounded as the targets' instruction is.  A
+        // negative operand or a NaN is left alone: the NaN the target makes has a sign
+        // of its own (negative on x86-64, positive on RISC-V and ARM).
+        if (src->kind != TAC_CONST_DOUBLE || src->u.double_val < 0 || isnan(src->u.double_val))
+            return NULL;
+        rc               = tac_new_const(TAC_CONST_DOUBLE);
+        rc->u.double_val = sqrt(src->u.double_val);
+        break;
     }
 
     Tac_Val *rv    = tac_new_val(TAC_VAL_CONSTANT);

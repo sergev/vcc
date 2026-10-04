@@ -163,3 +163,48 @@ int main(void) {
 }
 )PROG"));
 }
+
+// A call of sqrt is the sqrtsd instruction, not a call.
+TEST_F(X86Test, SqrtInstruction)
+{
+    EXPECT_EQ("sqrtsd %xmm0, %xmm0\nret\n", Code(CompileToX86(R"(
+#include <math.h>
+double f(double x) { return sqrt(x); }
+)")));
+}
+
+// sqrt is IEEE, correctly rounded: the bits are the host's, for zeros of both signs,
+// denormals, the largest double and infinity; a negative operand or a NaN gives a NaN.
+// The operand may come from memory; a constant operand is folded.
+TEST_F(X86Test, SqrtRun)
+{
+    SKIP_IF_NO_X86_TOOLS();
+    EXPECT_EQ("0000000000000000\n8000000000000000\n3ff0000000000000\n3ff6a09e667f3bcd\n3ffbb67ae8584caa\n3fe0000000000000\n1fc1297872d9cbae\n5fefffffffffffff\n5f138d352e5096af\n1e60000000000000\n7ff0000000000000\n3ffbb67ae8584caa\n1 1 1\n4.5\n",
+              CompileAndRunX86(R"(
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+double root(double x) { return sqrt(x); }
+double rootp(const double *p) { return sqrt(*p); }
+static void bits(double r)
+{
+    unsigned long long b;
+    memcpy(&b, &r, sizeof b);
+    printf("%08x%08x\n", (unsigned)(b >> 32), (unsigned)b);
+}
+int main(void)
+{
+    static const double v[] = { 0.0, -0.0, 1.0, 2.0, 3.0, 0.25, 1e-310,
+                                1.7976931348623157e308, 1e300, 5e-324 };
+    for (int i = 0; i < 10; i++)
+        bits(root(v[i]));
+    double inf = v[7] * 2, nan = inf - inf;
+    bits(root(inf));
+    bits(rootp(&v[4]));
+    double r1 = root(-1.0), r2 = root(nan), r3 = root(-inf);
+    printf("%d %d %d\n", r1 != r1, r2 != r2, r3 != r3);
+    printf("%g\n", sqrt(16.0) + sqrt(0.25));
+    return 0;
+}
+)"));
+}

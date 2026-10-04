@@ -66,6 +66,10 @@ a multiply, a division, a shift by a variable and the conversions to and from fl
 point call the run-time ABI helpers (`__aeabi_lmul`, `__aeabi_ldivmod`, `__aeabi_llsl`,
 `__aeabi_l2d`, …), and the allocator counts them as calls.
 
+A call of `sqrt` is the `vsqrt.f64` instruction: the translator lowers a call of the
+library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
+descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genarm32`.
 

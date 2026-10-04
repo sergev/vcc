@@ -1169,3 +1169,67 @@ TEST_F(TranslateTest, CompoundLiteralScalarAddress)
           name: %1
 )");
 }
+
+// A call of the C library's sqrt, on a target where square root is an instruction, is the
+// unary sqrt_double: no call.  A float argument is converted by the prototype first.
+TEST_F(TranslateTestRiscv, SqrtIsUnary)
+{
+    std::string yaml = CompileToYaml(R"(
+#include <math.h>
+double f(float x) { return sqrt(x); }
+)");
+    EXPECT_NE(std::string::npos, yaml.find("kind: unary\n      op: sqrt_double\n")) << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("fun_call")) << yaml;
+}
+
+// The BESM-6 has no square-root instruction: sqrt stays a call.
+TEST_F(TranslateTest, SqrtCallOnBesm6)
+{
+    std::string yaml = CompileToYaml(R"(
+#include <math.h>
+double f(double x) { return sqrt(x); }
+)");
+    EXPECT_NE(std::string::npos, yaml.find("kind: fun_call\n      fun_name: sqrt\n")) << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("sqrt_double")) << yaml;
+}
+
+// Only the external sqrt of double(double) is the library's: a static one, one defined in
+// the unit, or one of another type stays a call.
+static void ExpectSqrtCall(const std::string &yaml)
+{
+    EXPECT_NE(std::string::npos, yaml.find("fun_name: sqrt\n")) << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("sqrt_double")) << yaml;
+}
+
+TEST_F(TranslateTestRiscv, SqrtStaticCalled)
+{
+    ExpectSqrtCall(CompileToYaml(R"(
+static double sqrt(double);
+double f(double x) { return sqrt(x); }
+static double sqrt(double x) { return x; }
+)"));
+}
+
+TEST_F(TranslateTestRiscv, SqrtDefinedCalled)
+{
+    ExpectSqrtCall(CompileToYaml(R"(
+double sqrt(double x) { return x; }
+double f(double x) { return sqrt(x); }
+)"));
+}
+
+TEST_F(TranslateTestRiscv, SqrtFloatArgumentCalled)
+{
+    ExpectSqrtCall(CompileToYaml(R"(
+double sqrt(float);
+double f(float x) { return sqrt(x); }
+)"));
+}
+
+TEST_F(TranslateTestRiscv, SqrtFloatResultCalled)
+{
+    ExpectSqrtCall(CompileToYaml(R"(
+float sqrt(double);
+float f(double x) { return sqrt(x); }
+)"));
+}

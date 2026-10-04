@@ -531,6 +531,7 @@ void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth)
                 : instr->u.unary.op == TAC_UNARY_NEGATE            ? "negate"
                 : instr->u.unary.op == TAC_UNARY_NEGATE_UNSIGNED   ? "negate_unsigned"
                 : instr->u.unary.op == TAC_UNARY_NEGATE_DOUBLE     ? "negate_double"
+                : instr->u.unary.op == TAC_UNARY_SQRT_DOUBLE       ? "sqrt_double"
                                                                    : "not");
         break;
     case TAC_INSTRUCTION_BINARY:

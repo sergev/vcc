@@ -48,6 +48,10 @@ AAPCS64 leaves the upper bits of a narrow argument or result unspecified, so a
 parameter is extended when it arrives and a call result when it comes back; the caller
 and the callee never extend for each other.
 
+A call of `sqrt` is the `fsqrt` instruction: the translator lowers a call of the
+library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
+descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genaarch64`.
 

@@ -145,6 +145,7 @@ enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
     X(MULSD, "mulsd", X86_PLAIN)                                                           \
     X(DIVSS, "divss", X86_PLAIN)                                                           \
     X(DIVSD, "divsd", X86_PLAIN)                                                           \
+    X(SQRTSD, "sqrtsd", X86_PLAIN)                                                         \
     X(XORPS, "xorps", X86_PLAIN)                                                           \
     X(UCOMISS, "ucomiss", X86_PLAIN)                                                       \
     X(UCOMISD, "ucomisd", X86_PLAIN)                                                       \

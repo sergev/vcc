@@ -72,6 +72,7 @@ module TAC {
         | Var(identifier name)
 
     UnaryOperator = Complement | Negate | Not | NegateUnsigned | NegateDouble
+                  | ComplementUnsigned | SqrtDouble
 
     BinaryOperator = Add | Subtract | Multiply | Divide | Remainder | Equal | NotEqual
                    | LessThan | LessOrEqual | GreaterThan | GreaterOrEqual

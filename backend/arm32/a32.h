@@ -99,7 +99,8 @@ typedef struct {
     X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx") X(VADD_F32, "vadd.f32") X(VADD_F64, "vadd.f64")          \
     X(VSUB_F32, "vsub.f32") X(VSUB_F64, "vsub.f64") X(VMUL_F32, "vmul.f32")                 \
     X(VMUL_F64, "vmul.f64") X(VDIV_F32, "vdiv.f32") X(VDIV_F64, "vdiv.f64")                 \
-    X(VNEG_F32, "vneg.f32") X(VNEG_F64, "vneg.f64") X(VCMP_F32, "vcmp.f32")                 \
+    X(VNEG_F32, "vneg.f32") X(VNEG_F64, "vneg.f64") X(VSQRT_F64, "vsqrt.f64")              \
+    X(VCMP_F32, "vcmp.f32")                                                                 \
     X(VCMP_F64, "vcmp.f64") X(VMRS, "vmrs") X(VMOV_F32, "vmov.f32") X(VMOV_F64, "vmov.f64") \
     X(VCVT_F64_F32, "vcvt.f64.f32") X(VCVT_F32_F64, "vcvt.f32.f64")                         \
     X(VCVT_F32_S32, "vcvt.f32.s32") X(VCVT_F32_U32, "vcvt.f32.u32")                         \

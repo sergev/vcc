@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "optimizer_test_fixture.h"
 #include "target.h"
 
@@ -23,6 +25,29 @@ TEST_F(OptimizerTest, NullBodyReturnsNull)
 // ---------------------------------------------------------------------------
 // Unary constant folding
 // ---------------------------------------------------------------------------
+
+// sqrt(2.25)  →  Copy(ConstDouble(1.5), t); sqrt(-0.0) is -0.0.
+TEST_F(OptimizerTest, UnaryFoldSqrt)
+{
+    Tac_Instruction *body = make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(2.25), make_var("t"));
+    body                  = constant_fold(body);
+    AssertFoldedDouble(body, 1.5);
+
+    body = constant_fold(make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(-0.0), make_var("t")));
+    AssertFoldedDouble(body, 0.0);
+    EXPECT_TRUE(std::signbit(body->u.copy.src->u.constant->u.double_val));
+}
+
+// A negative operand or a NaN is not folded: the NaN's sign belongs to the target.
+TEST_F(OptimizerTest, UnaryNoFoldSqrtNegative)
+{
+    for (double x : { -4.0, std::nan("") }) {
+        Tac_Instruction *body = make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(x), make_var("t"));
+        body                  = constant_fold(body);
+        ASSERT_NE(body, nullptr);
+        EXPECT_EQ(body->kind, TAC_INSTRUCTION_UNARY);
+    }
+}
 
 // ~0  →  Copy(ConstInt(-1), t)
 TEST_F(OptimizerTest, UnaryFoldComplement)

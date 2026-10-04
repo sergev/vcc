@@ -608,6 +608,9 @@ static void export_yaml_instruction(FILE *fd, const Tac_Instruction *instr, int 
         case TAC_UNARY_NEGATE_DOUBLE:
             fprintf(fd, "negate_double\n");
             break;
+        case TAC_UNARY_SQRT_DOUBLE:
+            fprintf(fd, "sqrt_double\n");
+            break;
         }
         print_indent(fd, level);
         fprintf(fd, "src:\n");

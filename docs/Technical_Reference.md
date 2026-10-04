@@ -655,7 +655,12 @@ instruction selected for a volatile access carries `is_volatile`, so the peephol
 neither delete it as the reload of a store (RISC-V, AArch64, ARM32, x86-64, BESM-6 rule #27) nor
 merge it into a pair (`ldp`/`stp`, `ldrd`/`strd`).
 
-Unary ops: `complement`, `complement_unsigned`, `negate`, `negate_unsigned`, `negate_double`, `not`.
+Unary ops: `complement`, `complement_unsigned`, `negate`, `negate_unsigned`, `negate_double`, `not`,
+`sqrt_double`. The translator emits `sqrt_double` for a call of the C library's
+`sqrt(double)` (external, not defined in the unit) on a target whose descriptor has
+`hw_sqrt` (RISC-V, AArch64, ARM32, x86-64; not the BESM-6), where square root is one
+correctly rounded instruction; constant folding evaluates it for a constant that is
+not negative or a NaN (the sign of the NaN a target makes is its own).
 
 Binary ops: `add`, `subtract`, `multiply`, `divide`, `remainder`, `equal`, `not_equal`,
 `less_than`, `less_or_equal`, `greater_than`, `greater_or_equal`, `bitwise_and`,

@@ -652,6 +652,26 @@ static Tac_Val *gen_logical_or(TacCtx *ctx, Expr *l, Expr *r)
     return result;
 }
 
+// Whether call `e` is of the C library's sqrt on a target where square root is an
+// instruction: then it is lowered to the unary sqrt_double, which is no call at all.  C11
+// §7.1.3 reserves the name with external linkage, so a program cannot mean another
+// function by it; still, it must be the external function by that name (a static one, a
+// definition seen in this unit, or a variable holding a function pointer is left alone),
+// with a double result and one double argument (as converted by the prototype).  The result is the correctly rounded IEEE square root,
+// as sqrt's is, and sqrt sets no errno here.
+static bool is_hw_sqrt(const Expr *e)
+{
+    const Expr *func = e->u.call.func, *arg = e->u.call.args;
+    if (!target_config->hw_sqrt || func->kind != EXPR_VAR || strcmp(func->u.var, "sqrt") != 0 ||
+        !func->type || unalias(func->type)->kind != TYPE_FUNCTION)
+        return false;
+    if (!arg || arg->next || !arg->type || unalias(arg->type)->kind != TYPE_DOUBLE ||
+        unalias(e->type)->kind != TYPE_DOUBLE)
+        return false;
+    const Symbol *sym = symtab_get_opt(func->u.var);
+    return sym && sym->kind == SYM_FUNC && sym->u.func.global && !sym->u.func.defined;
+}
+
 static Tac_Val *gen_unary(TacCtx *ctx, UnaryOp op, Expr *inner, const Type *type)
 {
     // Logical NOT of a char*/void* is a null test; gen_cond_val reduces a fat pointer to
@@ -1370,6 +1390,16 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         return emit_cast(ctx, inner, e->u.cast.expr->type, e->u.cast.type);
     }
     case EXPR_CALL: {
+        if (is_hw_sqrt(e)) {
+            Tac_Val *src        = gen_expr(ctx, e->u.call.args);
+            Tac_Val *vd         = new_var_val(ctx, ast_type_to_tac_type(e->type));
+            Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_UNARY);
+            in->u.unary.op      = TAC_UNARY_SQRT_DOUBLE;
+            in->u.unary.src     = src;
+            in->u.unary.dst     = vd;
+            tac_append(ctx, in);
+            return val_var(vd->u.var_name);
+        }
         Tac_Val *args_head  = NULL;
         Tac_Val **args_tail = &args_head;
         for (Expr *arg = e->u.call.args; arg; arg = arg->next) {

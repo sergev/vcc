@@ -320,10 +320,11 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         store_int(g, d, dst);
         return;
     }
-    if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
+    bool is_sqrt = in->u.unary.op == TAC_UNARY_SQRT_DOUBLE;
+    if (!is_sqrt && in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("aarch64: %s: bad floating-point unary operator", gen_name(g));
     int d = def_reg(g, F0, dst);
-    emit2(g, A64_FNEG, a64_reg(d, w), a64_reg(s, w));
+    emit2(g, is_sqrt ? A64_FSQRT : A64_FNEG, a64_reg(d, w), a64_reg(s, w));
     store_val(g, d, dst);
 }
 
@@ -380,7 +381,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         emit2(g, A64_CSET, a64_reg(d, A64_W), a64_cond(A64_EQ));
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
-        fatal_error("aarch64: %s: NEGATE_DOUBLE of an integer", gen_name(g));
+    case TAC_UNARY_SQRT_DOUBLE:
+        fatal_error("aarch64: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_int(g, d, in->u.unary.dst);
 }

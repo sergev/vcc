@@ -38,6 +38,8 @@ static const char *unary_op_name(Tac_UnaryOperator op)
         return "negate_unsigned";
     case TAC_UNARY_NEGATE_DOUBLE:
         return "negate_double";
+    case TAC_UNARY_SQRT_DOUBLE:
+        return "sqrt_double";
     }
     return "?";
 }

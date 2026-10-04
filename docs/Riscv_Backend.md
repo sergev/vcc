@@ -52,6 +52,10 @@ For each function, in this order:
    reload of a value just stored, no jump to the next line.  A copy is followed to its
    uses within a block, so the copies around an RV32 `long long` pair mostly go.
 
+A call of `sqrt` is the `fsqrt.d` instruction: the translator lowers a call of the
+library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
+descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genriscv`.
 

@@ -360,6 +360,10 @@ static void check_unary(Verifier *v, const Tac_Instruction *in)
         expect_class(v, "dst", &d, M_FP);
         expect_same(v, "src", &s, "dst", &d);
         break;
+    case TAC_UNARY_SQRT_DOUBLE:
+        expect_class(v, "dst", &d, M(C_DOUBLE));
+        expect_same(v, "src", &s, "dst", &d);
+        break;
     default:
         expect_class(v, "src", &s, M_INT);
         expect_class(v, "dst", &d, M_INT);

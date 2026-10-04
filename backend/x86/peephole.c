@@ -62,6 +62,7 @@ static bool is_alu2(X86_Op op)
     case X86_MULSD:
     case X86_DIVSS:
     case X86_DIVSD:
+    case X86_SQRTSD:
     case X86_XORPS:
     case X86_CVTSS2SD:
     case X86_CVTSD2SS:
@@ -705,6 +706,7 @@ static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link, 
     case X86_MULSD:
     case X86_DIVSS:
     case X86_DIVSD:
+    case X86_SQRTSD:
     case X86_UCOMISS:
     case X86_UCOMISD:
         pure = true;
@@ -817,6 +819,7 @@ static bool takes_source(const X86_Instr *use, bool imm)
     case X86_MULSD:
     case X86_DIVSS:
     case X86_DIVSD:
+    case X86_SQRTSD:
     case X86_UCOMISS:
     case X86_UCOMISD:
         return !imm;
@@ -827,7 +830,8 @@ static bool takes_source(const X86_Instr *use, bool imm)
 
 // mov M, T (a load, or an immediate) then an operation reading T as its source, T
 // dead after: the operation takes M; the load goes.  A comparison may take it as its
-// other operand too: cmp X, T is cmp X, M.
+// other operand too: cmp X, T is cmp X, M.  sqrtsd T, T is sqrtsd M, T: its destination
+// is only written (the upper lanes it keeps hold nothing for a scalar).
 static bool fold_load(const Live *lv, int bi, X86_Block *b, X86_Instr **link)
 {
     X86_Instr *ld = *link, *use = ld->next;
@@ -843,7 +847,9 @@ static bool fold_load(const Live *lv, int bi, X86_Block *b, X86_Instr **link)
         return false;
     if (imm && ld->width == X86_Q && !x86_imm32(m->imm))
         return false;
-    if (!dead_after(lv, bi, use, bit(t)) || (hidden_regs(use) & bit(t)))
+    bool into_dest = use->op == X86_SQRTSD && is_reg(&use->opnd[0]) && use->opnd[0].reg == t &&
+                     is_reg(&use->opnd[1]) && use->opnd[1].reg == t;
+    if ((!into_dest && !dead_after(lv, bi, use, bit(t))) || (hidden_regs(use) & bit(t)))
         return false;
     int k = -1; // the operand of `use` that becomes M
     if (is_reg(&use->opnd[0]) && use->opnd[0].reg == t && takes_source(use, imm)) {
@@ -855,10 +861,11 @@ static bool fold_load(const Live *lv, int bi, X86_Block *b, X86_Instr **link)
     if (k < 0 || (gp_load && use->width != ld->width) ||
         (fp_load && (use->op == X86_MOV || (use->op == X86_ADDSD || use->op == X86_SUBSD ||
                                             use->op == X86_MULSD || use->op == X86_DIVSD ||
-                                            use->op == X86_UCOMISD) != (ld->op == X86_MOVSD))))
+                                            use->op == X86_SQRTSD || use->op == X86_UCOMISD) != (ld->op == X86_MOVSD))))
         return false;
     const X86_Operand *other = &use->opnd[1 - k];
-    if (other->kind == X86_OPND_REG ? other->reg == t : (address_regs(other) & bit(t)) != 0)
+    if (!into_dest &&
+        (other->kind == X86_OPND_REG ? other->reg == t : (address_regs(other) & bit(t)) != 0))
         return false;
     if (mem && (other->kind == X86_OPND_MEM || other->kind == X86_OPND_RIP))
         return false; // one memory operand at most

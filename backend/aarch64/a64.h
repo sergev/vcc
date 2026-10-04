@@ -120,7 +120,8 @@ typedef struct {
                             X(ADRP, "adrp") X(B, "b") X(BCOND, "b.") X(CBZ, "cbz") X(CBNZ, "cbnz") \
                                 X(BL, "bl") X(BLR, "blr") X(RET, "ret") X(FMOV, "fmov")            \
                                     X(FADD, "fadd") X(FSUB, "fsub") X(FMUL, "fmul")                \
-                                        X(FDIV, "fdiv") X(FNEG, "fneg") X(FCMP, "fcmp")            \
+                                        X(FDIV, "fdiv") X(FNEG, "fneg") X(FSQRT, "fsqrt")          \
+                                            X(FCMP, "fcmp")                                        \
                                             X(FCVT, "fcvt") X(SCVTF, "scvtf") X(UCVTF, "ucvtf")    \
                                                 X(FCVTZS, "fcvtzs") X(FCVTZU, "fcvtzu")            \
                                                     X(EPILOGUE, "#epilogue")

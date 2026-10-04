@@ -81,7 +81,9 @@ static const Target targets[] = {
                 // returns an HFA in VFP registers although it is wider than 4 bytes
       0,        // struct_args_split
       NULL,     // immediate_args
-      NULL },   // va_class: va_arg is a pointer walk, no argument classes
+      NULL,     // va_class: va_arg is a pointer walk, no argument classes
+      0,        // ldouble_mant_dig
+      1 },      // hw_sqrt: vsqrt.f64
 
     { "aarch64",
       1, 1,   // _Bool
@@ -101,7 +103,9 @@ static const Target targets[] = {
                 // passes a large result's address in x8, not as an argument
       0,        // struct_args_split
       NULL,     // immediate_args
-      tac_aapcs64_class }, // va_class
+      tac_aapcs64_class, // va_class
+      0,        // ldouble_mant_dig
+      1 },      // hw_sqrt: fsqrt
 
     { "x86_64",
       1, 1,   // _Bool
@@ -123,7 +127,8 @@ static const Target targets[] = {
       0,        // struct_args_split
       NULL,     // immediate_args
       tac_sysv64_class, // va_class
-      64 },     // ldouble_mant_dig: the x87 extended format
+      64,       // ldouble_mant_dig: the x87 extended format
+      1 },      // hw_sqrt: sqrtsd
 
     { "riscv32",
       1, 1,   // _Bool
@@ -139,8 +144,13 @@ static const Target targets[] = {
       0,   // plain char unsigned (RISC-V ABI)
       0,   // signed >> arithmetic
       1,   // aggregate_align (1)
-      16 }, // struct_return_max: ILP32D returns {double, double} in fa0/fa1; the
+      16,   // struct_return_max: ILP32D returns {double, double} in fa0/fa1; the
             // backend passes the hidden pointer for the other structs over 8 bytes
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL,     // va_class
+      0,        // ldouble_mant_dig
+      1 },      // hw_sqrt: fsqrt.d
 
     { "riscv64",
       1, 1,   // _Bool
@@ -155,7 +165,13 @@ static const Target targets[] = {
       16, 32, 64, 64, // signed bits
       0,   // plain char unsigned (RISC-V ABI)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      0,        // struct_return_max: two pointers
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL,     // va_class
+      0,        // ldouble_mant_dig
+      1 },      // hw_sqrt: fsqrt.d
 
     { "mmix",
       1, 1,   // _Bool

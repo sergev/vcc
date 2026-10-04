@@ -77,6 +77,10 @@ argument undefined, but clang extends them to 32 bits as the sender and relies o
 as the receiver. So `genx86` extends as the sender and extends again as the receiver,
 which is safe with both clang and GCC.
 
+A call of `sqrt` is the `sqrtsd` instruction: the translator lowers a call of the
+library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
+descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genx86`.
 

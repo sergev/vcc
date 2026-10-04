@@ -72,7 +72,8 @@ typedef struct {
     X(FLW, "flw") X(FLD, "fld") X(FSW, "fsw") X(FSD, "fsd")                               \
     X(FADDS, "fadd.s") X(FADDD, "fadd.d") X(FSUBS, "fsub.s") X(FSUBD, "fsub.d")           \
     X(FMULS, "fmul.s") X(FMULD, "fmul.d") X(FDIVS, "fdiv.s") X(FDIVD, "fdiv.d")           \
-    X(FNEGS, "fneg.s") X(FNEGD, "fneg.d") X(FEQS, "feq.s") X(FEQD, "feq.d")               \
+    X(FNEGS, "fneg.s") X(FNEGD, "fneg.d") X(FSQRTD, "fsqrt.d")                            \
+    X(FEQS, "feq.s") X(FEQD, "feq.d")                                                     \
     X(FLTS, "flt.s") X(FLTD, "flt.d") X(FLES, "fle.s") X(FLED, "fle.d")                   \
     X(FCVTSW, "fcvt.s.w") X(FCVTSWU, "fcvt.s.wu") X(FCVTSL, "fcvt.s.l")                   \
     X(FCVTSLU, "fcvt.s.lu") X(FCVTDW, "fcvt.d.w") X(FCVTDWU, "fcvt.d.wu")                 \

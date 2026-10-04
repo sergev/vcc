@@ -81,6 +81,9 @@ typedef struct {
     // 64 for the x87 extended format.  0 = binary128 when long double is wider than
     // double, else double's.
     int ldouble_mant_dig;
+    // Square root is an instruction (an IEEE one, correctly rounded): the translator
+    // lowers a call of the C library's sqrt to TAC sqrt_double instead of a call.
+    int hw_sqrt;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

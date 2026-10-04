@@ -383,9 +383,14 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         store_val(g, r, in->u.unary.dst);
         return;
     }
+    int r = def_reg(g, RV_F0, in->u.unary.dst);
+    if (in->u.unary.op == TAC_UNARY_SQRT_DOUBLE) {
+        emit2(g, RV_FSQRTD, rv_reg(r), rv_reg(s));
+        store_val(g, r, in->u.unary.dst);
+        return;
+    }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("riscv: %s: bad floating-point unary operator", gen_name(g));
-    int r = def_reg(g, RV_F0, in->u.unary.dst);
     emit2(g, d ? RV_FNEGD : RV_FNEGS, rv_reg(r), rv_reg(s));
     store_val(g, r, in->u.unary.dst);
 }
@@ -469,7 +474,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         emit2(g, RV_SEQZ, rv_reg(d), s);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
-        fatal_error("riscv: %s: NEGATE_DOUBLE of an integer", gen_name(g));
+    case TAC_UNARY_SQRT_DOUBLE:
+        fatal_error("riscv: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_int_result(g, d, in->u.unary.dst);
 }

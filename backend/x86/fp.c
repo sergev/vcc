@@ -95,6 +95,14 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         store_val(g, T0, dst);
         return;
     }
+    if (in->u.unary.op == TAC_UNARY_SQRT_DOUBLE) {
+        // The source from a register, memory or .rodata; the result in the destination's
+        // register (sqrtsd writes the low lane only, so it needs no copy first).
+        int r = def_reg(g, F0, dst);
+        emit2(g, X86_SQRTSD, X86_Q, fp_operand(g, in->u.unary.src), x86_xmm(r));
+        store_val(g, r, dst);
+        return;
+    }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         fatal_error("x86: %s: bad floating-point unary operator", gen_name(g));
     // The sign bit flipped by xorps with a mask, 16 bytes in memory as xorps reads them.
