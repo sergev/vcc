@@ -22,7 +22,7 @@ around in `backend/x86/`. BESM-6 output must not change, and RISC-V, AArch64 and
 output changes only where a step says so.
 
 This replaces `TODO.md`, which predates every LLVM-toolchain backend. Its instruction
-patterns survive in Phase 2 below. Its stack-only frame map, its `FrameKind` type
+patterns went into Phase 2. Its stack-only frame map, its `FrameKind` type
 inference (TAC is typed now) and its macOS/Mach-O output do not. `x86_64.asdl` and
 `x86_64.md` stay as the reference spec of the instruction set.
 
@@ -164,96 +164,40 @@ Phase 1 is done:
   from debugcon. The book suite runs chapter 1, compared with clang. Until X21 the
   test programs use the riscv64 and LP64 headers.
 
-## Phase 2 — instruction selection, book order
-
-Naive and correct first: every TAC variable is in a frame slot, operands are loaded into
-the scratch registers of the table above, and the result is stored back. One memory
-operand per instruction is allowed from the start (`addl -8(%rbp), %eax`), since x86
-makes it free. Each step is done when its book chapters pass and a few golden tests pin
-the selected instructions.
-
-- **X8. Frame.** Slots come from typed TAC and `ALLOCATE_LOCAL`, with natural alignment
-  and 16 for a `long double`.
-  - The prologue is `push %rbp; mov %rsp, %rbp; sub $N, %rsp`, keeping `rsp` 16-aligned at
-    every call. Callee-saved registers are pushed between, with the pad accounting for
-    their count. The epilogue is `leave; ret`, with pops before the `leave`.
-  - Displacements are any 32-bit value, so there is no range splitting. Immediates are
-    32 bits sign-extended. A wider constant is `movabs $imm, %r11` and then used from
-    the register.
-- **X9. Integer ops** (ch. 2–4, 11, 12).
-  - Arithmetic and logic in the type's width. A 32-bit `l` operation zeroes the upper
-    half, so `unsigned int` → `unsigned long` is a plain `movl`.
-  - `neg` and `not`.
-  - `imul` in its two- and three-operand forms.
-  - Signed divide: `cltd`/`cqto` + `idiv`. Unsigned: `xor %edx, %edx` + `div`. Quotient in
-    `rax`, remainder in `rdx`. `INT_MIN / -1` traps (`#DE`), which C leaves undefined and
-    clang's code does too.
-  - Shifts by an immediate, or by `%cl`, with `sar`/`shr` chosen by signedness.
-  - Comparisons: `cmp` + `setcc` + `movzbl`, with `l`/`le`/`g`/`ge` signed and
-    `b`/`be`/`a`/`ae` unsigned.
-  - Width conversions: `movsbl`/`movswl`/`movslq` and `movzbl`/`movzwl`.
-
-  **Fixed registers.** `rdx` and `rcx` are argument registers, and a divide or variable
-  shift clobbers them. In the naive phase everything is in memory, so this costs
-  nothing. For X23, the selection's contract is that these instructions are reported to
-  the allocator as clobbering.
-- **X10. Control flow** (ch. 5–8): `.L` labels unique per TU, `jmp`, and `cmp`/`test` +
-  `jcc`. A test of zero is `test %reg, %reg`.
-- **X11. Calls, scalar ABI** (ch. 9).
-  - Arguments in `rdi`–`r9` and `xmm0`–`xmm7`. The rest go in 8-byte stack slots stored
-    at `0(%rsp)`, `8(%rsp)`… of an outgoing area reserved in the frame: no pushes, so
-    `rsp` stays fixed and 16-aligned.
-  - `call sym` for direct calls, `call *%r11` for indirect ones.
-  - `%al` set to the number of `xmm` arguments before every call to a variadic or
-    unprototyped callee, direct or through a pointer.
-  - Narrow arguments and results extended by the sender and re-extended by the receiver.
-  - `FUN_CALL_NORETURN`.
-  - Parallel moves into the argument registers, ordered so no source is clobbered before
-    it is read.
-- **X12. Globals and static data** (ch. 10).
-  - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind. A `long double` is
-    `.quad` significand + `.short` sign/exponent + `.zero 6`, from `f128_to_x87`.
-  - Addresses are `lea sym(%rip)`, and accesses use `sym(%rip)` directly.
-  - Static locals' `name$N` are spelled legally for both assemblers (`$` begins an
-    immediate in AT&T syntax; check what AArch64 does).
-- **X13. Floating point, SSE** (ch. 13).
-  - `addsd`/`subsd`/`mulsd`/`divsd` and their `ss` forms. Negation is `xorpd` with a
-    sign-mask constant.
-  - `cvtss2sd`/`cvtsd2ss`. `cvtsi2sd`/`cvttsd2si` in `l` and `q` widths for the signed
-    conversions.
-  - `unsigned int` goes through a zero-extended 64-bit convert.
-  - `unsigned long` → FP: when the top bit is set, halve with the low bit kept
-    (`shr`/`or`), convert and double. FP → `unsigned long`: subtract 2^63 when ≥ 2^63,
-    convert and flip the top bit.
-  - **Comparisons** with `ucomisd`, all NaN-correct:
-    - `<` and `<=` swap the operands and use `a`/`ae`, which are false on unordered
-      without a parity test.
-    - `==` is `sete` + `setnp` + `and`; `!=` is `setne` + `setp` + `or`.
-    - Branches use `jp`.
-  - Constants: zero by `xorps`, others from `.rodata` through `sym(%rip)`. A truth test
-    of a double compares with zero, NaN being true.
-- **X14. `long double`, x87** (ch. 13 again, and the book's `long double` programs).
-  - Every `long double` value lives in its 16-byte slot. A pattern loads with `fldt`,
-    computes (`faddp`/`fsubp`/`fmulp`/`fdivp`/`fchs`) and stores with `fstpt`. The x87
-    stack is empty between TAC instructions and never deeper than two inside one.
-  - Constants come from `fldz`/`fld1` or a 10-byte `.rodata` literal.
-  - Integer → `long double`: `fild`. For unsigned 64-bit, add a 2^64 constant when the
-    source is negative.
-  - `long double` → integer: switch the control word to truncation around the store
-    (`fnstcw`, `or $0xc00`, `fldcw`, `fistp`, restore), because baseline x86-64 has no
-    `fisttp`. Unsigned 64-bit takes the 2^63 bias.
-  - `float`/`double` ↔ `long double` through memory (`flds`/`fldl`, `fstps`/`fstpl`).
-  - Comparisons: `fucomip` + `fstp %st(0)`, with the same flag and parity rules as X13.
-- **X15. Pointers, arrays, chars, strings** (ch. 14–16).
-  - Loads by width and signedness (`movsbl`/`movzbl`/`movswl`/`movzwl`), and stores from
-    the register at the store's width.
-  - `ADD_PTR` as `lea (base, index, scale)` for scale 1/2/4/8, else `imul` and `add`.
-  - The byte-pointer TAC kinds as plain operations, as on RISC-V.
-- **X16. Structs** (ch. 17–18). Member access via `COPY_*_OFFSET`.
-  - Whole-aggregate copies by 8/4/2/1-byte moves through `r11`, and a loop past a few
-    eightbytes. `rep movsb` waits for X25, since it needs `rdi`/`rsi`/`rcx`.
-  - For now, struct arguments are passed whole on the stack, and every struct result goes
-    through the hidden pointer in `rdi`, returned in `rax`.
+Phase 2 is done:
+- **Naive selection.** Every TAC variable has a slot below `rbp`, any other name is
+  `sym(%rip)`. An instruction loads its operands into `rax`/`r10`/`r11` (`xmm14`/`xmm15`)
+  with one of them straight from memory or as an immediate, and stores the result back.
+  `frame.c` (slots, value access, the `.rodata` constant pool, `gen_memcopy`),
+  `instr.c`, `call.c`, `fp.c` (SSE), `x87.c` and `data.c`.
+- **Frame.** `push %rbp; mov %rsp, %rbp; sub $N, %rsp` and `leave; ret`, none at all in a
+  leaf that touches neither the stack nor a slot.
+- **Integers.** Two-operand forms through `rax`, three-operand `imul` by an immediate,
+  `cltd`/`cqto` + `idiv` and `xor` + `div`, shifts by `%cl`, `cmp` + `setcc` +
+  `movzbl`, the width conversions.
+- **Control flow.** `test` + `jcc`; an FP truth test against zero with `jp`. Local
+  labels `.Lx<n>` are numbered per translation unit.
+- **Calls.** Scalars in `rdi`–`r9` and `xmm0`–`xmm7`, the rest in an outgoing area at
+  the bottom of the frame; `%al` before a variadic or unprototyped callee; `call *%r11`.
+  Arguments are loaded straight from memory, so the parallel moves wait for X23.
+- **SSE.** NaN-correct comparisons (swapped operands for `<`/`<=`, parity for `==`/`!=`),
+  unsigned 64-bit conversions both ways, negation by a 16-byte `xorps` mask from
+  `.rodata`.
+- **x87.** Every `long double` in its slot, `fldt`/`fstpt` around each operation; the
+  truncating `fistpq` under a switched control word; unsigned 64-bit with a 2^64 or 2^63
+  correction; arguments in 16-byte aligned stack slots, results in `st(0)`. Checked
+  against clang both ways.
+- **Structs** for now go whole on the stack, and every struct result through the
+  address in `rdi`, returned in `rax`. Copies move pieces through `r11`, in a loop
+  (`rax`, `r10`, `rcx`) past 64 bytes.
+- **Static data** with the x87 `long double` as `.quad` + `.short` + `.zero 6`; `name$N`
+  static locals are legal symbols for both assemblers.
+- **`libc.a`** holds the C library compiled by `genx86`, but not the `printf` family,
+  which waits for `<stdarg.h>` (X18).
+- **Tests.** The whole book suite runs, compared with clang. Three programs are skipped
+  because they assume an unsigned plain `char` (clang gives what we give). There are
+  goldens and run tests per step, and interop with clang for integer, FP and
+  `long double` arguments.
 
 ## Phase 3 — ABI conformance
 
@@ -269,8 +213,8 @@ the selected instructions.
     - MEMORY structs copied into the outgoing argument area;
     - `long double` arguments on the stack, 16-aligned.
   - Results: `rax`/`rdx`, `xmm0`/`xmm1`, or mixed in eightbyte order. MEMORY results go
-    through `rdi` and come back in `rax`. A `long double` is returned in `st(0)`, which
-    the callee loads with `fldt` and the caller stores with `fstpt`.
+    through `rdi` and come back in `rax`, as every struct result does now. A
+    `long double` is returned in `st(0)`, as now.
 - **X18. Variadic functions and `<stdarg.h>`.**
   - **Calls.** Set `%al` and pass every argument by the ordinary rules: unlike ARM32,
     SysV variadics change nothing but `%al`.
@@ -288,6 +232,7 @@ the selected instructions.
     `cls` from X17. A struct mixing INTEGER and SSE eightbytes is assembled in `tmp` from
     both halves of the save area. MEMORY and `long double` come from the overflow area,
     `long double` 16-aligned.
+  - `printf`, `sprintf` and `snprintf` join `libc.a`, with `doprnt`.
   - Audit the frontend for the array-typed `va_list`: a parameter of that type adjusts
     to a pointer, and `va_list` inside a struct stays an array. No earlier target had an
     array-typed `va_list`.
@@ -320,7 +265,8 @@ the selected instructions.
   - X18's `stdarg.h`.
 
   `inttypes.h` and `math.h` come from `libc/lp64/include/`, the rest from
-  `libc/common/include/`. Add an `x86_64-headers` CTest and its `-cpp` twin. Check our
+  `libc/common/include/`. The tests and the `libc.a` build switch from the riscv64
+  headers to these. Add an `x86_64-headers` CTest and its `-cpp` twin. Check our
   headers' type sizes and limits against clang's own for the triple, as ARM32 did.
 - **X22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests`, with host libc output as the expectation. `printf("%Lf")` exercises the
@@ -336,13 +282,16 @@ the selected instructions.
     allocator handles an empty callee-saved part; add a regalloc test.
   - `long double` is `REGALLOC_NONE`.
   - **Fixed registers.** A divide, remainder or variable shift is reported through the
-    `runtime_call` hook, so no value lives in `rdx`/`rcx` across it. If the ch. 20
+    `runtime_call` hook, so no value lives in `rdx`/`rcx` across it; so is a struct
+    copy past 64 bytes, whose loop counts in `rcx`. If the ch. 20
     programs show that costing much, add a narrower clobber-set hook to `regalloc.h` and
     record it.
   - **Two-operand form.** Selection computes `d = a op b` in place when `d` is `a`'s
     register (coalescing makes that common). It goes through `rax` when `d` is `b`'s
     register.
   - Callee-saved registers are pushed and popped around the frame.
+  - Parallel moves into the argument registers, ordered so that no source is
+    clobbered before it is read (deferred from X11).
 
   The ch. 20 tests pass.
 - **X24. Leaf functions and rsp-addressed frames.**
