@@ -158,7 +158,7 @@ One selection helper owns that rule.
 
 ## Phase 6 — finishing
 
-- **M25. Driver.** `vcc -t avr` runs:
+- **M25. Driver.** *Done.* `vcc -t avr` runs:
   - `vcpp -t avr`, `vparse`, `vlower -t avr`, `vgenavr`;
   - `clang --target=avr -mmcu=atmega1280 -c`;
   - `ld.lld -T link.ld crt0.o … -lc`.

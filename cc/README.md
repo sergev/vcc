@@ -31,6 +31,7 @@ linker       link          .o   -> a.out
 | AArch64 (ARMv8-A, AAPCS64) | `aarch64` | `vgenaarch64` | `clang --target=aarch64-none-elf -c` | `ld.lld -T link.ld` |
 | ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` | `ld.lld -T link.ld` |
 | x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `clang --target=x86_64-none-elf -c` | `ld.lld -T link.ld` |
+| AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `clang --target=avr -mmcu=atmega1280 -c` | `ld.lld -T link.ld` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
@@ -49,7 +50,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64` or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr` or `besm6` |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -98,13 +99,13 @@ driver against the build tree:
 
 ## Linking
 
-RISC-V, AArch64, ARM32 and x86-64:
+RISC-V, AArch64, ARM32, x86-64 and AVR:
 
 ```text
 ld.lld -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc
 ```
 
-The result is an ELF for the qemu `virt` machine (`microvm` for x86-64). It runs with
+The result is an ELF for the qemu `virt` machine (`microvm` for x86-64, `arduino-mega` for AVR). It runs with
 `qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none -kernel a.out`
 (`qemu-system-riscv32` for `riscv32`), or for `aarch64` with
 `qemu-system-aarch64 -M virt -cpu cortex-a57 -display none -serial stdio -monitor none -semihosting -kernel a.out`,
@@ -114,6 +115,13 @@ these two exit with `main`'s result. For `x86_64`:
 `qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel a.out`;
 `exit` writes the status byte to the debug console (add `-debugcon file:status` to keep
 it), and the exit device then stops qemu with status `(main's result << 1) | 1`.
+
+For `avr` the ELF is for qemu's `arduino-mega` (an ATmega1280):
+`qemu-system-avr -M arduino-mega -display none -monitor none -serial stdio -serial file:status -bios a.out`.
+Nothing on the machine can stop qemu: `exit` writes `main`'s result as one byte to
+USART1 (the `status` file) and waits, so qemu is stopped by hand, or by a script once the
+byte has arrived. For a real board, `llvm-objcopy -O ihex a.out a.hex` makes the Intel HEX
+image a flasher takes.
 
 BESM-6:
 
@@ -139,7 +147,7 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
 - preprocessing and target selection
 - `-S` for every target and both BESM-6 dialects
 - the usage errors
-- `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32 and x86-64
+- `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR
 - the BESM-6 link line, checked with a stand-in linker
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the

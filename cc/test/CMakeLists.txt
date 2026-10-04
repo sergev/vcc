@@ -5,7 +5,7 @@
 # StagedPrefix cases instead build a miniature installation (bin/ and
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
 # what checks the relocatable lookup.  Cases that assemble, link or run need
-# clang, ld.lld and qemu-system-riscv64, -aarch64, -arm or -x86_64 (or b6as/b6ld
+# clang, ld.lld and qemu-system-riscv64, -aarch64, -arm, -x86_64 or -avr (or b6as/b6ld
 # for the BESM-6) and are skipped without them.
 #
 add_executable(cc-tests cc_test.cpp)
@@ -21,12 +21,14 @@ target_compile_definitions(cc-tests PRIVATE
     VCC_GENAARCH64_PATH="$<TARGET_FILE:genaarch64>"
     VCC_GENARM32_PATH="$<TARGET_FILE:genarm32>"
     VCC_GENX86_PATH="$<TARGET_FILE:genx86>"
+    VCC_GENAVR_PATH="$<TARGET_FILE:genavr>"
     BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}"
     RISCV_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
     RISCV32_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
     AARCH64_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
     ARM32_INCLUDE_DIR="${ARM32_INCLUDE_DIR}"
     X86_INCLUDE_DIR="${X86_INCLUDE_DIR}"
+    AVR_INCLUDE_DIR="${AVR_INCLUDE_DIR}"
     LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     ILP32_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
@@ -49,8 +51,12 @@ target_compile_definitions(cc-tests PRIVATE
     X86_TOOLS_FOUND=$<BOOL:${X86_TOOLS_FOUND}>
     X86_QEMU="${X86_QEMU}"
     X86_LIB_DIR="${X86_LIB_DIR}"
-    X86_LINK_SCRIPT="${X86_LINK_SCRIPT}")
-add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86)
+    X86_LINK_SCRIPT="${X86_LINK_SCRIPT}"
+    AVR_TOOLS_FOUND=$<BOOL:${AVR_TOOLS_FOUND}>
+    AVR_QEMU="${AVR_QEMU}"
+    AVR_LIB_DIR="${AVR_LIB_DIR}"
+    AVR_LINK_SCRIPT="${AVR_LINK_SCRIPT}")
+add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86 genavr)
 if(RISCV_TOOLS_FOUND)
     add_dependencies(cc-tests riscv-libc)
 endif()
@@ -65,5 +71,8 @@ if(ARM32_TOOLS_FOUND)
 endif()
 if(X86_TOOLS_FOUND)
     add_dependencies(cc-tests x86-libc)
+endif()
+if(AVR_TOOLS_FOUND)
+    add_dependencies(cc-tests avr-libc)
 endif()
 gtest_discover_tests(cc-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

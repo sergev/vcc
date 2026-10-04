@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -97,11 +98,21 @@ bool HaveX86Run()
            access((std::string(X86_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The same for AVR, run on qemu `arduino-mega`.
+bool HaveAvrRun()
+{
+    return AVR_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) && HaveTool(AVR_QEMU) &&
+           access((std::string(AVR_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
-// `stderr_file` when they are given (which is how the -v echo is captured).
+// `stderr_file` when they are given (which is how the -v echo is captured).  With a
+// `done_file`, the child is stopped (and 0 returned) once that file is not empty:
+// qemu has no way to exit on AVR.
 int RunProcess(const std::vector<std::string> &argv, const std::string &stdout_file = {},
-               const std::string &stderr_file = {}, int timeout_sec = 20)
+               const std::string &stderr_file = {}, int timeout_sec = 20,
+               const std::string &done_file = {})
 {
     std::vector<char *> cargv;
     for (const auto &a : argv)
@@ -133,6 +144,12 @@ int RunProcess(const std::vector<std::string> &argv, const std::string &stdout_f
             break;
         if (w < 0)
             return -1;
+        struct stat st;
+        if (!done_file.empty() && stat(done_file.c_str(), &st) == 0 && st.st_size > 0) {
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            return 0;
+        }
         if (std::chrono::steady_clock::now() > deadline) {
             kill(pid, SIGKILL);
             waitpid(pid, &status, 0);
@@ -192,7 +209,7 @@ protected:
     // path.  stdout lands in out.log, stderr in err.log.
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
-        bool besm6 = false, aarch64 = false, arm32 = false, x86 = false;
+        bool besm6 = false, aarch64 = false, arm32 = false, x86 = false, avr = false;
         for (size_t i = 0; i + 1 < args.size(); i++) {
             if (args[i] == "-t" && args[i + 1] == "besm6")
                 besm6 = true;
@@ -202,12 +219,15 @@ protected:
                 arm32 = true;
             if (args[i] == "-t" && args[i + 1] == "x86_64")
                 x86 = true;
+            if (args[i] == "-t" && args[i + 1] == "avr")
+                avr = true;
         }
         setenv("VCC_GEN",
                besm6     ? VCC_GENBESM_PATH
                : aarch64 ? VCC_GENAARCH64_PATH
                : arm32   ? VCC_GENARM32_PATH
                : x86     ? VCC_GENX86_PATH
+               : avr     ? VCC_GENAVR_PATH
                          : VCC_GENRISCV_PATH,
                1);
 
@@ -217,9 +237,10 @@ protected:
                               : aarch64 ? AARCH64_INCLUDE_DIR
                               : arm32   ? ARM32_INCLUDE_DIR
                               : x86     ? X86_INCLUDE_DIR
+                              : avr     ? AVR_INCLUDE_DIR
                                         : RISCV_INCLUDE_DIR;
             argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
-            if (!besm6)
+            if (!besm6 && !avr)
                 argv.push_back(std::string("-I") + (arm32 ? ILP32_INCLUDE_DIR : LP64_INCLUDE_DIR));
             argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
         }
@@ -255,6 +276,7 @@ protected:
         fs::create_symlink(VCC_GENAARCH64_PATH, prefix + "/bin/vgenaarch64");
         fs::create_symlink(VCC_GENARM32_PATH, prefix + "/bin/vgenarm32");
         fs::create_symlink(VCC_GENX86_PATH, prefix + "/bin/vgenx86");
+        fs::create_symlink(VCC_GENAVR_PATH, prefix + "/bin/vgenavr");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
@@ -264,6 +286,7 @@ protected:
                                  : target == "aarch64" ? AARCH64_INCLUDE_DIR
                                  : target == "arm32"   ? ARM32_INCLUDE_DIR
                                  : target == "x86_64"  ? X86_INCLUDE_DIR
+                                 : target == "avr"     ? AVR_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
         const char *model_inc =
             target == "riscv64" || target == "aarch64" || target == "x86_64" ? LP64_INCLUDE_DIR
@@ -335,6 +358,19 @@ protected:
                      "none", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04", "-debugcon",
                      "file:" + con, "-kernel", elf },
                    out, Path("qemu.err"), 10);
+        std::string code = ReadFile(con);
+        *status = code.empty() ? -1 : (unsigned char)code[0];
+        return ReadFile(out);
+    }
+
+    // Run a linked AVR ELF under qemu `arduino-mega`; returns its USART0 output, main's
+    // result in *status, the byte the runtime writes to USART1, which ends the run.
+    std::string RunQemuAvr(const std::string &elf, int *status)
+    {
+        std::string out = Path("qemu.out"), con = Path("qemu.status");
+        RunProcess({ AVR_QEMU, "-M", "arduino-mega", "-display", "none", "-monitor", "none",
+                     "-serial", "stdio", "-serial", "file:" + con, "-bios", elf },
+                   out, Path("qemu.err"), 10, con);
         std::string code = ReadFile(con);
         *status = code.empty() ? -1 : (unsigned char)code[0];
         return ReadFile(out);
@@ -533,6 +569,43 @@ TEST_F(CcDriver, LinkAndRunX86)
         << Stderr();
     int status;
     EXPECT_EQ(RunQemuX86(Path("t.elf"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+}
+
+TEST_F(CcDriver, CompileToAssemblyAvr)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "avr", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find("main:"), std::string::npos) << text;
+    EXPECT_NE(text.find("call    printf"), std::string::npos) << text;
+}
+
+// Separate compilation for AVR, a .S among the sources, and the link of the build's
+// runtime by hand.
+TEST_F(CcDriver, LinkAndRunAvr)
+{
+    if (!HaveAvrRun())
+        GTEST_SKIP() << "AVR clang/ld.lld/qemu not found";
+    WriteSource("main.c", "#include <stdio.h>\n"
+                          "int twice(int);\n"
+                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S", R"(#ifdef __AVR__
+        .globl  twice
+twice:  lsl     r24
+        rol     r25
+        ret
+#endif
+)");
+    ASSERT_EQ(Vcc({ "-t", "avr", "-c", "main.c", "twice.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    std::string lib = AVR_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "avr", "-nostdlib", "-T", AVR_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuAvr(Path("t.elf"), &status), "42\n");
     EXPECT_EQ(status, 3);
 }
 
@@ -836,6 +909,44 @@ int main(void)
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t x86_64 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenx86 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" --target=x86_64-none-elf -c "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+}
+
+// The same for AVR: its own headers alone, the 16-bit int and the binary32 double.
+TEST_F(CcDriver, StagedPrefixAvr)
+{
+    if (!HaveAvrRun())
+        GTEST_SKIP() << "AVR clang/ld.lld/qemu not found";
+    std::string prefix = StagePrefix("avr");
+    std::string lib = prefix + "/share/vcc/avr/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(AVR_LIB_DIR) + "/" + name, lib + "/" + name);
+    fs::create_symlink(AVR_LINK_SCRIPT, lib + "/link.ld");
+
+    WriteSource("t.c", R"(#include <stdio.h>
+#include <limits.h>
+#include <float.h>
+int main(void)
+{
+    long x = 1L << 20;
+    printf("%d %d %ld %g\n", (int)sizeof(int), (int)sizeof(double), x, 2.5);
+    return INT_MAX == 32767 && DBL_MANT_DIG == 24 ? 7 : 1;
+}
+)");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "avr", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
+    int status;
+    EXPECT_EQ(RunQemuAvr(Path("t.elf"), &status), "2 4 1048576 2.5\n");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t avr -nostdinc -I" + prefix +
+                        "/share/vcc/avr/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t avr "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenavr "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" --target=avr -mmcu=atmega1280 -c "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
