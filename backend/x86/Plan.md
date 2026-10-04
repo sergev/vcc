@@ -101,19 +101,19 @@ Verified 2026-10-03 on this machine, with a scratch program (not in the tree):
 
 ### Registers, as we use them
 
-Fixed here so the allocator (X23) and the naive selection (Phase 2) agree from the start:
+As the allocator and selection use them:
 
 | Use | Integer | SSE |
 |---|---|---|
 | Scratch for instruction selection | `rax`, `r10`, `r11` (plus `rdx`/`rcx` at a divide or variable shift, X9) | `xmm14`, `xmm15` |
 | Values not live across a call | `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9` | `xmm0`–`xmm13` |
 | Values live across a call | `rbx`, `r12`–`r15` (`rbp` too in a function without a frame pointer) | none: the psABI has no callee-saved `xmm` |
-| Frame | `rbp` (until X24), `rsp` | — |
+| Frame | `rsp` (`rbp` with `--frame-pointer`) | — |
 
 `rax` is outside the allocator's pool although it is the result register. Being scratch
 lets every two-operand pattern compute in `rax` without checking the operands for
-aliasing, and the `cltq`/`cqto`/`div`/`setcc` idioms all want it. The allocator's
-result hint then points to `rax` only as a *move* target. A `long double` never gets a
+aliasing, and the `cltq`/`cqto`/`div`/`setcc` idioms all want it. So the allocator
+has no integer result hint; the peephole pass computes a result in `rax` instead. A `long double` never gets a
 register: it lives in its 16-byte slot, and the x87 stack holds values only inside one
 instruction's pattern (X14).
 
@@ -178,7 +178,6 @@ Phase 2 is done:
   labels `.Lx<n>` are numbered per translation unit.
 - **Calls.** Scalars in `rdi`–`r9` and `xmm0`–`xmm7`, the rest in an outgoing area at
   the bottom of the frame; `%al` before a variadic or unprototyped callee; `call *%r11`.
-  Arguments are loaded straight from memory, so the parallel moves wait for X23.
 - **SSE.** NaN-correct comparisons (swapped operands for `<`/`<=`, parity for `==`/`!=`),
   unsigned 64-bit conversions both ways, negation by a 16-byte `xorps` mask from
   `.rodata`.
@@ -248,51 +247,38 @@ Phase 4 is done:
   ported, plus `%Lf`/`%Le`/`%Lg` of the x87 `long double` through `va_arg` and the
   string routines on bytes over 127 with a signed plain `char`.
 
-## Phase 5 — code quality
-
-- **X23. Register allocation** on `backend/common/regalloc.c`, with the pools of the
-  register table.
-  - **Integer pool:** the six argument registers, then `rbx` and `r12`–`r15`.
-  - **SSE pool:** `xmm0`–`xmm13`, all of them "argument" registers with nothing
-    callee-saved, so an FP value live across a call stays in its slot. Check that the
-    allocator handles an empty callee-saved part; add a regalloc test.
-  - `long double` is `REGALLOC_NONE`.
-  - **Fixed registers.** A divide, remainder or variable shift is reported through the
-    `runtime_call` hook, so no value lives in `rdx`/`rcx` across it; so is a struct
-    copy past 64 bytes, whose loop counts in `rcx`. If the ch. 20
-    programs show that costing much, add a narrower clobber-set hook to `regalloc.h` and
-    record it.
-  - **Two-operand form.** Selection computes `d = a op b` in place when `d` is `a`'s
-    register (coalescing makes that common). It goes through `rax` when `d` is `b`'s
-    register.
-  - Callee-saved registers are pushed and popped around the frame.
-  - Parallel moves into the argument registers, ordered so that no source is
-    clobbered before it is read (deferred from X11).
-
-  The ch. 20 tests pass.
-- **X24. Leaf functions and rsp-addressed frames.**
-  - Without `--frame-pointer`, slots are addressed from `rsp` and `rbp` joins the pool,
-    as on AArch64.
-  - A leaf function keeps its slots in the **red zone**, the 128 bytes below `rsp`, with
-    no `sub`. This is safe because the runtime never enables interrupts. Check that clang
-    also assumes the red zone for this triple.
-  - A leaf that needs no stack has no prologue at all.
-- **X25. Peephole.**
-  - **Folding:**
-    - memory operands into ALU instructions (`addl 8(%rsp), %edi`), and immediates;
-    - `lea` for `a + b`, `a + b*k` and `a + k` into a third register;
-    - copies followed into their uses, and no reload of a value just stored.
-  - **Short forms:**
-    - `test` for zero and mask tests;
-    - `xor %eax, %eax` for zero where the flags are dead;
-    - `rep movsb`/`movsq` for large copies.
-  - **Branches:**
-    - compare-and-branch fusion (no `setcc`/`movzbl`/`test`);
-    - branch over jump, and no jump to the next line.
-  - **`cmov`** for short diamonds (`if (c) x = a; else x = b;`, `?:`, min/max) — the x86
-    counterpart of ARM32's conditional execution. It is register or memory source only,
-    and from a memory source only where that load is always valid (a frame slot), since
-    `cmov` loads unconditionally.
+Phase 5 is done:
+- **Register allocation** (`regalloc.c`, on `backend/common/regalloc.c`). The pools are
+  `rdi`–`r9` then `rbx`, `r12`–`r15` (and `rbp` without a frame pointer), and
+  `xmm0`–`xmm13`, all caller-saved, so an FP value live across a call keeps its slot. A
+  divide or a shift by a variable is reported through the `runtime_call` hook: in the
+  book suite that costs 20 memory references in 6153, so no narrower hook was added. A
+  struct copy past 64 bytes loops through `xmm15` and counts in `r11`, and so writes
+  no allocated register. Selection computes `d = a op b` in `d` unless `d` is `b`'s
+  register (a commuting operator swaps them). Parameters and arguments are moved as if
+  at once; a cycle is broken through `rax` or `xmm14`. In shared code, a parameter dead
+  on entry no longer keeps its incoming register (the `dead_param` hook, in all four
+  allocating backends).
+- **Frames.** Without `--frame-pointer` the frame is addressed from `rsp` and the first
+  callee-saved register goes where `rbp` would be pushed. A leaf whose slots fit keeps
+  them in the red zone (clang assumes it too for the triple), and a leaf that needs no
+  stack has no prologue. Slots are addressed from a pseudo register, `X86_FRAME`,
+  resolved once the frame is known.
+- **Peephole** (`peephole.c`), over register liveness that includes the flags:
+  - moves followed into their uses, and results computed in the register they are moved to;
+  - loads and immediates folded into their users, `lea` into the memory operand it feeds;
+  - reloads deleted, `test` for `cmp $0` and masks, `xor` for zero;
+  - jump-to-next, branch-over-jump and dead code removed, and unreferenced blocks merged;
+  - `cmov` for one-move triangles and diamonds, from a register or a slot only.
+  
+  Comparisons fuse with their branch in selection, FP ones with the parity jumps. The
+  libc's instructions went from 6571 (naive) to 3358.
+- `rep movs` for large copies was not done. It needs `rdi`, `rsi` and `rcx`, which may
+  hold the operands of the call being set up, and the `xmm15` loop already copies 16
+  bytes per iteration.
+- **Tests:** `regalloc_tests.cpp` and `peephole_tests.cpp`, the frame goldens, and run
+  tests of every two-operand aliasing arrangement, of `rsp` alignment at calls
+  (checked by clang's code), and of the rewrites. Each was checked against a mutation.
 
 ## Phase 6 — finishing
 
@@ -327,13 +313,6 @@ Phase 4 is done:
 
 ## Risks
 
-- **Fixed registers against the allocator.** `div`/`idiv`, variable shifts and `%al`
-  tie instructions to registers that are also argument registers. Mitigation: three
-  scratch registers outside the pool, the `runtime_call` report from X9, and golden
-  tests of every fixed-register pattern with operands already in `rdx`/`rcx`.
-- **Two-operand forms** invite the "destination is the second source" bug (`d = a - d`).
-  Mitigation: one helper in selection owns the rule, and a test per operator pins it
-  with the operands in every aliasing arrangement.
 - **x87 `long double`.** Folded constants against computed values (the double rounding of a constant), the
   control-word dance for truncation, and the x87 stack discipline at calls (empty, except
   `st(0)` for a result). An x87 stack left unbalanced fails far from its cause, as a NaN
@@ -343,8 +322,6 @@ Phase 4 is done:
 - **SysV classification edge cases:** all-or-nothing, mixed eightbytes, MEMORY by value
   on the stack, `long double` in a struct, the returned address in `rax`. Mitigation:
   X19's table with clang, and X17's interop test.
-- **No callee-saved `xmm`.** FP-heavy code with calls spills around every call. That is
-  the ABI, and clang pays it too; accept it, and keep the regalloc test from X23.
 - **Signed plain `char`** is new among our byte-addressed targets, and libc sources or
   tests may quietly assume `char` ≥ 0. Mitigation: the Phase 0 audit found none in libc; the X22 string tests.
 - **crt0.** A 32→64-bit transition that goes wrong hangs or triple-faults silently (qemu
