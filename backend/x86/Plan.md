@@ -225,25 +225,28 @@ Phase 3 is done:
   programs it skips now run as signed-char versions (`book_x86_tests.cpp`), also
   compared with clang.
 
-## Phase 4 — library and headers
-
-- **X21. Headers.** `libc/x86/include/` has `stdarg.h`, `stddef.h` and `stdint.h`
-  (X18). It still needs:
-  - `float.h`, with `LDBL_*` of the x87 format: `LDBL_MANT_DIG` 64, `LDBL_MAX_EXP` 16384,
-    `LDBL_EPSILON` 2^-63, and so on;
-  - `limits.h` with a signed `CHAR_MIN`/`CHAR_MAX`. `libc/lp64/include/limits.h`
-    hard-codes an unsigned `char`, and `__CHAR_UNSIGNED__` cannot select between the two
-    under the system preprocessor the build uses;
-  - `setjmp.h` (`rbx`, `rbp`, `r12`–`r15`, `rsp`, the return address, plus `MXCSR` and
-    the x87 control word), with its `setjmp`/`longjmp` in `libc.a`;
-  - a `README.md`.
-
-  `inttypes.h` and `math.h` come from `libc/lp64/include/`, the rest from
-  `libc/common/include/`. Add an `x86_64-headers` CTest and its `-cpp` twin. Check our
-  headers' type sizes and limits against clang's own for the triple, as ARM32 did.
-- **X22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
-  `math_tests`, with host libc output as the expectation. `printf("%Lf")` exercises the
-  x87 `long double` through `va_arg`, and the string tests exercise signed `char`.
+Phase 4 is done:
+- **Headers.** `libc/x86/include/` has `float.h` (the x87 `LDBL_*`, clang's values),
+  `limits.h` (signed `char`), `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h` and a
+  README; `inttypes.h` and `math.h` come from `libc/lp64/include/`. `X86_INCLUDE_DIR` is
+  set beside the other targets' in the top-level `CMakeLists.txt`. The
+  `x86_64-headers` CTest and its `-cpp` twin parse every header, and
+  `HeadersAgreeWithClang` checks the types, limits and `LDBL_*` values against clang's
+  own headers for the triple.
+- **`setjmp`/`longjmp`** (`libc/x86/setjmp.s`, in `libc.a`) save `rbx`, `rbp`,
+  `r12`–`r15`, `rsp`, the return address, MXCSR and the x87 control word. The first
+  target to have them.
+- **Volatile.** The `setjmp` test found that `round++` on a `volatile int` added to the
+  value last stored instead of the value read: the translator read the variable a second
+  time without the volatile mark, and copy propagation folded it. Fixed for all targets:
+  a volatile variable is read once in `++`, `--` and compound assignment, its
+  initializer is a volatile write, and an assignment's value is the value stored. The
+  backends with register allocation keep a volatile variable in memory, and no peephole
+  pass deletes a volatile reload or pairs volatile accesses (BESM-6 rule #27 included).
+  See "Volatile" in `docs/Technical_Reference.md`.
+- **Libc run tests.** AArch64's `printf_tests`/`str_tests`/`mem_tests`/`math_tests`
+  ported, plus `%Lf`/`%Le`/`%Lg` of the x87 `long double` through `va_arg` and the
+  string routines on bytes over 127 with a signed plain `char`.
 
 ## Phase 5 — code quality
 
