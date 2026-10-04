@@ -34,6 +34,7 @@ add_executable(avr-tests
     test/ptr_tests.cpp
     test/fp_tests.cpp
     test/struct_tests.cpp
+    test/stdarg_tests.cpp
     test/run_tests.cpp
     ${AVR_BOOK_SOURCES}
 )

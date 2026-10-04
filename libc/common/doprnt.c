@@ -11,14 +11,17 @@
  * stored into buf (at most size-1, NUL-terminated).  The return value is the total
  * length that would be produced.
  */
-#include <stdio.h>
+#include <float.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdio.h>
 
 enum {
-    MAXNBUF  = 32,  /* integer digits: 64-bit octal (22) + slack                 */
-    FBUFSIZE = 352, /* %f of DBL_MAX: 309 integer digits + '.' + precision + exp */
-    MAX_DIG  = 17,  /* max meaningful significant digits of a double             */
-    DEF_PREC = 6,   /* default precision for %f/%e and significant digits for %g */
+    MAXNBUF  = 32,                  /* integer digits: 64-bit octal (22) + slack  */
+    FBUFSIZE = DBL_MAX_10_EXP + 44, /* %f of DBL_MAX: its integer digits + '.' +
+                                       precision + exponent (352 for binary64)    */
+    MAX_DIG  = DBL_DECIMAL_DIG,     /* max meaningful significant digits          */
+    DEF_PREC = 6, /* default precision for %f/%e and significant digits for %g     */
 };
 
 static int g_to_buf;  /* 1 = store into g_buf, 0 = emit via putbyte */
@@ -148,7 +151,7 @@ int __doprnt(const char *fmt, va_list ap, char *buf, int size, int to_buf)
             goto reswitch;
         }
         if (c == 'z' || c == 't') {
-            lmod = 1;
+            lmod = sizeof(size_t) == sizeof(long) ? 1 : 0;
             goto reswitch;
         }
         if (c == 'L') {

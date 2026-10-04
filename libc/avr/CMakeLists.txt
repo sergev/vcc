@@ -68,9 +68,10 @@ macro(avr_compile_libc_c name srcdir)
     list(APPEND AVR_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The shared C library but the variadic part (M17), and the binary32 soft-float runtime;
+# The shared C library with the printf engine, and the binary32 soft-float runtime;
 # from libc/ilp32 the long long division and conversions; the AVR's own C.
-foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar
+foreach(name atoi doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset printf
+        puts putchar snprintf sprintf
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
         strtok float32)
     avr_compile_libc_c(${name} ${LIBC_COMMON_DIR})

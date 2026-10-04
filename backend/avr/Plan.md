@@ -173,6 +173,10 @@ One selection helper owns that rule.
     `(*(T *)((ap += sizeof(T)) - sizeof(T)))`. Alignment is 1, `char`/`short` promote to
     2-byte `int`, and `float` to a 4-byte `double`.
   - **Gate:** `printf` in `libc.a` works.
+  - *Done:* variadics both ways across clang, a `va_list` too. `printf`, `sprintf` and
+    `snprintf` are in `libc.a` and match the host's formatting. The two `doprnt` items
+    of M21 came forward. `sprintf`'s nominal unbounded size, `1 << 24`, overflowed a
+    16-bit `int`.
 - **M18. Interop tests** with clang in both directions, over a table of signatures, built
   before the code they test:
   - **Register overflow:** the argument that does not fit, and the later ones that would
@@ -228,10 +232,8 @@ One selection helper owns that rule.
   Add an `avr-headers` CTest and its `-cpp` twin. Check our headers' sizes and limits
   against clang's for the triple, as ARM32 and x86-64 did.
 - **M21. Libc fixes and run tests.**
-  - **`libc/common/doprnt.c`:**
-    - `%z`/`%t` are read as `long`; size them by `size_t`/`ptrdiff_t`.
-    - `FBUFSIZE` (352 bytes on an 8 KB stack) and `MAX_DIG` 17 assume binary64; derive
-      them from `DBL_MANT_DIG`/`DBL_MAX_EXP`.
+  - **`libc/common/doprnt.c`:** done at M17 (`%z`/`%t` by `size_t`, `FBUFSIZE` and
+    `MAX_DIG` from `float.h`).
   - **`libc/ilp32/int64.c`** converts between 64-bit integers and FP assuming a 53-bit
     `double` (`:68-85`). Make it round correctly for binary32 too, or give AVR its own
     conversions in `float32.c`.
