@@ -238,6 +238,52 @@ TEST_F(TranslateTestX86, AggregateCopyThroughPointerByBytes)
     tac_free_toplevel(tac);
 }
 
+// MSP430 aligns every type wider than char to 2, a long and a double included; the
+// offsets and sizes are clang's for --target=msp430.
+TEST_F(TranslateTestMsp430, StructLayout)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct A { char c; int i; long l; double d; };
+        struct B { char c; long long ll; char e; };
+        struct C { char a, b, c; };
+        struct D { char c; float f; short s; };
+        union U { char c; long l; };
+        struct E { char c; struct C in; long double ld; };
+        int f(struct A a, struct B b, struct C c, struct D d, union U u, struct E e)
+        { return 0; }
+    )");
+    const Tac_Type *a = SymbolType(tac, "f", "%a");
+    EXPECT_EQ(TypeStr(a), "struct A(16,2)");
+    EXPECT_EQ(Members(a), "c@0:uchar i@2:int l@4:long d@8:double");
+    const Tac_Type *b = SymbolType(tac, "f", "%b");
+    EXPECT_EQ(TypeStr(b), "struct B(12,2)");
+    EXPECT_EQ(Members(b), "c@0:uchar ll@2:long_long e@10:uchar");
+    EXPECT_EQ(TypeStr(SymbolType(tac, "f", "%c")), "struct C(3,1)");
+    const Tac_Type *d = SymbolType(tac, "f", "%d");
+    EXPECT_EQ(TypeStr(d), "struct D(8,2)");
+    EXPECT_EQ(Members(d), "c@0:uchar f@2:float s@6:short");
+    EXPECT_EQ(TypeStr(SymbolType(tac, "f", "%u")), "union U(4,2)");
+    const Tac_Type *e = SymbolType(tac, "f", "%e");
+    EXPECT_EQ(TypeStr(e), "struct E(12,2)");
+    EXPECT_EQ(Members(e), "c@0:uchar in@1:struct C(3,1) ld@4:long_double");
+    tac_free_toplevel(tac);
+}
+
+// A 2-aligned struct copies by 2-byte words (uint: int is 2 bytes), a char-only one by
+// bytes.
+TEST_F(TranslateTestMsp430, AggregateCopyByAlignment)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct L { char c; long l; } gl;
+        struct C { char c[3]; } gc;
+        void f(void) { struct L x; x = gl; }
+        void g(void) { struct C y; y = gc; }
+    )");
+    EXPECT_EQ(ChunkStores(tac, "f"), "0:uint 2:uint 4:uint");
+    EXPECT_EQ(ChunkStores(tac, "g"), "0:uchar 1:uchar 2:uchar");
+    tac_free_toplevel(tac);
+}
+
 // An alignment above one word still copies by words.
 TEST_F(TranslateTestX86, AggregateCopyCappedAtWord)
 {
@@ -306,6 +352,26 @@ TEST_F(TranslateTestRiscv, WideStructReturnThroughHiddenPointer)
     EXPECT_EQ(TypeStr(make->u.function.params->type), "*struct T(24,8)");
     const Tac_Instruction *call = FirstCall(Function(tac, "use"));
     EXPECT_EQ(CountArgs(call), 2); // the result slot's address, then a
+    EXPECT_EQ(call->u.fun_call.dst, nullptr);
+    tac_free_toplevel(tac);
+}
+
+// MSP430 returns every struct and union through a hidden pointer, a 1-byte one too.
+TEST_F(TranslateTestMsp430, EveryStructReturnThroughHiddenPointer)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct S1 { char c; };
+        union U { int i; };
+        struct S1 make(char c) { struct S1 s = { c }; return s; }
+        union U make_u(int i) { union U u; u.i = i; return u; }
+        char use(void) { struct S1 q = make(1); return q.c; }
+    )");
+    const Tac_TopLevel *make = Function(tac, "make");
+    EXPECT_STREQ(make->u.function.params->name, "%.ret");
+    EXPECT_EQ(TypeStr(make->u.function.params->type), "*struct S1(1,1)");
+    EXPECT_STREQ(Function(tac, "make_u")->u.function.params->name, "%.ret");
+    const Tac_Instruction *call = FirstCall(Function(tac, "use"));
+    EXPECT_EQ(CountArgs(call), 2); // the result slot's address, then c
     EXPECT_EQ(call->u.fun_call.dst, nullptr);
     tac_free_toplevel(tac);
 }

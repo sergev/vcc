@@ -213,6 +213,17 @@ protected:
     }
 };
 
+// Fixture for MSP430: a 16-bit int, size_t and pointer, unsigned plain char, a binary64
+// double, alignment 2 for everything wider than char, every struct returned in memory.
+class TranslateTestMsp430 : public TranslateTest {
+protected:
+    void SetUp() override
+    {
+        TranslateTest::SetUp();
+        target_config = target_lookup("msp430");
+    }
+};
+
 // Fixture for the byte-addressed LP64 target the RISC-V backend uses.
 class TranslateTestRiscv : public TranslateTest {
 protected:

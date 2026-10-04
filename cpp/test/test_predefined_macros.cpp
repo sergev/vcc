@@ -198,6 +198,13 @@ TEST_F(Predefined, AvrTarget) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "avr"}));
 }
 
+// The classic MSP430: unsigned plain char; clang's non-reserved MSP430 is left out.
+TEST_F(Predefined, Msp430Target) {
+    EXPECT_TRUE(TokensAre("#if __MSP430__ && __CHAR_UNSIGNED__ && __ELF__ && !defined(MSP430) && "
+                          "!defined(__AVR__) && !defined(__riscv) && !defined(__LP64__)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "msp430"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"

@@ -632,8 +632,7 @@ bool type_is_byval_sret(const Type *t)
 {
     if (!is_struct_or_union(t))
         return false;
-    size_t max = target_config->struct_return_max;
-    return get_size(t) > (max ? max : 2 * target_config->pointer_size);
+    return get_size(t) > target_config->struct_return_max;
 }
 
 bool type_is_split_arg(const Type *t)

@@ -66,8 +66,8 @@ typedef struct {
     size_t aggregate_align;
     // Struct/union by value.  One returned that is wider than struct_return_max bytes
     // goes through a hidden pointer to a caller-allocated slot, passed as the first
-    // argument (0 = two pointers, the usual psABI register pair; SIZE_MAX = never, the
-    // backend returns every struct itself).  With
+    // argument (0 = every struct and union, whatever its size, as on MSP430; SIZE_MAX =
+    // never, the backend returns every struct itself).  With
     // struct_args_split, an argument wider than a word is passed as that many word
     // arguments (BESM-6); otherwise it is passed whole and the backend applies its ABI.
     size_t struct_return_max;
