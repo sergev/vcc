@@ -1,5 +1,5 @@
 #
-# x86-64 runtime for bare-metal qemu `microvm` (see backend/x86/Plan.md): crt0.o,
+# x86-64 runtime for bare-metal qemu `microvm` (see docs/X86_64_Backend.md): crt0.o,
 # crt0-status.o (prints main's result, for the book run tests) and libc.a: the assembly
 # leaves, and the C library compiled by our own code generator.  Uses the clang, llvm-ar
 # and ld.lld libc/riscv64 found, when that clang has the x86-64 target;

@@ -1,5 +1,6 @@
 //
-// Peephole pass over the x86-64 IR, after register allocation and the frame:
+// Peephole pass over the x86-64 IR, after register allocation and frame layout, before
+// the prologue:
 //   - a move to itself goes (a 32-bit one when the upper half it clears is not read),
 //     so does an extension repeated in place, a lea of its own base, an add or sub of
 //     zero, and an instruction whose results are all dead;

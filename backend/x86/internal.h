@@ -1,5 +1,5 @@
 //
-// x86-64 code generator internals (System V psABI; see backend/x86/Plan.md).
+// x86-64 code generator internals (System V psABI; see docs/X86_64_Backend.md).
 //
 // Registers: rdi, rsi, rdx, rcx, r8, r9 and xmm0-xmm7 carry arguments, rax/rdx and
 // xmm0/xmm1 results; rax, r10 and r11 are the scratch registers of instruction
