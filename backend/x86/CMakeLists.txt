@@ -21,7 +21,7 @@ target_link_libraries(x86 backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(X86_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER X86_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-3])_tests\\.cpp$")
+list(FILTER X86_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-6])_tests\\.cpp$")
 
 add_executable(x86-tests
     test/emit_tests.cpp
@@ -33,6 +33,7 @@ add_executable(x86-tests
     test/data_tests.cpp
     test/fp_tests.cpp
     test/x87_tests.cpp
+    test/ptr_tests.cpp
     test/run_tests.cpp
     ${X86_BOOK_SOURCES}
 )

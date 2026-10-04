@@ -11,15 +11,12 @@ protected:
     void SetUp() override
     {
         X86Test::SetUp();
-        // Programs that call into the C library, which joins libc.a once the code
-        // generator compiles it (Plan.md, X15).
-#define LIBC "needs the C library in libc.a"
+        // Plain char is signed here, as clang has it; the other byte-addressed targets
+        // have it unsigned.
         static const SkippedTest skipped[] = {
-            { "Chapter13_StandardLibraryCall", LIBC },
-            { "Chapter13_DoubleParamsAndResultLibrary", LIBC },
+            { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
             { nullptr, nullptr },
         };
-#undef LIBC
         SkipIfListed(skipped);
         SKIP_IF_NO_X86_TOOLS();
     }

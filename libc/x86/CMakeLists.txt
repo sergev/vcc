@@ -1,7 +1,7 @@
 #
 # x86-64 runtime for bare-metal qemu `microvm` (see backend/x86/Plan.md): crt0.o,
-# crt0-status.o (prints main's result, for the book run tests) and libc.a, for now the
-# assembly leaves only.  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
+# crt0-status.o (prints main's result, for the book run tests) and libc.a: the assembly
+# leaves, and the C library compiled by our own code generator.  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
 # that clang has the x86-64 target; qemu-system-x86_64 runs the programs; GNU `as` from
 # x86_64-elf-binutils, when installed, is a second assembler the tests check our output
 # with.
@@ -51,6 +51,35 @@ foreach(name console malloc)
         COMMAND ${RISCV_CLANG} ${X86_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
     list(APPEND X86_LIBC_OBJS ${out}/${name}.o)
+endforeach()
+
+# C sources, through cpp -> parse -> lower -> genx86 -> clang.  Until the x86-64
+# headers exist (backend/x86/Plan.md, X21) the riscv64 ones serve: the same LP64 data
+# model but for long double and plain char, which these sources do not depend on.  The
+# printf family waits for <stdarg.h> (X18).
+set(X86_LIBC_INCLUDES -I${RISCV_INCLUDE_DIR} -I${LP64_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB X86_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
+     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+macro(x86_compile_libc_c name srcdir)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc ${X86_LIBC_INCLUDES}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t x86_64 ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genx86 ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${RISCV_CLANG} ${X86_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${srcdir}/${name}.c ${X86_LIBC_HEADERS} parse lower genx86
+        COMMENT "Compiling ${name}.c -> ${name}.o (x86-64)")
+    list(APPEND X86_LIBC_OBJS ${out}/${name}.o)
+endmacro()
+
+set(X86_LIBC_C ${LIBC_C_COMMON})
+list(REMOVE_ITEM X86_LIBC_C printf snprintf sprintf)
+foreach(name ${X86_LIBC_C})
+    x86_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+foreach(name ${LIBC_C_LP64})
+    x86_compile_libc_c(${name} ${LIBC_LP64_DIR})
 endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a
