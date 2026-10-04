@@ -292,6 +292,13 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     store_val(g, T0, in->u.binary.dst);
 }
 
+// dst = &src, of a named object or function: lea of its slot or symbol.
+static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
+{
+    emit2(g, X86_LEA, X86_Q, name_mem(g, src->u.var_name, 0), x86_reg(T0, X86_Q));
+    store_val(g, T0, dst);
+}
+
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
@@ -322,6 +329,19 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_INSTRUCTION_BINARY:
         gen_binary(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:
+    case TAC_INSTRUCTION_CHAR_PTR_TO_PTR:
+        gen_copy(g, in->u.ptr_to_char_ptr.src, in->u.ptr_to_char_ptr.dst);
+        break;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        gen_get_address(g, in->u.get_address.src, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_FUN_CALL:
+    case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+        gen_call(g, in);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame

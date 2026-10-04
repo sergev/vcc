@@ -120,6 +120,7 @@ void gen_prologue(Gen *g);
 // A slot for each parameter, stored from its argument register or placed over its
 // stack slot.
 void gen_params(Gen *g);
+void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //
