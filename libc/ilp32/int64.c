@@ -64,9 +64,14 @@ long long __moddi3(long long n, long long d)
     return n < 0 ? (long long)(0 - r) : (long long)r;
 }
 
-/* Both halves are exact in a double, and so is their sum but for one rounding. */
+float __floatundisf(unsigned long long u);
+
+/* Both halves are exact in a binary64 double, and so is their sum but for one
+   rounding; a binary32 one (AVR) is a float. */
 double __floatundidf(unsigned long long u)
 {
+    if (sizeof(double) == sizeof(float))
+        return __floatundisf(u);
     return (double)(unsigned long)(u >> 32) * 4294967296.0 + (double)(unsigned long)u;
 }
 
@@ -75,13 +80,20 @@ double __floatdidf(long long x)
     return x < 0 ? -__floatundidf(magnitude(x)) : __floatundidf((unsigned long long)x);
 }
 
-/* Through double, rounded once: above 2^53 the bits a float cannot keep are first
-   folded into a sticky bit, so that the double is exact. */
+/* Rounded once, whatever the width of double (binary32 on AVR): the bits beyond 32
+   are shifted out into a sticky bit, which rounds as they would, the 32-bit value is
+   converted, and the result scaled back exactly. */
 float __floatundisf(unsigned long long u)
 {
-    if (u >> 53)
-        return (float)((double)((u >> 11) | ((u & 0x7ff) != 0)) * 2048.0);
-    return (float)__floatundidf(u);
+    int s = 0;
+    while (u >> 32) {
+        u = (u >> 1) | (u & 1);
+        s++;
+    }
+    float f = (float)(unsigned long)u;
+    if (s)
+        f = f * (float)(1UL << (s / 2)) * (float)(1UL << (s - s / 2));
+    return f;
 }
 
 float __floatdisf(long long x)
@@ -89,7 +101,8 @@ float __floatdisf(long long x)
     return x < 0 ? -__floatundisf(magnitude(x)) : __floatundisf((unsigned long long)x);
 }
 
-/* Truncating toward zero; out of range is undefined, as in C. */
+/* Truncating toward zero; out of range is undefined, as in C.  Exact for a binary32
+   double too: above 2^32 it has no bits below 2^9. */
 unsigned long long __fixunsdfdi(double d)
 {
     if (d < 1.0)

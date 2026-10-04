@@ -242,3 +242,92 @@ int main(void)
 }
 )"));
 }
+
+// Conversions between float and long long (libc/ilp32/int64.c), rounded once: ties,
+// sticky bits far below the kept ones, and the top of the range; against the host.
+static std::string LongLongProgram()
+{
+    static const int64_t lls[] = { 0, 1, -1, 16777217, 0x100000080LL, 0x100000081LL,
+                                   0x180000080LL, 0x7fffff8000000000LL,
+                                   0x7fffffbfffffffffLL, (int64_t)0x8000008000000001ULL,
+                                   (int64_t)0xffffff8000000000ULL, -0x100000081LL,
+                                   0x123456789abcdefLL, (int64_t)0x8000000000000000ULL };
+    static const float fls[] = { 0.0f, 0.75f, -0.75f, 4294967296.0f, 1.5e18f, -1.5e18f,
+                                 9.2233715e18f, 1.8446743e19f };
+    std::string src = R"(
+void putbyte(int c);
+static void hex(unsigned long u)
+{
+    for (int i = 28; i >= 0; i -= 4)
+        putbyte("0123456789abcdef"[(u >> i) & 15]);
+    putbyte(' ');
+}
+static unsigned long fbits(float v) { return *(unsigned long *)&v; }
+volatile long long lls[] = { )";
+    for (int64_t v : lls)
+        src += std::to_string((unsigned long long)v) + "ULL, ";
+    src += "};\nvolatile float fls[] = { ";
+    for (float v : fls) {
+        char buf[32];
+        snprintf(buf, sizeof buf, "%.9e", v);
+        src += std::string(buf) + "f, ";
+    }
+    src += "};\n";
+    src += R"(int main(void)
+{
+    for (int i = 0; i < )" +
+           std::to_string(sizeof lls / sizeof lls[0]) + R"(; i++) {
+        long long v = lls[i];
+        hex(fbits((float)v));
+        hex(fbits((float)(unsigned long long)v));
+        hex(fbits((double)v));
+        putbyte('\n');
+    }
+    for (int i = 0; i < )" +
+           std::to_string(sizeof fls / sizeof fls[0]) + R"(; i++) {
+        float f = fls[i];
+        long long s = f < 9.2e18f ? (long long)f : 0;
+        unsigned long long u = f >= 0 ? (unsigned long long)f : 0;
+        hex((unsigned long)(s >> 32)); hex((unsigned long)s);
+        hex((unsigned long)(u >> 32)); hex((unsigned long)u);
+        putbyte('\n');
+    }
+    return 0;
+}
+)";
+    return src;
+}
+
+static std::string LongLongExpected()
+{
+    static const int64_t lls[] = { 0, 1, -1, 16777217, 0x100000080LL, 0x100000081LL,
+                                   0x180000080LL, 0x7fffff8000000000LL,
+                                   0x7fffffbfffffffffLL, (int64_t)0x8000008000000001ULL,
+                                   (int64_t)0xffffff8000000000ULL, -0x100000081LL,
+                                   0x123456789abcdefLL, (int64_t)0x8000000000000000ULL };
+    static const float fls[] = { 0.0f, 0.75f, -0.75f, 4294967296.0f, 1.5e18f, -1.5e18f,
+                                 9.2233715e18f, 1.8446743e19f };
+    std::string s;
+    for (int64_t v : lls)
+        s += Hex(Bits((float)v)) + " " + Hex(Bits((float)(uint64_t)v)) + " " +
+             Hex(Bits((float)v)) + " \n";
+    for (float f : fls) {
+        int64_t i  = f < 9.2e18f ? (int64_t)f : 0;
+        uint64_t u = f >= 0 ? (uint64_t)f : 0;
+        s += Hex((uint32_t)((uint64_t)i >> 32)) + " " + Hex((uint32_t)i) + " " +
+             Hex((uint32_t)(u >> 32)) + " " + Hex((uint32_t)u) + " \n";
+    }
+    return s;
+}
+
+TEST_F(AvrTest, RunLongLongConversions)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    EXPECT_EQ(LongLongExpected(), CompileAndRunAvr(LongLongProgram()));
+}
+
+TEST_F(AvrTest, RunLongLongConversionsFromClang)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    EXPECT_EQ(LongLongExpected(), ClangRun(LongLongProgram()));
+}

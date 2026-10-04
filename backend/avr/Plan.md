@@ -181,7 +181,7 @@ One selection helper owns that rule.
 
   Add an `avr-headers` CTest and its `-cpp` twin. Check our headers' sizes and limits
   against clang's for the triple, as ARM32 and x86-64 did.
-- **M21. Libc fixes and run tests.**
+- **M21. Libc fixes and run tests.** *Done.*
   - **`libc/common/doprnt.c`:** done at M17 (`%z`/`%t` by `size_t`, `FBUFSIZE` and
     `MAX_DIG` from `float.h`).
   - **`libc/ilp32/int64.c`** converts between 64-bit integers and FP assuming a 53-bit

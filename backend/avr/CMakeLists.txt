@@ -37,6 +37,10 @@ add_executable(avr-tests
     test/stdarg_tests.cpp
     test/interop_tests.cpp
     test/run_tests.cpp
+    test/printf_tests.cpp
+    test/str_tests.cpp
+    test/mem_tests.cpp
+    test/math_tests.cpp
     ${AVR_BOOK_SOURCES}
 )
 target_link_libraries(avr-tests avr parser translator semantic GTest::gtest_main
