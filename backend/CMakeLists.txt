@@ -4,6 +4,7 @@ add_subdirectory(riscv)
 add_subdirectory(aarch64)
 add_subdirectory(arm32)
 add_subdirectory(x86)
+add_subdirectory(avr)
 
 #
 # `genbesm` executable
@@ -55,3 +56,11 @@ add_executable(genx86
 target_link_libraries(genx86 x86 backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genx86> DESTINATION bin RENAME vgenx86)
+
+#
+# `genavr` executable
+#
+add_executable(genavr
+    avr/main.c
+)
+target_link_libraries(genavr avr backend_common)
