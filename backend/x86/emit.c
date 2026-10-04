@@ -89,6 +89,10 @@ static void emit_operand(FILE *out, const X86_Operand *o)
     case X86_OPND_LABEL:
         fputs(o->sym, out);
         break;
+    case X86_OPND_INDIRECT:
+        fputc('*', out);
+        emit_reg(out, o->reg, X86_Q);
+        break;
     }
 }
 
@@ -96,8 +100,12 @@ static void emit_operand(FILE *out, const X86_Operand *o)
 void x86_emit_instr(FILE *out, const X86_Instr *in)
 {
     char text[24];
-    snprintf(text, sizeof text, "%s%s", x86_mnemonic[in->op],
-             x86_suffixed[in->op] ? (const char *const[]){ "b", "w", "l", "q" }[in->width] : "");
+    const char *tail = "";
+    if (x86_form[in->op] == X86_SUFFIX)
+        tail = (const char *const[]){ "b", "w", "l", "q" }[in->width];
+    else if (x86_form[in->op] == X86_CONDITION)
+        tail = x86_cond_name[in->cond];
+    snprintf(text, sizeof text, "%s%s", x86_mnemonic[in->op], tail);
     fprintf(out, "    %s", text);
     for (int i = 0; i < X86_MAX_OPERANDS && in->opnd[i].kind != X86_OPND_NONE; i++) {
         if (i == 0) {

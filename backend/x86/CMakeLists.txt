@@ -4,6 +4,9 @@
 add_library(x86 STATIC
     x86.c
     emit.c
+    frame.c
+    call.c
+    instr.c
     codegen.c
 )
 target_include_directories(x86 PUBLIC .)
@@ -20,6 +23,7 @@ list(FILTER X86_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(x86-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${X86_BOOK_SOURCES}
 )

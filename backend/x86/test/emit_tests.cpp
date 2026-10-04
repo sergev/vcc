@@ -122,6 +122,28 @@ TEST_F(EmitTest, Suffixes)
     EXPECT_EQ("    ret\n", Line(X86_RET, X86_Q, {}));
 }
 
+// A conditional opcode spells its condition; the extensions name both widths.
+TEST_F(EmitTest, Conditions)
+{
+    X86_Instr in{};
+    in.op      = X86_SET;
+    in.cond    = X86_CC_E;
+    in.opnd[0] = x86_reg(X86_RAX, X86_B);
+    EXPECT_EQ("    sete    %al\n", Capture([&](FILE *f) { x86_emit_instr(f, &in); }));
+    in.op      = X86_J;
+    in.cond    = X86_CC_AE;
+    in.opnd[0] = x86_label(".L4");
+    EXPECT_EQ("    jae     .L4\n", Capture([&](FILE *f) { x86_emit_instr(f, &in); }));
+    xfree(in.opnd[0].sym);
+    EXPECT_EQ(X86_CC_NE, X86_CC_E ^ 1);
+    EXPECT_EQ(X86_CC_LE, X86_CC_G ^ 1);
+    EXPECT_EQ("    movsbq  %al, %rax\n",
+              Line(X86_MOVSB, X86_Q, { x86_reg(X86_RAX, X86_B), x86_reg(X86_RAX, X86_Q) }));
+    EXPECT_EQ("    movslq  -4(%rbp), %rax\n",
+              Line(X86_MOVSL, X86_Q, { x86_mem(X86_RBP, -4), x86_reg(X86_RAX, X86_Q) }));
+    EXPECT_EQ("    call    *%r11\n", Line(X86_CALL, X86_Q, { x86_indirect(X86_R11) }));
+}
+
 TEST_F(EmitTest, MemoryOperands)
 {
     X86_Operand eax = x86_reg(X86_RAX, X86_L);

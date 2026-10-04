@@ -56,6 +56,7 @@ typedef enum {
     X86_OPND_MEM,   // disp(base, index, scale); base or index may be absent (-1)
     X86_OPND_RIP,   // sym+disp(%rip): a static datum, RIP-relative
     X86_OPND_LABEL, // sym: a jump or call target
+    X86_OPND_INDIRECT, // *%reg: an indirect call target
 } X86_OperandKind;
 
 typedef struct {
@@ -68,12 +69,70 @@ typedef struct {
     char *sym;    // owned
 } X86_Operand;
 
-// Opcode, mnemonic, and whether the instruction's width is appended as a suffix
-// (`mov` + l = `movl`).  An unsuffixed mnemonic is spelled in full.
-#define X86_OPS(X) X(MOV, "mov", 1) X(MOVABS, "movabs", 1) X(XOR, "xor", 1) X(RET, "ret", 0)
+// Condition codes in their encoding order, so that `c ^ 1` is the inverse of `c`.
+typedef enum {
+    X86_CC_O,
+    X86_CC_NO,
+    X86_CC_B, // unsigned <
+    X86_CC_AE,
+    X86_CC_E,
+    X86_CC_NE,
+    X86_CC_BE,
+    X86_CC_A,
+    X86_CC_S,
+    X86_CC_NS,
+    X86_CC_P, // unordered, after ucomis
+    X86_CC_NP,
+    X86_CC_L, // signed <
+    X86_CC_GE,
+    X86_CC_LE,
+    X86_CC_G,
+} X86_Cond;
+
+// How an opcode's mnemonic is spelled: in full, with the instruction's width as a
+// suffix (`mov` + l = `movl`), or with its condition (`set` + e = `sete`).
+enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
+
+// Opcode, mnemonic, spelling.  The sign and zero extensions name the source width in
+// the mnemonic and take the destination's as the suffix: `movsb` + l = `movsbl`.
+#define X86_OPS(X)                                                                         \
+    X(MOV, "mov", X86_SUFFIX)                                                              \
+    X(MOVABS, "movabs", X86_SUFFIX)                                                        \
+    X(MOVSB, "movsb", X86_SUFFIX)                                                          \
+    X(MOVSW, "movsw", X86_SUFFIX)                                                          \
+    X(MOVSL, "movsl", X86_SUFFIX)                                                          \
+    X(MOVZB, "movzb", X86_SUFFIX)                                                          \
+    X(MOVZW, "movzw", X86_SUFFIX)                                                          \
+    X(LEA, "lea", X86_SUFFIX)                                                              \
+    X(ADD, "add", X86_SUFFIX)                                                              \
+    X(SUB, "sub", X86_SUFFIX)                                                              \
+    X(IMUL, "imul", X86_SUFFIX)                                                            \
+    X(IDIV, "idiv", X86_SUFFIX)                                                            \
+    X(DIV, "div", X86_SUFFIX)                                                              \
+    X(AND, "and", X86_SUFFIX)                                                              \
+    X(OR, "or", X86_SUFFIX)                                                                \
+    X(XOR, "xor", X86_SUFFIX)                                                              \
+    X(NEG, "neg", X86_SUFFIX)                                                              \
+    X(NOT, "not", X86_SUFFIX)                                                              \
+    X(SHL, "shl", X86_SUFFIX)                                                              \
+    X(SAR, "sar", X86_SUFFIX)                                                              \
+    X(SHR, "shr", X86_SUFFIX)                                                              \
+    X(CMP, "cmp", X86_SUFFIX)                                                              \
+    X(TEST, "test", X86_SUFFIX)                                                            \
+    X(PUSH, "push", X86_SUFFIX)                                                            \
+    X(POP, "pop", X86_SUFFIX)                                                              \
+    X(CLTD, "cltd", X86_PLAIN)                                                             \
+    X(CQTO, "cqto", X86_PLAIN)                                                             \
+    X(SET, "set", X86_CONDITION)                                                           \
+    X(J, "j", X86_CONDITION)                                                               \
+    X(JMP, "jmp", X86_PLAIN)                                                               \
+    X(CALL, "call", X86_PLAIN)                                                             \
+    X(LEAVE, "leave", X86_PLAIN)                                                           \
+    X(RET, "ret", X86_PLAIN)                                                               \
+    X(EPILOGUE, "#epilogue", X86_PLAIN)
 
 typedef enum {
-#define X86_ENUM(op, mnem, suffixed) X86_##op,
+#define X86_ENUM(op, mnem, form) X86_##op,
     X86_OPS(X86_ENUM)
 #undef X86_ENUM
         X86_NUM_OPS
@@ -85,6 +144,7 @@ typedef struct X86_Instr {
     struct X86_Instr *next;
     X86_Op op;
     X86_Width width; // the suffix, for a suffixed opcode
+    X86_Cond cond;   // the condition, for a conditional one
     X86_Operand opnd[X86_MAX_OPERANDS];
 } X86_Instr;
 
@@ -101,7 +161,8 @@ typedef struct {
 } X86_Func;
 
 extern const char *const x86_mnemonic[X86_NUM_OPS];
-extern const bool x86_suffixed[X86_NUM_OPS];
+extern const int x86_form[X86_NUM_OPS];
+extern const char *const x86_cond_name[16];
 
 X86_Func *x86_new_func(const char *name, bool global);
 // Append a block, labelled `label` (copied; NULL for none), and make it current.
@@ -119,6 +180,7 @@ X86_Operand x86_mem(int base, int64_t disp);   // disp(base)
 X86_Operand x86_mem_index(int base, int index, int scale, int64_t disp);
 X86_Operand x86_rip(const char *sym, int64_t disp); // sym+disp(%rip)
 X86_Operand x86_label(const char *sym);
+X86_Operand x86_indirect(int reg); // *%reg
 
 bool x86_is_xmm(int reg);
 bool x86_is_st(int reg);

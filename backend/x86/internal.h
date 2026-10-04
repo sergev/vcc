@@ -6,23 +6,122 @@
 // selection, xmm14/xmm15 the SSE ones; rbx, rbp and r12-r15 are callee-saved, no xmm
 // register is; rbp is the frame pointer, rsp the stack pointer.
 //
+// Every `%` name lives in a slot at a fixed offset from rbp, any other name at its
+// symbol, addressed as sym(%rip).  An instruction loads its operands into the scratch
+// registers, with one of them straight from memory or an immediate where x86 allows,
+// and stores the result back.
+//
+// Frame (rbp = rsp after rbp is pushed, 16-byte aligned):
+//   rbp + 16 ...     incoming stack arguments
+//   rbp + 8          return address
+//   rbp + 0          saved rbp
+//   rbp - ...        slots
+//   rsp + 0 ...      outgoing stack arguments
+//
+// A value in a general register is in canonical form: a type of 32 bits or fewer in
+// the 32-bit view, extended to 32 bits by its own type, the upper half zero (as every
+// 32-bit write leaves it); a 64-bit one in the 64-bit view.
+//
 #ifndef X86_INTERNAL_H
 #define X86_INTERNAL_H
 
+#include "string_map.h"
 #include "tac.h"
 #include "x86.h"
+
+enum {
+    T0 = X86_RAX, // operands and results
+    T1 = X86_R10,
+    T2 = X86_R11,
+    F0 = X86_XMM0 + 14,
+    F1 = X86_XMM0 + 15,
+};
+
+typedef struct {
+    const Tac_Type *type;
+    int offset; // from rbp
+} Slot;
 
 typedef struct {
     X86_Func *fn;
     const Tac_TopLevel *program; // the translation unit
     const Tac_TopLevel *tl;      // the function
+    X86_Block *prologue;
+    StringMap frame;   // name → Slot *
+    StringMap globals; // name → const Tac_Type *
+    int locals_size;   // bytes of slots below the saved rbp
+    int outgoing;      // bytes of the outgoing argument area
 } Gen;
 
+//
+// Types (frame.c)
+//
+int x86_size(const Tac_Type *t);
+int x86_align(const Tac_Type *t);
+bool x86_is_fp(const Tac_Type *t); // float or double
+bool x86_is_double(const Tac_Type *t);
+bool x86_is_ld(const Tac_Type *t); // long double
+bool x86_is_unsigned(const Tac_Type *t);
+bool x86_is_aggregate(const Tac_Type *t);
+// The width of a scalar of `size` bytes.
+X86_Width x86_width_of(int size);
+// The width of an integer operation on type `t`: 32 bits up to 4 bytes, else 64.
+X86_Width x86_op_width(const Tac_Type *t);
+
+//
+// Frame and value access (frame.c)
+//
+void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl);
+void gen_done(Gen *g);
 const char *gen_name(const Gen *g);
+// A new slot of `size` bytes for `name` (or anonymous when NULL); returns its offset.
+int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int align);
+// Give `name` a slot at a fixed offset (an incoming stack argument).
+void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset);
+const Slot *find_slot(const Gen *g, const char *name);
+const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
+const Tac_Type *name_type(const Gen *g, const char *name);
+// The memory operand of named object `name`, `off` bytes in: off(%rbp) for a slot,
+// name+off(%rip) for a static object.
+X86_Operand name_mem(const Gen *g, const char *name, int64_t off);
 X86_Instr *emit0(Gen *g, X86_Op op, X86_Width width);
 X86_Instr *emit1(Gen *g, X86_Op op, X86_Width width, X86_Operand a);
 X86_Instr *emit2(Gen *g, X86_Op op, X86_Width width, X86_Operand src, X86_Operand dst);
 // reg = imm, at width (X86_L zero-extends to 64 bits).
 void gen_li(Gen *g, int reg, X86_Width width, int64_t imm);
+// The value of integer constant `c` as its type says, in 64 bits.
+int64_t const_value(const Tac_Const *c);
+// Integer constant `c` converted to integer type `t`, as the register form of `t`
+// holds it: narrower types sign- or zero-extended to 32 bits.
+int64_t const_as(const Tac_Const *c, const Tac_Type *t);
+// Load a scalar of type `t` at memory operand `m` into general register `reg`, in its
+// canonical form; store one at its own width.
+void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
+void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
+// Load scalar value `v` into `reg`, as its own type; store `reg` into variable `v`, at
+// the width of the variable's type.
+void load_val(Gen *g, int reg, const Tac_Val *v);
+void store_val(Gen *g, int reg, const Tac_Val *v);
+// Load integer value `v` into `reg` for an operation on type `t`: a variable as its own
+// type, a constant converted to `t` (its own kind may differ).
+void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t);
+// The source operand of integer value `v` in an operation on type `t`: an immediate,
+// the variable in memory when it has the operation's width, or else `scratch` after
+// loading it.
+X86_Operand src_operand(Gen *g, const Tac_Val *v, const Tac_Type *t, int scratch);
+// A marker for the frame teardown, then ret.
+void gen_epilogue(Gen *g);
+// Fill the prologue and the epilogues, once the frame is known.
+void gen_prologue(Gen *g);
+
+//
+// Calls and returns (call.c)
+//
+void gen_return(Gen *g, const Tac_Val *v);
+
+//
+// Instruction selection (instr.c)
+//
+void gen_instr(Gen *g, const Tac_Instruction *in);
 
 #endif // X86_INTERNAL_H

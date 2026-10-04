@@ -6,16 +6,19 @@
 #include "xalloc.h"
 
 const char *const x86_mnemonic[X86_NUM_OPS] = {
-#define X86_MNEM(op, mnem, suffixed) [X86_##op] = mnem,
+#define X86_MNEM(op, mnem, form) [X86_##op] = mnem,
     X86_OPS(X86_MNEM)
 #undef X86_MNEM
 };
 
-const bool x86_suffixed[X86_NUM_OPS] = {
-#define X86_SUFFIXED(op, mnem, suffixed) [X86_##op] = suffixed,
-    X86_OPS(X86_SUFFIXED)
-#undef X86_SUFFIXED
+const int x86_form[X86_NUM_OPS] = {
+#define X86_FORM(op, mnem, form) [X86_##op] = form,
+    X86_OPS(X86_FORM)
+#undef X86_FORM
 };
+
+const char *const x86_cond_name[16] = { "o", "no", "b",  "ae", "e", "ne", "be", "a",
+                                        "s", "ns", "p", "np", "l", "ge", "le", "g" };
 
 X86_Func *x86_new_func(const char *name, bool global)
 {
@@ -150,5 +153,12 @@ X86_Operand x86_label(const char *sym)
 {
     X86_Operand o = operand(X86_OPND_LABEL);
     o.sym         = xstrdup(sym);
+    return o;
+}
+
+X86_Operand x86_indirect(int reg)
+{
+    X86_Operand o = x86_reg(reg, X86_Q);
+    o.kind        = X86_OPND_INDIRECT;
     return o;
 }
