@@ -20,6 +20,7 @@ protected:
             { "Chapter5_AllocateTempsAndVars", "expects a 32-bit int" },
             { "Chapter5_CompoundBitwiseShiftr", "expects a 32-bit int" },
             { "Chapter8_ForAbsentPost", "expects a 32-bit int" },
+            { "Chapter9_LibraryManyArgs", "expects a 32-bit int" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

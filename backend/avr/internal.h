@@ -129,5 +129,7 @@ void place_params(Gen *g);
 // Store the register parameters into their slots.
 void store_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
+// A call, direct or through a pointer; FUN_CALL_NORETURN too.
+void gen_call(Gen *g, const Tac_Instruction *in);
 
 #endif // AVR_INTERNAL_H

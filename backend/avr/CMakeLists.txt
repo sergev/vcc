@@ -19,7 +19,7 @@ target_link_libraries(avr backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(AVR_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER AVR_BOOK_SOURCES INCLUDE REGEX "/chapter[1-8]_tests\\.cpp$")
+list(FILTER AVR_BOOK_SOURCES INCLUDE REGEX "/chapter[1-9]_tests\\.cpp$")
 
 add_executable(avr-tests
     test/emit_tests.cpp
@@ -27,6 +27,7 @@ add_executable(avr-tests
     test/frame_tests.cpp
     test/int_tests.cpp
     test/relax_tests.cpp
+    test/call_tests.cpp
     test/run_tests.cpp
     ${AVR_BOOK_SOURCES}
 )
