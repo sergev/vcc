@@ -146,155 +146,45 @@ Only `r16`–`r31` take an immediate operand (`ldi`, `subi`, `sbci`, `andi`, `or
 A value in `r2`–`r15` therefore goes through `Z`/`X` for any operation with a constant.
 One selection helper owns that rule.
 
-## Phase 0 — groundwork
-
-This is a large phase, because the frontend has never been run with a 16-bit `int` or a
-32-bit `double`. The audit below was done read-only, before writing this plan. Every fix
-lands with a test under `-t avr`, and leaves the other targets' output unchanged.
-
-- **M1. Target plumbing.**
-  - `semantic/target.c` already has an `avr` entry with the right sizes, but nothing uses
-    it. Correct it:
-    - `char_signed = 1`. Plain `char` is signed under both avr-gcc (unless
-      `-funsigned-char`) and clang (no `__CHAR_UNSIGNED__`). The entry's "plain char
-      unsigned (avr-gcc)" is a mistake.
-    - `struct_return_max = 8`, so the frontend's hidden pointer comes in exactly where
-      the ABI puts one (first argument, `r24:r25`). Results of up to 8 bytes stay with
-      the backend.
-    - `struct_args_split = 0`, `immediate_args = NULL`, `va_class = NULL` (`va_arg` is a
-      pointer walk, M17), `hw_sqrt = 0`, and the new fields of M3.
-  - `DEFAULT_TARGET_INDEX` (`target.c:223`) selects x86-64 by its position in the table.
-    Make it a lookup by name, so table order stops mattering. Leave the unused `msp430`
-    entry alone.
-  - Teach `cpp -t avr` its predefined macros, from clang's `-dM -E` for the triple:
-    - the device: `__AVR`, `__AVR__`, `__AVR_ARCH__=51`, `__AVR_ATmega1280__`;
-    - its features: `__AVR_HAVE_MUL__`, `__AVR_HAVE_MOVW__`, `__AVR_HAVE_LPMX__`,
-      `__AVR_HAVE_ELPM__`, `__AVR_HAVE_ELPMX__`, `__AVR_HAVE_JMP_CALL__`,
-      `__AVR_2_BYTE_PC__`;
-    - `__ELF__`, and the `__SIZEOF_*__` set (`__SIZEOF_INT__=2`,
-      `__SIZEOF_POINTER__=2`, `__SIZEOF_DOUBLE__=4`, `__SIZEOF_LONG_DOUBLE__=4`);
-    - `__INT_MAX__=32767`, `__SIZE_TYPE__`, `__PTRDIFF_TYPE__` and `__WCHAR_TYPE__`;
-    - `__FLT_MANT_DIG__`, `__DBL_MANT_DIG__` and `__LDBL_MANT_DIG__`, all 24.
-
-    Do not define the non-reserved `AVR`, nor `__CHAR_UNSIGNED__`. Add a test in
-    `test_predefined_macros.cpp`. `lower -t avr` already accepts the name.
-- **M2. A 16-bit `int` in the frontend.** Each item was found by the audit, with its
-  location:
-  - **Integer literals are typed by the host's ranges.** `parser/expr.c:336-358` compares
-    against the host's `INT_MAX`, so `40000` is an `int` and wraps to −25536, and `0x8000`
-    is not an `unsigned int`. `parse` runs before any target is known, so the semantic
-    pass re-types a literal by C11 §6.4.4.1 against the target's `int_bits`/`long_bits`.
-    That generalizes `widen_long_literal` (`semantic/expressions.c:137`). The
-    `0xFFFFFFFF` guard in `check_int_literal_width` (`const_convert.c:143`) becomes
-    target-relative.
-  - **Character constants and enumerators.** Multi-character constants overflow a 16-bit
-    `int` without a diagnostic. `declarations.c:351` stores an enumerator as a host `int`
-    with no range check, which C11 §6.7.2.2p2 requires.
-  - **`unsigned short` promotes to `unsigned int` when `short` is as wide as `int`.** That
-    affects `is_promotable_narrow` (`type_utils.c:333`), `promote_kind`
-    (`typecheck.c:491`), and every caller: the common type, unary operators, shifts,
-    compound assignment and `switch`.
-  - **`size_t` and `ptrdiff_t` are hard-coded as `long`.**
-    - `sizeof`/`_Alignof` have type `TYPE_ULONG` (`expressions.c:790,800,809`,
-      `typecheck.c:1015`), and the translator emits a mismatched `val_int`
-      (`translator/expr.c:1593`).
-    - Pointer indices convert to `TYPE_LONG` (`expressions.c:434,437,456,597,768,771`).
-    - Pointer difference is `long`, divided in `TAC_TYPE_LONG` (`expressions.c:462`,
-      `translator/expr.c:175`).
-
-    Add one pair of helpers giving the target's `size_t`/`ptrdiff_t` type: `unsigned
-    int`/`int` when a pointer is as wide as `int`, else `unsigned long`/`long`. Use them
-    at every site. LP64, ILP32 and BESM-6 resolve them to the types they use today, so
-    their output does not change.
-  - **Integer ↔ pointer casts of different widths.** `emit_cast` (`translate.c:395,408`)
-    copies where it must truncate (`long` → pointer) or extend (pointer → `long`). No
-    earlier target had a pointer narrower than `long`.
-  - **`tac_type_word()`** (`translate.c:797`) gives an 8-byte "word" on AVR, and
-    `gen_zero_fill` (`stmt.c:143-167`) stores a 2-byte `0` through it. Make the zero-fill
-    word the target's register width (`unsigned int` on AVR), or keep the store's type and
-    stride consistent.
-  - **Static `int` initializers.** `new_static_init_int` (`const_convert.c:152`) chooses
-    only between 32 and 64 bits, so a 2-byte `int` becomes `I64`. TAC already has
-    `TAC_STATIC_INIT_I16`/`U16`; use them, and `I8`/`U8` for a 1-byte `_Bool`.
-  - **`switch`.** The duplicate-case check (`statements.c:146`) compares raw values. Check
-    them after conversion to the promoted controlling type, so `0` and `65536` collide on
-    a 16-bit `int`.
-  - **Shift counts** of 16 or more on a 16-bit `int` are undefined. The folder already
-    narrows through `const_shift_bits`. clang only warns, and the frontend has no
-    warnings, so nothing is added.
-
-  Done when the semantic, translator and optimizer suites have `-t avr` cases for each
-  item, and every other target's goldens are unchanged.
-- **M3. A 32-bit `double` and `long double`.** Today a `double` constant is folded and
-  stored as a host binary64, and `round_float` (`const_fold.c:393`, `typecheck.c:654`)
-  rounds only when `float` is narrower than `double`.
-  - Add a descriptor field `double_mant_dig`, next to `ldouble_mant_dig`: 24 on AVR, and
-    0 for binary64 on every other target. Set AVR's `ldouble_mant_dig` to 24 as well. With
-    `ldouble_size` 4, `ld_is_double` is already true, so `long double` folds as `double`
-    and inherits the rounding.
-  - Round to binary32 wherever a host double is produced:
-    - double arithmetic (`const_fold.c:505-548`) and its semantic twin (`cv_set_real`,
-      `fold_real_binop`);
-    - the `sqrt` fold;
-    - int → double conversion (`const_fold.c:861,868`);
-    - double literals as they meet their type (`translator/expr.c:1014`);
-    - static initializers (`const_convert.c:237`), with `TAC_STATIC_INIT_DOUBLE`
-      emitted as binary32 bits;
-    - the long double conversions (`const_convert.c:128`).
-  - **Rounding without double rounding.**
-    - Arithmetic (`+ − × ÷ √`): computing in binary64 and then rounding to binary32 is
-      exact, because 53 ≥ 2·24 + 2.
-    - An integer of more than 53 bits must convert to binary32 directly (the host's
-      `(float)` of the integer), not through a double.
-    - A decimal literal parsed as binary64 and then rounded can be off by one ulp from a
-      correctly rounded binary32. `parse` has no target, so it also records `strtof`'s
-      value in the AST (`Literal.single_val`), and the semantic pass takes that one where
-      `double` is single. A literal just above a binary32 halfway point pins it.
-  - `FLOAT_TO_DOUBLE`/`DOUBLE_TO_FLOAT` stay distinct TAC operators. They fold to no-ops,
-    and the backend emits nothing for them.
-  - Tests in `semantic-tests`/`optimizer-tests` under `-t avr`:
-    - `0.1` folds to `0x3dcccccd`;
-    - `16777217.0` and `(double)16777217L` both give `16777216`;
-    - `1e39` gives infinity;
-    - `DBL_EPSILON` and `LDBL_EPSILON` are 2⁻²³;
-    - `(long double)0.1 == 0.1`.
-
-    BESM-6 keeps `double_mant_dig = 0` and folds as today.
-- **M4. TAC audit for `avr`.** Run the test corpus through `lower -t avr`: chapter
-  sources, translator fixtures, libc sources. The combinations new to the project:
-  - `int` the size of `short`;
-  - `size_t` narrower than `unsigned long`;
-  - a pointer narrower than `long`;
-  - alignment 1 everywhere, so `aggregate_chunk` is 1 and copies are byte by byte;
-  - `float` the size of `double`.
-
-  Fix what is found in shared code and list it here.
-
-  Done, with no defect beyond M2's and M3's:
-  - All 512 book programs, 1040 test-fixture snippets and the 33 `libc/common` and
-    `libc/ilp32` sources were lowered with `-t avr --verify` and with `-t riscv32`.
-    They fail on the same inputs, except the tests that pin a 32-bit `unsigned` or
-    probe AVR's own limits.
-  - Two book programs switch on `long` cases that collide in 32 bits. They are
-    duplicate cases on riscv32 and AVR, as with clang, and the rv32 suite already
-    skips them.
-  - A struct is laid out at alignment 1 and copied byte by byte, and `float` → `double`
-    is a `float_to_double` that folds to nothing.
-  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on x86-64.
-    The backend rounds it to single when it emits it.
-- **M5. CMake detection and the qemu fixture.**
-  - `libc/avr/CMakeLists.txt` finds `qemu-system-avr`, checks that the LLVM clang lists
-    `avr` (`--print-targets`), and finds `ld.lld` and `llvm-ar`. It sets
-    `AVR_TOOLS_FOUND`, `AVR_CLANG`, `AVR_LD`, `AVR_AR`, `AVR_LIB_DIR` and
-    `AVR_LINK_SCRIPT`.
-  - `QemuConfig` (`backend/common/test/qemu_test.h`) gains two things:
-    - The option that loads the image (`-kernel`, or `-bios` for AVR).
-    - `status_from_serial`. When it is set, the run adds `-serial
-      file:<scratch>.status` after the stdout serial. `RunWithTimeout`
-      (`libutil/test/test_tools.h`) gains an optional "done" file: when it becomes
-      non-empty, the poll kills qemu and the run counts as finished, not timed out.
-
-    The other backends leave both unset, and their tests are unchanged.
+Phase 0 is done:
+- `cpp -t avr` predefines clang's macros for the ATmega1280 (no `__CHAR_UNSIGNED__`).
+  The `avr` descriptor has a signed plain `char`, returns structs of up to 8 bytes
+  itself and larger ones through the frontend's hidden pointer
+  (`struct_return_max = 8`), and has no `va_class`.
+- **A 16-bit `int` in the frontend.**
+  - The parser records each integer constant's spelling (`Literal.spelling`: radix and
+    suffixes), and `type_int_literal` types it by the target's widths (C11 §6.4.4.1).
+    That also makes `0x80000000` an `unsigned int` on the 32-bit-`int` targets, as it
+    should be.
+  - `size_t` and `ptrdiff_t` are `size_kind()`/`ptrdiff_kind()`: `unsigned int`/`int`
+    on AVR, `unsigned long`/`long` elsewhere as before. That covers `sizeof`, pointer
+    indices and pointer differences.
+  - `unsigned short` promotes to `unsigned int` where `short` is as wide as `int`
+    (`ushort_promotes_unsigned`); BESM-6 keeps its documented simplification.
+  - Pointer ↔ `long` casts truncate or zero-extend. A 2-byte `int` is an `I16`/`U16`
+    static initializer.
+  - `case` values are compared after conversion to the promoted controlling type
+    (`narrow_const_int`). An enumerator must fit `int` or `unsigned int`, and is stored
+    as the target's `int`. A character constant must fit `int`.
+- **A 32-bit `double` and `long double`.**
+  - `double_mant_dig = 24` (and `ldouble_mant_dig = 24`) make both constant folders
+    round every `double` result to binary32 (`target_double_round`), and convert an
+    integer to it in one rounding (`target_double_from_i64`/`_u64`).
+  - A `double` literal takes its `strtof` value, which the parser records in
+    `Literal.single_val`, so it is rounded once. A literal just above a binary32 halfway
+    point pins this.
+  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on x86-64;
+    the backend rounds it when it emits it.
+- The TAC audit (512 book programs, 1040 test-fixture snippets, the C library) found no
+  defect beyond these.
+- `libc/avr/CMakeLists.txt` finds the tools (`AVR_TOOLS_FOUND`, `AVR_CLANG`, `AVR_AR`,
+  `AVR_LD`, `AVR_QEMU`, `AVR_LIB_DIR`, `AVR_LINK_SCRIPT`, `AVR_TARGET_FLAGS`).
+- `QemuConfig.image_option` loads the image with `-bios`, and
+  `QemuConfig.status_from_serial` adds `-serial file:<scratch>.status`. The run ends
+  when that file is not empty, and `main`'s result is its first byte.
+- `enum { A = 1 } e = A;`, an enumerator used in the same declaration that defines it,
+  fails with "Symbol not found" on every target. This is an existing frontend defect,
+  not an AVR one, and is still open.
 
 `make run` stays green after every M-step.
 
