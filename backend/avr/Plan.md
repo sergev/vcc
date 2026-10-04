@@ -153,8 +153,8 @@ One selection helper owns that rule.
 - **M6. Runtime, hand-written part.** `libc/avr/`:
   - **`crt0.S`:**
     - A vector table. Reset jumps to the start code; every other vector goes to
-      `__bad_interrupt`, which prints the vector number and exits with a distinctive
-      status.
+      `__bad_interrupt`, which prints "unexpected interrupt" and exits with status
+      0xfe. A shared handler cannot tell which vector it came through.
     - `clr r1`, SREG = 0, and SP at the top of SRAM (`0x21ff`).
     - `__do_copy_data`: copy `.data` (with `.rodata` in it) from flash with `elpm` and
       `RAMPZ`, since the load address can pass 64 KB.
@@ -164,8 +164,12 @@ One selection helper owns that rule.
 
     The two `__do_*` symbols are defined because clang-compiled objects reference them.
     Interrupts stay off throughout. A `PRINT_STATUS` variant, as for the other targets.
-  - **`console.S`.** `putbyte` polls `UDRE0` and writes `UDR0`. `exit` writes the status
-    byte to `UDR1`, waits for it to go out, and then sits in `cli; sleep`.
+  - **`console.s`.** `putbyte` polls `UDRE0` and writes `UDR0`. `exit` writes the status
+    byte to `UDR1`, waits for it to go out, and then sits in `cli; sleep`. It first
+    checks a canary that `crt0.S` puts between `.bss` and the heap, and reports a stack
+    that ran into it with status 0xfd.
+  - **`malloc.s`:** a bump allocator from `__heap_start` up to 256 bytes below SP, with
+    `calloc`, `realloc` and a `free` that does nothing, as on x86-64.
   - **`link.ld`:**
     - Flash at 0 (128 KB), and SRAM at `0x800200` (8 KB, in the AVR toolchain's data
       address space).
@@ -176,14 +180,19 @@ One selection helper owns that rule.
   - **Integer helpers in assembly,** under their libgcc names and register contracts:
     `__mulsi3`, `__divmodqi4`/`__udivmodqi4`, `__divmodhi4`/`__udivmodhi4` and
     `__divmodsi4`/`__udivmodsi4`.
-    - Take each contract (inputs, outputs, clobbered registers) from LLVM's AVR backend,
-      where its special-cased libcalls are lowered, so a clang-compiled caller's
-      assumptions hold.
-    - Record the contracts in a table in the source. M10 and M22 read the same facts.
-  - **Tested on its own,** before any compiled code depends on it. An assembly program
-    prints through `putbyte` and returns a status, and data copy and `.bss` clearing are
-    checked. Each helper is checked against a table of cases: zero, `INT_MIN / -1`,
-    signs, and `UINT_MAX`.
+    - The contracts (inputs, outputs, clobbered registers) are avr-gcc's. clang calls
+      these helpers with their avr-gcc inputs and outputs (checked) and assumes no more
+      than an ordinary call's clobbers, so the narrower avr-gcc contract satisfies
+      clang's callers and ours alike.
+    - The contracts are a table at the top of `divmod.s` and `mul.s`. M10 and M22 read
+      the same facts.
+  - **Tested on its own,** before any compiled code depends on it, by hand as X5 was. A
+    clang-compiled program printed through `putbyte` and returned 200 on USART1. Its
+    division, remainder and 32-bit products over 12 × 12 signed, unsigned, 16- and
+    32-bit operands (extremes included) matched the host line for line, and so did
+    `.data`, `.bss`, `malloc`, `realloc` and `calloc` with its overflow check. The 8-bit
+    helpers, which clang never calls, matched the host on all 65,280 operand pairs.
+    M8 makes these run tests.
 - **M7. Skeleton.** `backend/avr/` with `CMakeLists.txt`, `avr_ir.h`, `avr_ir.c`,
   `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing `genavr`.
   - The IR has a function, a block and an instruction. Its operands are:
