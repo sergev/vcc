@@ -115,8 +115,11 @@ void gen_epilogue(Gen *g);
 void gen_prologue(Gen *g);
 
 //
-// Calls and returns (call.c)
+// Calls, parameters and returns (call.c)
 //
+// A slot for each parameter, stored from its argument register or placed over its
+// stack slot.
+void gen_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v);
 
 //

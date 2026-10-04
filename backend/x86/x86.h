@@ -1,7 +1,8 @@
 //
 // x86-64 backend IR: a function is a list of blocks, a block a list of instructions.
-// An instruction has up to two operands, in AT&T order (source, destination), and a
-// width that a suffixed opcode spells as b/w/l/q.  Operands name physical or virtual
+// An instruction has up to three operands, in AT&T order (sources, then the
+// destination: `imul $k, src, dst`), and a width that a suffixed opcode spells as
+// b/w/l/q.  Operands name physical or virtual
 // registers, each at a width of its own; only what the backend emits is modelled
 // (x86_64.asdl is the full ISA reference).
 //
@@ -138,7 +139,7 @@ typedef enum {
         X86_NUM_OPS
 } X86_Op;
 
-#define X86_MAX_OPERANDS 2
+#define X86_MAX_OPERANDS 3
 
 typedef struct X86_Instr {
     struct X86_Instr *next;

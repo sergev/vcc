@@ -58,6 +58,198 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     store_val(g, T0, dst);
 }
 
+// Whether operator `op` is unsigned whatever its operands' types: they may differ in
+// signedness, once copy propagation has removed a cast.
+static bool unsigned_op(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_DIVIDE_UNSIGNED:
+    case TAC_BINARY_REMAINDER_UNSIGNED:
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+    case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// The condition of comparison `op`, or -1 when it is not one.
+static int compare_cond(Tac_BinaryOperator op, bool is_unsigned)
+{
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+        return X86_CC_E;
+    case TAC_BINARY_NOT_EQUAL:
+        return X86_CC_NE;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+        return is_unsigned ? X86_CC_B : X86_CC_L;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+        return is_unsigned ? X86_CC_BE : X86_CC_LE;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+        return is_unsigned ? X86_CC_A : X86_CC_G;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+        return is_unsigned ? X86_CC_AE : X86_CC_GE;
+    default:
+        return -1;
+    }
+}
+
+// eax = 0 or 1 by condition `cond` of the flags.
+static void gen_setcc(Gen *g, int cond)
+{
+    X86_Instr *set = emit1(g, X86_SET, X86_B, x86_reg(T0, X86_B));
+    set->cond      = cond;
+    emit2(g, X86_MOVZB, X86_L, x86_reg(T0, X86_B), x86_reg(T0, X86_L));
+}
+
+static void gen_unary(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *t = val_type(g, in->u.unary.src);
+    if (x86_is_fp(t) || x86_is_ld(t))
+        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    X86_Width w   = x86_op_width(t);
+    X86_Operand r = x86_reg(T0, w);
+    load_int_as(g, T0, in->u.unary.src, t);
+    switch (in->u.unary.op) {
+    case TAC_UNARY_NEGATE:
+    case TAC_UNARY_NEGATE_UNSIGNED:
+        emit1(g, X86_NEG, w, r);
+        break;
+    case TAC_UNARY_COMPLEMENT:
+    case TAC_UNARY_COMPLEMENT_UNSIGNED:
+        emit1(g, X86_NOT, w, r);
+        break;
+    case TAC_UNARY_NOT:
+        emit2(g, X86_TEST, w, r, r);
+        gen_setcc(g, X86_CC_E);
+        break;
+    case TAC_UNARY_NEGATE_DOUBLE:
+        fatal_error("x86: %s: NEGATE_DOUBLE of an integer", gen_name(g));
+    }
+    store_val(g, T0, in->u.unary.dst);
+}
+
+// dst = src1 / src2 or src1 % src2: the dividend in rdx:rax, sign- or zero-extended,
+// the divisor in a register or memory (never an immediate); the quotient comes back in
+// rax, the remainder in rdx.
+static void gen_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool is_unsigned)
+{
+    X86_Width w = x86_op_width(t);
+    load_int_as(g, T0, in->u.binary.src1, t);
+    X86_Operand d = src_operand(g, in->u.binary.src2, t, T1);
+    if (d.kind == X86_OPND_IMM) {
+        gen_li(g, T1, w, d.imm);
+        d = x86_reg(T1, w);
+    }
+    if (is_unsigned)
+        emit2(g, X86_XOR, X86_L, x86_reg(X86_RDX, X86_L), x86_reg(X86_RDX, X86_L));
+    else
+        emit0(g, w == X86_Q ? X86_CQTO : X86_CLTD, w);
+    emit1(g, is_unsigned ? X86_DIV : X86_IDIV, w, d);
+    Tac_BinaryOperator op = in->u.binary.op;
+    bool rem = op == TAC_BINARY_REMAINDER || op == TAC_BINARY_REMAINDER_UNSIGNED;
+    store_val(g, rem ? X86_RDX : T0, in->u.binary.dst);
+}
+
+// dst = src1 shifted by src2: by an immediate, or by %cl.  The count is used modulo
+// the width, as the hardware does (C leaves larger counts undefined).
+static void gen_shift(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool is_unsigned)
+{
+    X86_Width w           = x86_op_width(t);
+    Tac_BinaryOperator op = in->u.binary.op;
+    X86_Op sh = op == TAC_BINARY_LEFT_SHIFT ? X86_SHL : is_unsigned ? X86_SHR : X86_SAR;
+    const Tac_Val *count  = in->u.binary.src2;
+    load_int_as(g, T0, in->u.binary.src1, t);
+    if (count->kind == TAC_VAL_CONSTANT) {
+        emit2(g, sh, w, x86_imm(const_value(count->u.constant) & (w == X86_Q ? 63 : 31)),
+              x86_reg(T0, w));
+    } else {
+        load_val(g, X86_RCX, count);
+        emit2(g, sh, w, x86_reg(X86_RCX, X86_B), x86_reg(T0, w));
+    }
+    store_val(g, T0, in->u.binary.dst);
+}
+
+static void gen_binary(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *t = val_type(g, in->u.binary.src1);
+    if (x86_is_fp(t) || x86_is_ld(t))
+        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    Tac_BinaryOperator op = in->u.binary.op;
+    bool is_unsigned      = t->kind == TAC_TYPE_POINTER || unsigned_op(op);
+    X86_Width w           = x86_op_width(t);
+    X86_Operand r         = x86_reg(T0, w);
+    switch (op) {
+    case TAC_BINARY_DIVIDE:
+    case TAC_BINARY_DIVIDE_UNSIGNED:
+    case TAC_BINARY_REMAINDER:
+    case TAC_BINARY_REMAINDER_UNSIGNED:
+        gen_divide(g, in, t, is_unsigned);
+        return;
+    case TAC_BINARY_LEFT_SHIFT:
+    case TAC_BINARY_RIGHT_SHIFT:
+    case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
+        gen_shift(g, in, t, is_unsigned);
+        return;
+    case TAC_BINARY_MULTIPLY:
+    case TAC_BINARY_MULTIPLY_UNSIGNED: {
+        // An immediate factor takes the three-operand form, the other one from memory.
+        X86_Operand b = src_operand(g, in->u.binary.src2, t, T1);
+        X86_Operand a = b.kind == X86_OPND_IMM ? src_operand(g, in->u.binary.src1, t, T0) : r;
+        if (a.kind != X86_OPND_IMM && b.kind == X86_OPND_IMM) {
+            emit2(g, X86_IMUL, w, b, a)->opnd[2] = r;
+        } else {
+            load_int_as(g, T0, in->u.binary.src1, t);
+            emit2(g, X86_IMUL, w, b, r);
+        }
+        store_val(g, T0, in->u.binary.dst);
+        return;
+    }
+    default:
+        break;
+    }
+    load_int_as(g, T0, in->u.binary.src1, t);
+    X86_Operand b = src_operand(g, in->u.binary.src2, t, T1);
+    int cond      = compare_cond(op, is_unsigned);
+    if (cond >= 0) {
+        emit2(g, X86_CMP, w, b, r);
+        gen_setcc(g, cond);
+        store_val(g, T0, in->u.binary.dst);
+        return;
+    }
+    X86_Op xop;
+    switch (op) {
+    case TAC_BINARY_ADD:
+    case TAC_BINARY_ADD_UNSIGNED:
+        xop = X86_ADD;
+        break;
+    case TAC_BINARY_SUBTRACT:
+    case TAC_BINARY_SUBTRACT_UNSIGNED:
+        xop = X86_SUB;
+        break;
+    case TAC_BINARY_BITWISE_AND:
+        xop = X86_AND;
+        break;
+    case TAC_BINARY_BITWISE_OR:
+        xop = X86_OR;
+        break;
+    case TAC_BINARY_BITWISE_XOR:
+        xop = X86_XOR;
+        break;
+    default:
+        fatal_error("x86: %s: floating-point operator %d on integers", gen_name(g), op);
+    }
+    emit2(g, xop, w, b, r);
+    store_val(g, T0, in->u.binary.dst);
+}
+
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
@@ -71,6 +263,12 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_TRUNCATE:
     case TAC_INSTRUCTION_ZERO_EXTEND:
         gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_UNARY:
+        gen_unary(g, in);
+        break;
+    case TAC_INSTRUCTION_BINARY:
+        gen_binary(g, in);
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
