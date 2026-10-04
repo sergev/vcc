@@ -3,6 +3,7 @@ add_subdirectory(besm6)
 add_subdirectory(riscv)
 add_subdirectory(aarch64)
 add_subdirectory(arm32)
+add_subdirectory(x86)
 
 #
 # `genbesm` executable
@@ -44,3 +45,11 @@ add_executable(genarm32
 target_link_libraries(genarm32 arm32 backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genarm32> DESTINATION bin RENAME vgenarm32)
+
+#
+# `genx86` executable
+#
+add_executable(genx86
+    x86/main.c
+)
+target_link_libraries(genx86 x86 backend_common)
