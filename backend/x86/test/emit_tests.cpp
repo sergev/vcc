@@ -162,14 +162,15 @@ TEST_F(EmitTest, Function)
     x86_append(fn, X86_RET, X86_Q);
     std::string s = Capture([&](FILE *f) { x86_emit_func(f, fn); });
     x86_free_func(fn);
-    EXPECT_EQ("    .text\n"
-              "    .globl  main\n"
-              "    .p2align 4\n"
-              "    .type   main, @function\n"
-              "main:\n"
-              "    movl    $2, %eax\n"
-              ".L1:\n"
-              "    ret\n"
-              "    .size   main, .-main\n",
+    EXPECT_EQ(R"(    .text
+    .globl  main
+    .p2align 4
+    .type   main, @function
+main:
+    movl    $2, %eax
+.L1:
+    ret
+    .size   main, .-main
+)",
               s);
 }
