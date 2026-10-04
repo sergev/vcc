@@ -299,7 +299,21 @@ Phase 0 is done:
   - The module header emits sections, `.globl`, `.type sym, @function`/`@object`,
     `.size`, `.p2align 1` for 2-aligned objects, and labels.
   - A test pins the rendering of every operand form.
-- **T7. Run harness and first program.** `msp430_test.h` on the fixture of T4:
+
+  *Done.*
+  - `msp_ir.h`/`msp_ir.c` (`Msp_Func`/`Msp_Block`/`Msp_Instr`). Each opcode has a form
+    (double, single, jump, emulated with a destination, emulated `op dst, dst`, `br`,
+    none), and `msp_instr_size` derives the size from it.
+  - `emit.c` prints an immediate sign-normalized to the operation's width. clang uses a
+    constant generator only for a literal spelled 0, 1, 2, 4, 8 or −1: `#65535`,
+    `mov.b #255` and any symbol expression (even `g-g`) take an extension word.
+  - No module header is needed, unlike AVR.
+  - `codegen.c` returns a constant. `genmsp430` is built.
+  - `emit_tests.cpp` pins the syntax, and `SizesAgreeWithAssembler` assembles 58 cases
+    between labels and compares each label difference with the model.
+  - **More forms clang's assembler rejects** (all valid in the ISA): `push` of anything
+    but a register or an immediate, `pop` to memory, and `br @rN`/`br @rN+`. Together
+    with `@rN+` to memory (T5), selection must go through a register for these. Run harness and first program.** `msp430_test.h` on the fixture of T4:
   - `CompileToMsp430` produces golden assembly.
   - `CompileAndRunMsp430` assembles with clang, links with `crt0.o` and `libc.a`, and
     runs under mspsim.

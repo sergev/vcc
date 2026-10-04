@@ -5,6 +5,7 @@ add_subdirectory(aarch64)
 add_subdirectory(arm32)
 add_subdirectory(x86)
 add_subdirectory(avr)
+add_subdirectory(msp430)
 
 #
 # `genbesm` executable
@@ -66,3 +67,11 @@ add_executable(genavr
 target_link_libraries(genavr avr backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genavr> DESTINATION bin RENAME vgenavr)
+
+#
+# `genmsp430` executable
+#
+add_executable(genmsp430
+    msp430/main.c
+)
+target_link_libraries(genmsp430 msp430 backend_common)
