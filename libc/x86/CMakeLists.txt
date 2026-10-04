@@ -24,6 +24,7 @@ set(X86_CLANG ${RISCV_CLANG} CACHE INTERNAL "")
 set(X86_LD ${RISCV_LD} CACHE INTERNAL "")
 set(X86_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(X86_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
+set(X86_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
 # Baseline x86-64 (SSE2), System V psABI, ELF, small code model.
 set(X86_TARGET_FLAGS --target=x86_64-none-elf CACHE INTERNAL "")
 if(NOT X86_TOOLS_FOUND)
@@ -53,12 +54,12 @@ foreach(name console malloc)
     list(APPEND X86_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genx86 -> clang.  Until the x86-64
-# headers exist (backend/x86/Plan.md, X21) the riscv64 ones serve: the same LP64 data
-# model but for long double and plain char, which these sources do not depend on.  The
-# printf family waits for <stdarg.h> (X18).
-set(X86_LIBC_INCLUDES -I${RISCV_INCLUDE_DIR} -I${LP64_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
-file(GLOB X86_LIBC_HEADERS ${RISCV_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
+# C sources, through cpp -> parse -> lower -> genx86 -> clang.  The x86-64 headers so
+# far are stdarg.h, stddef.h and stdint.h (backend/x86/Plan.md, X21 adds the rest);
+# then the LP64 ones, whose limits.h has an unsigned plain char, which these sources do
+# not depend on.
+set(X86_LIBC_INCLUDES -I${X86_INCLUDE_DIR} -I${LP64_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB X86_LIBC_HEADERS ${X86_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
      ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(x86_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
@@ -73,11 +74,11 @@ macro(x86_compile_libc_c name srcdir)
     list(APPEND X86_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-set(X86_LIBC_C ${LIBC_C_COMMON})
-list(REMOVE_ITEM X86_LIBC_C printf snprintf sprintf)
-foreach(name ${X86_LIBC_C})
+# __doprnt, but not the binary128 runtime: long double is the x87 format.
+foreach(name ${LIBC_C_COMMON} doprnt)
     x86_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
+x86_compile_libc_c(va_arg ${src})
 foreach(name ${LIBC_C_LP64})
     x86_compile_libc_c(${name} ${LIBC_LP64_DIR})
 endforeach()

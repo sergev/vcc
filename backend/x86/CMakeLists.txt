@@ -32,6 +32,7 @@ add_executable(x86-tests
     test/x87_tests.cpp
     test/ptr_tests.cpp
     test/struct_tests.cpp
+    test/stdarg_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
@@ -40,13 +41,12 @@ target_link_libraries(x86-tests x86 parser translator semantic GTest::gtest_main
 if(X86_TOOLS_FOUND)
     add_dependencies(x86-tests x86-libc)
 endif()
-# The x86-64 headers come with the code that needs them (Plan.md, X21); until then the
-# riscv64 ones, the same LP64 data model but for long double and plain char, serve the
-# test programs.
+# The x86-64 headers so far are stdarg.h, stddef.h and stdint.h (Plan.md, X21 adds the
+# rest), then the LP64 ones, whose limits.h has an unsigned plain char until X21.
 target_compile_definitions(x86-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
-    TEST_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
+    TEST_INCLUDE_DIR="${X86_INCLUDE_DIR}"
     TEST_MODEL_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     X86_TOOLS_FOUND=$<BOOL:${X86_TOOLS_FOUND}>

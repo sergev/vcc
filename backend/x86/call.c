@@ -18,6 +18,12 @@
 // through memory whose address the caller passes in rdi as a hidden first argument,
 // the callee returning it in rax.
 //
+// A variadic call differs only in %al, an upper bound on the xmm registers used.  A
+// variadic function saves the argument registers into a register save area, and
+// va_start (__va_start, expanded here) points a va_list at it.
+//
+#include <string.h>
+
 #include "codegen.h"
 #include "internal.h"
 #include "xalloc.h"
@@ -197,6 +203,39 @@ static bool x87_result(const Tac_Type *t)
     return t && (x86_is_ld(t) || (x86_is_aggregate(t) && tac_sysv64_class(t) == TAC_SYSV64_X87));
 }
 
+// A variadic function saves rdi-r9 and, when %al says any xmm register carries an
+// argument, xmm0-xmm7 into the 176-byte register save area, where va_arg finds them.
+static void save_varargs(Gen *g)
+{
+    g->va.save = alloc_slot(g, NULL, NULL, 176, 16);
+    for (int i = 0; i < 6; i++)
+        emit2(g, X86_MOV, X86_Q, x86_reg(int_regs[i], X86_Q), x86_mem(X86_RBP, g->va.save + 8 * i));
+    char skip[32];
+    new_label(skip);
+    emit2(g, X86_TEST, X86_B, x86_reg(X86_RAX, X86_B), x86_reg(X86_RAX, X86_B));
+    emit1(g, X86_J, X86_Q, x86_label(skip))->cond = X86_CC_E;
+    for (int i = 0; i < 8; i++)
+        emit2(g, X86_MOVSD, X86_Q, x86_xmm(X86_XMM0 + i), x86_mem(X86_RBP, g->va.save + 48 + 16 * i));
+    x86_new_block(g->fn, skip);
+}
+
+// va_start(ap), a call of __va_start(ap): fill the va_list
+// { gp_offset, fp_offset, overflow_arg_area, reg_save_area }.
+static void gen_va_start(Gen *g, const Tac_Instruction *in)
+{
+    if (!g->va.save)
+        fatal_error("x86: %s: va_start in a function without ...", gen_name(g));
+    if (!in->u.fun_call.args || in->u.fun_call.args->next)
+        fatal_error("x86: %s: __va_start takes one argument", gen_name(g));
+    load_val(g, T0, in->u.fun_call.args);
+    emit2(g, X86_MOV, X86_L, x86_imm(g->va.gp), x86_mem(T0, 0));
+    emit2(g, X86_MOV, X86_L, x86_imm(g->va.fp), x86_mem(T0, 4));
+    emit2(g, X86_LEA, X86_Q, x86_mem(X86_RBP, g->va.overflow), x86_reg(T1, X86_Q));
+    emit2(g, X86_MOV, X86_Q, x86_reg(T1, X86_Q), x86_mem(T0, 8));
+    emit2(g, X86_LEA, X86_Q, x86_mem(X86_RBP, g->va.save), x86_reg(T1, X86_Q));
+    emit2(g, X86_MOV, X86_Q, x86_reg(T1, X86_Q), x86_mem(T0, 16));
+}
+
 // Each parameter gets a slot: one passed in a register is stored there at its own
 // width, which truncates; one on the stack is read where the caller put it, above the
 // return address.  A load extends by type, so a narrow argument is re-extended whatever
@@ -204,6 +243,8 @@ static bool x87_result(const Tac_Type *t)
 void gen_params(Gen *g)
 {
     ArgState s = { 0 };
+    if (g->tl->u.function.variadic)
+        save_varargs(g);
     if (struct_result(ret_type(g->tl->u.function.type))) {
         g->ret_ptr = alloc_slot(g, NULL, NULL, 8, 8);
         emit2(g, X86_MOV, X86_Q, x86_reg(X86_RDI, X86_Q), x86_mem(X86_RBP, g->ret_ptr));
@@ -224,6 +265,9 @@ void gen_params(Gen *g)
             place_slot(g, p->name, t, 16 + a.stack);
         }
     }
+    g->va.gp       = 8 * s.next_int;
+    g->va.fp       = 48 + 16 * s.next_sse;
+    g->va.overflow = 16 + s.stack;
 }
 
 
@@ -247,6 +291,10 @@ static void load_arg(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as)
 
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (!in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0) {
+        gen_va_start(g, in);
+        return;
+    }
     const Tac_Type *ft = in->u.fun_call.fun_type;
     const Tac_Val *dst = in->u.fun_call.dst;
     const Tac_Type *rt = ret_type(ft);

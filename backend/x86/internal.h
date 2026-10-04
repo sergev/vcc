@@ -60,6 +60,11 @@ typedef struct {
     int outgoing;      // bytes of the outgoing argument area
     int x87_tmp;       // the x87 scratch slot, or 0 (x87.c)
     int ret_ptr;       // the slot of the result address that came in rdi, or 0
+    struct {
+        int save;      // the slot of the register save area, or 0 (not variadic)
+        int gp, fp;    // va_list's initial gp_offset and fp_offset
+        int overflow;  // the first variadic stack argument, from rbp
+    } va;
     FpConst *consts;   // the function's .rodata constants
     int nconsts, maxconsts;
 } Gen;
@@ -143,7 +148,7 @@ void gen_prologue(Gen *g);
 // Calls, parameters and returns (call.c)
 //
 // A slot for each parameter, stored from its argument register or placed over its
-// stack slot.
+// stack slot; in a variadic function, the register save area first.
 void gen_params(Gen *g);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
