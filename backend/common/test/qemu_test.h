@@ -19,12 +19,19 @@ struct QemuConfig {
     const char *ld;                        // ld.lld
     const char *link_script;
     const char *lib_dir;           // crt0 objects and libc.a
-    std::vector<std::string> qemu; // the command up to -kernel <exe>
+    std::vector<std::string> qemu; // the command up to -kernel <exe> (or image_option)
     const char *scratch_suffix;    // keeps the scratch files of two widths apart
     // Where main's result comes from: false, qemu's exit status (semihosting); true,
     // the first byte written to the debug console (port 0xe9 on x86), which the run
     // sends to a file of its own.  qemu's x86 exit device cannot carry a whole byte.
     bool status_from_debugcon = false;
+    // The option that loads the image: -kernel, or -bios on AVR, where -kernel loads
+    // nothing.
+    const char *image_option = "-kernel";
+    // Main's result is the first byte on a second serial port (USART1 on AVR), which the
+    // run sends to a file of its own.  Nothing on qemu's AVR machine makes it exit, so
+    // the run ends when that byte arrives.
+    bool status_from_serial = false;
 };
 
 class QemuTest : public BackendTest {
@@ -111,12 +118,14 @@ protected:
             return "ERROR";
         std::string status_path       = base + ".status";
         std::vector<std::string> qemu = config.qemu;
-        if (config.status_from_debugcon) {
-            std::remove(status_path.c_str());
+        std::remove(status_path.c_str());
+        if (config.status_from_debugcon)
             qemu.insert(qemu.end(), { "-debugcon", "file:" + status_path });
-        }
-        qemu.insert(qemu.end(), { "-kernel", exe_path });
-        rc = RunWithTimeout(qemu, out_path, log_path, 5);
+        if (config.status_from_serial)
+            qemu.insert(qemu.end(), { "-serial", "file:" + status_path });
+        qemu.insert(qemu.end(), { config.image_option, exe_path });
+        rc = RunWithTimeout(qemu, out_path, log_path, 5,
+                            config.status_from_serial ? status_path : std::string());
         if (rc < 0) {
             ADD_FAILURE() << (rc == -2 ? "qemu timed out" : "qemu failed") << " on " << exe_path
                           << ":\n"
@@ -124,10 +133,13 @@ protected:
             return "ERROR";
         }
         exit_status = rc;
-        if (config.status_from_debugcon) {
+        if (config.status_from_debugcon || config.status_from_serial) {
             std::string status = ReadFile(status_path);
             if (status.empty()) {
-                ADD_FAILURE() << "no exit status on the debug console of " << exe_path << ":\n"
+                ADD_FAILURE() << "no exit status on the "
+                              << (config.status_from_serial ? "status serial port"
+                                                            : "debug console")
+                              << " of " << exe_path << ":\n"
                               << ReadFile(log_path);
                 return "ERROR";
             }

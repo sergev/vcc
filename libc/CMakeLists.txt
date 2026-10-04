@@ -33,3 +33,5 @@ add_subdirectory(riscv32)
 add_subdirectory(aarch64)
 add_subdirectory(arm32)
 add_subdirectory(x86)
+# avr uses the tools riscv64 found too.
+add_subdirectory(avr)

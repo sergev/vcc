@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -141,9 +142,12 @@ inline int RunTool(const std::vector<std::string> &argv, const std::string &log_
 
 // Run argv (argv[0] resolved on PATH) with stdout to out_path and stderr to err_path,
 // killing it after `seconds`.  Returns its exit code, -1 if it could not be run or was
-// killed by a signal, or -2 on timeout.
+// killed by a signal, or -2 on timeout.  With a `done_path`, a program that never exits
+// by itself (qemu on AVR) has finished once that file is not empty: it is killed then,
+// after a moment for its output to drain, and the result is 0.
 inline int RunWithTimeout(const std::vector<std::string> &argv, const std::string &out_path,
-                          const std::string &err_path, int seconds)
+                          const std::string &err_path, int seconds,
+                          const std::string &done_path = "")
 {
     pid_t pid = fork();
     if (pid < 0)
@@ -171,6 +175,13 @@ inline int RunWithTimeout(const std::vector<std::string> &argv, const std::strin
             return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
         if (r < 0)
             return -1;
+        struct stat st;
+        if (!done_path.empty() && stat(done_path.c_str(), &st) == 0 && st.st_size > 0) {
+            usleep(20000);
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            return 0;
+        }
         usleep(10000);
     }
     kill(pid, SIGKILL);
