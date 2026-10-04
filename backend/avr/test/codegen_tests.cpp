@@ -38,14 +38,31 @@ EXPECT_CODE(VoidFallOff, "", "void f(void) { }")
 
 // The result registers by size: r25:r24 (a char extended), r25:r22, r25:r18;
 // little-endian.
-EXPECT_CODE(ReturnChar, "ldi r24, 255\nldi r25, 255\n", "signed char f(void) { return -1; }")
-EXPECT_CODE(ReturnUnsignedChar, "ldi r24, 255\nldi r25, 0\n",
+EXPECT_CODE(ReturnChar, R"(ldi r24, 255
+ldi r25, 255
+)", "signed char f(void) { return -1; }")
+EXPECT_CODE(ReturnUnsignedChar, R"(ldi r24, 255
+ldi r25, 0
+)",
             "unsigned char f(void) { return 255; }")
-EXPECT_CODE(ReturnInt, "ldi r24, 52\nldi r25, 18\n", "int f(void) { return 0x1234; }")
-EXPECT_CODE(ReturnLong, "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\n",
+EXPECT_CODE(ReturnInt, R"(ldi r24, 52
+ldi r25, 18
+)", "int f(void) { return 0x1234; }")
+EXPECT_CODE(ReturnLong, R"(ldi r22, 4
+ldi r23, 3
+ldi r24, 2
+ldi r25, 1
+)",
             "long f(void) { return 0x01020304L; }")
 EXPECT_CODE(ReturnLongLong,
-            "ldi r18, 8\nldi r19, 7\nldi r20, 6\nldi r21, 5\n"
-            "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\n",
+            R"(ldi r18, 8
+ldi r19, 7
+ldi r20, 6
+ldi r21, 5
+ldi r22, 4
+ldi r23, 3
+ldi r24, 2
+ldi r25, 1
+)",
             "long long f(void) { return 0x0102030405060708LL; }")
 

@@ -6,7 +6,7 @@
 #include "internal.h"
 #include "xalloc.h"
 
-static AVR_Op inverse(AVR_Op op)
+AVR_Op avr_inverse(AVR_Op op)
 {
     switch (op) {
     case AVR_BREQ:
@@ -61,13 +61,13 @@ static bool relax_pass(AVR_Func *fn)
             if (in->op == AVR_RJMP && (words < -2048 || words > 2047)) {
                 in->op  = AVR_JMP;
                 changed = true;
-            } else if (inverse(in->op) != AVR_NUM_OPS && (words < -64 || words > 63)) {
+            } else if (avr_inverse(in->op) != AVR_NUM_OPS && (words < -64 || words > 63)) {
                 // br!cc skip; rjmp target; skip:
                 char skip[32];
                 new_label(skip);
                 AVR_Instr *jump = avr_insert_after(b, in, AVR_RJMP);
                 jump->opnd[0]   = in->opnd[0];
-                in->op          = inverse(in->op);
+                in->op          = avr_inverse(in->op);
                 in->opnd[0]     = avr_label(skip);
                 avr_split_after(fn, b, jump, skip);
                 changed = true;

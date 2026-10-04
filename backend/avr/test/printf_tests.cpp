@@ -440,14 +440,15 @@ int main(void) {
 TEST_F(AvrTest, PrintfInfNan)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    EXPECT_EQ("[inf] [INF] [inf] [INF] [inf] [INF]\n"
-              "[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]\n"
-              "[nan] [NAN] [nan] [NAN] [nan] [NAN]\n"
-              "[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]\n"
-              "[     nan] [NAN     ] [     nan] [nan]\n"
-              "[-inf] [      -inf] [-INF      ] [-INF]\n"
-              "[inf] [nan]\n"
-              "-inf|NAN|inf\n",
+    EXPECT_EQ(R"([inf] [INF] [inf] [INF] [inf] [INF]
+[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]
+[nan] [NAN] [nan] [NAN] [nan] [NAN]
+[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]
+[     nan] [NAN     ] [     nan] [nan]
+[-inf] [      -inf] [-INF      ] [-INF]
+[inf] [nan]
+-inf|NAN|inf
+)",
               CompileAndRunAvr(R"PROG(
 #include <math.h>
 #include <stdio.h>
@@ -474,10 +475,11 @@ int main(void) {
 TEST_F(AvrTest, PrintfRoundHalfEven)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    EXPECT_EQ("0 2 2 4 -2\n"
-              "0.2 0.8 1.12 0.35\n"
-              "2e+01 4e+01 1.2e+00 1.12e+00\n"
-              "2 0.12 0.5 1e-05\n",
+    EXPECT_EQ(R"(0 2 2 4 -2
+0.2 0.8 1.12 0.35
+2e+01 4e+01 1.2e+00 1.12e+00
+2 0.12 0.5 1e-05
+)",
               CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 int main(void) {

@@ -47,13 +47,16 @@ protected:
                             "-bios",
                             true })
     {
-        avr_regalloc = true; // the default; a test may change it
+        // The defaults; a test may change them.
+        avr_regalloc = true;
+        avr_peephole = true;
     }
 
-    // Pin instruction selection itself: every variable in its slot.
+    // Pin instruction selection itself: every variable in its slot, no peephole pass.
     static void NaiveSelection()
     {
         avr_regalloc = false;
+        avr_peephole = false;
     }
 
     // Assembly of every toplevel of the translation unit.

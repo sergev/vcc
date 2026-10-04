@@ -54,44 +54,86 @@ class RelaxTest : public ::testing::Test {};
 // Forward: a branch reaches 63 words ahead.
 TEST_F(RelaxTest, ForwardBranchInRange)
 {
-    EXPECT_EQ("f:\n    breq    .Lt\n.Lt:\n    ret\n", Relaxed(AVR_BREQ, 0, 63, false));
+    EXPECT_EQ(R"(f:
+    breq    .Lt
+.Lt:
+    ret
+)", Relaxed(AVR_BREQ, 0, 63, false));
 }
 
 TEST_F(RelaxTest, ForwardBranchOutOfRange)
 {
-    EXPECT_EQ("f:\n    brne    .Lv0\n    rjmp    .Lt\n.Lv0:\n.Lt:\n    ret\n",
+    EXPECT_EQ(R"(f:
+    brne    .Lv0
+    rjmp    .Lt
+.Lv0:
+.Lt:
+    ret
+)",
               Relaxed(AVR_BREQ, 0, 64, false));
 }
 
 // Backward: 64 words back.
 TEST_F(RelaxTest, BackwardBranchInRange)
 {
-    EXPECT_EQ("f:\n.Lt:\n    brlt    .Lt\n    ret\n", Relaxed(AVR_BRLT, 63, 0, true));
+    EXPECT_EQ(R"(f:
+.Lt:
+    brlt    .Lt
+    ret
+)", Relaxed(AVR_BRLT, 63, 0, true));
 }
 
 TEST_F(RelaxTest, BackwardBranchOutOfRange)
 {
-    EXPECT_EQ("f:\n.Lt:\n    brge    .Lv0\n    rjmp    .Lt\n.Lv0:\n    ret\n",
+    EXPECT_EQ(R"(f:
+.Lt:
+    brge    .Lv0
+    rjmp    .Lt
+.Lv0:
+    ret
+)",
               Relaxed(AVR_BRLT, 64, 0, true));
 }
 
 // rjmp reaches 2047 words ahead and 2048 back; past that it is a jmp.
 TEST_F(RelaxTest, JumpInRange)
 {
-    EXPECT_EQ("f:\n    rjmp    .Lt\n.Lt:\n    ret\n", Relaxed(AVR_RJMP, 0, 2047, false));
-    EXPECT_EQ("f:\n.Lt:\n    rjmp    .Lt\n    ret\n", Relaxed(AVR_RJMP, 2047, 0, true));
+    EXPECT_EQ(R"(f:
+    rjmp    .Lt
+.Lt:
+    ret
+)", Relaxed(AVR_RJMP, 0, 2047, false));
+    EXPECT_EQ(R"(f:
+.Lt:
+    rjmp    .Lt
+    ret
+)", Relaxed(AVR_RJMP, 2047, 0, true));
 }
 
 TEST_F(RelaxTest, JumpOutOfRange)
 {
-    EXPECT_EQ("f:\n    jmp     .Lt\n.Lt:\n    ret\n", Relaxed(AVR_RJMP, 0, 2048, false));
-    EXPECT_EQ("f:\n.Lt:\n    jmp     .Lt\n    ret\n", Relaxed(AVR_RJMP, 2048, 0, true));
+    EXPECT_EQ(R"(f:
+    jmp     .Lt
+.Lt:
+    ret
+)", Relaxed(AVR_RJMP, 0, 2048, false));
+    EXPECT_EQ(R"(f:
+.Lt:
+    jmp     .Lt
+    ret
+)", Relaxed(AVR_RJMP, 2048, 0, true));
 }
 
 // A relaxed branch whose rjmp is itself out of reach becomes a jmp.
 TEST_F(RelaxTest, BranchFarAway)
 {
-    EXPECT_EQ("f:\n    brne    .Lv0\n    jmp     .Lt\n.Lv0:\n.Lt:\n    ret\n",
+    EXPECT_EQ(R"(f:
+    brne    .Lv0
+    jmp     .Lt
+.Lv0:
+.Lt:
+    ret
+)",
               Relaxed(AVR_BREQ, 0, 3000, false));
 }
 
@@ -102,7 +144,12 @@ TEST_F(AvrTest, RunLongLoop)
     std::string body;
     for (int i = 0; i < 20; i++)
         body += "        sum = sum + " + std::to_string(i) + ";\n";
-    EXPECT_EQ("1900\n", CompileAndRunBook("int main(void) {\n    int sum = 0;\n"
-                                          "    for (int i = 0; i < 10; i++) {\n" +
-                                          body + "    }\n    return sum;\n}\n"));
+    EXPECT_EQ("1900\n", CompileAndRunBook(R"(int main(void) {
+    int sum = 0;
+    for (int i = 0; i < 10; i++) {
+)" +
+                                          body + R"(    }
+    return sum;
+}
+)"));
 }

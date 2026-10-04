@@ -193,24 +193,24 @@ One selection helper owns that rule.
     with `pop r0`, as avr-gcc does, instead of the SP sequence.
   - The interrupt-safe SP write stays for larger frames, because user code may enable
     interrupts.
-- **M24. Peephole.**
-  - **Moves and constants:**
-    - `movw` for pair copies;
-    - `r1` for zero (`cp r24, r1`, `mov r25, r1`) and no `ldi 0`;
-    - `adiw`/`sbiw` for small constants on `r24`, `X`, `Y` or `Z`;
-    - constant bytes of `0x00`/`0xff` folded out of `and`/`or`, and a zero low byte of an
-      added constant starting the chain at the next byte;
-    - shifts by 8, 16 or 24 as byte moves.
-  - **Memory:**
-    - post-increment `ld Z+`/`st X+` for consecutive bytes;
-    - no reload of a byte just stored;
-    - no `clr r1` that is already zero.
-  - **Branches:**
-    - compare-and-branch fusion, with no 0/1 materialized;
-    - branch over jump, and no jump to the next line;
-    - skip instructions (`sbrs`/`sbrc`, `cpse`) for an `if` whose body is one
-      instruction. This is AVR's counterpart of `cmov` and conditional execution.
-  - **Tail calls:** `jmp` when the epilogue leaves nothing on the stack.
+- **M24. Peephole.** *Done* (`backend/avr/peephole.c`, and fusion in selection):
+  - **Compare-and-branch fusion** in selection: a comparison read only by the
+    conditional jump after it branches on its flags, integer or FP.
+  - **Forward, per block:** register copies and constants known (`r1` zero), so a
+    move or `ldi` of what a register holds goes; a slot or global byte just loaded or
+    stored is forwarded to a reload as a move, and a store of what it holds goes. A
+    store through a pointer or a call forgets memory; a volatile access stays.
+  - **Backward, over register and SREG liveness:** a dead instruction goes;
+    `ldi t, k; cp r, t` is `cpi r, k`; `subi`/`sbci` of 1..63 on `r24`–`r30` is
+    `adiw`/`sbiw` where the flags are dead.
+  - **Jumps:** none to the next instruction, a branch over a jump inverted, code after
+    an unconditional jump gone; after the frame, a jump to a lone `ret` is `ret`, and a
+    call followed by the return a tail `jmp`.
+  - **Cycles** in parallel moves go through a free `X`/`Z` pair or `r0` before the
+    stack.
+  - **Not done:** skip instructions (`sbrs`/`sbrc`/`cpse`), post-increment for
+    consecutive bytes (`ldd` costs the same as `ld Z+`), and `ldi 0` → `mov r1` (the
+    same cost).
   - Branch relaxation (M11) runs after all of these.
 
 ## Phase 6 — finishing

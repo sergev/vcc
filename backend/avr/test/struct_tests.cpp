@@ -9,11 +9,13 @@
 TEST_F(AvrTest, StructArgumentFlattened)
 {
     NaiveSelection();
-    std::string s = Body(CompileToAvr("struct s5 { char a; int b; int c; };\n"
-                                      "struct s5 g(struct s5 x, int k);\n"
-                                      "int f(struct s5 *p) { return g(*p, 7).c; }"));
+    std::string s = Body(CompileToAvr(R"(struct s5 { char a; int b; int c; };
+struct s5 g(struct s5 x, int k);
+int f(struct s5 *p) { return g(*p, 7).c; })"));
     EXPECT_NE(std::string::npos, s.find("ldd r24, Y+")) << s;
-    EXPECT_NE(std::string::npos, s.find("ldi r18, 7\nldi r19, 0\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r18, 7
+ldi r19, 0
+)")) << s;
     EXPECT_NE(std::string::npos, s.find("call g\nstd Y+")) << s;
     EXPECT_NE(std::string::npos, s.find(", r18\n")) << s;
 }
@@ -23,8 +25,10 @@ TEST_F(AvrTest, StructArgumentFlattened)
 TEST_F(AvrTest, RunStructSplitWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    std::string decls = "void putbyte(int c);\nstruct s5 { char a; int b; int c; };\n"
-                        "long g6(long long a, long long b, struct s5 s, int k);\n";
+    std::string decls = R"(void putbyte(int c);
+struct s5 { char a; int b; int c; };
+long g6(long long a, long long b, struct s5 s, int k);
+)";
     EXPECT_EQ("ok", CompileAndRunWithClang(decls + R"(
 long g6(long long a, long long b, struct s5 s, int k)
 {

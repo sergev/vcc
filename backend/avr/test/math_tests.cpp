@@ -114,7 +114,10 @@ int main(void) {
 TEST_F(AvrTest, FrexpLdexpRoundTrip)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    EXPECT_EQ("M=0.750000 E=4\nBACK=12.000000\nBACK=100.000000\n", CompileAndRunAvr(R"PROG(
+    EXPECT_EQ(R"(M=0.750000 E=4
+BACK=12.000000
+BACK=100.000000
+)", CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 #include <math.h>
 static void body(void) {

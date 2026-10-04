@@ -79,6 +79,22 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
     store_val(g, in->u.binary.dst, 24, 1);
 }
 
+AVR_Op gen_fp_compare(Gen *g, const Tac_Instruction *in)
+{
+    const char *name;
+    AVR_Op br;
+    bool swap;
+    if (!compare_helper(in->u.binary.op, &name, &br, &swap))
+        return AVR_NUM_OPS;
+    load_two(g, in->u.binary.src1, 22, 4, in->u.binary.src2, 18, 4);
+    emit1(g, AVR_CALL, avr_label(name));
+    if (swap)
+        emit2(g, AVR_CP, avr_reg(AVR_ZERO), avr_reg(24));
+    else
+        emit2(g, AVR_CP, avr_reg(24), avr_reg(AVR_ZERO));
+    return br;
+}
+
 void gen_fp_unary(Gen *g, const Tac_Instruction *in)
 {
     switch (in->u.unary.op) {

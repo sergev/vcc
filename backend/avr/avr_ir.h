@@ -145,6 +145,7 @@ typedef struct AVR_Instr {
     struct AVR_Instr *next;
     AVR_Op op;
     AVR_Operand opnd[AVR_MAX_OPERANDS];
+    bool vol; // part of a volatile access: kept as it is
 } AVR_Instr;
 
 typedef struct AVR_Block {
@@ -157,6 +158,7 @@ typedef struct {
     char *name; // owned
     bool global;
     AVR_Block *blocks, *tail;
+    uint32_t result; // the registers holding the result at the return; all when ~0
 } AVR_Func;
 
 extern const char *const avr_mnemonic[AVR_NUM_OPS];
@@ -182,6 +184,17 @@ AVR_Operand avr_sym(AVR_Modifier mod, const char *sym, int64_t off);
 AVR_Operand avr_ptr(int ptr, AVR_PtrMode mode); // ptr is AVR_X, AVR_Y or AVR_Z
 AVR_Operand avr_disp(int ptr, int q);           // ptr is AVR_Y or AVR_Z
 AVR_Operand avr_label(const char *sym);
+
+// The conditional branch taken exactly when `op` is not; AVR_NUM_OPS for another op.
+AVR_Op avr_inverse(AVR_Op op);
+
+// Free one instruction.
+void avr_free_instr(AVR_Instr *in);
+
+// The peephole pass over the body (before the prologue and epilogue), and the cleanup
+// after them: jumps to the next instruction, branches over jumps, tail calls.
+void avr_peephole_pass(AVR_Func *fn);
+void avr_peephole_frame(AVR_Func *fn);
 
 // Branch relaxation, the last pass: a conditional branch beyond +-64 words becomes the
 // inverse branch over an rjmp (or jmp), an rjmp beyond +-2K words a jmp; repeated until

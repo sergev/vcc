@@ -187,8 +187,13 @@ TEST_F(AvrTest, FloatAddCalls)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("float f(float a, float b) { return a + b; }"));
-    EXPECT_NE(std::string::npos, s.find("ldd r18, Y+5\nldd r19, Y+6\nldd r20, Y+7\n"
-                                        "ldd r21, Y+8\ncall __addsf3\nstd Y+9, r22\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r18, Y+5
+ldd r19, Y+6
+ldd r20, Y+7
+ldd r21, Y+8
+call __addsf3
+std Y+9, r22
+)"))
         << s;
 }
 
@@ -206,7 +211,10 @@ TEST_F(AvrTest, FloatCompare)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(float a, float b) { return a > b; }"));
-    EXPECT_NE(std::string::npos, s.find("call __gtsf2\ncp r1, r24\nldi r24, 1\nbrlt ")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(call __gtsf2
+cp r1, r24
+ldi r24, 1
+brlt )")) << s;
 }
 
 // The truth test ignores the sign: -0.0 is false.
@@ -215,7 +223,12 @@ TEST_F(AvrTest, FloatTruthTest)
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(float a) { return !a; }"));
     EXPECT_NE(std::string::npos,
-              s.find("andi r25, 127\ncp r22, r1\ncpc r23, r1\ncpc r24, r1\ncpc r25, r1\n"))
+              s.find(R"(andi r25, 127
+cp r22, r1
+cpc r23, r1
+cpc r24, r1
+cpc r25, r1
+)"))
         << s;
 }
 
@@ -224,7 +237,10 @@ TEST_F(AvrTest, FloatFromInt)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("float f(unsigned u) { return u; }"));
-    EXPECT_NE(std::string::npos, s.find("mov r24, r1\nmov r25, r1\ncall __floatunsisf\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(mov r24, r1
+mov r25, r1
+call __floatunsisf
+)")) << s;
 }
 
 TEST_F(AvrTest, RunFloatTruthAndNegation)

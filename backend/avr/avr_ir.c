@@ -22,6 +22,7 @@ AVR_Func *avr_new_func(const char *name, bool global)
     AVR_Func *fn = xalloc(sizeof(AVR_Func), __func__, __FILE__, __LINE__);
     fn->name     = xstrdup(name);
     fn->global   = global;
+    fn->result   = ~0u;
     avr_new_block(fn, NULL);
     return fn;
 }
@@ -81,6 +82,13 @@ AVR_Block *avr_split_after(AVR_Func *fn, AVR_Block *b, AVR_Instr *in, const char
     return n;
 }
 
+void avr_free_instr(AVR_Instr *in)
+{
+    for (int i = 0; i < AVR_MAX_OPERANDS; i++)
+        xfree(in->opnd[i].sym);
+    xfree(in);
+}
+
 void avr_free_func(AVR_Func *fn)
 {
     AVR_Block *b = fn->blocks;
@@ -89,9 +97,7 @@ void avr_free_func(AVR_Func *fn)
         AVR_Instr *in    = b->head;
         while (in) {
             AVR_Instr *next = in->next;
-            for (int i = 0; i < AVR_MAX_OPERANDS; i++)
-                xfree(in->opnd[i].sym);
-            xfree(in);
+            avr_free_instr(in);
             in = next;
         }
         xfree(b->label);

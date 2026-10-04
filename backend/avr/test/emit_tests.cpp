@@ -139,15 +139,16 @@ TEST_F(EmitTest, Function)
     avr_append(fn, AVR_RET);
     std::string s = Capture([&](FILE *f) { avr_emit_func(f, fn); });
     avr_free_func(fn);
-    EXPECT_EQ(s, "    .text\n"
-                 "    .globl  main\n"
-                 "    .p2align 1\n"
-                 "    .type   main, @function\n"
-                 "main:\n"
-                 "    ldi     r24, 200\n"
-                 ".L1:\n"
-                 "    ret\n"
-                 "    .size   main, .-main\n");
+    EXPECT_EQ(s, R"(    .text
+    .globl  main
+    .p2align 1
+    .type   main, @function
+main:
+    ldi     r24, 200
+.L1:
+    ret
+    .size   main, .-main
+)");
 }
 
 TEST_F(EmitTest, Header)

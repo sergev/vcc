@@ -642,7 +642,8 @@ static uint32_t save_for_b(Gen *g, int n)
     return n == 8 ? save_var_regs(g, 10, 17) : 0;
 }
 
-static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, const Tac_Type *t)
+// The flags of a comparison, in blocks A and B.
+static void compare_naive(Gen *g, const Tac_Instruction *in, Cond c, const Tac_Type *t)
 {
     int n = avr_type_size(t), a = block_a(n), b = block_b(n);
     uint32_t saved = save_for_b(g, n);
@@ -651,8 +652,13 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, const Tac_Typ
         chain(g, AVR_CP, AVR_CPC, b, a, n);
     else
         chain(g, AVR_CP, AVR_CPC, a, b, n);
-    gen_set_on(g, c.br);
     restore_var_regs(g, saved);
+}
+
+static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, const Tac_Type *t)
+{
+    compare_naive(g, in, c, t);
+    gen_set_on(g, c.br);
     store_val(g, in->u.binary.dst, 24, 1);
 }
 
@@ -912,8 +918,8 @@ static void set_result(Gen *g, AVR_Op br, const Tac_Val *dst)
         store_val(g, dst, t, 1);
 }
 
-static void clean_compare(Gen *g, Cond c, const Tac_Val *s1, const Tac_Val *s2, int n,
-                          const Tac_Val *dst)
+// The flags of a comparison, its operand bytes straight from registers.
+static void compare_clean(Gen *g, Cond c, const Tac_Val *s1, const Tac_Val *s2, int n)
 {
     for (int i = 0; i < n; i++) {
         int x = byte_of(g, s1, i, AVR_X, NEAR), y = byte_of(g, s2, i, AVR_X + 1, NEAR);
@@ -922,6 +928,12 @@ static void clean_compare(Gen *g, Cond c, const Tac_Val *s1, const Tac_Val *s2, 
         else
             emit2(g, i == 0 ? AVR_CP : AVR_CPC, avr_reg(x), avr_reg(y));
     }
+}
+
+static void clean_compare(Gen *g, Cond c, const Tac_Val *s1, const Tac_Val *s2, int n,
+                          const Tac_Val *dst)
+{
+    compare_clean(g, c, s1, s2, n);
     set_result(g, c.br, dst);
 }
 
@@ -1277,6 +1289,41 @@ static bool is_clean(const Gen *g, const Tac_Instruction *in)
     default:
         return true;
     }
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
+    if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    Tac_BinaryOperator op = in->u.binary.op;
+    const Tac_Val *s1 = in->u.binary.src1, *s2 = in->u.binary.src2;
+    const Tac_Type *t = operand_type(g, s1, s2);
+    AVR_Op br;
+    if (avr_is_fp(t)) {
+        br = gen_fp_compare(g, in);
+        if (br == AVR_NUM_OPS)
+            return false; // nothing emitted
+    } else {
+        Cond cond;
+        if (!compare_cond(op, unsigned_compare(op) || t->kind == TAC_TYPE_POINTER, &cond))
+            return false;
+        if (is_clean(g, in))
+            compare_clean(g, cond, s1, s2, avr_type_size(t));
+        else
+            compare_naive(g, in, cond, t);
+        br = cond.br;
+    }
+    char *l = label_name(next->u.jump_if_zero.target);
+    emit1(g, next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ? avr_inverse(br) : br, avr_label(l));
+    xfree(l);
+    return true;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last)

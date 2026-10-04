@@ -6,16 +6,36 @@
 
 // A load: the pointer in Z, the bytes through Z+i.
 EXPECT_CODE(LoadLong,
-            "std Y+1, r24\nstd Y+2, r25\nldd r30, Y+1\nldd r31, Y+2\n"
-            "ldd r22, Z+0\nldd r23, Z+1\nldd r24, Z+2\nldd r25, Z+3\n"
-            "std Y+3, r22\nstd Y+4, r23\nstd Y+5, r24\nstd Y+6, r25\n"
-            "ldd r22, Y+3\nldd r23, Y+4\nldd r24, Y+5\nldd r25, Y+6\n",
+            R"(std Y+1, r24
+std Y+2, r25
+ldd r30, Y+1
+ldd r31, Y+2
+ldd r22, Z+0
+ldd r23, Z+1
+ldd r24, Z+2
+ldd r25, Z+3
+std Y+3, r22
+std Y+4, r23
+std Y+5, r24
+std Y+6, r25
+ldd r22, Y+3
+ldd r23, Y+4
+ldd r24, Y+5
+ldd r25, Y+6
+)",
             "long f(long *p) { return *p; }")
 
 // A store: the value and the pointer, variables before constants.
 EXPECT_CODE(StoreInt,
-            "std Y+1, r24\nstd Y+2, r25\nldd r30, Y+1\nldd r31, Y+2\nldi r24, 7\nldi r25, 0\n"
-            "std Z+0, r24\nstd Z+1, r25\n",
+            R"(std Y+1, r24
+std Y+2, r25
+ldd r30, Y+1
+ldd r31, Y+2
+ldi r24, 7
+ldi r25, 0
+std Z+0, r24
+std Z+1, r25
+)",
             "void f(int *p) { *p = 7; }")
 
 // An index scaled by 4 is shifted twice, by 3 multiplied.
@@ -23,8 +43,15 @@ TEST_F(AvrTest, AddPtrScaled)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("long *f(long *p, int i) { return p + i; }"));
-    EXPECT_NE(std::string::npos, s.find("ldd r30, Y+1\nldd r31, Y+2\nlsl r24\nrol r25\n"
-                                        "lsl r24\nrol r25\nadd r24, r30\nadc r25, r31\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r30, Y+1
+ldd r31, Y+2
+lsl r24
+rol r25
+lsl r24
+rol r25
+add r24, r30
+adc r25, r31
+)"))
         << s;
 }
 
@@ -33,7 +60,10 @@ TEST_F(AvrTest, AddPtrMultiplied)
     NaiveSelection();
     std::string s = Body(CompileToAvr("struct s { char c[3]; };\n"
                                       "struct s *f(struct s *p, int i) { return p + i; }"));
-    EXPECT_NE(std::string::npos, s.find("ldi r22, 3\nldi r23, 0\nmul r24, r22\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r22, 3
+ldi r23, 0
+mul r24, r22
+)")) << s;
 }
 
 // Pointer comparisons are unsigned.  (Of char pointers the frontend compares the
@@ -107,7 +137,9 @@ int main(void)
 TEST_F(AvrTest, RunStringLibrary)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    EXPECT_EQ("hello, world\n0\n", CompileAndRunBook(R"(
+    EXPECT_EQ(R"(hello, world
+0
+)", CompileAndRunBook(R"(
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

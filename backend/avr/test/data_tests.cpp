@@ -57,9 +57,9 @@ z:
 d:
     .long   0x3fc00000
 )",
-              Data(CompileToAvr("int i = -2; long l = 100000; static long long ll = -5000000000LL;\n"
-                                "char z[3]; double d = 1.5;\n"
-                                "long long *use(void) { return &ll; }")));
+              Data(CompileToAvr(R"(int i = -2; long l = 100000; static long long ll = -5000000000LL;
+char z[3]; double d = 1.5;
+long long *use(void) { return &ll; })")));
 }
 
 // A data pointer is .short sym+off; a function pointer .short pm(f), a word address.
@@ -69,26 +69,42 @@ TEST_F(AvrTest, StaticPointers)
     std::string s = Data(CompileToAvr("int a[4]; int *p = &a[2];\n"
                                       "int f(void);\nint (*fp)(void) = f;\n"
                                       "const char *s = \"hi\";"));
-    EXPECT_NE(std::string::npos, s.find("p:\n    .short  a+4\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("fp:\n    .short  pm(f)\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(p:
+    .short  a+4
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(fp:
+    .short  pm(f)
+)")) << s;
     EXPECT_NE(std::string::npos, s.find("    .section .rodata\n")) << s;
     EXPECT_NE(std::string::npos, s.find("    .ascii  \"hi\"\n    .byte   0\n")) << s;
 }
 
 // Globals are read and written with lds/sts.
-EXPECT_CODE(GlobalAccess, "lds r22, g\nlds r23, g+1\nlds r24, g+2\nlds r25, g+3\n"
-                          "sts h, r22\nsts h+1, r23\nsts h+2, r24\nsts h+3, r25\n",
+EXPECT_CODE(GlobalAccess, R"(lds r22, g
+lds r23, g+1
+lds r24, g+2
+lds r25, g+3
+sts h, r22
+sts h+1, r23
+sts h+2, r24
+sts h+3, r25
+)",
             "long g, h;\nvoid f(void) { h = g; }")
 
 // The address of data is lo8/hi8, of a function pm_lo8/pm_hi8.
 TEST_F(AvrTest, Addresses)
 {
     NaiveSelection();
-    std::string s = Code(CompileToAvr("int g;\nint h(void);\n"
-                                      "int *f(void) { return &g; }\n"
-                                      "int (*k(void))(void) { return h; }"));
-    EXPECT_NE(std::string::npos, s.find("ldi r24, lo8(g)\nldi r25, hi8(g)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("ldi r24, pm_lo8(h)\nldi r25, pm_hi8(h)\n")) << s;
+    std::string s = Code(CompileToAvr(R"(int g;
+int h(void);
+int *f(void) { return &g; }
+int (*k(void))(void) { return h; })"));
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r24, lo8(g)
+ldi r25, hi8(g)
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r24, pm_lo8(h)
+ldi r25, pm_hi8(h)
+)")) << s;
 }
 
 // Globals and static locals, initialized and not, read and written.

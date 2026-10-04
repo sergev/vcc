@@ -10,21 +10,54 @@
 #include "avr_test.h"
 
 EXPECT_CODE(AddInt,
-            "std Y+1, r24\nstd Y+2, r25\nstd Y+3, r22\nstd Y+4, r23\n"
-            "ldd r24, Y+1\nldd r25, Y+2\nldd r22, Y+3\nldd r23, Y+4\n"
-            "add r24, r22\nadc r25, r23\nstd Y+5, r24\nstd Y+6, r25\n"
-            "ldd r24, Y+5\nldd r25, Y+6\n",
+            R"(std Y+1, r24
+std Y+2, r25
+std Y+3, r22
+std Y+4, r23
+ldd r24, Y+1
+ldd r25, Y+2
+ldd r22, Y+3
+ldd r23, Y+4
+add r24, r22
+adc r25, r23
+std Y+5, r24
+std Y+6, r25
+ldd r24, Y+5
+ldd r25, Y+6
+)",
             "int f(int a, int b) { return a + b; }")
 
 // A long: A in r25:r22, B in r21:r18.
 EXPECT_CODE(SubLong,
-            "std Y+1, r22\nstd Y+2, r23\nstd Y+3, r24\nstd Y+4, r25\n"
-            "std Y+5, r18\nstd Y+6, r19\nstd Y+7, r20\nstd Y+8, r21\n"
-            "ldd r22, Y+1\nldd r23, Y+2\nldd r24, Y+3\nldd r25, Y+4\n"
-            "ldd r18, Y+5\nldd r19, Y+6\nldd r20, Y+7\nldd r21, Y+8\n"
-            "sub r22, r18\nsbc r23, r19\nsbc r24, r20\nsbc r25, r21\n"
-            "std Y+9, r22\nstd Y+10, r23\nstd Y+11, r24\nstd Y+12, r25\n"
-            "ldd r22, Y+9\nldd r23, Y+10\nldd r24, Y+11\nldd r25, Y+12\n",
+            R"(std Y+1, r22
+std Y+2, r23
+std Y+3, r24
+std Y+4, r25
+std Y+5, r18
+std Y+6, r19
+std Y+7, r20
+std Y+8, r21
+ldd r22, Y+1
+ldd r23, Y+2
+ldd r24, Y+3
+ldd r25, Y+4
+ldd r18, Y+5
+ldd r19, Y+6
+ldd r20, Y+7
+ldd r21, Y+8
+sub r22, r18
+sbc r23, r19
+sbc r24, r20
+sbc r25, r21
+std Y+9, r22
+std Y+10, r23
+std Y+11, r24
+std Y+12, r25
+ldd r22, Y+9
+ldd r23, Y+10
+ldd r24, Y+11
+ldd r25, Y+12
+)",
             "long f(long a, long b) { return a - b; }")
 
 // Negation: com on the high bytes, neg on the low one, the borrow up by sbci.
@@ -33,8 +66,14 @@ TEST_F(AvrTest, NegateLong)
     NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return -a; }"));
     EXPECT_NE(std::string::npos,
-              s.find("com r25\ncom r24\ncom r23\nneg r22\nsbci r23, 255\nsbci r24, 255\n"
-                     "sbci r25, 255\n"))
+              s.find(R"(com r25
+com r24
+com r23
+neg r22
+sbci r23, 255
+sbci r24, 255
+sbci r25, 255
+)"))
         << s;
 }
 
@@ -44,8 +83,15 @@ TEST_F(AvrTest, MultiplyInt)
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a * b; }"));
     EXPECT_NE(std::string::npos,
-              s.find("mul r24, r22\nmovw r20, r0\nmul r24, r23\nadd r21, r0\nmul r25, r22\n"
-                     "add r21, r0\nclr r1\nmovw r24, r20\n"))
+              s.find(R"(mul r24, r22
+movw r20, r0
+mul r24, r23
+add r21, r0
+mul r25, r22
+add r21, r0
+clr r1
+movw r24, r20
+)"))
         << s;
 }
 
@@ -55,7 +101,10 @@ TEST_F(AvrTest, DivideAndRemainderInt)
 {
     NaiveSelection();
     std::string d = Body(CompileToAvr("int f(int a, int b) { return a / b; }"));
-    EXPECT_NE(std::string::npos, d.find("call __divmodhi4\nstd Y+5, r22\nstd Y+6, r23\n")) << d;
+    EXPECT_NE(std::string::npos, d.find(R"(call __divmodhi4
+std Y+5, r22
+std Y+6, r23
+)")) << d;
 }
 
 TEST_F(AvrTest, RemainderUnsignedLong)
@@ -64,7 +113,11 @@ TEST_F(AvrTest, RemainderUnsignedLong)
     std::string r = Body(CompileToAvr("unsigned long f(unsigned long a, unsigned long b) "
                                       "{ return a % b; }"));
     EXPECT_NE(std::string::npos,
-              r.find("call __udivmodsi4\nstd Y+9, r22\nstd Y+10, r23\nstd Y+11, r24\n"))
+              r.find(R"(call __udivmodsi4
+std Y+9, r22
+std Y+10, r23
+std Y+11, r24
+)"))
         << r;
 }
 
@@ -74,16 +127,36 @@ TEST_F(AvrTest, CompareGreater)
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a > b; }"));
     EXPECT_NE(std::string::npos,
-              s.find("cp r22, r24\ncpc r23, r25\nldi r24, 1\nbrlt .Lv1\nclr r24\n"
-                     "std Y+5, r24\nstd Y+6, r1\n"))
+              s.find(R"(cp r22, r24
+cpc r23, r25
+ldi r24, 1
+brlt .Lv1
+clr r24
+std Y+5, r24
+std Y+6, r1
+)"))
         << s;
 }
 
 EXPECT_CODE(CompareUnsignedLessOrEqual,
-            "std Y+1, r24\nstd Y+2, r25\nstd Y+3, r22\nstd Y+4, r23\n"
-            "ldd r24, Y+1\nldd r25, Y+2\nldd r22, Y+3\nldd r23, Y+4\n"
-            "cp r22, r24\ncpc r23, r25\nldi r24, 1\nbrsh .Lv1\nclr r24\n"
-            "std Y+5, r24\nstd Y+6, r1\nldd r24, Y+5\nldd r25, Y+6\n",
+            R"(std Y+1, r24
+std Y+2, r25
+std Y+3, r22
+std Y+4, r23
+ldd r24, Y+1
+ldd r25, Y+2
+ldd r22, Y+3
+ldd r23, Y+4
+cp r22, r24
+cpc r23, r25
+ldi r24, 1
+brsh .Lv1
+clr r24
+std Y+5, r24
+std Y+6, r1
+ldd r24, Y+5
+ldd r25, Y+6
+)",
             "int f(unsigned a, unsigned b) { return a <= b; }")
 
 // A shift by a constant: whole bytes moved, then bit by bit.
@@ -92,8 +165,17 @@ TEST_F(AvrTest, ShiftLongByConstant)
     NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return a >> 9; }"));
     EXPECT_NE(std::string::npos,
-              s.find("mov r22, r23\nmov r23, r24\nmov r24, r25\nmov r25, r24\nlsl r25\n"
-                     "sbc r25, r25\nasr r25\nror r24\nror r23\nror r22\n"))
+              s.find(R"(mov r22, r23
+mov r23, r24
+mov r24, r25
+mov r25, r24
+lsl r25
+sbc r25, r25
+asr r25
+ror r24
+ror r23
+ror r22
+)"))
         << s;
 }
 
@@ -102,8 +184,13 @@ TEST_F(AvrTest, ShiftByVariable)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("unsigned f(unsigned a, int n) { return a << n; }"));
-    EXPECT_NE(std::string::npos, s.find("ldd r26, Y+3\nrjmp .Lv2\nlsl r24\nrol r25\n"
-                                        "dec r26\nbrpl .Lv1\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r26, Y+3
+rjmp .Lv2
+lsl r24
+rol r25
+dec r26
+brpl .Lv1
+)"))
         << s;
 }
 
@@ -112,8 +199,13 @@ TEST_F(AvrTest, SignExtendIntToLong)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("long f(int a) { return a; }"));
-    EXPECT_NE(std::string::npos, s.find("ldd r22, Y+1\nldd r23, Y+2\nmov r24, r23\nlsl r24\n"
-                                        "sbc r24, r24\nmov r25, r24\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r22, Y+1
+ldd r23, Y+2
+mov r24, r23
+lsl r24
+sbc r24, r24
+mov r25, r24
+)"))
         << s;
 }
 
@@ -122,7 +214,11 @@ TEST_F(AvrTest, ZeroExtendUnsignedToLong)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("unsigned long f(unsigned a) { return a; }"));
-    EXPECT_NE(std::string::npos, s.find("ldd r22, Y+1\nldd r23, Y+2\nmov r24, r1\nmov r25, r1\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r22, Y+1
+ldd r23, Y+2
+mov r24, r1
+mov r25, r1
+)"))
         << s;
 }
 
@@ -132,7 +228,12 @@ TEST_F(AvrTest, LogicalNot)
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(long a) { return !a; }"));
     EXPECT_NE(std::string::npos,
-              s.find("cp r22, r1\ncpc r23, r1\ncpc r24, r1\ncpc r25, r1\nldi r24, 1\nbreq "))
+              s.find(R"(cp r22, r1
+cpc r23, r1
+cpc r24, r1
+cpc r25, r1
+ldi r24, 1
+breq )"))
         << s;
 }
 
@@ -229,7 +330,11 @@ std::string IntProgram(Group group, const std::vector<T> &vals)
             }
         }
     }
-    return "int main(void)\n{\n" + decl + c.body + "    return bad;\n}\n";
+    return R"(int main(void)
+{
+)" + decl + c.body + R"(    return bad;
+}
+)";
 }
 
 const std::vector<int16_t> ints       = { 32767, -32768, -1, 7, 300 };

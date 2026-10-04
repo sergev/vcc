@@ -6,8 +6,18 @@
 
 // An int in r25:r24, a long in r23:r20; the result from r25:r24.
 EXPECT_CODE(CallRegisterArguments,
-            "ldi r24, 1\nldi r25, 0\nldi r20, 2\nldi r21, 0\nldi r22, 0\nldi r23, 0\n"
-            "call g\nstd Y+1, r24\nstd Y+2, r25\nldd r24, Y+1\nldd r25, Y+2\n",
+            R"(ldi r24, 1
+ldi r25, 0
+ldi r20, 2
+ldi r21, 0
+ldi r22, 0
+ldi r23, 0
+call g
+std Y+1, r24
+std Y+2, r25
+ldd r24, Y+1
+ldd r25, Y+2
+)",
             "int g(int a, long b);\nint f(void) { return g(1, 2L); }")
 
 // A char takes a pair, extended by the sender.
@@ -16,8 +26,12 @@ TEST_F(AvrTest, CallCharArgument)
     NaiveSelection();
     std::string s = Body(CompileToAvr("int g(signed char c, int i);\n"
                                       "int f(void) { return g(-1, 2); }"));
-    EXPECT_NE(std::string::npos, s.find("ldi r24, 255\nldi r25, 255\nldi r22, 2\nldi r23, 0\n"
-                                        "call g\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r24, 255
+ldi r25, 255
+ldi r22, 2
+ldi r23, 0
+call g
+)"))
         << s;
 }
 
@@ -31,13 +45,32 @@ TEST_F(AvrTest, CallStackArguments)
         "int g(long long a, long long b, long c, int d);\n"
         "int f(void) { return g(1, 2, 0x01020304, 0x0506); }"));
     EXPECT_NE(std::string::npos,
-              s.find("ldi r26, 5\npush r26\nldi r26, 6\npush r26\nldi r26, 1\npush r26\n"
-                     "ldi r26, 2\npush r26\nldi r26, 3\npush r26\nldi r26, 4\npush r26\n"))
+              s.find(R"(ldi r26, 5
+push r26
+ldi r26, 6
+push r26
+ldi r26, 1
+push r26
+ldi r26, 2
+push r26
+ldi r26, 3
+push r26
+ldi r26, 4
+push r26
+)"))
         << s;
     EXPECT_NE(std::string::npos,
-              s.find("call g\nin r30, __SP_L__\nin r31, __SP_H__\nadiw r30, 6\n"
-                     "in r0, __SREG__\ncli\nout __SP_H__, r31\nout __SREG__, r0\n"
-                     "out __SP_L__, r30\nstd Y+1, r24\n"))
+              s.find(R"(call g
+in r30, __SP_L__
+in r31, __SP_H__
+adiw r30, 6
+in r0, __SREG__
+cli
+out __SP_H__, r31
+out __SREG__, r0
+out __SP_L__, r30
+std Y+1, r24
+)"))
         << s;
 }
 
@@ -46,10 +79,13 @@ TEST_F(AvrTest, CallReleaseByPop)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr(
-        "int g(long long a, long long b, long c, int d);\n"
-        "int h(long long a, long long b, int c, int d, int e);\n"
-        "int f(void) { return h(1, 2, 3, 4, 5); }"));
-    EXPECT_NE(std::string::npos, s.find("call h\npop r0\npop r0\n")) << s;
+        R"(int g(long long a, long long b, long c, int d);
+int h(long long a, long long b, int c, int d, int e);
+int f(void) { return h(1, 2, 3, 4, 5); })"));
+    EXPECT_NE(std::string::npos, s.find(R"(call h
+pop r0
+pop r0
+)")) << s;
 }
 
 // Our code calls clang's with arguments of every size, in registers and on the stack.

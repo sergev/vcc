@@ -69,6 +69,9 @@ typedef struct {
     bool y_free;       // Y may hold variables: the function is to have no frame
     bool stack_args;   // some parameter (or part of one) comes on the stack
     bool frameless;    // no slots and no stack arguments: Y is not set up
+    bool vol;          // the TAC instruction being selected is a volatile access
+    const Flow *flow;  // with the peephole pass: for compare-and-branch fusion
+    int *uses;         // the reads of each flow variable
     int frame_size;    // bytes of slots
     char exit[32];     // the label of the epilogue
 } Gen;
@@ -131,8 +134,9 @@ Regs regs_range(int reg, int n);
 // Whether variable `name` (or value `v`) lives in registers; its bytes in *out.
 bool var_regs(const Gen *g, const char *name, Regs *out);
 bool val_regs(const Gen *g, const Tac_Val *v, Regs *out);
-// The byte moves dst[i] = src[i] at once, in an order (with a register on the stack to
-// break a cycle) that reads every source before it is overwritten.
+// The byte moves dst[i] = src[i] at once, in an order that reads every source before
+// it is overwritten; a cycle is broken through X, Z or r0 when no move touches it
+// (none holds a value across a parallel move otherwise), else through the stack.
 void parallel_move(Gen *g, const int *dst, const int *src, int n);
 // Push (or pop, in reverse) the registers lo..hi holding variables; returns the mask.
 uint32_t save_var_regs(Gen *g, int lo, int hi);
@@ -202,6 +206,9 @@ bool uses_scratch(const Tac_Instruction *in, TypeOf type_of, const void *arg);
 // The variable `in` writes, or NULL (a call's is its own).
 const Tac_Val *instr_dst(const Tac_Instruction *in);
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
+// A comparison `in` whose result only `next`, a conditional jump, reads: the compare
+// and the branch, no 0 or 1 in between; false when they are not such a pair.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
 // r24 = 1 when branch `br` would be taken on the flags as they are, else 0.
 void gen_set_on(Gen *g, AVR_Op br);
 
@@ -209,6 +216,9 @@ void gen_set_on(Gen *g, AVR_Op br);
 // Floating point, in software (fp.c)
 //
 void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+// An FP comparison up to the flags; returns the branch taken when it holds, or
+// AVR_NUM_OPS when `in` is no comparison.
+AVR_Op gen_fp_compare(Gen *g, const Tac_Instruction *in);
 void gen_fp_unary(Gen *g, const Tac_Instruction *in);
 // The zero flag of FP value `v`: set when it is a zero of either sign (not a NaN).
 void gen_fp_test(Gen *g, const Tac_Val *v);

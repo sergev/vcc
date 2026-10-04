@@ -18,16 +18,22 @@ int sum(int *a, int n)
 }
 )"));
     EXPECT_EQ(std::string::npos, s.find("Y+")) << s;
-    EXPECT_NE(std::string::npos, s.find("ldd r20, Z+0\nldd r21, Z+1\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r20, Z+0
+ldd r21, Z+1
+)")) << s;
 }
 
-// Arguments passed on swapped are a cycle of moves, broken through the stack.
-TEST_F(AvrTest, SwappedArgumentsThroughStack)
+// Arguments passed on swapped are a cycle of moves, broken through Z; the call, then
+// nothing to restore, is a tail jump.
+TEST_F(AvrTest, SwappedArgumentsThroughZ)
 {
-    std::string s = Body(CompileToAvr("int h(int a, int b);\n"
-                                      "int f(int a, int b) { return h(b, a); }"));
-    EXPECT_NE(std::string::npos, s.find("push r")) << s;
-    EXPECT_NE(std::string::npos, s.find("call h\n")) << s;
+    EXPECT_EQ(R"(movw r30, r22
+movw r22, r24
+movw r24, r30
+jmp h
+)",
+              Code(CompileToAvr("int h(int a, int b);\n"
+                                "int f(int a, int b) { return h(b, a); }")));
 }
 
 TEST_F(AvrTest, RunSwappedArguments)
@@ -121,5 +127,7 @@ int main(void)
 TEST_F(AvrTest, ParametersStayWhereTheyArrive)
 {
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a - b; }"));
-    EXPECT_EQ("sub r24, r22\nsbc r25, r23\n", s);
+    EXPECT_EQ(R"(sub r24, r22
+sbc r25, r23
+)", s);
 }

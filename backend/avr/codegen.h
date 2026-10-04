@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 extern bool avr_regalloc; // registers for scalar variables (else all in slots)
+extern bool avr_peephole; // the peephole pass, and compares fused with branches
 
 // Translate one TAC toplevel to AVR assembly on `out`.  `program` heads the whole
 // translation unit, lowered with -t avr; the module header goes out with it.

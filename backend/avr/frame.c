@@ -314,7 +314,9 @@ bool is_function(const Gen *g, const char *name)
 
 AVR_Instr *emit0(Gen *g, AVR_Op op)
 {
-    return avr_append(g->fn, op);
+    AVR_Instr *in = avr_append(g->fn, op);
+    in->vol       = g->vol;
+    return in;
 }
 
 AVR_Instr *emit1(Gen *g, AVR_Op op, AVR_Operand a)
@@ -535,6 +537,15 @@ static bool is_src(const int *s, int n, int skip, int r)
     return false;
 }
 
+// Whether a pending move reads or writes register r.
+static bool touched(const int *d, const int *s, int m, int r)
+{
+    for (int i = 0; i < m; i++)
+        if (d[i] == r || s[i] == r)
+            return true;
+    return false;
+}
+
 void parallel_move(Gen *g, const int *dst, const int *src, int n)
 {
     int d[64], s[64], m = 0;
@@ -553,11 +564,30 @@ void parallel_move(Gen *g, const int *dst, const int *src, int n)
             if (!is_src(s, m, i, d[i]))
                 pick = i;
         if (pick < 0) {
-            // A cycle: one source kept on the stack, popped into its destination last.
-            emit1(g, AVR_PUSH, avr_reg(s[0]));
-            pushed[np++] = d[0];
-            d[0]         = d[--m];
-            s[0]         = s[m];
+            // A cycle: a source copied into a register no move touches (a pair of X
+            // or Z with movw, else r0), or kept on the stack and popped last.
+            int mate = -1;
+            for (int j = 0; j < m && mate < 0; j++)
+                if (d[0] % 2 == 0 && s[0] % 2 == 0 && d[j] == d[0] + 1 && s[j] == s[0] + 1)
+                    mate = j;
+            int tmp = -1;
+            if (mate >= 0)
+                for (int t = AVR_Z; t >= AVR_X && tmp < 0; t -= 4)
+                    if (!touched(d, s, m, t) && !touched(d, s, m, t + 1))
+                        tmp = t;
+            if (tmp >= 0) {
+                emit2(g, AVR_MOVW, avr_reg(tmp), avr_reg(s[0]));
+                s[0]    = tmp;
+                s[mate] = tmp + 1;
+            } else if (!touched(d, s, m, AVR_TMP)) {
+                emit2(g, AVR_MOV, avr_reg(AVR_TMP), avr_reg(s[0]));
+                s[0] = AVR_TMP;
+            } else {
+                emit1(g, AVR_PUSH, avr_reg(s[0]));
+                pushed[np++] = d[0];
+                d[0]         = d[--m];
+                s[0]         = s[m];
+            }
             continue;
         }
         // movw when the next byte goes along with it.

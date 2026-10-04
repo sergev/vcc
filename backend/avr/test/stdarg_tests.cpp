@@ -12,8 +12,16 @@ TEST_F(AvrTest, VariadicCallAllOnStack)
     NaiveSelection();
     std::string s = Code(CompileToAvr("int v(int n, ...);\nint f(void) { return v(1, 2L); }"));
     EXPECT_NE(std::string::npos,
-              s.find("push r1\npush r1\npush r1\nldi r26, 2\npush r26\n"
-                     "push r1\nldi r26, 1\npush r26\ncall v\n"))
+              s.find(R"(push r1
+push r1
+push r1
+ldi r26, 2
+push r26
+push r1
+ldi r26, 1
+push r26
+call v
+)"))
         << s;
 }
 
@@ -23,7 +31,9 @@ TEST_F(AvrTest, VariadicFunctionStoresNothing)
     NaiveSelection();
     std::string s = Body(CompileToAvr("#include <stdarg.h>\n"
                                       "int v(int n, ...) { return n; }"));
-    EXPECT_EQ("ldd r24, Y+5\nldd r25, Y+6\n", s);
+    EXPECT_EQ(R"(ldd r24, Y+5
+ldd r25, Y+6
+)", s);
 }
 
 // The variadic functions both sides call: sums of every kind of argument.
@@ -128,7 +138,9 @@ TEST_F(AvrTest, RunVariadicCallClang)
 TEST_F(AvrTest, RunVaListAcross)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    std::string decls = std::string(va_decls) + "long cwrap(int n, ...);\nlong clist(int n, va_list ap);\n";
+    std::string decls = std::string(va_decls) + R"(long cwrap(int n, ...);
+long clist(int n, va_list ap);
+)";
     EXPECT_EQ("ok", CompileAndRunWithClang(decls + R"(
 long vlist(int n, va_list ap)
 {
@@ -203,6 +215,8 @@ int main(void)
     return 0;
 }
 )");
-    EXPECT_EQ(std::string(expected) + "abcdefghij-1234 16\n00ab\n", out);
+    EXPECT_EQ(std::string(expected) + R"(abcdefghij-1234 16
+00ab
+)", out);
     EXPECT_EQ(0, exit_status);
 }
