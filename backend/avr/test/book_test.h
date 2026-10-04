@@ -13,6 +13,10 @@ protected:
     {
         AvrTest::SetUp();
         static const SkippedTest skipped[] = {
+            { "Chapter2_BitwiseIntMin", "expects a 32-bit int" },
+            { "Chapter2_NegateIntMax", "expects a 32-bit int" },
+            { "Chapter3_BitwiseShiftPrecedence", "shifts a 16-bit int by 16: undefined" },
+            { "Chapter3_BitwiseShiftrNegative", "shifts a 16-bit int by 30: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);
