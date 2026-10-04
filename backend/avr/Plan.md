@@ -156,41 +156,6 @@ One selection helper owns that rule.
 
 `make run` stays green after every M-step.
 
-## Phase 4 — library and headers
-
-- **M20. Headers.** *Done.* `libc/avr/include/` (`stddef.h`, `stdint.h`, `limits.h` and
-  `stdarg.h` exist since M15, `float.h` since M14; the ILP32 `math.h` fills in until
-  then):
-  - `float.h`: `FLT_*` = `DBL_*` = `LDBL_*`, with `MANT_DIG` 24, `EPSILON` 2⁻²³ and
-    `DECIMAL_DIG` 9;
-  - `limits.h`: `INT_MAX` 32767, `LONG_MAX` 2³¹−1, and a signed `char`;
-  - `stdint.h`: `int16_t` = `int`, `int32_t` = `long`, `intptr_t` = `int`, `SIZE_MAX`
-    65535;
-  - `stddef.h`: `size_t`, `ptrdiff_t`, `wchar_t` and `max_align_t`;
-  - `inttypes.h`, with `PRId32` "ld" and `PRId16` "d";
-  - `math.h`, with the `double` functions also serving as the `float` ones;
-  - `setjmp.h`: `r2`–`r17`, `Y`, SP and the return address;
-  - M17's `stdarg.h`.
-
-  All of them are AVR's own; no other target shares a 16-bit data model. Shared-header
-  defects found by the audit:
-  - `RAND_MAX` (`common/include/stdlib.h:18`) exceeds `INT_MAX`. Move it to a
-    target-owned header, at 32767 on AVR, unchanged elsewhere.
-  - `char32_t` (`uchar.h:13`) is a plain `unsigned`, 16 bits here. Make it
-    `uint_least32_t`, and `char16_t` `uint_least16_t`.
-
-  Add an `avr-headers` CTest and its `-cpp` twin. Check our headers' sizes and limits
-  against clang's for the triple, as ARM32 and x86-64 did.
-- **M21. Libc fixes and run tests.** *Done.*
-  - **`libc/common/doprnt.c`:** done at M17 (`%z`/`%t` by `size_t`, `FBUFSIZE` and
-    `MAX_DIG` from `float.h`).
-  - **`libc/ilp32/int64.c`** converts between 64-bit integers and FP assuming a 53-bit
-    `double` (`:68-85`). Make it round correctly for binary32 too, or give AVR its own
-    conversions in `float32.c`.
-  - **Run tests:** port the `printf`/`str`/`mem`/`math` run tests. Use host libc output
-    as the expectation, except for float digits beyond binary32's 9 significant ones.
-    There, take the expectation from the host's `float` arithmetic.
-
 ## Phase 5 — code quality
 
 - **M22. Register allocation** on `backend/common/regalloc.c`, with the pair as unit.
