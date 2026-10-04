@@ -223,117 +223,41 @@ Phase 0 is done:
 
   The cycle limit `-n` belongs in the backend's runner command (T7).
 
-## Phase 1 — skeleton
+Phase 1 is done:
+- **Runtime** (`libc/msp430/`):
+  - `crt0.S` stops the watchdog, sets SP to 0x4000, copies `.data` from ROM, clears
+    `.bss`, sets the canary, and calls `main`. It has a `PRINT_STATUS` variant and a
+    vector table with every interrupt on `__bad_interrupt` (status 0xfe).
+  - `console.s` has `putbyte`/`putch`/`flush`. `exit` writes the status to 0x01fe, or
+    0xfd and "stack overflow" when the canary is broken.
+  - `link.ld`: RAM 0x0200–0x3fff, ROM 0x4000–0xffdf, vectors at 0xffe0, a 2 KB stack
+    reserve. Always link with `ld.lld -n`.
+  - `mul.s`, `divmod.s` and `shift.s` hold `__mspabi_mpyi`/`mpyl`, the 16- and 32-bit
+    `div`/`rem` family and `slll`/`srll`/`sral`.
+    - Each file's header has the contract table. All of them clobber at most R11–R15.
+    - The divides also leave the remainder in R14 or R14:R15.
+  - `getch` and `malloc` wait for T20.
+- **mspsim had a jump bug,** fixed in mspsim `090dbcc` with a test. Every forward jump of
+  256–511 words went backwards.
+- **Backend skeleton** (`backend/msp430/`, `genmsp430`):
+  - `Msp_Instr` carries a form per opcode, and `msp_instr_size` derives the size from it.
+    `SizesAgreeWithAssembler` checks the model on 58 cases against clang's assembler.
+  - Immediates print sign-normalized to the operation's width. clang uses a constant
+    generator only for a literal spelled 0, 1, 2, 4, 8 or −1, never for a symbol
+    expression.
+  - **clang's assembler rejects these ISA forms,** so selection goes through a register
+    for them:
+    - `@rN+` with a non-register destination;
+    - `push` of anything but a register or an immediate;
+    - `pop` to memory;
+    - `br @rN`/`br @rN+`.
 
-- **T5. Runtime, hand-written part.** `libc/msp430/`:
-  - **`crt0.S`:**
-    - `_start`: SP to the top of RAM (0x4000); copy `.data` from its load address; clear
-      `.bss`; write a stack canary below the stack; call `main`; pass its result to
-      `exit`.
-    - **Vectors** in `.vectors` at 0xFFE0. Reset goes to `_start`. Every other vector
-      goes to `__bad_interrupt`, which prints the vector number and exits with a
-      distinctive status. Interrupts stay off.
-    - A `PRINT_STATUS` variant, as for the other targets.
-  - **`console.s`.** `putbyte` polls `IFG2` bit 1 and writes `UCA0TXBUF`.
-    - `exit` checks the canary, reporting an overflow as a distinctive status. It then
-      writes the status to `&0x01fe`, and as a fallback sits in a `dint`/`CPUOFF` loop.
-    - `getch` reads `UCA0RXBUF` while `IFG2` bit 0 is set, since mspsim feeds stdin
-      there. It is cheap, and gives the library an input leaf.
-  - **`link.ld`:**
-    - The memory map from the decisions table.
-    - `.data` in RAM with its load address in ROM (`AT>`), then `.bss`.
-    - `__heap_start` after `.bss`, and the stack at the top of RAM.
-    - An `ASSERT` that `.data` + `.bss` leave a minimum stack (e.g. 2 KB), so an
-      oversized program fails to link rather than corrupting itself.
-    - Always linked with `ld.lld -n`.
-  - **Integer helpers in assembly,** under their `__mspabi_` names and contracts: `mpyi`
-    and `mpyl` (shift-and-add); the 16- and 32-bit divide/remainder family (one
-    shift-subtract core per width, with sign fix-ups); `slll`, `srll` and `sral`.
-    - Record the contracts (inputs, outputs, clobbers) in a table in the source, taken
-      from LLVM's MSP430 lowering. T9 and T21 read the same facts.
-    - **Our helpers clobber at most R11–R15**, plus their documented inputs. That is safe
-      whatever LLVM assumes.
-  - **Tested on its own,** before any compiled code depends on it. An assembly program
-    prints through `putbyte` and returns a status, and data copy and `.bss` clearing are
-    checked. Each helper is checked against a table of cases: zero, `INT_MIN / -1`,
-    signs, `UINT_MAX`, and shift counts of 0, 15 and 31.
-
-  *Done.*
-  - `crt0.S`, `console.s`, `link.ld`, and the helpers in `mul.s` (`mpyi`, `mpyl`),
-    `divmod.s` (the 16- and 32-bit divide/remainder family) and `shift.s` (`slll`,
-    `srll`, `sral`). They are built into `crt0.o`, `crt0-status.o` and `libc.a`.
-  - `crt0` also stops the watchdog, as a real device needs.
-  - Not yet written: `getch` (mspsim gives no end-of-file to a polling reader) and
-    `malloc`, both for T20.
-  - **Smoke test.** A clang-compiled program linked with this runtime agrees with the
-    host on all 1772 results of `*`, `/`, `%` and the `long` shifts, over 12×12 edge
-    operands. `crt0-status.o` prints `-123`, `0`, `-32768` and `4321` correctly. The
-    test programs through the fixture land in T7, as AVR's did in M8.
-  - **mspsim bug, fixed** (mspsim `090dbcc`, with a `jump_offsets` test). A jump's sign
-    was read from offset bit 8, so every forward jump of 256–511 words went backwards.
-    The smoke test found it.
-  - **clang's assembler rejects `@rN+` as a source with any non-register destination**
-    (`mov @r14+, 0(r15)`: "invalid operand"), though the ISA allows it. Every other
-    source × destination combination assembles. Selection and peephole must not emit
-    that form; copy loops go through a register.
-- **T6. Skeleton.** `backend/msp430/` with `CMakeLists.txt`, `msp_ir.h`, `msp_ir.c`,
-  `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing
-  `genmsp430`.
-  - The IR has a function, a block and an instruction, with a `.b`/`.w` size.
-  - **Operands** are the seven source modes:
-    - register `rN`, physical or virtual;
-    - indexed `x(rN)`;
-    - absolute `&sym+k`, used for every global. Never the PC-relative symbolic mode,
-      whose meaning depends on where the instruction lands;
-    - indirect `@rN` and autoincrement `@rN+`;
-    - immediate `#k` or `#sym+k`;
-    - a label, for jumps.
-
-    The destination takes register, indexed and absolute.
-  - **Every instruction knows its size:** 2 bytes, plus 2 per extension word.
-    - An extension word comes with indexed and absolute operands, and with an immediate
-      that is *not* a constant-generator value (0, 1, 2, 4, 8, −1; in `.b`, 0xff counts
-      as −1).
-    - The model mirrors clang's assembler. A golden test assembles one instruction of
-      every operand form and compares each size with the object (`llvm-objdump`).
-  - The module header emits sections, `.globl`, `.type sym, @function`/`@object`,
-    `.size`, `.p2align 1` for 2-aligned objects, and labels.
-  - A test pins the rendering of every operand form.
-
-  *Done.*
-  - `msp_ir.h`/`msp_ir.c` (`Msp_Func`/`Msp_Block`/`Msp_Instr`). Each opcode has a form
-    (double, single, jump, emulated with a destination, emulated `op dst, dst`, `br`,
-    none), and `msp_instr_size` derives the size from it.
-  - `emit.c` prints an immediate sign-normalized to the operation's width. clang uses a
-    constant generator only for a literal spelled 0, 1, 2, 4, 8 or −1: `#65535`,
-    `mov.b #255` and any symbol expression (even `g-g`) take an extension word.
-  - No module header is needed, unlike AVR.
-  - `codegen.c` returns a constant. `genmsp430` is built.
-  - `emit_tests.cpp` pins the syntax, and `SizesAgreeWithAssembler` assembles 58 cases
-    between labels and compares each label difference with the model.
-  - **More forms clang's assembler rejects** (all valid in the ISA): `push` of anything
-    but a register or an immediate, `pop` to memory, and `br @rN`/`br @rN+`. Together
-    with `@rN+` to memory (T5), selection must go through a register for these. Run harness and first program.** `msp430_test.h` on the fixture of T4:
-  - `CompileToMsp430` produces golden assembly.
-  - `CompileAndRunMsp430` assembles with clang, links with `crt0.o` and `libc.a`, and
-    runs under mspsim.
-  - Tests guard with `SKIP_IF_NO_MSP430_TOOLS()`, and the test binary is `msp430-tests`.
-  - The book suite gets an `msp430` `BookTest` with its skip list. The new reasons are
-    "exceeds the cycle limit" and "too big for 15.5 KB of RAM".
-    - A program whose result simply differs on a 16-bit `int` is *not* skipped: the
-      comparison with clang (T18) makes it a valid test.
-
-  Done when `int main(void) { return 200; }` runs and the fixture reports 200.
-
-  *Done.* `msp430_test.h` runs `mspsim -n 200000000`, about four seconds, below the
-  fixture's five-second backstop. 35 tests pass:
-  - the first programs and the book status line;
-  - `main` returning 132, which proves the `[Exit code …]` disambiguation;
-  - an illegal instruction failing the run;
-  - the runtime (T5) against the host: `putbyte` from assembly, `.data`/`.bss`/
-    `.rodata`, division and multiplication over 12×12 operands, the division corner
-    cases, the `long` shifts for every count, and the stack canary;
-  - book chapter 1, compared with clang.
+    `0(rN)` costs an extension word that `@rN` does not.
+- **Run harness** (`msp430_test.h`, `book_test.h`, `msp430-tests`):
+  - `mspsim -n 200000000` runs the image, and `main` returning 132 is told apart from an
+    illegal instruction.
+  - The runtime is tested against the host.
+  - Book chapter 1 is compared with clang.
 
 ## Phase 2 — instruction selection, book order
 
