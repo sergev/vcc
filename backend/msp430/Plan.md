@@ -325,6 +325,16 @@ Phase 0 is done:
 
   Done when `int main(void) { return 200; }` runs and the fixture reports 200.
 
+  *Done.* `msp430_test.h` runs `mspsim -n 200000000`, about four seconds, below the
+  fixture's five-second backstop. 35 tests pass:
+  - the first programs and the book status line;
+  - `main` returning 132, which proves the `[Exit code …]` disambiguation;
+  - an illegal instruction failing the run;
+  - the runtime (T5) against the host: `putbyte` from assembly, `.data`/`.bss`/
+    `.rodata`, division and multiplication over 12×12 operands, the division corner
+    cases, the `long` shifts for every count, and the stack canary;
+  - book chapter 1, compared with clang.
+
 ## Phase 2 — instruction selection, book order
 
 Naive and correct first. Every TAC variable lives in a frame slot. Because the ISA is
