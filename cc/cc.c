@@ -12,7 +12,7 @@
 //     ld         link            .o   -> a.out  (b6ld | ld.lld)
 //
 // The target is chosen with -t (riscv64 by default, like vcpp and vlower; or riscv32,
-// aarch64, arm32, besm6).
+// aarch64, arm32, x86_64, besm6).
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
 // straight to the linker, as is a .a archive.
@@ -61,8 +61,8 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // assembler and linker are given as an environment override, the path found when
 // vcc was configured (may be empty), and the bare name to look up on PATH.  The
 // targets other than the BESM-6 are assembled by clang and linked by ld.lld with a
-// linker script for qemu `virt`; the clang configured for RISC-V serves the ARM
-// targets too.
+// linker script for qemu `virt` (`microvm` for x86-64); the clang configured for
+// RISC-V serves the other targets too.
 //
 enum arch { ARCH_BESM6, ARCH_LLVM };
 
@@ -88,6 +88,8 @@ static const struct target targets[] = {
       RISCV_LD, "ld.lld" },
     { "arm32", ARCH_LLVM, "armv7a-none-eabihf", "-mcpu=cortex-a15", "-mfpu=vfpv3-d16", "vgenarm32",
       RISCV_CLANG, "clang", RISCV_LD, "ld.lld" },
+    { "x86_64", ARCH_LLVM, "x86_64-none-elf", NULL, NULL, "vgenx86", RISCV_CLANG, "clang", RISCV_LD,
+      "ld.lld" },
 };
 
 static const struct target *target = &targets[1]; // riscv64
@@ -559,6 +561,7 @@ static int run_codegen(const char *in, const char *out)
 //     riscv32: clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c -o out in
 //     aarch64: clang --target=aarch64-none-elf -c -o out in
 //     arm32:   clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c -o out in
+//     x86_64:  clang --target=x86_64-none-elf -c -o out in
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
@@ -786,7 +789,8 @@ static void usage(void)
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
-    printf("    -t, --target NAME  Target: riscv64 (default), riscv32, aarch64, arm32 or besm6\n");
+    printf("    -t, --target NAME  Target: riscv64 (default), riscv32, aarch64, arm32, x86_64\n");
+    printf("                       or besm6\n");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");

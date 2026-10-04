@@ -5,8 +5,8 @@
 # StagedPrefix cases instead build a miniature installation (bin/ and
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
 # what checks the relocatable lookup.  Cases that assemble, link or run need
-# clang, ld.lld and qemu-system-riscv64, -aarch64 or -arm (or b6as/b6ld for the BESM-6)
-# and are skipped without them.
+# clang, ld.lld and qemu-system-riscv64, -aarch64, -arm or -x86_64 (or b6as/b6ld
+# for the BESM-6) and are skipped without them.
 #
 add_executable(cc-tests cc_test.cpp)
 target_link_libraries(cc-tests PRIVATE GTest::gtest_main)
@@ -20,11 +20,13 @@ target_compile_definitions(cc-tests PRIVATE
     VCC_GENRISCV_PATH="$<TARGET_FILE:genriscv>"
     VCC_GENAARCH64_PATH="$<TARGET_FILE:genaarch64>"
     VCC_GENARM32_PATH="$<TARGET_FILE:genarm32>"
+    VCC_GENX86_PATH="$<TARGET_FILE:genx86>"
     BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}"
     RISCV_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
     RISCV32_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
     AARCH64_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
     ARM32_INCLUDE_DIR="${ARM32_INCLUDE_DIR}"
+    X86_INCLUDE_DIR="${X86_INCLUDE_DIR}"
     LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     ILP32_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
@@ -43,8 +45,12 @@ target_compile_definitions(cc-tests PRIVATE
     ARM32_TOOLS_FOUND=$<BOOL:${ARM32_TOOLS_FOUND}>
     ARM32_QEMU="${ARM32_QEMU}"
     ARM32_LIB_DIR="${ARM32_LIB_DIR}"
-    ARM32_LINK_SCRIPT="${ARM32_LINK_SCRIPT}")
-add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32)
+    ARM32_LINK_SCRIPT="${ARM32_LINK_SCRIPT}"
+    X86_TOOLS_FOUND=$<BOOL:${X86_TOOLS_FOUND}>
+    X86_QEMU="${X86_QEMU}"
+    X86_LIB_DIR="${X86_LIB_DIR}"
+    X86_LINK_SCRIPT="${X86_LINK_SCRIPT}")
+add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86)
 if(RISCV_TOOLS_FOUND)
     add_dependencies(cc-tests riscv-libc)
 endif()
@@ -56,5 +62,8 @@ if(AARCH64_TOOLS_FOUND)
 endif()
 if(ARM32_TOOLS_FOUND)
     add_dependencies(cc-tests arm32-libc)
+endif()
+if(X86_TOOLS_FOUND)
+    add_dependencies(cc-tests x86-libc)
 endif()
 gtest_discover_tests(cc-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

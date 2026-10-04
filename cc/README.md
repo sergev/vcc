@@ -30,6 +30,7 @@ linker       link          .o   -> a.out
 | RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c` | `ld.lld -T link.ld` |
 | AArch64 (ARMv8-A, AAPCS64) | `aarch64` | `vgenaarch64` | `clang --target=aarch64-none-elf -c` | `ld.lld -T link.ld` |
 | ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` | `ld.lld -T link.ld` |
+| x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `clang --target=x86_64-none-elf -c` | `ld.lld -T link.ld` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
@@ -48,7 +49,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32` or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64` or `besm6` |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -83,7 +84,7 @@ takes everything relative to it:
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
-clang and `ld.lld` found when the build was configured (RISC-V and ARM), or else whatever
+clang and `ld.lld` found when the build was configured (all but the BESM-6), or else whatever
 `clang`/`ld.lld`/`b6as`/`b6ld` is on `PATH`.
 
 Each tool can be overridden with an environment variable. This is how the tests run the
@@ -97,19 +98,22 @@ driver against the build tree:
 
 ## Linking
 
-RISC-V, AArch64 and ARM32:
+RISC-V, AArch64, ARM32 and x86-64:
 
 ```text
 ld.lld -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc
 ```
 
-The result is an ELF for the qemu `virt` machine. It runs with
+The result is an ELF for the qemu `virt` machine (`microvm` for x86-64). It runs with
 `qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none -kernel a.out`
 (`qemu-system-riscv32` for `riscv32`), or for `aarch64` with
 `qemu-system-aarch64 -M virt -cpu cortex-a57 -display none -serial stdio -monitor none -semihosting -kernel a.out`,
 and for `arm32` with
 `qemu-system-arm -M virt -cpu cortex-a15 -display none -serial stdio -monitor none -semihosting -kernel a.out`;
-these two exit with `main`'s result.
+these two exit with `main`'s result. For `x86_64`:
+`qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel a.out`;
+`exit` writes the status byte to the debug console (add `-debugcon file:status` to keep
+it), and the exit device then stops qemu with status `(main's result << 1) | 1`.
 
 BESM-6:
 
@@ -135,7 +139,7 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
 - preprocessing and target selection
 - `-S` for every target and both BESM-6 dialects
 - the usage errors
-- `-c`, a link and a run under qemu for RISC-V, AArch64 and ARM32
+- `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32 and x86-64
 - the BESM-6 link line, checked with a stand-in linker
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the
