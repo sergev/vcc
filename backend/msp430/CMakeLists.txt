@@ -4,6 +4,12 @@
 add_library(msp430 STATIC
     msp_ir.c
     emit.c
+    frame.c
+    instr.c
+    call.c
+    relax.c
+    data.c
+    fp.c
     codegen.c
 )
 target_include_directories(msp430 PUBLIC .)
@@ -20,6 +26,7 @@ list(FILTER MSP430_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(msp430-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${MSP430_BOOK_SOURCES}
 )

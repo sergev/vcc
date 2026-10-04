@@ -289,6 +289,19 @@ instructions.
     fixed. clang instead does `sub`/`add` around each call; both are ABI-correct.
   - **Incoming stack arguments** are above the saved registers and the 2-byte return
     address. Incoming register parameters are stored to their slots in the prologue.
+
+  *Done.* The whole naive selection landed with this step: `frame.c`, `instr.c`,
+  `call.c`, `fp.c`, `data.c`, `relax.c`. The steps after it add their tests and book
+  chapters, and fix what those find.
+  - An operand into the incoming arguments is marked (`Msp_Operand.incoming`) and
+    completed by `gen_frame`, once the pushed registers are known.
+  - **Helpers.** Our code calls only ordinary-ABI helpers: `__mspabi_*` for 16 and 32
+    bits, the libgcc names for 64-bit integers and FP (`__muldi3`, `__adddf3`,
+    `__ltdf2`, …), with a second 64-bit operand at `0(r1)` in the outgoing area. The
+    R8–R11 `__mspabi_*` entry points become shims for clang's code (T13). This also gets
+    NaN right, which clang's single `__mspabi_cmpd` cannot do for both `<` and `>=`.
+  - `frame_tests.cpp` checks the parameters, the stack and split parameters, alignment,
+    and a run of a 1.2 KB frame.
 - **T9. Integer ops** (ch. 2–4, 11, 12). After the usual conversions, arithmetic is on
   `int`, `long` or `long long`: 1, 2 or 4 words.
   - **Add and subtract:**

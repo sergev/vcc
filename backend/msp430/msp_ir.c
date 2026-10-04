@@ -40,7 +40,37 @@ Msp_Block *msp_new_block(Msp_Func *fn, const char *label)
 
 Msp_Instr *msp_append(Msp_Func *fn, Msp_Op op)
 {
-    Msp_Block *b  = fn->tail;
+    return msp_append_to(fn->tail, op);
+}
+
+Msp_Instr *msp_insert_after(Msp_Block *b, Msp_Instr *in, Msp_Op op)
+{
+    Msp_Instr *n = xalloc(sizeof(Msp_Instr), __func__, __FILE__, __LINE__);
+    n->op        = op;
+    n->next      = in->next;
+    in->next     = n;
+    if (b->tail == in)
+        b->tail = n;
+    return n;
+}
+
+Msp_Block *msp_split_after(Msp_Func *fn, Msp_Block *b, Msp_Instr *in, const char *label)
+{
+    Msp_Block *n = xalloc(sizeof(Msp_Block), __func__, __FILE__, __LINE__);
+    n->label     = xstrdup(label);
+    n->head      = in->next;
+    n->tail      = in->next ? b->tail : NULL;
+    in->next     = NULL;
+    b->tail      = in;
+    n->next      = b->next;
+    b->next      = n;
+    if (fn->tail == b)
+        fn->tail = n;
+    return n;
+}
+
+Msp_Instr *msp_append_to(Msp_Block *b, Msp_Op op)
+{
     Msp_Instr *in = xalloc(sizeof(Msp_Instr), __func__, __FILE__, __LINE__);
     in->op        = op;
     if (b->tail)

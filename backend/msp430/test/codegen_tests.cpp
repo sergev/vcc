@@ -11,6 +11,7 @@ TEST_F(Msp430Test, ReturnConstant)
     .type   main, @function
 main:
     mov     #2, r12
+.Lv0:
     ret
     .size   main, .-main
 )",

@@ -39,9 +39,11 @@ typedef enum {
 
 typedef struct {
     Msp_OperandKind kind;
-    int reg;     // a register, or the base of INDEXED/IND/POSTINC
-    int64_t imm; // an immediate, an offset, or an address
-    char *sym;   // owned; NULL for none
+    int reg;       // a register, or the base of INDEXED/IND/POSTINC
+    int64_t imm;   // an immediate, an offset, or an address
+    char *sym;     // owned; NULL for none
+    bool incoming; // x(r1) into the incoming stack arguments: x counts from their start,
+                   // until the frame is laid out and the offset completed
 } Msp_Operand;
 
 // How an instruction is encoded, which decides its size and its operands.
@@ -133,8 +135,13 @@ extern const Msp_Form msp_form[MSP_NUM_OPS];
 Msp_Func *msp_new_func(const char *name, bool global);
 // Append a block, labelled `label` (copied; NULL for none), and make it current.
 Msp_Block *msp_new_block(Msp_Func *fn, const char *label);
-// Append an instruction to the current (last) block.
+// Append an instruction to the current (last) block, or to block `b`.
 Msp_Instr *msp_append(Msp_Func *fn, Msp_Op op);
+Msp_Instr *msp_append_to(Msp_Block *b, Msp_Op op);
+// Insert an instruction after `in` of block `b`.
+Msp_Instr *msp_insert_after(Msp_Block *b, Msp_Instr *in, Msp_Op op);
+// Move the instructions after `in` into a new block labelled `label`, after `b`.
+Msp_Block *msp_split_after(Msp_Func *fn, Msp_Block *b, Msp_Instr *in, const char *label);
 void msp_free_func(Msp_Func *fn);
 
 Msp_Operand msp_reg(int reg);
