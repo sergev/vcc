@@ -72,6 +72,55 @@ TEST_F(AvrTest, SavedRegistersPushed)
     EXPECT_NE(std::string::npos, s.find("pop r11\npop r10\nadiw r28, 16\n")) << s;
 }
 
+// Up to 6 bytes of slots are reserved by rcall, 2 bytes each, and released by pop.
+TEST_F(AvrTest, SmallFrameByRcall)
+{
+    NaiveSelection();
+    std::string s = Code(CompileToAvr("int f(void) { volatile int z = 3; return z; }"));
+    EXPECT_EQ(0u, s.find("push r28\npush r29\nrcall .\nrcall .\nin r28, __SP_L__\n"
+                         "in r29, __SP_H__\n"))
+        << s;
+    EXPECT_NE(std::string::npos, s.find("pop r0\npop r0\npop r0\npop r0\npop r29\npop r28\nret\n"))
+        << s;
+}
+
+// No slots and no stack arguments: no frame, Y neither saved nor set up.
+TEST_F(AvrTest, Frameless)
+{
+    EXPECT_EQ("add r24, r22\nadc r25, r23\nret\n",
+              Code(CompileToAvr("int f(int a, int b) { return a + b; }")));
+}
+
+// Without a frame Y holds variables, saved and restored like the other call-saved
+// registers.
+static const char y_source[] = R"(
+int g(int x);
+int f(int a, int b)
+{
+    int c = g(a);
+    int d = g(b);
+    return a * 1000 + b * 100 + c * 10 + d;
+}
+)";
+
+TEST_F(AvrTest, FramelessYHoldsVariable)
+{
+    std::string s = Code(CompileToAvr(y_source));
+    EXPECT_EQ(std::string::npos, s.find("__SP_L__")) << s;
+    EXPECT_NE(std::string::npos, s.find("push r28\npush r29\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("movw r28, ")) << s;
+}
+
+TEST_F(AvrTest, RunFramelessYHoldsVariable)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    EXPECT_EQ("", CompileAndRunAvr(std::string(y_source) + R"(
+int g(int x) { return x + 1; }
+int main(void) { return f(1, 2) == 1000 + 200 + 20 + 3 ? 0 : 1; }
+)"));
+    EXPECT_EQ(0, exit_status);
+}
+
 // A frame over 63 bytes (40 ints and a temporary) is reserved with subi/sbci; a slot past Y+63, or straddling
 // it, is reached through Z.
 TEST_F(AvrTest, LargeFrame)

@@ -4,14 +4,16 @@
 // wasting the high byte), a long or a float two, not necessarily adjacent; a long long
 // stays in memory.  A value not live across a call, or across an instruction the
 // naive selection does (uses_scratch), may take an argument pair r24-r18, first; any
-// other value one of r16-r2, call-saved, which the prologue then pushes.  r16 comes
-// first among them, since r16-r31 take immediate operands.
+// other value one of r16-r2, call-saved, which the prologue then pushes, and Y (r28)
+// in a function to have no frame.  The upper ones come first among them, since
+// r16-r31 take immediate operands.
 //
 #include "regalloc.h"
 
 #include "internal.h"
 
-static const int int_pool[] = { 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2 };
+static const int int_pool[]   = { 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2 };
+static const int int_pool_y[] = { 24, 22, 20, 18, 16, 28, 14, 12, 10, 8, 6, 4, 2 };
 
 #define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))
 
@@ -72,8 +74,8 @@ void gen_regalloc(Gen *g)
 {
     Target target        = { .g = g };
     RegAlloc_Target desc = {
-        .int_pool     = int_pool,
-        .nint         = NINT,
+        .int_pool     = g->y_free ? int_pool_y : int_pool,
+        .nint         = g->y_free ? NINT + 1 : NINT,
         .int_narg     = 4,
         .ret_int      = 24,
         .arg          = &target,

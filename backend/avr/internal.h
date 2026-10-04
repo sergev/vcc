@@ -20,7 +20,9 @@
 // bytes computes in its destination's registers, or in X and Z, with r0 for an operand
 // byte from memory (uses_scratch tells the two apart, for the allocator too).
 //
-// Frame (Y is set to SP after the slots are reserved; SP points below the last byte):
+// Frame (Y is set to SP after the slots are reserved, with `rcall .` for up to 6 bytes;
+// SP points below the last byte), unless the function has neither slots nor stack
+// arguments: it then saves no Y and leaves SP alone, and Y may hold variables:
 //   Y + frame + 5 ...   incoming stack arguments
 //   Y + frame + 3       return address (2 bytes)
 //   Y + frame + 1       saved Y
@@ -64,6 +66,9 @@ typedef struct {
     StringMap regs;    // register variable → low pair | high pair << 8
     StringMap dead;    // parameters dead on entry: left where they arrive
     uint32_t var_regs; // the registers holding variables, as a bit mask
+    bool y_free;       // Y may hold variables: the function is to have no frame
+    bool stack_args;   // some parameter (or part of one) comes on the stack
+    bool frameless;    // no slots and no stack arguments: Y is not set up
     int frame_size;    // bytes of slots
     char exit[32];     // the label of the epilogue
 } Gen;

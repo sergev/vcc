@@ -234,6 +234,8 @@ void layout_frame(Gen *g)
         }
     }
     map_destroy_free(&allocs, free_nothing);
+    if (g->frame_size > 0 && g->frame_size <= 6)
+        g->frame_size = (g->frame_size + 1) & ~1; // reserved by rcall, 2 bytes each
 
     // The stack parameters, now that the slots' size is known.
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
@@ -792,7 +794,7 @@ static void write_sp(Gen *g, bool pro)
     e(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SP_L__", 0), avr_reg(AVR_Y));
 }
 
-// The call-saved registers r2-r17 the body uses, as a bit mask.
+// The call-saved registers r2-r17 the body uses (and Y without a frame), as a mask.
 static uint32_t saved_regs(const Gen *g)
 {
     uint32_t mask = 0;
@@ -800,7 +802,8 @@ static uint32_t saved_regs(const Gen *g)
         for (const AVR_Instr *in = b->head; in; in = in->next)
             for (int i = 0; i < AVR_MAX_OPERANDS; i++) {
                 const AVR_Operand *o = &in->opnd[i];
-                if (o->kind != AVR_OPND_REG || o->reg < 2 || o->reg > 17)
+                if (o->kind != AVR_OPND_REG || o->reg < 2 ||
+                    (o->reg > 17 && !(g->frameless && o->reg >= AVR_Y && o->reg <= AVR_Y + 1)))
                     continue;
                 mask |= 1u << o->reg;
                 if (in->op == AVR_MOVW)
@@ -812,30 +815,42 @@ static uint32_t saved_regs(const Gen *g)
 void gen_frame(Gen *g)
 {
     uint32_t saved = saved_regs(g);
+    bool small     = g->frame_size <= 6; // reserved by rcall, released by pop
 
-    // Prologue: save Y, point it at the slots, then save the registers.
-    pro1(g, AVR_PUSH, avr_reg(AVR_Y));
-    pro1(g, AVR_PUSH, avr_reg(AVR_Y + 1));
-    pro2(g, AVR_IN, avr_reg(AVR_Y), avr_sym(AVR_MOD_NONE, "__SP_L__", 0));
-    pro2(g, AVR_IN, avr_reg(AVR_Y + 1), avr_sym(AVR_MOD_NONE, "__SP_H__", 0));
-    if (g->frame_size) {
-        adjust_y(g, true, -g->frame_size);
-        write_sp(g, true);
+    // Prologue: save Y, reserve the slots and point Y at them, then save the
+    // registers.
+    if (!g->frameless) {
+        pro1(g, AVR_PUSH, avr_reg(AVR_Y));
+        pro1(g, AVR_PUSH, avr_reg(AVR_Y + 1));
+        if (small)
+            for (int i = 0; i < g->frame_size; i += 2)
+                pro1(g, AVR_RCALL, avr_label("."));
+        pro2(g, AVR_IN, avr_reg(AVR_Y), avr_sym(AVR_MOD_NONE, "__SP_L__", 0));
+        pro2(g, AVR_IN, avr_reg(AVR_Y + 1), avr_sym(AVR_MOD_NONE, "__SP_H__", 0));
+        if (!small) {
+            adjust_y(g, true, -g->frame_size);
+            write_sp(g, true);
+        }
     }
-    for (int r = 2; r <= 17; r++)
+    for (int r = 2; r <= 31; r++)
         if (saved & (1u << r))
             pro1(g, AVR_PUSH, avr_reg(r));
 
     // Epilogue, the reverse.
     avr_new_block(g->fn, g->exit);
-    for (int r = 17; r >= 2; r--)
+    for (int r = 31; r >= 2; r--)
         if (saved & (1u << r))
             emit1(g, AVR_POP, avr_reg(r));
-    if (g->frame_size) {
-        adjust_y(g, false, g->frame_size);
-        write_sp(g, false);
+    if (!g->frameless) {
+        if (small) {
+            for (int i = 0; i < g->frame_size; i++)
+                emit1(g, AVR_POP, avr_reg(AVR_TMP));
+        } else {
+            adjust_y(g, false, g->frame_size);
+            write_sp(g, false);
+        }
+        emit1(g, AVR_POP, avr_reg(AVR_Y + 1));
+        emit1(g, AVR_POP, avr_reg(AVR_Y));
     }
-    emit1(g, AVR_POP, avr_reg(AVR_Y + 1));
-    emit1(g, AVR_POP, avr_reg(AVR_Y));
     emit0(g, AVR_RET);
 }

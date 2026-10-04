@@ -185,12 +185,14 @@ One selection helper owns that rule.
     special-contract helpers.
 
   The ch. 20 tests pass.
-- **M23. Frameless functions.**
+- **M23. Frameless functions.** *Done.*
   - A function with no slots and no stack arguments sets up no `Y` and does not touch SP.
-    `Y` then joins the call-saved pool.
-  - Frames of 2–6 bytes are allocated with `rcall .` (2 bytes each, the return-address
-    push) and released with `pop r0`, as avr-gcc does, instead of the SP sequence.
-  - The interrupt-safe SP write stays, because user code may enable interrupts.
+    `Y` joins the call-saved pool, after `r16`; when a function given it turns out to
+    need a frame after all, it is allocated again without it.
+  - Frames of 2–6 bytes (rounded up to even) are reserved with `rcall .` and released
+    with `pop r0`, as avr-gcc does, instead of the SP sequence.
+  - The interrupt-safe SP write stays for larger frames, because user code may enable
+    interrupts.
 - **M24. Peephole.**
   - **Moves and constants:**
     - `movw` for pair copies;

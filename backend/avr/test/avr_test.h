@@ -101,7 +101,7 @@ protected:
     {
         static const char *const frame[] = {
             "push r", "pop r", "in r28, ", "in r29, ", "sbiw r28, ", "adiw r28, ", "subi r28, ",
-            "sbci r29, ", "in r0, __SREG__", "cli", "out __SP_", "out __SREG__", "ret",
+            "sbci r29, ", "in r0, __SREG__", "cli", "out __SP_", "out __SREG__", "ret", "rcall .",
         };
         auto is_frame = [](const std::string &line) {
             for (const char *f : frame)

@@ -16,15 +16,9 @@ __SP_L__ = 61
     .p2align 1
     .type   main, @function
 main:
-    push    r28
-    push    r29
-    in      r28, __SP_L__
-    in      r29, __SP_H__
     ldi     r24, 2
     ldi     r25, 0
 .Lv0:
-    pop     r29
-    pop     r28
     ret
     .size   main, .-main
 )",

@@ -130,6 +130,8 @@ void place_params(Gen *g)
     param_pieces(g, &v);
     for (int i = 0; i < v.n; i++) {
         const Piece *p = &v.p[i];
+        if (!p->reg)
+            g->stack_args = true;
         if (p->off == 0 && all_on_stack(&v, p->arg)) {
             const Tac_Param *param = nth_param(g, p->arg);
             place_stack_param(g, param->name, param->type, p->stack);
