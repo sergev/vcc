@@ -7,12 +7,23 @@
 
 #include "internal.h"
 
+bool avr_regalloc = true;
+
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
-    gen_init(&g, program, tl);
+    gen_init(&g, program, tl, avr_regalloc);
+    if (g.alloc)
+        gen_regalloc(&g);
     place_params(&g);
     layout_frame(&g);
+    if (g.alloc && !frame_is_near(&g)) {
+        // Slots past Y+63 the scratch-free selection cannot reach: all in memory.
+        gen_done(&g);
+        gen_init(&g, program, tl, false);
+        place_params(&g);
+        layout_frame(&g);
+    }
     store_params(&g);
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
         gen_instr(&g, in, in->next == NULL);

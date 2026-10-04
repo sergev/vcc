@@ -13,6 +13,7 @@ EXPECT_CODE(CallRegisterArguments,
 // A char takes a pair, extended by the sender.
 TEST_F(AvrTest, CallCharArgument)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int g(signed char c, int i);\n"
                                       "int f(void) { return g(-1, 2); }"));
     EXPECT_NE(std::string::npos, s.find("ldi r24, 255\nldi r25, 255\nldi r22, 2\nldi r23, 0\n"
@@ -21,16 +22,17 @@ TEST_F(AvrTest, CallCharArgument)
 }
 
 // The long does not fit in r9:r8, so it and the int after it go on the stack: pushed
-// last first and high byte first; after the call SP is restored through Z.
+// last first and high byte first, a constant through r26; after the call SP is
+// restored through Z.
 TEST_F(AvrTest, CallStackArguments)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr(
         "int g(long long a, long long b, long c, int d);\n"
         "int f(void) { return g(1, 2, 0x01020304, 0x0506); }"));
     EXPECT_NE(std::string::npos,
-              s.find("ldi r24, 6\nldi r25, 5\npush r25\npush r24\n"
-                     "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\n"
-                     "push r25\npush r24\npush r23\npush r22\n"))
+              s.find("ldi r26, 5\npush r26\nldi r26, 6\npush r26\nldi r26, 1\npush r26\n"
+                     "ldi r26, 2\npush r26\nldi r26, 3\npush r26\nldi r26, 4\npush r26\n"))
         << s;
     EXPECT_NE(std::string::npos,
               s.find("call g\nin r30, __SP_L__\nin r31, __SP_H__\nadiw r30, 6\n"
@@ -42,6 +44,7 @@ TEST_F(AvrTest, CallStackArguments)
 // Two bytes of stack arguments are released with pop.
 TEST_F(AvrTest, CallReleaseByPop)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr(
         "int g(long long a, long long b, long c, int d);\n"
         "int h(long long a, long long b, int c, int d, int e);\n"

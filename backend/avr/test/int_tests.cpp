@@ -30,6 +30,7 @@ EXPECT_CODE(SubLong,
 // Negation: com on the high bytes, neg on the low one, the borrow up by sbci.
 TEST_F(AvrTest, NegateLong)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return -a; }"));
     EXPECT_NE(std::string::npos,
               s.find("com r25\ncom r24\ncom r23\nneg r22\nsbci r23, 255\nsbci r24, 255\n"
@@ -40,6 +41,7 @@ TEST_F(AvrTest, NegateLong)
 // A 16-bit multiply is inline, from three mul, with r1 cleared after.
 TEST_F(AvrTest, MultiplyInt)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a * b; }"));
     EXPECT_NE(std::string::npos,
               s.find("mul r24, r22\nmovw r20, r0\nmul r24, r23\nadd r21, r0\nmul r25, r22\n"
@@ -51,12 +53,14 @@ TEST_F(AvrTest, MultiplyInt)
 // __divmodhi4 in r23:r22, the remainder in r25:r24.
 TEST_F(AvrTest, DivideAndRemainderInt)
 {
+    NaiveSelection();
     std::string d = Body(CompileToAvr("int f(int a, int b) { return a / b; }"));
     EXPECT_NE(std::string::npos, d.find("call __divmodhi4\nstd Y+5, r22\nstd Y+6, r23\n")) << d;
 }
 
 TEST_F(AvrTest, RemainderUnsignedLong)
 {
+    NaiveSelection();
     std::string r = Body(CompileToAvr("unsigned long f(unsigned long a, unsigned long b) "
                                       "{ return a % b; }"));
     EXPECT_NE(std::string::npos,
@@ -67,6 +71,7 @@ TEST_F(AvrTest, RemainderUnsignedLong)
 // A comparison: cp/cpc, then 1 or 0 in r24; > swaps the operands of brlt.
 TEST_F(AvrTest, CompareGreater)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a > b; }"));
     EXPECT_NE(std::string::npos,
               s.find("cp r22, r24\ncpc r23, r25\nldi r24, 1\nbrlt .Lv1\nclr r24\n"
@@ -84,6 +89,7 @@ EXPECT_CODE(CompareUnsignedLessOrEqual,
 // A shift by a constant: whole bytes moved, then bit by bit.
 TEST_F(AvrTest, ShiftLongByConstant)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return a >> 9; }"));
     EXPECT_NE(std::string::npos,
               s.find("mov r22, r23\nmov r23, r24\nmov r24, r25\nmov r25, r24\nlsl r25\n"
@@ -94,6 +100,7 @@ TEST_F(AvrTest, ShiftLongByConstant)
 // A shift by a variable: a loop counted down in r26.
 TEST_F(AvrTest, ShiftByVariable)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("unsigned f(unsigned a, int n) { return a << n; }"));
     EXPECT_NE(std::string::npos, s.find("ldd r26, Y+3\nrjmp .Lv2\nlsl r24\nrol r25\n"
                                         "dec r26\nbrpl .Lv1\n"))
@@ -103,6 +110,7 @@ TEST_F(AvrTest, ShiftByVariable)
 // Sign extension: the top byte's sign through C, then copies.
 TEST_F(AvrTest, SignExtendIntToLong)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("long f(int a) { return a; }"));
     EXPECT_NE(std::string::npos, s.find("ldd r22, Y+1\nldd r23, Y+2\nmov r24, r23\nlsl r24\n"
                                         "sbc r24, r24\nmov r25, r24\n"))
@@ -112,6 +120,7 @@ TEST_F(AvrTest, SignExtendIntToLong)
 // Zero extension copies r1.
 TEST_F(AvrTest, ZeroExtendUnsignedToLong)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("unsigned long f(unsigned a) { return a; }"));
     EXPECT_NE(std::string::npos, s.find("ldd r22, Y+1\nldd r23, Y+2\nmov r24, r1\nmov r25, r1\n"))
         << s;
@@ -120,6 +129,7 @@ TEST_F(AvrTest, ZeroExtendUnsignedToLong)
 // A test of zero: cp/cpc against r1.
 TEST_F(AvrTest, LogicalNot)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(long a) { return !a; }"));
     EXPECT_NE(std::string::npos,
               s.find("cp r22, r1\ncpc r23, r1\ncpc r24, r1\ncpc r25, r1\nldi r24, 1\nbreq "))

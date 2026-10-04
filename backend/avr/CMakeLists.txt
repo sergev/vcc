@@ -10,6 +10,7 @@ add_library(avr STATIC
     relax.c
     data.c
     fp.c
+    regalloc.c
     codegen.c
 )
 target_include_directories(avr PUBLIC .)
@@ -37,6 +38,7 @@ add_executable(avr-tests
     test/stdarg_tests.cpp
     test/interop_tests.cpp
     test/run_tests.cpp
+    test/regalloc_tests.cpp
     test/printf_tests.cpp
     test/str_tests.cpp
     test/mem_tests.cpp

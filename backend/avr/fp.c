@@ -59,8 +59,7 @@ static bool compare_helper(Tac_BinaryOperator op, const char **name, AVR_Op *br,
 void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     Tac_BinaryOperator op = in->u.binary.op;
-    load_val(g, in->u.binary.src1, 22, 4, EXT_TYPE);
-    load_val(g, in->u.binary.src2, 18, 4, EXT_TYPE);
+    load_two(g, in->u.binary.src1, 22, 4, in->u.binary.src2, 18, 4);
     const char *name = arith_helper(op);
     if (name) {
         emit1(g, AVR_CALL, avr_label(name));

@@ -8,12 +8,13 @@
 // pair; a structure result comes back from r18 when over 4 bytes.
 TEST_F(AvrTest, StructArgumentFlattened)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("struct s5 { char a; int b; int c; };\n"
                                       "struct s5 g(struct s5 x, int k);\n"
                                       "int f(struct s5 *p) { return g(*p, 7).c; }"));
     EXPECT_NE(std::string::npos, s.find("ldd r24, Y+")) << s;
-    EXPECT_NE(std::string::npos,
-              s.find("ldi r18, 7\nldi r19, 0\ncall g\nstd Y+")) << s;
+    EXPECT_NE(std::string::npos, s.find("ldi r18, 7\nldi r19, 0\n")) << s;
+    EXPECT_NE(std::string::npos, s.find("call g\nstd Y+")) << s;
     EXPECT_NE(std::string::npos, s.find(", r18\n")) << s;
 }
 

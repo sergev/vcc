@@ -47,6 +47,13 @@ protected:
                             "-bios",
                             true })
     {
+        avr_regalloc = true; // the default; a test may change it
+    }
+
+    // Pin instruction selection itself: every variable in its slot.
+    static void NaiveSelection()
+    {
+        avr_regalloc = false;
     }
 
     // Assembly of every toplevel of the translation unit.
@@ -164,5 +171,6 @@ protected:
 #define EXPECT_CODE(name, expected, src)              \
     TEST_F(AvrTest, name)                             \
     {                                                 \
+        NaiveSelection();                             \
         EXPECT_EQ(expected, Body(CompileToAvr(src))); \
     }

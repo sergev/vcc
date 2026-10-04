@@ -9,16 +9,18 @@
 // A variadic call pushes all its arguments, named ones included.
 TEST_F(AvrTest, VariadicCallAllOnStack)
 {
-    std::string s = Body(CompileToAvr("int v(int n, ...);\nint f(void) { return v(1, 2L); }"));
+    NaiveSelection();
+    std::string s = Code(CompileToAvr("int v(int n, ...);\nint f(void) { return v(1, 2L); }"));
     EXPECT_NE(std::string::npos,
-              s.find("ldi r22, 2\nldi r23, 0\nldi r24, 0\nldi r25, 0\npush r25\npush r24\n"
-                     "push r23\npush r22\nldi r24, 1\nldi r25, 0\npush r25\npush r24\ncall v\n"))
+              s.find("push r1\npush r1\npush r1\nldi r26, 2\npush r26\n"
+                     "push r1\nldi r26, 1\npush r26\ncall v\n"))
         << s;
 }
 
 // A variadic function stores nothing: its parameters live where they came in.
 TEST_F(AvrTest, VariadicFunctionStoresNothing)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("#include <stdarg.h>\n"
                                       "int v(int n, ...) { return n; }"));
     EXPECT_EQ("ldd r24, Y+5\nldd r25, Y+6\n", s);

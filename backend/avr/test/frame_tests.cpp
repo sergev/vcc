@@ -8,6 +8,7 @@
 // temporary.
 TEST_F(AvrTest, FrameWithParameters)
 {
+    NaiveSelection();
     EXPECT_EQ(R"(push r28
 push r29
 in r28, __SP_L__
@@ -64,6 +65,7 @@ EXPECT_CODE(StackParameters,
 // The call-saved registers in use are pushed after Y is set up, and popped before.
 TEST_F(AvrTest, SavedRegistersPushed)
 {
+    NaiveSelection();
     std::string s = Code(CompileToAvr("int f(long long a, long long b) { return 0; }"));
     EXPECT_NE(std::string::npos, s.find("out __SP_L__, r28\npush r10\npush r11\npush r12\n"))
         << s;
@@ -74,6 +76,7 @@ TEST_F(AvrTest, SavedRegistersPushed)
 // it, is reached through Z.
 TEST_F(AvrTest, LargeFrame)
 {
+    NaiveSelection();
     std::string src = "int f(void) {\n";
     for (int i = 0; i < 40; i++)
         src += "    volatile int v" + std::to_string(i) + " = " + std::to_string(i) + ";\n";

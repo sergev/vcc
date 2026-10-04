@@ -7,11 +7,18 @@
 // Y (r29:r28) is the frame pointer, X (r27:r26) and Z (r31:r30) the pointer scratch of
 // instruction selection.
 //
-// Every TAC variable lives in memory: a `%` name in a frame slot, any other name at its
-// symbol.  An operation loads its operands into two register blocks laid out as the
-// first two arguments of a call (block_a and block_b), computes in place, and stores the
-// result; the helpers with special contracts (__divmodhi4, __mulsi3, ...) then need no
-// moves.
+// A scalar variable not in memory may get registers (regalloc.c): an int, pointer or
+// char a pair, a long or float two pairs, from r24-r18 when it is not live across a
+// call or a helper, else from r16-r2.  The rest live in memory: a `%` name in a frame
+// slot, any other name at its symbol.
+//
+// Instruction selection has two forms.  The naive one loads the operands into two
+// register blocks laid out as the first two arguments of a call (block_a and block_b),
+// computes in place and stores the result; the helpers with special contracts
+// (__divmodhi4, __mulsi3, ...) then need no moves.  It is all there is without register
+// allocation.  With it, an instruction that needs no helper and no more than four
+// bytes computes in its destination's registers, or in X and Z, with r0 for an operand
+// byte from memory (uses_scratch tells the two apart, for the allocator too).
 //
 // Frame (Y is set to SP after the slots are reserved; SP points below the last byte):
 //   Y + frame + 5 ...   incoming stack arguments
@@ -26,6 +33,7 @@
 #define AVR_INTERNAL_H
 
 #include "avr_ir.h"
+#include "flow.h"
 #include "string_map.h"
 #include "tac.h"
 
@@ -38,6 +46,12 @@ typedef struct {
     int q; // displacement from Y of the first byte
 } Slot;
 
+// The registers of a value, byte by byte (a structure piece takes up to 18).
+typedef struct {
+    int n;
+    int r[32];
+} Regs;
+
 typedef struct {
     AVR_Func *fn;
     const Tac_TopLevel *program; // the translation unit
@@ -45,6 +59,11 @@ typedef struct {
     AVR_Block *prologue;
     StringMap frame;   // name → Slot *
     StringMap globals; // name → const Tac_Type *
+    StringMap locals;  // parameter or local → const Tac_Type *
+    bool alloc;        // registers allocated: the scratch-free selection
+    StringMap regs;    // register variable → low pair | high pair << 8
+    StringMap dead;    // parameters dead on entry: left where they arrive
+    uint32_t var_regs; // the registers holding variables, as a bit mask
     int frame_size;    // bytes of slots
     char exit[32];     // the label of the epilogue
 } Gen;
@@ -69,7 +88,7 @@ int block_b(int size);
 void gen_unit_begin(void);
 // A new local label `.Lv<n>`, unique in the translation unit, into `buf`.
 void new_label(char buf[32]);
-void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl);
+void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool alloc);
 void gen_done(Gen *g);
 const char *gen_name(const Gen *g);
 // The slots of the parameters and locals, the stack parameters' placed first;
@@ -95,6 +114,24 @@ uint64_t const_bits(const Tac_Const *c);
 // Load (or store) registers reg..reg+n-1 from (or to) bytes off..off+n-1 of named
 // object `name`.
 void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n);
+// The same in memory, register by register: a slot past Y+63 through Z, or through X
+// when Z is among `regs` or in `busy` (a register mask).
+void access_mem(Gen *g, bool store, const char *name, int off, const int *regs, int n,
+                uint32_t busy);
+// Whether a slot's bytes off..off+n-1 are reached as Y+q (or the name is a global).
+bool near_bytes(const Gen *g, const char *name, int off, int n);
+
+// Registers reg..reg+n-1.
+Regs regs_range(int reg, int n);
+// Whether variable `name` (or value `v`) lives in registers; its bytes in *out.
+bool var_regs(const Gen *g, const char *name, Regs *out);
+bool val_regs(const Gen *g, const Tac_Val *v, Regs *out);
+// The byte moves dst[i] = src[i] at once, in an order (with a register on the stack to
+// break a cycle) that reads every source before it is overwritten.
+void parallel_move(Gen *g, const int *dst, const int *src, int n);
+// Push (or pop, in reverse) the registers lo..hi holding variables; returns the mask.
+uint32_t save_var_regs(Gen *g, int lo, int hi);
+void restore_var_regs(Gen *g, uint32_t mask);
 
 // Load register `reg` from byte `off` of the incoming stack arguments.
 void access_incoming(Gen *g, int off, int reg);
@@ -109,20 +146,37 @@ typedef enum {
     EXT_ZERO,
     EXT_SIGN,
 } Ext;
-// Load value `v` into reg..reg+n-1: its low n bytes, or all of it extended as `ext`
+// Value `v` into registers `to`: its low to.n bytes, or all of it extended as `ext`
 // says when it is narrower.
+typedef struct {
+    const Tac_Val *v;
+    Regs to;
+    Ext ext;
+} Load;
+// Whether a value of type `t` extended as `ext` says gets copies of its sign.
+bool ext_sign(const Tac_Type *t, Ext ext);
+// The bits of constant `c` of `size` bytes as `n` bytes, extended as `ext` says.
+uint64_t const_extended(const Tac_Const *c, int size, int n, Ext ext);
+// Several loads at once: no load overwrites a register another still reads.
+void load_vals(Gen *g, const Load *l, int n);
+void load_regs(Gen *g, const Tac_Val *v, const Regs *to, Ext ext);
+// Value `v` into reg..reg+n-1.
 void load_val(Gen *g, const Tac_Val *v, int reg, int n, Ext ext);
-// Store reg..reg+n-1 into variable `v`: its low bytes, or with zero high bytes when it
-// is wider.
+// Two values at once.
+void load_two(Gen *g, const Tac_Val *v1, int reg1, int n1, const Tac_Val *v2, int reg2, int n2);
+// Store registers `regs` (n of them) into variable `v`: its low bytes, or with zero
+// high bytes when it is wider.
+void store_regs(Gen *g, const Tac_Val *v, const int *regs, int n);
 void store_val(Gen *g, const Tac_Val *v, int reg, int n);
-// rd..rd+n-1 = rs..rs+n-1, by pairs where both are even; nothing when the same.
-void move_regs(Gen *g, int rd, int rs, int n);
-// Fill reg+from..reg+n-1 by extending reg+from-1: zeros, or copies of its sign.
-void extend_regs(Gen *g, int reg, int from, int n, bool sign);
+// Fill r[from..n-1] by extending r[from-1]: zeros, or copies of its sign.
+void extend_regs(Gen *g, const int *r, int from, int n, bool sign);
 // Start a new block labelled `label`.
 void gen_label_block(Gen *g, const char *label);
 // Fill the prologue and the epilogue, once the body is done.
 void gen_frame(Gen *g);
+// Whether every slot of up to 4 bytes is reached as Y+q, as the scratch-free
+// selection needs.
+bool frame_is_near(const Gen *g);
 
 //
 // Static data (data.c)
@@ -135,6 +189,13 @@ void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *na
 //
 // Instruction selection (instr.c)
 //
+// The type of an operand, for uses_scratch.
+typedef const Tac_Type *(*TypeOf)(const void *arg, const Tac_Val *v);
+// Whether `in`, not a call, needs the naive selection's registers r18-r25 (or calls a
+// helper): the allocator then keeps the values live across it out of them.
+bool uses_scratch(const Tac_Instruction *in, TypeOf type_of, const void *arg);
+// The variable `in` writes, or NULL (a call's is its own).
+const Tac_Val *instr_dst(const Tac_Instruction *in);
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
 // r24 = 1 when branch `br` would be taken on the flags as they are, else 0.
 void gen_set_on(Gen *g, AVR_Op br);
@@ -158,5 +219,16 @@ void store_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Register allocation hints: the registers the parameters arrive in, and those of a
+// call's arguments and result.
+void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi);
+void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint);
+// The type of `v` in function `f` (before the frame is laid out).
+const Tac_Type *flow_val_type(const Gen *g, const Flow *f, const Tac_Val *v);
+
+//
+// Register allocation (regalloc.c)
+//
+void gen_regalloc(Gen *g);
 
 #endif // AVR_INTERNAL_H

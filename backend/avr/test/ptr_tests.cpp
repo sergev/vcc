@@ -12,23 +12,25 @@ EXPECT_CODE(LoadLong,
             "ldd r22, Y+3\nldd r23, Y+4\nldd r24, Y+5\nldd r25, Y+6\n",
             "long f(long *p) { return *p; }")
 
-// A store: the value first, then the pointer.
+// A store: the value and the pointer, variables before constants.
 EXPECT_CODE(StoreInt,
-            "std Y+1, r24\nstd Y+2, r25\nldi r24, 7\nldi r25, 0\nldd r30, Y+1\nldd r31, Y+2\n"
+            "std Y+1, r24\nstd Y+2, r25\nldd r30, Y+1\nldd r31, Y+2\nldi r24, 7\nldi r25, 0\n"
             "std Z+0, r24\nstd Z+1, r25\n",
             "void f(int *p) { *p = 7; }")
 
 // An index scaled by 4 is shifted twice, by 3 multiplied.
 TEST_F(AvrTest, AddPtrScaled)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("long *f(long *p, int i) { return p + i; }"));
-    EXPECT_NE(std::string::npos, s.find("lsl r24\nrol r25\nlsl r24\nrol r25\n"
-                                        "ldd r22, Y+1\nldd r23, Y+2\nadd r24, r22\nadc r25, r23\n"))
+    EXPECT_NE(std::string::npos, s.find("ldd r30, Y+1\nldd r31, Y+2\nlsl r24\nrol r25\n"
+                                        "lsl r24\nrol r25\nadd r24, r30\nadc r25, r31\n"))
         << s;
 }
 
 TEST_F(AvrTest, AddPtrMultiplied)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("struct s { char c[3]; };\n"
                                       "struct s *f(struct s *p, int i) { return p + i; }"));
     EXPECT_NE(std::string::npos, s.find("ldi r22, 3\nldi r23, 0\nmul r24, r22\n")) << s;
@@ -38,6 +40,7 @@ TEST_F(AvrTest, AddPtrMultiplied)
 // difference with zero.)
 TEST_F(AvrTest, PointerCompareUnsigned)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int *a, int *b) { return a < b; }"));
     EXPECT_NE(std::string::npos, s.find("brlo")) << s;
 }

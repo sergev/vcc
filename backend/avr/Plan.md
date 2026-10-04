@@ -159,27 +159,30 @@ One selection helper owns that rule.
 ## Phase 5 — code quality
 
 - **M22. Register allocation** on `backend/common/regalloc.c`, with the pair as unit.
-  - **Classes:**
-    - `char`/`short`/`int`/pointer are `REGALLOC_INT`;
-    - `long`/`float`/`double` are `REGALLOC_PAIR`;
-    - `long long` is `REGALLOC_NONE`.
-  - **Numbering:** pairs are numbered from 1 on the allocator's side, since 0 means
-    "none" there (as ARM32 did for `r0`).
-  - **Pools:**
-    - argument pairs `r24`, `r22`, `r20`, `r18`, with result hints on `r24` (and `r22`
-      for a `long`);
-    - call-saved pairs `r16` … `r2`, pushed and popped around the frame.
-  - **Upper registers:**
-    - `r16`–`r31` take immediates and `r2`–`r15` do not, so put `r16:r17` first among the
-      call-saved pairs.
-    - An immediate operation on a lower pair goes through `Z`/`X` in selection. Measure
-      the cost on ch. 20.
-  - **Helper calls:**
-    - every helper call is reported through the `runtime_call` hook;
-    - the special-contract helpers (`__divmodhi4` clobbers far fewer registers than a
-      call) get a narrower clobber-set hook in `regalloc.h` if ch. 20 shows that worth
-      it, and the decision is recorded here;
-    - a `mul` clobbers `r0`/`r1` only, which are outside the pool.
+  *Done* (`backend/avr/regalloc.c`):
+  - **Classes:** `char`/`short`/`int`/pointer are `REGALLOC_INT`; `long`/`float`/
+    `double` are `REGALLOC_PAIR`, two pairs not necessarily adjacent; `long long` and
+    aggregates stay in memory.
+  - **Numbering:** a pair is its low register's own number; 0 never occurs.
+  - **Pools:** argument pairs `r24`, `r22`, `r20`, `r18` first, then `r16` … `r2`
+    (`r16` first, for the immediates), pushed by the prologue when used. Parameters
+    and call arguments and results are hinted to their ABI registers.
+  - **Two forms of selection.** The allocator's `runtime_call` hook is
+    `uses_scratch`: an instruction that the naive form selects (a helper, 8 bytes,
+    multiply/divide, a variable shift, an aggregate over 16 bytes, an index scaled by a
+    multiply) counts as a call, so no value lives across it in `r18`–`r25`. Every other
+    instruction computes in its destination's registers, or in `Z`/`X` when the
+    destination is in memory or needs immediates its registers cannot take, with
+    operand bytes straight from registers, through `r0` from memory, or as immediates.
+  - **Moves:** operands, call arguments and parameters on entry are gathered by one
+    parallel move per instruction, a cycle broken through the stack.
+  - **Call-saved argument registers:** a value in `r8`–`r17` that an argument (or the
+    second operand of an 8-byte helper) overwrites is pushed and popped around it.
+  - **Y+63:** the scratch-free form reaches slots only as `Y+q`. A function whose
+    scalar slots of up to 4 bytes would lie past `Y+63` falls back to the naive form,
+    all in memory.
+  - **Helper clobbers:** every helper counts as a call; no narrower clobber set for the
+    special-contract helpers.
 
   The ch. 20 tests pass.
 - **M23. Frameless functions.**

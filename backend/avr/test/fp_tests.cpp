@@ -185,6 +185,7 @@ int main(void)
 // Every FP operation is a call: operands in r25:r22 and r21:r18.
 TEST_F(AvrTest, FloatAddCalls)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("float f(float a, float b) { return a + b; }"));
     EXPECT_NE(std::string::npos, s.find("ldd r18, Y+5\nldd r19, Y+6\nldd r20, Y+7\n"
                                         "ldd r21, Y+8\ncall __addsf3\nstd Y+9, r22\n"))
@@ -194,6 +195,7 @@ TEST_F(AvrTest, FloatAddCalls)
 // Negation flips the sign bit inline.
 TEST_F(AvrTest, FloatNegateInline)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("double f(double a) { return -a; }"));
     EXPECT_NE(std::string::npos, s.find("subi r25, 128\n")) << s;
     EXPECT_EQ(std::string::npos, s.find("call")) << s;
@@ -202,6 +204,7 @@ TEST_F(AvrTest, FloatNegateInline)
 // A comparison tests the helper's result in r24: a > b as 0 < r24.
 TEST_F(AvrTest, FloatCompare)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(float a, float b) { return a > b; }"));
     EXPECT_NE(std::string::npos, s.find("call __gtsf2\ncp r1, r24\nldi r24, 1\nbrlt ")) << s;
 }
@@ -209,6 +212,7 @@ TEST_F(AvrTest, FloatCompare)
 // The truth test ignores the sign: -0.0 is false.
 TEST_F(AvrTest, FloatTruthTest)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("int f(float a) { return !a; }"));
     EXPECT_NE(std::string::npos,
               s.find("andi r25, 127\ncp r22, r1\ncpc r23, r1\ncpc r24, r1\ncpc r25, r1\n"))
@@ -218,6 +222,7 @@ TEST_F(AvrTest, FloatTruthTest)
 // A 16-bit int is widened to 32 bits before __floatsisf, an unsigned with zeros.
 TEST_F(AvrTest, FloatFromInt)
 {
+    NaiveSelection();
     std::string s = Body(CompileToAvr("float f(unsigned u) { return u; }"));
     EXPECT_NE(std::string::npos, s.find("mov r24, r1\nmov r25, r1\ncall __floatunsisf\n")) << s;
 }

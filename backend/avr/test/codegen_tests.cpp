@@ -5,6 +5,7 @@
 
 TEST_F(AvrTest, ReturnConstant)
 {
+    NaiveSelection();
     EXPECT_EQ(R"(__tmp_reg__ = 0
 __zero_reg__ = 1
 __SREG__ = 63
@@ -32,6 +33,7 @@ main:
 
 TEST_F(AvrTest, StaticFunctionIsLocal)
 {
+    NaiveSelection();
     std::string s = CompileToAvr("static int f(void) { return 1; }");
     EXPECT_EQ(std::string::npos, s.find(".globl")) << s;
     EXPECT_NE(std::string::npos, s.find("f:\n")) << s;

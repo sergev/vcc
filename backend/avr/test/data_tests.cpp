@@ -26,6 +26,7 @@ static std::string Data(const std::string &asm_text)
 
 TEST_F(AvrTest, StaticScalars)
 {
+    NaiveSelection();
     EXPECT_EQ(R"(    .data
     .globl  i
     .type   i, @object
@@ -64,6 +65,7 @@ d:
 // A data pointer is .short sym+off; a function pointer .short pm(f), a word address.
 TEST_F(AvrTest, StaticPointers)
 {
+    NaiveSelection();
     std::string s = Data(CompileToAvr("int a[4]; int *p = &a[2];\n"
                                       "int f(void);\nint (*fp)(void) = f;\n"
                                       "const char *s = \"hi\";"));
@@ -81,6 +83,7 @@ EXPECT_CODE(GlobalAccess, "lds r22, g\nlds r23, g+1\nlds r24, g+2\nlds r25, g+3\
 // The address of data is lo8/hi8, of a function pm_lo8/pm_hi8.
 TEST_F(AvrTest, Addresses)
 {
+    NaiveSelection();
     std::string s = Code(CompileToAvr("int g;\nint h(void);\n"
                                       "int *f(void) { return &g; }\n"
                                       "int (*k(void))(void) { return h; }"));

@@ -93,17 +93,27 @@ static void add_global(Gen *g, const char *name, const Tac_Type *type)
         map_insert(&g->globals, name, (intptr_t)type, 0);
 }
 
-void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
+void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool alloc)
 {
     memset(g, 0, sizeof(*g));
     g->program  = program;
     g->tl       = tl;
+    g->alloc    = alloc;
     g->fn       = avr_new_func(tl->u.function.name, tl->u.function.global);
     g->prologue = g->fn->tail;
     avr_new_block(g->fn, NULL); // the body
     new_label(g->exit);
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->locals);
+    map_init(&g->regs);
+    map_init(&g->dead);
+    for (const Tac_Param *p = tl->u.function.params; p; p = p->next)
+        if (p->type)
+            map_insert(&g->locals, p->name, (intptr_t)p->type, 0);
+    for (const Tac_Param *p = tl->u.function.locals; p; p = p->next)
+        if (p->type)
+            map_insert(&g->locals, p->name, (intptr_t)p->type, 0);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -133,6 +143,9 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->locals);
+    map_destroy(&g->regs);
+    map_destroy(&g->dead);
     avr_free_func(g->fn);
 }
 
@@ -182,6 +195,13 @@ static void free_nothing(intptr_t p)
     (void)p;
 }
 
+// The order of slots: scalars of up to 4 bytes first, so that they stay within Y+63
+// (the scratch-free selection reaches them only so), then long long, then aggregates.
+static int slot_class(const Tac_Type *t, bool aggregate)
+{
+    return aggregate ? 2 : avr_type_size(t) > 4 ? 1 : 0;
+}
+
 void layout_frame(Gen *g)
 {
     StringMap allocs;
@@ -190,21 +210,24 @@ void layout_frame(Gen *g)
         if (in->kind == TAC_INSTRUCTION_ALLOCATE_LOCAL)
             map_insert(&allocs, in->u.allocate_local.name, (intptr_t)in, 0);
 
-    // The register parameters first (the stack ones have their slots), then scalars,
-    // so that the common case stays within Y+63, then aggregates.
-    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
-        if (!p->type)
-            fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
-        if (!find_slot(g, p->name)) {
+    // The register parameters among the others (the stack ones have their slots); a
+    // variable in registers needs none.
+    intptr_t v;
+    for (int cls = 0; cls < 3; cls++) {
+        for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
+            if (!p->type)
+                fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
+            if (find_slot(g, p->name) || map_get(&g->regs, p->name, &v) ||
+                slot_class(p->type, !avr_is_scalar(p->type)) != cls)
+                continue;
             insert_slot(g, p->name, p->type, 1 + g->frame_size);
             g->frame_size += avr_type_size(p->type);
         }
-    }
-    for (int pass = 0; pass < 2; pass++) {
         for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
             if (!p->type)
                 fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
-            if (is_aggregate_local(p, &allocs) != (pass == 1) || find_slot(g, p->name))
+            if (find_slot(g, p->name) || map_get(&g->regs, p->name, &v) ||
+                slot_class(p->type, is_aggregate_local(p, &allocs)) != cls)
                 continue;
             insert_slot(g, p->name, p->type, 1 + g->frame_size);
             g->frame_size += local_size(p, &allocs);
@@ -214,10 +237,30 @@ void layout_frame(Gen *g)
 
     // The stack parameters, now that the slots' size is known.
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
-        intptr_t v;
         if (map_get(&g->frame, p->name, &v) && ((Slot *)v)->q >= STACK_PARAM)
             ((Slot *)v)->q += g->frame_size + 5 - STACK_PARAM;
     }
+}
+
+static bool name_is_near(const Gen *g, const char *name)
+{
+    const Slot *s = find_slot(g, name);
+    intptr_t v;
+    if (!s || map_get(&g->regs, name, &v) || !avr_is_scalar(s->type))
+        return true;
+    int size = avr_type_size(s->type);
+    return size > 4 || s->q + size - 1 <= Y_MAX;
+}
+
+bool frame_is_near(const Gen *g)
+{
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next)
+        if (!name_is_near(g, p->name))
+            return false;
+    for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next)
+        if (!name_is_near(g, p->name))
+            return false;
+    return true;
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
@@ -228,10 +271,12 @@ const Slot *find_slot(const Gen *g, const char *name)
 
 const Tac_Type *name_type(const Gen *g, const char *name)
 {
+    intptr_t v;
+    if (map_get(&g->locals, name, &v))
+        return (const Tac_Type *)v;
     const Slot *s = find_slot(g, name);
     if (s)
         return s->type;
-    intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
     fatal_error("avr: %s: no type for %s", gen_name(g), name);
@@ -259,9 +304,9 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
 
 bool is_function(const Gen *g, const char *name)
 {
-    if (find_slot(g, name))
-        return false;
     intptr_t v;
+    if (find_slot(g, name) || map_get(&g->locals, name, &v))
+        return false;
     return map_get(&g->globals, name, &v) && ((const Tac_Type *)v)->kind == TAC_TYPE_FUN_TYPE;
 }
 
@@ -345,8 +390,6 @@ static void address_slot(Gen *g, int ptr, int q)
     }
 }
 
-static void access_y(Gen *g, bool store, int q, int reg, int n);
-
 void address_of(Gen *g, int ptr, const char *name, int off)
 {
     const Slot *s = find_slot(g, name);
@@ -380,7 +423,47 @@ void copy_bytes(Gen *g, int size)
     emit1(g, AVR_BRNE, avr_label(loop));
 }
 
-void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n)
+Regs regs_range(int reg, int n)
+{
+    Regs r = { .n = n };
+    for (int i = 0; i < n; i++)
+        r.r[i] = reg + i;
+    return r;
+}
+
+bool var_regs(const Gen *g, const char *name, Regs *out)
+{
+    intptr_t v;
+    if (!map_get(&g->regs, name, &v))
+        return false;
+    int lo = (int)(v & 0xff), hi = (int)(v >> 8);
+    out->n = avr_type_size(name_type(g, name));
+    for (int i = 0; i < out->n; i++)
+        out->r[i] = i < 2 ? lo + i : hi + i - 2;
+    return true;
+}
+
+bool val_regs(const Gen *g, const Tac_Val *v, Regs *out)
+{
+    return v->kind == TAC_VAL_VAR && var_regs(g, v->u.var_name, out);
+}
+
+bool near_bytes(const Gen *g, const char *name, int off, int n)
+{
+    const Slot *s = find_slot(g, name);
+    return !s || s->q + off + n - 1 <= Y_MAX;
+}
+
+static bool among(const int *regs, int n, int r)
+{
+    for (int i = 0; i < n; i++)
+        if (regs[i] == r)
+            return true;
+    return false;
+}
+
+void access_mem(Gen *g, bool store, const char *name, int off, const int *regs, int n,
+                uint32_t busy)
 {
     const Slot *s = find_slot(g, name);
     if (!s) {
@@ -388,109 +471,278 @@ void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n)
             fatal_error("avr: %s: no slot for %s", gen_name(g), name);
         for (int i = 0; i < n; i++) {
             if (store)
-                emit2(g, AVR_STS, avr_sym(AVR_MOD_NONE, name, off + i), avr_reg(reg + i));
+                emit2(g, AVR_STS, avr_sym(AVR_MOD_NONE, name, off + i), avr_reg(regs[i]));
             else
-                emit2(g, AVR_LDS, avr_reg(reg + i), avr_sym(AVR_MOD_NONE, name, off + i));
+                emit2(g, AVR_LDS, avr_reg(regs[i]), avr_sym(AVR_MOD_NONE, name, off + i));
         }
         return;
     }
-    access_y(g, store, s->q + off, reg, n);
+    int q = s->q + off;
+    if (q + n - 1 <= Y_MAX) {
+        for (int i = 0; i < n; i++) {
+            if (store)
+                emit2(g, AVR_STD, avr_disp(AVR_Y, q + i), avr_reg(regs[i]));
+            else
+                emit2(g, AVR_LDD, avr_reg(regs[i]), avr_disp(AVR_Y, q + i));
+        }
+        return;
+    }
+    // Past Y+63: through Z, or X when Z is taken.
+    bool z_taken = among(regs, n, AVR_Z) || among(regs, n, AVR_Z + 1) || (busy >> AVR_Z & 3);
+    int ptr      = z_taken ? AVR_X : AVR_Z;
+    if (ptr == AVR_X && (among(regs, n, AVR_X) || among(regs, n, AVR_X + 1) || (busy >> AVR_X & 3)))
+        fatal_error("avr: %s: no pointer register for %s", gen_name(g), name);
+    address_slot(g, ptr, q);
+    for (int i = 0; i < n; i++) {
+        if (store)
+            emit2(g, AVR_ST, avr_ptr(ptr, AVR_PTR_POST_INC), avr_reg(regs[i]));
+        else
+            emit2(g, AVR_LD, avr_reg(regs[i]), avr_ptr(ptr, AVR_PTR_POST_INC));
+    }
+}
+
+void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n)
+{
+    Regs vr, r = regs_range(reg, n);
+    if (var_regs(g, name, &vr)) {
+        if (store)
+            parallel_move(g, vr.r + off, r.r, n);
+        else
+            parallel_move(g, r.r, vr.r + off, n);
+        return;
+    }
+    access_mem(g, store, name, off, r.r, n, 0);
 }
 
 void access_incoming(Gen *g, int off, int reg)
 {
-    access_y(g, false, g->frame_size + 5 + off, reg, 1);
-}
-
-static void access_y(Gen *g, bool store, int q, int reg, int n)
-{
-    if (q + n - 1 <= Y_MAX) {
-        for (int i = 0; i < n; i++) {
-            if (store)
-                emit2(g, AVR_STD, avr_disp(AVR_Y, q + i), avr_reg(reg + i));
-            else
-                emit2(g, AVR_LDD, avr_reg(reg + i), avr_disp(AVR_Y, q + i));
-        }
+    int q = g->frame_size + 5 + off;
+    if (q <= Y_MAX) {
+        emit2(g, AVR_LDD, avr_reg(reg), avr_disp(AVR_Y, q));
         return;
     }
-    // Past Y+63: through Z, or X when the registers are Z's.
-    int ptr = reg + n > AVR_Z ? AVR_X : AVR_Z;
-    address_slot(g, ptr, q);
-    for (int i = 0; i < n; i++) {
-        if (store)
-            emit2(g, AVR_ST, avr_ptr(ptr, AVR_PTR_POST_INC), avr_reg(reg + i));
-        else
-            emit2(g, AVR_LD, avr_reg(reg + i), avr_ptr(ptr, AVR_PTR_POST_INC));
-    }
+    address_slot(g, AVR_Z, q);
+    emit2(g, AVR_LD, avr_reg(reg), avr_ptr(AVR_Z, AVR_PTR_PLAIN));
 }
 
-void extend_regs(Gen *g, int reg, int from, int n, bool sign)
+static bool is_src(const int *s, int n, int skip, int r)
+{
+    for (int i = 0; i < n; i++)
+        if (i != skip && s[i] == r)
+            return true;
+    return false;
+}
+
+void parallel_move(Gen *g, const int *dst, const int *src, int n)
+{
+    int d[64], s[64], m = 0;
+    for (int i = 0; i < n; i++) {
+        if (dst[i] == src[i])
+            continue;
+        if (m == 64)
+            fatal_error("avr: %s: too many moves", gen_name(g));
+        d[m]   = dst[i];
+        s[m++] = src[i];
+    }
+    int pushed[64], np = 0;
+    while (m > 0) {
+        int pick = -1;
+        for (int i = 0; i < m && pick < 0; i++)
+            if (!is_src(s, m, i, d[i]))
+                pick = i;
+        if (pick < 0) {
+            // A cycle: one source kept on the stack, popped into its destination last.
+            emit1(g, AVR_PUSH, avr_reg(s[0]));
+            pushed[np++] = d[0];
+            d[0]         = d[--m];
+            s[0]         = s[m];
+            continue;
+        }
+        // movw when the next byte goes along with it.
+        int mate = -1;
+        if (d[pick] % 2 == 0 && s[pick] % 2 == 0)
+            for (int j = 0; j < m && mate < 0; j++)
+                if (d[j] == d[pick] + 1 && s[j] == s[pick] + 1 && !is_src(s, m, j, d[j]))
+                    mate = j;
+        if (mate >= 0) {
+            emit2(g, AVR_MOVW, avr_reg(d[pick]), avr_reg(s[pick]));
+            int hi = pick > mate ? pick : mate, lo = pick > mate ? mate : pick;
+            d[hi] = d[--m], s[hi] = s[m];
+            d[lo] = d[--m], s[lo] = s[m];
+        } else {
+            emit2(g, AVR_MOV, avr_reg(d[pick]), avr_reg(s[pick]));
+            d[pick] = d[--m];
+            s[pick] = s[m];
+        }
+    }
+    while (np > 0)
+        emit1(g, AVR_POP, avr_reg(pushed[--np]));
+}
+
+uint32_t save_var_regs(Gen *g, int lo, int hi)
+{
+    uint32_t mask = 0;
+    for (int r = lo; r <= hi; r++)
+        if (g->var_regs >> r & 1) {
+            emit1(g, AVR_PUSH, avr_reg(r));
+            mask |= 1u << r;
+        }
+    return mask;
+}
+
+void restore_var_regs(Gen *g, uint32_t mask)
+{
+    for (int r = 31; r >= 0; r--)
+        if (mask >> r & 1)
+            emit1(g, AVR_POP, avr_reg(r));
+}
+
+void extend_regs(Gen *g, const int *r, int from, int n, bool sign)
 {
     if (from >= n)
         return;
     if (!sign) {
         for (int i = from; i < n; i++)
-            emit2(g, AVR_MOV, avr_reg(reg + i), avr_reg(AVR_ZERO));
+            emit2(g, AVR_MOV, avr_reg(r[i]), avr_reg(AVR_ZERO));
         return;
     }
     // The sign of the top byte into C, then 0 - C: 0x00 or 0xff.
-    int top = reg + from;
-    emit2(g, AVR_MOV, avr_reg(top), avr_reg(reg + from - 1));
+    int top = r[from];
+    emit2(g, AVR_MOV, avr_reg(top), avr_reg(r[from - 1]));
     emit1(g, AVR_LSL, avr_reg(top));
     emit2(g, AVR_SBC, avr_reg(top), avr_reg(top));
     for (int i = from + 1; i < n; i++)
-        emit2(g, AVR_MOV, avr_reg(reg + i), avr_reg(top));
+        emit2(g, AVR_MOV, avr_reg(r[i]), avr_reg(top));
+}
+
+bool ext_sign(const Tac_Type *t, Ext ext)
+{
+    return ext == EXT_SIGN || (ext == EXT_TYPE && !avr_is_unsigned(t) && !avr_is_fp(t));
+}
+
+uint64_t const_extended(const Tac_Const *c, int size, int n, Ext ext)
+{
+    uint64_t bits = const_bits(c);
+    if (size < 8 && n > size && ext != EXT_TYPE) {
+        uint64_t mask = (1ull << (8 * size)) - 1;
+        bool neg      = ext == EXT_SIGN && (bits >> (8 * size - 1) & 1);
+        bits          = neg ? bits | ~mask : bits & mask;
+    }
+    return bits;
+}
+
+void load_vals(Gen *g, const Load *l, int n)
+{
+    // Every destination, for the choice of a pointer or an immediate register.
+    uint32_t dsts = 0;
+    for (int k = 0; k < n; k++)
+        for (int i = 0; i < l[k].to.n; i++)
+            dsts |= 1u << l[k].to.r[i];
+
+    // Register to register, all at once.
+    int d[64], s[64], m = 0;
+    for (int k = 0; k < n; k++) {
+        Regs vr;
+        if (!val_regs(g, l[k].v, &vr))
+            continue;
+        for (int i = 0; i < l[k].to.n && i < vr.n; i++) {
+            d[m]   = l[k].to.r[i];
+            s[m++] = vr.r[i];
+        }
+    }
+    parallel_move(g, d, s, m);
+
+    // From memory, then constants.
+    for (int k = 0; k < n; k++) {
+        const Tac_Val *v = l[k].v;
+        Regs vr;
+        if (v->kind != TAC_VAL_VAR || val_regs(g, v, &vr))
+            continue;
+        int size = avr_type_size(val_type(g, v));
+        access_mem(g, false, v->u.var_name, 0, l[k].to.r, size < l[k].to.n ? size : l[k].to.n,
+                   dsts);
+    }
+    for (int k = 0; k < n; k++) {
+        const Tac_Val *v = l[k].v;
+        if (v->kind != TAC_VAL_CONSTANT)
+            continue;
+        int size      = avr_type_size(val_type(g, v));
+        uint64_t bits = const_extended(v->u.constant, size, l[k].to.n, l[k].ext);
+        int tmp       = -1;
+        for (int r = 26; r <= 31 && tmp < 0; r++)
+            if ((r < 28 || r >= 30) && !(dsts >> r & 1))
+                tmp = r;
+        for (int i = 0; i < l[k].to.n; i++) {
+            int reg = l[k].to.r[i], b = (int)(i < 8 ? bits >> (8 * i) & 0xff : 0);
+            if (reg >= 16) {
+                emit2(g, AVR_LDI, avr_reg(reg), avr_imm(b));
+            } else if (b == 0) {
+                emit2(g, AVR_MOV, avr_reg(reg), avr_reg(AVR_ZERO));
+            } else {
+                if (tmp < 0)
+                    fatal_error("avr: %s: no register for a constant", gen_name(g));
+                emit2(g, AVR_LDI, avr_reg(tmp), avr_imm(b));
+                emit2(g, AVR_MOV, avr_reg(reg), avr_reg(tmp));
+            }
+        }
+    }
+
+    // The bytes past a narrower variable.
+    for (int k = 0; k < n; k++) {
+        const Tac_Val *v = l[k].v;
+        if (v->kind != TAC_VAL_VAR)
+            continue;
+        const Tac_Type *t = val_type(g, v);
+        extend_regs(g, l[k].to.r, avr_type_size(t), l[k].to.n, ext_sign(t, l[k].ext));
+    }
+}
+
+void load_regs(Gen *g, const Tac_Val *v, const Regs *to, Ext ext)
+{
+    Load l = { v, *to, ext };
+    load_vals(g, &l, 1);
 }
 
 void load_val(Gen *g, const Tac_Val *v, int reg, int n, Ext ext)
 {
-    const Tac_Type *t = val_type(g, v);
-    int size          = avr_type_size(t);
-    if (v->kind == TAC_VAL_CONSTANT) {
-        uint64_t bits = const_bits(v->u.constant);
-        if (size < 8 && n > size && ext != EXT_TYPE) {
-            uint64_t mask = (1ull << (8 * size)) - 1;
-            bool neg      = ext == EXT_SIGN && (bits >> (8 * size - 1) & 1);
-            bits          = neg ? bits | ~mask : bits & mask;
-        }
-        for (int i = 0; i < n; i++)
-            gen_li(g, reg + i, (int)(i < 8 ? bits >> (8 * i) & 0xff : 0));
-        return;
-    }
-    int m = size < n ? size : n;
-    access_bytes(g, false, v->u.var_name, 0, reg, m);
-    bool sign = ext == EXT_SIGN || (ext == EXT_TYPE && !avr_is_unsigned(t) && !avr_is_fp(t));
-    extend_regs(g, reg, m, n, sign);
+    Load l = { v, regs_range(reg, n), ext };
+    load_vals(g, &l, 1);
 }
 
-void store_val(Gen *g, const Tac_Val *v, int reg, int n)
+void load_two(Gen *g, const Tac_Val *v1, int reg1, int n1, const Tac_Val *v2, int reg2, int n2)
+{
+    Load l[2] = { { v1, regs_range(reg1, n1), EXT_TYPE }, { v2, regs_range(reg2, n2), EXT_TYPE } };
+    load_vals(g, l, 2);
+}
+
+void store_regs(Gen *g, const Tac_Val *v, const int *regs, int n)
 {
     if (v->kind != TAC_VAL_VAR)
         fatal_error("avr: %s: store to a constant", gen_name(g));
     int size = avr_type_size(val_type(g, v));
     int m    = size < n ? size : n;
-    access_bytes(g, true, v->u.var_name, 0, reg, m);
-    for (int i = m; i < size; i++)
-        access_bytes(g, true, v->u.var_name, i, AVR_ZERO, 1);
+    Regs vr;
+    if (var_regs(g, v->u.var_name, &vr)) {
+        int src[8];
+        for (int i = 0; i < size; i++)
+            src[i] = i < m ? regs[i] : AVR_ZERO;
+        parallel_move(g, vr.r, src, size);
+        return;
+    }
+    uint32_t busy = 0;
+    for (int i = 0; i < m; i++)
+        busy |= 1u << regs[i];
+    access_mem(g, true, v->u.var_name, 0, regs, m, busy);
+    for (int i = m; i < size; i++) {
+        int zero = AVR_ZERO;
+        access_mem(g, true, v->u.var_name, i, &zero, 1, busy);
+    }
 }
 
-void move_regs(Gen *g, int rd, int rs, int n)
+void store_val(Gen *g, const Tac_Val *v, int reg, int n)
 {
-    if (rd == rs)
-        return;
-    for (int i = 0; i < n;) {
-        int d = rd < rs ? i : n - 1 - i; // overlapping ranges: the far end first
-        if (n - i >= 2 && (rd + d) % 2 == 0 && (rs + d) % 2 == 0 && rd < rs) {
-            emit2(g, AVR_MOVW, avr_reg(rd + d), avr_reg(rs + d));
-            i += 2;
-        } else if (n - i >= 2 && rd > rs && (rd + d - 1) % 2 == 0 && (rs + d - 1) % 2 == 0) {
-            emit2(g, AVR_MOVW, avr_reg(rd + d - 1), avr_reg(rs + d - 1));
-            i += 2;
-        } else {
-            emit2(g, AVR_MOV, avr_reg(rd + d), avr_reg(rs + d));
-            i++;
-        }
-    }
+    Regs r = regs_range(reg, n);
+    store_regs(g, v, r.r, n);
 }
 
 void gen_label_block(Gen *g, const char *label)
