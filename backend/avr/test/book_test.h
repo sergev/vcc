@@ -36,6 +36,8 @@ protected:
             { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31: undefined" },
             { "Chapter17_SizeofExtern", "arrays too large for 8 KB of SRAM" },
             { "Chapter18_MissingRetval", "uses a missing return value: undefined" },
+            { "Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes",
+              "shifts an int by 31: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

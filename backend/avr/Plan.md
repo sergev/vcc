@@ -156,186 +156,19 @@ One selection helper owns that rule.
 
 `make run` stays green after every M-step.
 
-## Phase 2 — instruction selection, book order
-
-Naive and correct first. Every TAC variable lives in a frame slot, and each operation
-runs **byte-serially** through scratch registers. In the naive phase that is every
-call-clobbered register, since no value is allocated yet. `ldd`, `std`, `ld` and `st`
-leave SREG alone, so a carry chain survives the loads and stores between its links:
-
-```
-ldd r24, Y+1    ; a, low byte
-ldd r25, Y+3    ; b, low byte
-add r24, r25
-std Y+5, r24
-ldd r24, Y+2    ; high bytes: the carry from `add` is still there
-ldd r25, Y+4
-adc r24, r25
-std Y+6, r24
-```
-
-Each step is done when its book chapters pass and a few golden tests pin the selected
-instructions.
-
-- **M9. Frame.** Slots come from typed TAC and `ALLOCATE_LOCAL`. Alignment is 1, so
-  there is no padding.
-  - **Prologue:**
-    - push `Y`;
-    - `in r28, __SP_L__; in r29, __SP_H__`;
-    - lower `Y` by the frame size (`sbiw` up to 63, `subi`/`sbci` beyond);
-    - write SP back with the interrupt-safe sequence: `in r0, __SREG__; cli; out
-      __SP_H__, r29; out __SREG__, r0; out __SP_L__, r28`;
-    - push the call-saved registers the body uses, found by a scan once it is selected.
-      They go below the slots, so the offsets of stack arguments do not depend on them.
-
-    The epilogue is the reverse, then `ret`, and an early return jumps to it. Slot `n`
-    is at `Y+1+n`. Stack arguments start at `Y+frame+5`, above the saved `Y` and the
-    2-byte return address.
-  - **The `Y+63` limit.** A slot whose last byte is past `Y+63` is reached by building
-    its address in `Z` (`movw r30, r28; subi r30, lo8(-q); sbci r31, hi8(-q)`) and
-    walking it with `Z+`. One helper owns the rule.
-  - Scalars and temporaries take the low offsets and arrays and structs the high ones, so
-    the common case stays within `Y+q`.
-  - Incoming register parameters are stored to their slots in the prologue.
-- **M10. Integer ops** (ch. 2–4, 11, 12). After the usual conversions, arithmetic is on
-  `int`, `long` or `long long`: 2, 4 or 8 bytes.
-  - **Add and subtract:** `add`/`adc` and `sub`/`sbc` chains.
-    - AVR has no add-immediate, so `x + k` is `subi lo8(-k)` / `sbci hi8(-k)` on an
-      upper register.
-  - **Logic and negation:**
-    - `and`/`or`/`eor` byte by byte, and `com`.
-    - Negation is `com` on the high bytes, `neg` on the low byte, and `sbci 0xff` up the
-      chain.
-  - **Multiply:**
-    - 16-bit inline from three `mul`s, with `clr r1` after each;
-    - 32-bit through `__mulsi3`, 64-bit through `__muldi3`.
-  - **Divide and remainder** call `__divmodhi4`/`__udivmodhi4` or
-    `__divmodsi4`/`__udivmodsi4` with their M6 contracts. The `long long` forms call
-    `__divdi3`, `__udivdi3`, `__moddi3` and `__umoddi3`, built from the shared C model
-    `libc/ilp32/int64.c`, and `__muldi3`. They arrive with the C library at M15, since
-    `int64.c` needs pointers; until then the book programs that use them are skipped.
-  - **Shifts:**
-    - By a constant: whole bytes move first, then `lsl`/`rol`, `lsr`/`ror` or
-      `asr`/`ror` per bit, or a counted loop past a few bits.
-    - By a variable: a loop, `dec` + `brpl` around the bit step, as clang does.
-  - **Comparisons:**
-    - `cp`/`cpc` chains, then `breq`/`brne`, `brlt`/`brge` (signed) or `brlo`/`brsh`
-      (unsigned).
-    - `>` and `<=` swap the operands.
-    - A 0/1 result is `ldi`, a branch over `clr`.
-  - **Width conversions:**
-    - truncation is free (little-endian, low bytes first);
-    - zero extension copies `r1`;
-    - sign extension is `mov; lsl; sbc rX, rX` for the high byte, then copies of it.
-
-  **Fixed registers.** `mul` writes `r1:r0`, and the helpers have fixed operands. In the
-  naive phase everything is in memory, so this costs nothing. For M22, the selection's
-  contract is that each of these reports its clobbers.
-- **M11. Control flow** (ch. 5–8) and **branch relaxation.**
-  - `.L` labels are unique per TU. A test of zero is `or` across the bytes, or `cp`/`cpc`
-    against `r1`.
-  - Selection emits short forms: `brXX`, and `rjmp` within a function.
-  - A **relaxation pass runs last**, after peephole. It computes every instruction's
-    offset from the M7 sizes and rewrites what is out of range:
-    - `brXX L` beyond ±64 words becomes `br!XX .+2; rjmp L`, or `.+4; jmp L`;
-    - `rjmp` beyond ±2 K words becomes `jmp`.
-
-    It repeats until nothing changes; sizes only grow, so it terminates.
-  - A golden test has a branch over a body just under, at, and just over each limit. A
-    run test has a loop body larger than 128 bytes.
-- **M12. Calls, scalar ABI** (ch. 9).
-  - Arguments are placed per the ABI section: registers from `r25` down, and from the
-    first argument that does not fit, it and the rest on the stack.
-    - Stack arguments are `push`ed, last argument first and high byte first, so they lie
-      in memory in order and little-endian.
-    - After the call SP is restored: with `pop r0` for up to a few bytes, else the
-      `in`/`adiw`/`out` sequence.
-  - **Calls:** `call sym` for a direct call. An indirect call is `icall`, with `Z`
-    holding the word address that a function pointer already is.
-  - **Narrow values** are extended to their 2-byte register pair by the sender, and
-    re-extended by the receiver.
-  - **Results** come back in `r24`, `r25:r24`, `r22`–`r25` or `r18`–`r25`.
-  - `FUN_CALL_NORETURN` is a plain `call`, which keeps the return address for debugging.
-  - **Parallel moves** go into the argument registers, by pair with `movw` where both
-    sides are even, ordered so that no source is clobbered before it is read.
-- **M13. Globals and static data** (ch. 10).
-  - `.data`, `.bss` and `.rodata` with every `Tac_StaticInit` kind, emitted as `.byte`,
-    `.short`, `.long` and `.quad`; a `double` is a `.long` of binary32 bits (M3).
-  - **Addresses:**
-    - a data address is `ldi lo8(sym)` / `ldi hi8(sym)`;
-    - a function address is `pm_lo8`/`pm_hi8`;
-    - in data, they are `.short sym+off` and `.short pm(f)`.
-
-    `TAC_STATIC_INIT_POINTER` must know whether its target is a function. Find out from
-    the referenced name's type (the `EXTERN`/function toplevels), and add a flag to the
-    initializer only if that is not enough.
-  - Accesses are `lds`/`sts sym+k` directly.
-  - `.rodata` lives in SRAM, as with clang and avr-gcc. Constants in flash are out of
-    scope.
-  - Static locals' `name$N` assemble as they are (checked).
-- **M14. Floating point** (ch. 13), in software.
-  - **A binary32 soft-float runtime** under the libgcc names, with the ordinary ABI:
-    - arithmetic: `__addsf3`, `__subsf3`, `__mulsf3`, `__divsf3`;
-    - comparisons: `__eqsf2`, `__nesf2`, `__ltsf2`, `__lesf2`, `__gtsf2`, `__gesf2`,
-      `__unordsf2`;
-    - conversions: `__fixsfsi`, `__fixunssfsi`, `__floatsisf`, `__floatunsisf`,
-      `__fixsfdi`, `__fixunssfdi`, `__floatdisf`, `__floatundisf`.
-  - Write it in C, in `libc/common/float32.c` (a sibling of `float128.c`, sharing
-    `libutil`'s `narrow` where it can). It must be correctly rounded (nearest-even), with
-    subnormals, infinities and NaNs, so it agrees bit for bit with compiler-rt, clang's
-    runtime, and with M3's folding. It is compiled by `genavr`, so it lands after M10–M13.
-    Until then, the FP book chapter waits.
-  - **Selection:**
-    - every operation is a helper call;
-    - negation flips bit 7 of the top byte (`subi r25, 0x80`), and `fabs` clears it,
-      both inline;
-    - constants are four `ldi`s, with no constant pool;
-    - a truth test is "any bit but the sign set", inline, and true for NaN;
-    - `int`/`unsigned int` conversions widen to 32 bits first;
-    - `FLOAT_TO_DOUBLE`/`DOUBLE_TO_FLOAT` and the long double conversions emit nothing.
-  - **`sqrt`** stays a call (`hw_sqrt = 0`), to a C `sqrt`/`sqrtf` in `libc/avr`.
-  - **Tests:** the runtime against the host's own binary32 arithmetic over a table of
-    cases. The host has the type natively, so no case generator is needed.
-  - *Done after M15*, whose pointers the runtime needs. `frexp`, `ldexp` and `modf` are
-    AVR's own binary32 C (the ILP32 ones assume binary64), `__muldi3` is shift-and-add C
-    in `libc/avr`, and `int64.c` comes in as it is (its 64-bit integer to FP
-    conversions still round twice: M21). `float.h` came forward from M20; the ILP32
-    `math.h` serves until then.
-- **M15. Pointers, arrays, chars, strings** (ch. 14–16).
-  - Loads and stores go through `Z` (or `X`): `movw r30, p` then `ld`/`ldd Z+k`. Loads
-    and stores are byte by byte, at the access's width, with a sign or zero extension as
-    in M10.
-  - `ADD_PTR` scales a 16-bit index by a shift for powers of two, else by an inline 16-bit
-    multiply.
-  - Pointer comparisons are unsigned.
-  - The byte-pointer TAC kinds are plain operations, as on RISC-V.
-  - From here, the C library (`libc/common`, plus `libc/avr` C sources) is built with
-    `genavr` into `libc.a`, as x86-64 did at X15: so far its integer part, the string
-    and memory functions, `atoi`, `puts` and `putchar`.
-  - Done before M14, whose runtime is C that reaches a float's bits through a pointer.
-    It brought forward `stddef.h`, `stdint.h`, `limits.h` and `stdarg.h` from M20,
-    since the library needs a 16-bit `size_t`. The book chapters 14–16 come with M14,
-    as most of their programs use `double`.
-- **M16. Structs** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
-  - Copies are byte by byte, since alignment is 1: unrolled `ld X+` / `st Z+` up to a
-    threshold, then a counted loop.
-  - Struct arguments follow the scalar rules: registers when they fit, size rounded up to
-    even, else the stack.
-  - Results of up to 8 bytes come back in registers ending at `r25`. Larger ones are the
-    frontend's hidden pointer (M1's `struct_return_max = 8`).
-
 ## Phase 3 — ABI conformance
 
 - **M17. Variadic functions and `<stdarg.h>`.**
   - **Calls:** for a variadic callee, *every* argument goes on the stack, named ones
-    included. An unprototyped callee is called as non-variadic, as avr-gcc does.
-  - **The variadic function** finds all its parameters on the stack, so its prologue
-    stores nothing.
+    included (in place since M12). An unprototyped callee is called as non-variadic, as
+    avr-gcc does.
+  - **The variadic function** finds all its parameters on the stack, and its parameter
+    slots lie over them (in place since M9), so its prologue stores nothing.
   - **`va_list`** is `char *`. clang's AVR `__builtin_va_list` is a plain pointer, so a
     `va_list` handed to or from clang-compiled code is the same thing.
-  - **`va_start(ap, last)`** is `__va_start(ap)`, intercepted by the backend as on the
-    other targets. It yields the address just past the last named argument in the
-    incoming stack area.
+  - **`va_start(ap, last)`** needs no builtin: `(char *)&last + sizeof(last)` is the
+    address just past the last named argument, since `last` lives in the incoming
+    stack area. `<stdarg.h>` is written so since M15; M17 tests it.
   - **`va_arg(ap, T)`** is a macro and needs no runtime or class:
     `(*(T *)((ap += sizeof(T)) - sizeof(T)))`. Alignment is 1, `char`/`short` promote to
     2-byte `int`, and `float` to a 4-byte `double`.
@@ -362,14 +195,18 @@ instructions.
   expected values assume a 32-bit `int`, but clang's AVR output does not.
   - *In place since M13:* the AVR `BookTest` intercepts the failures of the book's own
     expectations, so clang is the only oracle. clang `-O0` runs out of registers on a
-    few struct programs; those are compiled with `-O1`. The skip list keeps the programs that
-    cannot run: undefined shifts, case values that collide in a 32-bit `long`, and a
-    loop that never ends with a 16-bit `unsigned`.
+    few struct programs; those are compiled with `-O1`. The skip list keeps the
+    programs that cannot run: undefined behaviour (shifts by 16 or more, a missing
+    return value, reads past a 16-bit `int`), case values that collide in a 32-bit
+    `long`, arrays too large for 8 KB of SRAM, a loop that never ends with a 16-bit
+    `unsigned`, a recursion that takes two minutes under qemu, and one program that
+    clang `-O0` miscompiles.
 
 ## Phase 4 — library and headers
 
 - **M20. Headers.** `libc/avr/include/` (`stddef.h`, `stdint.h`, `limits.h` and
-  `stdarg.h` exist since M15):
+  `stdarg.h` exist since M15, `float.h` since M14; the ILP32 `math.h` fills in until
+  then):
   - `float.h`: `FLT_*` = `DBL_*` = `LDBL_*`, with `MANT_DIG` 24, `EPSILON` 2⁻²³ and
     `DECIMAL_DIG` 9;
   - `limits.h`: `INT_MAX` 32767, `LONG_MAX` 2³¹−1, and a signed `char`;
