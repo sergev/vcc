@@ -7,14 +7,16 @@
 
 #include "internal.h"
 
-bool x86_regalloc = true;
+bool x86_regalloc      = true;
+bool x86_frame_pointer = false;
 
 // The first slots for the callee-saved registers in use, where the prologue pushes
-// them; then a register or a slot for every parameter and local.  An ALLOCATE_LOCAL may
-// ask for more room or alignment than the type.
+// them (without a frame pointer the first goes where rbp would); then a register or a
+// slot for every parameter and local.  An ALLOCATE_LOCAL may ask for more room or
+// alignment than the type.
 static void layout_frame(Gen *g)
 {
-    for (int i = 0; i < g->nsaved; i++)
+    for (int i = x86_frame_pointer ? 0 : 1; i < g->nsaved; i++)
         alloc_slot(g, NULL, NULL, 8, 8);
     gen_params(g);
     StringMap allocs;

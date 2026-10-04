@@ -338,7 +338,7 @@ X86_Operand name_mem(const Gen *g, const char *name, int64_t off)
     if (s && s->reg)
         fatal_error("x86: %s: %s is in a register", gen_name(g), name);
     if (s)
-        return x86_mem(X86_RBP, s->offset + off);
+        return x86_mem(X86_FRAME, s->offset + off);
     if (name[0] == '%')
         fatal_error("x86: %s: no slot for %s", gen_name(g), name);
     return x86_rip(name, off);
@@ -572,17 +572,54 @@ static bool uses_reg(const X86_Instr *in, int reg)
     return false;
 }
 
-// Whether the body needs no frame: it makes no call (which needs rsp 16-byte aligned),
-// saves no register, and never uses rbp (no slot, no stack argument) or rsp.
-static bool is_leaf(const Gen *g)
+// Whether the body uses register `reg` (X86_FRAME: a slot or stack argument).
+static bool body_uses(const Gen *g, int reg)
 {
-    if (g->nsaved > 0)
-        return false;
     for (const X86_Block *b = g->fn->blocks; b; b = b->next)
         for (const X86_Instr *in = b->head; in; in = in->next)
-            if (in->op == X86_CALL || uses_reg(in, X86_RBP) || uses_reg(in, X86_RSP))
-                return false;
-    return true;
+            if (uses_reg(in, reg))
+                return true;
+    return false;
+}
+
+static bool has_calls(const Gen *g)
+{
+    for (const X86_Block *b = g->fn->blocks; b; b = b->next)
+        for (const X86_Instr *in = b->head; in; in = in->next)
+            if (in->op == X86_CALL)
+                return true;
+    return false;
+}
+
+// How the frame is addressed: not at all; in the red zone below rsp (a leaf); from
+// rbp, pushed and set; or from rsp, `size` bytes below the return address.
+typedef enum { FRAME_NONE, FRAME_RED_ZONE, FRAME_RBP, FRAME_RSP } FrameKind;
+
+typedef struct {
+    FrameKind kind;
+    int size; // FRAME_RSP: the bytes below the return address
+    int rest; // FRAME_RBP, FRAME_RSP: the bytes reserved below the pushed registers
+} Frame;
+
+// A frame offset is from where rbp would point, 8 bytes below the return address:
+// that is rbp, rsp + size - 8, or rsp - 8 in the red zone.
+static void resolve_frame(Gen *g, const Frame *fr)
+{
+    for (X86_Block *b = g->fn->blocks; b; b = b->next) {
+        for (X86_Instr *in = b->head; in; in = in->next) {
+            for (int i = 0; i < X86_MAX_OPERANDS; i++) {
+                X86_Operand *o = &in->opnd[i];
+                if (o->kind != X86_OPND_MEM || o->reg != X86_FRAME)
+                    continue;
+                if (fr->kind == FRAME_RBP) {
+                    o->reg = X86_RBP;
+                } else {
+                    o->reg = X86_RSP;
+                    o->imm += fr->kind == FRAME_RSP ? fr->size - 8 : -8;
+                }
+            }
+        }
+    }
 }
 
 // Emit into block `b` instead of the current one: the prologue, or an epilogue.
@@ -593,23 +630,26 @@ static X86_Block *redirect(Gen *g, X86_Block *b)
     return tail;
 }
 
-// The frame teardown: `leave`, or with saved registers, rsp back to them, which are
-// popped, and then rbp.  `rest` is the bytes reserved below them.
-static void epilogue(Gen *g, int rest)
+// The frame teardown: rsp back to the pushed registers, which are popped (`leave`
+// when there are none but rbp).
+static void epilogue(Gen *g, const Frame *fr)
 {
-    if (g->nsaved == 0) {
+    if (fr->kind == FRAME_NONE || fr->kind == FRAME_RED_ZONE)
+        return;
+    if (fr->kind == FRAME_RBP && g->nsaved == 0) {
         emit0(g, X86_LEAVE, X86_Q);
         return;
     }
-    if (rest)
-        emit2(g, X86_ADD, X86_Q, x86_imm(rest), x86_reg(X86_RSP, X86_Q));
+    if (fr->rest)
+        emit2(g, X86_ADD, X86_Q, x86_imm(fr->rest), x86_reg(X86_RSP, X86_Q));
     for (int i = g->nsaved - 1; i >= 0; i--)
         emit1(g, X86_POP, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
-    emit1(g, X86_POP, X86_Q, x86_reg(X86_RBP, X86_Q));
+    if (fr->kind == FRAME_RBP)
+        emit1(g, X86_POP, X86_Q, x86_reg(X86_RBP, X86_Q));
 }
 
 // Replace each epilogue marker by the frame teardown, or drop it.
-static void expand_epilogues(Gen *g, bool frame, int rest)
+static void expand_epilogues(Gen *g, const Frame *fr)
 {
     for (X86_Block *b = g->fn->blocks; b; b = b->next) {
         for (X86_Instr **link = &b->head; *link;) {
@@ -620,8 +660,7 @@ static void expand_epilogues(Gen *g, bool frame, int rest)
             }
             X86_Block seq   = { 0 };
             X86_Block *tail = redirect(g, &seq);
-            if (frame)
-                epilogue(g, rest);
+            epilogue(g, fr);
             g->fn->tail = tail;
             if (seq.head) {
                 seq.tail->next = marker->next;
@@ -639,22 +678,42 @@ static void expand_epilogues(Gen *g, bool frame, int rest)
 }
 
 // Fill the prologue and the epilogues, now that the frame is known.  A leaf function
-// that needs no stack has none; otherwise rbp is pushed, which leaves rsp 16-byte
-// aligned, then the callee-saved registers in use, into the first slots, and the rest
-// of the slots and the outgoing area are reserved in a multiple of 16 below them.
+// that needs no stack has none, and one whose slots fit the 128-byte red zone below
+// rsp keeps them there (the runtime never takes an interrupt).  With a frame pointer,
+// rbp is pushed, which leaves rsp 16-byte aligned, then the callee-saved registers in
+// use, into the first slots, and the rest of the slots and the outgoing area are
+// reserved in a multiple of 16 below them.  Without one, the first callee-saved
+// register goes where rbp would, and rsp ends 16-byte aligned the same way.
 void gen_prologue(Gen *g)
 {
-    bool frame = !is_leaf(g);
-    int rest   = (g->locals_size + g->outgoing + 15) / 16 * 16 - 8 * g->nsaved;
-    if (frame) {
+    Frame fr   = { FRAME_RBP, 0, 0 };
+    bool calls = has_calls(g);
+    int area   = (g->locals_size + g->outgoing + 15) / 16 * 16;
+    if (!calls && g->nsaved == 0 && !body_uses(g, X86_FRAME) && !body_uses(g, X86_RSP))
+        fr.kind = FRAME_NONE;
+    else if (!x86_frame_pointer && !calls && g->nsaved == 0 && g->outgoing == 0 &&
+             g->locals_size + 8 <= 128)
+        fr.kind = FRAME_RED_ZONE;
+    else if (!x86_frame_pointer)
+        fr.kind = FRAME_RSP;
+    if (fr.kind == FRAME_RBP) {
+        fr.rest = area - 8 * g->nsaved;
+    } else if (fr.kind == FRAME_RSP) {
+        fr.size = area + 8;
+        fr.rest = fr.size - 8 * g->nsaved;
+    }
+    if (fr.kind == FRAME_RBP || fr.kind == FRAME_RSP) {
         X86_Block *tail = redirect(g, g->prologue);
-        emit1(g, X86_PUSH, X86_Q, x86_reg(X86_RBP, X86_Q));
-        emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(X86_RBP, X86_Q));
+        if (fr.kind == FRAME_RBP) {
+            emit1(g, X86_PUSH, X86_Q, x86_reg(X86_RBP, X86_Q));
+            emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(X86_RBP, X86_Q));
+        }
         for (int i = 0; i < g->nsaved; i++)
             emit1(g, X86_PUSH, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
-        if (rest)
-            emit2(g, X86_SUB, X86_Q, x86_imm(rest), x86_reg(X86_RSP, X86_Q));
+        if (fr.rest)
+            emit2(g, X86_SUB, X86_Q, x86_imm(fr.rest), x86_reg(X86_RSP, X86_Q));
         g->fn->tail = tail;
     }
-    expand_epilogues(g, frame, rest);
+    resolve_frame(g, &fr);
+    expand_epilogues(g, &fr);
 }

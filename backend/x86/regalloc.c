@@ -3,17 +3,18 @@
 // value not live across a call may take an argument register, rdi, rsi, rdx, rcx, r8
 // or r9, or any of xmm0-xmm13: selection never uses them as scratch, and only a call,
 // a divide (rdx) or a shift by a variable (rcx) writes them.  A value live across one
-// takes rbx or r12-r15; the psABI preserves no xmm register, so an FP value live across
-// a call stays in its slot.  rax, r10, r11, xmm14 and xmm15 are selection's scratch,
-// and a long double never gets a register.
+// takes rbx, r12-r15, or rbp without a frame pointer; the psABI preserves no xmm
+// register, so an FP value live across a call stays in its slot.  rax, r10, r11, xmm14
+// and xmm15 are selection's scratch, and a long double never gets a register.
 //
 #include "regalloc.h"
 
+#include "codegen.h"
 #include "internal.h"
 
 // Argument registers, then callee-saved; a value live across a call starts at NARG.
 static const int int_pool[] = { X86_RDI, X86_RSI, X86_RDX, X86_RCX, X86_R8,  X86_R9,
-                                X86_RBX, X86_R12, X86_R13, X86_R14, X86_R15 };
+                                X86_RBX, X86_R12, X86_R13, X86_R14, X86_R15, X86_RBP };
 static const int fp_pool[]  = { X86_XMM0 + 0,  X86_XMM0 + 1,  X86_XMM0 + 2,  X86_XMM0 + 3,
                                 X86_XMM0 + 4,  X86_XMM0 + 5,  X86_XMM0 + 6,  X86_XMM0 + 7,
                                 X86_XMM0 + 8,  X86_XMM0 + 9,  X86_XMM0 + 10, X86_XMM0 + 11,
@@ -83,7 +84,7 @@ void gen_regalloc(Gen *g)
     Target target        = { .g = g };
     RegAlloc_Target desc = {
         .int_pool     = int_pool,
-        .nint         = NINT,
+        .nint         = x86_frame_pointer ? NINT - 1 : NINT, // rbp last
         .int_narg     = 6,
         .fp_pool      = fp_pool,
         .nfp          = NFP,

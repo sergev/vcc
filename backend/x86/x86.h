@@ -38,6 +38,7 @@ enum {
     X86_R15   = 15,
     X86_XMM0  = 16, // xmm0..xmm15
     X86_ST0   = 32, // st(0)..st(7)
+    X86_FRAME = 40, // the frame base: rbp, or rsp plus the frame's size, once known
     X86_VREG  = 48, // first virtual register
 };
 

@@ -224,14 +224,14 @@ void gen_ld_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *lab
 static void fistp_trunc(Gen *g)
 {
     int tmp = x87_tmp(g);
-    emit1(g, X86_FNSTCW, X86_Q, x86_mem(X86_RBP, tmp + 8));
-    emit2(g, X86_MOVZW, X86_L, x86_mem(X86_RBP, tmp + 8), x86_reg(T0, X86_L));
+    emit1(g, X86_FNSTCW, X86_Q, x86_mem(X86_FRAME, tmp + 8));
+    emit2(g, X86_MOVZW, X86_L, x86_mem(X86_FRAME, tmp + 8), x86_reg(T0, X86_L));
     emit2(g, X86_OR, X86_L, x86_imm(0xc00), x86_reg(T0, X86_L));
-    emit2(g, X86_MOV, X86_W, x86_reg(T0, X86_W), x86_mem(X86_RBP, tmp + 10));
-    emit1(g, X86_FLDCW, X86_Q, x86_mem(X86_RBP, tmp + 10));
-    emit1(g, X86_FISTPQ, X86_Q, x86_mem(X86_RBP, tmp));
-    emit1(g, X86_FLDCW, X86_Q, x86_mem(X86_RBP, tmp + 8));
-    emit2(g, X86_MOV, X86_Q, x86_mem(X86_RBP, tmp), x86_reg(T0, X86_Q));
+    emit2(g, X86_MOV, X86_W, x86_reg(T0, X86_W), x86_mem(X86_FRAME, tmp + 10));
+    emit1(g, X86_FLDCW, X86_Q, x86_mem(X86_FRAME, tmp + 10));
+    emit1(g, X86_FISTPQ, X86_Q, x86_mem(X86_FRAME, tmp));
+    emit1(g, X86_FLDCW, X86_Q, x86_mem(X86_FRAME, tmp + 8));
+    emit2(g, X86_MOV, X86_Q, x86_mem(X86_FRAME, tmp), x86_reg(T0, X86_Q));
 }
 
 // A conversion to or from long double.  Integers go through a 64-bit fildq/fistpq in
@@ -248,26 +248,26 @@ void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         // The x87 loads from memory only: a register goes through the scratch slot.
         X86_Operand m = fp_operand(g, src);
         if (m.kind == X86_OPND_REG) {
-            store_mem(g, m.reg, st, x86_mem(X86_RBP, x87_tmp(g)));
-            m = x86_mem(X86_RBP, x87_tmp(g));
+            store_mem(g, m.reg, st, x86_mem(X86_FRAME, x87_tmp(g)));
+            m = x86_mem(X86_FRAME, x87_tmp(g));
         }
         emit1(g, x86_is_double(st) ? X86_FLDL : X86_FLDS, X86_Q, m);
         fstp_val(g, dst);
     } else if (x86_is_ld(st) && x86_is_fp(dt)) {
         fld_val(g, src);
         int r         = var_reg(g, dst);
-        X86_Operand m = r ? x86_mem(X86_RBP, x87_tmp(g)) : name_mem(g, dst->u.var_name, 0);
+        X86_Operand m = r ? x86_mem(X86_FRAME, x87_tmp(g)) : name_mem(g, dst->u.var_name, 0);
         emit1(g, x86_is_double(dt) ? X86_FSTPL : X86_FSTPS, X86_Q, m);
         if (r)
-            load_mem(g, r, dt, x86_mem(X86_RBP, x87_tmp(g)));
+            load_mem(g, r, dt, x86_mem(X86_FRAME, x87_tmp(g)));
     } else if (x86_is_ld(dt)) {
         bool u = kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
         int tmp = x87_tmp(g);
         load_val(g, T0, src); // a 32-bit load zero-extends to 64
         if (!u && x86_size(st) <= 4)
             emit2(g, X86_MOVSL, X86_Q, x86_reg(T0, X86_L), x86_reg(T0, X86_Q));
-        emit2(g, X86_MOV, X86_Q, x86_reg(T0, X86_Q), x86_mem(X86_RBP, tmp));
-        emit1(g, X86_FILDQ, X86_Q, x86_mem(X86_RBP, tmp));
+        emit2(g, X86_MOV, X86_Q, x86_reg(T0, X86_Q), x86_mem(X86_FRAME, tmp));
+        emit1(g, X86_FILDQ, X86_Q, x86_mem(X86_FRAME, tmp));
         if (u && x86_size(st) == 8) {
             char done[32];
             new_label(done);

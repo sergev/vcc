@@ -29,27 +29,22 @@ addl $1, %ecx
     EXPECT_EQ(std::string::npos, code.find("pushq")) << code;
 }
 
-// A value live across a call takes rbx, pushed after rbp into the first slot and
-// popped before it; the 16-byte alignment counts the push.
+// A value live across a call takes rbx, pushed where rbp would go, which also leaves
+// rsp 16-byte aligned for the call.
 TEST_F(X86Test, CalleeSavedAcrossCall)
 {
     std::string code = Code(CompileToX86(R"(
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
 )"));
-    EXPECT_EQ(R"(pushq %rbp
-movq %rsp, %rbp
-pushq %rbx
-subq $8, %rsp
+    EXPECT_EQ(R"(pushq %rbx
 movl %edi, %edi
 movl %esi, %ebx
 call g
 movl %eax, %edi
 addl %ebx, %edi
 movl %edi, %eax
-addq $8, %rsp
 popq %rbx
-popq %rbp
 ret
 )",
               code);
@@ -70,13 +65,11 @@ TEST_F(X86Test, DoubleAcrossCallInSlot)
 double h(double);
 double across(double a, double b) { double x = h(a); return x + b; }
 )"));
-    EXPECT_EQ(R"(pushq %rbp
-movq %rsp, %rbp
-subq $16, %rsp
-movsd %xmm1, -8(%rbp)
+    EXPECT_EQ(R"(subq $24, %rsp
+movsd %xmm1, 8(%rsp)
 call h
-addsd -8(%rbp), %xmm0
-leave
+addsd 8(%rsp), %xmm0
+addq $24, %rsp
 ret
 )",
               code);
@@ -141,14 +134,15 @@ TEST_F(X86Test, DestinationIsSecondOperand)
               Code(CompileToX86("int rsub(int a, int b) { b = a - b; return b; }")));
 }
 
-// A parameter on the stack is loaded into its register: one that a dead parameter
-// arrived in (b-f are never read), so nothing is saved.
+// A parameter on the stack is loaded into its register, from above the return address
+// with no frame: a register that a dead parameter arrived in (b-f are never read), so
+// nothing is saved.
 TEST_F(X86Test, StackParameterInRegister)
 {
     std::string code = Code(CompileToX86(R"(
 long seventh(long a, long b, long c, long d, long e, long f, long g) { return g * a; }
 )"));
-    EXPECT_NE(std::string::npos, code.find("movq 16(%rbp), %rsi\nimulq %rsi, %rdi\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("movq 8(%rsp), %rsi\nimulq %rsi, %rdi\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("pushq %rbx")) << code;
 }
 

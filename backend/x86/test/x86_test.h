@@ -44,13 +44,17 @@ protected:
                                "",
                                true })
     {
-        x86_regalloc = true; // the default; a test may change it
+        // The defaults; a test may change them.
+        x86_regalloc      = true;
+        x86_frame_pointer = false;
     }
 
-    // Pin instruction selection itself: every variable in its slot.
+    // Pin instruction selection itself: every variable in its slot, rbp the frame
+    // pointer in every function that needs a frame.
     static void NaiveSelection()
     {
-        x86_regalloc = false;
+        x86_regalloc      = false;
+        x86_frame_pointer = true;
     }
 
     // Assembly of every toplevel of the translation unit.  When GNU as is installed,

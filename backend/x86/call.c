@@ -210,13 +210,13 @@ static void save_varargs(Gen *g)
 {
     g->va.save = alloc_slot(g, NULL, NULL, 176, 16);
     for (int i = 0; i < 6; i++)
-        emit2(g, X86_MOV, X86_Q, x86_reg(int_regs[i], X86_Q), x86_mem(X86_RBP, g->va.save + 8 * i));
+        emit2(g, X86_MOV, X86_Q, x86_reg(int_regs[i], X86_Q), x86_mem(X86_FRAME, g->va.save + 8 * i));
     char skip[32];
     new_label(skip);
     emit2(g, X86_TEST, X86_B, x86_reg(X86_RAX, X86_B), x86_reg(X86_RAX, X86_B));
     emit1(g, X86_J, X86_Q, x86_label(skip))->cond = X86_CC_E;
     for (int i = 0; i < 8; i++)
-        emit2(g, X86_MOVSD, X86_Q, x86_xmm(X86_XMM0 + i), x86_mem(X86_RBP, g->va.save + 48 + 16 * i));
+        emit2(g, X86_MOVSD, X86_Q, x86_xmm(X86_XMM0 + i), x86_mem(X86_FRAME, g->va.save + 48 + 16 * i));
     x86_new_block(g->fn, skip);
 }
 
@@ -231,9 +231,9 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     load_val(g, T0, in->u.fun_call.args);
     emit2(g, X86_MOV, X86_L, x86_imm(g->va.gp), x86_mem(T0, 0));
     emit2(g, X86_MOV, X86_L, x86_imm(g->va.fp), x86_mem(T0, 4));
-    emit2(g, X86_LEA, X86_Q, x86_mem(X86_RBP, g->va.overflow), x86_reg(T1, X86_Q));
+    emit2(g, X86_LEA, X86_Q, x86_mem(X86_FRAME, g->va.overflow), x86_reg(T1, X86_Q));
     emit2(g, X86_MOV, X86_Q, x86_reg(T1, X86_Q), x86_mem(T0, 8));
-    emit2(g, X86_LEA, X86_Q, x86_mem(X86_RBP, g->va.save), x86_reg(T1, X86_Q));
+    emit2(g, X86_LEA, X86_Q, x86_mem(X86_FRAME, g->va.save), x86_reg(T1, X86_Q));
     emit2(g, X86_MOV, X86_Q, x86_reg(T1, X86_Q), x86_mem(T0, 16));
 }
 
@@ -312,7 +312,7 @@ void gen_params(Gen *g)
         save_varargs(g);
     if (s.next_int) {
         g->ret_ptr = alloc_slot(g, NULL, NULL, 8, 8);
-        emit2(g, X86_MOV, X86_Q, x86_reg(X86_RDI, X86_Q), x86_mem(X86_RBP, g->ret_ptr));
+        emit2(g, X86_MOV, X86_Q, x86_reg(X86_RDI, X86_Q), x86_mem(X86_FRAME, g->ret_ptr));
     }
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
@@ -329,9 +329,9 @@ void gen_params(Gen *g)
         if (a.reg[0] >= 0) {
             int off = alloc_slot(g, p->name, t, x86_size(t), x86_align(t));
             if (x86_is_aggregate(t))
-                store_aggregate(g, a.reg, a.cls, x86_mem(X86_RBP, off), t);
+                store_aggregate(g, a.reg, a.cls, x86_mem(X86_FRAME, off), t);
             else
-                store_mem(g, a.reg[0], t, x86_mem(X86_RBP, off));
+                store_mem(g, a.reg[0], t, x86_mem(X86_FRAME, off));
         } else {
             place_slot(g, p->name, t, 16 + a.stack);
         }
@@ -346,7 +346,7 @@ void gen_params(Gen *g)
         ArgLoc a = classify(&s, p->type);
         int preg = assigned_reg(g, p->name);
         if (preg && a.reg[0] < 0 && !map_get(&g->dead, p->name, NULL))
-            load_mem(g, preg, p->type, x86_mem(X86_RBP, 16 + a.stack));
+            load_mem(g, preg, p->type, x86_mem(X86_FRAME, 16 + a.stack));
     }
 }
 
@@ -470,7 +470,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     // The result's address in rdi: the destination, or a slot for an unused one.
     if (struct_result(rt)) {
         X86_Operand m = dst ? name_mem(g, dst->u.var_name, 0)
-                            : x86_mem(X86_RBP, alloc_slot(g, NULL, NULL, x86_size(rt),
+                            : x86_mem(X86_FRAME, alloc_slot(g, NULL, NULL, x86_size(rt),
                                                           x86_align(rt)));
         emit2(g, X86_LEA, X86_Q, m, x86_reg(X86_RDI, X86_Q));
     }
@@ -528,10 +528,10 @@ void gen_return(Gen *g, const Tac_Val *v)
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
         if (x86_is_aggregate(t) && g->ret_ptr) {
             // Copied through the address that came in rdi, which goes back in rax.
-            emit2(g, X86_MOV, X86_Q, x86_mem(X86_RBP, g->ret_ptr), x86_reg(T1, X86_Q));
+            emit2(g, X86_MOV, X86_Q, x86_mem(X86_FRAME, g->ret_ptr), x86_reg(T1, X86_Q));
             gen_memcopy(g, x86_mem(T1, 0), name_mem(g, v->u.var_name, 0), x86_size(t),
                         x86_align(t));
-            emit2(g, X86_MOV, X86_Q, x86_mem(X86_RBP, g->ret_ptr), x86_reg(X86_RAX, X86_Q));
+            emit2(g, X86_MOV, X86_Q, x86_mem(X86_FRAME, g->ret_ptr), x86_reg(X86_RAX, X86_Q));
         } else if (struct_result(t)) {
             fatal_error("x86: %s: a struct result without its address", gen_name(g));
         } else if (x86_is_ld(t)) {

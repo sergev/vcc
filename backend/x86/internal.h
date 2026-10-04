@@ -8,18 +8,21 @@
 //
 // A scalar `%` name that is never in memory may get a register (regalloc.c): an
 // argument register (xmm0-xmm13 for float and double) unless it is live across a
-// call, else rbx or r12-r15; an FP value live across a call stays in its slot, as no
-// xmm register is callee-saved.  Any other `%` name lives in a slot at a fixed offset
-// from rbp, any other name at its symbol, addressed as sym(%rip).  An instruction
+// call, else rbx, r12-r15, or rbp without a frame pointer; an FP value live across a
+// call stays in its slot, as no xmm register is callee-saved.  Any other `%` name
+// lives in a slot at a fixed offset from the frame base, any other name at its symbol,
+// addressed as sym(%rip).  An instruction
 // works on registers directly where x86 allows, and loads other operands into the
 // scratch registers, with one of them straight from memory or an immediate.
 //
-// Frame (rbp = rsp after rbp is pushed, 16-byte aligned):
-//   rbp + 16 ...     incoming stack arguments
-//   rbp + 8          return address
-//   rbp + 0          saved rbp
-//   rbp - ...        rbx and r12-r15 in use, pushed, then slots
+// Frame (the base, X86_FRAME, 8 bytes below the return address, 16-byte aligned):
+//   base + 16 ...    incoming stack arguments
+//   base + 8         return address
+//   base + 0         saved rbp, or (no frame pointer) the first callee-saved register
+//   base - ...       the other callee-saved registers in use, pushed, then slots
 //   rsp + 0 ...      outgoing stack arguments
+// gen_prologue resolves the base to rbp with --frame-pointer, else to rsp plus the
+// frame's size, or in a leaf whose slots fit the red zone to rsp - 8, with no frame.
 //
 // A value in a general register is in canonical form: a type of 32 bits or fewer in
 // the 32-bit view, extended to 32 bits by its own type, the upper half zero (as every
@@ -75,7 +78,7 @@ typedef struct {
     StringMap regs;    // name → allocated register (regalloc.c)
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)
     int nsaved;        // callee-saved registers in use, pushed in this order
-    int saved_reg[5];
+    int saved_reg[6];
 } Gen;
 
 //

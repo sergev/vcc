@@ -9,6 +9,7 @@
 // arguments above the return address.
 TEST_F(X86Test, VariadicSavesRegisters)
 {
+    x86_frame_pointer = true;
     std::string code = Code(CompileToX86(R"(
 #include <stdarg.h>
 int f(int n, double d, ...) { va_list ap; va_start(ap, d); n = va_arg(ap, int); va_end(ap); return n; }

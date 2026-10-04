@@ -1,5 +1,6 @@
 //
-// x86-64 frame: slots below rbp, the prologue and epilogue, large frames.
+// x86-64 frame: slots below rbp or from rsp, the red zone, the prologue and epilogue,
+// large frames.
 //
 #include "x86_test.h"
 
@@ -79,4 +80,98 @@ int main(void) {
     return r;
 })");
     EXPECT_EQ(253, exit_status);
+}
+
+// A leaf keeps its slots in the red zone below rsp, with no prologue at all; the
+// array is 16-byte aligned 24 bytes below the return address.
+TEST_F(X86Test, LeafRedZone)
+{
+    std::string code = Code(CompileToX86(R"(
+int pick(int i) { int a[4]; a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4; return a[i & 3]; }
+)"));
+    EXPECT_NE(std::string::npos, code.find("leaq -24(%rsp), %rsi\n")) << code;
+    EXPECT_EQ(std::string::npos, code.find("subq")) << code;
+    EXPECT_EQ(std::string::npos, code.find("%rbp")) << code;
+}
+
+// A leaf whose slots do not fit the 128 bytes of the red zone reserves them.
+TEST_F(X86Test, LeafPastRedZone)
+{
+    std::string code = Code(CompileToX86(R"(
+int pick(int i) { char a[128]; a[0] = 1; a[i & 127] = 2; return a[0]; }
+)"));
+    EXPECT_EQ(0u, code.find("subq $136, %rsp\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("leaq (%rsp), %rsi\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("addq $136, %rsp\nret\n")) << code;
+}
+
+// With --frame-pointer, rbp is pushed and set, and slots are addressed from it.
+TEST_F(X86Test, FramePointerOption)
+{
+    x86_frame_pointer = true;
+    std::string code = Code(CompileToX86(R"(
+double h(double);
+double across(double a, double b) { double x = h(a); return x + b; }
+)"));
+    EXPECT_EQ(0u, code.find("pushq %rbp\nmovq %rsp, %rbp\nsubq $16, %rsp\nmovsd %xmm1, -8(%rbp)\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("leave\nret\n")) << code;
+}
+
+// Without a frame pointer rbp is the sixth callee-saved register: pushed after rbx and
+// r12-r15, and rsp kept 16-byte aligned by what is reserved below them.
+TEST_F(X86Test, RbpAllocated)
+{
+    std::string code = Code(CompileToX86(R"(
+int g(int);
+int six(void)
+{
+    int a = g(1), b = g(2), c = g(3), d = g(4), e = g(5), f = g(6);
+    g(0);
+    return a + b + c + d + e + f;
+}
+)"));
+    EXPECT_EQ(0u, code.find("pushq %rbx\npushq %r12\npushq %r13\npushq %r14\npushq %r15\n"
+                            "pushq %rbp\nsubq $8, %rsp\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("addq $8, %rsp\npopq %rbp\npopq %r15\npopq %r14\n"
+                                           "popq %r13\npopq %r12\npopq %rbx\nret\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find(", %ebp\n")) << code;
+}
+
+// rsp is 16-byte aligned at every call from a frame addressed from rsp, with 0, 1 or 6
+// registers pushed: clang's code finds its 16-byte aligned local aligned.
+TEST_F(X86Test, RunRspFrameAlignment)
+{
+    SKIP_IF_NO_X86_TOOLS();
+    std::string ours = R"(
+int misalign(void);
+int g(int x) { return x; }
+
+int none(void) { int a[3]; a[0] = misalign(); a[1] = a[0]; a[2] = a[1]; return a[2]; }
+int one(int x) { int m = misalign(); return m + g(x) - x; }
+int six(void)
+{
+    int a = g(1), b = g(2), c = g(3), d = g(4), e = g(5), f = g(6);
+    return misalign() + a + b + c + d + e + f - 21;
+}
+int leaf(int i) { int a[8]; for (int k = 0; k < 8; k++) a[k] = k * k; return a[i & 7]; }
+
+int main(void)
+{
+    return misalign() * 1000 + none() * 100 + one(5) * 10 + six() + (leaf(3) != 9);
+}
+)";
+    std::string theirs = R"(
+int misalign(void)
+{
+    volatile long x __attribute__((aligned(16))) = 0;
+    unsigned long a = (unsigned long)&x;
+    __asm__ volatile("" : "+r"(a)); // so that clang cannot assume the alignment
+    return (int)(a & 15) + (int)x;
+}
+)";
+    CompileAndRunWithClang(ours, theirs);
+    EXPECT_EQ(0, exit_status);
 }

@@ -60,6 +60,7 @@ EXPECT_HAS(LongDoubleToFloat, "fstps ", "float f(long double a) { return a; }")
 // 8-byte one; the result is stored from st(0).
 TEST_F(X86Test, LongDoubleCall)
 {
+    x86_frame_pointer = true;
     std::string code = Code(CompileToX86(R"(
 long double g(long a, long b, long c, long d, long e, long k, long x, long double y);
 void f(long double a) { g(1, 2, 3, 4, 5, 6, 7, a); }
