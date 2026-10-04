@@ -15,7 +15,12 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
+/* A target whose int cannot hold the default defines _RAND_MAX in its <stddef.h>. */
+#ifdef _RAND_MAX
+#define RAND_MAX _RAND_MAX
+#else
 #define RAND_MAX 2147483647
+#endif
 
 typedef struct {
     int quot;

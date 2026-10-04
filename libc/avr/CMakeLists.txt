@@ -23,6 +23,27 @@ set(AVR_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
 # The ATmega1280: avr51, 128 KB of flash, a 2-byte PC.
 set(AVR_TARGET_FLAGS --target=avr -mmcu=atmega1280 CACHE INTERNAL "")
 
+# Standard-library header check, as for the other targets ...
+add_test(
+    NAME avr-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            ${SystemCpp}
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
+            ${AVR_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
+# ... and the same through our own preprocessor.
+add_test(
+    NAME avr-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-tavr
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${AVR_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
 if(NOT AVR_TOOLS_FOUND)
     message(STATUS "No AVR clang/llvm-ar/ld.lld: the AVR runtime is not built")
     return()
@@ -43,7 +64,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves, and the integer helpers under their libgcc names.
 set(AVR_LIBC_OBJS "")
-foreach(name console divmod malloc mul)
+foreach(name console divmod malloc mul setjmp)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${AVR_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
@@ -51,10 +72,9 @@ foreach(name console divmod malloc mul)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genavr -> clang, with the AVR headers,
-# then (until M20 gives AVR its own math.h) the ILP32 ones, then the shared ones.
-set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
-file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
-     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+# then the shared ones.
+set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(avr_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${SystemCpp} -E -nostdinc ${AVR_LIBC_INCLUDES}

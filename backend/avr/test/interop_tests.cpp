@@ -253,3 +253,79 @@ int main(void)
 )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// Our headers against clang's own for the target: the same constants, types and
+// layouts.  double is binary32 here, as on the clang side.
+TEST_F(AvrTest, HeadersAgreeWithClang)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    std::string values = R"(
+#include <float.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+enum { NI = 26, NF = 8 };
+void NAME(long long *i, double *f)
+{
+    long long iv[NI] = { sizeof(wchar_t), (wchar_t)-1 > 0, WCHAR_MIN, WCHAR_MAX,
+                         WINT_MIN, WINT_MAX, sizeof(max_align_t), _Alignof(max_align_t),
+                         SIZE_MAX, PTRDIFF_MIN, PTRDIFF_MAX, INTPTR_MIN, UINTPTR_MAX,
+                         INT64_MIN, UINT32_MAX, CHAR_MIN, CHAR_MAX, LONG_MAX, INT_MIN,
+                         UINT_MAX, sizeof(size_t) * 10 + sizeof(ptrdiff_t),
+                         sizeof(int_fast16_t) * 10 + sizeof(int_least32_t),
+                         sizeof(intmax_t), SIG_ATOMIC_MAX,
+                         LDBL_MANT_DIG * 10000 + LDBL_MAX_EXP, DECIMAL_DIG + LDBL_DIG * 100 };
+    double fv[NF] = { LDBL_EPSILON, LDBL_MIN, LDBL_MAX, LDBL_TRUE_MIN, DBL_EPSILON,
+                      DBL_MAX, FLT_EPSILON, FLT_MIN_10_EXP + FLT_MAX_10_EXP };
+    for (int k = 0; k < NI; k++)
+        i[k] = iv[k];
+    for (int k = 0; k < NF; k++)
+        f[k] = fv[k];
+}
+)";
+    std::string ours   = values;
+    std::string theirs = values;
+    ours.replace(ours.find("NAME"), 4, "our_values");
+    theirs.replace(theirs.find("NAME"), 4, "their_values");
+    ours += R"(
+void their_values(long long *i, double *f);
+int main(void)
+{
+    long long oi[NI], ti[NI];
+    double of[NF], tf[NF];
+    our_values(oi, of);
+    their_values(ti, tf);
+    for (int k = 0; k < NI; k++)
+        if (oi[k] != ti[k])
+            return 1 + k;
+    for (int k = 0; k < NF; k++)
+        if (of[k] != tf[k])
+            return 100 + k;
+    return 0;
+})";
+    EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The shared headers in a 16-bit int: RAND_MAX fits it, char32_t holds 32 bits.
+TEST_F(AvrTest, SharedHeadersFitInt16)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    EXPECT_EQ("", CompileAndRunAvr(R"(
+#include <stdlib.h>
+#include <uchar.h>
+#include <limits.h>
+#include <inttypes.h>
+#include <math.h>
+int main(void)
+{
+    if (RAND_MAX != INT_MAX) return 1;
+    if (sizeof(char32_t) != 4 || sizeof(char16_t) != 2) return 2;
+    if ((char32_t)-1 < 0x7fffffff) return 3;
+    if (sizeof(PRId32) != 3 || PRId32[0] != 'l' || PRIdPTR[0] != 'd') return 4;
+    if (fabsf(-2.5f) != 2.5f || !(INFINITY > FLT_MAX)) return 5;
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}

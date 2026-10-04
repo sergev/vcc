@@ -15,6 +15,9 @@ typedef struct {
     long double __ld;
 } max_align_t;
 
+/* For <stdlib.h>: RAND_MAX fits an int. */
+#define _RAND_MAX 32767
+
 #ifndef NULL
 #define NULL ((void *)0)
 #endif

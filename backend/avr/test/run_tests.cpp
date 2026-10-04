@@ -241,3 +241,57 @@ int main(void)
     EXPECT_EQ("stack overflow\n", ClangRun(src));
     EXPECT_EQ(0xfd, exit_status);
 }
+
+// setjmp/longjmp from libc.a: a jump out of nested frames, longjmp(env, 0) arriving as
+// 1, and a second setjmp on the same buffer.
+static const char setjmp_program[] = R"(
+#include <setjmp.h>
+static jmp_buf env;
+static int depth;
+__attribute__((noinline)) static void dive(int n, int val)
+{
+    depth = n;
+    if (n == 5)
+        longjmp(env, val);
+    dive(n + 1, val);
+}
+int main(void)
+{
+    volatile int round = 0;
+    int r = setjmp(env);
+    round++;
+    if (round == 1) {
+        if (r != 0)
+            return 1;
+        dive(0, 7);
+    }
+    if (round == 2) {
+        if (r != 7 || depth != 5)
+            return 2;
+        dive(0, 0);
+    }
+    if (round == 3 && r != 1)
+        return 3;
+    return round == 3 ? 42 : 4;
+}
+)";
+
+TEST_F(AvrTest, RunSetjmpLongjmp)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    std::string src = setjmp_program;
+    src.replace(src.find("__attribute__((noinline)) "), 26, "");
+    EXPECT_EQ("", CompileAndRunAvr(src));
+    EXPECT_EQ(42, exit_status);
+}
+
+// The same from clang's code, which keeps values in the call-saved registers.
+TEST_F(AvrTest, RunSetjmpLongjmpClang)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    std::string src = setjmp_program;
+    EXPECT_EQ("", Run("", "crt0.o", &src,
+                      { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
+                      ".clang"));
+    EXPECT_EQ(42, exit_status);
+}

@@ -158,7 +158,7 @@ One selection helper owns that rule.
 
 ## Phase 4 — library and headers
 
-- **M20. Headers.** `libc/avr/include/` (`stddef.h`, `stdint.h`, `limits.h` and
+- **M20. Headers.** *Done.* `libc/avr/include/` (`stddef.h`, `stdint.h`, `limits.h` and
   `stdarg.h` exist since M15, `float.h` since M14; the ILP32 `math.h` fills in until
   then):
   - `float.h`: `FLT_*` = `DBL_*` = `LDBL_*`, with `MANT_DIG` 24, `EPSILON` 2⁻²³ and
