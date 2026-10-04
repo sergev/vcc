@@ -32,4 +32,4 @@ add_subdirectory(riscv32)
 # aarch64 and arm32 use the tools riscv64 found.
 add_subdirectory(aarch64)
 add_subdirectory(arm32)
-add_subdirectory(x86_64)
+add_subdirectory(x86)

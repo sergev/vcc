@@ -134,7 +134,7 @@ Phase 0 is done:
   differs only by signed plain `char` and x87 folding. An *unfolded* `long double`
   literal keeps its binary128 bits in TAC, and the backend rounds it with
   `f128_to_x87`. No libc routine depends on the signedness of plain `char`.
-- `libc/x86_64/CMakeLists.txt` finds the tools (`X86_TOOLS_FOUND`, `X86_CLANG`,
+- `libc/x86/CMakeLists.txt` finds the tools (`X86_TOOLS_FOUND`, `X86_CLANG`,
   `X86_LD`, `X86_QEMU`, `X86_GNU_AS`, `X86_LIB_DIR`, `X86_LINK_SCRIPT`,
   `X86_TARGET_FLAGS`).
 - `QemuConfig.status_from_debugcon` makes the shared fixture pass `-debugcon
@@ -142,7 +142,7 @@ Phase 0 is done:
 
 ## Phase 1 — skeleton
 
-- **X5. Runtime.** `libc/x86_64/`:
+- **X5. Runtime.** `libc/x86/`:
   - **`crt0.S`, 32-bit part** (`.code32`). The PVH note. The page tables, one PML4 and one
     PDPT of four 1 GiB identity pages. PAE, `EFER.LME` and paging, as verified above.
     Then the GDT and a far jump to 64-bit code.
@@ -345,7 +345,7 @@ the selected instructions.
 
 ## Phase 4 — library and headers
 
-- **X21. Headers.** `libc/x86_64/include/`:
+- **X21. Headers.** `libc/x86/include/`:
   - `float.h`, with `LDBL_*` of the x87 format: `LDBL_MANT_DIG` 64, `LDBL_MAX_EXP` 16384,
     `LDBL_EPSILON` 2^-63, and so on;
   - `limits.h` with a signed `CHAR_MIN`/`CHAR_MAX`. `libc/lp64/include/limits.h`
@@ -416,13 +416,13 @@ the selected instructions.
 
   `cc-tests` cases, including a staged prefix.
 - **X27. Install.** `genx86` as `vgenx86`; `crt0.o`, `libc.a`, `link.ld` and the
-  headers (`libc/x86_64`, `libc/lp64`, `libc/common`) under `share/vcc/x86_64/`; the
+  headers (`libc/x86`, `libc/lp64`, `libc/common`) under `share/vcc/x86_64/`; the
   runtime only when the x86-64 clang/llvm-ar were found.
 - **X28. Documentation.**
   - `docs/X86_64_Backend.md`, in the style of `docs/Arm32_Backend.md`: target, how code
     is generated, frame, calls, variadics, the x87 `long double`, runtime, running a
     program by hand under qemu.
-  - README and CLAUDE.md for five targets, and `libc/x86_64/include/README.md`.
+  - README and CLAUDE.md for five targets, and `libc/x86/include/README.md`.
   - Remove `backend/x86/` from the "design notes only" sentence.
 
   This plan is then removed.
