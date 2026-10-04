@@ -1,10 +1,10 @@
 #
 # x86-64 runtime for bare-metal qemu `microvm` (see backend/x86/Plan.md): crt0.o,
 # crt0-status.o (prints main's result, for the book run tests) and libc.a: the assembly
-# leaves, and the C library compiled by our own code generator.  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
-# that clang has the x86-64 target; qemu-system-x86_64 runs the programs; GNU `as` from
-# x86_64-elf-binutils, when installed, is a second assembler the tests check our output
-# with.
+# leaves, and the C library compiled by our own code generator.  Uses the clang, llvm-ar
+# and ld.lld libc/riscv64 found, when that clang has the x86-64 target;
+# qemu-system-x86_64 runs the programs; GNU `as` from x86_64-elf-binutils, when
+# installed, is a second assembler the tests check our output with.
 #
 find_program(X86_QEMU NAMES qemu-system-x86_64)
 find_program(X86_GNU_AS NAMES x86_64-elf-as)
@@ -49,6 +49,19 @@ add_test(
             ${X86_INCLUDE_DIR}
             ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
+# All the headers, the x86-64, the LP64 and the shared ones, go into one directory, as
+# for aarch64.  x86-64's own float.h and limits.h (x87 long double, signed char) take
+# the place of the LP64 ones.
+file(GLOB X86_TARGET_HEADERS ${X86_INCLUDE_DIR}/*.h)
+file(GLOB X86_LP64_HEADERS ${LP64_INCLUDE_DIR}/*.h)
+foreach(header ${X86_TARGET_HEADERS})
+    get_filename_component(name ${header} NAME)
+    list(REMOVE_ITEM X86_LP64_HEADERS ${LP64_INCLUDE_DIR}/${name})
+endforeach()
+file(GLOB X86_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${X86_TARGET_HEADERS} ${X86_LP64_HEADERS} ${X86_COMMON_HEADERS}
+        DESTINATION share/vcc/x86_64/include)
+
 if(NOT X86_TOOLS_FOUND)
     message(STATUS "No x86-64 clang/llvm-ar: the x86-64 runtime is not built")
     return()
@@ -109,3 +122,6 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${X86_LIBC_OBJS})
 add_custom_target(x86-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+# The runtime, with the linker script for qemu `microvm`.
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/x86_64/lib)

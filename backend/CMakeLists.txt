@@ -53,3 +53,5 @@ add_executable(genx86
     x86/main.c
 )
 target_link_libraries(genx86 x86 backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genx86> DESTINATION bin RENAME vgenx86)
