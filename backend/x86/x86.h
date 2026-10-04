@@ -126,6 +126,7 @@ enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
     X(CLTD, "cltd", X86_PLAIN)                                                             \
     X(CQTO, "cqto", X86_PLAIN)                                                             \
     X(SET, "set", X86_CONDITION)                                                           \
+    X(CMOV, "cmov", X86_CONDITION)                                                         \
     X(J, "j", X86_CONDITION)                                                               \
     X(JMP, "jmp", X86_PLAIN)                                                               \
     X(CALL, "call", X86_PLAIN)                                                             \
@@ -205,6 +206,7 @@ typedef struct {
     bool global;
     X86_Block *blocks, *tail;
     bool volatile_access; // the TAC instruction being selected is a volatile access
+    uint32_t result_regs; // bit r: register r carries the function's result at ret
 } X86_Func;
 
 extern const char *const x86_mnemonic[X86_NUM_OPS];

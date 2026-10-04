@@ -77,6 +77,8 @@ typedef struct {
     int nconsts, maxconsts;
     StringMap regs;    // name → allocated register (regalloc.c)
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)
+    struct Flow *flow; // with the peephole pass: the body's variables,
+    int *uses;         // and how many times each is read
     int nsaved;        // callee-saved registers in use, pushed in this order
     int saved_reg[6];
 } Gen;
@@ -198,6 +200,8 @@ struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
+// Bit r for each register r that carries the function's result at ret.
+uint32_t result_regs(const Gen *g);
 
 //
 // Floating point, SSE (fp.c)
@@ -209,6 +213,9 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t);
 void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
 // Branch to `label` when FP value `cond` is zero (or nonzero); a NaN is nonzero.
 void gen_fp_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *label);
+// FP comparison `in` and a branch to `label` when its result is zero (or nonzero);
+// false, emitting nothing, when `in` is not a comparison.
+bool gen_fp_compare_branch(Gen *g, const Tac_Instruction *in, bool if_zero, const char *label);
 // dst = src, a float or double, through rax.
 void gen_fp_copy(Gen *g, const Tac_Val *src, X86_Operand dst, const Tac_Type *t);
 
@@ -236,5 +243,13 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// A comparison `in` whose only use is conditional jump `next`: cmp (or ucomis) and a
+// jcc in place of both; false, emitting nothing, when it is not one.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
+
+//
+// Peephole pass (peephole.c), on the finished function
+//
+void x86_peephole_func(X86_Func *fn);
 
 #endif // X86_INTERNAL_H

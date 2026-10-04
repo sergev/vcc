@@ -9,6 +9,7 @@
 static const BackendFlag flags[] = {
     { "no-regalloc", "keep every variable in memory" },
     { "frame-pointer", "keep rbp as a frame pointer in every function" },
+    { "no-peephole", "skip the peephole pass" },
     { NULL, NULL },
 };
 
@@ -16,8 +17,10 @@ static void flag(int index)
 {
     if (index == 0)
         x86_regalloc = false;
-    else
+    else if (index == 1)
         x86_frame_pointer = true;
+    else
+        x86_peephole = false;
 }
 
 static const char *output_ext(void)

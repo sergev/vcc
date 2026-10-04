@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -349,6 +350,18 @@ bool clobbers_regs(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
     return true;
 }
 
+// Set the flags by a - b, of integer type `t`.
+static void gen_cmp(Gen *g, const Tac_Val *a, const Tac_Val *b, const Tac_Type *t)
+{
+    X86_Width w = x86_op_width(t);
+    int ra      = T0;
+    if (a->kind == TAC_VAL_CONSTANT)
+        load_int_as(g, T0, a, t);
+    else
+        ra = use_val(g, T0, a);
+    emit2(g, X86_CMP, w, src_operand(g, b, t, T1), x86_reg(ra, w));
+}
+
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
@@ -381,12 +394,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     }
     int cond = compare_cond(op, is_unsigned);
     if (cond >= 0) {
-        int ra = T0;
-        if (a->kind == TAC_VAL_CONSTANT)
-            load_int_as(g, T0, a, t);
-        else
-            ra = use_val(g, T0, a);
-        emit2(g, X86_CMP, w, src_operand(g, b, t, T1), x86_reg(ra, w));
+        gen_cmp(g, a, b, t);
         int d = def_reg(g, T0, in->u.binary.dst);
         gen_setcc(g, d, cond);
         store_val(g, d, in->u.binary.dst);
@@ -592,6 +600,36 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     int d = def_reg(g, T0, dst);
     emit2(g, X86_LEA, X86_Q, name_mem(g, src->u.var_name, 0), x86_reg(d, X86_Q));
     store_val(g, d, dst);
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
+    if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    const Tac_Type *t     = val_type(g, in->u.binary.src1);
+    Tac_BinaryOperator op = in->u.binary.op;
+    bool if_zero          = next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO;
+    char *l               = label_name(next->u.jump_if_zero.target);
+    bool done             = false;
+    if (x86_is_fp(t)) {
+        done = gen_fp_compare_branch(g, in, if_zero, l);
+    } else if (!x86_is_ld(t)) {
+        int cond = compare_cond(op, t->kind == TAC_TYPE_POINTER || unsigned_op(op));
+        if (cond >= 0) {
+            gen_cmp(g, in->u.binary.src1, in->u.binary.src2, t);
+            emit1(g, X86_J, X86_Q, x86_label(l))->cond = if_zero ? cond ^ 1 : cond;
+            done                                       = true;
+        }
+    }
+    xfree(l);
+    return done;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

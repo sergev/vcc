@@ -90,7 +90,7 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t)
 }
 
 // The registers a result of class `cls` comes back in: rax and rdx, xmm0 and xmm1.
-static void result_regs(int cls, int reg[2])
+static void result_regs_of(int cls, int reg[2])
 {
     int next_int = 0, next_sse = 0;
     for (int i = 0; i < 2; i++) {
@@ -491,7 +491,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         emit1(g, X86_FSTPT, X86_Q, name_mem(g, dst->u.var_name, 0));
     } else if (x86_is_aggregate(t)) {
         int cls = tac_sysv64_class(t), reg[2];
-        result_regs(cls, reg);
+        result_regs_of(cls, reg);
         store_aggregate(g, reg, cls, name_mem(g, dst->u.var_name, 0), t);
     } else {
         store_val(g, x86_is_fp(t) ? X86_XMM0 : X86_RAX, dst);
@@ -519,6 +519,24 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         hint[var] = X86_XMM0;
 }
 
+uint32_t result_regs(const Gen *g)
+{
+    const Tac_Type *t = ret_type(g->tl->u.function.type);
+    if (!t || t->kind == TAC_TYPE_VOID || x87_result(t))
+        return 0;
+    if (struct_result(t))
+        return 1u << X86_RAX;
+    if (!x86_is_aggregate(t))
+        return 1u << (x86_is_fp(t) ? X86_XMM0 : X86_RAX);
+    int reg[2];
+    uint32_t m = 0;
+    result_regs_of(tac_sysv64_class(t), reg);
+    for (int i = 0; i < 2; i++)
+        if (reg[i] >= 0)
+            m |= 1u << reg[i];
+    return m;
+}
+
 // The result in rax, extended to 32 bits when narrower (clang relies on it), xmm0,
 // st(0), the registers of its class, or memory.
 void gen_return(Gen *g, const Tac_Val *v)
@@ -540,7 +558,7 @@ void gen_return(Gen *g, const Tac_Val *v)
             emit1(g, X86_FLDT, X86_Q, name_mem(g, v->u.var_name, 0));
         } else if (x86_is_aggregate(t)) {
             int cls = tac_sysv64_class(t), reg[2];
-            result_regs(cls, reg);
+            result_regs_of(cls, reg);
             load_aggregate(g, reg, cls, v->u.var_name, t);
         } else if (x86_is_fp(t)) {
             load_val(g, X86_XMM0, v);

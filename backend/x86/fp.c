@@ -208,6 +208,41 @@ static void jmp(Gen *g, const char *label)
     emit1(g, X86_JMP, X86_Q, x86_label(label));
 }
 
+bool gen_fp_compare_branch(Gen *g, const Tac_Instruction *in, bool if_zero, const char *label)
+{
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
+    const Tac_Type *t = val_type(g, a);
+    bool swap;
+    int cond = fp_compare_cond(in->u.binary.op, &swap);
+    if (cond < 0)
+        return false;
+    if (swap) {
+        const Tac_Val *x = a;
+        a                = b;
+        b                = x;
+    }
+    int ra = use_val(g, F0, a);
+    emit2(g, x86_is_double(t) ? X86_UCOMISD : X86_UCOMISS, X86_Q, fp_operand(g, b), x86_xmm(ra));
+    // Equal is ZF = 1 and PF = 0, so its branch and its inverse take two jumps; `a`
+    // and `ae` are false for unordered operands, and `be` and `b` true.
+    bool taken_if_equal = (cond == X86_CC_E) != if_zero;
+    if (cond == X86_CC_E || cond == X86_CC_NE) {
+        if (taken_if_equal) {
+            char skip[32];
+            new_label(skip);
+            jcc(g, X86_CC_P, skip);
+            jcc(g, X86_CC_E, label);
+            x86_new_block(g->fn, skip);
+        } else {
+            jcc(g, X86_CC_NE, label);
+            jcc(g, X86_CC_P, label);
+        }
+    } else {
+        jcc(g, if_zero ? cond ^ 1 : cond, label);
+    }
+    return true;
+}
+
 void gen_fp_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *label)
 {
     compare_zero(g, cond, val_type(g, cond));

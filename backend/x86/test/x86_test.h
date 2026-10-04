@@ -47,14 +47,16 @@ protected:
         // The defaults; a test may change them.
         x86_regalloc      = true;
         x86_frame_pointer = false;
+        x86_peephole      = true;
     }
 
     // Pin instruction selection itself: every variable in its slot, rbp the frame
-    // pointer in every function that needs a frame.
+    // pointer in every function that needs a frame, no peephole pass.
     static void NaiveSelection()
     {
         x86_regalloc      = false;
         x86_frame_pointer = true;
+        x86_peephole      = false;
     }
 
     // Assembly of every toplevel of the translation unit.  When GNU as is installed,

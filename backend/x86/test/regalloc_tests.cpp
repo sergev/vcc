@@ -10,6 +10,7 @@
 // nothing goes through the frame.
 TEST_F(X86Test, LoopInRegisters)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 long sum(long *p, int n)
 {
@@ -33,6 +34,7 @@ addl $1, %ecx
 // rsp 16-byte aligned for the call.
 TEST_F(X86Test, CalleeSavedAcrossCall)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
@@ -53,6 +55,7 @@ ret
 // Doubles in xmm registers, computed in place, with no frame at all.
 TEST_F(X86Test, DoublesInRegisters)
 {
+    x86_peephole = false;
     EXPECT_EQ("mulsd %xmm1, %xmm0\naddsd %xmm2, %xmm0\nret\n",
               Code(CompileToX86("double dot(double a, double b, double c) { return a * b + c; }")));
 }
@@ -61,6 +64,7 @@ TEST_F(X86Test, DoublesInRegisters)
 // one not live across it stays in a register.
 TEST_F(X86Test, DoubleAcrossCallInSlot)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 double h(double);
 double across(double a, double b) { double x = h(a); return x + b; }
@@ -78,6 +82,7 @@ ret
 // Arguments trading registers: a cycle, broken through rax.
 TEST_F(X86Test, ArgumentsMovedAtOnce)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 int g2(int, int);
 int swap(int a, int b) { return g2(b, a); }
@@ -90,6 +95,7 @@ int swap(int a, int b) { return g2(b, a); }
 // register is extended again in place.
 TEST_F(X86Test, NarrowValuesCanonical)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 signed char narrow(signed char c, int k) { signed char d = c + k; return d; }
 )"));
@@ -103,6 +109,7 @@ signed char narrow(signed char c, int k) { signed char d = c + k; return d; }
 // live across the divide is kept out of the argument registers.
 TEST_F(X86Test, DivideAvoidsRdx)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86("int divc(int a, int b, int c) { return a / c + b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(movl %esi, %ebx
 movl %edi, %eax
@@ -118,6 +125,7 @@ addl %ebx, %edi
 // live across the shift is kept out of the argument registers.
 TEST_F(X86Test, ShiftAvoidsRcx)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 long shx(int a, int b, int c, long x, int n) { return (x << n) + a; }
 )"));
@@ -130,6 +138,7 @@ long shx(int a, int b, int c, long x, int n) { return (x << n) + a; }
 // first operand's register, which is dead after.
 TEST_F(X86Test, DestinationIsSecondOperand)
 {
+    x86_peephole = false;
     EXPECT_EQ("movl %edi, %edi\nmovl %esi, %esi\nsubl %esi, %edi\nmovl %edi, %eax\nret\n",
               Code(CompileToX86("int rsub(int a, int b) { b = a - b; return b; }")));
 }
@@ -139,6 +148,7 @@ TEST_F(X86Test, DestinationIsSecondOperand)
 // nothing is saved.
 TEST_F(X86Test, StackParameterInRegister)
 {
+    x86_peephole = false;
     std::string code = Code(CompileToX86(R"(
 long seventh(long a, long b, long c, long d, long e, long f, long g) { return g * a; }
 )"));
