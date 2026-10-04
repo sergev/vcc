@@ -23,6 +23,7 @@ add_executable(translate-tests
     test/struct_tests.cpp
     test/type_tests.cpp
     test/avr_tests.cpp
+    test/msp430_tests.cpp
 )
 target_link_libraries(translate-tests parser translator GTest::gtest_main test_util)
 target_compile_definitions(translate-tests PRIVATE

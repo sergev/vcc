@@ -219,6 +219,10 @@ One per-opcode table, transcribed from that reference, serves selection and peep
     clang also defines the non-reserved `MSP430`. Leave it out, as AVR left out `AVR`.
     Add a test in `test_predefined_macros.cpp`.
   - Check that `lower -t msp430` accepts the name and lays out structs by the new entry.
+
+  *Done.* As for every other target, `cpp` predefines only the identifying macros:
+  `__MSP430__`, `__CHAR_UNSIGNED__` and `__ELF__`. The sizes and limits come from the
+  headers. riscv64's `struct_return_max` is now an explicit 16.
 - **T2. Frontend audit for MSP430's new combinations.** Run the test corpus through
   `lower -t msp430`: the chapter sources, translator fixtures and libc sources. Then pin
   what is new to the project, each with a `-t msp430` test:
@@ -236,16 +240,38 @@ One per-opcode table, transcribed from that reference, serves selection and peep
     `?:`, and in a chained assignment.
 
   Fix what is found in shared code and list it here.
+
+  *Done, with no defect in shared code:*
+  - `translator/test/msp430_tests.cpp` and the `TranslateTestMsp430` cases in
+    `type_tests.cpp` pin each item, the layouts against clang's for six structs.
+  - All 34 `libc/common` and `libc/ilp32` sources, 362 book programs and 224
+    test-fixture snippets lower with `-t msp430 --verify`. The outcomes are the same as
+    with `-t avr` on all 1437 inputs, except two that are expected:
+    - an AVR test calls `fabsf`, which only AVR's `math.h` declares;
+    - `__builtin_va_class` is rejected on both targets.
+
+    The other failures are the book's invalid and multi-file programs and fragments.
+  - A plain `char` static initializer reads `-1` in TAC on every target, the
+    unsigned-char ones included. It is the same byte, 0xff, so this is not a defect.
+  - An unfolded `0.1L` keeps its binary128 bits in TAC, as on ARM32, where `long double`
+    is `double` too. The backend rounds it when it emits it.
 - **T3. Shared headers for the 16-bit data model.** AVR's `stdint.h`, `inttypes.h` and
   `stddef.h` describe exactly MSP430's `int16`/`long32`/pointer16 model, and `limits.h`
   differs only in `CHAR_MIN`/`CHAR_MAX`.
   - Move them to a new `libc/ip16/include/`, searched after the target's own directory
-    as `libc/lp64` and `libc/ilp32` are. Key `CHAR_MIN`/`CHAR_MAX` off
-    `__CHAR_UNSIGNED__`.
+    as `libc/lp64` and `libc/ilp32` are.
   - `libc/msp430/include/` starts with what this needs for the fixtures. The rest follows
     at T19.
   - `TEST_MODEL_INCLUDE_DIR` becomes `libc/ip16/include` for AVR and MSP430.
   - AVR's preprocessed headers and every `avr-tests` golden stay unchanged.
+
+  *Done.*
+  - `limits.h` stays target-owned, as x86-64's does. Keying `CHAR_MIN` off
+    `__CHAR_UNSIGNED__` would break under the host `cc -E` that the build and the
+    fixtures use, since the host defines its own.
+  - `libc/msp430/include/` has `float.h` (ARM32's binary64 one), `limits.h`, `math.h`
+    (the ILP32 declarations) and `stdarg.h` (the pointer walk, sizes rounded up to 2).
+  - All 27 AVR headers preprocess byte-identically after the move.
 - **T4. CMake detection and the simulator fixture.**
   - `libc/msp430/CMakeLists.txt` finds `mspsim`, checks that the LLVM clang lists
     `msp430` (`--print-targets`), and finds `ld.lld` and `llvm-ar`. It sets
