@@ -31,6 +31,10 @@ protected:
             { "Chapter11_ArithmeticOps", "needs __moddi3, from the C library (M15)" },
             { "Chapter11_CompoundAssignToInt", "needs __divdi3, from the C library (M15)" },
             { "Chapter12_UnsignedTypeSpecifiers", "loops forever with a 16-bit unsigned" },
+            { "Chapter15_BigArray", "arrays too large for a 16-bit size_t" },
+            { "Chapter15_ArrayOfPointersToArrays", "clang -O0 runs out of registers" },
+            { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
+            { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

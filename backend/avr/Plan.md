@@ -297,7 +297,12 @@ instructions.
   - Pointer comparisons are unsigned.
   - The byte-pointer TAC kinds are plain operations, as on RISC-V.
   - From here, the C library (`libc/common`, plus `libc/avr` C sources) is built with
-    `genavr` into `libc.a`, as x86-64 did at X15.
+    `genavr` into `libc.a`, as x86-64 did at X15: so far its integer part, the string
+    and memory functions, `atoi`, `puts` and `putchar`.
+  - Done before M14, whose runtime is C that reaches a float's bits through a pointer.
+    It brought forward `stddef.h`, `stdint.h`, `limits.h` and `stdarg.h` from M20,
+    since the library needs a 16-bit `size_t`. The book chapters 14–16 come with M14,
+    as most of their programs use `double`.
 - **M16. Structs** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
   - Copies are byte by byte, since alignment is 1: unrolled `ld X+` / `st Z+` up to a
     threshold, then a counted loop.
@@ -349,7 +354,8 @@ instructions.
 
 ## Phase 4 — library and headers
 
-- **M20. Headers.** `libc/avr/include/`:
+- **M20. Headers.** `libc/avr/include/` (`stddef.h`, `stdint.h`, `limits.h` and
+  `stdarg.h` exist since M15):
   - `float.h`: `FLT_*` = `DBL_*` = `LDBL_*`, with `MANT_DIG` 24, `EPSILON` 2⁻²³ and
     `DECIMAL_DIG` 9;
   - `limits.h`: `INT_MAX` 32767, `LONG_MAX` 2³¹−1, and a signed `char`;

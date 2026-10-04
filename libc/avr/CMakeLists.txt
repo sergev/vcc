@@ -50,6 +50,31 @@ foreach(name console divmod malloc mul)
     list(APPEND AVR_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
+# C sources, through cpp -> parse -> lower -> genavr -> clang, with the AVR headers,
+# then the shared ones.
+set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+macro(avr_compile_libc_c name srcdir)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc ${AVR_LIBC_INCLUDES}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t avr ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genavr ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${RISCV_CLANG} ${AVR_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${srcdir}/${name}.c ${AVR_LIBC_HEADERS} parse lower genavr
+        COMMENT "Compiling ${name}.c -> ${name}.o (AVR)")
+    list(APPEND AVR_LIBC_OBJS ${out}/${name}.o)
+endmacro()
+
+# The integer-only part of the shared C library, so far: the rest needs floating point
+# (M14) and variadic functions (M17).
+foreach(name atoi memchr memcmp memcpy memmove memset puts putchar
+        strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
+        strtok)
+    avr_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
     COMMAND ${RISCV_AR} rcs ${out}/libc.a ${AVR_LIBC_OBJS}

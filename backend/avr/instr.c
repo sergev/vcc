@@ -227,6 +227,109 @@ static void mul16(Gen *g)
     emit2(g, AVR_MOVW, avr_reg(24), avr_reg(20));
 }
 
+// The type `ptr` points to, or NULL when unknown.
+static const Tac_Type *pointee(const Gen *g, const Tac_Val *ptr)
+{
+    const Tac_Type *t = val_type(g, ptr);
+    return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
+}
+
+// dst = *ptr, `size` bytes (a scalar): the pointer in Z, the bytes through Z+i.
+static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, int size)
+{
+    if (size > 8)
+        fatal_error("avr: %s: loading an aggregate is not implemented yet", gen_name(g));
+    int a = block_a(size);
+    load_val(g, ptr, AVR_Z, 2, EXT_TYPE);
+    for (int i = 0; i < size; i++)
+        emit2(g, AVR_LDD, avr_reg(a + i), avr_disp(AVR_Z, i));
+    store_val(g, dst, a, size);
+}
+
+// *ptr = src, `size` bytes (a scalar): the value first, then the pointer in Z.
+static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size)
+{
+    if (size > 8)
+        fatal_error("avr: %s: storing an aggregate is not implemented yet", gen_name(g));
+    int a = block_a(size);
+    load_val(g, src, a, size, EXT_TYPE);
+    load_val(g, ptr, AVR_Z, 2, EXT_TYPE);
+    for (int i = 0; i < size; i++)
+        emit2(g, AVR_STD, avr_disp(AVR_Z, i), avr_reg(a + i));
+}
+
+// The width of a load or store through `ptr` of value `v`: the pointee's when known,
+// else the value's.
+static int access_size(const Gen *g, const Tac_Val *ptr, const Tac_Val *v)
+{
+    const Tac_Type *t = pointee(g, ptr);
+    if (!t || !avr_is_scalar(t) || t->kind == TAC_TYPE_VOID)
+        t = val_type(g, v);
+    return avr_type_size(t);
+}
+
+// dst = ptr + index * scale: the index scaled in r25:r24, by shifts for a power of two
+// and a multiply otherwise, then the pointer added from r23:r22.
+static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Val *index = in->u.add_ptr.index;
+    int scale            = in->u.add_ptr.scale;
+    if (index->kind == TAC_VAL_CONSTANT) {
+        int off = (int)(const_bits(index->u.constant) * (uint64_t)scale);
+        load_val(g, in->u.add_ptr.ptr, 24, 2, EXT_TYPE);
+        gen_li(g, 22, off & 0xff);
+        gen_li(g, 23, (off >> 8) & 0xff);
+    } else {
+        load_val(g, index, 24, 2, EXT_TYPE);
+        int k = 0;
+        while (k < 15 && (1 << k) < scale)
+            k++;
+        if ((1 << k) == scale) {
+            for (int i = 0; i < k; i++) {
+                emit1(g, AVR_LSL, avr_reg(24));
+                emit1(g, AVR_ROL, avr_reg(25));
+            }
+        } else {
+            gen_li(g, 22, scale & 0xff);
+            gen_li(g, 23, (scale >> 8) & 0xff);
+            mul16(g);
+        }
+        load_val(g, in->u.add_ptr.ptr, 22, 2, EXT_TYPE);
+    }
+    chain(g, AVR_ADD, AVR_ADC, 24, 22, 2);
+    store_val(g, in->u.add_ptr.dst, 24, 2);
+}
+
+// dst = a - b, two byte pointers.
+static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
+{
+    load_val(g, in->u.ptr_diff.ptr_a, 24, 2, EXT_TYPE);
+    load_val(g, in->u.ptr_diff.ptr_b, 22, 2, EXT_TYPE);
+    chain(g, AVR_SUB, AVR_SBC, 24, 22, 2);
+    store_val(g, in->u.ptr_diff.dst, 24, 2);
+}
+
+// Member `offset` of aggregate `name` = src, a scalar of `size` bytes.
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset, int size)
+{
+    if (size > 8)
+        fatal_error("avr: %s: copying an aggregate member is not implemented yet", gen_name(g));
+    int a = block_a(size);
+    load_val(g, src, a, size, EXT_TYPE);
+    access_bytes(g, true, name, offset, a, size);
+}
+
+// dst = member `offset` of aggregate `name`, a scalar of `size` bytes.
+static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst,
+                                 int size)
+{
+    if (size > 8)
+        fatal_error("avr: %s: copying an aggregate member is not implemented yet", gen_name(g));
+    int a = block_a(size);
+    access_bytes(g, false, name, offset, a, size);
+    store_val(g, dst, a, size);
+}
+
 // Call runtime helper `name`.
 static void call_helper(Gen *g, const char *name)
 {
@@ -443,6 +546,44 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
             fatal_error("avr: %s: the address of a constant", gen_name(g));
         gen_get_address(g, in->u.get_address.src->u.var_name, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_LOAD:
+        gen_load(g, in->u.load.src_ptr, in->u.load.dst,
+                 access_size(g, in->u.load.src_ptr, in->u.load.dst));
+        break;
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        gen_load(g, in->u.load.src_ptr, in->u.load.dst, 1);
+        break;
+    case TAC_INSTRUCTION_STORE:
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr,
+                  access_size(g, in->u.store.dst_ptr, in->u.store.src));
+        break;
+    case TAC_INSTRUCTION_STORE_BYTE:
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr, 1);
+        break;
+    case TAC_INSTRUCTION_ADD_PTR:
+        gen_add_ptr(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_DIFF:
+        gen_ptr_diff(g, in);
+        break;
+    case TAC_INSTRUCTION_COPY_TO_OFFSET:
+        gen_copy_to_offset(g, in->u.copy_to_offset.src, in->u.copy_to_offset.dst,
+                           in->u.copy_to_offset.offset,
+                           avr_type_size(val_type(g, in->u.copy_to_offset.src)));
+        break;
+    case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+        gen_copy_to_offset(g, in->u.copy_to_offset.src, in->u.copy_to_offset.dst,
+                           in->u.copy_to_offset.offset, 1);
+        break;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+        gen_copy_from_offset(g, in->u.copy_from_offset.src, in->u.copy_from_offset.offset,
+                             in->u.copy_from_offset.dst,
+                             avr_type_size(val_type(g, in->u.copy_from_offset.dst)));
+        break;
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        gen_copy_from_offset(g, in->u.copy_from_offset.src, in->u.copy_from_offset.offset,
+                             in->u.copy_from_offset.dst, 1);
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

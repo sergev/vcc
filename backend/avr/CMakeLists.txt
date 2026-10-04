@@ -30,6 +30,7 @@ add_executable(avr-tests
     test/relax_tests.cpp
     test/call_tests.cpp
     test/data_tests.cpp
+    test/ptr_tests.cpp
     test/run_tests.cpp
     ${AVR_BOOK_SOURCES}
 )
@@ -39,11 +40,11 @@ if(AVR_TOOLS_FOUND)
     add_dependencies(avr-tests avr-libc)
 endif()
 # The AVR headers come with the code that needs them (Plan.md, M20); until then the
-# riscv32 ones serve the test programs, which include only <stdlib.h> so far.
+# ILP32 ones fill in, behind them.
 target_compile_definitions(avr-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
-    TEST_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
+    TEST_INCLUDE_DIR="${AVR_INCLUDE_DIR}"
     TEST_MODEL_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     AVR_TOOLS_FOUND=$<BOOL:${AVR_TOOLS_FOUND}>
