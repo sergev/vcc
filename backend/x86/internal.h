@@ -73,6 +73,7 @@ typedef struct {
     FpConst *consts;   // the function's .rodata constants
     int nconsts, maxconsts;
     StringMap regs;    // name → allocated register (regalloc.c)
+    StringMap dead;    // allocated parameters dead on entry (regalloc.c)
     int nsaved;        // callee-saved registers in use, pushed in this order
     int saved_reg[5];
 } Gen;

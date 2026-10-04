@@ -369,6 +369,10 @@ void gen_params(Gen *g)
             fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t, false);
         int preg = assigned_reg(g, p->name);
+        if (preg && map_get(&g->dead, p->name, NULL)) {
+            place_reg(g, p->name, t, preg, assigned_reg_hi(g, p->name));
+            continue;
+        }
         if (preg && split_fp(&a) && a.piece[0].reg >= 0) {
             // A double in integer registers, for an FP register: through memory.
             int slot = alloc_slot(g, NULL, NULL, 8, 8);
@@ -438,6 +442,8 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
         int preg = assigned_reg(g, p->name), hi = assigned_reg_hi(g, p->name);
+        if (map_get(&g->dead, p->name, NULL))
+            continue;
         if (preg && hi) {
             for (int i = 0; i < 2; i++)
                 if (a.piece[i].reg < 0)

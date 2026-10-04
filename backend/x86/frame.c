@@ -165,6 +165,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->frame);
     map_init(&g->globals);
     map_init(&g->regs);
+    map_init(&g->dead);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -195,6 +196,7 @@ void gen_done(Gen *g)
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
     map_destroy(&g->regs);
+    map_destroy(&g->dead);
     xfree(g->consts);
     x86_free_func(g->fn);
 }

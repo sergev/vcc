@@ -67,6 +67,7 @@ typedef struct {
     int outgoing;      // bytes of the outgoing argument area
     int ret_ptr;       // slot of the result address that came in x8, or 0
     StringMap regs;    // name → allocated register (regalloc.c)
+    StringMap dead;    // allocated parameters dead on entry (regalloc.c)
     struct Flow *flow; // with the peephole pass: the body's variables,
     int *uses;         // and how many times each is read
     int nsaved;        // callee-saved registers in use

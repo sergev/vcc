@@ -72,6 +72,7 @@ typedef struct {
     int ret_ptr;       // slot of the result address that came in r0, or 0
     StringMap regs;    // name → allocated register + 1 (regalloc.c)
     StringMap regs_hi; // name → its high word's register + 1
+    StringMap dead;    // allocated parameters dead on entry (regalloc.c)
     unsigned saved_core; // r4-r9 in use, a bit each
     unsigned saved_vfp;  // d8-d13 in use, a bit per d register
     bool sp_frame;       // the frame addressed from sp, r11 free for values

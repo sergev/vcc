@@ -20,7 +20,8 @@ extern "C" {
 // live across a call takes a callee-saved one; any other may take an argument
 // register too, first.  A parameter prefers the register it arrives in, a call
 // argument its argument register, a returned value or a call's result the result
-// register.  A spilled candidate stays in its frame slot.
+// register.  A parameter dead on entry (unused, or written before it is read) takes
+// no register from the others then.  A spilled candidate stays in its frame slot.
 //
 // A value two integer registers wide (long long on a 32-bit target) has its high word
 // as a node of its own (flow variable v + n), interfering with all the low word does
@@ -58,6 +59,11 @@ typedef struct {
     void (*call_hints)(void *arg, const Flow *f, const Tac_Instruction *in, int *hint);
     // Variable `name` gets register `reg`, and its high word `hi` (else 0).
     void (*assign)(void *arg, const char *name, int reg, int hi);
+    // Optional: parameter `name`, just assigned, is dead on entry.  Its register may
+    // then hold another parameter on entry, so its incoming value must not be moved or
+    // loaded there.  Without this hook every parameter interferes with what is live on
+    // entry, as if its value were kept.
+    void (*dead_param)(void *arg, const char *name);
 } RegAlloc_Target;
 
 // Allocate registers for the variables of function `fn`.

@@ -23,8 +23,7 @@ testb %al, %al
 je .Lx0
 movsd %xmm0, -128(%rbp)
 )")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(movsd %xmm7, -16(%rbp)
-movl %edi, )")) << code;
+    EXPECT_NE(std::string::npos, code.find("movsd %xmm7, -16(%rbp)\n")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(movl $8, (%rax)
 movl $64, 4(%rax)
 leaq 16(%rbp), %r10

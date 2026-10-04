@@ -239,7 +239,7 @@ void gen_params(Gen *g)
         int preg = assigned_reg(g, p->name);
         if (preg) {
             place_reg(g, p->name, t, preg);
-            if (a.nregs)
+            if (a.nregs && !map_get(&g->dead, p->name, NULL))
                 moves[nmoves++] = (Move){ preg, a.reg[0], t, true };
             continue;
         }
@@ -273,7 +273,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type);
         int preg = assigned_reg(g, p->name);
-        if (preg && !a.nregs)
+        if (preg && !a.nregs && !map_get(&g->dead, p->name, NULL))
             load_mem(g, preg, p->type, A64_FP, 16 + a.stack);
     }
 }

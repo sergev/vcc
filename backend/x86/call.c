@@ -298,8 +298,9 @@ void param_hints(const Gen *g, StringMap *hints)
 
 // Each parameter gets a register or a slot.  One passed in a register is moved to its
 // own, or stored to its slot at its own width, which truncates; one on the stack is
-// loaded, or read where the caller put it, above the return address.  A narrow
-// argument is extended again whatever the caller left in the upper bits.  The stores
+// loaded, or read where the caller put it, above the return address (but for one dead
+// on entry).  A narrow argument is extended again whatever the caller left in the
+// upper bits.  The stores
 // come first, then the moves as if at once (an allocated register may be another
 // argument register), then the loads.
 void gen_params(Gen *g)
@@ -321,7 +322,7 @@ void gen_params(Gen *g)
         int preg = assigned_reg(g, p->name);
         if (preg) {
             place_reg(g, p->name, t, preg);
-            if (a.reg[0] >= 0)
+            if (a.reg[0] >= 0 && !map_get(&g->dead, p->name, NULL))
                 moves[nmoves++] = (Move){ preg, a.reg[0], t, true };
             continue;
         }
@@ -344,7 +345,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type);
         int preg = assigned_reg(g, p->name);
-        if (preg && a.reg[0] < 0)
+        if (preg && a.reg[0] < 0 && !map_get(&g->dead, p->name, NULL))
             load_mem(g, preg, p->type, x86_mem(X86_RBP, 16 + a.stack));
     }
 }

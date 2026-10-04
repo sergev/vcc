@@ -53,6 +53,7 @@ typedef struct {
     int outgoing;      // bytes of the outgoing argument area
     StringMap regs;    // name → allocated register
     StringMap regs_hi; // name → register of a long long's high word
+    StringMap dead;    // allocated parameters dead on entry (regalloc.c)
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots

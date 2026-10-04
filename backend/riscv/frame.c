@@ -125,6 +125,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->frame);
     map_init(&g->globals);
     map_init(&g->regs);
+    map_init(&g->dead);
     map_init(&g->regs_hi);
     g->header = gen_variadic(g) ? 16 + 8 * riscv_xlen : 16;
     for (const Tac_TopLevel *t = program; t; t = t->next) {
@@ -157,6 +158,7 @@ void gen_done(Gen *g)
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
     map_destroy(&g->regs);
+    map_destroy(&g->dead);
     map_destroy(&g->regs_hi);
     xfree(g->const_bits);
     xfree(g->const_label);

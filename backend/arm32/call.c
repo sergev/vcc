@@ -275,7 +275,7 @@ void gen_params(Gen *g)
         int hi, reg = assigned_reg(g, p->name, &hi);
         if (reg >= 0) {
             place_reg(g, p->name, t, reg, hi);
-            if (a.nregs && !variadic)
+            if (a.nregs && !variadic && !map_get(&g->dead, p->name, NULL))
                 nmoves += param_moves(moves + nmoves, t, a.reg, reg, hi);
             continue;
         }
@@ -321,7 +321,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         ArgLoc a = classify(&s, p->type);
         int hi, reg = assigned_reg(g, p->name, &hi);
-        if (reg < 0 || (a.nregs && !variadic))
+        if (reg < 0 || (a.nregs && !variadic) || map_get(&g->dead, p->name, NULL))
             continue;
         int off = 8 + (!variadic ? a.stack : a.nregs ? 4 * (a.reg - A32_R0) : 16 + a.stack);
         if (hi >= 0) {

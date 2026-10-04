@@ -183,11 +183,20 @@ int slot(int x) { int y = x; take(&y); return y; }
 }
 
 // A stack argument is read above what the function pushed; a leaf saves only the
-// callee-saved register it uses.
+// callee-saved register it uses (r0-r3 holding the other parameters, all live).
 TEST_F(Arm32Test, StackArgumentFromSp)
 {
-    EXPECT_EQ("push {r4}\nldr r4, [sp, #4]\nadd r0, r0, r4\npop {r4}\nbx lr\n",
+    EXPECT_EQ("push {r4}\nldr r4, [sp, #4]\nadd r0, r0, r1\nadd r0, r0, r2\nadd r0, r0, r3\n"
+              "add r0, r0, r4\npop {r4}\nbx lr\n",
               Code(CompileToArm32(R"(
+int stackarg(int a, int b, int c, int d, int e) { return a + b + c + d + e; }
+)")));
+}
+
+// A parameter dead on entry leaves its register to a stack argument: nothing pushed.
+TEST_F(Arm32Test, DeadParameterRegister)
+{
+    EXPECT_EQ("ldr r1, [sp]\nadd r0, r0, r1\nbx lr\n", Code(CompileToArm32(R"(
 int stackarg(int a, int b, int c, int d, int e) { return a + e; }
 )")));
 }

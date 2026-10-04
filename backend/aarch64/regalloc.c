@@ -73,6 +73,12 @@ static void assign(void *arg, const char *name, int reg, int hi)
     t->used[reg] = true;
 }
 
+// Its register may hold another parameter on entry: gen_params leaves it alone.
+static void dead_param(void *arg, const char *name)
+{
+    map_insert(&((Target *)arg)->g->dead, name, 1, 0);
+}
+
 void gen_regalloc(Gen *g)
 {
     Target target        = { .g = g };
@@ -91,6 +97,7 @@ void gen_regalloc(Gen *g)
         .param_hints  = get_param_hints,
         .call_hints   = get_call_hints,
         .assign       = assign,
+        .dead_param   = dead_param,
     };
     regalloc(&desc, g->tl);
 

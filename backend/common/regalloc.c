@@ -216,12 +216,13 @@ static void build(Alloc *a)
             flow_step(f, in, live);
         }
     }
-    // The parameters are all written on entry.
+    // The parameters are all written on entry, but for those dead there, when the
+    // target leaves their incoming values where they are.
     if (f->nblocks > 0) {
         DefArg da = { a, f->blocks[0].live_in, -1 };
         for (const Tac_Param *p = f->fn->u.function.params; p; p = p->next) {
             int v = flow_var(f, p->name);
-            if (v >= 0)
+            if (v >= 0 && (flow_has(f->blocks[0].live_in, v) || !a->t->dead_param))
                 interfere_def(v, &da);
         }
     }
@@ -412,6 +413,14 @@ static void find_hints(Alloc *a)
     }
 }
 
+static bool is_param(const Flow *f, int v)
+{
+    for (const Tac_Param *p = f->fn->u.function.params; p; p = p->next)
+        if (flow_var(f, p->name) == v)
+            return true;
+    return false;
+}
+
 static void *zalloc(size_t size)
 {
     void *p = xalloc(size ? size : 1, __func__, __FILE__, __LINE__);
@@ -449,6 +458,9 @@ void regalloc(const RegAlloc_Target *t, const Tac_TopLevel *fn)
         if (!reg || (h >= 0 && !hi))
             continue; // a pair gets both registers or neither
         t->assign(t->arg, a.flow->names[v], reg, hi);
+        if (t->dead_param && is_param(a.flow, v) && a.flow->nblocks > 0 &&
+            !flow_has(a.flow->blocks[0].live_in, v))
+            t->dead_param(t->arg, a.flow->names[v]);
     }
 
     xfree(a.cross);
