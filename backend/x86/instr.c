@@ -36,12 +36,17 @@ static void gen_jump(Gen *g, const char *tac)
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
-    if (x86_is_fp(t) || x86_is_ld(t))
-        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    char *l           = label_name(target);
+    if (x86_is_ld(t))
+        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_fp(t)) {
+        gen_fp_cond_jump(g, if_zero, cond, l);
+        xfree(l);
+        return;
+    }
     X86_Width w = x86_op_width(t);
     load_val(g, T0, cond);
     emit2(g, X86_TEST, w, x86_reg(T0, w), x86_reg(T0, w));
-    char *l      = label_name(target);
     X86_Instr *j = emit1(g, X86_J, X86_Q, x86_label(l));
     j->cond      = if_zero ? X86_CC_E : X86_CC_NE;
     xfree(l);
@@ -51,10 +56,14 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (x86_is_fp(t) || x86_is_ld(t) || x86_is_aggregate(t))
+    if (x86_is_ld(t) || x86_is_aggregate(t))
         fatal_error("x86: %s: copying this type is not implemented yet", gen_name(g));
     X86_Width w     = x86_width_of(x86_size(t));
     X86_Operand mem = name_mem(g, dst->u.var_name, 0);
+    if (x86_is_fp(t)) {
+        gen_fp_copy(g, src, mem, t);
+        return;
+    }
     if (src->kind == TAC_VAL_CONSTANT) {
         int64_t imm = const_as(src->u.constant, t);
         if (w != X86_Q || x86_imm32(imm)) {
@@ -154,8 +163,12 @@ static void gen_setcc(Gen *g, int cond)
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    if (x86_is_fp(t) || x86_is_ld(t))
-        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    if (x86_is_ld(t))
+        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_fp(t)) {
+        gen_fp_unary(g, in, t);
+        return;
+    }
     X86_Width w   = x86_op_width(t);
     X86_Operand r = x86_reg(T0, w);
     load_int_as(g, T0, in->u.unary.src, t);
@@ -222,8 +235,12 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
-    if (x86_is_fp(t) || x86_is_ld(t))
-        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    if (x86_is_ld(t))
+        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_fp(t)) {
+        gen_fp_binary(g, in, t);
+        return;
+    }
     Tac_BinaryOperator op = in->u.binary.op;
     bool is_unsigned      = t->kind == TAC_TYPE_POINTER || unsigned_op(op);
     X86_Width w           = x86_op_width(t);
@@ -323,6 +340,18 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_TRUNCATE:
     case TAC_INSTRUCTION_ZERO_EXTEND:
         gen_int_convert(g, in->u.sign_extend.src, in->u.sign_extend.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

@@ -11,9 +11,15 @@ protected:
     void SetUp() override
     {
         X86Test::SetUp();
+        // Programs that call into the C library, which joins libc.a once the code
+        // generator compiles it (Plan.md, X15).
+#define LIBC "needs the C library in libc.a"
         static const SkippedTest skipped[] = {
+            { "Chapter13_StandardLibraryCall", LIBC },
+            { "Chapter13_DoubleParamsAndResultLibrary", LIBC },
             { nullptr, nullptr },
         };
+#undef LIBC
         SkipIfListed(skipped);
         SKIP_IF_NO_X86_TOOLS();
     }

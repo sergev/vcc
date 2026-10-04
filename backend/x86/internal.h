@@ -42,6 +42,13 @@ typedef struct {
     int offset; // from rbp
 } Slot;
 
+// A constant in .rodata: `size` bytes (4, 8 or 16) of lo:hi, aligned to its size.
+typedef struct {
+    uint64_t lo, hi;
+    int size;
+    int label; // .LC<label>
+} FpConst;
+
 typedef struct {
     X86_Func *fn;
     const Tac_TopLevel *program; // the translation unit
@@ -51,6 +58,8 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int locals_size;   // bytes of slots below the saved rbp
     int outgoing;      // bytes of the outgoing argument area
+    FpConst *consts;   // the function's .rodata constants
+    int nconsts, maxconsts;
 } Gen;
 
 //
@@ -71,6 +80,14 @@ X86_Width x86_op_width(const Tac_Type *t);
 //
 // Frame and value access (frame.c)
 //
+// A new translation unit: label numbering starts over.
+void gen_unit_begin(void);
+// A new local label `.Lx<n>`, unique in the translation unit, into `buf`.
+void new_label(char buf[32]);
+// The memory operand of a .rodata constant of `size` bytes, lo:hi.
+X86_Operand const_mem(Gen *g, uint64_t lo, uint64_t hi, int size);
+// Emit the function's .rodata constants.
+void emit_consts(const Gen *g, FILE *out);
 void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl);
 void gen_done(Gen *g);
 const char *gen_name(const Gen *g);
@@ -94,12 +111,12 @@ int64_t const_value(const Tac_Const *c);
 // Integer constant `c` converted to integer type `t`, as the register form of `t`
 // holds it: narrower types sign- or zero-extended to 32 bits.
 int64_t const_as(const Tac_Const *c, const Tac_Type *t);
-// Load a scalar of type `t` at memory operand `m` into general register `reg`, in its
-// canonical form; store one at its own width.
+// Load a scalar of type `t` at memory operand `m` into register `reg`: a general one in
+// its canonical form, an xmm one with movss/movsd; store one at its own width.
 void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
 void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
-// Load scalar value `v` into `reg`, as its own type; store `reg` into variable `v`, at
-// the width of the variable's type.
+// Load scalar value `v` into `reg` (general or xmm), as its own type; store `reg` into
+// variable `v`, at the width of the variable's type.
 void load_val(Gen *g, int reg, const Tac_Val *v);
 void store_val(Gen *g, int reg, const Tac_Val *v);
 // Load integer value `v` into `reg` for an operation on type `t`: a variable as its own
@@ -122,6 +139,19 @@ void gen_prologue(Gen *g);
 void gen_params(Gen *g);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
+
+//
+// Floating point, SSE (fp.c)
+//
+// The source operand of FP value `v`: the variable in memory, or a .rodata constant.
+X86_Operand fp_operand(Gen *g, const Tac_Val *v);
+void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t);
+void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t);
+void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+// Branch to `label` when FP value `cond` is zero (or nonzero); a NaN is nonzero.
+void gen_fp_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *label);
+// dst = src, a float or double, through rax.
+void gen_fp_copy(Gen *g, const Tac_Val *src, X86_Operand dst, const Tac_Type *t);
 
 //
 // Static data (data.c)

@@ -50,6 +50,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);
     x86_emit_func(out, g.fn);
+    emit_consts(&g, out);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)
         emit_static_variable(out, s->name, false, s->type, s->init_list, false, s->alignment);
@@ -68,8 +69,10 @@ static int declared_alignment(const Tac_TopLevel *program, const char *name)
 
 void x86_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
-    if (tl == program)
-        x86_emit_header(out); // a new translation unit
+    if (tl == program) { // a new translation unit
+        x86_emit_header(out);
+        gen_unit_begin();
+    }
     switch (tl->kind) {
     case TAC_TOPLEVEL_FUNCTION:
         gen_function(program, tl, out);

@@ -130,6 +130,26 @@ enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
     X(CALL, "call", X86_PLAIN)                                                             \
     X(LEAVE, "leave", X86_PLAIN)                                                           \
     X(RET, "ret", X86_PLAIN)                                                               \
+    X(MOVD, "movd", X86_PLAIN)                                                             \
+    X(MOVSS, "movss", X86_PLAIN)                                                           \
+    X(MOVSD, "movsd", X86_PLAIN)                                                           \
+    X(ADDSS, "addss", X86_PLAIN)                                                           \
+    X(ADDSD, "addsd", X86_PLAIN)                                                           \
+    X(SUBSS, "subss", X86_PLAIN)                                                           \
+    X(SUBSD, "subsd", X86_PLAIN)                                                           \
+    X(MULSS, "mulss", X86_PLAIN)                                                           \
+    X(MULSD, "mulsd", X86_PLAIN)                                                           \
+    X(DIVSS, "divss", X86_PLAIN)                                                           \
+    X(DIVSD, "divsd", X86_PLAIN)                                                           \
+    X(XORPS, "xorps", X86_PLAIN)                                                           \
+    X(UCOMISS, "ucomiss", X86_PLAIN)                                                       \
+    X(UCOMISD, "ucomisd", X86_PLAIN)                                                       \
+    X(CVTSS2SD, "cvtss2sd", X86_PLAIN)                                                     \
+    X(CVTSD2SS, "cvtsd2ss", X86_PLAIN)                                                     \
+    X(CVTSI2SS, "cvtsi2ss", X86_SUFFIX)                                                    \
+    X(CVTSI2SD, "cvtsi2sd", X86_SUFFIX)                                                    \
+    X(CVTTSS2SI, "cvttss2si", X86_PLAIN)                                                   \
+    X(CVTTSD2SI, "cvttsd2si", X86_PLAIN)                                                   \
     X(EPILOGUE, "#epilogue", X86_PLAIN)
 
 typedef enum {

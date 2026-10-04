@@ -96,6 +96,58 @@ X86_Width x86_op_width(const Tac_Type *t)
     return x86_size(t) <= 4 ? X86_L : X86_Q;
 }
 
+static int unit_labels, unit_consts; // numbering in the translation unit
+
+void gen_unit_begin(void)
+{
+    unit_labels = 0;
+    unit_consts = 0;
+}
+
+void new_label(char buf[32])
+{
+    snprintf(buf, 32, ".Lx%d", unit_labels++);
+}
+
+X86_Operand const_mem(Gen *g, uint64_t lo, uint64_t hi, int size)
+{
+    char label[32];
+    for (int i = 0; i < g->nconsts; i++) {
+        const FpConst *c = &g->consts[i];
+        if (c->lo == lo && c->hi == hi && c->size == size) {
+            snprintf(label, sizeof label, ".LC%d", c->label);
+            return x86_rip(label, 0);
+        }
+    }
+    if (g->nconsts == g->maxconsts) {
+        g->maxconsts = g->maxconsts ? 2 * g->maxconsts : 8;
+        FpConst *grown = xalloc(g->maxconsts * sizeof(FpConst), __func__, __FILE__, __LINE__);
+        if (g->nconsts)
+            memcpy(grown, g->consts, g->nconsts * sizeof(FpConst));
+        xfree(g->consts);
+        g->consts = grown;
+    }
+    FpConst *c = &g->consts[g->nconsts++];
+    *c         = (FpConst){ lo, hi, size, unit_consts++ };
+    snprintf(label, sizeof label, ".LC%d", c->label);
+    return x86_rip(label, 0);
+}
+
+void emit_consts(const Gen *g, FILE *out)
+{
+    for (int i = 0; i < g->nconsts; i++) {
+        const FpConst *c = &g->consts[i];
+        fprintf(out, "    .section .rodata\n    .p2align %d\n.LC%d:\n",
+                c->size == 4 ? 2 : c->size == 8 ? 3 : 4, c->label);
+        if (c->size == 4)
+            fprintf(out, "    .long   0x%08x\n", (unsigned)c->lo);
+        else
+            fprintf(out, "    .quad   0x%016llx\n", (unsigned long long)c->lo);
+        if (c->size == 16)
+            fprintf(out, "    .quad   0x%016llx\n", (unsigned long long)c->hi);
+    }
+}
+
 static void add_global(Gen *g, const char *name, const Tac_Type *type)
 {
     if (name && type)
@@ -141,6 +193,7 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    xfree(g->consts);
     x86_free_func(g->fn);
 }
 
@@ -295,6 +348,10 @@ int64_t const_as(const Tac_Const *c, const Tac_Type *t)
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
 {
+    if (x86_is_xmm(reg) && x86_is_fp(t)) {
+        emit2(g, x86_is_double(t) ? X86_MOVSD : X86_MOVSS, X86_Q, m, x86_xmm(reg));
+        return;
+    }
     if (x86_is_ld(t) || x86_is_aggregate(t) || x86_is_fp(t))
         fatal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
     bool u = x86_is_unsigned(t);
@@ -316,6 +373,10 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
 
 void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
 {
+    if (x86_is_xmm(reg) && x86_is_fp(t)) {
+        emit2(g, x86_is_double(t) ? X86_MOVSD : X86_MOVSS, X86_Q, x86_xmm(reg), m);
+        return;
+    }
     if (x86_is_ld(t) || x86_is_aggregate(t) || x86_is_fp(t))
         fatal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
     X86_Width w = x86_width_of(x86_size(t));
@@ -325,7 +386,9 @@ void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
 void load_val(Gen *g, int reg, const Tac_Val *v)
 {
     const Tac_Type *t = val_type(g, v);
-    if (v->kind == TAC_VAL_CONSTANT)
+    if (x86_is_xmm(reg))
+        load_mem(g, reg, t, fp_operand(g, v));
+    else if (v->kind == TAC_VAL_CONSTANT)
         gen_li(g, reg, x86_op_width(t), const_value(v->u.constant));
     else
         load_mem(g, reg, t, name_mem(g, v->u.var_name, 0));
