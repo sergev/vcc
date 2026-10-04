@@ -42,11 +42,18 @@ static const Target targets[] = {
       4, 1,   // float
       4, 1,   // double  (same as float in avr-gcc default mode)
       4, 1,   // long double (same as float)
-      2, 1,   // pointer (16-bit data address)
+      2, 1,   // pointer (16-bit data address; a function pointer is a word address)
       16, 16, 32, 64, // signed bits: short int long llong
-      0,   // plain char unsigned (avr-gcc)
+      1,   // plain char signed (avr-gcc, clang)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      8,        // struct_return_max: up to 8 bytes in r18-r25; larger through a
+                // hidden pointer in r24:r25, the first argument
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL,     // va_class: every variadic argument is on the stack, va_arg a pointer walk
+      0,        // ldouble_mant_dig: long double is double
+      0 },      // hw_sqrt: no FP hardware
 
     { "msp430",
       1, 1,   // _Bool

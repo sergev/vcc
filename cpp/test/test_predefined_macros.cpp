@@ -189,6 +189,15 @@ TEST_F(Predefined, X86_64Target) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "x86_64"}));
 }
 
+// The ATmega1280 (avr51): signed plain char, no __CHAR_UNSIGNED__.
+TEST_F(Predefined, AvrTarget) {
+    EXPECT_TRUE(TokensAre("#if __AVR && __AVR__ && __AVR_ARCH__ == 51 && __AVR_ATmega1280__ && "
+                          "__AVR_HAVE_MUL__ && __AVR_HAVE_MOVW__ && __AVR_HAVE_JMP_CALL__ && "
+                          "__AVR_2_BYTE_PC__ && __ELF__ && !defined(__CHAR_UNSIGNED__) && "
+                          "!defined(AVR) && !defined(__riscv) && !defined(__LP64__)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "avr"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"
