@@ -53,3 +53,30 @@ endif()
 if(NOT MSPSIM)
     message(STATUS "No mspsim: the MSP430 run tests will be skipped")
 endif()
+
+set(MSP430_ASFLAGS ${MSP430_TARGET_FLAGS} -c)
+set(src ${CMAKE_CURRENT_SOURCE_DIR})
+set(out ${CMAKE_CURRENT_BINARY_DIR})
+
+add_custom_command(OUTPUT ${out}/crt0.o
+    COMMAND ${RISCV_CLANG} ${MSP430_ASFLAGS} -o ${out}/crt0.o ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+add_custom_command(OUTPUT ${out}/crt0-status.o
+    COMMAND ${RISCV_CLANG} ${MSP430_ASFLAGS} -DPRINT_STATUS -o ${out}/crt0-status.o
+            ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+# Assembly leaves, and the integer helpers under their MSP430 EABI names.
+set(MSP430_LIBC_OBJS "")
+foreach(name console divmod mul shift)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${RISCV_CLANG} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
+        DEPENDS ${src}/${name}.s)
+    list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
+endforeach()
+
+add_custom_command(OUTPUT ${out}/libc.a
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
+    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${MSP430_LIBC_OBJS}
+    DEPENDS ${MSP430_LIBC_OBJS})
+add_custom_target(msp430-libc ALL
+    DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)

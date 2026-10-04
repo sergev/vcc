@@ -257,6 +257,25 @@ Phase 0 is done:
     prints through `putbyte` and returns a status, and data copy and `.bss` clearing are
     checked. Each helper is checked against a table of cases: zero, `INT_MIN / -1`,
     signs, `UINT_MAX`, and shift counts of 0, 15 and 31.
+
+  *Done.*
+  - `crt0.S`, `console.s`, `link.ld`, and the helpers in `mul.s` (`mpyi`, `mpyl`),
+    `divmod.s` (the 16- and 32-bit divide/remainder family) and `shift.s` (`slll`,
+    `srll`, `sral`). They are built into `crt0.o`, `crt0-status.o` and `libc.a`.
+  - `crt0` also stops the watchdog, as a real device needs.
+  - Not yet written: `getch` (mspsim gives no end-of-file to a polling reader) and
+    `malloc`, both for T20.
+  - **Smoke test.** A clang-compiled program linked with this runtime agrees with the
+    host on all 1772 results of `*`, `/`, `%` and the `long` shifts, over 12×12 edge
+    operands. `crt0-status.o` prints `-123`, `0`, `-32768` and `4321` correctly. The
+    test programs through the fixture land in T7, as AVR's did in M8.
+  - **mspsim bug, fixed** (mspsim `090dbcc`, with a `jump_offsets` test). A jump's sign
+    was read from offset bit 8, so every forward jump of 256–511 words went backwards.
+    The smoke test found it.
+  - **clang's assembler rejects `@rN+` as a source with any non-register destination**
+    (`mov @r14+, 0(r15)`: "invalid operand"), though the ISA allows it. Every other
+    source × destination combination assembles. Selection and peephole must not emit
+    that form; copy loops go through a register.
 - **T6. Skeleton.** `backend/msp430/` with `CMakeLists.txt`, `msp_ir.h`, `msp_ir.c`,
   `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing
   `genmsp430`.
