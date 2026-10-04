@@ -33,7 +33,7 @@ typedef uint64_t Regs;
 #define ARGS      (0x03c7ull | 0x00ff0000ull) // rax (%al) rcx rdx rsi rdi r8 r9, xmm0-7
 #define SAVED     0xf028ull                   // rbx rbp r12-r15
 
-static Regs ret_regs; // the function's result registers, read by ret
+static Regs ret_regs, ret_wide; // the function's result registers, read by ret
 
 static Regs bit(int r)
 {
@@ -199,6 +199,10 @@ static void effects(const X86_Instr *in, Regs *use, Regs *def)
     case X86_RET:
         u |= SAVED | bit(X86_RSP) | ret_regs;
         break;
+    case X86_EPILOGUE:
+        u |= bit(X86_RSP) | bit(X86_RBP);
+        d |= SAVED | bit(X86_RSP); // the callee-saved registers restored
+        break;
     case X86_LEAVE:
         u |= bit(X86_RBP);
         d |= bit(X86_RBP) | bit(X86_RSP);
@@ -261,11 +265,70 @@ static bool writes_memory(const X86_Instr *in)
 //
 // Liveness over the blocks
 //
-typedef struct {
+// Of the general registers, those whose upper 32 bits `in` reads (as a 64-bit
+// operand, an address, or implicitly) and those it writes whole, which a 32-bit write
+// does, zeroing them.  An 8- or 16-bit write leaves them.
+static void upper_effects(const X86_Instr *in, Regs *use, Regs *def)
+{
+    Regs u = 0, d = 0;
+    for (int i = 0; i < X86_MAX_OPERANDS; i++) {
+        const X86_Operand *o = &in->opnd[i];
+        int r                = role(in, i);
+        u |= address_regs(o);
+        if (o->kind == X86_OPND_INDIRECT)
+            u |= bit(o->reg);
+        if (o->kind != X86_OPND_REG || x86_is_xmm(o->reg))
+            continue;
+        if ((r & READ) && o->width == X86_Q)
+            u |= bit(o->reg);
+        if ((r & WRITE) && (o->width == X86_L || o->width == X86_Q))
+            d |= bit(o->reg);
+    }
+    switch (in->op) {
+    case X86_IDIV:
+    case X86_DIV:
+        if (in->width == X86_Q)
+            u |= bit(X86_RAX) | bit(X86_RDX);
+        d |= bit(X86_RAX) | bit(X86_RDX);
+        break;
+    case X86_CQTO:
+        u |= bit(X86_RAX);
+        d |= bit(X86_RDX);
+        break;
+    case X86_CLTD:
+        d |= bit(X86_RDX);
+        break;
+    case X86_CALL:
+        u |= in->wide;
+        d |= CALLER & 0xffff;
+        break;
+    case X86_RET:
+        u |= SAVED | bit(X86_RSP) | ret_wide;
+        break;
+    case X86_EPILOGUE:
+        u |= bit(X86_RSP) | bit(X86_RBP);
+        d |= SAVED | bit(X86_RSP);
+        break;
+    case X86_LEAVE:
+    case X86_PUSH:
+    case X86_POP:
+        u |= bit(X86_RSP) | bit(X86_RBP);
+        d |= bit(X86_RSP);
+        break;
+    default:
+        break;
+    }
+    *use = u & 0xffff;
+    *def = d & 0xffff;
+}
+
+typedef struct Live {
     X86_Func *fn;
     int nblocks;
     X86_Block **blocks;
     Regs *live_in, *live_out;
+    bool upper;               // of the upper halves of the general registers
+    const struct Live *halves; // with the upper-half liveness of the same blocks
 } Live;
 
 static int block_index(const Live *lv, const char *label)
@@ -280,7 +343,10 @@ static int block_index(const Live *lv, const char *label)
 static Regs step(const Live *lv, const X86_Instr *in, Regs live)
 {
     Regs u, d;
-    effects(in, &u, &d);
+    if (lv->upper)
+        upper_effects(in, &u, &d);
+    else
+        effects(in, &u, &d);
     live = (live & ~d) | u;
     if (in->op == X86_J) {
         int t = block_index(lv, in->opnd[0].sym);
@@ -289,9 +355,11 @@ static Regs step(const Live *lv, const X86_Instr *in, Regs live)
     return live;
 }
 
-static void live_compute(Live *lv, X86_Func *fn)
+static void live_compute(Live *lv, X86_Func *fn, bool upper)
 {
     lv->fn      = fn;
+    lv->upper   = upper;
+    lv->halves  = NULL;
     lv->nblocks = 0;
     for (X86_Block *b = fn->blocks; b; b = b->next)
         lv->nblocks++;
@@ -555,28 +623,11 @@ static int move_bits(const X86_Instr *in)
     return in->op == X86_MOVAPS ? 128 : in->width == X86_L ? 32 : 64;
 }
 
-// Whether the upper half of general register `r`, after `in`, is never read: its next
-// mention reads at most 32 bits of it and writes it whole, or it is dead.
+// Whether the upper half of general register `r`, after `in`, is never read before
+// it is written.
 static bool upper_unread(const Live *lv, int bi, X86_Instr *in, int r)
 {
-    for (X86_Instr *p = in->next; p; p = p->next) {
-        if (live_at_target(lv, p, r))
-            return false;
-        if (!mentions(p, r))
-            continue;
-        if (reads_reg(p, r) && !replaceable(p, r, 32))
-            return false;
-        if (writes_reg(p, r)) {
-            for (int i = 0; i < X86_MAX_OPERANDS; i++)
-                if (is_reg(&p->opnd[i]) && p->opnd[i].reg == r && (role(p, i) & WRITE) &&
-                    view_bits(&p->opnd[i]) >= 32)
-                    return true;
-            return false;
-        }
-        if (dead_after(lv, bi, p, bit(r)))
-            return true;
-    }
-    return (lv->live_out[bi] & bit(r)) == 0;
+    return (live_after(lv->halves, bi, in) & bit(r)) == 0;
 }
 
 // Delete what does nothing: a move to itself, an extension repeated in place, a lea
@@ -1039,7 +1090,8 @@ static bool cmov_source(const X86_Instr *in)
     const X86_Operand *s = &in->opnd[0];
     if (is_reg(s))
         return !x86_is_xmm(s->reg);
-    return s->kind == X86_OPND_MEM && s->index < 0 && (s->reg == X86_RSP || s->reg == X86_RBP);
+    return s->kind == X86_OPND_MEM && s->index < 0 &&
+           (s->reg == X86_FRAME || s->reg == X86_RSP || s->reg == X86_RBP);
 }
 
 // Whether `in` puts a value into general register `d` and does nothing else: a move,
@@ -1061,89 +1113,186 @@ static bool reads_operand(const X86_Operand *o, int d)
     return (is_reg(o) && o->reg == d) || (address_regs(o) & bit(d));
 }
 
+// Whether the source of move `in` may be read on either path: a register, a constant,
+// a static, or a slot (not memory through a pointer, which may not be valid there).
+static bool safe_source(const X86_Instr *in)
+{
+    const X86_Operand *s = &in->opnd[0];
+    if (in->op == X86_XOR || s->kind == X86_OPND_IMM || s->kind == X86_OPND_REG ||
+        s->kind == X86_OPND_RIP)
+        return true;
+    return s->kind == X86_OPND_MEM && s->index < 0 &&
+           (s->reg == X86_FRAME || s->reg == X86_RSP || s->reg == X86_RBP);
+}
+
+// Whether `in` puts a constant into register `d`: mov $k, or xor.
+static bool const_move(const X86_Instr *in, int d)
+{
+    return plain_move(in, d) && (in->op == X86_XOR || in->opnd[0].kind == X86_OPND_IMM);
+}
+
+// Constant move `in` becomes cmov of r11 (`cc`), loaded with the constant first: the
+// load, returned, goes ahead of it.  r11 must be dead there.
+static X86_Instr *cmov_from_r11(X86_Instr *in, int cc)
+{
+    X86_Width w   = in->op == X86_XOR ? X86_L : in->width;
+    int64_t k     = in->op == X86_XOR ? 0 : in->opnd[0].imm;
+    X86_Instr *ld = xalloc(sizeof(X86_Instr), __func__, __FILE__, __LINE__);
+    ld->op        = X86_MOV;
+    ld->width     = w;
+    ld->opnd[0]   = x86_imm(k);
+    ld->opnd[1]   = x86_reg(X86_R11, w);
+    in->op        = X86_CMOV;
+    in->cond      = cc;
+    in->width     = w;
+    set_operand(in, 0, x86_reg(X86_R11, w));
+    set_operand(in, 1, x86_reg(in->opnd[1].reg, w));
+    ld->next = in;
+    return ld;
+}
+
+// Append instructions `first`..`last` (linked) to block `a`.
+static void append_seq(X86_Block *a, X86_Instr *first, X86_Instr *last)
+{
+    last->next = NULL;
+    if (a->tail)
+        a->tail->next = first;
+    else
+        a->head = first;
+    a->tail = last;
+}
+
 // The only instruction of block `b`, or NULL.
 static X86_Instr *only(X86_Block *b)
 {
     return b && b->head && b->head == b->tail ? b->head : NULL;
 }
 
-// A block ending in jcc L whose next block moves into D (nothing else) and falls into
-// L: cmov of the inverse condition.  Or, a diamond: the next block moves into D and
-// jumps to M, and L moves into D and falls into M: one move made, the other made
-// conditional.  The branch's own block must end in that one jcc (an FP comparison may
-// take two).
+// Unlink `from` and the instructions after it from block `b`.
+static void detach_from(X86_Block *b, X86_Instr *from)
+{
+    X86_Instr **link = &b->head;
+    while (*link != from)
+        link = &(*link)->next;
+    *link   = NULL;
+    b->tail = NULL;
+    for (X86_Instr *p = b->head; p; p = p->next)
+        b->tail = p;
+}
+
+// A jcc L, then a move into D (nothing else) falling into L: cmov of the inverse
+// condition.  Or, a diamond: jcc L, a move into D and a jump to M, then L moves into
+// D and falls into M: one move made, the other made conditional.  The moves follow the
+// jcc in its block, or start the next one when no other jump goes there; the jcc
+// must be alone (an FP comparison may take two).  A constant is made conditional
+// through r11, where that is dead.
 static bool make_cmov(X86_Func *fn)
 {
-    for (X86_Block *a = fn->blocks; a; a = a->next) {
-        X86_Instr *j = a->tail;
-        X86_Block *t = a->next;
-        if (!j || j->op != X86_J || !t || (t->label && label_refs(fn, t->label) > 0))
-            continue;
-        bool pair = false;
-        for (X86_Instr *in = a->head; in; in = in->next)
-            if (in->next == j && in->op == X86_J)
-                pair = true;
-        if (pair)
-            continue;
-        X86_Instr *mv = t->head;
-        if (!mv || !is_reg(&mv->opnd[1]) || x86_is_xmm(mv->opnd[1].reg))
-            continue;
-        int d = mv->opnd[1].reg;
-        // A triangle.
-        if (only(t) && t->next && jumps_to(j, t->next->label) && cmov_source(mv)) {
-            mv->op   = X86_CMOV;
-            mv->cond = j->cond ^ 1;
-            X86_Instr *c = mv;
-            t->head = t->tail = NULL;
-            delete_instr(a, j);
-            if (a->tail)
-                a->tail->next = c;
-            else
-                a->head = c;
-            a->tail = c;
-            return true;
-        }
-        // A diamond.
-        X86_Instr *jmp = mv->next;
-        X86_Block *e   = t->next;
-        if (!jmp || jmp->op != X86_JMP || jmp != t->tail || !e || !jumps_to(j, e->label) ||
-            label_refs(fn, e->label) != 1 || !only(e) || !e->next ||
-            !jumps_to(jmp, e->next->label))
-            continue;
-        X86_Instr *other = e->head;
-        if (!plain_move(mv, d) || !plain_move(other, d) ||
-            (mv->op == X86_MOV && other->op == X86_MOV && mv->width != other->width))
-            continue;
-        // One move made unconditionally, the other one conditionally after it.
-        X86_Instr *first = mv, *cond = other;
-        int cc           = j->cond; // the branch is taken to `other`
-        if (!cmov_source(cond) || reads_operand(&cond->opnd[0], d)) {
-            first = other;
-            cond  = mv;
-            cc    = j->cond ^ 1;
-            if (!cmov_source(cond) || reads_operand(&cond->opnd[0], d))
+    Live lv;
+    live_compute(&lv, fn, false);
+    bool done = false;
+    int ai    = -1;
+    for (X86_Block *a = fn->blocks; a && !done; a = a->next) {
+        ai++;
+        // r11 is free in the blocks after `a`, up to where the arms join.
+        Regs after_regs = 0;
+        for (int k = 1; k <= 3 && ai + k < lv.nblocks; k++)
+            after_regs |= lv.live_in[ai + k];
+        bool r11_free = !(after_regs & bit(X86_R11));
+        for (X86_Instr *j = a->head; j && !done; j = j->next) {
+            if (j->op != X86_J || (j->next && j->next->op == X86_J))
                 continue;
+            bool pair = false;
+            for (X86_Instr *p = a->head; p; p = p->next)
+                if (p->next == j && p->op == X86_J)
+                    pair = true;
+            if (pair)
+                continue;
+            // The arm: what follows j in `a`, or else the next block.
+            X86_Block *box = a, *after = a->next;
+            X86_Instr *mv  = j->next;
+            if (!mv) {
+                box = a->next;
+                if (!box || (box->label && label_refs(fn, box->label) > 0))
+                    continue;
+                mv    = box->head;
+                after = box->next;
+            }
+            if (!mv || !is_reg(&mv->opnd[1]) || x86_is_xmm(mv->opnd[1].reg) || !after)
+                continue;
+            int d  = mv->opnd[1].reg;
+            int cc = j->cond;
+            // A triangle.
+            if (mv == box->tail && jumps_to(j, after->label) &&
+                (cmov_source(mv) || (r11_free && const_move(mv, d)))) {
+                detach_from(box, mv);
+                delete_instr(a, j);
+                if (cmov_source(mv)) {
+                    mv->op   = X86_CMOV;
+                    mv->cond = cc ^ 1;
+                    append_seq(a, mv, mv);
+                } else {
+                    append_seq(a, cmov_from_r11(mv, cc ^ 1), mv);
+                }
+                done = true;
+                break;
+            }
+            // A diamond.
+            X86_Instr *jmp = mv->next;
+            X86_Block *e   = after;
+            if (!jmp || jmp->op != X86_JMP || jmp != box->tail || !jumps_to(j, e->label) ||
+                label_refs(fn, e->label) != 1 || !only(e) || !e->next ||
+                !jumps_to(jmp, e->next->label))
+                continue;
+            X86_Instr *other = e->head;
+            if (!plain_move(mv, d) || !plain_move(other, d) ||
+                (mv->op == X86_MOV && other->op == X86_MOV && mv->width != other->width))
+                continue;
+            // One move made unconditionally, the other one conditionally after it: from a
+            // register or slot that is not D, or else a constant through r11.
+            X86_Instr *first = mv, *cond = other;
+            int ccond        = cc; // the branch is taken to `other`
+            bool via_r11     = false;
+            if (!cmov_source(cond) || reads_operand(&cond->opnd[0], d)) {
+                first = other;
+                cond  = mv;
+                ccond = cc ^ 1;
+                if (!cmov_source(cond) || reads_operand(&cond->opnd[0], d)) {
+                    if (!r11_free)
+                        continue;
+                    via_r11 = true;
+                    if (!const_move(cond, d)) {
+                        first = mv;
+                        cond  = other;
+                        ccond = cc;
+                        if (!const_move(cond, d))
+                            continue;
+                    }
+                }
+            }
+            if (!safe_source(first))
+                continue;
+            if (first->op == X86_XOR) {
+                first->op = X86_MOV;
+                set_operand(first, 0, x86_imm(0));
+            }
+            detach_from(box, mv);
+            e->head = e->tail = NULL;
+            delete_instr(a, j);
+            free_instr(jmp);
+            if (via_r11) {
+                first->next = cmov_from_r11(cond, ccond);
+            } else {
+                cond->op    = X86_CMOV;
+                cond->cond  = ccond;
+                first->next = cond;
+            }
+            append_seq(a, first, cond);
+            done = true;
         }
-        if (first->op == X86_XOR) {
-            first->op = X86_MOV;
-            set_operand(first, 0, x86_imm(0));
-        }
-        t->head = t->tail = NULL;
-        e->head = e->tail = NULL;
-        first->next       = cond;
-        cond->next        = NULL;
-        cond->op          = X86_CMOV;
-        cond->cond        = cc;
-        delete_instr(a, j);
-        free_instr(jmp);
-        if (a->tail)
-            a->tail->next = first;
-        else
-            a->head = first;
-        a->tail = cond;
-        return true;
     }
-    return false;
+    live_free(&lv);
+    return done;
 }
 
 //
@@ -1160,11 +1309,14 @@ static bool rewrite(const Live *lv, int bi, X86_Block *b, X86_Instr **link, X86_
 void x86_peephole_func(X86_Func *fn)
 {
     ret_regs     = fn->result_regs;
+    ret_wide     = fn->result_wide;
     bool changed = true;
     while (changed) {
         changed = false;
-        Live lv;
-        live_compute(&lv, fn);
+        Live lv, halves;
+        live_compute(&lv, fn, false);
+        live_compute(&halves, fn, true);
+        lv.halves = &halves;
         for (int bi = 0; bi < lv.nblocks; bi++) {
             X86_Block *b    = lv.blocks[bi];
             X86_Instr *prev = NULL;
@@ -1178,6 +1330,7 @@ void x86_peephole_func(X86_Func *fn)
             }
         }
         live_free(&lv);
+        live_free(&halves);
         if (!changed)
             changed = rewrite_branches(fn) || make_cmov(fn) || merge_blocks(fn);
     }

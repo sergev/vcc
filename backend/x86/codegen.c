@@ -82,11 +82,11 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     g.fn->volatile_access = false;
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
-    gen_prologue(&g);
     if (x86_peephole) {
-        g.fn->result_regs = result_regs(&g);
+        g.fn->result_regs = result_regs(&g, &g.fn->result_wide);
         x86_peephole_func(g.fn);
     }
+    gen_prologue(&g);
     if (g.flow) {
         flow_free(g.flow);
         xfree(g.uses);

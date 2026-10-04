@@ -264,15 +264,21 @@ Phase 5 is done:
   them in the red zone (clang assumes it too for the triple), and a leaf that needs no
   stack has no prologue. Slots are addressed from a pseudo register, `X86_FRAME`,
   resolved once the frame is known.
-- **Peephole** (`peephole.c`), over register liveness that includes the flags:
+- **Peephole** (`peephole.c`), on the body before the prologue is built, over register
+  liveness that includes the flags, and a second liveness of the upper halves of the
+  general registers (a call notes which argument registers are 64 bits wide):
   - moves followed into their uses, and results computed in the register they are moved to;
   - loads and immediates folded into their users, `lea` into the memory operand it feeds;
   - reloads deleted, `test` for `cmp $0` and masks, `xor` for zero;
   - jump-to-next, branch-over-jump and dead code removed, and unreferenced blocks merged;
-  - `cmov` for one-move triangles and diamonds, from a register or a slot only.
+  - a 32-bit move to itself dropped where no upper half is read;
+  - `cmov` for one-move triangles and diamonds, from a register or a slot, or a
+    constant through `r11`. The unconditional move must be safe on both paths, so a
+    load through a pointer never becomes one.
   
-  Comparisons fuse with their branch in selection, FP ones with the parity jumps. The
-  libc's instructions went from 6571 (naive) to 3358.
+  The prologue then saves only the callee-saved registers still used. Comparisons fuse
+  with their branch in selection, FP ones with the parity jumps. The libc's
+  instructions went from 6571 (naive) to 3325.
 - `rep movs` for large copies was not done. It needs `rdi`, `rsi` and `rcx`, which may
   hold the operands of the call being set up, and the `xmm15` loop already copies 16
   bytes per iteration.

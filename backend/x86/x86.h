@@ -193,6 +193,7 @@ typedef struct X86_Instr {
     X86_Cond cond;   // the condition, for a conditional one
     X86_Operand opnd[X86_MAX_OPERANDS];
     bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
+    uint32_t wide;    // a call: bit r for each general register whose 64 bits are an argument
 } X86_Instr;
 
 typedef struct X86_Block {
@@ -207,6 +208,7 @@ typedef struct {
     X86_Block *blocks, *tail;
     bool volatile_access; // the TAC instruction being selected is a volatile access
     uint32_t result_regs; // bit r: register r carries the function's result at ret
+    uint32_t result_wide; // of those, the general registers all 64 bits of which do
 } X86_Func;
 
 extern const char *const x86_mnemonic[X86_NUM_OPS];

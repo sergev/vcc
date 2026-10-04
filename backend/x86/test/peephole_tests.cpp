@@ -17,11 +17,13 @@ int keep(int a, int b) { int x = g(a); return x + b; }
     EXPECT_NE(std::string::npos, code.find("call g\naddl %ebx, %eax\npopq %rbx\nret\n")) << code;
 }
 
-// Around a divide: the dividend and the result stay in rax.
+// Around a divide: the dividend and the result stay in rax.  b, allocated rbx as it
+// is live across the divide, is read from rsi where it arrived, which the divide does
+// not change; then nothing uses rbx, and it is not saved.  The parameters' 32-bit
+// moves to themselves go, as nothing reads their upper halves.
 TEST_F(X86Test, DivideInPlace)
 {
-    EXPECT_EQ("pushq %rbx\nmovl %edi, %eax\nmovl %edx, %r10d\ncltd\nidivl %r10d\n"
-              "addl %esi, %eax\npopq %rbx\nret\n",
+    EXPECT_EQ("movl %edi, %eax\nmovl %edx, %r10d\ncltd\nidivl %r10d\naddl %esi, %eax\nret\n",
               Code(CompileToX86("int divc(int a, int b, int c) { return a / c + b; }")));
 }
 
@@ -92,6 +94,29 @@ TEST_F(X86Test, CmovDiamond)
               Code(CompileToX86(R"(
 int pick(int c, int a, int b) { int x; if (c) x = a; else x = b; return x; }
 )")));
+}
+
+// A constant is made conditional through r11, as cmov takes no immediate.
+TEST_F(X86Test, CmovConstant)
+{
+    EXPECT_EQ("testl %edi, %edi\nmovl $0, %r11d\ncmovl %r11d, %edi\nmovl %edi, %eax\nret\n",
+              Code(CompileToX86("int clampzero(int x) { return x < 0 ? 0 : x; }")));
+}
+
+// A diamond whose arm loads through a pointer: that load would be made on both paths,
+// so neither arm may be the unconditional one.
+TEST_F(X86Test, NoCmovLoadMadeUnconditional)
+{
+    std::string code = Code(CompileToX86("int f(int c, int *p) { return c ? *p : 5; }"));
+    EXPECT_EQ(std::string::npos, code.find("cmov")) << code;
+}
+
+// The upper half of a parameter's register is read: its 32-bit move to itself stays,
+// clearing it.
+TEST_F(X86Test, UpperHalfKept)
+{
+    std::string code = Code(CompileToX86("double f(unsigned u) { return u; }"));
+    EXPECT_EQ("movl %edi, %edi\ncvtsi2sdq %rdi, %xmm0\nret\n", code);
 }
 
 // cmov loads whatever the condition, so a load through a pointer stays a branch.

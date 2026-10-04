@@ -686,6 +686,13 @@ static void expand_epilogues(Gen *g, const Frame *fr)
 // register goes where rbp would, and rsp ends 16-byte aligned the same way.
 void gen_prologue(Gen *g)
 {
+    // Only the callee-saved registers the body still uses (after the peephole pass);
+    // the slots of the others stay unused.
+    int n = 0;
+    for (int i = 0; i < g->nsaved; i++)
+        if (body_uses(g, g->saved_reg[i]))
+            g->saved_reg[n++] = g->saved_reg[i];
+    g->nsaved  = n;
     Frame fr   = { FRAME_RBP, 0, 0 };
     bool calls = has_calls(g);
     int area   = (g->locals_size + g->outgoing + 15) / 16 * 16;
@@ -703,7 +710,9 @@ void gen_prologue(Gen *g)
         fr.rest = fr.size - 8 * g->nsaved;
     }
     if (fr.kind == FRAME_RBP || fr.kind == FRAME_RSP) {
-        X86_Block *tail = redirect(g, g->prologue);
+        // At the head of the first block, which may hold the body by now.
+        X86_Block seq   = { 0 };
+        X86_Block *tail = redirect(g, &seq);
         if (fr.kind == FRAME_RBP) {
             emit1(g, X86_PUSH, X86_Q, x86_reg(X86_RBP, X86_Q));
             emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(X86_RBP, X86_Q));
@@ -713,6 +722,13 @@ void gen_prologue(Gen *g)
         if (fr.rest)
             emit2(g, X86_SUB, X86_Q, x86_imm(fr.rest), x86_reg(X86_RSP, X86_Q));
         g->fn->tail = tail;
+        X86_Block *first = g->fn->blocks;
+        if (seq.head) {
+            seq.tail->next = first->head;
+            first->head    = seq.head;
+            if (!first->tail)
+                first->tail = seq.tail;
+        }
     }
     resolve_frame(g, &fr);
     expand_epilogues(g, &fr);

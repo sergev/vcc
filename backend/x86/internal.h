@@ -200,8 +200,9 @@ struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
-// Bit r for each register r that carries the function's result at ret.
-uint32_t result_regs(const Gen *g);
+// Bit r for each register r that carries the function's result at ret; in *wide,
+// for each general register all 64 bits of which do.
+uint32_t result_regs(const Gen *g, uint32_t *wide);
 
 //
 // Floating point, SSE (fp.c)

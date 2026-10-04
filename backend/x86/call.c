@@ -255,10 +255,9 @@ static void emit_move(Gen *g, const Move *m)
 }
 
 // Make all moves as if at once: a move goes when no other still reads its
-// destination; a cycle is broken through rax or xmm14.
+// destination; a cycle is broken through rax or xmm14, at the moved value's width.
 static void parallel_move(Gen *g, Move *m, int n)
 {
-    static const Tac_Type wide_int = { .kind = TAC_TYPE_LONG }, wide_fp = { .kind = TAC_TYPE_DOUBLE };
     while (n > 0) {
         int pick = -1;
         for (int i = 0; i < n && pick < 0; i++) {
@@ -271,7 +270,7 @@ static void parallel_move(Gen *g, Move *m, int n)
         if (pick < 0) {
             bool fp = x86_is_xmm(m[0].src);
             int tmp = fp ? F0 : T0;
-            move_reg(g, tmp, m[0].src, fp ? &wide_fp : &wide_int);
+            move_reg(g, tmp, m[0].src, m[0].type);
             m[0].src = tmp;
             continue;
         }
@@ -369,6 +368,17 @@ static void load_arg(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as)
         load_int_as(g, reg, v, as);
 }
 
+// Bit r for each general register of `reg` (an aggregate's eightbytes, of `size`
+// bytes in all) that holds more than 4 bytes of it.
+static uint32_t wide_eightbytes(const int reg[2], int size)
+{
+    uint32_t m = 0;
+    for (int i = 0; i < 2; i++)
+        if (reg[i] >= 0 && !x86_is_xmm(reg[i]) && size - 8 * i > 4)
+            m |= 1u << reg[i];
+    return m;
+}
+
 // One argument: its value, its type, the type it is passed as, and where it goes.
 typedef struct {
     const Tac_Val *v;
@@ -463,6 +473,17 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         else
             load_arg(g, a->loc.reg[0], a->v, a->as);
     }
+    // The general registers whose upper halves are arguments too.
+    uint32_t wide = struct_result(rt) ? 1u << X86_RDI : 0;
+    for (i = 0; i < nargs; i++) {
+        const Arg *a = &args[i];
+        if (a->loc.reg[0] < 0)
+            continue;
+        if (x86_is_aggregate(a->type))
+            wide |= wide_eightbytes(a->loc.reg, x86_size(a->type));
+        else if (!x86_is_xmm(a->loc.reg[0]) && x86_size(a->as) == 8)
+            wide |= 1u << a->loc.reg[0];
+    }
     xfree(args);
     // A variadic or unprototyped callee is told how many xmm registers carry arguments.
     if (!ft || ft->u.fun_type.variadic)
@@ -474,10 +495,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
                                                           x86_align(rt)));
         emit2(g, X86_LEA, X86_Q, m, x86_reg(X86_RDI, X86_Q));
     }
-    if (in->u.fun_call.indirect)
-        emit1(g, X86_CALL, X86_Q, x86_indirect(T2));
-    else
-        emit1(g, X86_CALL, X86_Q, x86_label(in->u.fun_call.fun_name));
+    X86_Instr *call = in->u.fun_call.indirect
+                          ? emit1(g, X86_CALL, X86_Q, x86_indirect(T2))
+                          : emit1(g, X86_CALL, X86_Q, x86_label(in->u.fun_call.fun_name));
+    call->wide = wide;
     // A result in st(0) must be popped even when unused.
     if (struct_result(rt))
         return;
@@ -519,21 +540,30 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         hint[var] = X86_XMM0;
 }
 
-uint32_t result_regs(const Gen *g)
+uint32_t result_regs(const Gen *g, uint32_t *wide)
 {
     const Tac_Type *t = ret_type(g->tl->u.function.type);
+    *wide             = 0;
     if (!t || t->kind == TAC_TYPE_VOID || x87_result(t))
         return 0;
-    if (struct_result(t))
+    if (struct_result(t)) {
+        *wide = 1u << X86_RAX; // the address
+        return *wide;
+    }
+    if (!x86_is_aggregate(t)) {
+        if (x86_is_fp(t))
+            return 1u << X86_XMM0;
+        if (x86_size(t) == 8)
+            *wide = 1u << X86_RAX;
         return 1u << X86_RAX;
-    if (!x86_is_aggregate(t))
-        return 1u << (x86_is_fp(t) ? X86_XMM0 : X86_RAX);
+    }
     int reg[2];
     uint32_t m = 0;
     result_regs_of(tac_sysv64_class(t), reg);
     for (int i = 0; i < 2; i++)
         if (reg[i] >= 0)
             m |= 1u << reg[i];
+    *wide = wide_eightbytes(reg, x86_size(t));
     return m;
 }
 

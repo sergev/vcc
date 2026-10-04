@@ -87,7 +87,7 @@ TEST_F(X86Test, ArgumentsMovedAtOnce)
 int g2(int, int);
 int swap(int a, int b) { return g2(b, a); }
 )"));
-    EXPECT_NE(std::string::npos, code.find("movq %rsi, %rax\nmovl %edi, %esi\nmovl %eax, %edi\ncall g2\n"))
+    EXPECT_NE(std::string::npos, code.find("movl %esi, %eax\nmovl %edi, %esi\nmovl %eax, %edi\ncall g2\n"))
         << code;
 }
 
