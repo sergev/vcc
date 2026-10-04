@@ -560,9 +560,10 @@ static A32_Operand *mem_operand(A32_Instr *in)
 // Delete a later load of what store `st` wrote, at the same width, when nothing between
 // changes the register, the base or memory that may overlap; into another register it
 // becomes a move.  Only a frame slot (sp or r11) is followed past other instructions.
+// A volatile access is neither of the two.
 static bool delete_reload(A32_Instr *st)
 {
-    if ((st->op != A32_STR && st->op != A32_VSTR) || st->cond != A32_AL)
+    if ((st->op != A32_STR && st->op != A32_VSTR) || st->cond != A32_AL || st->is_volatile)
         return false;
     const A32_Operand *v = &st->opnd[0], *m = &st->opnd[1];
     if (m->kind != A32_OPND_MEM || m->sub != A32_MEM_OFFSET || m->reg2 >= 0 || m->reg == v->reg)
@@ -576,6 +577,8 @@ static bool delete_reload(A32_Instr *st)
         if (n->op == load && n->cond == A32_AL && n->opnd[0].width == v->width &&
             nm->kind == A32_OPND_MEM && nm->sub == A32_MEM_OFFSET && nm->reg2 < 0 &&
             nm->reg == m->reg && nm->imm == m->imm) {
+            if (n->is_volatile)
+                return false;
             if (n->opnd[0].reg == v->reg) {
                 delete_at(link);
             } else {
@@ -961,12 +964,12 @@ static bool predicate(A32_Func *fn, A32_Block *b)
 // Adjacent `ldr a, [b, #o]` and `ldr a + 1, [b, #o + 4]` (or str) of a frame slot, a
 // even and not lr, in either order: ldrd (strd).  sp and r11 are 8-byte aligned, so a
 // word-aligned offset is a word-aligned address, as ldrd needs (a slot of bytes is
-// not, and ldr does not mind).
+// not, and ldr does not mind).  Not a volatile access: it is made as it was written.
 static bool pair(A32_Instr **link)
 {
     A32_Instr *x = *link, *y = x->next;
     if (!y || y->op != x->op || (x->op != A32_LDR && x->op != A32_STR) || x->cond != A32_AL ||
-        y->cond != A32_AL)
+        y->cond != A32_AL || x->is_volatile || y->is_volatile)
         return false;
     const A32_Operand *xm = &x->opnd[1], *ym = &y->opnd[1];
     if (!is_reg(&x->opnd[0]) || !is_reg(&y->opnd[0]) || xm->kind != A32_OPND_MEM ||

@@ -44,9 +44,10 @@ X86_Block *x86_new_block(X86_Func *fn, const char *label)
 X86_Instr *x86_append(X86_Func *fn, X86_Op op, X86_Width width)
 {
     X86_Block *b  = fn->tail;
-    X86_Instr *in = xalloc(sizeof(X86_Instr), __func__, __FILE__, __LINE__);
-    in->op        = op;
-    in->width     = width;
+    X86_Instr *in   = xalloc(sizeof(X86_Instr), __func__, __FILE__, __LINE__);
+    in->op          = op;
+    in->width       = width;
+    in->is_volatile = fn->volatile_access;
     if (b->tail)
         b->tail->next = in;
     else

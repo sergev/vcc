@@ -48,7 +48,9 @@ Rv_Instr *rv_append_to(Rv_Block *b, Rv_Op op)
 
 Rv_Instr *rv_append(Rv_Func *fn, Rv_Op op)
 {
-    return rv_append_to(fn->tail, op);
+    Rv_Instr *in    = rv_append_to(fn->tail, op);
+    in->is_volatile = fn->volatile_access;
+    return in;
 }
 
 void rv_free_func(Rv_Func *fn)

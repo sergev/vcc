@@ -488,11 +488,12 @@ static bool compute_in_place(A64_Instr *in)
 // Delete a later load of what store `st` wrote, into the same register at the same
 // width, when nothing between changes the register, the base or memory that may
 // overlap.  Only a frame slot (sp or x29) is followed past other instructions.  Not a W
-// store: a W load would clear an upper half the register may not have had clear.
+// store: a W load would clear an upper half the register may not have had clear.  A
+// volatile access is neither of the two.
 static bool delete_reload(A64_Instr *st)
 {
     const A64_Operand *v = &st->opnd[0], *m = &st->opnd[1];
-    if (st->op != A64_STR || v->kind != A64_OPND_REG || v->width == A64_W || v->width == A64_S ||
+    if (st->op != A64_STR || st->is_volatile || v->kind != A64_OPND_REG || v->width == A64_W || v->width == A64_S ||
         v->reg == A64_ZR || m->kind != A64_OPND_MEM || m->sub != A64_MEM_OFFSET || m->reg == v->reg)
         return false;
     int size = width_bits(v->width) / 8;
@@ -502,6 +503,8 @@ static bool delete_reload(A64_Instr *st)
         if (n->op == A64_LDR && n->opnd[0].reg == v->reg && n->opnd[0].width == v->width &&
             nm->kind == A64_OPND_MEM && nm->sub == A64_MEM_OFFSET && nm->reg == m->reg &&
             nm->imm == m->imm) {
+            if (n->is_volatile)
+                return false;
             delete_at(link);
             return true;
         }
@@ -617,11 +620,13 @@ static bool fold_multiply(A64_Instr **link)
 }
 
 // Adjacent `ldr a, [b, #o]` and `ldr c, [b, #o + size]` (or str), in either order:
-// ldp (stp) of the lower address's register first.
+// ldp (stp) of the lower address's register first.  Not a volatile access: it is made
+// as it was written.
 static bool pair(A64_Instr **link)
 {
     A64_Instr *x = *link, *y = x->next;
-    if (!y || y->op != x->op || (x->op != A64_LDR && x->op != A64_STR))
+    if (!y || y->op != x->op || (x->op != A64_LDR && x->op != A64_STR) || x->is_volatile ||
+        y->is_volatile)
         return false;
     const A64_Operand *xm = &x->opnd[1], *ym = &y->opnd[1];
     A64_Width w = x->opnd[0].width;

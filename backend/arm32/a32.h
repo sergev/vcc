@@ -122,6 +122,7 @@ typedef struct A32_Instr {
     A32_Cond cond;
     bool set_flags; // the S suffix
     A32_Operand opnd[A32_MAX_OPERANDS];
+    bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
 } A32_Instr;
 
 typedef struct A32_Block {
@@ -134,6 +135,7 @@ typedef struct {
     char *name; // owned
     bool global;
     A32_Block *blocks, *tail;
+    bool volatile_access; // the TAC instruction being selected is a volatile access
 } A32_Func;
 
 extern const char *const a32_mnemonic[A32_NUM_OPS];

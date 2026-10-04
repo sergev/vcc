@@ -35,6 +35,26 @@ TEST_F(CodegenTest, RedundantReloadRemoved)
               output);
 }
 
+// A volatile local is reloaded after its store: rule #27 leaves a volatile access as
+// it was written.
+TEST_F(CodegenTest, VolatileReloadKept)
+{
+    std::string output = CompileToMadlen("int f(int a) { volatile int x = a; return x; }");
+    EXPECT_EQ(R"(c
+        f:   ,name,
+    b/ret:   ,subp,
+             ,its, 13
+             ,call, b/save
+          15 ,utm, 1
+           6 ,xta,
+           7 ,atx,
+           7 ,xta,
+             ,uj, b/ret
+             ,end,
+)",
+              output);
+}
+
 // A label is a basic-block boundary: control can re-enter, so a slot stored just
 // before the label must NOT license dropping a reload of it just after.  The
 // if/else join stores `c` (slot 7,0) at the end of the else arm, then the join

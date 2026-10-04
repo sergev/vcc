@@ -616,6 +616,19 @@ for arithmetic and copies (a constant carries its value over), one floating kind
 | `fun_call` | `fun_name: f` `indirect: true` (omitted when false) `args:` list of `- val:` (omitted when none) `dst:` (omitted for void) `fun_type:` the callee's type |
 | `fun_call_noreturn` | same fields as `fun_call`; a direct call to a `_Noreturn` function |
 
+**Volatile.** Each access to a volatile object is one instruction marked `volatile:
+true`, made once and as written. A volatile variable is read only by a volatile `copy`
+into a temporary (`read_var` in `translator/expr.c`): an increment, a compound
+assignment and a plain use all read it that way, once. It is written by a volatile
+`copy` from the value, its initializer included, and the value of an assignment to it is
+the value stored, not a second read. The optimizer neither folds a volatile instruction
+nor substitutes into it, records no copy from it, and never drops it as dead. In the
+backends, the named variable of a volatile `copy` is kept in memory, as an address-taken
+one is (`backend/common/flow.c`), so it keeps its value across `longjmp`. Each machine
+instruction selected for a volatile access carries `is_volatile`, so the peephole passes
+neither delete it as the reload of a store (RISC-V, AArch64, ARM32, BESM-6 rule #27) nor
+merge it into a pair (`ldp`/`stp`, `ldrd`/`strd`).
+
 Unary ops: `complement`, `complement_unsigned`, `negate`, `negate_unsigned`, `negate_double`, `not`.
 
 Binary ops: `add`, `subtract`, `multiply`, `divide`, `remainder`, `equal`, `not_equal`,

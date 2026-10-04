@@ -44,3 +44,19 @@ main:
 )",
               CompileToRiscv("int main(void) { return -2; }"));
 }
+
+// A volatile local stays in its slot: the store is not followed into the reload, each
+// read is a load of its own, and the parameter it is set from stays in its register.
+TEST_F(RiscvTest, VolatileLocalInMemory)
+{
+    EXPECT_NE(std::string::npos,
+              Code(CompileToRiscv("int f(int a) { volatile int x = a; return x; }"))
+                  .find("addi sp, sp, -16\nsw a0, 12(sp)\nlw a0, 12(sp)\naddi sp, sp, 16\nret\n"));
+}
+TEST_F(RiscvTest, VolatileReadsEachLoad)
+{
+    std::string code = Code(CompileToRiscv("int f(int a) { volatile int x = a; return x + x; }"));
+    size_t first     = code.find("lw ");
+    ASSERT_NE(std::string::npos, first) << code;
+    EXPECT_NE(std::string::npos, code.find("lw ", first + 1)) << code;
+}

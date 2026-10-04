@@ -188,6 +188,7 @@ typedef struct X86_Instr {
     X86_Width width; // the suffix, for a suffixed opcode
     X86_Cond cond;   // the condition, for a conditional one
     X86_Operand opnd[X86_MAX_OPERANDS];
+    bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
 } X86_Instr;
 
 typedef struct X86_Block {
@@ -200,6 +201,7 @@ typedef struct {
     char *name; // owned
     bool global;
     X86_Block *blocks, *tail;
+    bool volatile_access; // the TAC instruction being selected is a volatile access
 } X86_Func;
 
 extern const char *const x86_mnemonic[X86_NUM_OPS];

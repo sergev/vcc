@@ -138,6 +138,7 @@ typedef struct A64_Instr {
     struct A64_Instr *next;
     A64_Op op;
     A64_Operand opnd[A64_MAX_OPERANDS];
+    bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
 } A64_Instr;
 
 typedef struct A64_Block {
@@ -150,6 +151,7 @@ typedef struct {
     char *name; // owned
     bool global;
     A64_Block *blocks, *tail;
+    bool volatile_access; // the TAC instruction being selected is a volatile access
 } A64_Func;
 
 // A conditional branch is `b.<cond> label`: BCOND with the condition as its first

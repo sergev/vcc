@@ -71,12 +71,14 @@ static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl
     }
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
+        g->fn->volatile_access = in->is_volatile;
         if (gen_compare_branch(g, in, in->next))
             in = in->next;
         else
             gen_instr(g, in);
         last = in;
     }
+    g->fn->volatile_access = false;
     if (g->flow) {
         flow_free(g->flow);
         xfree(g->uses);

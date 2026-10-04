@@ -96,6 +96,7 @@ typedef struct Rv_Instr {
     struct Rv_Instr *next;
     Rv_Op op;
     Rv_Operand opnd[3];
+    bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
 } Rv_Instr;
 
 typedef struct Rv_Block {
@@ -109,6 +110,7 @@ typedef struct {
     bool global;
     Rv_Block *blocks, *tail;
     int num_vregs;
+    bool volatile_access; // the TAC instruction being selected is a volatile access
 } Rv_Func;
 
 extern const char *const rv_mnemonic[RV_NUM_OPS];

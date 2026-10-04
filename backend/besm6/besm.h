@@ -135,6 +135,7 @@ struct Besm_Instr {
     double real_val;         // BESM_DATA_REAL
     int opcode;              // BESM_IO_EXTRACODE: the extracode opcode, 050..077 (the
                              // mnemonic is a function of it, and differs per dialect)
+    bool is_volatile;        // selected for a volatile access: never deleted as a reload
     // TODO: star plus offset
     // TODO: literal address with value (int, uns, real)
 };

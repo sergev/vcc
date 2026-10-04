@@ -7,10 +7,13 @@
 #include "tac.h"
 #include "xalloc.h"
 
+bool besm_volatile_access;
+
 // Append a new instruction to a block, maintaining *tail.
 Besm_Instr *emit(Besm_Block *block, Besm_Instr **tail, Besm_InstrKind kind)
 {
-    Besm_Instr *i = besm_new_instr(kind);
+    Besm_Instr *i  = besm_new_instr(kind);
+    i->is_volatile = besm_volatile_access;
     if (!block->body)
         block->body = i;
     else

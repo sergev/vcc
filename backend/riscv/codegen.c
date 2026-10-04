@@ -96,9 +96,11 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     layout_frame(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
+        g.fn->volatile_access = in->is_volatile;
         gen_instr(&g, in);
         last = in;
     }
+    g.fn->volatile_access = false;
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);

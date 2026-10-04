@@ -890,6 +890,22 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
     return val_var(vd->u.var_name);
 }
 
+// The value of scalar variable `name` of type `type` as an operand: the variable itself,
+// or, when it is volatile, a fresh read of it through a volatile COPY, so the optimizer
+// can neither fold nor propagate the value away.
+static Tac_Val *read_var(TacCtx *ctx, const char *name, const Type *type)
+{
+    if (!type_is_volatile(type) || !is_scalar(type))
+        return val_var(name);
+    Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(type));
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
+    in->is_volatile     = true;
+    in->u.copy.src      = val_var(name);
+    in->u.copy.dst      = dst;
+    tac_append(ctx, in);
+    return val_var(dst->u.var_name);
+}
+
 // Emit "dst = src (+/-) 1" for the inc/dec operators.  For a char*/void* the step adjusts
 // the 3-bit byte offset of the fat pointer (ADD_PTR scale 1, byte index +1/-1); for any
 // other scalar it is a plain BINARY add/subtract by 1 (word-addressed for word pointers).
@@ -1050,16 +1066,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         // A read of a volatile scalar variable must re-read memory on every use.
         // Materialize it into a volatile COPY so the optimizer cannot fold or
         // propagate the value away. Aggregates are read via field access instead.
-        if (type_is_volatile(e->type) && is_scalar(e->type)) {
-            Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(e->type));
-            Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
-            in->is_volatile     = true;
-            in->u.copy.src      = val_var(e->u.var);
-            in->u.copy.dst      = dst;
-            tac_append(ctx, in);
-            return val_var(dst->u.var_name);
-        }
-        return val_var(e->u.var);
+        return read_var(ctx, e->u.var, e->type);
     case EXPR_UNARY_OP:
         if (e->u.unary_op.op == UNARY_PLUS)
             return gen_expr(ctx, e->u.unary_op.expr);
@@ -1096,7 +1103,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             bool inc    = (e->u.unary_op.op == UNARY_PRE_INC);
             if (inner->kind == EXPR_VAR) {
                 const char *var     = inner->u.var;
-                const Tac_Val *vd         = gen_step(ctx, inner->type, val_var(var), inc);
+                const Tac_Val *vd   = gen_step(ctx, inner->type, read_var(ctx, var, inner->type), inc);
                 Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 cp->is_volatile     = type_is_volatile(inner->type);
                 cp->u.copy.src      = val_var(vd->u.var_name);
@@ -1157,19 +1164,24 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                 in->u.copy.src      = src;
                 in->u.copy.dst      = val_var(dst);
                 tac_append(ctx, in);
+                // The value of an assignment to a volatile variable is the value
+                // stored, not a second read of the variable.
+                if (vol)
+                    return dup_val(src);
             } else if ((is_byte_pointer(target->type) || wide_ptr_scale(target->type)) &&
                        (e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB)) {
                 // char* += n (fat-pointer byte arithmetic) or pointer-to-array/-struct
                 // += n (element-scaled), not a raw word add.
                 int pscale   = is_byte_pointer(target->type) ? 1 : wide_ptr_scale(target->type);
-                Tac_Val *res = gen_ptr_add(ctx, val_var(dst), src, e->u.assign.op == ASSIGN_SUB,
+                Tac_Val *res = gen_ptr_add(ctx, read_var(ctx, dst, target->type), src,
+                                           e->u.assign.op == ASSIGN_SUB,
                                            pscale, target->type, e->u.assign.value->type);
                 Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 cp->is_volatile     = vol;
                 cp->u.copy.src      = res;
                 cp->u.copy.dst      = val_var(dst);
                 tac_append(ctx, cp);
-                return val_var(dst);
+                return vol ? dup_val(res) : val_var(dst);
             } else {
                 // Compound op computed in the common type (== e->u.assign.value->type
                 // after typecheck's promotions): widen the lvalue, operate, narrow the
@@ -1177,8 +1189,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                 // target type) `widen` is false and this is byte-identical to before.
                 const Type *op_type = e->u.assign.value->type;
                 bool widen = unalias(op_type)->kind != unalias(target->type)->kind;
-                Tac_Val *opnd =
-                    widen ? emit_cast(ctx, val_var(dst), target->type, op_type) : val_var(dst);
+                Tac_Val *cur = read_var(ctx, dst, target->type);
+                Tac_Val *opnd = widen ? emit_cast(ctx, cur, target->type, op_type) : cur;
                 Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
                 Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
                 bin->u.binary.op   = map_assign_op(e->u.assign.op, op_type);
@@ -1194,6 +1206,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                 cp->u.copy.src      = result;
                 cp->u.copy.dst      = val_var(dst);
                 tac_append(ctx, cp);
+                if (vol)
+                    return dup_val(result);
             }
             return val_var(dst);
         } else if (target->kind == EXPR_FIELD_ACCESS &&
@@ -1497,7 +1511,9 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             cp1->u.copy.src      = val_var(var);
             cp1->u.copy.dst      = old;
             tac_append(ctx, cp1);
-            const Tac_Val *vd          = gen_step(ctx, inner->type, val_var(var), inc);
+            // A volatile variable is read once, into `old`.
+            const Tac_Val *vd    = gen_step(ctx, inner->type,
+                                            vol ? val_var(old->u.var_name) : val_var(var), inc);
             Tac_Instruction *cp2 = tac_new_instruction(TAC_INSTRUCTION_COPY);
             cp2->is_volatile     = vol;
             cp2->u.copy.src      = val_var(vd->u.var_name);

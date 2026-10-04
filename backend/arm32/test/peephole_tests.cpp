@@ -127,3 +127,19 @@ int main(void)
 )");
     EXPECT_EQ(127, exit_status);
 }
+
+// A volatile local stays in its slot: the store is not followed into the reload, and
+// two accesses are two, not an ldrd/strd.
+TEST_F(Arm32Test, PeepholeKeepsVolatileReload)
+{
+    EXPECT_NE(std::string::npos,
+              Code(CompileToArm32("int f(int a) { volatile int x = a; return x; }"))
+                  .find("sub sp, sp, #8\nstr r0, [sp, #4]\nldr r0, [sp, #4]\nadd sp, sp, #8\nbx lr\n"));
+}
+TEST_F(Arm32Test, PeepholeKeepsVolatileUnpaired)
+{
+    std::string code =
+        Code(CompileToArm32("int g(int a, int b) { volatile int x = b, y = a; return x - y; }"));
+    EXPECT_EQ(std::string::npos, code.find("ldrd ")) << code;
+    EXPECT_EQ(std::string::npos, code.find("strd ")) << code;
+}

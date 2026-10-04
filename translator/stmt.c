@@ -350,6 +350,7 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
             } else {
                 Tac_Val *src        = gen_expr(ctx, id->init->u.expr);
                 Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
+                in->is_volatile     = type_is_volatile(id->type); // never dropped as dead
                 in->u.copy.src      = src;
                 in->u.copy.dst      = val_var(id->name);
                 tac_append(ctx, in);

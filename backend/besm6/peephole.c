@@ -510,11 +510,12 @@ static void state_step(PeepState *st, const Besm_Instr *i)
 // (the preceding `atx` to it stored the value and did not disturb A).  The reload is pure
 // waste; report a match so the caller splices it out.  For a plain frame slot the reload is
 // the single `xta`; for a global it is the whole `utc name` + `xta` group, which the sweep
-// matches through `c_group_loc` instead of this predicate.
+// matches through `c_group_loc` instead of this predicate.  A volatile reload stays: the
+// access is made as it was written.
 //
 static bool rule_redundant_reload(const Besm_Instr *cur, const PeepState *st)
 {
-    return cur->kind == BESM_MEM_XTA && loc_eq(plain_loc(cur), st->a_loc);
+    return cur->kind == BESM_MEM_XTA && !cur->is_volatile && loc_eq(plain_loc(cur), st->a_loc);
 }
 
 //
@@ -1117,7 +1118,8 @@ static bool peephole_sweep(Besm_Block *block, const Frame *frame, const bool *mu
 
                 // Rule #27 for a global: the whole `utc name` + `xta` group reloads a
                 // location A already holds.  Delete setter and consumer together.
-                if (consumer->kind == BESM_MEM_XTA && loc_eq(gl, st.a_loc)) {
+                if (consumer->kind == BESM_MEM_XTA && !consumer->is_volatile &&
+                    loc_eq(gl, st.a_loc)) {
                     Besm_Instr *next = consumer->next;
                     delete_group(block, prev, cur, count);
                     cur     = next;

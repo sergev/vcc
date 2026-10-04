@@ -132,3 +132,19 @@ int main(void)
 )");
     EXPECT_EQ(25, exit_status);
 }
+
+// A volatile local stays in its slot: the store is not followed into the reload, and
+// two accesses are two, not a pair.
+TEST_F(Aarch64Test, PeepholeKeepsVolatileReload)
+{
+    EXPECT_NE(std::string::npos,
+              Code(CompileToAarch64("int f(int a) { volatile int x = a; return x; }"))
+                  .find("sub sp, sp, #16\nstr w0, [sp, #12]\nldr w0, [sp, #12]\nadd sp, sp, #16\nret\n"));
+}
+TEST_F(Aarch64Test, PeepholeKeepsVolatileUnpaired)
+{
+    std::string code = Code(CompileToAarch64(
+        "long g(long a) { volatile long x = a, y = a; return x + y; }"));
+    EXPECT_EQ(std::string::npos, code.find("ldp ")) << code;
+    EXPECT_EQ(std::string::npos, code.find("stp ")) << code;
+}

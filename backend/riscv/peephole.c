@@ -271,15 +271,19 @@ static bool is_store(Rv_Op op)
 // Delete a later `load` of what store `st` wrote, into the same register, when nothing
 // between them changes the register, the base, or memory that may overlap.  Only a
 // frame slot is followed past other instructions: a store through another base, or a
-// call, may write it.
+// call, may write it.  A volatile access is neither of the two.
 static bool delete_reload(Rv_Instr *st, Rv_Op load)
 {
+    if (st->is_volatile)
+        return false;
     int r = st->opnd[0].reg, base = st->opnd[1].reg;
     int64_t off = st->opnd[1].imm;
     for (Rv_Instr **link = &st->next; *link; link = &(*link)->next) {
         Rv_Instr *n = *link;
         if (n->op == load && n->opnd[0].reg == r && n->opnd[1].reg == base &&
             n->opnd[1].imm == off) {
+            if (n->is_volatile)
+                return false;
             delete_at(link);
             return true;
         }

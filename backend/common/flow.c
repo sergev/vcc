@@ -5,6 +5,7 @@
 //
 #include "flow.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "xalloc.h"
@@ -188,6 +189,23 @@ static void mark_in_memory(const Flow *f, const char *name)
         flow_add(f->in_memory, v);
 }
 
+// Whether `v` is a temporary (`%` and a digit), not a named variable.
+static bool is_temporary(const Tac_Val *v)
+{
+    return v->u.var_name[0] == '%' && isdigit((unsigned char)v->u.var_name[1]);
+}
+
+// The volatile object of a volatile COPY stays in memory, so every access really
+// reaches it (and it keeps its value across longjmp).  The translator reads a volatile
+// variable only into a temporary, so a copy to a named variable writes it, and a copy
+// to a temporary reads its source.
+static void mark_volatile_copy(const Flow *f, const Tac_Instruction *in)
+{
+    const Tac_Val *obj = is_temporary(in->u.copy.dst) ? in->u.copy.src : in->u.copy.dst;
+    if (obj->kind == TAC_VAL_VAR && !is_temporary(obj))
+        mark_in_memory(f, obj->u.var_name);
+}
+
 static bool ends_block(const Tac_Instruction *in)
 {
     switch (in->kind) {
@@ -234,6 +252,20 @@ static void build_vars(Flow *f)
             break;
         case TAC_INSTRUCTION_ALLOCATE_LOCAL:
             mark_in_memory(f, in->u.allocate_local.name);
+            break;
+        case TAC_INSTRUCTION_COPY:
+            if (in->is_volatile)
+                mark_volatile_copy(f, in);
+            break;
+        case TAC_INSTRUCTION_COPY_TO_OFFSET:
+        case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+            if (in->is_volatile)
+                mark_in_memory(f, in->u.copy_to_offset.dst);
+            break;
+        case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+        case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+            if (in->is_volatile)
+                mark_in_memory(f, in->u.copy_from_offset.src);
             break;
         default:
             break;

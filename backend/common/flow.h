@@ -42,7 +42,7 @@ typedef struct Flow {
     const Tac_Type **types;       // variable index → type (may be NULL)
     StringMap index;              // name → variable index
     int words;                    // words per set
-    Flow_Set *in_memory;          // address taken or ALLOCATE_LOCAL
+    Flow_Set *in_memory;          // address taken, ALLOCATE_LOCAL or volatile
     int nblocks;
     Flow_Block *blocks;           // [0] is the entry
 } Flow;

@@ -60,7 +60,9 @@ Besm_OperandShape besm_operand_shape(Besm_InstrKind kind);
 // and Unix emitters).  NULL for BESM_SHAPE_SPECIAL kinds.  Defined in besm_mnem.c.
 extern const char *const besm_latin_mnem[];
 
-// Append a new instruction to a block, maintaining *tail.
+// Append a new instruction to a block, maintaining *tail.  It is marked volatile while
+// besm_volatile_access is set: the TAC instruction being selected is a volatile access.
+extern bool besm_volatile_access;
 Besm_Instr *emit(Besm_Block *block, Besm_Instr **tail, Besm_InstrKind kind);
 
 // Emit XTA: A = mem[reg + off].

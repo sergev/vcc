@@ -34,7 +34,9 @@ A64_Block *a64_new_block(A64_Func *fn, const char *label)
 
 A64_Instr *a64_append(A64_Func *fn, A64_Op op)
 {
-    return a64_append_to(fn->tail, op);
+    A64_Instr *in   = a64_append_to(fn->tail, op);
+    in->is_volatile = fn->volatile_access;
+    return in;
 }
 
 A64_Instr *a64_append_to(A64_Block *b, A64_Op op)

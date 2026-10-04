@@ -392,8 +392,11 @@ static void codegen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl
             utm_sp->addr = num_autos;
         }
 
-        for (const Tac_Instruction *instr = tl->u.function.body; instr; instr = instr->next)
+        for (const Tac_Instruction *instr = tl->u.function.body; instr; instr = instr->next) {
+            besm_volatile_access = instr->is_volatile;
             codegen_instr(instr, f, block, &tail);
+        }
+        besm_volatile_access = false;
 
         // A _Noreturn function never reaches its epilogue, and with no b/save there is
         // nothing for b/ret to restore — omit the epilogue jump entirely.

@@ -326,3 +326,54 @@ TEST_F(PipelineTest, LocalsKeptWithoutOptimization)
     OptimizeYaml("int f(int a) { int x = a + 1; int y = 7; x = y; return x * a; }", OptFlags{});
     EXPECT_EQ(locals, "%x:int %0:int %y:int %1:int");
 }
+
+// ---------------------------------------------------------------------------
+// Volatile: every access to a volatile object happens once, as written
+// ---------------------------------------------------------------------------
+
+// The number of times `needle` occurs in `hay`.
+static int count_of(const std::string &hay, const std::string &needle)
+{
+    int n = 0;
+    for (size_t at = hay.find(needle); at != std::string::npos; at = hay.find(needle, at + 1))
+        n++;
+    return n;
+}
+
+// The initializing write and both accesses of r++ survive, and the increment adds to
+// the value read, not to the 0 stored before the call.
+TEST_F(PipelineTest, VolatilePostIncrementRereads)
+{
+    std::string yaml =
+        OptimizeYaml("int g(void); int f(void) { volatile int r = 0; g(); r++; return r; }");
+    EXPECT_EQ(4, count_of(yaml, "volatile: true")) << yaml;
+    EXPECT_NE(std::string::npos, yaml.find("  kind: binary\n  op: add\n  src1:\n    kind: var\n"))
+        << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("  kind: return\n  src:\n    kind: constant")) << yaml;
+}
+
+// ++r, r += 2 and r-- each read r once and write it once.
+TEST_F(PipelineTest, VolatileUpdatesReadOnceWriteOnce)
+{
+    std::string yaml = OptimizeYaml("int f(void) { volatile int r = 5; ++r; r += 2; r--; return r; }");
+    EXPECT_EQ(8, count_of(yaml, "volatile: true")) << yaml;
+    EXPECT_EQ(3, count_of(yaml, "  kind: binary\n")) << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("value: 8")) << yaml; // not folded
+}
+
+// The value of an assignment is the value stored, not a second read of r; both
+// writes stay although the first is overwritten.
+TEST_F(PipelineTest, VolatileAssignmentValueIsStored)
+{
+    std::string yaml = OptimizeYaml("int f(void) { volatile int r = 1; int y = (r = 3); return y; }");
+    EXPECT_EQ(2, count_of(yaml, "volatile: true")) << yaml;
+    EXPECT_EQ(0, count_of(yaml, "    name: %r\n  dst:")) << yaml; // r is never read
+}
+
+// Reads whose values are unused still happen.
+TEST_F(PipelineTest, VolatileUnusedReadsKept)
+{
+    std::string yaml = OptimizeYaml("int f(void) { volatile int r = 1; r; r; return 0; }");
+    EXPECT_EQ(3, count_of(yaml, "volatile: true")) << yaml;
+    EXPECT_EQ(2, count_of(yaml, "    name: %r\n  dst:")) << yaml;
+}

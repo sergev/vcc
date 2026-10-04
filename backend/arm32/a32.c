@@ -37,8 +37,9 @@ A32_Block *a32_new_block(A32_Func *fn, const char *label)
 A32_Instr *a32_append(A32_Func *fn, A32_Op op)
 {
     A32_Block *b  = fn->tail;
-    A32_Instr *in = xalloc(sizeof(A32_Instr), __func__, __FILE__, __LINE__);
-    in->op        = op;
+    A32_Instr *in   = xalloc(sizeof(A32_Instr), __func__, __FILE__, __LINE__);
+    in->op          = op;
+    in->is_volatile = fn->volatile_access;
     if (b->tail)
         b->tail->next = in;
     else
