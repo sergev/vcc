@@ -32,9 +32,10 @@ protected:
               "two minutes under qemu, clang's too" },
             { "Chapter14_SwitchDereferencedPointer", "case values collide in a 32-bit long" },
             { "Chapter15_BigArray", "arrays too large for a 16-bit size_t" },
-            { "Chapter15_ArrayOfPointersToArrays", "clang -O0 runs out of registers" },
             { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
             { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31: undefined" },
+            { "Chapter17_SizeofExtern", "arrays too large for 8 KB of SRAM" },
+            { "Chapter18_MissingRetval", "uses a missing return value: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);
@@ -59,13 +60,29 @@ protected:
         AvrTest::TearDown();
     }
 
-    // Run a book program, and check that clang -O0 gives the same.
+    // Run a book program, and check that clang -O0 gives the same; -O1 for the few
+    // where clang -O0 runs out of registers.
     std::string CompileAndRunBook(const std::string &src)
     {
+        static const char *const clang_o1[] = {
+            "Chapter15_ArrayOfPointersToArrays",
+            "Chapter18_AutoStructInitializers",
+            "Chapter18_CompoundAssignStructMembers",
+            "Chapter18_IncrStructMembers",
+            "Chapter18_ScalarMemberAccessLinkedList",
+            "Chapter18_ScalarMemberAccessNestedStruct",
+            "Chapter18_StructCopyWithArrowOperator",
+            nullptr,
+        };
+        const char *opt  = "-O0";
+        const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+        for (const char *const *t = clang_o1; *t; t++)
+            if (strcmp(*t, name) == 0)
+                opt = "-O1";
         std::string ours = AvrTest::CompileAndRunBook(src);
         int status       = exit_status;
         EXPECT_NE("ERROR", ours) << "did not run";
-        EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
+        EXPECT_EQ(ClangRunBook(src, opt), ours) << "differs from clang";
         EXPECT_EQ(exit_status, status) << "exit status differs from clang";
         exit_status = status;
         return ours;

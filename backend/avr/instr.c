@@ -48,13 +48,17 @@ void gen_set_on(Gen *g, AVR_Op br)
     gen_label_block(g, done);
 }
 
-// dst = src, a scalar.
+// dst = src; an aggregate copied from X to Z.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (!avr_is_scalar(t))
-        fatal_error("avr: %s: copying an aggregate is not implemented yet", gen_name(g));
-    int size = avr_type_size(t);
+    int size          = avr_type_size(t);
+    if (!avr_is_scalar(t)) {
+        address_of(g, AVR_X, src->u.var_name, 0);
+        address_of(g, AVR_Z, dst->u.var_name, 0);
+        copy_bytes(g, size);
+        return;
+    }
     int a    = block_a(size);
     load_val(g, src, a, size, EXT_TYPE);
     store_val(g, dst, a, size);
@@ -235,11 +239,16 @@ static const Tac_Type *pointee(const Gen *g, const Tac_Val *ptr)
     return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
 }
 
-// dst = *ptr, `size` bytes (a scalar): the pointer in Z, the bytes through Z+i.
+// dst = *ptr, `size` bytes: a scalar with the pointer in Z and the bytes through Z+i,
+// an aggregate copied with the pointer in X.
 static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, int size)
 {
-    if (size > 8)
-        fatal_error("avr: %s: loading an aggregate is not implemented yet", gen_name(g));
+    if (!avr_is_scalar(val_type(g, dst))) {
+        load_val(g, ptr, AVR_X, 2, EXT_TYPE);
+        address_of(g, AVR_Z, dst->u.var_name, 0);
+        copy_bytes(g, size);
+        return;
+    }
     int a = block_a(size);
     load_val(g, ptr, AVR_Z, 2, EXT_TYPE);
     for (int i = 0; i < size; i++)
@@ -247,11 +256,16 @@ static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, int size)
     store_val(g, dst, a, size);
 }
 
-// *ptr = src, `size` bytes (a scalar): the value first, then the pointer in Z.
+// *ptr = src, `size` bytes: a scalar's value first, then the pointer in Z; an
+// aggregate copied, the pointer in Z first (loading it may take X).
 static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size)
 {
-    if (size > 8)
-        fatal_error("avr: %s: storing an aggregate is not implemented yet", gen_name(g));
+    if (src->kind == TAC_VAL_VAR && !avr_is_scalar(val_type(g, src))) {
+        load_val(g, ptr, AVR_Z, 2, EXT_TYPE);
+        address_of(g, AVR_X, src->u.var_name, 0);
+        copy_bytes(g, size);
+        return;
+    }
     int a = block_a(size);
     load_val(g, src, a, size, EXT_TYPE);
     load_val(g, ptr, AVR_Z, 2, EXT_TYPE);
@@ -264,7 +278,8 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size)
 static int access_size(const Gen *g, const Tac_Val *ptr, const Tac_Val *v)
 {
     const Tac_Type *t = pointee(g, ptr);
-    if (!t || !avr_is_scalar(t) || t->kind == TAC_TYPE_VOID)
+    if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
+        (t->kind == TAC_TYPE_STRUCTURE && t->u.structure.size == 0))
         t = val_type(g, v);
     return avr_type_size(t);
 }
@@ -310,22 +325,30 @@ static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
     store_val(g, in->u.ptr_diff.dst, 24, 2);
 }
 
-// Member `offset` of aggregate `name` = src, a scalar of `size` bytes.
+// Member `offset` of aggregate `name` = src, of `size` bytes.
 static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset, int size)
 {
-    if (size > 8)
-        fatal_error("avr: %s: copying an aggregate member is not implemented yet", gen_name(g));
+    if (src->kind == TAC_VAL_VAR && !avr_is_scalar(val_type(g, src))) {
+        address_of(g, AVR_X, src->u.var_name, 0);
+        address_of(g, AVR_Z, name, offset);
+        copy_bytes(g, size);
+        return;
+    }
     int a = block_a(size);
     load_val(g, src, a, size, EXT_TYPE);
     access_bytes(g, true, name, offset, a, size);
 }
 
-// dst = member `offset` of aggregate `name`, a scalar of `size` bytes.
+// dst = member `offset` of aggregate `name`, of `size` bytes.
 static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst,
                                  int size)
 {
-    if (size > 8)
-        fatal_error("avr: %s: copying an aggregate member is not implemented yet", gen_name(g));
+    if (!avr_is_scalar(val_type(g, dst))) {
+        address_of(g, AVR_X, name, offset);
+        address_of(g, AVR_Z, dst->u.var_name, 0);
+        copy_bytes(g, size);
+        return;
+    }
     int a = block_a(size);
     access_bytes(g, false, name, offset, a, size);
     store_val(g, dst, a, size);

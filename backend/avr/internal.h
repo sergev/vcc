@@ -93,8 +93,16 @@ void gen_li(Gen *g, int reg, int imm);
 // zero-extended by its kind, a floating-point one as binary32.
 uint64_t const_bits(const Tac_Const *c);
 // Load (or store) registers reg..reg+n-1 from (or to) bytes off..off+n-1 of named
-// object `name`, n at most 8.
+// object `name`.
 void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n);
+
+// Load register `reg` from byte `off` of the incoming stack arguments.
+void access_incoming(Gen *g, int off, int reg);
+// Point pointer register `ptr` (X or Z) at byte `off` of named object `name`.
+void address_of(Gen *g, int ptr, const char *name, int off);
+// Copy `size` bytes from X to Z, both advanced: unrolled up to 16, else a loop counted
+// in r25:r24.
+void copy_bytes(Gen *g, int size);
 
 typedef enum {
     EXT_TYPE, // by the value's own type: sign for a signed integer, else zero

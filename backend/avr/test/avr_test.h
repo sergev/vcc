@@ -149,11 +149,11 @@ protected:
         return Run(CompileToAvr(ours.c_str()), "crt0.o", &theirs, { "-O1" }, "");
     }
 
-    // Run a book program compiled by clang -O0 with the target headers.
-    std::string ClangRunBook(const std::string &src)
+    // Run a book program compiled by clang (-O0 by default) with the target headers.
+    std::string ClangRunBook(const std::string &src, const char *opt = "-O0")
     {
         return Run("", "crt0-status.o", &src,
-                   { "-O0", "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
+                   { opt, "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
                      TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
                    ".clang");
     }

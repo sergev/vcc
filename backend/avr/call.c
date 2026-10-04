@@ -1,34 +1,83 @@
 //
-// Parameters, calls and returns: the avr-gcc ABI.
+// Parameters, calls and returns: the avr-gcc ABI as clang implements it.
 //
 // Arguments are assigned left to right from r25 down, each taking the registers just
 // below the previous one, its size rounded up to even; the first that would go below
-// r8 goes on the stack, and so does every later one.  A variadic callee takes them all
-// on the stack.  Stack arguments lie in order above the return address, unaligned.
+// r8 goes on the stack, and so does every later one.  A structure is flattened into
+// its members first (split_arg).  A variadic callee takes them all on the stack.
+// Stack arguments lie in order above the return address, unaligned.
 //
 #include "internal.h"
 #include "xalloc.h"
 
+// A piece of an argument: clang passes a structure flattened, each top-level member
+// an argument of its own (bit-fields by their storage unit, a nested structure, union
+// or array whole), so a structure may even be split between registers and the stack.
 typedef struct {
-    int reg; // the first (lowest) register, or 0 on the stack
-    int off; // the offset in the stack argument area
-} ArgLoc;
+    int arg;  // the argument's index
+    int off;  // the piece's offset in the argument
+    int size; // its bytes
+    int reg;  // the first (lowest) register, or 0 on the stack
+    int stack; // the offset in the stack argument area
+} Piece;
 
-// Assign `n` arguments of types `types`; returns the bytes of stack arguments.
-static int assign_args(const Tac_Type *const *types, int n, bool variadic, ArgLoc *loc)
+typedef struct {
+    Piece *p;
+    int n, max;
+} Pieces;
+
+static void add_piece(Pieces *v, int arg, int off, int size)
 {
+    if (v->n == v->max) {
+        v->max   = v->max ? 2 * v->max : 16;
+        Piece *p = xalloc(v->max * sizeof(Piece), __func__, __FILE__, __LINE__);
+        for (int i = 0; i < v->n; i++)
+            p[i] = v->p[i];
+        xfree(v->p);
+        v->p = p;
+    }
+    v->p[v->n++] = (Piece){ .arg = arg, .off = off, .size = size };
+}
+
+// The pieces of argument `arg` of type `t`: a scalar, a union or an opaque structure
+// is one; a structure one per distinct member offset.
+static void split_arg(Pieces *v, int arg, const Tac_Type *t)
+{
+    int size = avr_type_size(t);
+    if (t->kind != TAC_TYPE_STRUCTURE || t->u.structure.is_union || !t->u.structure.members) {
+        add_piece(v, arg, 0, size);
+        return;
+    }
+    int start = 0;
+    for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+        if (m->offset > start) {
+            add_piece(v, arg, start, m->offset - start);
+            start = m->offset;
+        }
+    }
+    if (size > start)
+        add_piece(v, arg, start, size - start);
+}
+
+// Place the pieces of `n` arguments of types `types`, from r25 down, each rounded up
+// to even, until one does not fit above r8: from it on, all go on the stack.  Returns
+// the bytes of stack arguments.
+static int assign_args(const Tac_Type *const *types, int n, bool variadic, Pieces *v)
+{
+    for (int i = 0; i < n; i++)
+        split_arg(v, i, types[i]);
     int reg = 26, stack = 0;
     bool on_stack = variadic;
-    for (int i = 0; i < n; i++) {
-        int size = avr_type_size(types[i]);
-        int even = (size + 1) & ~1;
+    for (int i = 0; i < v->n; i++) {
+        Piece *p = &v->p[i];
+        int even = (p->size + 1) & ~1;
         if (!on_stack && reg - even >= 8) {
             reg -= even;
-            loc[i] = (ArgLoc){ .reg = reg };
+            p->reg = reg;
         } else {
             on_stack = true;
-            loc[i]   = (ArgLoc){ .off = stack };
-            stack += size;
+            p->stack = stack;
+            stack += p->size;
         }
     }
     return stack;
@@ -42,8 +91,8 @@ static int count_params(const Gen *g)
     return n;
 }
 
-// The locations of the function's parameters, into `loc` (count_params of them).
-static void param_locs(const Gen *g, ArgLoc *loc)
+// The pieces of the function's parameters.
+static void param_pieces(const Gen *g, Pieces *v)
 {
     int n                  = count_params(g);
     const Tac_Type **types = xalloc((n + 1) * sizeof(*types), __func__, __FILE__, __LINE__);
@@ -53,32 +102,68 @@ static void param_locs(const Gen *g, ArgLoc *loc)
             fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
         types[i++] = p->type;
     }
-    assign_args(types, n, g->tl->u.function.variadic, loc);
+    assign_args(types, n, g->tl->u.function.variadic, v);
     xfree(types);
+}
+
+// The parameter of index `i`.
+static const Tac_Param *nth_param(const Gen *g, int i)
+{
+    const Tac_Param *p = g->tl->u.function.params;
+    while (i-- > 0)
+        p = p->next;
+    return p;
+}
+
+// Whether every piece of parameter `arg` came on the stack: it then lives there.
+static bool all_on_stack(const Pieces *v, int arg)
+{
+    for (int i = 0; i < v->n; i++)
+        if (v->p[i].arg == arg && v->p[i].reg)
+            return false;
+    return true;
 }
 
 void place_params(Gen *g)
 {
-    int n       = count_params(g);
-    ArgLoc *loc = xalloc((n + 1) * sizeof(*loc), __func__, __FILE__, __LINE__);
-    param_locs(g, loc);
-    int i = 0;
-    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++)
-        if (!loc[i].reg)
-            place_stack_param(g, p->name, p->type, loc[i].off);
-    xfree(loc);
+    Pieces v = { 0 };
+    param_pieces(g, &v);
+    for (int i = 0; i < v.n; i++) {
+        const Piece *p = &v.p[i];
+        if (p->off == 0 && all_on_stack(&v, p->arg)) {
+            const Tac_Param *param = nth_param(g, p->arg);
+            place_stack_param(g, param->name, param->type, p->stack);
+        }
+    }
+    xfree(v.p);
 }
 
 void store_params(Gen *g)
 {
-    int n       = count_params(g);
-    ArgLoc *loc = xalloc((n + 1) * sizeof(*loc), __func__, __FILE__, __LINE__);
-    param_locs(g, loc);
-    int i = 0;
-    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++)
-        if (loc[i].reg)
-            access_bytes(g, true, p->name, 0, loc[i].reg, avr_type_size(p->type));
-    xfree(loc);
+    Pieces v = { 0 };
+    param_pieces(g, &v);
+    for (int i = 0; i < v.n; i++) {
+        const Piece *p   = &v.p[i];
+        const char *name = nth_param(g, p->arg)->name;
+        if (p->reg) {
+            access_bytes(g, true, name, p->off, p->reg, p->size);
+        } else if (!all_on_stack(&v, p->arg)) {
+            // The stack part of a structure split by the register limit, copied into
+            // its slot byte by byte.
+            for (int k = 0; k < p->size; k++) {
+                access_incoming(g, p->stack + k, 24);
+                access_bytes(g, true, name, p->off + k, 24, 1);
+            }
+        }
+    }
+    xfree(v.p);
+}
+
+// The first register of a result of `size` bytes: r24, r22 or r18, the bytes in
+// order from it; over 4 bytes always r18, a 5-byte structure in r22:r18 too.
+static int result_reg(int size)
+{
+    return size <= 2 ? 24 : size <= 4 ? 22 : 18;
 }
 
 // SP += n, after a call: pop r0 for a few bytes, else through Z (the result registers
@@ -112,32 +197,42 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next)
         n++;
     const Tac_Type **types = xalloc((n + 1) * sizeof(*types), __func__, __FILE__, __LINE__);
-    ArgLoc *loc            = xalloc((n + 1) * sizeof(*loc), __func__, __FILE__, __LINE__);
     const Tac_Val **args   = xalloc((n + 1) * sizeof(*args), __func__, __FILE__, __LINE__);
     int i                  = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         args[i]  = a;
         types[i] = val_type(g, a);
-        if (!avr_is_scalar(types[i]))
-            fatal_error("avr: %s: passing a structure is not implemented yet", gen_name(g));
     }
-    int stack = assign_args(types, n, ft && ft->u.fun_type.variadic, loc);
+    Pieces v  = { 0 };
+    int stack = assign_args(types, n, ft && ft->u.fun_type.variadic, &v);
 
-    // The stack arguments, the last first and each high byte first, so that they lie
-    // in order and little-endian; then the register ones, straight from memory.
-    for (i = n - 1; i >= 0; i--) {
-        if (loc[i].reg)
+    // The stack pieces, the last first and each high byte first, so that they lie in
+    // order and little-endian; then the register ones, straight from memory.
+    for (i = v.n - 1; i >= 0; i--) {
+        const Piece *p = &v.p[i];
+        if (p->reg)
             continue;
-        int size = avr_type_size(types[i]), a = block_a(size);
-        load_val(g, args[i], a, size, EXT_TYPE);
-        for (int k = size - 1; k >= 0; k--)
+        if (!avr_is_scalar(types[p->arg])) {
+            for (int k = p->size - 1; k >= 0; k--) { // byte by byte, through r24
+                access_bytes(g, false, args[p->arg]->u.var_name, p->off + k, 24, 1);
+                emit1(g, AVR_PUSH, avr_reg(24));
+            }
+            continue;
+        }
+        int a = block_a(p->size);
+        load_val(g, args[p->arg], a, p->size, EXT_TYPE);
+        for (int k = p->size - 1; k >= 0; k--)
             emit1(g, AVR_PUSH, avr_reg(a + k));
     }
-    for (i = 0; i < n; i++)
-        if (loc[i].reg) {
-            int size = avr_type_size(types[i]);
-            load_val(g, args[i], loc[i].reg, size == 1 ? 2 : size, EXT_TYPE);
-        }
+    for (i = 0; i < v.n; i++) {
+        const Piece *p = &v.p[i];
+        if (!p->reg)
+            continue;
+        if (!avr_is_scalar(types[p->arg]))
+            access_bytes(g, false, args[p->arg]->u.var_name, p->off, p->reg, p->size);
+        else // a char extended to its pair
+            load_val(g, args[p->arg], p->reg, p->size == 1 ? 2 : p->size, EXT_TYPE);
+    }
 
     if (in->u.fun_call.indirect) {
         Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
@@ -152,20 +247,15 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Val *dst = in->u.fun_call.dst;
     if (dst) {
         const Tac_Type *t = val_type(g, dst);
+        int size          = avr_type_size(t);
         if (!avr_is_scalar(t))
-            fatal_error("avr: %s: a structure result is not implemented yet", gen_name(g));
-        int size = avr_type_size(t);
-        store_val(g, dst, block_a(size), size);
+            access_bytes(g, true, dst->u.var_name, 0, result_reg(size), size);
+        else
+            store_val(g, dst, result_reg(size), size);
     }
     xfree(types);
-    xfree(loc);
     xfree(args);
-}
-
-// The first register of a result of `size` bytes: r24, r25:r24, r25:r22 or r25:r18.
-static int result_reg(int size)
-{
-    return block_a(size);
+    xfree(v.p);
 }
 
 void gen_return(Gen *g, const Tac_Val *v, bool last)
@@ -173,12 +263,17 @@ void gen_return(Gen *g, const Tac_Val *v, bool last)
     if (v) {
         const Tac_Type *fn = g->tl->u.function.type;
         const Tac_Type *t  = fn ? fn->u.fun_type.ret_type : val_type(g, v);
-        if (!avr_is_scalar(t))
-            fatal_error("avr: %s: returning a structure is not implemented yet", gen_name(g));
         int size = avr_type_size(t);
-        if (size == 1)
-            size = 2; // a char comes back extended to r25:r24, as avr-gcc does
-        load_val(g, v, result_reg(size), size, EXT_TYPE);
+        if (!avr_is_scalar(t) && size > 8) {
+            // The frontend returns a larger one through the hidden pointer it returns
+            // here; under this ABI the address does not come back.
+        } else if (!avr_is_scalar(t)) {
+            access_bytes(g, false, v->u.var_name, 0, result_reg(size), size);
+        } else {
+            if (size == 1)
+                size = 2; // a char comes back extended to r25:r24, as avr-gcc does
+            load_val(g, v, result_reg(size), size, EXT_TYPE);
+        }
     }
     if (!last)
         emit1(g, AVR_RJMP, avr_label(g->exit));

@@ -345,6 +345,41 @@ static void address_slot(Gen *g, int ptr, int q)
     }
 }
 
+static void access_y(Gen *g, bool store, int q, int reg, int n);
+
+void address_of(Gen *g, int ptr, const char *name, int off)
+{
+    const Slot *s = find_slot(g, name);
+    if (s) {
+        address_slot(g, ptr, s->q + off);
+        return;
+    }
+    if (name[0] == '%')
+        fatal_error("avr: %s: no slot for %s", gen_name(g), name);
+    emit2(g, AVR_LDI, avr_reg(ptr), avr_sym(AVR_MOD_LO8, name, off));
+    emit2(g, AVR_LDI, avr_reg(ptr + 1), avr_sym(AVR_MOD_HI8, name, off));
+}
+
+void copy_bytes(Gen *g, int size)
+{
+    if (size <= 16) {
+        for (int i = 0; i < size; i++) {
+            emit2(g, AVR_LD, avr_reg(AVR_TMP), avr_ptr(AVR_X, AVR_PTR_POST_INC));
+            emit2(g, AVR_ST, avr_ptr(AVR_Z, AVR_PTR_POST_INC), avr_reg(AVR_TMP));
+        }
+        return;
+    }
+    char loop[32];
+    new_label(loop);
+    emit2(g, AVR_LDI, avr_reg(24), avr_imm(size & 0xff));
+    emit2(g, AVR_LDI, avr_reg(25), avr_imm((size >> 8) & 0xff));
+    gen_label_block(g, loop);
+    emit2(g, AVR_LD, avr_reg(AVR_TMP), avr_ptr(AVR_X, AVR_PTR_POST_INC));
+    emit2(g, AVR_ST, avr_ptr(AVR_Z, AVR_PTR_POST_INC), avr_reg(AVR_TMP));
+    emit2(g, AVR_SBIW, avr_reg(24), avr_imm(1));
+    emit1(g, AVR_BRNE, avr_label(loop));
+}
+
 void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n)
 {
     const Slot *s = find_slot(g, name);
@@ -359,7 +394,16 @@ void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n)
         }
         return;
     }
-    int q = s->q + off;
+    access_y(g, store, s->q + off, reg, n);
+}
+
+void access_incoming(Gen *g, int off, int reg)
+{
+    access_y(g, false, g->frame_size + 5 + off, reg, 1);
+}
+
+static void access_y(Gen *g, bool store, int q, int reg, int n)
+{
     if (q + n - 1 <= Y_MAX) {
         for (int i = 0; i < n; i++) {
             if (store)

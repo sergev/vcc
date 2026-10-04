@@ -98,13 +98,21 @@ confirmed by M18's interop table.
     extend as the sender and re-extend as the receiver, as on x86-64.
   - A struct is passed in registers like any other argument when it fits. A 10-byte
     struct went in `r14`–`r23`.
+  - *Found at M16:* clang **flattens a struct argument** into its top-level members.
+    Each member is an argument of its own, rounded up to a pair. A nested struct, a
+    union, an array, or the storage unit of bit-fields stays one piece, laid out in
+    ascending registers. `struct { char a; int b; int c; }` goes `a` in `r24`, `b` in
+    `r23:r22` and `c` in `r21:r20`, not as one 6-byte block. A piece that does not fit
+    above `r8` goes on the stack with everything after it, so one struct can be split
+    between registers and the stack. Whether avr-gcc agrees is not checked here.
 - **Stack arguments** sit above the 2-byte return address in the order of the parameter
   list. They are not aligned. The caller removes them.
 - **Variadic callees** take *every* argument on the stack, named ones included (checked:
   `va(1, 2L, 3.0)` stored all three through `Z+1`…`Z+10`). `va_list` is a plain pointer.
 - **Results:** 1 byte in `r24`, 2 bytes in `r25:r24`, 4 bytes in `r22`–`r25`, 8 bytes in
-  `r18`–`r25`. A struct of up to 8 bytes is returned in registers, its size rounded up to
-  even and ending at `r25`; a 3-byte struct came back in `r22`–`r24` (*checked*). A larger
+  `r18`–`r25`. A struct of up to 8 bytes is returned in registers, in ascending order
+  from `r24`, `r22` or `r18` for up to 2, 4 or 8 bytes; a 3-byte struct came back in
+  `r22`–`r24` (*checked*), and a 5-byte one in `r18`–`r22` (*checked* at M16). A larger
   struct is returned through a hidden pointer passed in `r24:r25` as the first argument,
   and the callee does not return that address (*checked*: 9 bytes go through memory, 8
   come back in `r18`–`r25`).
@@ -353,7 +361,8 @@ instructions.
   other LLVM-toolchain suites. This is what makes a 16-bit `int` testable: the book's
   expected values assume a 32-bit `int`, but clang's AVR output does not.
   - *In place since M13:* the AVR `BookTest` intercepts the failures of the book's own
-    expectations, so clang is the only oracle. The skip list keeps the programs that
+    expectations, so clang is the only oracle. clang `-O0` runs out of registers on a
+    few struct programs; those are compiled with `-O1`. The skip list keeps the programs that
     cannot run: undefined shifts, case values that collide in a 32-bit `long`, and a
     loop that never ends with a 16-bit `unsigned`.
 
