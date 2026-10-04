@@ -76,8 +76,8 @@ Verified 2026-10-03 on this machine, with scratch programs (not in the tree):
 
 ### The avr-gcc ABI, as clang implements it
 
-Checked against clang's output where marked; the rest is the avr-gcc ABI document, to be
-confirmed by M18's interop table.
+Checked against clang's output where marked; all of it is exercised against clang, both
+ways, by the interop tests (`backend/avr/test/interop_tests.cpp` and the others).
 
 - **Fixed registers.** `r0` is `__tmp_reg__`, scratch. `r1` is `__zero_reg__`: it is
   zero at every call and return, and `mul` overwrites it, so every `mul` is followed by
@@ -155,56 +155,6 @@ A value in `r2`–`r15` therefore goes through `Z`/`X` for any operation with a 
 One selection helper owns that rule.
 
 `make run` stays green after every M-step.
-
-## Phase 3 — ABI conformance
-
-- **M17. Variadic functions and `<stdarg.h>`.**
-  - **Calls:** for a variadic callee, *every* argument goes on the stack, named ones
-    included (in place since M12). An unprototyped callee is called as non-variadic, as
-    avr-gcc does.
-  - **The variadic function** finds all its parameters on the stack, and its parameter
-    slots lie over them (in place since M9), so its prologue stores nothing.
-  - **`va_list`** is `char *`. clang's AVR `__builtin_va_list` is a plain pointer, so a
-    `va_list` handed to or from clang-compiled code is the same thing.
-  - **`va_start(ap, last)`** needs no builtin: `(char *)&last + sizeof(last)` is the
-    address just past the last named argument, since `last` lives in the incoming
-    stack area. `<stdarg.h>` is written so since M15; M17 tests it.
-  - **`va_arg(ap, T)`** is a macro and needs no runtime or class:
-    `(*(T *)((ap += sizeof(T)) - sizeof(T)))`. Alignment is 1, `char`/`short` promote to
-    2-byte `int`, and `float` to a 4-byte `double`.
-  - **Gate:** `printf` in `libc.a` works.
-  - *Done:* variadics both ways across clang, a `va_list` too. `printf`, `sprintf` and
-    `snprintf` are in `libc.a` and match the host's formatting. The two `doprnt` items
-    of M21 came forward. `sprintf`'s nominal unbounded size, `1 << 24`, overflowed a
-    16-bit `int`.
-- **M18. Interop tests** with clang in both directions, over a table of signatures, built
-  before the code they test:
-  - **Register overflow:** the argument that does not fit, and the later ones that would
-    have fitted.
-  - **Odd sizes:**
-    - `char`, `char` + `int`;
-    - structs of 1, 3, 5, 8, 9 and 10 bytes, as arguments and as results;
-    - `long long` arguments and results;
-    - `float`/`double` arguments and results.
-  - **Function pointers both ways:** word addresses taken in one compiler and called in
-    the other.
-  - **Preserved state:** `r2`–`r17` and `Y` survive our calls, and `r1` is zero on
-    return.
-  - **Variadics both ways,** and a `va_list` handed across.
-  - **Clang code linked with our runtime:** it divides, multiplies and does float
-    arithmetic, so the helpers' M6 contracts are exercised by LLVM's own assumptions.
-- **M19. Differential book tests.** Every book program is also compiled by clang (default
-  `-mdouble=32`), run under qemu, and the outputs and statuses are compared, as in the
-  other LLVM-toolchain suites. This is what makes a 16-bit `int` testable: the book's
-  expected values assume a 32-bit `int`, but clang's AVR output does not.
-  - *In place since M13:* the AVR `BookTest` intercepts the failures of the book's own
-    expectations, so clang is the only oracle. clang `-O0` runs out of registers on a
-    few struct programs; those are compiled with `-O1`. The skip list keeps the
-    programs that cannot run: undefined behaviour (shifts by 16 or more, a missing
-    return value, reads past a 16-bit `int`), case values that collide in a 32-bit
-    `long`, arrays too large for 8 KB of SRAM, a loop that never ends with a 16-bit
-    `unsigned`, a recursion that takes two minutes under qemu, and one program that
-    clang `-O0` miscompiles.
 
 ## Phase 4 — library and headers
 
