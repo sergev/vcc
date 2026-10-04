@@ -4,7 +4,9 @@
 #pragma once
 
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
 
 #include "qemu_test.h"
 
@@ -86,6 +88,37 @@ protected:
         return out;
     }
 
+    // The instruction lines of Code(asm_text) without the prologue and the epilogue of
+    // its one function (a test of the frame looks at Code).
+    static std::string Body(const std::string &asm_text)
+    {
+        static const char *const frame[] = {
+            "push r", "pop r", "in r28, ", "in r29, ", "sbiw r28, ", "adiw r28, ", "subi r28, ",
+            "sbci r29, ", "in r0, __SREG__", "cli", "out __SP_", "out __SREG__", "ret",
+        };
+        auto is_frame = [](const std::string &line) {
+            for (const char *f : frame)
+                if (line.compare(0, strlen(f), f) == 0)
+                    return true;
+            return false;
+        };
+        std::string code = Code(asm_text);
+        std::vector<std::string> lines;
+        for (size_t pos = 0, nl; pos < code.size(); pos = nl + 1) {
+            nl = code.find('\n', pos);
+            lines.push_back(code.substr(pos, nl - pos));
+        }
+        size_t first = 0, end = lines.size();
+        while (first < end && is_frame(lines[first]))
+            first++;
+        while (end > first && is_frame(lines[end - 1]))
+            end--;
+        std::string out;
+        for (size_t i = first; i < end; i++)
+            out += lines[i] + "\n";
+        return out;
+    }
+
     // Run a program; returns its output, with main's result in exit_status.
     std::string CompileAndRunAvr(const std::string &src)
     {
@@ -126,10 +159,10 @@ protected:
     }
 };
 
-// A golden test of the instruction lines of one translation unit (each test compiles
-// one: the fixture's symbol table lives per test).
+// A golden test of the body of the one function of a translation unit (each test
+// compiles one: the fixture's symbol table lives per test).
 #define EXPECT_CODE(name, expected, src)              \
     TEST_F(AvrTest, name)                             \
     {                                                 \
-        EXPECT_EQ(expected, Code(CompileToAvr(src))); \
+        EXPECT_EQ(expected, Body(CompileToAvr(src))); \
     }

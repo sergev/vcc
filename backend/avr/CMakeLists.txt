@@ -4,6 +4,9 @@
 add_library(avr STATIC
     avr_ir.c
     emit.c
+    frame.c
+    instr.c
+    call.c
     codegen.c
 )
 target_include_directories(avr PUBLIC .)
@@ -20,6 +23,7 @@ list(FILTER AVR_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(avr-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${AVR_BOOK_SOURCES}
 )

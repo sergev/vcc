@@ -167,6 +167,8 @@ AVR_Func *avr_new_func(const char *name, bool global);
 AVR_Block *avr_new_block(AVR_Func *fn, const char *label);
 // Append an instruction to the current (last) block.
 AVR_Instr *avr_append(AVR_Func *fn, AVR_Op op);
+// Append an instruction to block `b`.
+AVR_Instr *avr_append_to(AVR_Block *b, AVR_Op op);
 void avr_free_func(AVR_Func *fn);
 
 AVR_Operand avr_reg(int reg);

@@ -40,7 +40,11 @@ AVR_Block *avr_new_block(AVR_Func *fn, const char *label)
 
 AVR_Instr *avr_append(AVR_Func *fn, AVR_Op op)
 {
-    AVR_Block *b  = fn->tail;
+    return avr_append_to(fn->tail, op);
+}
+
+AVR_Instr *avr_append_to(AVR_Block *b, AVR_Op op)
+{
     AVR_Instr *in = xalloc(sizeof(AVR_Instr), __func__, __FILE__, __LINE__);
     in->op        = op;
     if (b->tail)

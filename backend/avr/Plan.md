@@ -172,14 +172,17 @@ instructions.
 - **M9. Frame.** Slots come from typed TAC and `ALLOCATE_LOCAL`. Alignment is 1, so
   there is no padding.
   - **Prologue:**
-    - push the call-saved registers used, and `Y`;
+    - push `Y`;
     - `in r28, __SP_L__; in r29, __SP_H__`;
     - lower `Y` by the frame size (`sbiw` up to 63, `subi`/`sbci` beyond);
     - write SP back with the interrupt-safe sequence: `in r0, __SREG__; cli; out
-      __SP_H__, r29; out __SREG__, r0; out __SP_L__, r28`.
+      __SP_H__, r29; out __SREG__, r0; out __SP_L__, r28`;
+    - push the call-saved registers the body uses, found by a scan once it is selected.
+      They go below the slots, so the offsets of stack arguments do not depend on them.
 
-    The epilogue is the reverse, then `ret`. Slot `n` is at `Y+1+n`. Stack arguments are
-    above the saved registers and the 2-byte return address.
+    The epilogue is the reverse, then `ret`, and an early return jumps to it. Slot `n`
+    is at `Y+1+n`. Stack arguments start at `Y+frame+5`, above the saved `Y` and the
+    2-byte return address.
   - **The `Y+63` limit.** A slot whose last byte is past `Y+63` is reached by building
     its address in `Z` (`movw r30, r28; subi r30, lo8(-q); sbci r31, hi8(-q)`) and
     walking it with `Z+`. One helper owns the rule.

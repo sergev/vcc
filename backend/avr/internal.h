@@ -7,21 +7,127 @@
 // Y (r29:r28) is the frame pointer, X (r27:r26) and Z (r31:r30) the pointer scratch of
 // instruction selection.
 //
+// Every TAC variable lives in memory: a `%` name in a frame slot, any other name at its
+// symbol.  An operation loads its operands into two register blocks laid out as the
+// first two arguments of a call (block_a and block_b), computes in place, and stores the
+// result; the helpers with special contracts (__divmodhi4, __mulsi3, ...) then need no
+// moves.
+//
+// Frame (Y is set to SP after the slots are reserved; SP points below the last byte):
+//   Y + frame + 5 ...   incoming stack arguments
+//   Y + frame + 3       return address (2 bytes)
+//   Y + frame + 1       saved Y
+//   Y + 1 ...           slots: scalars first, then aggregates
+//   below Y             the call-saved registers in use, pushed after Y is set up
+// A slot is reached as Y+q while its last byte is within Y+63, else through a pointer
+// register loaded with its address (access_bytes).
+//
 #ifndef AVR_INTERNAL_H
 #define AVR_INTERNAL_H
 
 #include "avr_ir.h"
+#include "string_map.h"
 #include "tac.h"
+
+enum {
+    Y_MAX = 63, // the largest displacement of ldd/std
+};
+
+typedef struct {
+    const Tac_Type *type;
+    int q; // displacement from Y of the first byte
+} Slot;
 
 typedef struct {
     AVR_Func *fn;
     const Tac_TopLevel *program; // the translation unit
     const Tac_TopLevel *tl;      // the function
+    AVR_Block *prologue;
+    StringMap frame;   // name → Slot *
+    StringMap globals; // name → const Tac_Type *
+    int frame_size;    // bytes of slots
+    char exit[32];     // the label of the epilogue
 } Gen;
 
+//
+// Types (frame.c)
+//
+int avr_type_size(const Tac_Type *t);
+bool avr_is_unsigned(const Tac_Type *t); // unsigned integers and pointers
+bool avr_is_fp(const Tac_Type *t);       // float, double, long double
+bool avr_is_scalar(const Tac_Type *t);
+// The first register of operand block A or B of an operation on `size` bytes: A is
+// r24 or r(26-size)..r25, B is r22 or the `size` registers below A (an 8-byte B is
+// r10-r17, call-saved).
+int block_a(int size);
+int block_b(int size);
+
+//
+// Frame and value access (frame.c)
+//
+// A new translation unit: label numbering starts over.
+void gen_unit_begin(void);
+// A new local label `.Lv<n>`, unique in the translation unit, into `buf`.
+void new_label(char buf[32]);
+void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl);
+void gen_done(Gen *g);
 const char *gen_name(const Gen *g);
+// The slots of the parameters and locals, the stack parameters' placed first;
+// ALLOCATE_LOCAL may ask for more room.
+void layout_frame(Gen *g);
+// Give parameter `name` a slot over its incoming stack argument, `off` bytes into the
+// stack argument area.
+void place_stack_param(Gen *g, const char *name, const Tac_Type *type, int off);
+const Slot *find_slot(const Gen *g, const char *name);
+const Tac_Type *name_type(const Gen *g, const char *name);
+const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
+// Whether global `name` is a function, whose address is a word address in flash.
+bool is_function(const Gen *g, const char *name);
 AVR_Instr *emit0(Gen *g, AVR_Op op);
 AVR_Instr *emit1(Gen *g, AVR_Op op, AVR_Operand a);
 AVR_Instr *emit2(Gen *g, AVR_Op op, AVR_Operand a, AVR_Operand b);
+// reg = imm (one byte), into any register: ldi for r16-r31, r1 for zero, else through
+// r26.
+void gen_li(Gen *g, int reg, int imm);
+// The bytes of integer or FP constant `c`, little-endian: an integer sign- or
+// zero-extended by its kind, a floating-point one as binary32.
+uint64_t const_bits(const Tac_Const *c);
+// Load (or store) registers reg..reg+n-1 from (or to) bytes off..off+n-1 of named
+// object `name`, n at most 8.
+void access_bytes(Gen *g, bool store, const char *name, int off, int reg, int n);
+
+typedef enum {
+    EXT_TYPE, // by the value's own type: sign for a signed integer, else zero
+    EXT_ZERO,
+    EXT_SIGN,
+} Ext;
+// Load value `v` into reg..reg+n-1: its low n bytes, or all of it extended as `ext`
+// says when it is narrower.
+void load_val(Gen *g, const Tac_Val *v, int reg, int n, Ext ext);
+// Store reg..reg+n-1 into variable `v`: its low bytes, or with zero high bytes when it
+// is wider.
+void store_val(Gen *g, const Tac_Val *v, int reg, int n);
+// rd..rd+n-1 = rs..rs+n-1, by pairs where both are even; nothing when the same.
+void move_regs(Gen *g, int rd, int rs, int n);
+// Fill reg+from..reg+n-1 by extending reg+from-1: zeros, or copies of its sign.
+void extend_regs(Gen *g, int reg, int from, int n, bool sign);
+// Start a new block labelled `label`.
+void gen_label_block(Gen *g, const char *label);
+// Fill the prologue and the epilogue, once the body is done.
+void gen_frame(Gen *g);
+
+//
+// Instruction selection (instr.c)
+//
+void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
+
+//
+// Calls, parameters and returns (call.c)
+//
+// Slots over the incoming stack arguments, before layout_frame.
+void place_params(Gen *g);
+// Store the register parameters into their slots.
+void store_params(Gen *g);
+void gen_return(Gen *g, const Tac_Val *v, bool last);
 
 #endif // AVR_INTERNAL_H

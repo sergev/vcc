@@ -1,5 +1,5 @@
 //
-// AVR code generator: golden assembly.
+// AVR code generator: golden assembly of returns.
 //
 #include "avr_test.h"
 
@@ -15,8 +15,15 @@ __SP_L__ = 61
     .p2align 1
     .type   main, @function
 main:
+    push    r28
+    push    r29
+    in      r28, __SP_L__
+    in      r29, __SP_H__
     ldi     r24, 2
     ldi     r25, 0
+.Lv0:
+    pop     r29
+    pop     r28
     ret
     .size   main, .-main
 )",
@@ -30,15 +37,19 @@ TEST_F(AvrTest, StaticFunctionIsLocal)
     EXPECT_NE(std::string::npos, s.find("f:\n")) << s;
 }
 
-EXPECT_CODE(VoidReturn, "ret\n", "void f(void) { return; }")
-EXPECT_CODE(VoidFallOff, "ret\n", "void f(void) { }")
+EXPECT_CODE(VoidReturn, "", "void f(void) { return; }")
+EXPECT_CODE(VoidFallOff, "", "void f(void) { }")
 
-// The result registers by size: r24, r25:r24, r25:r22, r25:r18; little-endian.
-EXPECT_CODE(ReturnChar, "ldi r24, 255\nret\n", "signed char f(void) { return -1; }")
-EXPECT_CODE(ReturnInt, "ldi r24, 52\nldi r25, 18\nret\n", "int f(void) { return 0x1234; }")
-EXPECT_CODE(ReturnLong, "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\nret\n",
+// The result registers by size: r25:r24 (a char extended), r25:r22, r25:r18;
+// little-endian.
+EXPECT_CODE(ReturnChar, "ldi r24, 255\nldi r25, 255\n", "signed char f(void) { return -1; }")
+EXPECT_CODE(ReturnUnsignedChar, "ldi r24, 255\nldi r25, 0\n",
+            "unsigned char f(void) { return 255; }")
+EXPECT_CODE(ReturnInt, "ldi r24, 52\nldi r25, 18\n", "int f(void) { return 0x1234; }")
+EXPECT_CODE(ReturnLong, "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\n",
             "long f(void) { return 0x01020304L; }")
 EXPECT_CODE(ReturnLongLong,
             "ldi r18, 8\nldi r19, 7\nldi r20, 6\nldi r21, 5\n"
-            "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\nret\n",
+            "ldi r22, 4\nldi r23, 3\nldi r24, 2\nldi r25, 1\n",
             "long long f(void) { return 0x0102030405060708LL; }")
+
