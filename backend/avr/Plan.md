@@ -204,7 +204,8 @@ instructions.
   - **Divide and remainder** call `__divmodhi4`/`__udivmodhi4` or
     `__divmodsi4`/`__udivmodsi4` with their M6 contracts. The `long long` forms call
     `__divdi3`, `__udivdi3`, `__moddi3` and `__umoddi3`, built from the shared C model
-    `libc/ilp32/int64.c`.
+    `libc/ilp32/int64.c`, and `__muldi3`. They arrive with the C library at M15, since
+    `int64.c` needs pointers; until then the book programs that use them are skipped.
   - **Shifts:**
     - By a constant: whole bytes move first, then `lsl`/`rol`, `lsr`/`ror` or
       `asr`/`ror` per bit, or a counted loop past a few bits.
@@ -341,6 +342,10 @@ instructions.
   `-mdouble=32`), run under qemu, and the outputs and statuses are compared, as in the
   other LLVM-toolchain suites. This is what makes a 16-bit `int` testable: the book's
   expected values assume a 32-bit `int`, but clang's AVR output does not.
+  - *In place since M13:* the AVR `BookTest` intercepts the failures of the book's own
+    expectations, so clang is the only oracle. The skip list keeps the programs that
+    cannot run: undefined shifts, case values that collide in a 32-bit `long`, and a
+    loop that never ends with a 16-bit `unsigned`.
 
 ## Phase 4 — library and headers
 

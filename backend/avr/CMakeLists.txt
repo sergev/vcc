@@ -8,6 +8,7 @@ add_library(avr STATIC
     instr.c
     call.c
     relax.c
+    data.c
     codegen.c
 )
 target_include_directories(avr PUBLIC .)
@@ -19,7 +20,7 @@ target_link_libraries(avr backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(AVR_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER AVR_BOOK_SOURCES INCLUDE REGEX "/chapter[1-9]_tests\\.cpp$")
+list(FILTER AVR_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-2])_tests\\.cpp$")
 
 add_executable(avr-tests
     test/emit_tests.cpp
@@ -28,6 +29,7 @@ add_executable(avr-tests
     test/int_tests.cpp
     test/relax_tests.cpp
     test/call_tests.cpp
+    test/data_tests.cpp
     test/run_tests.cpp
     ${AVR_BOOK_SOURCES}
 )

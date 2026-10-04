@@ -61,6 +61,27 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     store_val(g, dst, a, size);
 }
 
+// dst = the address of named object `name`: Y+q for a slot, lo8/hi8 of a data
+// symbol, pm_lo8/pm_hi8 of a function (a word address in flash).
+static void gen_get_address(Gen *g, const char *name, const Tac_Val *dst)
+{
+    const Slot *s = find_slot(g, name);
+    if (s) {
+        emit2(g, AVR_MOVW, avr_reg(24), avr_reg(AVR_Y));
+        if (s->q <= Y_MAX) {
+            emit2(g, AVR_ADIW, avr_reg(24), avr_imm(s->q));
+        } else {
+            emit2(g, AVR_SUBI, avr_reg(24), avr_imm(-s->q & 0xff));
+            emit2(g, AVR_SBCI, avr_reg(25), avr_imm((-s->q >> 8) & 0xff));
+        }
+    } else {
+        bool fn = is_function(g, name);
+        emit2(g, AVR_LDI, avr_reg(24), avr_sym(fn ? AVR_MOD_PM_LO8 : AVR_MOD_LO8, name, 0));
+        emit2(g, AVR_LDI, avr_reg(25), avr_sym(fn ? AVR_MOD_PM_HI8 : AVR_MOD_HI8, name, 0));
+    }
+    store_val(g, dst, 24, 2);
+}
+
 // A width conversion: the low bytes of src, or src extended as `ext` says.
 static void gen_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Ext ext)
 {
@@ -415,6 +436,13 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
                       in->u.jump_if_zero.target);
+        break;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        if (in->u.get_address.src->kind != TAC_VAL_VAR)
+            fatal_error("avr: %s: the address of a constant", gen_name(g));
+        gen_get_address(g, in->u.get_address.src->u.var_name, in->u.get_address.dst);
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

@@ -117,6 +117,14 @@ void gen_label_block(Gen *g, const char *label);
 void gen_frame(Gen *g);
 
 //
+// Static data (data.c)
+//
+// `alignment` (from _Alignas) is used when stricter than 1.
+void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *name, bool global,
+                          const Tac_Type *type, const Tac_StaticInit *init, bool readonly,
+                          int alignment);
+
+//
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
