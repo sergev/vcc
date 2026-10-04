@@ -150,6 +150,27 @@ enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
     X(CVTSI2SD, "cvtsi2sd", X86_SUFFIX)                                                    \
     X(CVTTSS2SI, "cvttss2si", X86_PLAIN)                                                   \
     X(CVTTSD2SI, "cvttsd2si", X86_PLAIN)                                                   \
+    X(FLDT, "fldt", X86_PLAIN)                                                             \
+    X(FSTPT, "fstpt", X86_PLAIN)                                                           \
+    X(FLDS, "flds", X86_PLAIN)                                                             \
+    X(FLDL, "fldl", X86_PLAIN)                                                             \
+    X(FSTPS, "fstps", X86_PLAIN)                                                           \
+    X(FSTPL, "fstpl", X86_PLAIN)                                                           \
+    X(FILDQ, "fildq", X86_PLAIN)                                                           \
+    X(FISTPQ, "fistpq", X86_PLAIN)                                                         \
+    X(FLDZ, "fldz", X86_PLAIN)                                                             \
+    X(FLD1, "fld1", X86_PLAIN)                                                             \
+    X(FADDP, "faddp", X86_PLAIN)                                                           \
+    X(FSUBRP, "fsubrp", X86_PLAIN)                                                         \
+    X(FMULP, "fmulp", X86_PLAIN)                                                           \
+    X(FDIVRP, "fdivrp", X86_PLAIN)                                                         \
+    X(FADDS, "fadds", X86_PLAIN)                                                           \
+    X(FSUBS, "fsubs", X86_PLAIN)                                                           \
+    X(FCHS, "fchs", X86_PLAIN)                                                             \
+    X(FUCOMIP, "fucomip", X86_PLAIN)                                                       \
+    X(FSTP, "fstp", X86_PLAIN)                                                             \
+    X(FNSTCW, "fnstcw", X86_PLAIN)                                                         \
+    X(FLDCW, "fldcw", X86_PLAIN)                                                           \
     X(EPILOGUE, "#epilogue", X86_PLAIN)
 
 typedef enum {

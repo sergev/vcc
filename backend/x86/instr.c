@@ -37,8 +37,11 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 {
     const Tac_Type *t = val_type(g, cond);
     char *l           = label_name(target);
-    if (x86_is_ld(t))
-        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_ld(t)) {
+        gen_ld_cond_jump(g, if_zero, cond, l);
+        xfree(l);
+        return;
+    }
     if (x86_is_fp(t)) {
         gen_fp_cond_jump(g, if_zero, cond, l);
         xfree(l);
@@ -56,10 +59,14 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    if (x86_is_ld(t) || x86_is_aggregate(t))
+    if (x86_is_aggregate(t))
         fatal_error("x86: %s: copying this type is not implemented yet", gen_name(g));
     X86_Width w     = x86_width_of(x86_size(t));
     X86_Operand mem = name_mem(g, dst->u.var_name, 0);
+    if (x86_is_ld(t)) {
+        gen_ld_copy(g, src, mem);
+        return;
+    }
     if (x86_is_fp(t)) {
         gen_fp_copy(g, src, mem, t);
         return;
@@ -163,8 +170,10 @@ static void gen_setcc(Gen *g, int cond)
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.unary.src);
-    if (x86_is_ld(t))
-        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_ld(t)) {
+        gen_ld_unary(g, in);
+        return;
+    }
     if (x86_is_fp(t)) {
         gen_fp_unary(g, in, t);
         return;
@@ -235,8 +244,10 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool
 static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *t = val_type(g, in->u.binary.src1);
-    if (x86_is_ld(t))
-        fatal_error("x86: %s: long double is not implemented yet", gen_name(g));
+    if (x86_is_ld(t)) {
+        gen_ld_binary(g, in);
+        return;
+    }
     if (x86_is_fp(t)) {
         gen_fp_binary(g, in, t);
         return;
@@ -352,6 +363,16 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
     case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
         gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
+        break;
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

@@ -58,6 +58,7 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int locals_size;   // bytes of slots below the saved rbp
     int outgoing;      // bytes of the outgoing argument area
+    int x87_tmp;       // the x87 scratch slot, or 0 (x87.c)
     FpConst *consts;   // the function's .rodata constants
     int nconsts, maxconsts;
 } Gen;
@@ -152,6 +153,19 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
 void gen_fp_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *label);
 // dst = src, a float or double, through rax.
 void gen_fp_copy(Gen *g, const Tac_Val *src, X86_Operand dst, const Tac_Type *t);
+
+//
+// long double, x87 (x87.c)
+//
+// dst = long double `src`, copied as two quadwords through rax.
+void gen_ld_copy(Gen *g, const Tac_Val *src, X86_Operand dst);
+// Push long double `v` onto the x87 stack.
+void gen_ld_load(Gen *g, const Tac_Val *v);
+void gen_ld_unary(Gen *g, const Tac_Instruction *in);
+void gen_ld_binary(Gen *g, const Tac_Instruction *in);
+void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+// Branch to `label` when long double `cond` is zero (or nonzero); a NaN is nonzero.
+void gen_ld_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *label);
 
 //
 // Static data (data.c)

@@ -8,6 +8,7 @@ add_library(x86 STATIC
     call.c
     instr.c
     fp.c
+    x87.c
     data.c
     codegen.c
 )
@@ -31,6 +32,7 @@ add_executable(x86-tests
     test/call_tests.cpp
     test/data_tests.cpp
     test/fp_tests.cpp
+    test/x87_tests.cpp
     test/run_tests.cpp
     ${X86_BOOK_SOURCES}
 )

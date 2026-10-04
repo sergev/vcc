@@ -4,9 +4,10 @@
 // xmm0-xmm7; once a class runs out, its values go on the stack, each in an 8-byte
 // slot, the first at the lowest address.  The stack arguments are stored into an
 // outgoing area at the bottom of the frame, so rsp stays fixed and 16-byte aligned.
-// A narrow argument or result is extended to 32 bits by the sender (clang relies on
-// it) and again by the receiver, a store truncating and a load extending by type.
-// The result comes back in rax or xmm0.
+// A long double goes on the stack in a 16-byte aligned slot.  A narrow argument or
+// result is extended to 32 bits by the sender (clang relies on it) and again by the
+// receiver, a store truncating and a load extending by type.  The result comes back
+// in rax, xmm0, or st(0) for a long double.
 //
 #include "codegen.h"
 #include "internal.h"
@@ -23,16 +24,21 @@ typedef struct {
     int next_int, next_sse, stack;
 } ArgState;
 
+// A long double always goes on the stack, in a 16-byte aligned slot.
 static ArgLoc classify(Gen *g, ArgState *s, const Tac_Type *t)
 {
-    if (x86_is_ld(t) || x86_is_aggregate(t))
+    if (x86_is_aggregate(t))
         fatal_error("x86: %s: an argument of this type is not implemented yet", gen_name(g));
     ArgLoc a = { -1, 0 };
-    if (x86_is_fp(t) && s->next_sse < 8)
+    if (x86_is_ld(t)) {
+        s->stack = (s->stack + 15) / 16 * 16;
+        a.stack  = s->stack;
+        s->stack += 16;
+    } else if (x86_is_fp(t) && s->next_sse < 8) {
         a.reg = X86_XMM0 + s->next_sse++;
-    else if (!x86_is_fp(t) && s->next_int < 6)
+    } else if (!x86_is_fp(t) && s->next_int < 6) {
         a.reg = int_regs[s->next_int++];
-    if (a.reg < 0) {
+    } else {
         a.stack = s->stack;
         s->stack += 8;
     }
@@ -100,6 +106,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
                 want = want->next;
             if (pass == 1 && a.reg >= 0) {
                 load_arg(g, a.reg, v, as);
+            } else if (pass == 0 && x86_is_ld(t)) {
+                gen_ld_copy(g, v, x86_mem(X86_RSP, a.stack));
             } else if (pass == 0 && a.reg < 0) {
                 int r = x86_is_fp(t) ? F0 : T0;
                 load_arg(g, r, v, as);
@@ -123,23 +131,34 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     } else {
         emit1(g, X86_CALL, X86_Q, x86_label(in->u.fun_call.fun_name));
     }
-    if (!dst)
+    // A long double comes back in st(0), which must be popped even when unused.
+    const Tac_Type *rt = ret_type(ft);
+    if (!dst) {
+        if (rt && x86_is_ld(rt))
+            emit1(g, X86_FSTP, X86_Q, x86_st(0));
         return;
+    }
     const Tac_Type *t = val_type(g, dst);
-    if (x86_is_ld(t) || x86_is_aggregate(t))
+    if (x86_is_aggregate(t))
         fatal_error("x86: %s: a result of this type is not implemented yet", gen_name(g));
-    store_val(g, x86_is_fp(t) ? X86_XMM0 : X86_RAX, dst);
+    if (x86_is_ld(t))
+        emit1(g, X86_FSTPT, X86_Q, name_mem(g, dst->u.var_name, 0));
+    else
+        store_val(g, x86_is_fp(t) ? X86_XMM0 : X86_RAX, dst);
 }
 
-// The result in rax, extended to 32 bits when narrower (clang relies on it), or xmm0.
+// The result in rax, extended to 32 bits when narrower (clang relies on it), xmm0, or
+// st(0).
 void gen_return(Gen *g, const Tac_Val *v)
 {
     if (v) {
         const Tac_Type *t  = val_type(g, v);
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
-        if (x86_is_ld(t) || x86_is_aggregate(t))
+        if (x86_is_aggregate(t))
             fatal_error("x86: %s: returning this type is not implemented yet", gen_name(g));
-        if (x86_is_fp(t))
+        if (x86_is_ld(t))
+            gen_ld_load(g, v);
+        else if (x86_is_fp(t))
             load_val(g, X86_XMM0, v);
         else
             load_int_as(g, X86_RAX, v, rt && !x86_is_fp(rt) && !x86_is_ld(rt) ? rt : t);
