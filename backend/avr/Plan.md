@@ -146,46 +146,6 @@ Only `r16`–`r31` take an immediate operand (`ldi`, `subi`, `sbci`, `andi`, `or
 A value in `r2`–`r15` therefore goes through `Z`/`X` for any operation with a constant.
 One selection helper owns that rule.
 
-Phase 0 is done:
-- `cpp -t avr` predefines clang's macros for the ATmega1280 (no `__CHAR_UNSIGNED__`).
-  The `avr` descriptor has a signed plain `char`, returns structs of up to 8 bytes
-  itself and larger ones through the frontend's hidden pointer
-  (`struct_return_max = 8`), and has no `va_class`.
-- **A 16-bit `int` in the frontend.**
-  - The parser records each integer constant's spelling (`Literal.spelling`: radix and
-    suffixes), and `type_int_literal` types it by the target's widths (C11 §6.4.4.1).
-    That also makes `0x80000000` an `unsigned int` on the 32-bit-`int` targets, as it
-    should be.
-  - `size_t` and `ptrdiff_t` are `size_kind()`/`ptrdiff_kind()`: `unsigned int`/`int`
-    on AVR, `unsigned long`/`long` elsewhere as before. That covers `sizeof`, pointer
-    indices and pointer differences.
-  - `unsigned short` promotes to `unsigned int` where `short` is as wide as `int`
-    (`ushort_promotes_unsigned`); BESM-6 keeps its documented simplification.
-  - Pointer ↔ `long` casts truncate or zero-extend. A 2-byte `int` is an `I16`/`U16`
-    static initializer.
-  - `case` values are compared after conversion to the promoted controlling type
-    (`narrow_const_int`). An enumerator must fit `int` or `unsigned int`, and is stored
-    as the target's `int`. A character constant must fit `int`.
-- **A 32-bit `double` and `long double`.**
-  - `double_mant_dig = 24` (and `ldouble_mant_dig = 24`) make both constant folders
-    round every `double` result to binary32 (`target_double_round`), and convert an
-    integer to it in one rounding (`target_double_from_i64`/`_u64`).
-  - A `double` literal takes its `strtof` value, which the parser records in
-    `Literal.single_val`, so it is rounded once. A literal just above a binary32 halfway
-    point pins this.
-  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on x86-64;
-    the backend rounds it when it emits it.
-- The TAC audit (512 book programs, 1040 test-fixture snippets, the C library) found no
-  defect beyond these.
-- `libc/avr/CMakeLists.txt` finds the tools (`AVR_TOOLS_FOUND`, `AVR_CLANG`, `AVR_AR`,
-  `AVR_LD`, `AVR_QEMU`, `AVR_LIB_DIR`, `AVR_LINK_SCRIPT`, `AVR_TARGET_FLAGS`).
-- `QemuConfig.image_option` loads the image with `-bios`, and
-  `QemuConfig.status_from_serial` adds `-serial file:<scratch>.status`. The run ends
-  when that file is not empty, and `main`'s result is its first byte.
-- `enum { A = 1 } e = A;`, an enumerator used in the same declaration that defines it,
-  fails with "Symbol not found" on every target. This is an existing frontend defect,
-  not an AVR one, and is still open.
-
 `make run` stays green after every M-step.
 
 ## Phase 1 — skeleton
