@@ -220,8 +220,8 @@ lands with a test under `-t avr`, and leaves the other targets' output unchanged
     them after conversion to the promoted controlling type, so `0` and `65536` collide on
     a 16-bit `int`.
   - **Shift counts** of 16 or more on a 16-bit `int` are undefined. The folder already
-    narrows through `const_shift_bits`; diagnose an out-of-range count as clang does
-    (warning only).
+    narrows through `const_shift_bits`. clang only warns, and the frontend has no
+    warnings, so nothing is added.
 
   Done when the semantic, translator and optimizer suites have `-t avr` cases for each
   item, and every other target's goldens are unchanged.

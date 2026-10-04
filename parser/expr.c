@@ -321,6 +321,12 @@ Expr *parse_constant()
                     break;
                 }
             }
+            expr->u.literal->spelling = LITERAL_SPELLED |
+                                        (current_lexeme[0] != '0' ? LITERAL_DECIMAL : 0) |
+                                        (is_unsigned ? LITERAL_SUFFIX_U : 0) |
+                                        (long_count == 1   ? LITERAL_SUFFIX_L
+                                         : long_count >= 2 ? LITERAL_SUFFIX_LL
+                                                           : 0);
             // C11 §6.4.4.1: pick the first type in the suffix-determined list
             // that can hold the value. A `U` suffix selects the unsigned list
             // (unsigned int → unsigned long → unsigned long long); without it,

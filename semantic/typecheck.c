@@ -209,6 +209,7 @@ const Type *get_common_type(const Type *t1, const Type *t2)
         printf("--- %s()\n", __func__);
     }
     static const Type int_type         = { .kind = TYPE_INT };
+    static const Type uint_type        = { .kind = TYPE_UINT };
     static const Type double_type      = { .kind = TYPE_DOUBLE };
     static const Type float_type       = { .kind = TYPE_FLOAT };
     static const Type long_double_type = { .kind = TYPE_LONG_DOUBLE };
@@ -219,9 +220,9 @@ const Type *get_common_type(const Type *t1, const Type *t2)
     // comparison below, which on a target where _Bool is int-sized finds the two equal
     // and picks the *unsigned* one, i.e. _Bool, as the common type.
     if (is_promotable_narrow(t1))
-        t1 = &int_type;
+        t1 = promoted_kind(t1) == TYPE_UINT ? &uint_type : &int_type;
     if (is_promotable_narrow(t2))
-        t2 = &int_type;
+        t2 = promoted_kind(t2) == TYPE_UINT ? &uint_type : &int_type;
     if (t1->kind == t2->kind)
         return t1;
     if (t1->kind == TYPE_LONG_DOUBLE || t2->kind == TYPE_LONG_DOUBLE)
@@ -484,9 +485,21 @@ static bool kind_is_unsigned(TypeKind k)
     }
 }
 
-// Integer promotion (C11 §6.3.1.1p2) on a type kind: every sub-int kind promotes to int.
-// USHORT->INT deliberately matches get_common_type's rule rather than a stricter reading
-// of the standard (a BESM-6 unsigned short fills the word), so the folder and the
+long narrow_const_int(long val, const Type *t)
+{
+    TypeKind k = unalias(t)->kind;
+    int width  = kind_value_bits(k);
+    if (width <= 0)
+        return val;
+    if (kind_is_unsigned(k))
+        return (long)unsigned_narrow((uint64_t)val, width);
+    return (long)sign_narrow((uint64_t)val, width);
+}
+
+// Integer promotion (C11 §6.3.1.1p2) on a type kind: every sub-int kind promotes to int,
+// except an unsigned short as wide as int (AVR), which promotes to unsigned int.  On
+// BESM-6 USHORT->INT deliberately matches get_common_type's rule rather than a stricter
+// reading of the standard (its unsigned short fills the word), so the folder and the
 // typechecker always agree.
 static TypeKind promote_kind(TypeKind k)
 {
@@ -496,9 +509,10 @@ static TypeKind promote_kind(TypeKind k)
     case TYPE_SCHAR:
     case TYPE_UCHAR:
     case TYPE_SHORT:
-    case TYPE_USHORT:
     case TYPE_ENUM:
         return TYPE_INT;
+    case TYPE_USHORT:
+        return ushort_promotes_unsigned() ? TYPE_UINT : TYPE_INT;
     default:
         return k;
     }
@@ -1012,19 +1026,19 @@ static bool eval_const(const Expr *e, ConstVal *out)
             return false;
         }
     }
-    // sizeof and _Alignof yield size_t, an unsigned type; TYPE_ULONG matches the type
+    // sizeof and _Alignof yield size_t, an unsigned type; size_kind() matches the type
     // the typechecker annotates on these expressions (see semantic/expressions.c).
     case EXPR_SIZEOF_TYPE:
-        cv_set_int(out, TYPE_ULONG, get_size(e->u.sizeof_type));
+        cv_set_int(out, size_kind(), get_size(e->u.sizeof_type));
         return true;
     case EXPR_SIZEOF_EXPR:
         if (e->u.sizeof_expr->type) {
-            cv_set_int(out, TYPE_ULONG, get_size(e->u.sizeof_expr->type));
+            cv_set_int(out, size_kind(), get_size(e->u.sizeof_expr->type));
             return true;
         }
         return false;
     case EXPR_ALIGNOF:
-        cv_set_int(out, TYPE_ULONG, get_alignment(e->u.align_of));
+        cv_set_int(out, size_kind(), get_alignment(e->u.align_of));
         return true;
     case EXPR_VA_CLASS:
         cv_set_int(out, TYPE_INT, va_class_of(e->u.va_class));

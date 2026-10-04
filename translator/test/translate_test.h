@@ -203,6 +203,16 @@ protected:
     }
 };
 
+// Fixture for AVR: a 16-bit int, size_t and pointer, a 32-bit long, alignment 1.
+class TranslateTestAvr : public TranslateTest {
+protected:
+    void SetUp() override
+    {
+        TranslateTest::SetUp();
+        target_config = target_lookup("avr");
+    }
+};
+
 // Fixture for the byte-addressed LP64 target the RISC-V backend uses.
 class TranslateTestRiscv : public TranslateTest {
 protected:

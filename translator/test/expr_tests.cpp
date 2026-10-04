@@ -854,12 +854,12 @@ TEST_F(TranslateTest, UIntLiteral)
     EXPECT_NE(yaml.find("value: 10"), std::string::npos);
 }
 
-// A wide unsigned constant keeps all 48 bits with a plain U suffix (no L needed):
-// it widens to unsigned long and the full value reaches TAC.
+// A wide unsigned constant keeps all 48 bits with a plain U suffix (no L needed): it
+// fits BESM-6's 48-bit unsigned int (C11 §6.4.4.1), and the full value reaches TAC.
 TEST_F(TranslateTest, UIntLiteralWide)
 {
     std::string yaml = CompileToYaml("unsigned long f(void) { return 0xFFFFFFFFFFFFU; }");
-    EXPECT_NE(yaml.find("kind: ulong"), std::string::npos);
+    EXPECT_NE(yaml.find("kind: uint"), std::string::npos);
     EXPECT_NE(yaml.find("value: 281474976710655"), std::string::npos);
 }
 

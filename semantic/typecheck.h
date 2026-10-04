@@ -44,6 +44,10 @@ Expr *coerce_for_assignment(Expr *e, const Type *target_type);
 
 // Const evaluation — typecheck.c
 bool try_eval_const_int(const Expr *e, long *out);
+
+// An integer constant converted to the integer type `t` of the active target: wrapped
+// to its value width, as C11 §6.3.1.3 converts it.
+long narrow_const_int(long val, const Type *t);
 bool try_eval_const_real(const Expr *e, double *out);
 bool try_eval_const_ld(const Expr *e, Float128 *out);
 

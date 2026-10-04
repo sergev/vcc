@@ -9,6 +9,7 @@
 
 typedef struct SwitchCtx {
     StringMap seen_cases; /* key = "%ld" formatted case value */
+    const Type *type;     /* the promoted controlling type: case values convert to it */
     bool seen_default;
     struct SwitchCtx *outer;
 } SwitchCtx;
@@ -120,13 +121,13 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
         if (!is_integer(ctrl->type)) {
             fatal_error("Switch controlling expression must be of integer type");
         }
-        /* Integer promotion: types narrower than int → int. */
+        /* Integer promotion: types narrower than int → int (or unsigned int). */
         if (is_promotable_narrow(ctrl->type)) {
-            ctrl = convert_to_kind(ctrl, TYPE_INT);
+            ctrl = convert_to_kind(ctrl, promoted_kind(ctrl->type));
         }
         s->u.switch_stmt.expr = ctrl;
         /* Push a fresh context for case/default validation. */
-        SwitchCtx ctx = { .seen_default = false, .outer = current_switch };
+        SwitchCtx ctx = { .type = ctrl->type, .seen_default = false, .outer = current_switch };
         map_init(&ctx.seen_cases);
         current_switch        = &ctx;
         s->u.switch_stmt.body = typecheck_statement(ret_type, s->u.switch_stmt.body);
@@ -147,6 +148,9 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
         if (!try_eval_const_int(ce, &val)) {
             fatal_error("Case expression is not a constant integer");
         }
+        /* C11 §6.8.4.2p5: compared after conversion to the promoted controlling type,
+           so 0 and 65536 are duplicates where int has 16 bits. */
+        val = narrow_const_int(val, current_switch->type);
         char key[32];
         snprintf(key, sizeof(key), "%ld", val);
         if (map_get(&current_switch->seen_cases, key, NULL)) {

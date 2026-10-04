@@ -463,6 +463,8 @@ void export_literal(WFILE *fd, const Literal *lit)
         return;
     }
     wputw(TAG_LITERAL + lit->kind, fd);
+    if (lit->kind <= LITERAL_ULONG_LONG)
+        wputw(lit->spelling, fd);
     switch (lit->kind) {
     case LITERAL_INT:
         wputw((size_t)lit->u.int_val, fd);

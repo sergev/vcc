@@ -132,8 +132,8 @@ Expr *typecheck_string(Expr *e)
     return e;
 }
 
-// The parser types an integer constant as if long had 64 bits.  Where long is narrower
-// than long long, a long one that does not fit is a long long (C11 §6.4.4.1).
+// A literal the compiler made itself (no spelling) is typed as if long had 64 bits.
+// Where long is narrower than long long, a long one that does not fit is a long long.
 static void widen_long_literal(Literal *lit)
 {
     if (target_config->long_size >= target_config->llong_size)
@@ -160,6 +160,7 @@ static Expr *typecheck_literal(Expr *e)
     free_type(e->type);
     e->type = NULL; // prevent double-free: typecheck_string also calls free_type(e->type)
     check_int_literal_width(e->u.literal);
+    type_int_literal(e->u.literal);
     widen_long_literal(e->u.literal);
     switch (e->u.literal->kind) {
     case LITERAL_INT:
@@ -259,7 +260,7 @@ static Expr *promote_variadic_arg(Expr *e)
     e                = typecheck_and_decay(e);
     const Type *et   = unalias(e->type);
     if (is_promotable_narrow(et))
-        e = convert_to_kind(e, TYPE_INT);
+        e = convert_to_kind(e, promoted_kind(et));
     else if (et->kind == TYPE_FLOAT)
         e = convert_to_kind(e, TYPE_DOUBLE);
     return e;
@@ -316,7 +317,7 @@ static Expr *typecheck_expr(Expr *e)
             }
             const Type *it = unalias(inner->type);
             if (is_promotable_narrow(it))
-                inner = convert_to_kind(inner, TYPE_INT);
+                inner = convert_to_kind(inner, promoted_kind(it));
             free_type(e->type);
             e->type            = clone_type(inner->type, __func__, __FILE__, __LINE__);
             e->u.unary_op.expr = inner;
@@ -330,7 +331,7 @@ static Expr *typecheck_expr(Expr *e)
             }
             const Type *it = unalias(inner->type);
             if (is_promotable_narrow(it))
-                inner = convert_to_kind(inner, TYPE_INT);
+                inner = convert_to_kind(inner, promoted_kind(it));
             free_type(e->type);
             e->type            = clone_type(inner->type, __func__, __FILE__, __LINE__);
             e->u.unary_op.expr = inner;
@@ -431,10 +432,10 @@ static Expr *typecheck_expr(Expr *e)
                 e2                 = convert_to_type(e2, common);
                 e->type            = clone_type(common, __func__, __FILE__, __LINE__);
             } else if (is_complete_pointer(e1->type) && is_integer(e2->type)) {
-                e2      = convert_to_kind(e2, TYPE_LONG);
+                e2      = convert_to_kind(e2, ptrdiff_kind());
                 e->type = clone_type(e1->type, __func__, __FILE__, __LINE__);
             } else if (is_complete_pointer(e2->type) && is_integer(e1->type)) {
-                e1      = convert_to_kind(e1, TYPE_LONG);
+                e1      = convert_to_kind(e1, ptrdiff_kind());
                 e->type = clone_type(e2->type, __func__, __FILE__, __LINE__);
             } else {
                 fatal_error("Invalid operands for addition");
@@ -453,13 +454,13 @@ static Expr *typecheck_expr(Expr *e)
                 e2                 = convert_to_type(e2, common);
                 e->type            = clone_type(common, __func__, __FILE__, __LINE__);
             } else if (is_complete_pointer(e1->type) && is_integer(e2->type)) {
-                e2      = convert_to_kind(e2, TYPE_LONG);
+                e2      = convert_to_kind(e2, ptrdiff_kind());
                 e->type = clone_type(e1->type, __func__, __FILE__, __LINE__);
             } else if (is_complete_pointer(e1->type) &&
                        unalias(e1->type)->kind == unalias(e2->type)->kind) {
                 if (!compatible_type(e1->type, e2->type))
                     fatal_error("Incompatible pointer types");
-                e->type = new_type(TYPE_LONG, __func__, __FILE__, __LINE__);
+                e->type = new_type(ptrdiff_kind(), __func__, __FILE__, __LINE__);
             } else {
                 fatal_error("Invalid operands for subtraction");
             }
@@ -560,10 +561,10 @@ static Expr *typecheck_expr(Expr *e)
             }
             const Type *t1 = unalias(e1->type), *t2 = unalias(e2->type);
             if (is_promotable_narrow(t1)) {
-                e1 = convert_to_kind(e1, TYPE_INT);
+                e1 = convert_to_kind(e1, promoted_kind(t1));
             }
             if (is_promotable_narrow(t2)) {
-                e2 = convert_to_kind(e2, TYPE_INT);
+                e2 = convert_to_kind(e2, promoted_kind(t2));
             }
             free_type(e->type);
             e->type              = clone_type(e1->type, __func__, __FILE__, __LINE__);
@@ -594,7 +595,7 @@ static Expr *typecheck_expr(Expr *e)
                    is_complete_pointer(lhs->type)) {
             if (!is_integer(rhs->type))
                 fatal_error("Pointer arithmetic requires integer operand");
-            rhs = convert_to_kind(rhs, TYPE_LONG);
+            rhs = convert_to_kind(rhs, ptrdiff_kind());
         } else {
             if (!is_arithmetic(lhs->type) || !is_arithmetic(rhs->type))
                 fatal_error("Invalid operands for compound assignment");
@@ -765,10 +766,10 @@ static Expr *typecheck_expr(Expr *e)
         const Type *result_type;
         if (is_complete_pointer(ptr->type) && is_integer(index->type)) {
             result_type = unalias(ptr->type)->u.pointer.target;
-            index       = convert_to_kind(index, TYPE_LONG);
+            index       = convert_to_kind(index, ptrdiff_kind());
         } else if (is_complete_pointer(index->type) && is_integer(ptr->type)) {
             result_type = unalias(index->type)->u.pointer.target;
-            ptr         = convert_to_kind(ptr, TYPE_LONG);
+            ptr         = convert_to_kind(ptr, ptrdiff_kind());
         } else {
             fatal_error("Invalid types for subscript operation");
         }
@@ -787,7 +788,7 @@ static Expr *typecheck_expr(Expr *e)
             fatal_error("Can't apply sizeof to incomplete type");
         }
         free_type(e->type);
-        e->type          = new_type(TYPE_ULONG, __func__, __FILE__, __LINE__);
+        e->type          = new_type(size_kind(), __func__, __FILE__, __LINE__);
         e->u.sizeof_expr = inner;
         return e;
     }
@@ -797,7 +798,7 @@ static Expr *typecheck_expr(Expr *e)
             fatal_error("Can't apply sizeof to incomplete type");
         }
         free_type(e->type);
-        e->type = new_type(TYPE_ULONG, __func__, __FILE__, __LINE__);
+        e->type = new_type(size_kind(), __func__, __FILE__, __LINE__);
         return e;
     }
     case EXPR_ALIGNOF: {
@@ -806,7 +807,7 @@ static Expr *typecheck_expr(Expr *e)
             fatal_error("Can't apply _Alignof to incomplete type");
         }
         free_type(e->type);
-        e->type = new_type(TYPE_ULONG, __func__, __FILE__, __LINE__);
+        e->type = new_type(size_kind(), __func__, __FILE__, __LINE__);
         return e;
     }
     case EXPR_VA_CLASS: {

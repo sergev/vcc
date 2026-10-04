@@ -348,7 +348,13 @@ static void register_enum_constants(const Type *enum_type)
             val = next_val;
         }
         next_val = val + 1;
-        symtab_add_enum_const(e->name, (int)val, scope_level);
+        // C11 §6.7.2.2p2: the value is representable as an int.  One that fits only
+        // unsigned int wraps, as gcc and clang accept it.
+        int bits = target_config->int_bits;
+        uint64_t umax = unsigned_narrow(~(uint64_t)0, (int)target_config->int_size * 8);
+        if (bits < 64 && (val < 0 ? val < -(1L << (bits - 1)) : (uint64_t)val > umax))
+            fatal_error("Enum constant '%s' value %ld does not fit type int", e->name, val);
+        symtab_add_enum_const(e->name, (int)sign_narrow((uint64_t)val, bits), scope_level);
     }
 }
 

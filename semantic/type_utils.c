@@ -337,6 +337,47 @@ bool is_promotable_narrow(const Type *t)
            t->kind == TYPE_USHORT;
 }
 
+// C11 §6.3.1.1p2: unsigned short promotes to unsigned int where int cannot represent
+// all its values, i.e. where short is as wide as int (AVR).  BESM-6 keeps the
+// simplification described above: its unsigned short fills the word, and promotes to int.
+bool ushort_promotes_unsigned(void)
+{
+    return target_config && !target_word_addressed() &&
+           (int)target_config->short_size * 8 >= target_config->int_bits;
+}
+
+// The type a promotable narrow integer type promotes to.
+TypeKind promoted_kind(const Type *t)
+{
+    t = unalias(t);
+    return t->kind == TYPE_USHORT && ushort_promotes_unsigned() ? TYPE_UINT : TYPE_INT;
+}
+
+// ptrdiff_t, the type of a pointer difference and of a pointer's index: the signed
+// integer type as wide as a pointer, long where it is (every target but AVR, where a
+// pointer is the size of int).
+TypeKind ptrdiff_kind(void)
+{
+    if (target_config->long_size == target_config->pointer_size)
+        return TYPE_LONG;
+    if (target_config->int_size == target_config->pointer_size)
+        return TYPE_INT;
+    return TYPE_LONG_LONG;
+}
+
+// size_t, the type of sizeof and _Alignof: the unsigned ptrdiff_t.
+TypeKind size_kind(void)
+{
+    switch (ptrdiff_kind()) {
+    case TYPE_LONG:
+        return TYPE_ULONG;
+    case TYPE_INT:
+        return TYPE_UINT;
+    default:
+        return TYPE_ULONG_LONG;
+    }
+}
+
 bool is_arithmetic(const Type *t)
 {
     t = unalias(t);

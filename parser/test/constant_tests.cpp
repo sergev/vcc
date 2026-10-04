@@ -216,3 +216,27 @@ TEST_F(ParserTest, CharConstant_badUtf8Sequence_negative)
 {
     EXPECT_DEATH(program = parse(CreateTempFile("int x = '\xC3z';")), "");
 }
+
+// An integer constant records its spelling, from which the semantic pass types it for
+// the target (C11 §6.4.4.1); a character constant has none.
+TEST_F(ParserTest, IntegerConstant_spelling)
+{
+    Declaration *decl = GetDeclaration(
+        "int a = 10, b = 0x10, c = 010, d = 10u, e = 0x10L, f = 10ULL, g = 'a';");
+    const unsigned expected[] = {
+        LITERAL_SPELLED | LITERAL_DECIMAL,
+        LITERAL_SPELLED,
+        LITERAL_SPELLED,
+        LITERAL_SPELLED | LITERAL_DECIMAL | LITERAL_SUFFIX_U,
+        LITERAL_SPELLED | LITERAL_SUFFIX_L,
+        LITERAL_SPELLED | LITERAL_DECIMAL | LITERAL_SUFFIX_U | LITERAL_SUFFIX_LL,
+        0,
+    };
+    const InitDeclarator *d = decl->u.var.declarators;
+    for (unsigned spelling : expected) {
+        ASSERT_NE(nullptr, d);
+        EXPECT_EQ(spelling, d->init->u.expr->u.literal->spelling);
+        d = d->next;
+    }
+    EXPECT_EQ(nullptr, d);
+}

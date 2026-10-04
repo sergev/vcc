@@ -150,6 +150,9 @@ Tac_Type *tac_type_char(void);
 // The unsigned integer of one machine word (pointer size): the unit of word copies.
 Tac_Type *tac_type_word(void);
 
+// ptrdiff_t: the type of a pointer difference.
+Tac_Type *tac_type_ptrdiff(void);
+
 //
 // Expression and statement lowering (translate_expr.c, translate_stmt.c)
 //

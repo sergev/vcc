@@ -81,6 +81,8 @@ module AST {
          | VaClass(Type type)
          attributes(Type? type)
 
+    -- The integer kinds also carry `spelling`: radix and suffixes, from which the
+    -- semantic pass types the constant for the target (C11 §6.4.4.1).
     Literal = Int(int val)
             | Long(long val)
             | LongLong(long long val)

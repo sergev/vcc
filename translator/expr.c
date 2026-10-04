@@ -172,7 +172,7 @@ static Tac_Val *scale_byte_index(TacCtx *ctx, Tac_Val *idx, const Type *idx_type
 // a shift in the backend; otherwise it calls b/div.
 static Tac_Val *gen_div_const(TacCtx *ctx, Tac_Val *val, int divisor)
 {
-    Tac_Val *vd          = new_var_val(ctx, tac_new_type(TAC_TYPE_LONG));
+    Tac_Val *vd          = new_var_val(ctx, tac_type_ptrdiff());
     Tac_Instruction *div = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     div->u.binary.op     = TAC_BINARY_DIVIDE;
     div->u.binary.src1   = val;
@@ -763,14 +763,14 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
         bool l_fat = is_byte_pointer(l->type);
         bool r_fat = is_byte_pointer(r->type);
         if (op == BINARY_SUB && l_fat && r_fat) {
-            // char* - char* : the difference is a ptrdiff_t (long) element count.  Decode
+            // char* - char* : the difference is a ptrdiff_t element count.  Decode
             // both fat pointers to absolute byte positions and subtract (the runtime
             // helper b/pdiff), then divide by the pointee byte size to get the element
             // count.  sizeof(char) == 1, so plain char*/void* needs no divide; a pointer
             // to a char-innermost array (char(*)[N]) divides by the row size N.
             Tac_Val *vl         = gen_expr(ctx, l);
             Tac_Val *vr         = gen_expr(ctx, r);
-            Tac_Val *vd         = new_var_val(ctx, tac_new_type(TAC_TYPE_LONG));
+            Tac_Val *vd         = new_var_val(ctx, tac_type_ptrdiff());
             Tac_Instruction *pd = tac_new_instruction(TAC_INSTRUCTION_PTR_DIFF);
             pd->u.ptr_diff.ptr_a = vl;
             pd->u.ptr_diff.ptr_b = vr;
@@ -801,7 +801,7 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
         if (op == BINARY_SUB && wide_ptr_scale(l->type) && wide_ptr_scale(r->type)) {
             Tac_Val *vl          = gen_expr(ctx, l);
             Tac_Val *vr          = gen_expr(ctx, r);
-            Tac_Val *vd          = new_var_val(ctx, tac_new_type(TAC_TYPE_LONG));
+            Tac_Val *vd          = new_var_val(ctx, tac_type_ptrdiff());
             Tac_Instruction *sub = tac_new_instruction(TAC_INSTRUCTION_BINARY);
             sub->u.binary.op     = TAC_BINARY_SUBTRACT; // raw word-address difference
             sub->u.binary.src1   = vl;
@@ -840,7 +840,7 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
         is_byte_pointer(l->type) && is_byte_pointer(r->type)) {
         Tac_Val *vl          = gen_expr(ctx, l);
         Tac_Val *vr          = gen_expr(ctx, r);
-        Tac_Val *vdiff       = new_var_val(ctx, tac_new_type(TAC_TYPE_LONG));
+        Tac_Val *vdiff       = new_var_val(ctx, tac_type_ptrdiff());
         Tac_Instruction *pd  = tac_new_instruction(TAC_INSTRUCTION_PTR_DIFF);
         pd->u.ptr_diff.ptr_a = vl;
         pd->u.ptr_diff.ptr_b = vr;

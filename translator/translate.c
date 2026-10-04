@@ -392,6 +392,12 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
                     in->u.zero_extend.dst = dst;
                     tac_append(ctx, in);
                 }
+            } else if (from_size > to_size) {
+                // long → a 2-byte pointer (AVR)
+                Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_TRUNCATE);
+                in->u.truncate.src  = src;
+                in->u.truncate.dst  = dst;
+                tac_append(ctx, in);
             } else {
                 Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 in->u.copy.src      = src;
@@ -404,6 +410,12 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
                 Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_TRUNCATE);
                 in->u.truncate.src  = src;
                 in->u.truncate.dst  = dst;
+                tac_append(ctx, in);
+            } else if (from_size < to_size) {
+                // a 2-byte pointer → long (AVR): zero-extended, as clang's ptrtoint
+                Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_ZERO_EXTEND);
+                in->u.zero_extend.src = src;
+                in->u.zero_extend.dst = dst;
                 tac_append(ctx, in);
             } else {
                 Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_COPY);
@@ -794,11 +806,20 @@ Tac_Type *tac_type_char(void)
     return tac_new_type(target_config->char_signed ? TAC_TYPE_SCHAR : TAC_TYPE_UCHAR);
 }
 
+Tac_Type *tac_type_ptrdiff(void)
+{
+    Type t = { .kind = ptrdiff_kind() };
+    return ast_type_to_tac_type(&t);
+}
+
+// The unsigned integer type as wide as a pointer.
 Tac_Type *tac_type_word(void)
 {
-    return tac_new_type(target_config->long_size == target_config->pointer_size
-                            ? TAC_TYPE_ULONG
-                            : TAC_TYPE_ULONG_LONG);
+    if (target_config->long_size == target_config->pointer_size)
+        return tac_new_type(TAC_TYPE_ULONG);
+    if (target_config->int_size == target_config->pointer_size)
+        return tac_new_type(TAC_TYPE_UINT); // AVR
+    return tac_new_type(TAC_TYPE_ULONG_LONG);
 }
 
 //
