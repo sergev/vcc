@@ -140,67 +140,29 @@ Phase 0 is done:
 - `QemuConfig.status_from_debugcon` makes the shared fixture pass `-debugcon
   file:<scratch>.status` and take main's result from that file's first byte.
 
-## Phase 1 — skeleton
-
-- **X5. Runtime.** `libc/x86/`:
-  - **`crt0.S`, 32-bit part** (`.code32`). The PVH note. The page tables, one PML4 and one
-    PDPT of four 1 GiB identity pages. PAE, `EFER.LME` and paging, as verified above.
-    Then the GDT and a far jump to 64-bit code.
-  - **`crt0.S`, 64-bit part:**
-    - data segments, and `rsp` 16-aligned at the top of RAM;
-    - SSE on (`CR0.EM` clear, `MP` set, `CR4.OSFXSR`/`OSXMMEXCPT`), `MXCSR` at its
-      default, `fninit` for the x87 (precision control 64 bits, as clang assumes);
-    - an IDT of 32 exception gates whose common handler prints the vector, the error
-      code, `rip` and `CR2`, then exits with a distinctive status;
-    - clear `.bss`, call `main`, and pass its result to `exit`.
-
-    Interrupts stay off throughout, which is what makes the red zone safe (X24). A
-    `PRINT_STATUS` variant, as for the other targets.
-  - **`console.s`.** `putbyte` writes with `outb` to `0x3f8`. `exit` writes the status
-    byte to `0xe9`, then to `isa-debug-exit` at `0xf4`.
-  - **`link.ld`.** Load at `0x100000`, the `PT_NOTE` segment first, stack and heap at the
-    top of `microvm`'s default 128 MiB. The note must not end up in a writable
-    segment. `.eh_frame` is kept or discarded deliberately (clang emits it for C on
-    x86-64; compile clang parts with `-fno-asynchronous-unwind-tables`).
-  - **`malloc.s`**, a bump allocator like AArch64's (both LP64).
-  - **The C library.** The `libc/common` and `libc/lp64` sources, built with our
-    compiler, archived with `llvm-ar` as `libc.a`. No `float128.c` (the x87 is hardware)
-    and no `int64.c` (64-bit is native). Clang-compiled code may call
-    `memcpy`/`memset`, which `libc/common` already has.
-  - **Tested on its own** before any compiled code depends on it: an SSE operation, an
-    x87 operation, and a deliberate `ud2` and a page fault above 4 GiB that must both
-    report rather than hang.
-- **X6. Skeleton.** `backend/x86/` with `CMakeLists.txt`, `x86.h`, `x86.c`,
-  `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing `genx86`.
-  - The IR has a function, block, and instruction over virtual registers. An instruction
-    carries a width (`b`/`w`/`l`/`q`, or `ss`/`sd`/x87) and up to two operands in AT&T
-    order (source, destination).
-  - The operands are:
-    - a general register (rendered at the instruction's width: `%al`/`%ax`/`%eax`/`%rax`,
-      `%sil`, `%r8b`…);
-    - an `xmm` register and an x87 `st(i)`;
-    - an immediate;
-    - a symbol, RIP-relative;
-    - memory `disp(base, index, scale)`;
-    - a label.
-  - The module header emits sections, `.globl`, `.type sym, @function`/`@object`,
-    `.size`, `.p2align` and labels. A test pins the rendering of every register at every
-    width, because `%sil`/`%dil`/`%spl`/`%bpl` need a REX prefix and `%ah` cannot appear
-    with one.
-- **X7. Run harness and first program.** `x86_test.h` on `QemuTest`:
-  - `CompileToX86` (golden assembly). When `x86_64-elf-as` was found, it also assembles
-    every golden output with GNU `as`, so the output never comes to depend on clang's
-    assembler.
-  - `CompileAndRunX86`: assemble, link with crt0 and `libc.a`, and run
-    `qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none -device
-    isa-debug-exit,iobase=0xf4,iosize=0x04` under a short timeout, with
-    `status_from_debugcon` set so the fixture adds the `-debugcon` file and reads the
-    status from it.
-  - Tests guard with `SKIP_IF_NO_X86_TOOLS()`, and the test binary is `x86-tests`.
-  - The book suite gets an `x86_64` `BookTest` with its skip list, starting from
-    AArch64's LP64 reasons.
-
-  Done when `int main(void) { return 200; }` runs and the fixture reports 200.
+Phase 1 is done:
+- **The runtime is in `libc/x86/`.**
+  - `crt0.S` enters through the PVH note in 32-bit mode and switches to long mode over
+    static page tables (four 1 GiB pages). It enables SSE and the x87, installs 32
+    exception gates that report vector, error code, `rip` and `cr2` and exit with 255,
+    clears `.bss` and calls `main`. A value left on the x87 stack after `main` exits
+    with 254. `crt0-status.o` prints main's result first.
+  - `console.s` (`putbyte` on COM1, `exit` through debugcon and `isa-debug-exit`),
+    `malloc.s` and `link.ld` (load at 1 MiB, `.eh_frame` discarded).
+  - `libc.a` holds only these assembly leaves. The C library joins it once `genx86` can
+    compile it, as ARM32's did. `malloc.o` needs `memset`/`memcpy` from it, so a
+    program that calls `malloc` links only after that.
+- **The backend skeleton is in `backend/x86/`.**
+  - `x86.h`/`x86.c`: the IR over physical (hardware numbering, then `xmm`, then `st`)
+    and virtual registers. Each operand has a width of its own; a suffixed opcode spells
+    the instruction's width.
+  - `emit.c` writes AT&T syntax, `codegen.c` turns TAC into IR, and `main.c` builds
+    `genx86` on the shared driver. It handles `return` of an integer constant so far.
+- **The tests are in `x86-tests`.** `x86_test.h` on `QemuTest` provides
+  `CompileToX86`, which also assembles every output with GNU `as` when installed, and
+  `CompileAndRunX86`/`CompileAndRunBook`/`RunAssembly`/`ClangRunBook`, with the status
+  from debugcon. The book suite runs chapter 1, compared with clang. Until X21 the
+  test programs use the riscv64 and LP64 headers.
 
 ## Phase 2 — instruction selection, book order
 
@@ -462,6 +424,6 @@ the selected instructions.
   tests may quietly assume `char` ≥ 0. Mitigation: the Phase 0 audit found none in libc; the X22 string tests.
 - **crt0.** A 32→64-bit transition that goes wrong hangs or triple-faults silently (qemu
   resets). Mitigation: the sequence verified above, the IDT reporting handler installed
-  before anything can fault in 64-bit mode, the run timeout, and X5 tested on its own.
+  before anything can fault in 64-bit mode, the run timeout, and the runtime tests in `run_tests.cpp`.
 - **No native x86 on this host** (arm64, no Rosetta). Everything runs under qemu TCG.
   The 0.04 s `microvm` boot keeps that cheap; nothing here depends on native execution.
