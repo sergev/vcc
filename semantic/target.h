@@ -77,13 +77,17 @@ typedef struct {
     // The value of __builtin_va_class(T): the ABI's argument class of T, which va_arg
     // hands to the runtime; NULL on a target without one (the builtin is rejected).
     int (*va_class)(const struct Tac_Type *t);
-    // The long double significand in bits, when it is neither binary128 nor double:
-    // 64 for the x87 extended format.  0 = binary128 when long double is wider than
-    // double, else double's.
+    // The long double significand in bits, when it is neither binary128 nor binary64:
+    // 64 for the x87 extended format, 24 for IEEE single (AVR).  0 = binary128 when
+    // long double is wider than double, else double's.
     int ldouble_mant_dig;
     // Square root is an instruction (an IEEE one, correctly rounded): the translator
     // lowers a call of the C library's sqrt to TAC sqrt_double instead of a call.
     int hw_sqrt;
+    // The double significand in bits: 24 where double is IEEE single (AVR), 0 for the
+    // host's binary64.  The constant folders compute in the host's double and round each
+    // result to it.
+    int double_mant_dig;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any
@@ -105,6 +109,19 @@ int target_word_addressed(void);
 // significand (ldouble_mant_dig); unchanged where that is binary128 or double, which
 // the constant folders handle themselves.
 Float128 target_ld_round(Float128 q);
+
+// A double constant, computed in the host's binary64, rounded to the target's double:
+// binary32 where double_mant_dig is 24, else unchanged.  The rounding is exact for
+// + - * / and sqrt (53 >= 2*24 + 2), so folding agrees with the target's arithmetic.
+double target_double_round(double d);
+
+// Whether the target's double is IEEE single (AVR): then float and double are one format.
+int target_double_is_single(void);
+
+// An integer converted to the target's double, rounded once: a 64-bit integer converted
+// to binary64 first and then to binary32 could round twice.
+double target_double_from_i64(int64_t v);
+double target_double_from_u64(uint64_t v);
 
 // Sign-extend the low `w` bits of `bits` to a 64-bit signed value (w in (0,64)).
 // w<=0 or w>=64 means "no narrowing": return the full 64-bit pattern.  Both constant

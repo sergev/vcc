@@ -405,7 +405,8 @@ typedef enum {
 // How an integer constant was spelled, which with the target's widths decides its type
 // (C11 §6.4.4.1).  `parse` has no target, so it types the constant for the host; the
 // semantic pass retypes it when LITERAL_SPELLED is set.  0 for a character constant and
-// for a literal the compiler makes itself.
+// for a literal the compiler makes itself.  An unsuffixed floating constant from the
+// source has LITERAL_SPELLED alone, which says its single_val is set.
 //
 enum {
     LITERAL_SPELLED   = 1,  // the bits below are valid
@@ -418,6 +419,8 @@ enum {
 struct Literal {
     LiteralKind kind;
     unsigned spelling; // LITERAL_SPELLED etc. for an integer constant, else 0
+    float single_val;  // a double constant rounded once to binary32 (strtof), for a
+                       // target whose double is single: valid when spelling is set
     union {
         int64_t int_val;
         long long_val;

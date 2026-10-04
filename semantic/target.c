@@ -52,8 +52,9 @@ static const Target targets[] = {
       0,        // struct_args_split
       NULL,     // immediate_args
       NULL,     // va_class: every variadic argument is on the stack, va_arg a pointer walk
-      0,        // ldouble_mant_dig: long double is double
-      0 },      // hw_sqrt: no FP hardware
+      24,       // ldouble_mant_dig: long double is double, IEEE single
+      0,        // hw_sqrt: no FP hardware
+      24 },     // double_mant_dig: double is IEEE single
 
     { "msp430",
       1, 1,   // _Bool
@@ -256,7 +257,29 @@ int target_word_addressed(void)
 Float128 target_ld_round(Float128 q)
 {
     int mant = target_config ? target_config->ldouble_mant_dig : 0;
+    if (mant == 24)
+        return f128_from_double(f128_to_float(q)); // IEEE single: its exponent range too
     return mant ? f128_round(q, mant) : q;
+}
+
+int target_double_is_single(void)
+{
+    return target_config && target_config->double_mant_dig == 24;
+}
+
+double target_double_round(double d)
+{
+    return target_double_is_single() ? (double)(float)d : d;
+}
+
+double target_double_from_i64(int64_t v)
+{
+    return target_double_is_single() ? (double)(float)v : (double)v;
+}
+
+double target_double_from_u64(uint64_t v)
+{
+    return target_double_is_single() ? (double)(float)v : (double)v;
 }
 
 int64_t sign_narrow(uint64_t bits, int w)

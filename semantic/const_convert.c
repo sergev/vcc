@@ -9,6 +9,18 @@
 //
 // Convert literal to int64
 //
+//
+// The value of a float or double literal, as the target's double holds it: one from the
+// source takes strtof's value where double is IEEE single (rounding the strtod one again
+// could round twice).
+//
+static double literal_real(const Literal *lit)
+{
+    if (lit->kind == LITERAL_DOUBLE && lit->spelling && target_double_is_single())
+        return lit->single_val;
+    return lit->kind == LITERAL_DOUBLE ? target_double_round(lit->u.real_val) : lit->u.real_val;
+}
+
 int64_t literal_to_int64(const Literal *lit)
 {
     switch (lit->kind) {
@@ -28,7 +40,7 @@ int64_t literal_to_int64(const Literal *lit)
         return (int64_t)lit->u.ulong_long_val;
     case LITERAL_FLOAT:
     case LITERAL_DOUBLE:
-        return (int64_t)lit->u.real_val;
+        return (int64_t)literal_real(lit);
     case LITERAL_LONG_DOUBLE:
         return f128_to_i64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
@@ -62,7 +74,7 @@ uint64_t literal_to_uint64(const Literal *lit)
         return (uint64_t)lit->u.ulong_long_val;
     case LITERAL_FLOAT:
     case LITERAL_DOUBLE:
-        return (uint64_t)lit->u.real_val;
+        return (uint64_t)literal_real(lit);
     case LITERAL_LONG_DOUBLE:
         return f128_to_u64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
@@ -83,22 +95,23 @@ double literal_to_double(const Literal *lit)
     case LITERAL_CHAR:
         return (double)lit->u.char_val;
     case LITERAL_INT:
-        return (double)lit->u.int_val;
+        return target_double_from_i64(lit->u.int_val);
     case LITERAL_LONG:
-        return (double)lit->u.long_val;
+        return target_double_from_i64(lit->u.long_val);
     case LITERAL_LONG_LONG:
-        return (double)lit->u.long_long_val;
+        return target_double_from_i64(lit->u.long_long_val);
     case LITERAL_UINT:
-        return (double)lit->u.uint_val;
+        return target_double_from_u64(lit->u.uint_val);
     case LITERAL_ULONG:
-        return (double)lit->u.ulong_val;
+        return target_double_from_u64(lit->u.ulong_val);
     case LITERAL_ULONG_LONG:
-        return (double)lit->u.ulong_long_val;
+        return target_double_from_u64(lit->u.ulong_long_val);
     case LITERAL_FLOAT:
     case LITERAL_DOUBLE:
-        return (double)lit->u.real_val;
+        return literal_real(lit);
     case LITERAL_LONG_DOUBLE:
-        return f128_to_double(lit->u.long_double_val);
+        return target_double_is_single() ? (double)f128_to_float(lit->u.long_double_val)
+                                         : f128_to_double(lit->u.long_double_val);
     case LITERAL_STRING:
         fatal_error("literal_to_double: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
@@ -127,7 +140,7 @@ Float128 literal_to_long_double(const Literal *lit)
         return f128_from_u64(lit->u.ulong_long_val);
     case LITERAL_FLOAT:
     case LITERAL_DOUBLE:
-        return f128_from_double(lit->u.real_val);
+        return f128_from_double(literal_real(lit));
     case LITERAL_LONG_DOUBLE:
         return lit->u.long_double_val;
     case LITERAL_STRING:
@@ -203,7 +216,7 @@ static bool int_literal_fits(uint64_t v, LiteralKind kind)
 
 void type_int_literal(Literal *lit)
 {
-    if (!(lit->spelling & LITERAL_SPELLED))
+    if (!(lit->spelling & LITERAL_SPELLED) || lit->kind > LITERAL_ULONG_LONG)
         return;
 
     // C11 §6.4.4.1p5: the first type of the suffix's list that can represent the value.

@@ -375,7 +375,8 @@ Literal *clone_literal(const Literal *lit)
     Literal *result = new_literal(lit->kind);
     if (result == NULL)
         return NULL;
-    result->spelling = lit->spelling;
+    result->spelling   = lit->spelling;
+    result->single_val = lit->single_val;
     switch (lit->kind) {
     case LITERAL_INT:
         result->u.int_val = lit->u.int_val;

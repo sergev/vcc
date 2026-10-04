@@ -156,7 +156,7 @@ static Tac_Val *fold_unary_const(Tac_UnaryOperator op, const Tac_Const *src)
         if (src->kind != TAC_CONST_DOUBLE || src->u.double_val < 0 || isnan(src->u.double_val))
             return NULL;
         rc               = tac_new_const(TAC_CONST_DOUBLE);
-        rc->u.double_val = sqrt(src->u.double_val);
+        rc->u.double_val = target_double_round(sqrt(src->u.double_val));
         break;
     }
 
@@ -389,10 +389,12 @@ static Tac_Val *make_int_const_val(Tac_ConstKind kind, uint64_t bits)
 }
 
 // A float result, rounded to float precision where float is narrower than double, as
-// the target computes it (FLT_EVAL_METHOD 0).  BESM-6 float is the double format.
+// the target computes it (FLT_EVAL_METHOD 0), or where double is single too (AVR).
+// BESM-6 float is the double format.
 static double round_float(double d)
 {
-    if (!target_config || target_config->float_size < target_config->double_size)
+    if (!target_config || target_config->float_size < target_config->double_size ||
+        target_double_is_single())
         return (float)d;
     return d;
 }
@@ -413,7 +415,8 @@ static bool ld_is_double(void)
 static Float128 ld_from_int(int64_t v, bool is_unsigned)
 {
     if (ld_is_double())
-        return f128_from_double(is_unsigned ? (double)(uint64_t)v : (double)v);
+        return f128_from_double(is_unsigned ? target_double_from_u64((uint64_t)v)
+                                            : target_double_from_i64(v));
     return is_unsigned ? f128_from_u64((uint64_t)v) : f128_from_i64(v);
 }
 
@@ -545,7 +548,7 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
     if (c1->kind == TAC_CONST_FLOAT)
         rc->u.float_val = round_float(dr);
     else
-        rc->u.double_val = dr;
+        rc->u.double_val = target_double_round(dr);
     Tac_Val *rv    = tac_new_val(TAC_VAL_CONSTANT);
     rv->u.constant = rc;
     return rv;
@@ -858,14 +861,14 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (!const_is_integer_kind(src->kind))
             return NULL;
         rc               = tac_new_const(TAC_CONST_DOUBLE);
-        rc->u.double_val = (double)const_to_int64(src);
+        rc->u.double_val = target_double_from_i64(const_to_int64(src));
         break;
 
     case TAC_INSTRUCTION_UINT_TO_DOUBLE:
         if (!const_is_integer_kind(src->kind))
             return NULL;
         rc               = tac_new_const(TAC_CONST_DOUBLE);
-        rc->u.double_val = (double)const_to_uint64(src);
+        rc->u.double_val = target_double_from_u64(const_to_uint64(src));
         break;
 
     case TAC_INSTRUCTION_INT_TO_FLOAT:

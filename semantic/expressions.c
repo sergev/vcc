@@ -161,6 +161,8 @@ static Expr *typecheck_literal(Expr *e)
     e->type = NULL; // prevent double-free: typecheck_string also calls free_type(e->type)
     check_int_literal_width(e->u.literal);
     type_int_literal(e->u.literal);
+    if (e->u.literal->kind == LITERAL_DOUBLE) // as the target's double holds it
+        e->u.literal->u.real_val = literal_to_double(e->u.literal);
     widen_long_literal(e->u.literal);
     switch (e->u.literal->kind) {
     case LITERAL_INT:

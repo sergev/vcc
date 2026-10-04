@@ -382,7 +382,11 @@ Expr *parse_constant()
             expr->u.literal->kind              = LITERAL_LONG_DOUBLE;
             expr->u.literal->u.long_double_val = f128_from_string(current_lexeme, NULL);
         } else {
-            expr->u.literal->u.real_val = v;
+            // A target whose double is single takes strtof's value: rounding v again
+            // could round twice.
+            expr->u.literal->u.real_val   = v;
+            expr->u.literal->spelling     = LITERAL_SPELLED;
+            expr->u.literal->single_val   = strtof(current_lexeme, NULL);
         }
         break;
     }

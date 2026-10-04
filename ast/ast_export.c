@@ -463,8 +463,10 @@ void export_literal(WFILE *fd, const Literal *lit)
         return;
     }
     wputw(TAG_LITERAL + lit->kind, fd);
-    if (lit->kind <= LITERAL_ULONG_LONG)
+    if (lit->kind <= LITERAL_ULONG_LONG || lit->kind == LITERAL_DOUBLE)
         wputw(lit->spelling, fd);
+    if (lit->kind == LITERAL_DOUBLE)
+        wputd(lit->single_val, fd);
     switch (lit->kind) {
     case LITERAL_INT:
         wputw((size_t)lit->u.int_val, fd);

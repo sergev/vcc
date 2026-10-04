@@ -614,9 +614,13 @@ Literal *import_literal(WFILE *input)
         return NULL;
     LiteralKind kind = (LiteralKind)(tag - TAG_LITERAL);
     Literal *lit     = new_literal(kind);
-    if (kind <= LITERAL_ULONG_LONG) {
+    if (kind <= LITERAL_ULONG_LONG || kind == LITERAL_DOUBLE) {
         lit->spelling = (unsigned)wgetw(input);
         check_input(input, "literal spelling");
+    }
+    if (kind == LITERAL_DOUBLE) {
+        lit->single_val = (float)wgetd(input);
+        check_input(input, "literal single");
     }
     switch (kind) {
     case LITERAL_INT:

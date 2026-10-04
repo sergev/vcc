@@ -351,6 +351,8 @@ bool compare_literal(const Literal *a, const Literal *b)
         return false;
     if (a->kind != b->kind || a->spelling != b->spelling)
         return false;
+    if (a->kind == LITERAL_DOUBLE && a->spelling && a->single_val != b->single_val)
+        return false;
     switch (a->kind) {
     case LITERAL_INT:
         return a->u.int_val == b->u.int_val;

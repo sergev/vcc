@@ -163,3 +163,53 @@ TEST_F(TranslateTestAvr, CharacterConstantTooLong)
 {
     EXPECT_DEATH(CompileToYaml("int abc = 'abc';"), "character constant too long");
 }
+
+// double and long double are IEEE single, like float: every double constant is rounded
+// once to binary32, whether from the source, folded, or converted from an integer.
+TEST_F(TranslateTestAvr, DoubleIsSingle)
+{
+    std::string yaml = CompileToYaml(R"(
+        double d1 = 0.1;
+        double d2 = 16777217.0;
+        double d3 = 16777217L;
+        double d4 = 1e39;
+        double d5 = 1.0 / 3;
+        float f1 = 1.0f / 3;
+        int e1 = (long double)0.1 == 0.1;
+        int e2 = 0.1f == 0.1;
+        int e3 = 16777217.0 == 16777216.0;
+    )");
+    EXPECT_EQ(StaticValue(yaml, "d1"), "0x1.99999ap-4");
+    EXPECT_EQ(StaticValue(yaml, "d2"), "0x1p+24");
+    EXPECT_EQ(StaticValue(yaml, "d3"), "0x1p+24");
+    EXPECT_EQ(StaticValue(yaml, "d4"), "inf");
+    EXPECT_EQ(StaticValue(yaml, "d5"), "0x1.555556p-2");
+    EXPECT_EQ(StaticValue(yaml, "f1"), "0x1.555556p-2");
+    EXPECT_EQ(StaticValue(yaml, "e1"), "1");
+    EXPECT_EQ(StaticValue(yaml, "e2"), "1");
+    EXPECT_EQ(StaticValue(yaml, "e3"), "1");
+}
+
+// A double literal is rounded to binary32 once, by strtof: 1.00000005960464477539062501
+// is just above the halfway point between 1 and 1 + 2^-23, so it rounds up; rounded first
+// to binary64 it lands exactly on the halfway point, and then to even, down to 1.
+TEST_F(TranslateTestAvr, DoubleLiteralRoundsOnce)
+{
+    std::string yaml = CompileToYaml("double d = 1.00000005960464477539062501;");
+    EXPECT_EQ(StaticValue(yaml, "d"), "0x1.000002p+0");
+}
+
+// Folded double arithmetic in a function is rounded too.
+TEST_F(TranslateTestAvr, DoubleFoldIsSingle)
+{
+    std::string yaml = CompileToYaml("double f(void) { return 1.0 / 3.0; }");
+    EXPECT_NE(yaml.find("value: 0x1.555556p-2"), std::string::npos) << yaml;
+}
+
+// Elsewhere double stays binary64.
+TEST_F(TranslateTestX86, DoubleIsBinary64)
+{
+    std::string yaml = CompileToYaml("double d = 0.1; double e = 16777217L;");
+    EXPECT_EQ(StaticValue(yaml, "d"), "0x1.999999999999ap-4");
+    EXPECT_EQ(StaticValue(yaml, "e"), "0x1.000001p+24");
+}

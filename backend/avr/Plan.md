@@ -247,10 +247,9 @@ lands with a test under `-t avr`, and leaves the other targets' output unchanged
     - An integer of more than 53 bits must convert to binary32 directly (the host's
       `(float)` of the integer), not through a double.
     - A decimal literal parsed as binary64 and then rounded can be off by one ulp from a
-      correctly rounded binary32. `parse` has no target, so either keep the literal's
-      spelling and convert it with `strtof` once the target is known, or carry it exactly
-      as the long double literals already are (`f128_from_string`). Pick one, and pin it
-      with a literal that differs, e.g. one just above a binary32 halfway point.
+      correctly rounded binary32. `parse` has no target, so it also records `strtof`'s
+      value in the AST (`Literal.single_val`), and the semantic pass takes that one where
+      `double` is single. A literal just above a binary32 halfway point pins it.
   - `FLOAT_TO_DOUBLE`/`DOUBLE_TO_FLOAT` stay distinct TAC operators. They fold to no-ops,
     and the backend emits nothing for them.
   - Tests in `semantic-tests`/`optimizer-tests` under `-t avr`:
