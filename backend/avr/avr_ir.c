@@ -55,6 +55,32 @@ AVR_Instr *avr_append_to(AVR_Block *b, AVR_Op op)
     return in;
 }
 
+AVR_Instr *avr_insert_after(AVR_Block *b, AVR_Instr *in, AVR_Op op)
+{
+    AVR_Instr *n = xalloc(sizeof(AVR_Instr), __func__, __FILE__, __LINE__);
+    n->op        = op;
+    n->next      = in->next;
+    in->next     = n;
+    if (b->tail == in)
+        b->tail = n;
+    return n;
+}
+
+AVR_Block *avr_split_after(AVR_Func *fn, AVR_Block *b, AVR_Instr *in, const char *label)
+{
+    AVR_Block *n = xalloc(sizeof(AVR_Block), __func__, __FILE__, __LINE__);
+    n->label     = xstrdup(label);
+    n->head      = in->next;
+    n->tail      = in->next ? b->tail : NULL;
+    in->next     = NULL;
+    b->tail      = in;
+    n->next      = b->next;
+    b->next      = n;
+    if (fn->tail == b)
+        fn->tail = n;
+    return n;
+}
+
 void avr_free_func(AVR_Func *fn)
 {
     AVR_Block *b = fn->blocks;

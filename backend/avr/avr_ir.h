@@ -170,6 +170,11 @@ AVR_Instr *avr_append(AVR_Func *fn, AVR_Op op);
 // Append an instruction to block `b`.
 AVR_Instr *avr_append_to(AVR_Block *b, AVR_Op op);
 void avr_free_func(AVR_Func *fn);
+// Move the instructions after `in` in block `b` into a new block labelled `label`
+// (copied), right after `b`; returns it.
+AVR_Block *avr_split_after(AVR_Func *fn, AVR_Block *b, AVR_Instr *in, const char *label);
+// Insert an instruction after `in` in block `b`.
+AVR_Instr *avr_insert_after(AVR_Block *b, AVR_Instr *in, AVR_Op op);
 
 AVR_Operand avr_reg(int reg);
 AVR_Operand avr_imm(int64_t imm);
@@ -177,6 +182,11 @@ AVR_Operand avr_sym(AVR_Modifier mod, const char *sym, int64_t off);
 AVR_Operand avr_ptr(int ptr, AVR_PtrMode mode); // ptr is AVR_X, AVR_Y or AVR_Z
 AVR_Operand avr_disp(int ptr, int q);           // ptr is AVR_Y or AVR_Z
 AVR_Operand avr_label(const char *sym);
+
+// Branch relaxation, the last pass: a conditional branch beyond +-64 words becomes the
+// inverse branch over an rjmp (or jmp), an rjmp beyond +-2K words a jmp; repeated until
+// every branch reaches, as sizes only grow.
+void avr_relax(AVR_Func *fn);
 
 // GNU avr-as syntax, as clang emits it.  The header goes once at the top of a module.
 void avr_emit_header(FILE *out);

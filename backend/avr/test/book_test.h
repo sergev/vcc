@@ -17,6 +17,9 @@ protected:
             { "Chapter2_NegateIntMax", "expects a 32-bit int" },
             { "Chapter3_BitwiseShiftPrecedence", "shifts a 16-bit int by 16: undefined" },
             { "Chapter3_BitwiseShiftrNegative", "shifts a 16-bit int by 30: undefined" },
+            { "Chapter5_AllocateTempsAndVars", "expects a 32-bit int" },
+            { "Chapter5_CompoundBitwiseShiftr", "expects a 32-bit int" },
+            { "Chapter8_ForAbsentPost", "expects a 32-bit int" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

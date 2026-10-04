@@ -17,6 +17,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
         gen_instr(&g, in, in->next == NULL);
     gen_frame(&g);
+    avr_relax(g.fn);
     avr_emit_func(out, g.fn);
     gen_done(&g);
 }
