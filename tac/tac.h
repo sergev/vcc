@@ -650,6 +650,17 @@ int tac_aapcs64_hfa(const Tac_Type *t, int *esize);
 //
 enum { TAC_AAPCS32_CORE = 0 };
 int tac_aapcs32_class(const Tac_Type *t);
+//
+// System V AMD64 argument classes (tac_abi.c): in memory (over 16 bytes, or with an
+// eightbyte that merges to MEMORY), X87 (a long double, or a struct of one: returned in
+// st(0), passed in memory), or the class of each eightbyte, INTEGER or SSE, encoded
+// class0 | class1 << 2 (class1 0 for a type of one eightbyte).  The value of
+// __builtin_va_class.
+//
+enum { TAC_SYSV64_MEMORY = 0, TAC_SYSV64_INTEGER = 1, TAC_SYSV64_SSE = 2, TAC_SYSV64_X87 = 3 };
+int tac_sysv64_class(const Tac_Type *t);
+// Eightbyte `i` (0 or 1) of class `cls`, or 0 when there is none.
+#define TAC_SYSV64_EIGHTBYTE(cls, i) ((cls) >> 2 * (i) & 3)
 
 //
 // Verify

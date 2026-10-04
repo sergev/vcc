@@ -122,7 +122,7 @@ static const Target targets[] = {
                 // address (passed in rdi) in rax
       0,        // struct_args_split
       NULL,     // immediate_args
-      NULL,     // va_class
+      tac_sysv64_class, // va_class
       64 },     // ldouble_mant_dig: the x87 extended format
 
     { "riscv32",

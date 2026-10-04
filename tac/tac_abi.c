@@ -2,7 +2,8 @@
 // AAPCS64 argument classification over TAC types.  One function serves the AArch64
 // backend (where a call puts each argument) and the semantic pass (the value of
 // __builtin_va_class, which va_arg hands to the runtime), so the two cannot disagree.
-// AAPCS (32-bit) has the same homogeneous aggregates, with long double a double.
+// AAPCS (32-bit) has the same homogeneous aggregates, with long double a double.  The
+// System V AMD64 classes serve the x86-64 backend the same way.
 //
 #include "tac.h"
 
@@ -119,4 +120,73 @@ int tac_aapcs32_class(const Tac_Type *t)
     int esize;
     int count = hfa(t, true, &esize);
     return count ? esize * 8 + count : TAC_AAPCS32_CORE;
+}
+
+//
+// System V AMD64 (psABI §3.2.3): each eightbyte of a type is classed by the merge of
+// the classes of the scalars it overlaps.
+//
+enum { NO_CLASS = -1, X87UP = 4 };
+
+static int merge(int a, int b)
+{
+    if (a == b || b == NO_CLASS)
+        return a;
+    if (a == NO_CLASS)
+        return b;
+    if (a == TAC_SYSV64_MEMORY || b == TAC_SYSV64_MEMORY)
+        return TAC_SYSV64_MEMORY;
+    if (a == TAC_SYSV64_INTEGER || b == TAC_SYSV64_INTEGER)
+        return TAC_SYSV64_INTEGER;
+    if (a == TAC_SYSV64_X87 || b == TAC_SYSV64_X87 || a == X87UP || b == X87UP)
+        return TAC_SYSV64_MEMORY;
+    return TAC_SYSV64_SSE;
+}
+
+// Merge the scalars of `t`, at byte `offset` of the whole, into eb[0..1].
+static void sysv_leaves(const Tac_Type *t, int offset, int eb[2])
+{
+    switch (t->kind) {
+    case TAC_TYPE_ARRAY: {
+        int esize = size_of(t->u.array.elem_type, false);
+        for (int i = 0; i < t->u.array.size; i++)
+            sysv_leaves(t->u.array.elem_type, offset + i * esize, eb);
+        return;
+    }
+    case TAC_TYPE_STRUCTURE:
+        for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
+            sysv_leaves(m->type, offset + m->offset, eb);
+        return;
+    case TAC_TYPE_LONG_DOUBLE:
+        eb[offset / 8]     = merge(eb[offset / 8], TAC_SYSV64_X87);
+        eb[offset / 8 + 1] = merge(eb[offset / 8 + 1], X87UP);
+        return;
+    case TAC_TYPE_FLOAT:
+    case TAC_TYPE_DOUBLE:
+        eb[offset / 8] = merge(eb[offset / 8], TAC_SYSV64_SSE);
+        return;
+    default:
+        eb[offset / 8] = merge(eb[offset / 8], TAC_SYSV64_INTEGER);
+        return;
+    }
+}
+
+int tac_sysv64_class(const Tac_Type *t)
+{
+    int size = size_of(t, false);
+    if (size > 16 || size == 0)
+        return TAC_SYSV64_MEMORY;
+    int eb[2] = { NO_CLASS, NO_CLASS };
+    sysv_leaves(t, 0, eb);
+    if (eb[0] == TAC_SYSV64_X87 && eb[1] == X87UP)
+        return TAC_SYSV64_X87;
+    // An eightbyte of padding alone takes no register.
+    int n = size > 8 && eb[1] != NO_CLASS ? 2 : 1;
+    for (int i = 0; i < n; i++) {
+        if (eb[i] == NO_CLASS)
+            eb[i] = TAC_SYSV64_SSE;
+        if (eb[i] == TAC_SYSV64_MEMORY || eb[i] == TAC_SYSV64_X87 || eb[i] == X87UP)
+            return TAC_SYSV64_MEMORY;
+    }
+    return n == 2 ? eb[0] | eb[1] << 2 : eb[0];
 }
