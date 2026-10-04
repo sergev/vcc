@@ -426,6 +426,50 @@ X86_Operand src_operand(Gen *g, const Tac_Val *v, const Tac_Type *t, int scratch
     return x86_reg(scratch, w);
 }
 
+X86_Operand mem_at(X86_Operand m, int64_t off)
+{
+    m.imm += off;
+    if (m.sym)
+        m.sym = xstrdup(m.sym); // each operand owns its symbol
+    return m;
+}
+
+void gen_memcopy(Gen *g, X86_Operand dst, X86_Operand src, int size, int align)
+{
+    static const X86_Width widths[] = { [1] = X86_B, [2] = X86_W, [4] = X86_L, [8] = X86_Q };
+    int chunk = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
+    if (size > 64) {
+        // Quadwords in a loop, the addresses in rax and r10 and the count in rcx; the
+        // rest after it, from the advanced addresses.
+        char loop[32];
+        new_label(loop);
+        emit2(g, X86_LEA, X86_Q, dst, x86_reg(T0, X86_Q));
+        emit2(g, X86_LEA, X86_Q, src, x86_reg(T1, X86_Q));
+        gen_li(g, X86_RCX, X86_L, size / 8);
+        x86_new_block(g->fn, loop);
+        emit2(g, X86_MOV, X86_Q, x86_mem(T1, 0), x86_reg(T2, X86_Q));
+        emit2(g, X86_MOV, X86_Q, x86_reg(T2, X86_Q), x86_mem(T0, 0));
+        emit2(g, X86_ADD, X86_Q, x86_imm(8), x86_reg(T1, X86_Q));
+        emit2(g, X86_ADD, X86_Q, x86_imm(8), x86_reg(T0, X86_Q));
+        emit2(g, X86_SUB, X86_Q, x86_imm(1), x86_reg(X86_RCX, X86_Q));
+        X86_Instr *j = emit1(g, X86_J, X86_Q, x86_label(loop));
+        j->cond      = X86_CC_NE;
+        dst          = x86_mem(T0, 0);
+        src          = x86_mem(T1, 0);
+        size %= 8;
+    }
+    for (int i = 0; i < size;) {
+        while (chunk > size - i)
+            chunk /= 2;
+        X86_Width w = widths[chunk];
+        emit2(g, X86_MOV, w, mem_at(src, i), x86_reg(T2, w));
+        emit2(g, X86_MOV, w, x86_reg(T2, w), mem_at(dst, i));
+        i += chunk;
+    }
+    xfree(dst.sym);
+    xfree(src.sym);
+}
+
 void gen_epilogue(Gen *g)
 {
     emit0(g, X86_EPILOGUE, X86_Q);

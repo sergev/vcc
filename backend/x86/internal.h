@@ -59,6 +59,7 @@ typedef struct {
     int locals_size;   // bytes of slots below the saved rbp
     int outgoing;      // bytes of the outgoing argument area
     int x87_tmp;       // the x87 scratch slot, or 0 (x87.c)
+    int ret_ptr;       // the slot of the result address that came in rdi, or 0
     FpConst *consts;   // the function's .rodata constants
     int nconsts, maxconsts;
 } Gen;
@@ -127,6 +128,12 @@ void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t);
 // the variable in memory when it has the operation's width, or else `scratch` after
 // loading it.
 X86_Operand src_operand(Gen *g, const Tac_Val *v, const Tac_Type *t, int scratch);
+// Memory operand `m`, `off` bytes further (its symbol copied).
+X86_Operand mem_at(X86_Operand m, int64_t off);
+// Copy `size` bytes from memory operand `src` to `dst` (both consumed): moves of up to
+// `align` bytes through r11, in a loop of quadwords past 64 bytes, which uses rax, r10
+// and rcx.  Neither base register may be rax, rcx or r11.
+void gen_memcopy(Gen *g, X86_Operand dst, X86_Operand src, int size, int align);
 // A marker for the frame teardown, then ret.
 void gen_epilogue(Gen *g);
 // Fill the prologue and the epilogues, once the frame is known.

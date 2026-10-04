@@ -55,11 +55,15 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     xfree(l);
 }
 
-// Store scalar `src` as type `t` at memory operand `mem`: a constant straight in as an
-// immediate when it fits, a variable through rax.
+// Store `src` as type `t` at memory operand `mem` (consumed): a constant straight in
+// as an immediate when it fits, a scalar variable through rax, an aggregate copied.
 static void store_to(Gen *g, const Tac_Val *src, const Tac_Type *t, X86_Operand mem)
 {
     X86_Width w = x86_width_of(x86_size(t));
+    if (x86_is_aggregate(t)) {
+        gen_memcopy(g, mem, name_mem(g, src->u.var_name, 0), x86_size(t), x86_align(t));
+        return;
+    }
     if (x86_is_ld(t)) {
         gen_ld_copy(g, src, mem);
         return;
@@ -79,13 +83,10 @@ static void store_to(Gen *g, const Tac_Val *src, const Tac_Type *t, X86_Operand 
     store_mem(g, T0, t, mem);
 }
 
-// dst = src, for a scalar.
+// dst = src, for any type.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
-    const Tac_Type *t = val_type(g, dst);
-    if (x86_is_aggregate(t))
-        fatal_error("x86: %s: copying this type is not implemented yet", gen_name(g));
-    store_to(g, src, t, name_mem(g, dst->u.var_name, 0));
+    store_to(g, src, val_type(g, dst), name_mem(g, dst->u.var_name, 0));
 }
 
 // An integer conversion: the source loaded extended as the conversion says (its own
@@ -338,8 +339,10 @@ static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
     load_val(g, T1, src_ptr);
-    if (x86_is_aggregate(t))
-        fatal_error("x86: %s: loading this type is not implemented yet", gen_name(g));
+    if (x86_is_aggregate(t)) {
+        gen_memcopy(g, name_mem(g, dst->u.var_name, 0), x86_mem(T1, 0), x86_size(t), x86_align(t));
+        return;
+    }
     if (x86_is_ld(t)) {
         for (int i = 0; i < 2; i++) {
             emit2(g, X86_MOV, X86_Q, x86_mem(T1, 8 * i), x86_reg(T0, X86_Q));
@@ -360,8 +363,6 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
     if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
         (x86_is_aggregate(t) && !x86_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
-    if (x86_is_aggregate(t))
-        fatal_error("x86: %s: storing this type is not implemented yet", gen_name(g));
     load_val(g, T1, dst_ptr);
     store_to(g, src, t, x86_mem(T1, 0));
 }
@@ -440,8 +441,6 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
             !x86_is_aggregate(m))
             t = m;
     }
-    if (x86_is_aggregate(t))
-        fatal_error("x86: %s: copying an aggregate member is not implemented yet", gen_name(g));
     store_to(g, src, t, name_mem(g, dst, offset));
 }
 
@@ -451,13 +450,9 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
     const Tac_Type *t = val_type(g, dst);
     if (byte && x86_size(t) != 1)
         fatal_error("x86: %s: byte copy into %s", gen_name(g), dst->u.var_name);
-    if (x86_is_aggregate(t))
-        fatal_error("x86: %s: copying an aggregate member is not implemented yet", gen_name(g));
-    if (x86_is_ld(t)) {
-        for (int i = 0; i < 2; i++) {
-            emit2(g, X86_MOV, X86_Q, name_mem(g, src, offset + 8 * i), x86_reg(T0, X86_Q));
-            emit2(g, X86_MOV, X86_Q, x86_reg(T0, X86_Q), name_mem(g, dst->u.var_name, 8 * i));
-        }
+    if (x86_is_aggregate(t) || x86_is_ld(t)) {
+        gen_memcopy(g, name_mem(g, dst->u.var_name, 0), name_mem(g, src, offset), x86_size(t),
+                    x86_is_ld(t) ? 8 : x86_align(t));
         return;
     }
     int r = x86_is_fp(t) ? F0 : T0;

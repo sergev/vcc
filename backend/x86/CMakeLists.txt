@@ -19,9 +19,6 @@ target_link_libraries(x86 backend_common tac libutil)
 # Tests for the x86-64 backend: golden assembly, run tests on qemu, and the shared
 # book suite.  Run tests skip themselves when the x86-64 tools are absent.
 #
-# The book chapters the code generator handles so far.
-set(X86_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER X86_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-6])_tests\\.cpp$")
 
 add_executable(x86-tests
     test/emit_tests.cpp
@@ -34,8 +31,9 @@ add_executable(x86-tests
     test/fp_tests.cpp
     test/x87_tests.cpp
     test/ptr_tests.cpp
+    test/struct_tests.cpp
     test/run_tests.cpp
-    ${X86_BOOK_SOURCES}
+    ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(x86-tests x86 parser translator semantic GTest::gtest_main
     test_util backend_test_util)

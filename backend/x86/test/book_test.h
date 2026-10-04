@@ -1,7 +1,6 @@
 // The x86-64 fixture for the shared "Writing a C Compiler" suite
 // (backend/common/test/book/): programs run on bare-metal qemu, each also compiled by
-// clang and the two outputs compared.  The chapters are enabled in CMakeLists.txt as
-// the code generator reaches them.
+// clang and the two outputs compared.
 #pragma once
 
 #include "x86_test.h"
@@ -15,6 +14,8 @@ protected:
         // have it unsigned.
         static const SkippedTest skipped[] = {
             { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
+            { "Chapter18_ClassifyParams", "expects an unsigned plain char" },
+            { "Chapter18_UnionInits", "expects an unsigned plain char" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);
