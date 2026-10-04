@@ -2,8 +2,50 @@
 // Instruction selection: one TAC instruction at a time, its operands loaded into
 // scratch registers, or used from memory or as an immediate where x86 allows.
 //
+#include <string.h>
+
 #include "codegen.h"
 #include "internal.h"
+#include "xalloc.h"
+
+// Local label for TAC label `%N`: `.LN`.  TAC labels are unique in a translation unit.
+static char *label_name(const char *tac)
+{
+    size_t len = strlen(tac);
+    char *s    = xalloc(len + 3, __func__, __FILE__, __LINE__);
+    strcpy(s, ".L");
+    strcat(s, tac[0] == '%' ? tac + 1 : tac);
+    return s;
+}
+
+static void gen_label(Gen *g, const char *tac)
+{
+    char *l = label_name(tac);
+    x86_new_block(g->fn, l);
+    xfree(l);
+}
+
+static void gen_jump(Gen *g, const char *tac)
+{
+    char *l = label_name(tac);
+    emit1(g, X86_JMP, X86_Q, x86_label(l));
+    xfree(l);
+}
+
+// Branch to TAC label `target` when `cond` is zero (or nonzero).
+static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
+{
+    const Tac_Type *t = val_type(g, cond);
+    if (x86_is_fp(t) || x86_is_ld(t))
+        fatal_error("x86: %s: floating point is not implemented yet", gen_name(g));
+    X86_Width w = x86_op_width(t);
+    load_val(g, T0, cond);
+    emit2(g, X86_TEST, w, x86_reg(T0, w), x86_reg(T0, w));
+    char *l      = label_name(target);
+    X86_Instr *j = emit1(g, X86_J, X86_Q, x86_label(l));
+    j->cond      = if_zero ? X86_CC_E : X86_CC_NE;
+    xfree(l);
+}
 
 // dst = src, for a scalar.  A constant or a register is stored straight into memory.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
@@ -253,6 +295,17 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
+    case TAC_INSTRUCTION_LABEL:
+        gen_label(g, in->u.label.name);
+        break;
+    case TAC_INSTRUCTION_JUMP:
+        gen_jump(g, in->u.jump.target);
+        break;
+    case TAC_INSTRUCTION_JUMP_IF_ZERO:
+    case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
+        gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
+                      in->u.jump_if_zero.target);
+        break;
     case TAC_INSTRUCTION_RETURN:
         gen_return(g, in->u.return_.src);
         break;
