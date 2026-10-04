@@ -24,9 +24,31 @@ set(X86_CLANG ${RISCV_CLANG} CACHE INTERNAL "")
 set(X86_LD ${RISCV_LD} CACHE INTERNAL "")
 set(X86_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(X86_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
-set(X86_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
 # Baseline x86-64 (SSE2), System V psABI, ELF, small code model.
 set(X86_TARGET_FLAGS --target=x86_64-none-elf CACHE INTERNAL "")
+
+# Standard-library header check, as for aarch64 ...
+add_test(
+    NAME x86_64-headers
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            ${SystemCpp}
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check
+            ${X86_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
+
+# ... and the same through our own preprocessor.
+add_test(
+    NAME x86_64-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-tx86_64
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
+            ${X86_INCLUDE_DIR}
+            ${LP64_INCLUDE_DIR}
+            ${LIBC_COMMON_INCLUDE_DIR})
 if(NOT X86_TOOLS_FOUND)
     message(STATUS "No x86-64 clang/llvm-ar: the x86-64 runtime is not built")
     return()
@@ -47,17 +69,15 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves.
 set(X86_LIBC_OBJS "")
-foreach(name console malloc)
+foreach(name console malloc setjmp)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${X86_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
     list(APPEND X86_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genx86 -> clang.  The x86-64 headers so
-# far are stdarg.h, stddef.h and stdint.h (backend/x86/Plan.md, X21 adds the rest);
-# then the LP64 ones, whose limits.h has an unsigned plain char, which these sources do
-# not depend on.
+# C sources, through cpp -> parse -> lower -> genx86 -> clang, with the x86-64 headers,
+# then the LP64 and the shared ones.
 set(X86_LIBC_INCLUDES -I${X86_INCLUDE_DIR} -I${LP64_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
 file(GLOB X86_LIBC_HEADERS ${X86_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
      ${LIBC_COMMON_INCLUDE_DIR}/*.h)

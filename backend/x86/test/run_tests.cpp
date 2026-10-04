@@ -112,3 +112,42 @@ main:
     EXPECT_EQ(254, exit_status);
     EXPECT_NE(std::string::npos, out.find("x87 stack not empty after main")) << out;
 }
+
+// setjmp/longjmp from libc.a: a jump out of nested frames, longjmp(env, 0) arriving as
+// 1, and a second setjmp on the same buffer.
+TEST_F(X86Test, RunSetjmpLongjmp)
+{
+    SKIP_IF_NO_X86_TOOLS();
+    CompileAndRunX86(R"(
+#include <setjmp.h>
+static jmp_buf env;
+static int depth;
+static void dive(int n, int val)
+{
+    depth = n;
+    if (n == 5)
+        longjmp(env, val);
+    dive(n + 1, val);
+}
+int main(void)
+{
+    volatile int round = 0;
+    int r = setjmp(env);
+    round++;
+    if (round == 1) {
+        if (r != 0)
+            return 1;
+        dive(0, 7);
+    }
+    if (round == 2) {
+        if (r != 7 || depth != 5)
+            return 2;
+        dive(0, 0);
+    }
+    if (round == 3 && r != 1)
+        return 3;
+    return round == 3 ? 42 : 4;
+}
+)");
+    EXPECT_EQ(42, exit_status);
+}

@@ -43,8 +43,7 @@ target_link_libraries(x86-tests x86 parser translator semantic GTest::gtest_main
 if(X86_TOOLS_FOUND)
     add_dependencies(x86-tests x86-libc)
 endif()
-# The x86-64 headers so far are stdarg.h, stddef.h and stdint.h (Plan.md, X21 adds the
-# rest), then the LP64 ones, whose limits.h has an unsigned plain char until X21.
+# The x86-64 headers, then the LP64 and the shared ones.
 target_compile_definitions(x86-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     TEST_CPP="${SystemCpp}"
