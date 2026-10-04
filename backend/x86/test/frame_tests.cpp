@@ -6,6 +6,7 @@
 // A local in a slot: a constant stored straight into it, then loaded for the return.
 TEST_F(X86Test, LocalSlot)
 {
+    NaiveSelection();
     DisableOptimization();
     EXPECT_EQ(R"(pushq %rbp
 movq %rsp, %rbp
@@ -21,6 +22,7 @@ ret
 // Each width stores as itself and loads extended by its signedness.
 TEST_F(X86Test, SlotWidths)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToX86(R"(
 long f(void) {
@@ -38,6 +40,7 @@ long f(void) {
 // A 64-bit constant beyond 32 bits is not an immediate: it goes through a register.
 TEST_F(X86Test, WideConstantStore)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string code = Code(CompileToX86("long f(void) { long a = 0x123456789L; return a; }"));
     EXPECT_NE(std::string::npos, code.find("movabsq $4886718345, %rax\nmovq %rax, -8(%rbp)\n"))
@@ -47,6 +50,7 @@ TEST_F(X86Test, WideConstantStore)
 // Displacements take 32 bits: a large frame needs no address arithmetic.
 TEST_F(X86Test, LargeFrame)
 {
+    NaiveSelection();
     DisableOptimization();
     std::string src = "long f(void) {\n";
     for (int i = 0; i < 600; i++)

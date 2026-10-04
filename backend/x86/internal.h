@@ -6,21 +6,25 @@
 // selection, xmm14/xmm15 the SSE ones; rbx, rbp and r12-r15 are callee-saved, no xmm
 // register is; rbp is the frame pointer, rsp the stack pointer.
 //
-// Every `%` name lives in a slot at a fixed offset from rbp, any other name at its
-// symbol, addressed as sym(%rip).  An instruction loads its operands into the scratch
-// registers, with one of them straight from memory or an immediate where x86 allows,
-// and stores the result back.
+// A scalar `%` name that is never in memory may get a register (regalloc.c): an
+// argument register (xmm0-xmm13 for float and double) unless it is live across a
+// call, else rbx or r12-r15; an FP value live across a call stays in its slot, as no
+// xmm register is callee-saved.  Any other `%` name lives in a slot at a fixed offset
+// from rbp, any other name at its symbol, addressed as sym(%rip).  An instruction
+// works on registers directly where x86 allows, and loads other operands into the
+// scratch registers, with one of them straight from memory or an immediate.
 //
 // Frame (rbp = rsp after rbp is pushed, 16-byte aligned):
 //   rbp + 16 ...     incoming stack arguments
 //   rbp + 8          return address
 //   rbp + 0          saved rbp
-//   rbp - ...        slots
+//   rbp - ...        rbx and r12-r15 in use, pushed, then slots
 //   rsp + 0 ...      outgoing stack arguments
 //
 // A value in a general register is in canonical form: a type of 32 bits or fewer in
 // the 32-bit view, extended to 32 bits by its own type, the upper half zero (as every
-// 32-bit write leaves it); a 64-bit one in the 64-bit view.
+// 32-bit write leaves it); a 64-bit one in the 64-bit view.  Register 0, rax, is never
+// allocated, so 0 stands for no register.
 //
 #ifndef X86_INTERNAL_H
 #define X86_INTERNAL_H
@@ -40,6 +44,7 @@ enum {
 typedef struct {
     const Tac_Type *type;
     int offset; // from rbp
+    int reg;    // allocated register, or 0 for the slot
 } Slot;
 
 // A constant in .rodata: `size` bytes (4, 8 or 16) of lo:hi, aligned to its size.
@@ -67,6 +72,9 @@ typedef struct {
     } va;
     FpConst *consts;   // the function's .rodata constants
     int nconsts, maxconsts;
+    StringMap regs;    // name → allocated register (regalloc.c)
+    int nsaved;        // callee-saved registers in use, pushed in this order
+    int saved_reg[5];
 } Gen;
 
 //
@@ -102,11 +110,26 @@ const char *gen_name(const Gen *g);
 int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int align);
 // Give `name` a slot at a fixed offset (an incoming stack argument).
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset);
+// Keep `name` in register `reg`.
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg);
 const Slot *find_slot(const Gen *g, const char *name);
+// The register allocated to `name` by gen_regalloc, or 0.
+int assigned_reg(const Gen *g, const char *name);
+// The register holding variable `v`, or 0 when it is in memory or a constant.
+int var_reg(const Gen *g, const Tac_Val *v);
+// The register holding scalar `v`: its own, or `scratch` after loading it.
+int use_val(Gen *g, int scratch, const Tac_Val *v);
+// The register to compute `v` into: its own, or `scratch` (then store it).
+int def_reg(const Gen *g, int scratch, const Tac_Val *v);
+// dst = src, registers of one file, at the view of type `t`; nothing when the same.
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t);
+// dst = general register src in the canonical form of integer type `t` (in place
+// too: a narrow type is extended again).
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t);
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
 const Tac_Type *name_type(const Gen *g, const char *name);
 // The memory operand of named object `name`, `off` bytes in: off(%rbp) for a slot,
-// name+off(%rip) for a static object.
+// name+off(%rip) for a static object.  Not for a variable in a register.
 X86_Operand name_mem(const Gen *g, const char *name, int64_t off);
 X86_Instr *emit0(Gen *g, X86_Op op, X86_Width width);
 X86_Instr *emit1(Gen *g, X86_Op op, X86_Width width, X86_Operand a);
@@ -123,21 +146,23 @@ int64_t const_as(const Tac_Const *c, const Tac_Type *t);
 void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
 void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m);
 // Load scalar value `v` into `reg` (general or xmm), as its own type; store `reg` into
-// variable `v`, at the width of the variable's type.
+// variable `v`, at the width of the variable's type (into a register: brought to the
+// canonical form of its type, even when it is that register).
 void load_val(Gen *g, int reg, const Tac_Val *v);
 void store_val(Gen *g, int reg, const Tac_Val *v);
 // Load integer value `v` into `reg` for an operation on type `t`: a variable as its own
 // type, a constant converted to `t` (its own kind may differ).
 void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t);
 // The source operand of integer value `v` in an operation on type `t`: an immediate,
-// the variable in memory when it has the operation's width, or else `scratch` after
-// loading it.
+// the variable's register or memory when it has the operation's width, or else
+// `scratch` after loading it.
 X86_Operand src_operand(Gen *g, const Tac_Val *v, const Tac_Type *t, int scratch);
 // Memory operand `m`, `off` bytes further (its symbol copied).
 X86_Operand mem_at(X86_Operand m, int64_t off);
 // Copy `size` bytes from memory operand `src` to `dst` (both consumed): moves of up to
-// `align` bytes through r11, in a loop of quadwords past 64 bytes, which uses rax, r10
-// and rcx.  Neither base register may be rax, rcx or r11.
+// `align` bytes through r11, past 64 bytes in a loop of 16 bytes through xmm15, the
+// addresses in rax and r10 and the count in r11.  Neither base register may be rax or
+// r11, nor the destination's r10.
 void gen_memcopy(Gen *g, X86_Operand dst, X86_Operand src, int size, int align);
 // A marker for the frame teardown, then ret.
 void gen_epilogue(Gen *g);
@@ -145,11 +170,28 @@ void gen_epilogue(Gen *g);
 void gen_prologue(Gen *g);
 
 //
+// Register allocation (regalloc.c): fills g->regs and the callee-saved registers used.
+//
+void gen_regalloc(Gen *g);
+// Whether `in`, not a call, clobbers a register of the allocator's pools: rdx in a
+// divide or remainder, rcx in a shift by a variable.  Sets *dst to its result.
+typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
+bool clobbers_regs(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                   const Tac_Val **dst);
+
+//
 // Calls, parameters and returns (call.c)
 //
-// A slot for each parameter, stored from its argument register or placed over its
-// stack slot; in a variadic function, the register save area first.
+// A register or a slot for each parameter: moved from its argument register, stored
+// from it, or placed over its stack slot; in a variadic function, the register save
+// area first.
 void gen_params(Gen *g);
+// The incoming register of each scalar parameter passed in a register of its own.
+void param_hints(const Gen *g, StringMap *hints);
+// Hints for a call: each scalar argument variable its argument register, an FP result
+// xmm0; only where hint[var] is still 0 (indexed by flow variable).
+struct Flow;
+void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
 

@@ -22,6 +22,7 @@ ret
 // A 64-bit condition is tested at its width; a loop jumps back.
 TEST_F(X86Test, WhileLoop)
 {
+    NaiveSelection();
     std::string code = Code(CompileToX86(R"(
 long f(long n) {
     long s = 0;

@@ -44,6 +44,13 @@ protected:
                                "",
                                true })
     {
+        x86_regalloc = true; // the default; a test may change it
+    }
+
+    // Pin instruction selection itself: every variable in its slot.
+    static void NaiveSelection()
+    {
+        x86_regalloc = false;
     }
 
     // Assembly of every toplevel of the translation unit.  When GNU as is installed,
@@ -135,10 +142,11 @@ protected:
     }
 };
 
-// A golden test of the instruction lines of one translation unit (each test compiles
-// one: the fixture's symbol table lives per test).
+// A golden test of the instruction lines of one translation unit, under naive
+// selection (each test compiles one: the fixture's symbol table lives per test).
 #define EXPECT_CODE(name, expected, src)              \
     TEST_F(X86Test, name)                             \
     {                                                 \
+        NaiveSelection();                             \
         EXPECT_EQ(expected, Code(CompileToX86(src))); \
     }

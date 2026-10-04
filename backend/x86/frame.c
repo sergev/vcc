@@ -164,6 +164,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     x86_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->regs);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -193,6 +194,7 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->regs);
     xfree(g->consts);
     x86_free_func(g->fn);
 }
@@ -202,11 +204,12 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
     s->offset = offset;
+    s->reg    = reg;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -217,19 +220,83 @@ int alloc_slot(Gen *g, const char *name, const Tac_Type *type, int size, int ali
     g->locals_size = (g->locals_size + size + align - 1) / align * align;
     int offset     = -g->locals_size;
     if (name)
-        insert_slot(g, name, type, offset);
+        insert_slot(g, name, type, offset, 0);
     return offset;
 }
 
 void place_slot(Gen *g, const char *name, const Tac_Type *type, int offset)
 {
-    insert_slot(g, name, type, offset);
+    insert_slot(g, name, type, offset, 0);
+}
+
+void place_reg(Gen *g, const char *name, const Tac_Type *type, int reg)
+{
+    insert_slot(g, name, type, 0, reg);
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
 {
     intptr_t v;
     return map_get(&g->frame, name, &v) ? (const Slot *)v : NULL;
+}
+
+int assigned_reg(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->regs, name, &v) ? (int)v : 0;
+}
+
+int var_reg(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind != TAC_VAL_VAR)
+        return 0;
+    const Slot *s = find_slot(g, v->u.var_name);
+    return s ? s->reg : 0;
+}
+
+int use_val(Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    if (r)
+        return r;
+    load_val(g, scratch, v);
+    return scratch;
+}
+
+int def_reg(const Gen *g, int scratch, const Tac_Val *v)
+{
+    int r = var_reg(g, v);
+    return r ? r : scratch;
+}
+
+void move_reg(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    if (dst == src)
+        return;
+    if (x86_is_xmm(dst))
+        emit2(g, X86_MOVAPS, X86_Q, x86_xmm(src), x86_xmm(dst));
+    else
+        emit2(g, X86_MOV, x86_op_width(t), x86_reg(src, x86_op_width(t)),
+              x86_reg(dst, x86_op_width(t)));
+}
+
+void gen_canon(Gen *g, int dst, int src, const Tac_Type *t)
+{
+    bool u = x86_is_unsigned(t);
+    switch (x86_size(t)) {
+    case 1:
+        emit2(g, u ? X86_MOVZB : X86_MOVSB, X86_L, x86_reg(src, X86_B), x86_reg(dst, X86_L));
+        break;
+    case 2:
+        emit2(g, u ? X86_MOVZW : X86_MOVSW, X86_L, x86_reg(src, X86_W), x86_reg(dst, X86_L));
+        break;
+    case 4:
+        emit2(g, X86_MOV, X86_L, x86_reg(src, X86_L), x86_reg(dst, X86_L)); // even in place
+        break;
+    default:
+        move_reg(g, dst, src, t);
+        break;
+    }
 }
 
 const Tac_Type *name_type(const Gen *g, const char *name)
@@ -266,6 +333,8 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
 X86_Operand name_mem(const Gen *g, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->reg)
+        fatal_error("x86: %s: %s is in a register", gen_name(g), name);
     if (s)
         return x86_mem(X86_RBP, s->offset + off);
     if (name[0] == '%')
@@ -386,7 +455,10 @@ void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
 void load_val(Gen *g, int reg, const Tac_Val *v)
 {
     const Tac_Type *t = val_type(g, v);
-    if (x86_is_xmm(reg))
+    int r             = var_reg(g, v);
+    if (r)
+        move_reg(g, reg, r, t);
+    else if (x86_is_xmm(reg))
         load_mem(g, reg, t, fp_operand(g, v));
     else if (v->kind == TAC_VAL_CONSTANT)
         gen_li(g, reg, x86_op_width(t), const_value(v->u.constant));
@@ -396,7 +468,14 @@ void load_val(Gen *g, int reg, const Tac_Val *v)
 
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
-    store_mem(g, reg, val_type(g, v), name_mem(g, v->u.var_name, 0));
+    const Tac_Type *t = val_type(g, v);
+    int r             = var_reg(g, v);
+    if (!r)
+        store_mem(g, reg, t, name_mem(g, v->u.var_name, 0));
+    else if (x86_is_xmm(r) || (r == reg && x86_size(t) >= 4))
+        move_reg(g, r, reg, t);
+    else
+        gen_canon(g, r, reg, t);
 }
 
 void load_int_as(Gen *g, int reg, const Tac_Val *v, const Tac_Type *t)
@@ -420,7 +499,10 @@ X86_Operand src_operand(Gen *g, const Tac_Val *v, const Tac_Type *t, int scratch
         return x86_reg(scratch, w);
     }
     const Tac_Type *vt = val_type(g, v);
-    if (x86_size(vt) == (w == X86_L ? 4 : 8))
+    int r              = var_reg(g, v);
+    if (r && (w == X86_L || x86_size(vt) == 8))
+        return x86_reg(r, w); // a narrow type canonical in 32 bits
+    if (!r && x86_size(vt) == (w == X86_L ? 4 : 8))
         return name_mem(g, v->u.var_name, 0);
     load_val(g, scratch, v);
     return x86_reg(scratch, w);
@@ -439,24 +521,25 @@ void gen_memcopy(Gen *g, X86_Operand dst, X86_Operand src, int size, int align)
     static const X86_Width widths[] = { [1] = X86_B, [2] = X86_W, [4] = X86_L, [8] = X86_Q };
     int chunk = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
     if (size > 64) {
-        // Quadwords in a loop, the addresses in rax and r10 and the count in rcx; the
-        // rest after it, from the advanced addresses.
+        // 16 bytes at a time in a loop, through xmm15, the addresses in rax and r10 and
+        // the count in r11, so that no allocated register changes; the rest after it,
+        // from the advanced addresses.
         char loop[32];
         new_label(loop);
         emit2(g, X86_LEA, X86_Q, dst, x86_reg(T0, X86_Q));
         emit2(g, X86_LEA, X86_Q, src, x86_reg(T1, X86_Q));
-        gen_li(g, X86_RCX, X86_L, size / 8);
+        gen_li(g, T2, X86_L, size / 16);
         x86_new_block(g->fn, loop);
-        emit2(g, X86_MOV, X86_Q, x86_mem(T1, 0), x86_reg(T2, X86_Q));
-        emit2(g, X86_MOV, X86_Q, x86_reg(T2, X86_Q), x86_mem(T0, 0));
-        emit2(g, X86_ADD, X86_Q, x86_imm(8), x86_reg(T1, X86_Q));
-        emit2(g, X86_ADD, X86_Q, x86_imm(8), x86_reg(T0, X86_Q));
-        emit2(g, X86_SUB, X86_Q, x86_imm(1), x86_reg(X86_RCX, X86_Q));
+        emit2(g, X86_MOVUPS, X86_Q, x86_mem(T1, 0), x86_xmm(F1));
+        emit2(g, X86_MOVUPS, X86_Q, x86_xmm(F1), x86_mem(T0, 0));
+        emit2(g, X86_ADD, X86_Q, x86_imm(16), x86_reg(T1, X86_Q));
+        emit2(g, X86_ADD, X86_Q, x86_imm(16), x86_reg(T0, X86_Q));
+        emit2(g, X86_SUB, X86_L, x86_imm(1), x86_reg(T2, X86_L));
         X86_Instr *j = emit1(g, X86_J, X86_Q, x86_label(loop));
         j->cond      = X86_CC_NE;
         dst          = x86_mem(T0, 0);
         src          = x86_mem(T1, 0);
-        size %= 8;
+        size %= 16;
     }
     for (int i = 0; i < size;) {
         while (chunk > size - i)
@@ -487,10 +570,12 @@ static bool uses_reg(const X86_Instr *in, int reg)
     return false;
 }
 
-// Whether the body needs no frame: it makes no call (which needs rsp 16-byte aligned)
-// and never uses rbp (no slot, no stack argument) or rsp.
+// Whether the body needs no frame: it makes no call (which needs rsp 16-byte aligned),
+// saves no register, and never uses rbp (no slot, no stack argument) or rsp.
 static bool is_leaf(const Gen *g)
 {
+    if (g->nsaved > 0)
+        return false;
     for (const X86_Block *b = g->fn->blocks; b; b = b->next)
         for (const X86_Instr *in = b->head; in; in = in->next)
             if (in->op == X86_CALL || uses_reg(in, X86_RBP) || uses_reg(in, X86_RSP))
@@ -498,41 +583,76 @@ static bool is_leaf(const Gen *g)
     return true;
 }
 
-// Replace each epilogue marker by `leave`, or drop it.
-static void expand_epilogues(Gen *g, bool frame)
+// Emit into block `b` instead of the current one: the prologue, or an epilogue.
+static X86_Block *redirect(Gen *g, X86_Block *b)
+{
+    X86_Block *tail = g->fn->tail;
+    g->fn->tail     = b;
+    return tail;
+}
+
+// The frame teardown: `leave`, or with saved registers, rsp back to them, which are
+// popped, and then rbp.  `rest` is the bytes reserved below them.
+static void epilogue(Gen *g, int rest)
+{
+    if (g->nsaved == 0) {
+        emit0(g, X86_LEAVE, X86_Q);
+        return;
+    }
+    if (rest)
+        emit2(g, X86_ADD, X86_Q, x86_imm(rest), x86_reg(X86_RSP, X86_Q));
+    for (int i = g->nsaved - 1; i >= 0; i--)
+        emit1(g, X86_POP, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
+    emit1(g, X86_POP, X86_Q, x86_reg(X86_RBP, X86_Q));
+}
+
+// Replace each epilogue marker by the frame teardown, or drop it.
+static void expand_epilogues(Gen *g, bool frame, int rest)
 {
     for (X86_Block *b = g->fn->blocks; b; b = b->next) {
-        b->tail = NULL;
         for (X86_Instr **link = &b->head; *link;) {
-            X86_Instr *in = *link;
-            if (in->op == X86_EPILOGUE && !frame) {
-                *link = in->next;
-                xfree(in);
+            X86_Instr *marker = *link;
+            if (marker->op != X86_EPILOGUE) {
+                link = &marker->next;
                 continue;
             }
-            if (in->op == X86_EPILOGUE)
-                in->op = X86_LEAVE;
-            b->tail = in;
-            link    = &in->next;
+            X86_Block seq   = { 0 };
+            X86_Block *tail = redirect(g, &seq);
+            if (frame)
+                epilogue(g, rest);
+            g->fn->tail = tail;
+            if (seq.head) {
+                seq.tail->next = marker->next;
+                *link          = seq.head;
+                link           = &seq.tail->next;
+            } else {
+                *link = marker->next;
+            }
+            xfree(marker);
         }
+        b->tail = b->head;
+        while (b->tail && b->tail->next)
+            b->tail = b->tail->next;
     }
 }
 
 // Fill the prologue and the epilogues, now that the frame is known.  A leaf function
 // that needs no stack has none; otherwise rbp is pushed, which leaves rsp 16-byte
-// aligned, and the slots and outgoing area are reserved in a multiple of 16 below it.
+// aligned, then the callee-saved registers in use, into the first slots, and the rest
+// of the slots and the outgoing area are reserved in a multiple of 16 below them.
 void gen_prologue(Gen *g)
 {
     bool frame = !is_leaf(g);
+    int rest   = (g->locals_size + g->outgoing + 15) / 16 * 16 - 8 * g->nsaved;
     if (frame) {
-        X86_Block *tail = g->fn->tail;
-        g->fn->tail     = g->prologue;
-        int size        = (g->locals_size + g->outgoing + 15) / 16 * 16;
+        X86_Block *tail = redirect(g, g->prologue);
         emit1(g, X86_PUSH, X86_Q, x86_reg(X86_RBP, X86_Q));
         emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(X86_RBP, X86_Q));
-        if (size)
-            emit2(g, X86_SUB, X86_Q, x86_imm(size), x86_reg(X86_RSP, X86_Q));
+        for (int i = 0; i < g->nsaved; i++)
+            emit1(g, X86_PUSH, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
+        if (rest)
+            emit2(g, X86_SUB, X86_Q, x86_imm(rest), x86_reg(X86_RSP, X86_Q));
         g->fn->tail = tail;
     }
-    expand_epilogues(g, frame);
+    expand_epilogues(g, frame, rest);
 }

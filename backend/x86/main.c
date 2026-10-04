@@ -6,9 +6,15 @@
 #include "codegen.h"
 #include "driver.h"
 
+static const BackendFlag flags[] = {
+    { "no-regalloc", "keep every variable in memory" },
+    { NULL, NULL },
+};
+
 static void flag(int index)
 {
-    (void)index; // no backend flags yet
+    if (index == 0)
+        x86_regalloc = false;
 }
 
 static const char *output_ext(void)
@@ -18,6 +24,6 @@ static const char *output_ext(void)
 
 int main(int argc, char *argv[])
 {
-    static const Backend x86 = { NULL, flag, output_ext, x86_codegen };
+    static const Backend x86 = { flags, flag, output_ext, x86_codegen };
     return backend_main(argc, argv, &x86);
 }

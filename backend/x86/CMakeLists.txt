@@ -10,6 +10,7 @@ add_library(x86 STATIC
     fp.c
     x87.c
     data.c
+    regalloc.c
     codegen.c
 )
 target_include_directories(x86 PUBLIC .)
@@ -40,6 +41,7 @@ add_executable(x86-tests
     test/mem_tests.cpp
     test/math_tests.cpp
     test/run_tests.cpp
+    test/regalloc_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(x86-tests x86 parser translator semantic GTest::gtest_main

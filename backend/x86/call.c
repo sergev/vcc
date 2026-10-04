@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -125,7 +126,7 @@ static const Tac_Type *piece_type(int size)
 
 // Load the eightbyte at byte `off` of the aggregate at `base` (borrowed), of class `e`
 // and `size` bytes, into `reg`, reading none past its end: a general register is put
-// together from the pieces, the highest first, through r11.
+// together from the pieces, the highest first, through r10.
 static void load_eightbyte(Gen *g, int reg, int e, X86_Operand base, int off, int size)
 {
     if (size > 8)
@@ -143,8 +144,8 @@ static void load_eightbyte(Gen *g, int reg, int e, X86_Operand base, int off, in
             continue;
         }
         emit2(g, X86_SHL, X86_Q, x86_imm(piece[i] * 8), x86_reg(reg, X86_Q));
-        load_mem(g, T2, piece_type(piece[i]), mem_at(base, off + at));
-        emit2(g, X86_OR, X86_Q, x86_reg(T2, X86_Q), x86_reg(reg, X86_Q));
+        load_mem(g, T1, piece_type(piece[i]), mem_at(base, off + at));
+        emit2(g, X86_OR, X86_Q, x86_reg(T1, X86_Q), x86_reg(reg, X86_Q));
     }
 }
 
@@ -236,25 +237,94 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     emit2(g, X86_MOV, X86_Q, x86_reg(T1, X86_Q), x86_mem(T0, 16));
 }
 
-// Each parameter gets a slot: one passed in a register is stored there at its own
-// width, which truncates; one on the stack is read where the caller put it, above the
-// return address.  A load extends by type, so a narrow argument is re-extended whatever
-// the caller left in the upper bits.
+// A move of a value of type `type` between registers of one file, as if at once with
+// the others; with `canon`, an integer arrives in the canonical form of its type (a
+// parameter: the upper bits are the caller's).
+typedef struct {
+    int dst, src;
+    const Tac_Type *type;
+    bool canon;
+} Move;
+
+static void emit_move(Gen *g, const Move *m)
+{
+    if (m->canon && !x86_is_xmm(m->dst))
+        gen_canon(g, m->dst, m->src, m->type);
+    else
+        move_reg(g, m->dst, m->src, m->type);
+}
+
+// Make all moves as if at once: a move goes when no other still reads its
+// destination; a cycle is broken through rax or xmm14.
+static void parallel_move(Gen *g, Move *m, int n)
+{
+    static const Tac_Type wide_int = { .kind = TAC_TYPE_LONG }, wide_fp = { .kind = TAC_TYPE_DOUBLE };
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            bool blocked = false;
+            for (int j = 0; j < n && !blocked; j++)
+                blocked = j != i && m[j].src == m[i].dst;
+            if (!blocked)
+                pick = i;
+        }
+        if (pick < 0) {
+            bool fp = x86_is_xmm(m[0].src);
+            int tmp = fp ? F0 : T0;
+            move_reg(g, tmp, m[0].src, fp ? &wide_fp : &wide_int);
+            m[0].src = tmp;
+            continue;
+        }
+        emit_move(g, &m[pick]);
+        m[pick] = m[--n];
+    }
+}
+
+// The argument state on entry: rdi taken by the address of a memory result.
+static ArgState entry_state(const Gen *g)
+{
+    return (ArgState){ .next_int = struct_result(ret_type(g->tl->u.function.type)) };
+}
+
+void param_hints(const Gen *g, StringMap *hints)
+{
+    ArgState s = entry_state(g);
+    for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        if (a.reg[0] >= 0 && !x86_is_aggregate(p->type))
+            map_insert(hints, p->name, a.reg[0], 0);
+    }
+}
+
+// Each parameter gets a register or a slot.  One passed in a register is moved to its
+// own, or stored to its slot at its own width, which truncates; one on the stack is
+// loaded, or read where the caller put it, above the return address.  A narrow
+// argument is extended again whatever the caller left in the upper bits.  The stores
+// come first, then the moves as if at once (an allocated register may be another
+// argument register), then the loads.
 void gen_params(Gen *g)
 {
-    ArgState s = { 0 };
+    Move moves[14];
+    int nmoves = 0;
+    ArgState s = entry_state(g);
     if (g->tl->u.function.variadic)
         save_varargs(g);
-    if (struct_result(ret_type(g->tl->u.function.type))) {
+    if (s.next_int) {
         g->ret_ptr = alloc_slot(g, NULL, NULL, 8, 8);
         emit2(g, X86_MOV, X86_Q, x86_reg(X86_RDI, X86_Q), x86_mem(X86_RBP, g->ret_ptr));
-        s.next_int = 1;
     }
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
             fatal_error("x86: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
+        int preg = assigned_reg(g, p->name);
+        if (preg) {
+            place_reg(g, p->name, t, preg);
+            if (a.reg[0] >= 0)
+                moves[nmoves++] = (Move){ preg, a.reg[0], t, true };
+            continue;
+        }
         if (a.reg[0] >= 0) {
             int off = alloc_slot(g, p->name, t, x86_size(t), x86_align(t));
             if (x86_is_aggregate(t))
@@ -268,6 +338,15 @@ void gen_params(Gen *g)
     g->va.gp       = 8 * s.next_int;
     g->va.fp       = 48 + 16 * s.next_sse;
     g->va.overflow = 16 + s.stack;
+    parallel_move(g, moves, nmoves);
+
+    s = entry_state(g);
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
+        ArgLoc a = classify(&s, p->type);
+        int preg = assigned_reg(g, p->name);
+        if (preg && a.reg[0] < 0)
+            load_mem(g, preg, p->type, x86_mem(X86_RBP, 16 + a.stack));
+    }
 }
 
 
@@ -289,6 +368,47 @@ static void load_arg(Gen *g, int reg, const Tac_Val *v, const Tac_Type *as)
         load_int_as(g, reg, v, as);
 }
 
+// One argument: its value, its type, the type it is passed as, and where it goes.
+typedef struct {
+    const Tac_Val *v;
+    const Tac_Type *type, *as;
+    ArgLoc loc;
+} Arg;
+
+// Put argument `a` on the stack, when it goes there; only the scratch registers change.
+static void arg_to_stack(Gen *g, const Arg *a)
+{
+    const Tac_Type *t = a->type;
+    X86_Operand m     = x86_mem(X86_RSP, a->loc.stack);
+    if (a->loc.reg[0] >= 0)
+        return;
+    if (x86_is_aggregate(t)) {
+        gen_memcopy(g, m, name_mem(g, a->v->u.var_name, 0), x86_size(t), x86_align(t));
+    } else if (x86_is_ld(t)) {
+        gen_ld_copy(g, a->v, m);
+    } else if (x86_is_fp(t)) {
+        int r = use_val(g, F0, a->v);
+        store_mem(g, r, t, m);
+    } else {
+        int r = var_reg(g, a->v);
+        if (!r || x86_size(a->as) != x86_size(t)) {
+            load_int_as(g, T0, a->v, a->as);
+            r = T0;
+        }
+        emit2(g, X86_MOV, X86_Q, x86_reg(r, X86_Q), m);
+    }
+}
+
+// A move for argument `a` when it is a scalar already in a register, going in one.
+static bool arg_move(const Gen *g, const Arg *a, Move *m)
+{
+    int src = var_reg(g, a->v);
+    if (!src || a->loc.reg[0] < 0 || x86_is_aggregate(a->type))
+        return false;
+    *m = (Move){ a->loc.reg[0], src, a->type, false };
+    return true;
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     if (!in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0) {
@@ -300,42 +420,52 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Type *rt = ret_type(ft);
     if (!rt && dst)
         rt = val_type(g, dst);
-    // The stack arguments first, through rax or xmm14; then the registers, straight
-    // from memory.
-    for (int pass = 0; pass < 2; pass++) {
-        const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
-        ArgState s           = { .next_int = struct_result(rt) };
-        for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
-            const Tac_Type *t  = val_type(g, v);
-            const Tac_Type *as = arg_type(t, want);
-            ArgLoc a           = classify(&s, t);
-            if (want)
-                want = want->next;
-            if (pass == 1 && a.reg[0] >= 0 && x86_is_aggregate(t)) {
-                load_aggregate(g, a.reg, a.cls, v->u.var_name, t);
-            } else if (pass == 1 && a.reg[0] >= 0) {
-                load_arg(g, a.reg[0], v, as);
-            } else if (pass == 0 && a.reg[0] < 0 && x86_is_aggregate(t)) {
-                gen_memcopy(g, x86_mem(X86_RSP, a.stack), name_mem(g, v->u.var_name, 0),
-                            x86_size(t), x86_align(t));
-            } else if (pass == 0 && x86_is_ld(t)) {
-                gen_ld_copy(g, v, x86_mem(X86_RSP, a.stack));
-            } else if (pass == 0 && a.reg[0] < 0) {
-                int r = x86_is_fp(t) ? F0 : T0;
-                load_arg(g, r, v, as);
-                if (x86_is_fp(t))
-                    store_mem(g, r, t, x86_mem(X86_RSP, a.stack));
-                else
-                    emit2(g, X86_MOV, X86_Q, x86_reg(r, X86_Q), x86_mem(X86_RSP, a.stack));
-            }
-        }
-        if (s.stack > g->outgoing)
-            g->outgoing = s.stack;
-        // A variadic or unprototyped callee is told how many xmm registers carry
-        // arguments.
-        if (pass == 1 && (!ft || ft->u.fun_type.variadic))
-            gen_li(g, X86_RAX, X86_L, s.next_sse);
+    int nargs = 0;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next)
+        nargs++;
+    Arg *args            = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
+    const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
+    ArgState s           = { .next_int = struct_result(rt) };
+    int i                = 0;
+    // The stack arguments first, through rax or xmm14; then the callee's address in
+    // r11, which nothing after uses; then the arguments already in registers, moved as
+    // if at once; then the rest loaded straight into place.
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
+        Arg *a  = &args[i];
+        a->v    = v;
+        a->type = val_type(g, v);
+        a->as   = arg_type(a->type, want);
+        a->loc  = classify(&s, a->type);
+        if (want)
+            want = want->next;
+        arg_to_stack(g, a);
     }
+    if (s.stack > g->outgoing)
+        g->outgoing = s.stack;
+    if (in->u.fun_call.indirect) {
+        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
+        load_val(g, T2, &fp);
+    }
+    Move moves[14];
+    int nmoves = 0;
+    for (i = 0; i < nargs; i++)
+        if (arg_move(g, &args[i], &moves[nmoves]))
+            nmoves++;
+    parallel_move(g, moves, nmoves);
+    for (i = 0; i < nargs; i++) {
+        const Arg *a = &args[i];
+        Move m;
+        if (a->loc.reg[0] < 0 || arg_move(g, a, &m))
+            continue;
+        if (x86_is_aggregate(a->type))
+            load_aggregate(g, a->loc.reg, a->loc.cls, a->v->u.var_name, a->type);
+        else
+            load_arg(g, a->loc.reg[0], a->v, a->as);
+    }
+    xfree(args);
+    // A variadic or unprototyped callee is told how many xmm registers carry arguments.
+    if (!ft || ft->u.fun_type.variadic)
+        gen_li(g, X86_RAX, X86_L, s.next_sse);
     // The result's address in rdi: the destination, or a slot for an unused one.
     if (struct_result(rt)) {
         X86_Operand m = dst ? name_mem(g, dst->u.var_name, 0)
@@ -343,13 +473,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
                                                           x86_align(rt)));
         emit2(g, X86_LEA, X86_Q, m, x86_reg(X86_RDI, X86_Q));
     }
-    if (in->u.fun_call.indirect) {
-        Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
-        load_val(g, T2, &fp);
+    if (in->u.fun_call.indirect)
         emit1(g, X86_CALL, X86_Q, x86_indirect(T2));
-    } else {
+    else
         emit1(g, X86_CALL, X86_Q, x86_label(in->u.fun_call.fun_name));
-    }
     // A result in st(0) must be popped even when unused.
     if (struct_result(rt))
         return;
@@ -368,6 +495,27 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     } else {
         store_val(g, x86_is_fp(t) ? X86_XMM0 : X86_RAX, dst);
     }
+}
+
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+{
+    const Tac_Type *ft = in->u.fun_call.fun_type;
+    const Tac_Type *rt = ret_type(ft);
+    ArgState s         = { .next_int = struct_result(rt) };
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
+        int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
+        const Tac_Type *t = var >= 0 ? f->types[var] : val_type(g, v);
+        if (!t)
+            return;
+        ArgLoc a = classify(&s, t);
+        if (var >= 0 && !hint[var] && a.reg[0] >= 0 && !x86_is_aggregate(t))
+            hint[var] = a.reg[0];
+    }
+    const Tac_Val *dst = in->u.fun_call.dst;
+    int var            = dst ? flow_var(f, dst->u.var_name) : -1;
+    const Tac_Type *t  = var >= 0 ? f->types[var] : NULL;
+    if (t && !hint[var] && x86_is_fp(t))
+        hint[var] = X86_XMM0;
 }
 
 // The result in rax, extended to 32 bits when narrower (clang relies on it), xmm0,

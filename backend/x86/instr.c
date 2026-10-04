@@ -48,15 +48,16 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
         return;
     }
     X86_Width w = x86_op_width(t);
-    load_val(g, T0, cond);
-    emit2(g, X86_TEST, w, x86_reg(T0, w), x86_reg(T0, w));
+    int r       = use_val(g, T0, cond);
+    emit2(g, X86_TEST, w, x86_reg(r, w), x86_reg(r, w));
     X86_Instr *j = emit1(g, X86_J, X86_Q, x86_label(l));
     j->cond      = if_zero ? X86_CC_E : X86_CC_NE;
     xfree(l);
 }
 
 // Store `src` as type `t` at memory operand `mem` (consumed): a constant straight in
-// as an immediate when it fits, a scalar variable through rax, an aggregate copied.
+// as an immediate when it fits, a scalar variable from its register or through rax, an
+// aggregate copied.
 static void store_to(Gen *g, const Tac_Val *src, const Tac_Type *t, X86_Operand mem)
 {
     X86_Width w = x86_width_of(x86_size(t));
@@ -79,14 +80,41 @@ static void store_to(Gen *g, const Tac_Val *src, const Tac_Type *t, X86_Operand 
             return;
         }
     }
-    load_int_as(g, T0, src, t);
-    store_mem(g, T0, t, mem);
+    int r = var_reg(g, src);
+    if (!r) {
+        r = T0;
+        load_int_as(g, T0, src, t);
+    }
+    store_mem(g, r, t, mem);
 }
 
-// dst = src, for any type.
+// dst = src, for any type.  Into a register, a constant is loaded straight in, and a
+// variable loaded or moved, brought to the canonical form of the destination's type
+// (copy propagation may leave a source of the other signedness).
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
-    store_to(g, src, val_type(g, dst), name_mem(g, dst->u.var_name, 0));
+    const Tac_Type *t = val_type(g, dst);
+    int d             = var_reg(g, dst);
+    if (!d) {
+        store_to(g, src, t, name_mem(g, dst->u.var_name, 0));
+        return;
+    }
+    if (x86_is_xmm(d)) {
+        load_val(g, d, src);
+        return;
+    }
+    int s = var_reg(g, src);
+    if (src->kind == TAC_VAL_CONSTANT) {
+        load_int_as(g, d, src, t);
+    } else if (s) {
+        if (val_type(g, src)->kind == t->kind)
+            move_reg(g, d, s, t);
+        else
+            gen_canon(g, d, s, t);
+    } else {
+        // The bytes of the destination's type, loaded as it says.
+        load_mem(g, d, t, name_mem(g, src->u.var_name, 0));
+    }
 }
 
 // An integer conversion: the source loaded extended as the conversion says (its own
@@ -96,31 +124,38 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
                             Tac_InstructionKind kind)
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
+    int s = var_reg(g, src), d = var_reg(g, dst);
+    if (kind == TAC_INSTRUCTION_TRUNCATE && s && d) {
+        gen_canon(g, d, s, dt); // the upper bits of the source cleared, even in place
+        return;
+    }
     if (src->kind == TAC_VAL_CONSTANT || kind == TAC_INSTRUCTION_TRUNCATE) {
         gen_copy(g, src, dst);
         return;
     }
     X86_Width w   = x86_op_width(dt);
-    X86_Operand m = name_mem(g, src->u.var_name, 0);
+    int r         = def_reg(g, T0, dst);
+    X86_Width sw  = x86_width_of(x86_size(st));
+    X86_Operand m = s ? x86_reg(s, sw) : name_mem(g, src->u.var_name, 0);
     bool sign     = kind == TAC_INSTRUCTION_SIGN_EXTEND;
     switch (x86_size(st)) {
     case 1:
-        emit2(g, sign ? X86_MOVSB : X86_MOVZB, w, m, x86_reg(T0, w));
+        emit2(g, sign ? X86_MOVSB : X86_MOVZB, w, m, x86_reg(r, w));
         break;
     case 2:
-        emit2(g, sign ? X86_MOVSW : X86_MOVZW, w, m, x86_reg(T0, w));
+        emit2(g, sign ? X86_MOVSW : X86_MOVZW, w, m, x86_reg(r, w));
         break;
     case 4:
         if (sign && w == X86_Q)
-            emit2(g, X86_MOVSL, X86_Q, m, x86_reg(T0, X86_Q));
+            emit2(g, X86_MOVSL, X86_Q, m, x86_reg(r, X86_Q));
         else
-            emit2(g, X86_MOV, X86_L, m, x86_reg(T0, X86_L)); // the upper half zero
+            emit2(g, X86_MOV, X86_L, m, x86_reg(r, X86_L)); // the upper half zero
         break;
     default:
-        load_val(g, T0, src);
+        load_val(g, r, src);
         break;
     }
-    store_val(g, T0, dst);
+    store_val(g, r, dst);
 }
 
 // Whether operator `op` is unsigned whatever its operands' types: they may differ in
@@ -166,12 +201,12 @@ static int compare_cond(Tac_BinaryOperator op, bool is_unsigned)
     }
 }
 
-// eax = 0 or 1 by condition `cond` of the flags.
-static void gen_setcc(Gen *g, int cond)
+// reg = 0 or 1 by condition `cond` of the flags.
+static void gen_setcc(Gen *g, int reg, int cond)
 {
-    X86_Instr *set = emit1(g, X86_SET, X86_B, x86_reg(T0, X86_B));
+    X86_Instr *set = emit1(g, X86_SET, X86_B, x86_reg(reg, X86_B));
     set->cond      = cond;
-    emit2(g, X86_MOVZB, X86_L, x86_reg(T0, X86_B), x86_reg(T0, X86_L));
+    emit2(g, X86_MOVZB, X86_L, x86_reg(reg, X86_B), x86_reg(reg, X86_L));
 }
 
 static void gen_unary(Gen *g, const Tac_Instruction *in)
@@ -185,9 +220,13 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_fp_unary(g, in, t);
         return;
     }
+    // In the destination's register, unless that is of another width.
     X86_Width w   = x86_op_width(t);
-    X86_Operand r = x86_reg(T0, w);
-    load_int_as(g, T0, in->u.unary.src, t);
+    int reg       = T0;
+    if (in->u.unary.op != TAC_UNARY_NOT && x86_size(val_type(g, in->u.unary.dst)) == x86_size(t))
+        reg = def_reg(g, T0, in->u.unary.dst);
+    X86_Operand r = x86_reg(reg, w);
+    load_int_as(g, reg, in->u.unary.src, t);
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED:
@@ -199,23 +238,26 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_UNARY_NOT:
         emit2(g, X86_TEST, w, r, r);
-        gen_setcc(g, X86_CC_E);
+        gen_setcc(g, T0, X86_CC_E);
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
         fatal_error("x86: %s: NEGATE_DOUBLE of an integer", gen_name(g));
     }
-    store_val(g, T0, in->u.unary.dst);
+    store_val(g, reg, in->u.unary.dst);
 }
 
 // dst = src1 / src2 or src1 % src2: the dividend in rdx:rax, sign- or zero-extended,
-// the divisor in a register or memory (never an immediate); the quotient comes back in
-// rax, the remainder in rdx.
+// the divisor in a register or memory (never an immediate, nor rdx, which the
+// extension overwrites); the quotient comes back in rax, the remainder in rdx.
 static void gen_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool is_unsigned)
 {
     X86_Width w = x86_op_width(t);
     load_int_as(g, T0, in->u.binary.src1, t);
     X86_Operand d = src_operand(g, in->u.binary.src2, t, T1);
-    if (d.kind == X86_OPND_IMM) {
+    if (d.kind == X86_OPND_REG && d.reg == X86_RDX) {
+        emit2(g, X86_MOV, w, d, x86_reg(T1, w));
+        d = x86_reg(T1, w);
+    } else if (d.kind == X86_OPND_IMM) {
         gen_li(g, T1, w, d.imm);
         d = x86_reg(T1, w);
     }
@@ -229,23 +271,82 @@ static void gen_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t, boo
     store_val(g, rem ? X86_RDX : T0, in->u.binary.dst);
 }
 
+// The register to compute binary `in` of type `t` into: the destination's own, when
+// it has the operation's width and is not `avoid`, else rax.
+static int result_reg(const Gen *g, const Tac_Instruction *in, const Tac_Type *t, int avoid)
+{
+    const Tac_Val *dst = in->u.binary.dst;
+    int d              = var_reg(g, dst);
+    if (!d || d == avoid || x86_op_width(val_type(g, dst)) != x86_op_width(t))
+        return T0;
+    return d;
+}
+
 // dst = src1 shifted by src2: by an immediate, or by %cl.  The count is used modulo
-// the width, as the hardware does (C leaves larger counts undefined).
+// the width, as the hardware does (C leaves larger counts undefined).  The value is
+// loaded first, so that it may have been in rcx.
 static void gen_shift(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool is_unsigned)
 {
     X86_Width w           = x86_op_width(t);
     Tac_BinaryOperator op = in->u.binary.op;
     X86_Op sh = op == TAC_BINARY_LEFT_SHIFT ? X86_SHL : is_unsigned ? X86_SHR : X86_SAR;
     const Tac_Val *count  = in->u.binary.src2;
-    load_int_as(g, T0, in->u.binary.src1, t);
+    int r = result_reg(g, in, t, count->kind == TAC_VAL_CONSTANT ? 0 : X86_RCX);
+    if (r != T0 && r == var_reg(g, count))
+        r = T0;
+    load_int_as(g, r, in->u.binary.src1, t);
     if (count->kind == TAC_VAL_CONSTANT) {
         emit2(g, sh, w, x86_imm(const_value(count->u.constant) & (w == X86_Q ? 63 : 31)),
-              x86_reg(T0, w));
+              x86_reg(r, w));
     } else {
         load_val(g, X86_RCX, count);
-        emit2(g, sh, w, x86_reg(X86_RCX, X86_B), x86_reg(T0, w));
+        emit2(g, sh, w, x86_reg(X86_RCX, X86_B), x86_reg(r, w));
     }
-    store_val(g, T0, in->u.binary.dst);
+    store_val(g, r, in->u.binary.dst);
+}
+
+// Whether two-operand `op` may take its operands either way round.
+static bool commutes(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_ADD:
+    case TAC_BINARY_ADD_UNSIGNED:
+    case TAC_BINARY_MULTIPLY:
+    case TAC_BINARY_MULTIPLY_UNSIGNED:
+    case TAC_BINARY_BITWISE_AND:
+    case TAC_BINARY_BITWISE_OR:
+    case TAC_BINARY_BITWISE_XOR:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool clobbers_regs(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
+                   const Tac_Val **dst)
+{
+    if (in->kind != TAC_INSTRUCTION_BINARY)
+        return false;
+    const Tac_Type *t = type_of(arg, in->u.binary.src1);
+    if (!t || x86_is_fp(t) || x86_is_ld(t))
+        return false;
+    switch (in->u.binary.op) {
+    case TAC_BINARY_DIVIDE:
+    case TAC_BINARY_DIVIDE_UNSIGNED:
+    case TAC_BINARY_REMAINDER:
+    case TAC_BINARY_REMAINDER_UNSIGNED:
+        break;
+    case TAC_BINARY_LEFT_SHIFT:
+    case TAC_BINARY_RIGHT_SHIFT:
+    case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
+        if (in->u.binary.src2->kind == TAC_VAL_CONSTANT)
+            return false;
+        break;
+    default:
+        return false;
+    }
+    *dst = in->u.binary.dst;
+    return true;
 }
 
 static void gen_binary(Gen *g, const Tac_Instruction *in)
@@ -262,7 +363,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Tac_BinaryOperator op = in->u.binary.op;
     bool is_unsigned      = t->kind == TAC_TYPE_POINTER || unsigned_op(op);
     X86_Width w           = x86_op_width(t);
-    X86_Operand r         = x86_reg(T0, w);
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     switch (op) {
     case TAC_BINARY_DIVIDE:
     case TAC_BINARY_DIVIDE_UNSIGNED:
@@ -275,32 +376,48 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
         gen_shift(g, in, t, is_unsigned);
         return;
-    case TAC_BINARY_MULTIPLY:
-    case TAC_BINARY_MULTIPLY_UNSIGNED: {
-        // An immediate factor takes the three-operand form, the other one from memory.
-        X86_Operand b = src_operand(g, in->u.binary.src2, t, T1);
-        X86_Operand a = b.kind == X86_OPND_IMM ? src_operand(g, in->u.binary.src1, t, T0) : r;
-        if (a.kind != X86_OPND_IMM && b.kind == X86_OPND_IMM) {
-            emit2(g, X86_IMUL, w, b, a)->opnd[2] = r;
-        } else {
-            load_int_as(g, T0, in->u.binary.src1, t);
-            emit2(g, X86_IMUL, w, b, r);
-        }
-        store_val(g, T0, in->u.binary.dst);
-        return;
-    }
     default:
         break;
     }
-    load_int_as(g, T0, in->u.binary.src1, t);
-    X86_Operand b = src_operand(g, in->u.binary.src2, t, T1);
-    int cond      = compare_cond(op, is_unsigned);
+    int cond = compare_cond(op, is_unsigned);
     if (cond >= 0) {
-        emit2(g, X86_CMP, w, b, r);
-        gen_setcc(g, cond);
-        store_val(g, T0, in->u.binary.dst);
+        int ra = T0;
+        if (a->kind == TAC_VAL_CONSTANT)
+            load_int_as(g, T0, a, t);
+        else
+            ra = use_val(g, T0, a);
+        emit2(g, X86_CMP, w, src_operand(g, b, t, T1), x86_reg(ra, w));
+        int d = def_reg(g, T0, in->u.binary.dst);
+        gen_setcc(g, d, cond);
+        store_val(g, d, in->u.binary.dst);
         return;
     }
+    // Two-operand form: d = a op b in the destination's register, unless that is b's
+    // (then a commuting operator swaps them, another goes through rax).
+    int bs = var_reg(g, b);
+    if (bs && bs == var_reg(g, in->u.binary.dst) && commutes(op) && bs != var_reg(g, a)) {
+        const Tac_Val *x = a;
+        a                = b;
+        b                = x;
+        bs               = var_reg(g, b);
+    }
+    int rd        = result_reg(g, in, t, bs);
+    X86_Operand r = x86_reg(rd, w);
+    if (op == TAC_BINARY_MULTIPLY || op == TAC_BINARY_MULTIPLY_UNSIGNED) {
+        // An immediate factor takes the three-operand form, the other one from memory.
+        X86_Operand bo = src_operand(g, b, t, T1);
+        X86_Operand ao = bo.kind == X86_OPND_IMM ? src_operand(g, a, t, T0) : r;
+        if (ao.kind != X86_OPND_IMM && bo.kind == X86_OPND_IMM) {
+            emit2(g, X86_IMUL, w, bo, ao)->opnd[2] = r;
+        } else {
+            load_int_as(g, rd, a, t);
+            emit2(g, X86_IMUL, w, bo, r);
+        }
+        store_val(g, rd, in->u.binary.dst);
+        return;
+    }
+    load_int_as(g, rd, a, t);
+    X86_Operand bo = src_operand(g, b, t, T1);
     X86_Op xop;
     switch (op) {
     case TAC_BINARY_ADD:
@@ -323,8 +440,8 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     default:
         fatal_error("x86: %s: floating-point operator %d on integers", gen_name(g), op);
     }
-    emit2(g, xop, w, b, r);
-    store_val(g, T0, in->u.binary.dst);
+    emit2(g, xop, w, bo, r);
+    store_val(g, rd, in->u.binary.dst);
 }
 
 // The type stored through pointer value `ptr`, or NULL when not known.
@@ -334,37 +451,36 @@ static const Tac_Type *pointee(const Gen *g, const Tac_Val *ptr)
     return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
 }
 
-// dst = *src_ptr, the pointer in r10.
+// dst = *src_ptr, the pointer in its register or r10.
 static void gen_load(Gen *g, const Tac_Val *src_ptr, const Tac_Val *dst)
 {
     const Tac_Type *t = val_type(g, dst);
-    load_val(g, T1, src_ptr);
+    int p             = use_val(g, T1, src_ptr);
     if (x86_is_aggregate(t)) {
-        gen_memcopy(g, name_mem(g, dst->u.var_name, 0), x86_mem(T1, 0), x86_size(t), x86_align(t));
+        gen_memcopy(g, name_mem(g, dst->u.var_name, 0), x86_mem(p, 0), x86_size(t), x86_align(t));
         return;
     }
     if (x86_is_ld(t)) {
         for (int i = 0; i < 2; i++) {
-            emit2(g, X86_MOV, X86_Q, x86_mem(T1, 8 * i), x86_reg(T0, X86_Q));
+            emit2(g, X86_MOV, X86_Q, x86_mem(p, 8 * i), x86_reg(T0, X86_Q));
             emit2(g, X86_MOV, X86_Q, x86_reg(T0, X86_Q), name_mem(g, dst->u.var_name, 8 * i));
         }
         return;
     }
-    int r = x86_is_fp(t) ? F0 : T0;
-    load_mem(g, r, t, x86_mem(T1, 0));
+    int r = def_reg(g, x86_is_fp(t) ? F0 : T0, dst);
+    load_mem(g, r, t, x86_mem(p, 0));
     store_val(g, r, dst);
 }
 
-// *dst_ptr = src, the pointer in r10, in the width of the pointee (or of src when that
-// is not known).
+// *dst_ptr = src, the pointer in its register or r10, in the width of the pointee (or
+// of src when that is not known).
 static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *dst_ptr)
 {
     const Tac_Type *t = pointee(g, dst_ptr);
     if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
         (x86_is_aggregate(t) && !x86_is_aggregate(val_type(g, src))))
         t = val_type(g, src);
-    load_val(g, T1, dst_ptr);
-    store_to(g, src, t, x86_mem(T1, 0));
+    store_to(g, src, t, x86_mem(use_val(g, T1, dst_ptr), 0));
 }
 
 // dst = ptr + index * scale (bytes): lea with the index scaled by 1, 2, 4 or 8, or
@@ -374,32 +490,42 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
 {
     int scale            = in->u.add_ptr.scale;
     const Tac_Val *index = in->u.add_ptr.index;
-    load_val(g, T0, in->u.add_ptr.ptr);
+    int d                = def_reg(g, T0, in->u.add_ptr.dst);
+    int p                = use_val(g, T0, in->u.add_ptr.ptr);
     if (index->kind == TAC_VAL_CONSTANT && x86_imm32(const_value(index->u.constant) * scale)) {
-        emit2(g, X86_LEA, X86_Q, x86_mem(T0, const_value(index->u.constant) * scale),
-              x86_reg(T0, X86_Q));
+        emit2(g, X86_LEA, X86_Q, x86_mem(p, const_value(index->u.constant) * scale),
+              x86_reg(d, X86_Q));
     } else {
+        // A 64-bit index straight from its register; another one extended in r10.
         const Tac_Type *it = val_type(g, index);
-        load_val(g, T1, index);
+        int x              = var_reg(g, index);
+        bool scaled        = scale == 1 || scale == 2 || scale == 4 || scale == 8;
+        if (!x || x86_size(it) <= 4 || !scaled) {
+            load_val(g, T1, index);
+            x = T1;
+        }
         if (x86_size(it) <= 4 && !x86_is_unsigned(it))
             emit2(g, X86_MOVSL, X86_Q, x86_reg(T1, X86_L), x86_reg(T1, X86_Q));
-        if (scale != 1 && scale != 2 && scale != 4 && scale != 8) {
+        if (!scaled) {
             emit2(g, X86_IMUL, X86_Q, x86_imm(scale), x86_reg(T1, X86_Q))->opnd[2] =
                 x86_reg(T1, X86_Q);
             scale = 1;
         }
-        emit2(g, X86_LEA, X86_Q, x86_mem_index(T0, T1, scale, 0), x86_reg(T0, X86_Q));
+        emit2(g, X86_LEA, X86_Q, x86_mem_index(p, x, scale, 0), x86_reg(d, X86_Q));
     }
-    store_val(g, T0, in->u.add_ptr.dst);
+    store_val(g, d, in->u.add_ptr.dst);
 }
 
 // dst = a - b, a byte count.
 static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
 {
     static const Tac_Type ptr = { .kind = TAC_TYPE_POINTER };
-    load_val(g, T0, in->u.ptr_diff.ptr_a);
-    emit2(g, X86_SUB, X86_Q, src_operand(g, in->u.ptr_diff.ptr_b, &ptr, T1), x86_reg(T0, X86_Q));
-    store_val(g, T0, in->u.ptr_diff.dst);
+    int d                     = def_reg(g, T0, in->u.ptr_diff.dst);
+    if (d == var_reg(g, in->u.ptr_diff.ptr_b))
+        d = T0;
+    load_val(g, d, in->u.ptr_diff.ptr_a);
+    emit2(g, X86_SUB, X86_Q, src_operand(g, in->u.ptr_diff.ptr_b, &ptr, T1), x86_reg(d, X86_Q));
+    store_val(g, d, in->u.ptr_diff.dst);
 }
 
 // The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
@@ -455,7 +581,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
                     x86_is_ld(t) ? 8 : x86_align(t));
         return;
     }
-    int r = x86_is_fp(t) ? F0 : T0;
+    int r = def_reg(g, x86_is_fp(t) ? F0 : T0, dst);
     load_mem(g, r, t, name_mem(g, src, offset));
     store_val(g, r, dst);
 }
@@ -463,8 +589,9 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 // dst = &src, of a named object or function: lea of its slot or symbol.
 static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
-    emit2(g, X86_LEA, X86_Q, name_mem(g, src->u.var_name, 0), x86_reg(T0, X86_Q));
-    store_val(g, T0, dst);
+    int d = def_reg(g, T0, dst);
+    emit2(g, X86_LEA, X86_Q, name_mem(g, src->u.var_name, 0), x86_reg(d, X86_Q));
+    store_val(g, d, dst);
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

@@ -245,11 +245,21 @@ void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         fld_val(g, src);
         fstp_val(g, dst);
     } else if (x86_is_ld(dt) && x86_is_fp(st)) {
-        emit1(g, x86_is_double(st) ? X86_FLDL : X86_FLDS, X86_Q, fp_operand(g, src));
+        // The x87 loads from memory only: a register goes through the scratch slot.
+        X86_Operand m = fp_operand(g, src);
+        if (m.kind == X86_OPND_REG) {
+            store_mem(g, m.reg, st, x86_mem(X86_RBP, x87_tmp(g)));
+            m = x86_mem(X86_RBP, x87_tmp(g));
+        }
+        emit1(g, x86_is_double(st) ? X86_FLDL : X86_FLDS, X86_Q, m);
         fstp_val(g, dst);
     } else if (x86_is_ld(st) && x86_is_fp(dt)) {
         fld_val(g, src);
-        emit1(g, x86_is_double(dt) ? X86_FSTPL : X86_FSTPS, X86_Q, name_mem(g, dst->u.var_name, 0));
+        int r         = var_reg(g, dst);
+        X86_Operand m = r ? x86_mem(X86_RBP, x87_tmp(g)) : name_mem(g, dst->u.var_name, 0);
+        emit1(g, x86_is_double(dt) ? X86_FSTPL : X86_FSTPS, X86_Q, m);
+        if (r)
+            load_mem(g, r, dt, x86_mem(X86_RBP, x87_tmp(g)));
     } else if (x86_is_ld(dt)) {
         bool u = kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
         int tmp = x87_tmp(g);

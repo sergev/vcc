@@ -133,6 +133,8 @@ enum { X86_PLAIN, X86_SUFFIX, X86_CONDITION };
     X(MOVD, "movd", X86_PLAIN)                                                             \
     X(MOVSS, "movss", X86_PLAIN)                                                           \
     X(MOVSD, "movsd", X86_PLAIN)                                                           \
+    X(MOVAPS, "movaps", X86_PLAIN)                                                         \
+    X(MOVUPS, "movups", X86_PLAIN)                                                         \
     X(ADDSS, "addss", X86_PLAIN)                                                           \
     X(ADDSD, "addsd", X86_PLAIN)                                                           \
     X(SUBSS, "subss", X86_PLAIN)                                                           \

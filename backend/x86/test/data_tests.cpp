@@ -43,6 +43,7 @@ TEST_F(X86Test, LongDoubleData)
 // A global is read and written as sym(%rip).
 TEST_F(X86Test, GlobalAccess)
 {
+    NaiveSelection();
     std::string code = Code(CompileToX86("int g; int f(void) { g = g + 1; return g; }"));
     EXPECT_NE(std::string::npos, code.find("movl g(%rip), %eax\naddl $1, %eax\n")) << code;
     EXPECT_NE(std::string::npos, code.find("movl %eax, g(%rip)\n")) << code;

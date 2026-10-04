@@ -20,6 +20,7 @@ ret
 // The seventh and eighth arguments go in the outgoing area at the bottom of the frame.
 TEST_F(X86Test, StackArguments)
 {
+    NaiveSelection();
     std::string code = Code(CompileToX86(R"(
 long g(long a, long b, long c, long d, long e, long k, long x, long y);
 long f(void) { return g(1, 2, 3, 4, 5, 6, 7, 8); }
@@ -51,14 +52,18 @@ TEST_F(X86Test, VariadicCallSetsAl)
 
 TEST_F(X86Test, FunctionAddress)
 {
+    NaiveSelection();
     std::string code = Code(CompileToX86("int g(void); void *f(void) { return (void *)g; }"));
     EXPECT_NE(std::string::npos, code.find("leaq g(%rip), %rax\nmovq %rax, -8(%rbp)\n")) << code;
 }
 
+// The callee's address goes in r11 first, before the arguments take their registers
+// (one of which may hold it).
 TEST_F(X86Test, IndirectCall)
 {
+    NaiveSelection();
     std::string code = Code(CompileToX86("int f(int (*p)(int)) { return p(3); }"));
-    EXPECT_NE(std::string::npos, code.find("movl $3, %edi\nmovq -8(%rbp), %r11\ncall *%r11\n"))
+    EXPECT_NE(std::string::npos, code.find("movq -8(%rbp), %r11\nmovl $3, %edi\ncall *%r11\n"))
         << code;
 }
 

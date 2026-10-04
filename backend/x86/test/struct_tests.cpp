@@ -9,6 +9,7 @@
 #define EXPECT_HAS(name, expected, src)                                    \
     TEST_F(X86Test, name)                                                  \
     {                                                                      \
+        NaiveSelection();                                                  \
         std::string code = Code(CompileToX86(src));                        \
         EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
     }
@@ -73,8 +74,8 @@ EXPECT_HAS(RegisterArguments, R"(movsd -16(%rbp), %xmm0
 movq -8(%rbp), %rdi
 movzbl -17(%rbp), %esi
 shlq $16, %rsi
-movzwl -19(%rbp), %r11d
-orq %r11, %rsi
+movzwl -19(%rbp), %r10d
+orq %r10, %rsi
 movsd -32(%rbp), %xmm1
 movss -24(%rbp), %xmm2
 call g
@@ -142,11 +143,13 @@ call g
            "struct s { long a, b; int c; }; int g(int n, struct s x);"
            "int f(void) { struct s x = { 1, 2, 3 }; return g(1, x); }")
 
-// Past 64 bytes a loop of quadwords, then the rest.
-EXPECT_HAS(CopyLoop, "leaq (%rsp), %rax\nleaq -84(%rbp), %r10\nmovl $9, %ecx\n"
-                     "movq (%r10), %r11\nmovq %r11, (%rax)\naddq $8, %r10\naddq $8, %rax\n"
-                     "subq $1, %rcx\njne .Lx0\nmovl (%r10), %r11d\nmovl %r11d, (%rax)\n"
-                     "call g\n",
+// Past 64 bytes a loop of 16 bytes through xmm15, counting in r11 (no allocated
+// register changes), then the rest.
+EXPECT_HAS(CopyLoop, "leaq (%rsp), %rax\nleaq -84(%rbp), %r10\nmovl $4, %r11d\n"
+                     "movups (%r10), %xmm15\nmovups %xmm15, (%rax)\naddq $16, %r10\n"
+                     "addq $16, %rax\nsubl $1, %r11d\njne .Lx0\nmovl (%r10), %r11d\n"
+                     "movl %r11d, (%rax)\nmovl 4(%r10), %r11d\nmovl %r11d, 4(%rax)\n"
+                     "movl 8(%r10), %r11d\nmovl %r11d, 8(%rax)\ncall g\n",
            "struct s { int a[19]; }; int g(struct s x); int f(struct s *p) { return g(*p); }")
 
 // A member is a load or store at its offset in the slot.

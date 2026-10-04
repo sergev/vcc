@@ -39,6 +39,8 @@ static uint64_t fp_bits(const Tac_Const *c, const Tac_Type *t)
 
 X86_Operand fp_operand(Gen *g, const Tac_Val *v)
 {
+    if (var_reg(g, v))
+        return x86_xmm(var_reg(g, v));
     if (v->kind != TAC_VAL_CONSTANT)
         return name_mem(g, v->u.var_name, 0);
     const Tac_Type *t = val_type(g, v);
@@ -55,6 +57,9 @@ void gen_fp_copy(Gen *g, const Tac_Val *src, X86_Operand dst, const Tac_Type *t)
             return;
         }
         gen_li(g, T0, X86_Q, (int64_t)bits);
+    } else if (var_reg(g, src)) {
+        store_mem(g, var_reg(g, src), t, dst);
+        return;
     } else {
         emit2(g, X86_MOV, w, name_mem(g, src->u.var_name, 0), x86_reg(T0, w));
     }
@@ -76,9 +81,9 @@ static void gen_fp_equal(Gen *g, bool ne)
 static void compare_zero(Gen *g, const Tac_Val *v, const Tac_Type *t)
 {
     X86_Op ucomis = x86_is_double(t) ? X86_UCOMISD : X86_UCOMISS;
-    load_val(g, F0, v);
+    int r         = use_val(g, F0, v);
     emit2(g, X86_XORPS, X86_Q, x86_xmm(F1), x86_xmm(F1));
-    emit2(g, ucomis, X86_Q, x86_xmm(F1), x86_xmm(F0));
+    emit2(g, ucomis, X86_Q, x86_xmm(F1), x86_xmm(r));
 }
 
 void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
@@ -94,9 +99,10 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         fatal_error("x86: %s: bad floating-point unary operator", gen_name(g));
     // The sign bit flipped by xorps with a mask, 16 bytes in memory as xorps reads them.
     uint64_t sign = x86_is_double(t) ? (uint64_t)1 << 63 : (uint64_t)1 << 31;
-    load_val(g, F0, in->u.unary.src);
-    emit2(g, X86_XORPS, X86_Q, const_mem(g, sign, 0, 16), x86_xmm(F0));
-    store_val(g, F0, dst);
+    int r         = def_reg(g, F0, dst);
+    load_val(g, r, in->u.unary.src);
+    emit2(g, X86_XORPS, X86_Q, const_mem(g, sign, 0, 16), x86_xmm(r));
+    store_val(g, r, dst);
 }
 
 // The condition of an FP comparison and whether its operands are swapped, or -1.
@@ -140,8 +146,8 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
             a                = b;
             b                = x;
         }
-        load_val(g, F0, a);
-        emit2(g, d ? X86_UCOMISD : X86_UCOMISS, X86_Q, fp_operand(g, b), x86_xmm(F0));
+        int ra = use_val(g, F0, a);
+        emit2(g, d ? X86_UCOMISD : X86_UCOMISS, X86_Q, fp_operand(g, b), x86_xmm(ra));
         if (cond == X86_CC_E || cond == X86_CC_NE) {
             gen_fp_equal(g, cond == X86_CC_NE);
         } else {
@@ -173,9 +179,21 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     default:
         fatal_error("x86: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
-    load_val(g, F0, a);
-    emit2(g, op, X86_Q, fp_operand(g, b), x86_xmm(F0));
-    store_val(g, F0, dst);
+    // Two-operand form, as for integers: in the destination's register unless that is
+    // b's, when an add or multiply swaps the operands and the others go through xmm14.
+    int bs = var_reg(g, b), rd = var_reg(g, dst);
+    if (bs && bs == rd && bs != var_reg(g, a) && (op == X86_ADDSD || op == X86_ADDSS ||
+                                                  op == X86_MULSD || op == X86_MULSS)) {
+        const Tac_Val *x = a;
+        a                = b;
+        b                = x;
+        bs               = var_reg(g, b);
+    }
+    if (!rd || rd == bs)
+        rd = F0;
+    load_val(g, rd, a);
+    emit2(g, op, X86_Q, fp_operand(g, b), x86_xmm(rd));
+    store_val(g, rd, dst);
 }
 
 static X86_Instr *jcc(Gen *g, int cond, const char *label)
@@ -259,37 +277,48 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
     bool sfp = x86_is_fp(st), dfp = x86_is_fp(dt);
     if (sfp && dfp) {
         X86_Op cvt = x86_is_double(dt) ? X86_CVTSS2SD : X86_CVTSD2SS;
+        int r      = def_reg(g, F0, dst);
         if (x86_is_double(dt) == x86_is_double(st)) {
-            load_val(g, F0, src);
+            load_val(g, r, src);
         } else if (src->kind == TAC_VAL_CONSTANT) {
             load_val(g, F1, src);
-            emit2(g, cvt, X86_Q, x86_xmm(F1), x86_xmm(F0));
+            emit2(g, cvt, X86_Q, x86_xmm(F1), x86_xmm(r));
         } else {
-            emit2(g, cvt, X86_Q, name_mem(g, src->u.var_name, 0), x86_xmm(F0));
+            emit2(g, cvt, X86_Q, fp_operand(g, src), x86_xmm(r));
         }
-        store_val(g, F0, dst);
+        store_val(g, r, dst);
         return;
     }
     if (dfp) {
+        // A register holds an unsigned int zero-extended to 64 bits, a narrower type
+        // extended to 32, as a 32-bit load leaves them.
         bool d = x86_is_double(dt);
         bool u = kind == TAC_INSTRUCTION_UINT_TO_DOUBLE || kind == TAC_INSTRUCTION_UINT_TO_FLOAT;
         int size = x86_size(st);
-        load_val(g, T0, src); // a 32-bit load zero-extends to 64
-        if (u && size == 8)
+        if (u && size == 8) {
+            load_val(g, T0, src);
             gen_u64_to_fp(g, d);
-        else
-            emit2(g, d ? X86_CVTSI2SD : X86_CVTSI2SS, u || size == 8 ? X86_Q : X86_L,
-                  x86_reg(T0, u || size == 8 ? X86_Q : X86_L), x86_xmm(F0));
-        store_val(g, F0, dst);
+            store_val(g, F0, dst);
+            return;
+        }
+        int s       = use_val(g, T0, src);
+        int r       = def_reg(g, F0, dst);
+        X86_Width w = u || size == 8 ? X86_Q : X86_L;
+        emit2(g, d ? X86_CVTSI2SD : X86_CVTSI2SS, w, x86_reg(s, w), x86_xmm(r));
+        store_val(g, r, dst);
         return;
     }
     bool d   = x86_is_double(st);
     int size = x86_size(dt);
-    load_val(g, F0, src);
-    if (x86_is_unsigned(dt) && size == 8)
+    if (x86_is_unsigned(dt) && size == 8) {
+        load_val(g, F0, src); // changed in place
         gen_fp_to_u64(g, d);
-    else
-        emit2(g, d ? X86_CVTTSD2SI : X86_CVTTSS2SI, X86_Q, x86_xmm(F0),
-              x86_reg(T0, x86_is_unsigned(dt) && size == 4 ? X86_Q : x86_op_width(dt)));
-    store_val(g, T0, dst);
+        store_val(g, T0, dst);
+        return;
+    }
+    int s = use_val(g, F0, src);
+    int r = def_reg(g, T0, dst);
+    emit2(g, d ? X86_CVTTSD2SI : X86_CVTTSS2SI, X86_Q, x86_xmm(s),
+          x86_reg(r, x86_is_unsigned(dt) && size == 4 ? X86_Q : x86_op_width(dt)));
+    store_val(g, r, dst);
 }

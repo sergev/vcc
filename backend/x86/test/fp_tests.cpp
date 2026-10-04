@@ -7,6 +7,7 @@
 #define EXPECT_HAS(name, expected, src)                                    \
     TEST_F(X86Test, name)                                                  \
     {                                                                      \
+        NaiveSelection();                                                  \
         std::string code = Code(CompileToX86(src));                        \
         EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
     }
@@ -32,6 +33,7 @@ EXPECT_HAS(MultiplyFloats, "movss -4(%rbp), %xmm14\nmulss -8(%rbp), %xmm14\n",
 // A constant operand comes from .rodata.
 TEST_F(X86Test, ConstantOperand)
 {
+    NaiveSelection();
     std::string s = CompileToX86("double f(double a) { return a / 3.0; }");
     EXPECT_NE(std::string::npos, Code(s).find("divsd .LC0(%rip), %xmm14\n")) << s;
     EXPECT_NE(std::string::npos,
@@ -42,6 +44,7 @@ TEST_F(X86Test, ConstantOperand)
 // Negation flips the sign bit with a 16-byte mask, as xorps reads it.
 TEST_F(X86Test, NegateFloat)
 {
+    NaiveSelection();
     std::string s = CompileToX86("float f(float a) { return -a; }");
     EXPECT_NE(std::string::npos, Code(s).find("xorps .LC0(%rip), %xmm14\n")) << s;
     EXPECT_NE(std::string::npos,

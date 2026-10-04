@@ -8,6 +8,7 @@
 #define EXPECT_HAS(name, expected, src)                                         \
     TEST_F(X86Test, name)                                                    \
     {                                                                           \
+        NaiveSelection();                                                       \
         std::string code = Code(CompileToX86(src));                             \
         EXPECT_NE(std::string::npos, code.find(expected)) << code;              \
     }
