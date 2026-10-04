@@ -165,7 +165,7 @@ One selection helper owns that rule.
 
   `cc-tests` cases, including a staged prefix. The output is an ELF. Intel HEX for
   flashing (`llvm-objcopy -O ihex`) is documented, not run.
-- **M26. Install.** `genavr` as `vgenavr`; `crt0.o`, `libc.a`, `link.ld` and the
+- **M26. Install.** *Done.* `genavr` as `vgenavr`; `crt0.o`, `libc.a`, `link.ld` and the
   headers under `share/vcc/avr/`; the runtime only when the AVR clang and `llvm-ar` were
   found.
 - **M27. Documentation.**

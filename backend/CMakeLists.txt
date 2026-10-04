@@ -64,3 +64,5 @@ add_executable(genavr
     avr/main.c
 )
 target_link_libraries(genavr avr backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genavr> DESTINATION bin RENAME vgenavr)

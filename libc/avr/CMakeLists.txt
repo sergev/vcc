@@ -44,6 +44,11 @@ add_test(
             ${AVR_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, AVR's own and the shared ones, go into one directory.
+file(GLOB AVR_TARGET_HEADERS ${AVR_INCLUDE_DIR}/*.h)
+file(GLOB AVR_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${AVR_TARGET_HEADERS} ${AVR_COMMON_HEADERS} DESTINATION share/vcc/avr/include)
+
 if(NOT AVR_TOOLS_FOUND)
     message(STATUS "No AVR clang/llvm-ar/ld.lld: the AVR runtime is not built")
     return()
@@ -107,3 +112,5 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${AVR_LIBC_OBJS})
 add_custom_target(avr-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/avr/lib)
