@@ -123,7 +123,7 @@ Phase 0 is done:
 - `cpp -t x86_64` predefines clang's architecture macros for the triple (no
   `__CHAR_UNSIGNED__`).
 - The `x86_64` descriptor leaves every struct result to the backend
-  (`struct_return_max = SIZE_MAX`) and has no `va_class` yet (X17 supplies one).
+  (`struct_return_max = SIZE_MAX`); X17 gave it its `va_class`.
 - **`long double` is the x87 format in the frontend.** The descriptor's
   `ldouble_mant_dig = 64` makes both constant folders round every `long double` operand
   and result to a 64-bit significand (`target_ld_round`, over `f128_round` in
@@ -161,8 +161,7 @@ Phase 1 is done:
 - **The tests are in `x86-tests`.** `x86_test.h` on `QemuTest` provides
   `CompileToX86`, which also assembles every output with GNU `as` when installed, and
   `CompileAndRunX86`/`CompileAndRunBook`/`RunAssembly`/`ClangRunBook`, with the status
-  from debugcon. The book suite runs chapter 1, compared with clang. Until X21 the
-  test programs use the riscv64 and LP64 headers.
+  from debugcon. The book suite runs chapter 1, compared with clang.
 
 Phase 2 is done:
 - **Naive selection.** Every TAC variable has a slot below `rbp`, any other name is
@@ -187,86 +186,60 @@ Phase 2 is done:
   truncating `fistpq` under a switched control word; unsigned 64-bit with a 2^64 or 2^63
   correction; arguments in 16-byte aligned stack slots, results in `st(0)`. Checked
   against clang both ways.
-- **Structs** for now go whole on the stack, and every struct result through the
-  address in `rdi`, returned in `rax`. Copies move pieces through `r11`, in a loop
-  (`rax`, `r10`, `rcx`) past 64 bytes.
+- **Structs** went whole on the stack, and every struct result through the address in
+  `rdi`, until X17. Copies move pieces through `r11`, in a loop (`rax`, `r10`, `rcx`)
+  past 64 bytes.
 - **Static data** with the x87 `long double` as `.quad` + `.short` + `.zero 6`; `name$N`
   static locals are legal symbols for both assemblers.
-- **`libc.a`** holds the C library compiled by `genx86`, but not the `printf` family,
-  which waits for `<stdarg.h>` (X18).
+- **`libc.a`** holds the C library compiled by `genx86`; the `printf` family joined it
+  in X18.
 - **Tests.** The whole book suite runs, compared with clang. Three programs are skipped
   because they assume an unsigned plain `char` (clang gives what we give). There are
   goldens and run tests per step, and interop with clang for integer, FP and
   `long double` arguments.
 
-## Phase 3 — ABI conformance
-
-- **X17. Full aggregate classification.** One function, `tac_sysv64_class`, goes in
-  `tac/tac_abi.c` beside `tac_aapcs64_class` and `tac_aapcs32_class`.
-  - It classifies each eightbyte by the psABI merge rules into INTEGER, SSE, X87/X87UP or
-    MEMORY, and returns a code the backend and `__builtin_va_class` (now the descriptor's
-    `va_class`) share.
-  - It drives:
-    - two-eightbyte structs in up to two registers of either class, mixed included;
-    - the all-or-nothing rule, under which a struct that does not fit goes wholly on the
-      stack and later arguments still take registers;
-    - MEMORY structs copied into the outgoing argument area;
-    - `long double` arguments on the stack, 16-aligned.
-  - Results: `rax`/`rdx`, `xmm0`/`xmm1`, or mixed in eightbyte order. MEMORY results go
-    through `rdi` and come back in `rax`, as every struct result does now. A
-    `long double` is returned in `st(0)`, as now.
-- **X18. Variadic functions and `<stdarg.h>`.**
-  - **Calls.** Set `%al` and pass every argument by the ordinary rules: unlike ARM32,
-    SysV variadics change nothing but `%al`.
-  - **The variadic function's prologue** stores `rdi`–`r9` into the register save area,
-    and `xmm0`–`xmm7` behind `test %al, %al; je`.
-  - **`va_list`.** `typedef struct __va_list_tag {…} va_list[1];`, clang's type, so a
-    `va_list` handed to clang's `vprintf` (or from it) is the pointer both sides expect.
-    The macros therefore take `ap`, not `&ap` as on AArch64. `va_copy(d, s)` is
-    `*(d) = *(s)`.
-  - **`va_start(ap, last)`** is `__va_start(ap)`, intercepted by the backend as
-    AArch64's `gen_va_start`. It sets `gp_offset` = 8 × named GP registers, `fp_offset` =
-    48 + 16 × named SSE registers, `overflow_arg_area` = the first unnamed stack
-    argument, and `reg_save_area`.
-  - **`va_arg`** goes through the runtime `__va_arg(ap, size, align, cls, tmp)`, with
-    `cls` from X17. A struct mixing INTEGER and SSE eightbytes is assembled in `tmp` from
-    both halves of the save area. MEMORY and `long double` come from the overflow area,
-    `long double` 16-aligned.
-  - `printf`, `sprintf` and `snprintf` join `libc.a`, with `doprnt`.
-  - Audit the frontend for the array-typed `va_list`: a parameter of that type adjusts
-    to a pointer, and `va_list` inside a struct stays an array. No earlier target had an
-    array-typed `va_list`.
-- **X19. Interop tests** with clang in both directions, over a table of signatures, built
-  before the code they test:
-  - more than six integer and more than eight FP arguments, interleaved;
-  - the all-or-nothing rule (a two-eightbyte struct after five integer arguments);
-  - `{long, double}`, `{double, long}`, `{float, float, int}`, `{char[3]}`, 16- and
-    17-byte structs, a struct holding a `long double`;
-  - `long double` arguments and results;
-  - narrow ints in both directions;
-  - results in `rax`:`rdx`, `xmm0`:`xmm1` and mixed;
-  - variadics both ways, with `double`, `long double` and structs through `va_arg`;
-  - a `va_list` handed across.
-- **X20. Differential book tests.** Every book program compiled by clang too, run under
-  qemu, and the outputs compared — the comparison the other LLVM-toolchain suites make.
+Phase 3 is done:
+- **Classification.** `tac_sysv64_class` (`tac/tac_abi.c`) classes each eightbyte by the
+  psABI merge rules and returns MEMORY 0, X87 3 (a `long double`, or a struct of one), or
+  the INTEGER (1) / SSE (2) class of each eightbyte as `class0 | class1 << 2`. It is the
+  `x86_64` descriptor's `va_class`, so `__builtin_va_class` and `call.c` share it.
+- **Structs** of up to 16 bytes go in registers by eightbyte, mixed included, all or
+  nothing; the rest are copied onto the stack. An odd-sized eightbyte is put together from
+  pieces through `r11`, reading and writing nothing past the struct's end. Results come
+  back in `rax`/`rdx` and `xmm0`/`xmm1` in eightbyte order, in `st(0)` for X87, or through
+  the address in `rdi`.
+- **Variadics.** A variadic function saves `rdi`–`r9`, and `xmm0`–`xmm7` behind
+  `testb %al, %al; je`, into a 176-byte save area; `__va_start(ap)` is expanded in place.
+  `__va_arg` (`libc/x86/va_arg.c`) takes the class from X17 and puts a two-eightbyte
+  value from registers together in `tmp`. `va_list` is clang's array type; the frontend
+  needed no change (a parameter adjusts to a pointer, a struct member stays an array, a
+  copy of the struct copies it).
+- **Headers.** `libc/x86/include/` holds `stdarg.h`, plus `stddef.h` and `stdint.h`
+  from riscv64 (`wchar_t` is `int` on both); the tests and the `libc.a` build search it
+  first, then the LP64 and common headers. `libc.a` now has the `printf` family,
+  `doprnt` and `va_arg`, but not the binary128 runtime.
+- **Tests.** Goldens and run tests per step; three interop tables with clang both ways
+  (scalars, structs of every class with the all-or-nothing rule in both register
+  files, variadics with a `va_list` handed across), each checked against a deliberate
+  mutation. The book suite has compared every program with clang since Phase 1; the three
+  programs it skips now run as signed-char versions (`book_x86_tests.cpp`), also
+  compared with clang.
 
 ## Phase 4 — library and headers
 
-- **X21. Headers.** `libc/x86/include/`:
+- **X21. Headers.** `libc/x86/include/` has `stdarg.h`, `stddef.h` and `stdint.h`
+  (X18). It still needs:
   - `float.h`, with `LDBL_*` of the x87 format: `LDBL_MANT_DIG` 64, `LDBL_MAX_EXP` 16384,
     `LDBL_EPSILON` 2^-63, and so on;
   - `limits.h` with a signed `CHAR_MIN`/`CHAR_MAX`. `libc/lp64/include/limits.h`
     hard-codes an unsigned `char`, and `__CHAR_UNSIGNED__` cannot select between the two
     under the system preprocessor the build uses;
-  - `stddef.h` and `stdint.h` (`wchar_t` is `int`; compare with riscv64's, which may be
-    shareable);
   - `setjmp.h` (`rbx`, `rbp`, `r12`–`r15`, `rsp`, the return address, plus `MXCSR` and
-    the x87 control word);
-  - X18's `stdarg.h`.
+    the x87 control word), with its `setjmp`/`longjmp` in `libc.a`;
+  - a `README.md`.
 
   `inttypes.h` and `math.h` come from `libc/lp64/include/`, the rest from
-  `libc/common/include/`. The tests and the `libc.a` build switch from the riscv64
-  headers to these. Add an `x86_64-headers` CTest and its `-cpp` twin. Check our
+  `libc/common/include/`. Add an `x86_64-headers` CTest and its `-cpp` twin. Check our
   headers' type sizes and limits against clang's own for the triple, as ARM32 did.
 - **X22. Libc run tests.** Port the AArch64 `printf_tests`/`str_tests`/`mem_tests`/
   `math_tests`, with host libc output as the expectation. `printf("%Lf")` exercises the
@@ -324,7 +297,7 @@ Phase 2 is done:
   - `vcpp -t x86_64`, `vparse`, `vlower -t x86_64`, `vgenx86`;
   - `clang --target=x86_64-none-elf -c`;
   - `ld.lld -T link.ld crt0.o … -lc`.
-
+  
   `cc-tests` cases, including a staged prefix.
 - **X27. Install.** `genx86` as `vgenx86`; `crt0.o`, `libc.a`, `link.ld` and the
   headers (`libc/x86`, `libc/lp64`, `libc/common`) under `share/vcc/x86_64/`; the
@@ -366,7 +339,7 @@ Phase 2 is done:
   empty after `main`.
 - **SysV classification edge cases:** all-or-nothing, mixed eightbytes, MEMORY by value
   on the stack, `long double` in a struct, the returned address in `rax`. Mitigation:
-  X19's table, written before the code it tests.
+  X19's table with clang, and X17's interop test.
 - **No callee-saved `xmm`.** FP-heavy code with calls spills around every call. That is
   the ABI, and clang pays it too; accept it, and keep the regalloc test from X23.
 - **Signed plain `char`** is new among our byte-addressed targets, and libc sources or

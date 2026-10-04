@@ -269,8 +269,11 @@ _Static_assert(__builtin_va_class(struct { long a, b, c; }) == 1, "by reference"
 
 TEST_F(TypecheckTest, VaClassNeedsTarget)
 {
+    const Target *saved = target_config;
+    target_config       = target_lookup("riscv64");
     ParseProgram("int c = __builtin_va_class(int);");
     EXPECT_DEATH(typecheck_program(program), "__builtin_va_class is not supported");
+    target_config = saved;
 }
 
 TEST_F(TypecheckTest, StaticInitShortArray)

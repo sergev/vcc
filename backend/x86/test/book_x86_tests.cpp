@@ -52,8 +52,7 @@ TEST_F(BookTest, Chapter18_ClassifyParamsSignedChar)
 /* Test that we classify structure parameters correctly,
  * by passing a variety of structures as arguments.
  * Each test function takes only one argument.
- * */
-
+ */
 int strcmp(char *s1, char *s2);
 
 // from Listing 18-39
@@ -119,12 +118,11 @@ int t_2ints(struct two_ints s);
 int t_ndbl(struct nested_double s);
 int t_2eb(struct two_eightbytes s);
 int test_pass_in_memory(struct pass_in_memory s);
+
 /* Test that we classify structure parameters correctly,
  * by passing a variety of structures as arguments.
  * Each test function takes only one argument.
- * */
-
-
+ */
 int main(void) {
     struct twelve_bytes s1 = {0, "LMNOPQR"};
     if (!test_twelve_bytes(s1)) {
@@ -168,12 +166,11 @@ int main(void) {
 
     return 0; // success
 }
+
 /* Test that we classify structure parameters correctly,
  * by passing a variety of structures as arguments.
  * Each test function takes only one argument.
- * */
-
-
+ */
 int test_twelve_bytes(struct twelve_bytes s) {
     if (s.i != 0 || strcmp(s.arr, "LMNOPQR")) {
         return 0;
@@ -265,9 +262,8 @@ int vsimp(union simple *ptr);
 int vsimpcv(union simple *ptr);
 int vnest(union nested *ptr);
 int vnestp(union nested *ptr);
+
 // Test initialization of unions with automatic storage duration
-
-
 
 int tsimp(void) {
     // initialize simple union w/ only scalar members
@@ -281,7 +277,6 @@ int tsimpcv(void) {
     union simple x = { 4294967296UL };
     return vsimpcv(&x);
 }
-
 
 int tnest(void) {
     // initalize nested union where first member is a structure
@@ -314,8 +309,8 @@ int main(void) {
 
     return 0;
 }
-// Test initialization of unions with both automatic and static storage duration
 
+// Test initialization of unions with both automatic and static storage duration
 
 int vsimp(union simple* ptr) {
     return (ptr->d == 123.45);
@@ -338,6 +333,7 @@ int vnest(union nested* ptr) {
 
     return 1; // success
 }
+    
 int vnestp(union nested* ptr) {
     if (ptr->str.l != 900037203685l) {
         return 0; // fail
