@@ -291,6 +291,22 @@ One per-opcode table, transcribed from that reference, serves selection and peep
     - Name the shared fixture for what it now is (e.g. `SimTest`) only if that stays a
       mechanical rename. The other backends' tests are unchanged.
 
+  *Done*, more simply than planned:
+  - `QemuConfig` gains three things, with defaults that leave the other backends
+    unchanged:
+    - `link_flags`;
+    - an empty `image_option`, meaning the image is a plain argument;
+    - `exit_report`, which fails a run whose log lacks mspsim's `[Exit code N …]`
+      line.
+
+    `Run` was not split, and the fixture keeps its name.
+  - The cycle limit goes in the backend's runner command (T7).
+  - Checked by hand: a cycle-limit stop exits 124 with `[Cycle limit reached at …]` on
+    stderr, and a program stop exits with its value and `[Exit code 200 after …]`.
+  - The mspsim path of the fixture first runs in T5's runtime tests, which include a
+    cycle-limit case.
+  - The `msp430-headers` CTests are in `libc/msp430/CMakeLists.txt` now, not at T19.
+
 ## Phase 1 — skeleton
 
 - **T5. Runtime, hand-written part.** `libc/msp430/`:

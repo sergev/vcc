@@ -1,7 +1,8 @@
 // Fixture for a backend whose programs run on bare-metal qemu: assemble our output and
 // compile any clang part, link with ld.lld against the target's crt0 and libc.a, run
 // qemu under a timeout, and return the UART output with main's result (the qemu exit
-// status) in exit_status.  A backend fixture derives from it with a QemuConfig.
+// status) in exit_status.  A backend fixture derives from it with a QemuConfig.  The
+// runner need not be qemu: MSP430 runs on the mspsim simulator, through the same steps.
 #pragma once
 
 #include <fstream>
@@ -26,12 +27,20 @@ struct QemuConfig {
     // sends to a file of its own.  qemu's x86 exit device cannot carry a whole byte.
     bool status_from_debugcon = false;
     // The option that loads the image: -kernel, or -bios on AVR, where -kernel loads
-    // nothing.
+    // nothing; empty when the image is a plain argument (mspsim).
     const char *image_option = "-kernel";
     // Main's result is the first byte on a second serial port (USART1 on AVR), which the
     // run sends to a file of its own.  Nothing on qemu's AVR machine makes it exit, so
     // the run ends when that byte arrives.
     bool status_from_serial = false;
+    // More linker options, before the objects: -n on MSP430, so that ld.lld loads no
+    // ELF header into the peripheral area at address 0.
+    std::vector<std::string> link_flags = {};
+    // The runner's exit status is main's result only when its log has the
+    // "[Exit code N after M cycles]" line, mspsim's report of a program that stopped
+    // itself; any other stop (the cycle limit, an illegal instruction, a CPU asleep for
+    // good) has a status of its own, which a result could collide with, and fails the run.
+    bool exit_report = false;
 };
 
 class QemuTest : public BackendTest {
@@ -108,8 +117,9 @@ protected:
             objs.push_back(co_path);
         }
         std::string lib               = config.lib_dir;
-        std::vector<std::string> link = { config.ld, "-T",     config.link_script,
-                                          "-o",      exe_path, lib + "/" + crt0 };
+        std::vector<std::string> link = { config.ld };
+        link.insert(link.end(), config.link_flags.begin(), config.link_flags.end());
+        link.insert(link.end(), { "-T", config.link_script, "-o", exe_path, lib + "/" + crt0 });
         link.insert(link.end(), objs.begin(), objs.end());
         link.push_back(lib + "/libc.a");
         rc = RunTool(link, log_path);
@@ -123,7 +133,9 @@ protected:
             qemu.insert(qemu.end(), { "-debugcon", "file:" + status_path });
         if (config.status_from_serial)
             qemu.insert(qemu.end(), { "-serial", "file:" + status_path });
-        qemu.insert(qemu.end(), { config.image_option, exe_path });
+        if (*config.image_option)
+            qemu.push_back(config.image_option);
+        qemu.push_back(exe_path);
         rc = RunWithTimeout(qemu, out_path, log_path, 5,
                             config.status_from_serial ? status_path : std::string());
         if (rc < 0) {
@@ -133,6 +145,12 @@ protected:
             return "ERROR";
         }
         exit_status = rc;
+        if (config.exit_report && ReadFile(log_path).find("[Exit code ") == std::string::npos) {
+            ADD_FAILURE() << "the program did not stop itself (status " << rc << ") on "
+                          << exe_path << ":\n"
+                          << ReadFile(log_path);
+            return "ERROR";
+        }
         if (config.status_from_debugcon || config.status_from_serial) {
             std::string status = ReadFile(status_path);
             if (status.empty()) {
