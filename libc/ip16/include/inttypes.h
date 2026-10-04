@@ -1,7 +1,7 @@
 /*
- * <inttypes.h> — format conversion of integer types (C11 §7.8), AVR: the 16-bit types
- * and the pointer types are int, the 32-bit ones long, the 64-bit and max types long
- * long.
+ * <inttypes.h> — format conversion of integer types (C11 §7.8), AVR and MSP430: the
+ * 16-bit types and the pointer types are int, the 32-bit ones long, the 64-bit and max
+ * types long long.
  */
 #ifndef _INTTYPES_H
 #define _INTTYPES_H

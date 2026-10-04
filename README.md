@@ -183,7 +183,7 @@ qemu-system-avr -M arduino-mega -display none -monitor none \
 
 `main`'s result is the byte in the file `status`; qemu does not exit by itself, so stop it
 with Ctrl-C. By hand, it is `cpp -t avr` with `libc/avr/include` (then
-`libc/common/include`), `lower -t avr` and `genavr`; see
+`libc/ip16/include` and `libc/common/include`), `lower -t avr` and `genavr`; see
 [docs/Avr_Backend.md](docs/Avr_Backend.md). BESM-6 works the same way with `-t besm6` and
 its own code generator.
 

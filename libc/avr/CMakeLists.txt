@@ -31,6 +31,7 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check
             ${AVR_INCLUDE_DIR}
+            ${IP16_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
 # ... and the same through our own preprocessor.
@@ -42,10 +43,11 @@ add_test(
             $<TARGET_FILE:parse>
             ${CMAKE_CURRENT_BINARY_DIR}/header-check-cpp
             ${AVR_INCLUDE_DIR}
+            ${IP16_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
-# All the headers, AVR's own and the shared ones, go into one directory.
-file(GLOB AVR_TARGET_HEADERS ${AVR_INCLUDE_DIR}/*.h)
+# All the headers, AVR's own, the 16-bit model's and the shared ones, go into one directory.
+file(GLOB AVR_TARGET_HEADERS ${AVR_INCLUDE_DIR}/*.h ${IP16_INCLUDE_DIR}/*.h)
 file(GLOB AVR_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 install(FILES ${AVR_TARGET_HEADERS} ${AVR_COMMON_HEADERS} DESTINATION share/vcc/avr/include)
 
@@ -77,9 +79,10 @@ foreach(name console divmod malloc mul setjmp)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genavr -> clang, with the AVR headers,
-# then the shared ones.
-set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
-file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+# then the 16-bit model's, then the shared ones.
+set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${IP16_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${IP16_INCLUDE_DIR}/*.h
+    ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(avr_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${SystemCpp} -E -nostdinc ${AVR_LIBC_INCLUDES}

@@ -242,7 +242,7 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/avr/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/common/include/`).**
+**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/avr/include/`, `libc/msp430/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/ip16/include/`, `libc/common/include/`).**
 C11 standard-library headers: each target's directory holds the headers that depend on its
 data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
 `setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`) — except that riscv64 and aarch64 share
@@ -250,8 +250,9 @@ data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg
 `inttypes.h`/`math.h` from there, with its own `float.h` for the x87 `long double` and
 `limits.h` for the signed `char`), and riscv32 and arm32
 `inttypes.h`/`limits.h`/`math.h` in `libc/ilp32/include/`, searched second
-(`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`); AVR's
-16-bit data model shares nothing, so `libc/avr/include/` has all of its own — and `libc/common/include/` the target-neutral
+(`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`); AVR and MSP430
+share the 16-bit `inttypes.h`/`stddef.h`/`stdint.h` in `libc/ip16/include/` (plain `char`
+keeps `limits.h` apart, and `double` `float.h`) — and `libc/common/include/` the target-neutral
 rest, searched last (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 `parse` has no preprocessor, so these are consumed by a preprocessor first: our own

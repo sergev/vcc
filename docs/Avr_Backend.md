@@ -215,9 +215,10 @@ In `libc/avr/`:
   the comparisons and conversions, correctly rounded, under the libgcc names with the
   ordinary ABI); the `long long` division and conversions of `libc/ilp32/int64.c`; and
   `muldi3.c`, `frexp.c`, `ldexp.c`, `modf.c`. All of it is compiled by `genavr` itself.
-- Headers: `libc/avr/include` holds the data-model headers (`float.h`, `inttypes.h`,
-  `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`), and
-  `libc/common/include` the target-neutral ones. See
+- Headers: `libc/avr/include` holds AVR's own headers (`float.h`, `limits.h`, `math.h`,
+  `setjmp.h`, `stdarg.h`), `libc/ip16/include` those of the 16-bit data model it shares
+  with MSP430 (`inttypes.h`, `stddef.h`, `stdint.h`), and `libc/common/include` the
+  target-neutral ones. See
   [libc/avr/include/README.md](../libc/avr/include/README.md).
 
 ## Running a program by hand
@@ -252,7 +253,7 @@ ld.lld -T $P/share/vcc/avr/lib/link.ld -o hello.elf \
 ```
 
 Without installing, use `build/parse`, `build/lower`, `build/backend/genavr`, the headers
-in `libc/avr/include` and `libc/common/include`, and the library in `build/libc/avr/`.
+in `libc/avr/include`, `libc/ip16/include` and `libc/common/include`, and the library in `build/libc/avr/`.
 
 qemu emulates AVR slowly: a million iterations of a `long` loop take about two seconds.
 

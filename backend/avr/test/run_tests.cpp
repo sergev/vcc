@@ -291,7 +291,8 @@ TEST_F(AvrTest, RunSetjmpLongjmpClang)
     SKIP_IF_NO_AVR_TOOLS();
     std::string src = setjmp_program;
     EXPECT_EQ("", Run("", "crt0.o", &src,
-                      { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
+                      { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR, "-I",
+                        TEST_COMMON_INCLUDE_DIR },
                       ".clang"));
     EXPECT_EQ(42, exit_status);
 }

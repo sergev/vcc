@@ -1,6 +1,6 @@
 /*
- * <stdint.h> — integer types (C11 §7.20), AVR: int is 16 bits, long 32, long long 64,
- * pointers 16.
+ * <stdint.h> — integer types (C11 §7.20), the 16-bit data model of AVR and MSP430:
+ * int is 16 bits, long 32, long long 64, pointers 16.
  */
 #ifndef _STDINT_H
 #define _STDINT_H

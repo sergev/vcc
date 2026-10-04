@@ -449,7 +449,9 @@ instruction selection on its own.
 | `libc/aarch64/include/` | AArch64's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/arm32/include/` | ARM32's own headers (`float.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/x86/include/` | x86-64's own headers (`float.h`, `limits.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
-| `libc/avr/include/` | AVR's headers, all of the data-model ones (`float.h`, `inttypes.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
+| `libc/avr/include/` | AVR's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`) |
+| `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `stdarg.h`); the backend is being written |
+| `libc/ip16/include/` | 16-bit data-model headers shared by avr and msp430 (`inttypes.h`, `stddef.h`, `stdint.h`) |
 | `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |

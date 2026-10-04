@@ -240,8 +240,10 @@ protected:
                               : avr     ? AVR_INCLUDE_DIR
                                         : RISCV_INCLUDE_DIR;
             argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
-            if (!besm6 && !avr)
-                argv.push_back(std::string("-I") + (arm32 ? ILP32_INCLUDE_DIR : LP64_INCLUDE_DIR));
+            if (!besm6)
+                argv.push_back(std::string("-I") + (avr     ? IP16_INCLUDE_DIR
+                                                    : arm32 ? ILP32_INCLUDE_DIR
+                                                            : LP64_INCLUDE_DIR));
             argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
         }
         argv.insert(argv.end(), args.begin(), args.end());
@@ -291,6 +293,7 @@ protected:
         const char *model_inc =
             target == "riscv64" || target == "aarch64" || target == "x86_64" ? LP64_INCLUDE_DIR
             : target == "riscv32" || target == "arm32"                         ? ILP32_INCLUDE_DIR
+            : target == "avr"                                                  ? IP16_INCLUDE_DIR
                                                                                : target_inc;
         for (const char *inc : { target_inc, model_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {

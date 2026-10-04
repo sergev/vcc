@@ -1,8 +1,8 @@
 /*
- * <stddef.h> — common definitions (C11 §7.19), AVR.
+ * <stddef.h> — common definitions (C11 §7.19), AVR and MSP430.
  *
- * int and pointers are 16 bits: size_t is unsigned int, ptrdiff_t int, as in avr-gcc
- * and clang for the target.
+ * int and pointers are 16 bits: size_t is unsigned int, ptrdiff_t and wchar_t int, as
+ * clang has them for both targets.
  */
 #ifndef _STDDEF_H
 #define _STDDEF_H
