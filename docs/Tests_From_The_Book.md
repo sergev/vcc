@@ -369,6 +369,13 @@ reported, with its reason, so nothing is silently lost. (A name prefix such as G
   the shared programs run on qemu and agree with clang.
 - **BESM-6 skips the width-dependent programs** and runs its own versions of them under a
   separate fixture (`Besm6BookTest`).
+- **AVR compares every program with clang**, which shares its 16-bit `int`, so a program
+  whose answer changes with the width still has a reference; its book fixture judges the
+  output and exit status by clang's, not by the book's expectation. It skips only what
+  cannot run there: shifts by 16 or more and other undefined behavior with a 16-bit
+  `int`, case values that collide in a 32-bit `long`, programs too large for 8 KB of
+  SRAM or a 16-bit `size_t`, and the slowest under qemu; each reason is in
+  [backend/avr/test/book_test.h](../backend/avr/test/book_test.h).
 
 The discipline behind this is worth making explicit, because it is the difference between a
 test suite you can trust and one you cannot:

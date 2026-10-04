@@ -1,6 +1,6 @@
 #
 # AVR runtime for bare-metal qemu `arduino-mega` (the ATmega1280; see
-# backend/avr/Plan.md).  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
+# docs/Avr_Backend.md).  Uses the clang, llvm-ar and ld.lld libc/riscv64 found, when
 # that clang has the AVR target; qemu-system-avr runs the programs.
 #
 find_program(AVR_QEMU NAMES qemu-system-avr)

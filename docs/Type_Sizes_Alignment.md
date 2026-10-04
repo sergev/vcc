@@ -259,10 +259,11 @@ aggregate layout from its input rather than recomputing it.
 
 ## 6. Target Comparison
 
-`semantic/target.c` defines nine target descriptors. Two of them have a code
-generator: `riscv64` (`genriscv`) and `besm6` (`genbesm`). The other seven describe
-real ABIs so that the front end and the TAC can be produced for them, for example to
-compare layouts; `x86_64` is the default when a program using the libraries sets no
+`semantic/target.c` defines nine target descriptors. Seven of them have a code
+generator: `riscv64` and `riscv32` (`genriscv`), `x86_64` (`genx86`), `aarch64`
+(`genaarch64`), `arm32` (`genarm32`), `avr` (`genavr`) and `besm6` (`genbesm`). The
+other two, `mmix` and `msp430`, describe real ABIs so that the front end and the TAC
+can be produced for them, for example to compare layouts; `x86_64` is the default when a program using the libraries sets no
 target.
 
 Sizes, in bytes (`sizeof` units):
@@ -300,7 +301,7 @@ Other target-defined choices:
 
 | Property              | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
 |-----------------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
-| plain `char`          | unsigned | unsigned | signed | unsigned | unsigned | signed | signed | unsigned | unsigned |
+| plain `char`          | unsigned | unsigned | signed | unsigned | unsigned | signed | signed | signed | unsigned |
 | signed `int` bits     | 32      | 32      | 32     | 32      | 32    | 32   | 16     | 16  | 41    |
 | signed `long` bits    | 64      | 32      | 64     | 64      | 32    | 64   | 32     | 32  | 41    |
 | signed `>>`           | arith.  | arith.  | arith. | arith.  | arith. | arith. | arith. | arith. | logical |
@@ -318,8 +319,10 @@ Notes on the individual targets:
   8-byte format as `double` (the GCC MMIX port's choice; the FPU has no wider format).
 - **msp430**: everything 2 bytes or wider is aligned to 2. On MSP430X pointers widen to
   4 bytes; the descriptor describes the 16-bit variant.
-- **avr**: no alignment requirement at all; `double` and `long double` are the same
-  4-byte format as `float` (avr-gcc's default).
+- **avr** (the ATmega1280, avr-gcc ABI): no alignment requirement at all; `double` and
+  `long double` are the same 4-byte binary32 as `float` (avr-gcc's and clang's default);
+  plain `char` is signed; `size_t` is `unsigned int`. Compiled by `genavr`; see
+  [Avr_Backend.md](Avr_Backend.md).
 - **besm6**: every scalar is one 48-bit word; see the next section.
 
 Taken together: riscv64, aarch64, x86_64 and mmix share LP64 integers; riscv32 and

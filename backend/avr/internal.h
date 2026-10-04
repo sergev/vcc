@@ -1,5 +1,5 @@
 //
-// AVR code generator internals (the avr-gcc ABI; see backend/avr/Plan.md).
+// AVR code generator internals (the avr-gcc ABI; see docs/Avr_Backend.md).
 //
 // Registers: r0 is scratch (__tmp_reg__), r1 is zero at every call and return
 // (__zero_reg__).  Arguments go from r25 down to r8, results in r24, r25:r24, r25:r22

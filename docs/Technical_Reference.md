@@ -3,13 +3,14 @@
 This document lists repository layout, build details, components, tests, and development notes. The [README](../README.md) is the overview for new readers.
 
 VCC is one machine-independent C11 front end (scanner, parser, semantic analysis, TAC
-lowering and optimization) feeding per-target code generators. Five are complete:
+lowering and optimization) feeding per-target code generators. Six are complete:
 RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, see
 [Riscv_Backend.md](Riscv_Backend.md)), AArch64 AAPCS64 (`genaarch64`, see
 [Aarch64_Backend.md](Aarch64_Backend.md)), ARMv7-A AAPCS-VFP (`genarm32`, see
 [Arm32_Backend.md](Arm32_Backend.md)), x86-64 System V (`genx86`, see
-[X86_64_Backend.md](X86_64_Backend.md)) and BESM-6 (`genbesm`). The examples in this document use RISC-V; the other directories
-under `backend/` hold design notes only.
+[X86_64_Backend.md](X86_64_Backend.md)), AVR ATmega1280 with the avr-gcc ABI (`genavr`, see
+[Avr_Backend.md](Avr_Backend.md)) and BESM-6 (`genbesm`). The examples in this document use
+RISC-V; the other directories under `backend/` (`mmix/`, `msp430/`) hold design notes only.
 
 ## Repository layout
 
@@ -22,8 +23,9 @@ vcc/
 │   ├── aarch64/    # AArch64 codegen: IR (a64.h), register allocation, instruction selection, peephole, tests
 │   ├── arm32/      # ARM32 codegen: IR (a32.h), register allocation, instruction selection, peephole, tests
 │   ├── x86/        # x86-64 codegen: IR (x86.h), register allocation, instruction selection, x87, peephole, tests
+│   ├── avr/        # AVR codegen: IR (avr_ir.h), register allocation, two-form selection, peephole, branch relaxation, tests
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), three assembler dialects, tests, BESM-6 docs
-│   └── ...         # avr/, mmix/, msp430/ — ISA ASDL specs and notes, not implemented
+│   └── ...         # mmix/, msp430/ — ISA ASDL specs and notes, not implemented
 ├── cc/             # Compiler driver vcc (from v7besm's b6cc), its end-to-end tests
 ├── cpp/            # C preprocessor (v7 cpp, C11; from v7besm's b6cpp), its conformance tests
 ├── docs/           # Project documentation (this file)
@@ -54,6 +56,7 @@ vcc/
 | `genaarch64` | `build/backend/genaarch64` | `bin/vgenaarch64` | binary TAC (`-t aarch64`) | AArch64 GNU assembly (`.s`) |
 | `genarm32` | `build/backend/genarm32` | `bin/vgenarm32` | binary TAC (`-t arm32`) | ARM32 unified assembly (`.s`) |
 | `genx86` | `build/backend/genx86` | `bin/vgenx86` | binary TAC (`-t x86_64`) | x86-64 AT&T assembly (`.s`) |
+| `genavr` | `build/backend/genavr` | `bin/vgenavr` | binary TAC (`-t avr`) | AVR GNU avr-as assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
 `parse` and `lower` are built from the root `CMakeLists.txt`, `cc` and `cpp` from
@@ -164,8 +167,9 @@ supplies only its flags, output extension and a per-toplevel `codegen` callback.
 takes the same three flags (`--frame-pointer` keeps a frame record in every function), as
 does `genarm32` (TAC lowered with `-t arm32`, assembled by
 `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16`) and `genx86` (TAC
-lowered with `-t x86_64`, assembled by `clang --target=x86_64-none-elf`), and
-`genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
+lowered with `-t x86_64`, assembled by `clang --target=x86_64-none-elf`). `genavr` (TAC
+lowered with `-t avr`, assembled by `clang --target=avr -mmcu=atmega1280`) takes
+`--no-regalloc` and `--no-peephole`, and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
 
 ### Installation
 
@@ -176,12 +180,13 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenbesm6` |
+| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
 | `share/vcc/aarch64/lib/`, `include/` | the same for AArch64 (the runtime only when the clang has an AArch64 target) |
 | `share/vcc/arm32/lib/`, `include/` | the same for ARM32 (the runtime only when the clang has an ARM target) |
 | `share/vcc/x86_64/lib/`, `include/` | the same for x86-64 (the runtime only when the clang has an x86-64 target) |
+| `share/vcc/avr/lib/`, `include/` | the same for AVR (the runtime only when the clang has an AVR target) |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
 | `share/vcc/besm6/include/` | the C11 freestanding headers and `besm6.h` (the hosted libc comes from [v7besm](https://github.com/besm6/v7besm)) |
 
@@ -375,6 +380,27 @@ the semantic pass's `__builtin_va_class`. See [Aarch64_Backend.md](Aarch64_Backe
 `tac_sysv64_class` in `tac/tac_abi.c` classes the eightbytes of an aggregate, for the
 backend and `__builtin_va_class` alike. See [X86_64_Backend.md](X86_64_Backend.md).
 
+### AVR backend (`backend/avr/`)
+
+| File | Role |
+|------|------|
+| `avr_ir.h`, `avr_ir.c` | IR: functions as blocks of byte-register instructions, each knowing its size (2 or 4 bytes) |
+| `regalloc.c` | The target side of `backend/common/regalloc.c`, the even register pair as unit |
+| `instr.c`, `fp.c` | Instruction selection in two forms (naive register blocks, or in the destination's registers with X/Z as scratch), compare-and-branch fusion; binary32 through the libgcc helpers |
+| `call.c` | avr-gcc calls: pieces of flattened structures from r25 down, the stack after r8, variadics all on the stack, parallel moves, hints for the allocator |
+| `frame.c` | Slots, value access within and past `Y+63`, parallel moves, prologue/epilogue (`rcall .` frames, frameless functions) |
+| `peephole.c` | Peephole pass over register and SREG liveness, copy and memory forwarding, tail calls |
+| `relax.c` | Branch relaxation, which the toolchain does not do |
+| `data.c` | Static data, function addresses as `pm()` |
+| `emit.c` | GNU avr-as output, as clang emits it |
+| `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
+| `main.c` | `genavr` entry |
+| `avr.asdl`, `avr.md` | Reference ISA description and its notes (not used by the build) |
+| `test/*_tests.cpp` | GoogleTest suite (`avr-tests`) |
+
+The 16-bit `int` and binary32 `double` come from the `avr` descriptor in
+`semantic/target.c`. See [Avr_Backend.md](Avr_Backend.md).
+
 **Walkthrough.** For
 
 ```c
@@ -423,6 +449,8 @@ instruction selection on its own.
 | `libc/aarch64/include/` | AArch64's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/arm32/include/` | ARM32's own headers (`float.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/x86/include/` | x86-64's own headers (`float.h`, `limits.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
+| `libc/avr/include/` | AVR's headers, all of the data-model ones (`float.h`, `inttypes.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
+| `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |
 
@@ -971,4 +999,5 @@ dot -Tpng tac.dot -o tac.png
 - **AArch64:** [AAPCS64](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst) — the procedure call standard `genaarch64` follows, `va_arg` (appendix B) included.
 - **ARM32:** [AAPCS32](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst) — the procedure call standard `genarm32` follows (its VFP variant), and the [RTABI](https://github.com/ARM-software/abi-aa/blob/main/rtabi32/rtabi32.rst) helpers `libc/arm32` provides.
 - **x86-64:** [System V AMD64 psABI](https://gitlab.com/x86-psABIs/x86-64-ABI) — the calling convention `genx86` follows, the eightbyte classification and `va_arg` included.
+- **AVR:** [avr-gcc ABI](https://gcc.gnu.org/wiki/avr-gcc) — the calling convention `genavr` follows, as clang implements it; the [AVR instruction set manual](https://ww1.microchip.com/downloads/en/devicedoc/atmel-0856-avr-instruction-set-manual.pdf).
 - **BESM-6:** [v7besm](https://github.com/besm6/v7besm) (Unix v7 on BESM-6), [dubna](https://github.com/besm6/dubna) (Dubna monitor simulator).

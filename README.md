@@ -15,11 +15,13 @@ optimizer stay as they are.
 | AArch64       | complete | ARMv8-A, standard AAPCS64 calling convention (`-t aarch64`); links with clang's objects |
 | ARM32         | complete | ARMv7-A, AAPCS-VFP hard-float calling convention (`-t arm32`); links with clang's objects |
 | x86-64        | complete | System V psABI (`-t x86_64`), x87 `long double`; links with clang's objects |
+| AVR           | complete | 8-bit ATmega1280, avr-gcc ABI (`-t avr`), 16-bit `int`, binary32 `double`; links with clang's objects |
 | BESM-6        | complete | 48-bit word-addressed mainframe; three assembler dialects               |
 | others        | design notes | sketches under [backend/](backend/)                                 |
 
 The working targets could hardly be further apart — modern byte-addressed RISC machines,
-a two-operand CISC with an 80-bit `long double`, and a word-addressed machine with its own floating-point format and character set —
+a two-operand CISC with an 80-bit `long double`, an 8-bit microcontroller with a 16-bit
+`int`, and a word-addressed machine with its own floating-point format and character set —
 which keeps the front end honest: nothing in it may assume one particular kind of
 machine. Each target is described in its own documents (see [Documentation](#documentation)).
 
@@ -66,6 +68,7 @@ The compiler is not one binary but several, run one after another:
 | `genaarch64` | TAC         | AArch64 assembly            |
 | `genarm32` | TAC           | ARM32 assembly              |
 | `genx86`   | TAC           | x86-64 assembly             |
+| `genavr`   | TAC           | AVR assembly                |
 | `genbesm`  | TAC           | BESM-6 assembly             |
 
 `cpp` and `lower` take the target with `-t` (for example `-t riscv64`): `cpp` for the
@@ -84,16 +87,16 @@ Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too
 
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
 chain: `vcc -o hello.elf hello.c` preprocesses, compiles, assembles with clang and links
-with `ld.lld` for RISC-V, ARM and x86-64 (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
+with `ld.lld` for RISC-V, ARM, x86-64 and AVR (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
 `-o`, `-D`, `-I`, `-L` and `-l`.
 
 ## Getting started
 
 **You need** CMake 3.10 or newer and a C11 compiler. Building the tests also needs a C++17
 compiler and, the first time you configure, network access so CMake can download
-GoogleTest. The RISC-V, ARM and x86-64 runtimes and run tests need a clang with those
+GoogleTest. The RISC-V, ARM, x86-64 and AVR runtimes and run tests need a clang with those
 targets, `ld.lld`, and `qemu-system-riscv64`, `qemu-system-riscv32`,
-`qemu-system-aarch64`, `qemu-system-arm` and `qemu-system-x86_64` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those tests are skipped, as are the tests of any other target whose
+`qemu-system-aarch64`, `qemu-system-arm`, `qemu-system-x86_64` and `qemu-system-avr` (on macOS: Homebrew `llvm`, `lld` and `qemu`); without them those tests are skipped, as are the tests of any other target whose
 tools are missing.
 
 ```bash
@@ -168,8 +171,21 @@ qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none \
 
 qemu exits with `(main's result << 1) | 1`. By hand, it is `cpp -t x86_64` with
 `libc/x86/include` (then `libc/lp64/include` and `libc/common/include`), `lower -t x86_64`
-and `genx86`; see [docs/X86_64_Backend.md](docs/X86_64_Backend.md). BESM-6 works the
-same way with `-t besm6` and its own code generator.
+and `genx86`; see [docs/X86_64_Backend.md](docs/X86_64_Backend.md).
+
+For AVR, add `-t avr` and run it under `qemu-system-avr`'s `arduino-mega` machine:
+
+```bash
+vcc -t avr -o hello-avr.elf hello.c
+qemu-system-avr -M arduino-mega -display none -monitor none \
+    -serial stdio -serial file:status -bios hello-avr.elf
+```
+
+`main`'s result is the byte in the file `status`; qemu does not exit by itself, so stop it
+with Ctrl-C. By hand, it is `cpp -t avr` with `libc/avr/include` (then
+`libc/common/include`), `lower -t avr` and `genavr`; see
+[docs/Avr_Backend.md](docs/Avr_Backend.md). BESM-6 works the same way with `-t besm6` and
+its own code generator.
 
 To read what happened at any stage, ask for YAML instead:
 
@@ -202,11 +218,12 @@ libraries and headers go into their own directory under `share/vcc/`.
 | `bin/vgenaarch64`              | the AArch64 code generator                      |
 | `bin/vgenarm32`                | the ARM32 code generator                        |
 | `bin/vgenx86`                  | the x86-64 code generator                       |
+| `bin/vgenavr`                  | the AVR code generator                          |
 | `bin/vgenbesm6`                | the BESM-6 code generator                       |
 | `share/vcc/<target>/include/`  | the target's C headers                          |
 | `share/vcc/<target>/lib/`      | the target's runtime and C library              |
 
-For RISC-V, ARM and x86-64, `lib/` holds `crt0.o`, `libc.a` and the qemu linker script, and
+For RISC-V, ARM, x86-64 and AVR, `lib/` holds `crt0.o`, `libc.a` and the qemu linker script, and
 `include/` every C header. For BESM-6, which has its own operating system with its own C library
 (the [v7besm](https://github.com/besm6/v7besm) Unix port), only what describes the
 compiler itself is installed: the freestanding C11 headers, the intrinsics header and the
@@ -217,17 +234,19 @@ helper routines the generated code calls.
 Programs compiled here have a usable C library: `printf`, `sprintf` and `snprintf`;
 `puts`, `putchar` and console input; the whole of `<string.h>` and the `mem*` family;
 `malloc` and friends; `atoi`; `exit`; math helpers (`fabs`, `fmin`, `fmax`, `fma`,
-`modf`, `frexp`, `ldexp`; `sqrt` and `sqrtf` on all but the BESM-6); and working variable arguments (`<stdarg.h>`). On RISC-V and
+`modf`, `frexp`, `ldexp`; `sqrt` and `sqrtf` on all but the BESM-6 and AVR); and working variable arguments (`<stdarg.h>`). On RISC-V and
 AArch64, `long double` is IEEE binary128, computed in software. On 32-bit RISC-V and ARM32, `long long`
 is computed inline in register pairs, with division and the conversions to and from
 floating point in the runtime (the routines clang's code calls too); on ARM32,
 `long double` is a `double`. On x86-64 it is the x87 80-bit format, computed by the x87,
-and there is `setjmp`/`longjmp`. The portable part of
+and there is `setjmp`/`longjmp`. On AVR, `int` is 16 bits, `float` and `double` are both
+binary32, computed in software, and there is `setjmp`/`longjmp` too. The portable part of
 the library lives in [libc/common/](libc/common/) and is shared by every target, and
 [libc/lp64/](libc/lp64/) holds what the 64-bit targets share, [libc/ilp32/](libc/ilp32/)
 what the 32-bit targets share; each target has its own
 directory for the rest ([libc/riscv64/](libc/riscv64/), [libc/riscv32/](libc/riscv32/),
-[libc/aarch64/](libc/aarch64/), [libc/arm32/](libc/arm32/), [libc/x86/](libc/x86/)).
+[libc/aarch64/](libc/aarch64/), [libc/arm32/](libc/arm32/), [libc/x86/](libc/x86/),
+[libc/avr/](libc/avr/)).
 
 ## Documentation
 
@@ -272,6 +291,12 @@ source tree.
 | Document                                         | What it covers                                                       |
 | ------------------------------------------------ | -------------------------------------------------------------------- |
 | [docs/X86_64_Backend.md](docs/X86_64_Backend.md) | The code generator, psABI calls and variadics, the x87 `long double`, frames, and running under qemu |
+
+### AVR target
+
+| Document                                   | What it covers                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| [docs/Avr_Backend.md](docs/Avr_Backend.md) | The code generator, the 16-bit data model, frames and `Y+63`, branch relaxation, calls, the runtime's helper contracts, and running under qemu |
 
 ## License
 

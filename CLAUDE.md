@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Project status: active, five targets.** One C11 frontend feeds five backends: BESM-6
+**Project status: active, six targets.** One C11 frontend feeds six backends: BESM-6
 (`genbesm`; used to port [Unix v7 to the BESM-6](https://github.com/besm6/v7besm)),
 RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, `--rv32`; bare-metal qemu,
 link-compatible with clang — see [docs/Riscv_Backend.md](docs/Riscv_Backend.md)),
@@ -10,11 +10,14 @@ AArch64 ARMv8-A/AAPCS64 (`genaarch64`; bare-metal qemu with semihosting, link-co
 with clang — see [docs/Aarch64_Backend.md](docs/Aarch64_Backend.md)), ARM32
 ARMv7-A/AAPCS-VFP (`genarm32`; ARM state, bare-metal qemu with semihosting,
 link-compatible with clang's `armv7a-none-eabihf` — see
-[docs/Arm32_Backend.md](docs/Arm32_Backend.md)), and x86-64 System V psABI (`genx86`;
+[docs/Arm32_Backend.md](docs/Arm32_Backend.md)), x86-64 System V psABI (`genx86`;
 bare-metal qemu `microvm`, x87 `long double`, link-compatible with clang's
-`x86_64-none-elf` — see [docs/X86_64_Backend.md](docs/X86_64_Backend.md)).
+`x86_64-none-elf` — see [docs/X86_64_Backend.md](docs/X86_64_Backend.md)), and AVR, the
+8-bit ATmega1280 with the avr-gcc ABI (`genavr`; 16-bit `int`, binary32 `double`,
+bare-metal qemu `arduino-mega`, link-compatible with clang's `--target=avr
+-mmcu=atmega1280` — see [docs/Avr_Backend.md](docs/Avr_Backend.md)).
 Run the tests with `ctest -j8` (or `make run`): it is much faster than the binaries.
-The other ISA directories under `backend/` hold design notes only. A shared-code
+The other ISA directories under `backend/` (`mmix/`, `msp430/`) hold design notes only. A shared-code
 change must keep every backend's tests green, and must not change BESM-6 output except
 to fix a bug.
 
@@ -59,7 +62,9 @@ The same for ARM32: `genarm32` → `bin/vgenarm32`, the `libc/arm32` runtime →
 headers → `share/vcc/arm32/include/`. And for x86-64: `genx86` → `bin/vgenx86`, the
 `libc/x86` runtime → `share/vcc/x86_64/lib/` (when the clang has an x86-64 target) and the
 x86-64, LP64 and shared headers → `share/vcc/x86_64/include/` (x86-64's own `float.h` and
-`limits.h` in place of the LP64 ones).
+`limits.h` in place of the LP64 ones). And for AVR: `genavr` → `bin/vgenavr`, the
+`libc/avr` runtime → `share/vcc/avr/lib/` (when the clang has an AVR target) and the AVR
+and shared headers → `share/vcc/avr/include/`.
 The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
 `CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via
@@ -237,7 +242,7 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/common/include/`).**
+**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/avr/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/common/include/`).**
 C11 standard-library headers: each target's directory holds the headers that depend on its
 data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
 `setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`) — except that riscv64 and aarch64 share
@@ -245,7 +250,8 @@ data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg
 `inttypes.h`/`math.h` from there, with its own `float.h` for the x87 `long double` and
 `limits.h` for the signed `char`), and riscv32 and arm32
 `inttypes.h`/`limits.h`/`math.h` in `libc/ilp32/include/`, searched second
-(`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`) — and `libc/common/include/` the target-neutral
+(`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`); AVR's
+16-bit data model shares nothing, so `libc/avr/include/` has all of its own — and `libc/common/include/` the target-neutral
 rest, searched last (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 `parse` has no preprocessor, so these are consumed by a preprocessor first: our own
@@ -256,13 +262,13 @@ does (`SystemCpp`), the C compiler's `cc -E` — not a traditional standalone `c
 `#include` lines silently fail to expand. No `-P` is needed — `parse`'s scanner consumes
 `# line` markers and keeping them preserves original line numbers in diagnostics:
 `cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -`. The
-`besm-headers`, `riscv-headers`, `aarch64-headers`, `arm32-headers` and `x86_64-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
+`besm-headers`, `riscv-headers`, `aarch64-headers`, `arm32-headers`, `x86_64-headers` and `avr-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
 preprocess and parse every header to catch syntax errors; their `besm-headers-cpp`/
 `riscv-headers-cpp` twins do the same through our `cpp` (`CPPFLAGS=-t<target>`). The unit-test fixtures preprocess
 their C snippets automatically via `libutil/test/test_preprocess.h` (using the CMake
 `TEST_CPP`/`TEST_INCLUDE_DIR`/`TEST_COMMON_INCLUDE_DIR` defines, plus the optional
 `TEST_MODEL_INCLUDE_DIR`: `libc/lp64/include` for riscv64, aarch64 and x86_64, `libc/ilp32/include`
-for riscv32 and arm32), so
+for riscv32 and arm32, none for avr), so
 tests `#include <stdio.h>` instead of hand-declaring libc routines. `<stdarg.h>` is
 functional (BESM-6: word-pointer `va_list`, covered by `stdarg_tests.cpp`; RISC-V: a byte
 pointer over the register save area, covered by the RISC-V run and interop tests; AArch64:
@@ -270,7 +276,8 @@ the AAPCS64 `va_list` structure, `va_arg` through the runtime's `__va_arg` given
 argument class from the `__builtin_va_class(T)` keyword; ARM32: clang's
 `struct __va_list`, a pointer walk over r0–r3 pushed below the stack arguments; x86-64:
 clang's `__va_list_tag[1]` over the 176-byte register save area, `va_arg` through
-`__va_arg` given the eightbyte classes from `__builtin_va_class(T)`).
+`__va_arg` given the eightbyte classes from `__builtin_va_class(T)`; AVR: a `char *` walk
+over the stack, where a variadic callee takes every argument).
 
 Static analysis: when `cppcheck` is installed, CMake attaches it to every C and C++ target
 (`CMAKE_C_CPPCHECK`/`CMAKE_CXX_CPPCHECK` in the top-level `CMakeLists.txt`), so it runs as
@@ -305,7 +312,7 @@ Compiler flags in use: `-Wall -Werror -Wshadow` — all warnings are errors.
 
 ## Architecture
 
-This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6, RISC-V, AArch64, ARM32 and x86-64. The pipeline:
+This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6, RISC-V, AArch64, ARM32, x86-64 and AVR. The pipeline:
 
 ```
 [vcc] drives the whole chain, then the assembler and linker (clang + ld.lld | b6as + b6ld):
@@ -325,6 +332,8 @@ Source (.c)
                  (TAC lowered with `lower -t arm32`)
   → [genx86]     Register alloc → Instruction select → Peephole → Frame → AT&T assembly (.s)
                  (TAC lowered with `lower -t x86_64`)
+  → [genavr]     Register alloc → Instruction select → Peephole → Frame → Branch relaxation
+                 → GNU avr-as assembly (.s)   (TAC lowered with `lower -t avr`)
 ```
 
 **`parse`** (`parser/main.c`): Lexes and parses a C source file, outputs a binary AST stream (via `wio`) to stdout, or `--yaml`/`--dot` for human-readable forms.
@@ -350,6 +359,7 @@ Source (.c)
 | AArch64 code gen | `backend/aarch64/` | Complete: ARMv8-A, AAPCS64 incl. homogeneous float aggregates, structs through x8 and variadics (the AAPCS64 `va_list`; `tac_aapcs64_class` in `tac/tac_abi.c` classifies arguments for the backend and `__builtin_va_class` alike), register allocation on `backend/common/regalloc.c`, compare-and-branch fusion, peephole, frameless leaves and sp-addressed frames, binary128 `long double` via `libc/common/float128.c`; see [docs/Aarch64_Backend.md](docs/Aarch64_Backend.md) |
 | ARM32 code gen | `backend/arm32/` | Complete: ARMv7-A in ARM state with hardware divide, VFPv3-D16, AAPCS-VFP incl. back-filled `s` registers, homogeneous float aggregates (`tac_aapcs32_class`), structs by value split between r3 and the stack, and variadics under the base standard (clang's `struct __va_list`); `long long` in register pairs with the RTABI helpers (`libc/arm32/aeabi_*.s`), `long double` = `double`; register allocation on `backend/common/regalloc.c` (registers numbered from 1 on its side, since r0 is 0), parallel moves, compare-and-branch fusion, peephole with conditional execution and `ldrd`/`strd`, frameless leaves and sp-addressed frames (r11 as a fallback); see [docs/Arm32_Backend.md](docs/Arm32_Backend.md) |
 | x86-64 code gen | `backend/x86/` | Complete: baseline x86-64 (SSE2, `cmov`), System V psABI incl. structs by eightbyte class (`tac_sysv64_class`, all or nothing, MEMORY structs copied onto the stack), variadics (clang's `__va_list_tag[1]`, `__va_arg` in `libc/x86/va_arg.c`) and signed plain `char`; the x87 80-bit `long double` (never on the x87 stack between TAC instructions); register allocation on `backend/common/regalloc.c` (`rax` and `r10`/`r11` kept as scratch, a divide or variable shift counted as a call), two-operand selection, parallel moves, compare-and-branch fusion, peephole over register and flag liveness with `cmov`, rsp-addressed frames with the red zone (`--frame-pointer` for rbp); runs on qemu `microvm` through the PVH note, the status on the debug console; `setjmp`/`longjmp`; see [docs/X86_64_Backend.md](docs/X86_64_Backend.md) |
+| AVR code gen | `backend/avr/` | Complete: the ATmega1280 (`avr51`) with the avr-gcc ABI as clang implements it — arguments from r25 down in even pairs to r8, then all on the stack, structures flattened into their members, results from r24/r22/r18, a variadic callee taking every argument on the stack; a 16-bit `int` and binary32 `double` (in `semantic/target.c`, which the front end now honours for constants, `size_t` and folding); register allocation on `backend/common/regalloc.c` with the register pair as unit (instructions that need the r18–r25 blocks or a helper count as calls through `uses_scratch`), a scratch-free selection in the destination's registers or X/Z beside the naive block form, parallel moves, compare-and-branch fusion, a peephole pass over register and SREG liveness, Y-addressed frames (`rcall .` for small ones, none without slots, Y then allocatable) and branch relaxation; a binary32 soft-float runtime (`libc/common/float32.c`) and the libgcc integer helpers with their special register contracts; runs on qemu `arduino-mega`, the status on USART1; `setjmp`/`longjmp`; see [docs/Avr_Backend.md](docs/Avr_Backend.md) |
 
 ### Key data structures
 
@@ -419,6 +429,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/aarch64/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `aarch64_test.h` also runs programs on bare-metal `qemu-system-aarch64`, skipped without the tools), `interop_tests.cpp` (a signature table and variadics linked with clang both ways), `regalloc_tests.cpp`, `peephole_tests.cpp`, `float128_tests.cpp`, the libc run tests ported from RISC-V, and the book suite (compared with clang) → `aarch64-tests`
 - `backend/arm32/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `llong_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `arm32_test.h` also runs programs on bare-metal `qemu-system-arm`, skipped without the tools), `interop_tests.cpp` (a signature table, variadics and the RTABI helpers linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang) → `arm32-tests`
 - `backend/x86/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `x87_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`, every output also assembled by GNU `as` when installed; `x86_test.h` also runs programs on bare-metal `qemu-system-x86_64 -M microvm`, skipped without the tools), `interop_tests.cpp` (scalars, structs of every class and variadics linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang; `book_x86_tests.cpp` has signed-char versions of three programs) → `x86-tests`
+- `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with clang) → `avr-tests`
 - `backend/common/test/flow_tests.cpp` (CFG and liveness over TAC, `backend/common/flow.c`) → `backend-tests`
 - `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `type_tests.cpp` (typed TAC, struct layout, target struct ABI) → `translate-tests`
 - `optimize/test/const_fold_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `dead_store_tests.cpp`, `type_conv_tests.cpp`, `pipeline_tests.cpp` → `optimizer-tests`
@@ -457,6 +468,7 @@ run by `make run` (see **Build & Test** above).
 - [docs/Aarch64_Backend.md](docs/Aarch64_Backend.md) — the AArch64 backend: target, passes, frames, AAPCS64 calls and variadics, runtime, running a program by hand under qemu
 - [docs/Arm32_Backend.md](docs/Arm32_Backend.md) — the ARM32 backend: target, passes, frames, AAPCS-VFP calls and variadics, runtime, running a program by hand under qemu
 - [docs/X86_64_Backend.md](docs/X86_64_Backend.md) — the x86-64 backend: target, passes, the x87 `long double`, frames, psABI calls and variadics, runtime, running a program by hand under qemu
+- [docs/Avr_Backend.md](docs/Avr_Backend.md) — the AVR backend: target, the 16-bit data model and binary32 `double`, passes, frames and `Y+63`, branch relaxation, avr-gcc calls and variadics, the runtime's helper contracts, running a program by hand under qemu
 - [backend/besm6/Peephole_Rewrites.md](backend/besm6/Peephole_Rewrites.md) — peephole optimization in the BESM-6 backend: concept, the `besm_peephole` pass, and the catalogue of store/reload, NTR, compare/branch, and strength-reduction rewrites (Phase M)
 - [docs/C_Grammar.md](docs/C_Grammar.md) — C grammar article: scanner (`c11.l`), parser (`c11.y`), ASDL (`c11.asdl`), and how they relate to the hand-written implementation
 - [docs/Tests_From_The_Book.md](docs/Tests_From_The_Book.md) — textbook-style intro for newcomers: test-driven development, how the "Writing a C Compiler" tests are organized, and how each test maps to a compiler phase
