@@ -190,122 +190,38 @@ One per-opcode table, transcribed from that reference, serves selection and peep
 
 `make run` stays green after every T-step.
 
-## Phase 0 — groundwork
+Phase 0 is done:
+- `cpp -t msp430` predefines `__MSP430__`, `__CHAR_UNSIGNED__` and `__ELF__`. The
+  `msp430` descriptor has an unsigned plain `char`, alignment 2 for every type wider than
+  `char`, a binary64 `double` and `long double`, and no `va_class`.
+- `struct_return_max = 0` now means "every struct and union". MSP430 uses it, so every
+  struct result comes through the frontend's hidden pointer, the first argument (R12).
+  riscv64 spells out its 16.
+- The frontend audit found no defect. `translator/test/msp430_tests.cpp` and the
+  `TranslateTestMsp430` cases of `type_tests.cpp` pin:
+  - unsigned `char` with a 16-bit `int`;
+  - binary64 folding beside a 16-bit `int`;
+  - struct layouts, against clang's;
+  - copies by 2-byte words.
 
-- **T1. Target plumbing.**
-  - `semantic/target.c` has an incomplete `msp430` entry, with only the first fields
-    set. Complete and correct it:
-    - `char_signed = 0`: the entry's "plain char signed (msp430-gcc)" is wrong for clang,
-      which defines `__CHAR_UNSIGNED__`;
-    - every alignment 2 except `_Bool` (1);
-    - `struct_args_split = 0`, `immediate_args = NULL`, `va_class = NULL` (`va_arg` is a
-      pointer walk, T16);
-    - `ldouble_mant_dig = 0` and `double_mant_dig = 0` (binary64);
-    - `hw_sqrt = 0`.
-  - **Every struct returned in memory.** `type_is_byval_sret` (`translator/translate.c`)
-    reads `struct_return_max == 0` as "two pointers". Give every target that uses 0 its
-    explicit byte count (riscv64: 16), and make 0 mean "every struct and union, of any
-    size". MSP430 sets 0, so the frontend's hidden pointer is the first argument, which
-    the backend puts in R12. No other target's output changes.
-  - **`cpp -t msp430`.** Its predefined macros come from clang's `-dM -E` for the triple:
-    - `__MSP430__`, `__ELF__` and `__CHAR_UNSIGNED__`;
-    - the `__SIZEOF_*__` set (`__SIZEOF_INT__=2`, `__SIZEOF_POINTER__=2`,
-      `__SIZEOF_DOUBLE__=8`, `__SIZEOF_LONG_DOUBLE__=8`);
-    - `__INT_MAX__=32767`, `__SIZE_TYPE__`, `__PTRDIFF_TYPE__`, `__WCHAR_TYPE__` and
-      `__INTPTR_TYPE__`;
-    - `__BIGGEST_ALIGNMENT__=2`;
-    - `__FLT_MANT_DIG__` 24, and `__DBL_MANT_DIG__` and `__LDBL_MANT_DIG__` 53.
+  The book programs, the test-fixture snippets and the C library lower with
+  `-t msp430 --verify` exactly as with `-t avr`.
+- **Headers.**
+  - `libc/ip16/include/` holds the 16-bit `inttypes.h`, `stddef.h` and `stdint.h`, shared
+    with AVR. It is searched second, and is `TEST_MODEL_INCLUDE_DIR` for both.
+  - `libc/msp430/include/` has `float.h`, `limits.h`, `math.h` and `stdarg.h`; `setjmp.h`
+    comes at T19.
+  - The `msp430-headers` CTests exist.
+- `libc/msp430/CMakeLists.txt` finds the tools (`MSP430_TOOLS_FOUND`, `MSP430_CLANG`,
+  `MSP430_AR`, `MSP430_LD`, `MSPSIM`, `MSP430_LIB_DIR`, `MSP430_LINK_SCRIPT`,
+  `MSP430_TARGET_FLAGS`).
+- **`QemuConfig` runs mspsim:**
+  - `link_flags` (for `-n`);
+  - an empty `image_option`, which passes the ELF as a plain argument;
+  - `exit_report`, which fails a run unless mspsim's stderr has
+    `[Exit code N after M cycles]`.
 
-    clang also defines the non-reserved `MSP430`. Leave it out, as AVR left out `AVR`.
-    Add a test in `test_predefined_macros.cpp`.
-  - Check that `lower -t msp430` accepts the name and lays out structs by the new entry.
-
-  *Done.* As for every other target, `cpp` predefines only the identifying macros:
-  `__MSP430__`, `__CHAR_UNSIGNED__` and `__ELF__`. The sizes and limits come from the
-  headers. riscv64's `struct_return_max` is now an explicit 16.
-- **T2. Frontend audit for MSP430's new combinations.** Run the test corpus through
-  `lower -t msp430`: the chapter sources, translator fixtures and libc sources. Then pin
-  what is new to the project, each with a `-t msp430` test:
-  - **Alignment 2 for 4- and 8-byte types.** Struct layout and `offsetof` against
-    clang's for a table of structs, in `type_tests.cpp`. Also check `aggregate_chunk`
-    (2 for a 2-aligned struct, 1 for a `char`-only one), the zero-fill loop's stride, and
-    any code that assumes alignment = size.
-  - **Plain `char` unsigned with a 16-bit `int`.** `char` still promotes to `int`, since
-    255 fits. Check character constants, `'\xff'`, the comparisons, and `switch` on a
-    `char`.
-  - **binary64 `double` with a 16-bit `int`.** Folding is host-native, with no rounding
-    step. Check the int ↔ `double` conversions of 16- and 32-bit values and
-    `(double)LLONG_MAX`.
-  - **Every struct in memory** (T1): a struct-returning call used as an argument, in a
-    `?:`, and in a chained assignment.
-
-  Fix what is found in shared code and list it here.
-
-  *Done, with no defect in shared code:*
-  - `translator/test/msp430_tests.cpp` and the `TranslateTestMsp430` cases in
-    `type_tests.cpp` pin each item, the layouts against clang's for six structs.
-  - All 34 `libc/common` and `libc/ilp32` sources, 362 book programs and 224
-    test-fixture snippets lower with `-t msp430 --verify`. The outcomes are the same as
-    with `-t avr` on all 1437 inputs, except two that are expected:
-    - an AVR test calls `fabsf`, which only AVR's `math.h` declares;
-    - `__builtin_va_class` is rejected on both targets.
-
-    The other failures are the book's invalid and multi-file programs and fragments.
-  - A plain `char` static initializer reads `-1` in TAC on every target, the
-    unsigned-char ones included. It is the same byte, 0xff, so this is not a defect.
-  - An unfolded `0.1L` keeps its binary128 bits in TAC, as on ARM32, where `long double`
-    is `double` too. The backend rounds it when it emits it.
-- **T3. Shared headers for the 16-bit data model.** AVR's `stdint.h`, `inttypes.h` and
-  `stddef.h` describe exactly MSP430's `int16`/`long32`/pointer16 model, and `limits.h`
-  differs only in `CHAR_MIN`/`CHAR_MAX`.
-  - Move them to a new `libc/ip16/include/`, searched after the target's own directory
-    as `libc/lp64` and `libc/ilp32` are.
-  - `libc/msp430/include/` starts with what this needs for the fixtures. The rest follows
-    at T19.
-  - `TEST_MODEL_INCLUDE_DIR` becomes `libc/ip16/include` for AVR and MSP430.
-  - AVR's preprocessed headers and every `avr-tests` golden stay unchanged.
-
-  *Done.*
-  - `limits.h` stays target-owned, as x86-64's does. Keying `CHAR_MIN` off
-    `__CHAR_UNSIGNED__` would break under the host `cc -E` that the build and the
-    fixtures use, since the host defines its own.
-  - `libc/msp430/include/` has `float.h` (ARM32's binary64 one), `limits.h`, `math.h`
-    (the ILP32 declarations) and `stdarg.h` (the pointer walk, sizes rounded up to 2).
-  - All 27 AVR headers preprocess byte-identically after the move.
-- **T4. CMake detection and the simulator fixture.**
-  - `libc/msp430/CMakeLists.txt` finds `mspsim`, checks that the LLVM clang lists
-    `msp430` (`--print-targets`), and finds `ld.lld` and `llvm-ar`. It sets
-    `MSP430_TOOLS_FOUND`, `MSP430_CLANG`, `MSP430_LD`, `MSP430_AR`, `MSP430_LIB_DIR`,
-    `MSP430_LINK_SCRIPT` and `MSPSIM`.
-  - **`backend/common/test/qemu_test.h`** is qemu-specific only in its last third.
-    - Factor `QemuTest::Run` into a link half (assemble, compile the clang part, link)
-      and a run half. Add `link_flags` to the config, for `-n`.
-    - The run half for mspsim is `mspsim -n <cycles> <elf>`:
-      - stdout is the UART output;
-      - the exit status is `main`'s result modulo 256;
-      - stderr is kept in the log.
-    - mspsim's own statuses (124 cycle limit, 125 asleep, 132 illegal instruction)
-      collide with legitimate results. The harness tells them apart by the
-      `[Exit code N after M cycles]` line that mspsim prints to stderr without `-q`.
-    - The cycle limit is the timeout; the wall-clock timeout stays as a backstop.
-    - Name the shared fixture for what it now is (e.g. `SimTest`) only if that stays a
-      mechanical rename. The other backends' tests are unchanged.
-
-  *Done*, more simply than planned:
-  - `QemuConfig` gains three things, with defaults that leave the other backends
-    unchanged:
-    - `link_flags`;
-    - an empty `image_option`, meaning the image is a plain argument;
-    - `exit_report`, which fails a run whose log lacks mspsim's `[Exit code N …]`
-      line.
-
-    `Run` was not split, and the fixture keeps its name.
-  - The cycle limit goes in the backend's runner command (T7).
-  - Checked by hand: a cycle-limit stop exits 124 with `[Cycle limit reached at …]` on
-    stderr, and a program stop exits with its value and `[Exit code 200 after …]`.
-  - The mspsim path of the fixture first runs in T5's runtime tests, which include a
-    cycle-limit case.
-  - The `msp430-headers` CTests are in `libc/msp430/CMakeLists.txt` now, not at T19.
+  The cycle limit `-n` belongs in the backend's runner command (T7).
 
 ## Phase 1 — skeleton
 
