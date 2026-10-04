@@ -38,8 +38,7 @@ static void test_zero(Gen *g, int a, int n)
         emit2(g, i == 0 ? AVR_CP : AVR_CPC, avr_reg(a + i), avr_reg(AVR_ZERO));
 }
 
-// r24 = 1 when branch `br` would be taken on the flags as they are, else 0.
-static void set_on(Gen *g, AVR_Op br)
+void gen_set_on(Gen *g, AVR_Op br)
 {
     char done[32];
     new_label(done);
@@ -105,8 +104,10 @@ static void negate(Gen *g, int a, int n)
 static void gen_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Val *src = in->u.unary.src, *dst = in->u.unary.dst;
-    if (avr_is_fp(val_type(g, src)))
-        fatal_error("avr: %s: floating point is not implemented yet", gen_name(g));
+    if (avr_is_fp(val_type(g, src))) {
+        gen_fp_unary(g, in);
+        return;
+    }
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED: {
@@ -129,7 +130,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         int n = avr_type_size(val_type(g, src)), a = block_a(n);
         load_val(g, src, a, n, EXT_TYPE);
         test_zero(g, a, n);
-        set_on(g, AVR_BREQ);
+        gen_set_on(g, AVR_BREQ);
         store_val(g, dst, 24, 1);
         break;
     }
@@ -408,7 +409,7 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, const Tac_Typ
         chain(g, AVR_CP, AVR_CPC, b, a, n);
     else
         chain(g, AVR_CP, AVR_CPC, a, b, n);
-    set_on(g, c.br);
+    gen_set_on(g, c.br);
     store_val(g, in->u.binary.dst, 24, 1);
 }
 
@@ -416,8 +417,10 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 {
     Tac_BinaryOperator op = in->u.binary.op;
     const Tac_Type *t     = operand_type(g, in->u.binary.src1, in->u.binary.src2);
-    if (avr_is_fp(t))
-        fatal_error("avr: %s: floating point is not implemented yet", gen_name(g));
+    if (avr_is_fp(t)) {
+        gen_fp_binary(g, in);
+        return;
+    }
     Cond c;
     if (compare_cond(op, unsigned_compare(op) || t->kind == TAC_TYPE_POINTER, &c)) {
         gen_compare(g, in, c, t);
@@ -428,7 +431,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         gen_shift(g, in, SHL);
         return;
     case TAC_BINARY_RIGHT_SHIFT:
-        gen_shift(g, in, avr_is_unsigned(val_type(g, in->u.binary.dst)) ? SHR : SAR);
+        gen_shift(g, in, SAR);
         return;
     case TAC_BINARY_RIGHT_SHIFT_LOGICAL:
         gen_shift(g, in, SHR);
@@ -487,11 +490,13 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
     const Tac_Type *t = val_type(g, cond);
-    if (avr_is_fp(t))
-        fatal_error("avr: %s: floating point is not implemented yet", gen_name(g));
-    int n = avr_type_size(t), a = block_a(n);
-    load_val(g, cond, a, n, EXT_TYPE);
-    test_zero(g, a, n);
+    if (avr_is_fp(t)) {
+        gen_fp_test(g, cond);
+    } else {
+        int n = avr_type_size(t), a = block_a(n);
+        load_val(g, cond, a, n, EXT_TYPE);
+        test_zero(g, a, n);
+    }
     char *l = label_name(target);
     emit1(g, if_zero ? AVR_BREQ : AVR_BRNE, avr_label(l));
     xfree(l);
@@ -516,6 +521,26 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         break;
     case TAC_INSTRUCTION_TRUNCATE:
         gen_convert(g, in->u.truncate.src, in->u.truncate.dst, EXT_TYPE);
+        break;
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

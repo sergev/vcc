@@ -288,6 +288,11 @@ instructions.
   - **`sqrt`** stays a call (`hw_sqrt = 0`), to a C `sqrt`/`sqrtf` in `libc/avr`.
   - **Tests:** the runtime against the host's own binary32 arithmetic over a table of
     cases. The host has the type natively, so no case generator is needed.
+  - *Done after M15*, whose pointers the runtime needs. `frexp`, `ldexp` and `modf` are
+    AVR's own binary32 C (the ILP32 ones assume binary64), `__muldi3` is shift-and-add C
+    in `libc/avr`, and `int64.c` comes in as it is (its 64-bit integer to FP
+    conversions still round twice: M21). `float.h` came forward from M20; the ILP32
+    `math.h` serves until then.
 - **M15. Pointers, arrays, chars, strings** (ch. 14–16).
   - Loads and stores go through `Z` (or `X`): `movw r30, p` then `ld`/`ldd Z+k`. Loads
     and stores are byte by byte, at the access's width, with a sign or zero extension as

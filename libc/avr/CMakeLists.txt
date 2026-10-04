@@ -51,9 +51,10 @@ foreach(name console divmod malloc mul)
 endforeach()
 
 # C sources, through cpp -> parse -> lower -> genavr -> clang, with the AVR headers,
-# then the shared ones.
-set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
-file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+# then (until M20 gives AVR its own math.h) the ILP32 ones, then the shared ones.
+set(AVR_LIBC_INCLUDES -I${AVR_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB AVR_LIBC_HEADERS ${AVR_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
+     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 macro(avr_compile_libc_c name srcdir)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${SystemCpp} -E -nostdinc ${AVR_LIBC_INCLUDES}
@@ -67,12 +68,16 @@ macro(avr_compile_libc_c name srcdir)
     list(APPEND AVR_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The integer-only part of the shared C library, so far: the rest needs floating point
-# (M14) and variadic functions (M17).
-foreach(name atoi memchr memcmp memcpy memmove memset puts putchar
+# The shared C library but the variadic part (M17), and the binary32 soft-float runtime;
+# from libc/ilp32 the long long division and conversions; the AVR's own C.
+foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
-        strtok)
+        strtok float32)
     avr_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+avr_compile_libc_c(int64 ${LIBC_ILP32_DIR})
+foreach(name frexp ldexp modf muldi3)
+    avr_compile_libc_c(${name} ${src})
 endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a

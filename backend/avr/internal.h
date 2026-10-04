@@ -128,6 +128,17 @@ void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *na
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
+// r24 = 1 when branch `br` would be taken on the flags as they are, else 0.
+void gen_set_on(Gen *g, AVR_Op br);
+
+//
+// Floating point, in software (fp.c)
+//
+void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+void gen_fp_unary(Gen *g, const Tac_Instruction *in);
+// The zero flag of FP value `v`: set when it is a zero of either sign (not a NaN).
+void gen_fp_test(Gen *g, const Tac_Val *v);
+void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
 
 //
 // Calls, parameters and returns (call.c)
