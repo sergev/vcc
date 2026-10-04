@@ -269,6 +269,19 @@ lands with a test under `-t avr`, and leaves the other targets' output unchanged
   - `float` the size of `double`.
 
   Fix what is found in shared code and list it here.
+
+  Done, with no defect beyond M2's and M3's:
+  - All 512 book programs, 1040 test-fixture snippets and the 33 `libc/common` and
+    `libc/ilp32` sources were lowered with `-t avr --verify` and with `-t riscv32`.
+    They fail on the same inputs, except the tests that pin a 32-bit `unsigned` or
+    probe AVR's own limits.
+  - Two book programs switch on `long` cases that collide in 32 bits. They are
+    duplicate cases on riscv32 and AVR, as with clang, and the rv32 suite already
+    skips them.
+  - A struct is laid out at alignment 1 and copied byte by byte, and `float` → `double`
+    is a `float_to_double` that folds to nothing.
+  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on x86-64.
+    The backend rounds it to single when it emits it.
 - **M5. CMake detection and the qemu fixture.**
   - `libc/avr/CMakeLists.txt` finds `qemu-system-avr`, checks that the LLVM clang lists
     `avr` (`--print-targets`), and finds `ld.lld` and `llvm-ar`. It sets
