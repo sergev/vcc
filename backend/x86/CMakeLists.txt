@@ -33,6 +33,7 @@ add_executable(x86-tests
     test/ptr_tests.cpp
     test/struct_tests.cpp
     test/stdarg_tests.cpp
+    test/interop_tests.cpp
     test/run_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
