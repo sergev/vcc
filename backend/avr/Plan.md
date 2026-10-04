@@ -130,12 +130,12 @@ ways, by the interop tests (`backend/avr/test/interop_tests.cpp` and the others)
 
 ### Registers, as we use them
 
-Fixed here so the allocator (M22) and the naive selection (Phase 2) agree from the start:
+As the allocator and the naive selection use them:
 
 | Use | Registers |
 |---|---|
 | Fixed | `r0` (tmp), `r1` (zero) |
-| Frame pointer | `Y` = `r29:r28` (until M23 frees it in frameless functions) |
+| Frame pointer | `Y` = `r29:r28`, a call-saved pair in a function without a frame |
 | Selection scratch, pointer-capable and immediate-capable | `Z` = `r31:r30`, `X` = `r27:r26` |
 | Values not live across a call | `r25:r24`, `r23:r22`, `r21:r20`, `r19:r18` |
 | Values live across a call | `r17:r16` … `r3:r2` |
@@ -155,63 +155,6 @@ A value in `r2`–`r15` therefore goes through `Z`/`X` for any operation with a 
 One selection helper owns that rule.
 
 `make run` stays green after every M-step.
-
-## Phase 5 — code quality
-
-- **M22. Register allocation** on `backend/common/regalloc.c`, with the pair as unit.
-  *Done* (`backend/avr/regalloc.c`):
-  - **Classes:** `char`/`short`/`int`/pointer are `REGALLOC_INT`; `long`/`float`/
-    `double` are `REGALLOC_PAIR`, two pairs not necessarily adjacent; `long long` and
-    aggregates stay in memory.
-  - **Numbering:** a pair is its low register's own number; 0 never occurs.
-  - **Pools:** argument pairs `r24`, `r22`, `r20`, `r18` first, then `r16` … `r2`
-    (`r16` first, for the immediates), pushed by the prologue when used. Parameters
-    and call arguments and results are hinted to their ABI registers.
-  - **Two forms of selection.** The allocator's `runtime_call` hook is
-    `uses_scratch`: an instruction that the naive form selects (a helper, 8 bytes,
-    multiply/divide, a variable shift, an aggregate over 16 bytes, an index scaled by a
-    multiply) counts as a call, so no value lives across it in `r18`–`r25`. Every other
-    instruction computes in its destination's registers, or in `Z`/`X` when the
-    destination is in memory or needs immediates its registers cannot take, with
-    operand bytes straight from registers, through `r0` from memory, or as immediates.
-  - **Moves:** operands, call arguments and parameters on entry are gathered by one
-    parallel move per instruction, a cycle broken through the stack.
-  - **Call-saved argument registers:** a value in `r8`–`r17` that an argument (or the
-    second operand of an 8-byte helper) overwrites is pushed and popped around it.
-  - **Y+63:** the scratch-free form reaches slots only as `Y+q`. A function whose
-    scalar slots of up to 4 bytes would lie past `Y+63` falls back to the naive form,
-    all in memory.
-  - **Helper clobbers:** every helper counts as a call; no narrower clobber set for the
-    special-contract helpers.
-
-  The ch. 20 tests pass.
-- **M23. Frameless functions.** *Done.*
-  - A function with no slots and no stack arguments sets up no `Y` and does not touch SP.
-    `Y` joins the call-saved pool, after `r16`; when a function given it turns out to
-    need a frame after all, it is allocated again without it.
-  - Frames of 2–6 bytes (rounded up to even) are reserved with `rcall .` and released
-    with `pop r0`, as avr-gcc does, instead of the SP sequence.
-  - The interrupt-safe SP write stays for larger frames, because user code may enable
-    interrupts.
-- **M24. Peephole.** *Done* (`backend/avr/peephole.c`, and fusion in selection):
-  - **Compare-and-branch fusion** in selection: a comparison read only by the
-    conditional jump after it branches on its flags, integer or FP.
-  - **Forward, per block:** register copies and constants known (`r1` zero), so a
-    move or `ldi` of what a register holds goes; a slot or global byte just loaded or
-    stored is forwarded to a reload as a move, and a store of what it holds goes. A
-    store through a pointer or a call forgets memory; a volatile access stays.
-  - **Backward, over register and SREG liveness:** a dead instruction goes;
-    `ldi t, k; cp r, t` is `cpi r, k`; `subi`/`sbci` of 1..63 on `r24`–`r30` is
-    `adiw`/`sbiw` where the flags are dead.
-  - **Jumps:** none to the next instruction, a branch over a jump inverted, code after
-    an unconditional jump gone; after the frame, a jump to a lone `ret` is `ret`, and a
-    call followed by the return a tail `jmp`.
-  - **Cycles** in parallel moves go through a free `X`/`Z` pair or `r0` before the
-    stack.
-  - **Not done:** skip instructions (`sbrs`/`sbrc`/`cpse`), post-increment for
-    consecutive bytes (`ldd` costs the same as `ld Z+`), and `ldi 0` → `mov r1` (the
-    same cost).
-  - Branch relaxation (M11) runs after all of these.
 
 ## Phase 6 — finishing
 
