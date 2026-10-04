@@ -208,3 +208,50 @@ int main(void)
 }
 )"));
 }
+
+// sqrt and sqrtf in libc.a: called through a pointer, and by clang's code (which
+// -fno-builtin keeps a call).
+TEST_F(Arm32Test, SqrtLibrary)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    EXPECT_EQ("3ff6a09e667f3bcd\n3ffbb67ae8584caa\n3fb504f3\n3f3504f3\n3fddb3d7\n80000000\n1\n",
+              CompileAndRunWithClang(R"(
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+double croot(double x);
+float crootf(float x);
+static void bits(double r)
+{
+    unsigned long long b;
+    memcpy(&b, &r, sizeof b);
+    printf("%08x%08x\n", (unsigned)(b >> 32), (unsigned)b);
+}
+static void fbits(float r)
+{
+    unsigned b;
+    memcpy(&b, &r, sizeof b);
+    printf("%08x\n", b);
+}
+int main(void)
+{
+    double (*f)(double) = sqrt;
+    float (*g)(float)   = sqrtf;
+    bits(f(2.0));
+    bits(croot(3.0));
+    fbits(sqrtf(2.0f));
+    fbits(g(0.5f));
+    fbits(crootf(3.0f));
+    fbits(sqrtf(-0.0f));
+    double m = f(-1.0);
+    printf("%d\n", m != m);
+    return 0;
+}
+)",
+                                     R"(
+double sqrt(double);
+float sqrtf(float);
+double croot(double x) { return sqrt(x); }
+float crootf(float x) { return sqrtf(x); }
+)"));
+}

@@ -217,7 +217,7 @@ helper routines the generated code calls.
 Programs compiled here have a usable C library: `printf`, `sprintf` and `snprintf`;
 `puts`, `putchar` and console input; the whole of `<string.h>` and the `mem*` family;
 `malloc` and friends; `atoi`; `exit`; math helpers (`fabs`, `fmin`, `fmax`, `fma`,
-`modf`, `frexp`, `ldexp`); and working variable arguments (`<stdarg.h>`). On RISC-V and
+`modf`, `frexp`, `ldexp`; `sqrt` and `sqrtf` on all but the BESM-6); and working variable arguments (`<stdarg.h>`). On RISC-V and
 AArch64, `long double` is IEEE binary128, computed in software. On 32-bit RISC-V and ARM32, `long long`
 is computed inline in register pairs, with division and the conversions to and from
 floating point in the runtime (the routines clang's code calls too); on ARM32,

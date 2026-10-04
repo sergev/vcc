@@ -1,9 +1,10 @@
 /*
  * <math.h> — mathematics (C11 §7.12), ILP32 targets (RISC-V, ARM32).
  *
- * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax() and fma() are
- * implemented in libc.a; the rest are declared for future implementation (TODO).
- * The functions are double-typed only.
+ * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax(), fma(), sqrt() and
+ * sqrtf() are implemented in libc.a; the rest are declared for future implementation
+ * (TODO).  The functions are double-typed, but for sqrtf().  sqrt() is one correctly
+ * rounded instruction, which the compiler emits in place of a call.
  */
 #ifndef _MATH_H
 #define _MATH_H
@@ -28,6 +29,8 @@ double fabs(double x);
 double fmin(double x, double y);
 double fmax(double x, double y);
 double fma(double x, double y, double z);
+double sqrt(double x);
+float sqrtf(float x);
 
 /* ---- declared for future implementation (TODO) ---- */
 double floor(double x);
@@ -36,7 +39,6 @@ double round(double x);
 double trunc(double x);
 double fmod(double x, double y);
 
-double sqrt(double x);
 double pow(double x, double y);
 double exp(double x);
 double log(double x);

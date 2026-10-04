@@ -82,7 +82,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves.
 set(X86_LIBC_OBJS "")
-foreach(name console malloc setjmp)
+foreach(name console malloc setjmp sqrt)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${X86_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)

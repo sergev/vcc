@@ -80,6 +80,7 @@ which is safe with both clang and GCC.
 A call of `sqrt` is the `sqrtsd` instruction: the translator lowers a call of the
 library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
 descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+Its address, and a call from clang's code, reach `sqrt` in `libc.a` (`sqrt.s`).
 
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genx86`.
@@ -163,6 +164,7 @@ In `libc/x86/`:
   console, then stops qemu through `isa-debug-exit`.
 - `link.ld` — memory layout: the program loads at 1 MiB.
 - `malloc.s` — a simple bump allocator.
+- `sqrt.s` — `sqrt` and `sqrtf`, one instruction each.
 - `setjmp.s` — `setjmp`/`longjmp`, saving the callee-saved registers, `rsp`, the return
   address, MXCSR and the x87 control word.
 - C library: `printf`, the string functions and the math helpers, all compiled by our

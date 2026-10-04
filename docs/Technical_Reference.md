@@ -411,6 +411,7 @@ instruction selection on its own.
 | `libc/riscv64/crt0.S` | Start-up: stack, call `main`, then `exit` (also built as `crt0-status.o`, which prints `main`'s result, for the book run tests) |
 | `libc/riscv64/console.s` | `putbyte` (UART output) and `exit` (stops qemu) |
 | `libc/riscv64/malloc.s` | Simple allocator |
+| `libc/riscv64/sqrt.s` | `sqrt` and `sqrtf` (`fsqrt.d`, `fsqrt.s`), for both widths; each other target has its own |
 | `libc/common/doprnt.c` | The `printf` engine for the byte-addressed IEEE-754 targets |
 | `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
 | `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |

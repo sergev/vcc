@@ -64,9 +64,9 @@ add_custom_command(OUTPUT ${out}/crt0.o
 add_custom_command(OUTPUT ${out}/crt0-status.o
     COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -DPRINT_STATUS -o ${out}/crt0-status.o ${src}/crt0.S
     DEPENDS ${src}/crt0.S)
-# Assembly leaves: the console is the same for both widths.
+# Assembly leaves: the console and sqrt are the same for both widths.
 set(RISCV32_LIBC_OBJS "")
-foreach(asm ${RISCV64_DIR}/console.s ${src}/malloc.s)
+foreach(asm ${RISCV64_DIR}/console.s ${RISCV64_DIR}/sqrt.s ${src}/malloc.s)
     get_filename_component(name ${asm} NAME_WE)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -o ${out}/${name}.o ${asm}

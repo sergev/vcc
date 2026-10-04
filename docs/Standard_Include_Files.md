@@ -361,7 +361,7 @@ the `wctype`/`wctrans` extensible-property mechanism. It draws `wint_t` and `WEO
 ### Mathematics — `<math.h>`, `<tgmath.h>`, `<fenv.h>`
 
 `<math.h>` declares the usual real-valued functions, all taking and returning `double`
-(there are no `f`- or `l`-suffixed variants):
+(there are no `f`- or `l`-suffixed variants, but for `sqrtf`):
 
 | Group | Functions |
 |---|---|
@@ -373,7 +373,9 @@ the `wctype`/`wctrans` extensible-property mechanism. It draws `wint_t` and `WEO
 
 Implemented in `libc.a` so far: `fabs`, `fmin`, `fmax`, `fma` (shared C sources), and the
 binary64-specific `modf`, `frexp` and `ldexp` (in `libc/riscv64/`), which work on the
-IEEE bit layout directly. The rest are declared for future implementation.
+IEEE bit layout directly, and `sqrt` and `sqrtf`, one instruction each (`sqrt.s` in each
+target's runtime; the compiler emits the instruction for a call of `sqrt` itself). The
+rest are declared for future implementation.
 
 Because the formats are IEEE, `<math.h>` defines `INFINITY` and `NAN`. The compiler has
 no builtins for them, so they are spelled as overflowing constant expressions:

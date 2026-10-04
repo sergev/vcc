@@ -76,7 +76,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves.
 set(ARM32_LIBC_OBJS "")
-foreach(name console malloc aeabi_divmod aeabi_long aeabi_conv aeabi_mem)
+foreach(name console malloc sqrt aeabi_divmod aeabi_long aeabi_conv aeabi_mem)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${ARM32_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)

@@ -69,6 +69,7 @@ point call the run-time ABI helpers (`__aeabi_lmul`, `__aeabi_ldivmod`, `__aeabi
 A call of `sqrt` is the `vsqrt.f64` instruction: the translator lowers a call of the
 library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
 descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+Its address, and a call from clang's code, reach `sqrt` in `libc.a` (`sqrt.s`).
 
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genarm32`.
@@ -141,6 +142,7 @@ In `libc/arm32/`:
   `main`'s result as its exit status.
 - `link.ld` — memory layout: the program loads at 0x40010000.
 - `malloc.s` — a simple bump allocator.
+- `sqrt.s` — `sqrt` and `sqrtf`, one instruction each.
 - `aeabi_divmod.s`, `aeabi_long.s`, `aeabi_conv.s`, `aeabi_mem.s` — the run-time ABI
   helpers, which both our code and clang's call. They take the base standard even in a
   hard-float program, so the conversions move values between core and VFP registers

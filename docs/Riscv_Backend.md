@@ -55,6 +55,7 @@ For each function, in this order:
 A call of `sqrt` is the `fsqrt.d` instruction: the translator lowers a call of the
 library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
 descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
+Its address, and a call from clang's code, reach `sqrt` in `libc.a` (`sqrt.s`).
 
 To see the code without an optimization, add `--no-regalloc`, `--no-peephole` or
 `--frame-pointer` to `genriscv`.
@@ -93,6 +94,7 @@ In `libc/riscv64/`:
 - `console.s` — `putbyte` prints a character; `exit` stops qemu. `exit(0)` makes qemu
   exit with status 0; any other value becomes qemu's exit status.
 - `link.ld` — memory layout: the program loads at address 0x80000000.
+- `sqrt.s` — `sqrt` and `sqrtf`, one instruction each (shared with riscv32).
 - C library: `printf`, the string functions, a simple `malloc`, the math helpers and
   the `long double` routines; most of it from `libc/common/`, the bit-level math from
   `libc/lp64/`.
