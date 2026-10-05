@@ -542,14 +542,37 @@ void load_val(Gen *g, const Tac_Val *v, int reg)
     mem_op(g, load_op(t), reg, v->u.var_name, 0);
 }
 
-Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg)
+uint64_t const_as(const Tac_Const *c, const Tac_Type *t)
+{
+    uint64_t bits = const_bits(c);
+    if (!t || mmix_is_fp(t) || !mmix_is_scalar(t))
+        return bits;
+    int size = mmix_type_size(t);
+    if (size < 8) {
+        int shift = 64 - 8 * size;
+        bits      = mmix_is_unsigned(t) ? bits << shift >> shift
+                                        : (uint64_t)((int64_t)(bits << shift) >> shift);
+    }
+    return bits;
+}
+
+void load_val_as(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
 {
     if (v->kind == TAC_VAL_CONSTANT && !mmix_is_fp(val_type(g, v))) {
-        uint64_t bits = const_bits(v->u.constant);
+        gen_const(g, reg, const_as(v->u.constant, t));
+        return;
+    }
+    load_val(g, v, reg);
+}
+
+Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
+{
+    if (v->kind == TAC_VAL_CONSTANT && !mmix_is_fp(val_type(g, v))) {
+        uint64_t bits = const_as(v->u.constant, t);
         if (bits <= 255)
             return mmix_imm((int64_t)bits);
     }
-    load_val(g, v, reg);
+    load_val_as(g, v, reg, t);
     return mmix_reg(reg);
 }
 

@@ -130,9 +130,14 @@ Mmix_Op store_op(const Tac_Type *t);
 void address_of(Gen *g, int reg, const char *name, int64_t off);
 // Load value `v` into `reg`, extended to 64 bits by its type.
 void load_val(Gen *g, const Tac_Val *v, int reg);
-// The Z operand of an instruction: a constant byte as an immediate, else `v` loaded
-// into `reg`.
-Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg);
+// The same in the type `t` of the operation that uses it: a constant's kind may differ
+// in signedness (a cast between int and unsigned emits no TAC, and leaves the kind), so
+// a constant takes the width and signedness of `t`.  A variable has its own type.
+void load_val_as(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t);
+uint64_t const_as(const Tac_Const *c, const Tac_Type *t);
+// The Z operand of an operation in type `t`: a constant byte as an immediate, else `v`
+// loaded into `reg`.
+Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t);
 // Store `reg` into variable `v`, in its own width.
 void store_val(Gen *g, int reg, const Tac_Val *v);
 // Copy `size` bytes from the address in $2 to the address in $3, `align` bytes at a

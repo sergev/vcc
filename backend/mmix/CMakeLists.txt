@@ -19,12 +19,13 @@ target_link_libraries(mmix backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(MMIX_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
+list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter[1-4]_tests[0-9]*\\.cpp$")
 
 add_executable(mmix-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
+    test/int_tests.cpp
     test/run_tests.cpp
     ${MMIX_BOOK_SOURCES}
 )

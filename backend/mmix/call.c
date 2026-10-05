@@ -24,12 +24,14 @@ static void store_abi(Gen *g, int reg, const char *name, const Tac_Type *t)
     mem_op(g, mmix_is_float(t) ? MMIX_STTU : store_op(t), reg, name, 0);
 }
 
-// A scalar value into register `reg` as the ABI passes it: a float as its binary32 bits.
-static void load_abi(Gen *g, const Tac_Val *v, int reg)
+// A scalar value into register `reg` as the ABI passes it, in type `t` (its own when
+// NULL): extended to 64 bits, a float as its binary32 bits.
+static void load_abi(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
 {
-    const Tac_Type *t = val_type(g, v);
+    if (!t)
+        t = val_type(g, v);
     if (!mmix_is_float(t)) {
-        load_val(g, v, reg);
+        load_val_as(g, v, reg, t);
         return;
     }
     if (v->kind == TAC_VAL_CONSTANT)
@@ -54,7 +56,8 @@ void gen_return(Gen *g, const Tac_Val *v, bool last)
         const Tac_Type *t = val_type(g, v);
         if (!mmix_is_scalar(t))
             fatal_error("mmix: %s: a structure result is not implemented yet", gen_name(g));
-        load_abi(g, v, ret_reg(g));
+        const Tac_Type *ft = g->tl->u.function.type;
+        load_abi(g, v, ret_reg(g), ft ? ft->u.fun_type.ret_type : NULL);
     }
     if (!last)
         emit1(g, MMIX_JMP, mmix_label(g->exit));

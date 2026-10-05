@@ -261,7 +261,7 @@ instructions.
   - **`frame_tests.cpp`:** parameters of each width, alignment, the 17th and 18th
     parameters above the frame (an `int` at +4), a 328-byte frame through `$255`, and a
     run with a frame over 255 bytes. Runs with calls follow at K11.
-- **K9. Integer ops** (ch. 2–4, 11, 12).
+- **K9. Integer ops** (ch. 2–4, 11, 12). *Done, but for chapters 11 and 12.*
   - **Arithmetic:**
     - `addu`, `subu`, `mulu`, `negu`, and `and`/`or`/`xor`;
     - `nor`/`nand`/`nxor`, and `orn`/`andn` for `~`, as fits;
@@ -296,6 +296,36 @@ instructions.
   - **Width conversions:**
     - sign extension is `slu`+`sr`, zero extension `slu`+`sru` or `and` with a mask;
     - truncation is the extension to the narrower type, by the invariant.
+
+  *Done.*
+  - **Signed division: `div` with a fix-up (decided).** Six instructions for either
+    result:
+    - **quotient:** `div q,a,b; get r,rR; xor t,a,b; zsn t,t,1; csz t,r,0;
+      addu q,q,t`;
+    - **remainder:** the same up to the `xor`, then `zsn t,t,b; csz t,r,0;
+      subu r,r,t`.
+
+    GCC's absolute-value sequence takes nine. `LONG_MIN / -1` gives `LONG_MIN`
+    remainder 0, as GCC's does.
+  - **Constants in the operation's type.** A cast between `int` and `unsigned` emits no
+    TAC, so copy propagation can leave a `uint` constant in an `int` comparison (`i !=
+    (int)0x89abcdef`). Zero-extended, it compares wrongly with the sign-extended
+    variable. `load_val_as`/`val_operand` therefore give a constant the width and
+    signedness of the operation's type (the variable operand's), and a return value
+    those of the function's result type; arguments follow at K11. This is how TAC is,
+    not a frontend defect: RISC-V sidesteps it by keeping every 32-bit value
+    sign-extended, which MMIX's `divu` and `sru` cannot use.
+  - **In naive selection** every result is stored in its own width, so the width
+    invariant holds without re-extension; it matters again at K21.
+  - **Jumps and labels are in already,** since chapter 4's `&&` and `||` need them
+    (K10 tests them).
+  - **`int_tests.cpp`:** the constant generator's table (and every value it builds),
+    golden sequences, and two run tables against the host: 202 division and remainder
+    cases of every sign at 64 and 32 bits, signed and unsigned, with `LONG_MIN / -1`;
+    and wrapping, shifts, bitwise operations, comparisons and conversions at every
+    width.
+  - **Book chapters 1–4 pass** against GCC. Chapters 11 and 12 use calls and globals,
+    and a fatal error stops the whole test binary, so they wait for K11 and K12.
 - **K10. Control flow** (ch. 5–8).
   - **Branches** test one register against zero: `bz`, `bnz`, `bn`, `bnn`, `bp`, `bnp`,
     after a `cmp`/`cmpu` when the operands are not already a value and zero.

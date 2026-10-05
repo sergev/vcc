@@ -1,0 +1,286 @@
+//
+// MMIX integer operations: the constant generator, the selected instructions, and runs
+// against the host's arithmetic.
+//
+#include <climits>
+#include <cstdint>
+#include <sstream>
+#include <type_traits>
+
+#include "mmix_test.h"
+
+extern "C" {
+#include "internal.h"
+}
+
+// The constant generator's choice, as assembly lines.
+static std::string Steps(uint64_t value)
+{
+    ConstStep steps[4];
+    int n = mmix_const_steps(value, steps);
+    std::string s;
+    for (int i = 0; i < n; i++) {
+        char buf[64];
+        if (steps[i].op == MMIX_NEGU)
+            snprintf(buf, sizeof buf, "negu $1,0,%u\n", steps[i].arg);
+        else
+            snprintf(buf, sizeof buf, "%s $1,#%x\n", mmix_mnemonic[steps[i].op], steps[i].arg);
+        s += buf;
+    }
+    return s;
+}
+
+// A value with few nonzero wydes is set and completed with inc; one with few wydes
+// other than #ffff starts from -1 and clears; -1..-255 is one negu.
+TEST(MmixConst, Table)
+{
+    EXPECT_EQ("setl $1,#0\n", Steps(0));
+    EXPECT_EQ("setl $1,#c8\n", Steps(200));
+    EXPECT_EQ("setl $1,#ffff\n", Steps(0xffff));
+    EXPECT_EQ("setml $1,#1\n", Steps(0x10000));
+    EXPECT_EQ("seth $1,#8000\n", Steps(0x8000000000000000ull));
+    EXPECT_EQ("seth $1,#4004\n", Steps(0x4004000000000000ull)); // the double 2.5
+    EXPECT_EQ("setl $1,#cdef\nincml $1,#89ab\nincmh $1,#4567\ninch $1,#123\n",
+              Steps(0x0123456789abcdefull));
+    EXPECT_EQ("setl $1,#ffff\nincml $1,#ffff\n", Steps(0xffffffffull));
+    EXPECT_EQ("setmh $1,#ffff\ninch $1,#ffff\n", Steps(0xffffffff00000000ull));
+    EXPECT_EQ("negu $1,0,1\n", Steps(UINT64_MAX));
+    EXPECT_EQ("negu $1,0,255\n", Steps((uint64_t)-255));
+    EXPECT_EQ("negu $1,0,1\nandnl $1,#ff\n", Steps((uint64_t)-256));
+    EXPECT_EQ("negu $1,0,1\nandnl $1,#ffff\n", Steps((uint64_t)-65536));
+    EXPECT_EQ("negu $1,0,1\nandnl $1,#3e7\n", Steps((uint64_t)-1000));
+    EXPECT_EQ("negu $1,0,1\nandnh $1,#8000\n", Steps((uint64_t)INT64_MAX));
+    // A tie (three either way) goes to set.
+    EXPECT_EQ("setml $1,#8000\nincmh $1,#ffff\ninch $1,#ffff\n",
+              Steps((uint64_t)(int64_t)INT32_MIN));
+    // Every value the generator emits is the value asked for.
+    for (uint64_t v : { 0ull, 1ull, 255ull, 256ull, 0x10001ull, 0xffff0000ffffull,
+                        0xfffffffffffeull, 0x8000000000000001ull, 0x7fffffff00000000ull,
+                        (uint64_t)-2, (uint64_t)-70000, (uint64_t)INT64_MIN }) {
+        ConstStep steps[4];
+        int n     = mmix_const_steps(v, steps);
+        uint64_t r = 0;
+        for (int i = 0; i < n; i++) {
+            unsigned a = steps[i].arg;
+            switch (steps[i].op) {
+            case MMIX_NEGU: r = (uint64_t)0 - a; break;
+            case MMIX_SETL: r = a; break;
+            case MMIX_SETML: r = (uint64_t)a << 16; break;
+            case MMIX_SETMH: r = (uint64_t)a << 32; break;
+            case MMIX_SETH: r = (uint64_t)a << 48; break;
+            case MMIX_INCML: r += (uint64_t)a << 16; break;
+            case MMIX_INCMH: r += (uint64_t)a << 32; break;
+            case MMIX_INCH: r += (uint64_t)a << 48; break;
+            case MMIX_ANDNL: r &= ~(uint64_t)a; break;
+            case MMIX_ANDNML: r &= ~((uint64_t)a << 16); break;
+            case MMIX_ANDNMH: r &= ~((uint64_t)a << 32); break;
+            case MMIX_ANDNH: r &= ~((uint64_t)a << 48); break;
+            default: ADD_FAILURE() << "unexpected step"; break;
+            }
+        }
+        EXPECT_EQ(v, r) << std::hex << v;
+    }
+}
+
+// A constant byte is the Z immediate; the operation and its store.
+EXPECT_CODE(AddImmediate,
+            "subu $254,$254,16\n"
+            "sto $0,$254,0\n"
+            "ldo $1,$254,0\n"
+            "addu $1,$1,200\n"
+            "sto $1,$254,8\n"
+            "ldo $0,$254,8\n"
+            "addu $254,$254,16\n"
+            "pop 1,0\n",
+            "long f(long a) { a = a + 200; return a; }")
+
+// The signed add is addu: add would only set overflow bits in rA.  The int result is
+// stored in its own width, which wraps it.
+TEST_F(MmixTest, SignedAddIsAddu)
+{
+    std::string code = Code(CompileToMmix("int f(int a, int b) { return a + b; }"));
+    EXPECT_NE(std::string::npos, code.find("addu $1,$1,$2\nsttu $1,")) << code;
+    EXPECT_EQ(std::string::npos, code.find("add $")) << code;
+}
+
+// A comparison is cmp and a conditional set; against zero the value decides alone.
+TEST_F(MmixTest, Comparisons)
+{
+    std::string code = Code(CompileToMmix(
+        "int f1(long a, long b) { return a < b; }\n"
+        "int f2(unsigned a, unsigned b) { return a >= b; }\n"
+        "int f3(long a) { return a > 7; }\n"
+        "int f4(long a) { return a < 0; }\n"
+        "int f5(unsigned long a) { return a == 0; }\n"));
+    EXPECT_NE(std::string::npos, code.find("cmp $1,$1,$2\nzsn $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("cmpu $1,$1,$2\nzsnn $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("cmp $1,$1,7\nzsp $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nzsn $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nzsz $1,$1,1\n")) << code;
+}
+
+// Signed division: div floors, and the fix-up truncates; the remainder from rR.
+EXPECT_CODE(SignedDivide,
+            "subu $254,$254,24\n"
+            "sto $0,$254,0\n"
+            "sto $1,$254,8\n"
+            "ldo $1,$254,0\n"
+            "ldo $2,$254,8\n"
+            "div $3,$1,$2\n"
+            "get $255,rR\n"
+            "xor $1,$1,$2\n"
+            "zsn $1,$1,1\n"
+            "csz $1,$255,0\n"
+            "addu $3,$3,$1\n"
+            "sto $3,$254,16\n"
+            "ldo $0,$254,16\n"
+            "addu $254,$254,24\n"
+            "pop 1,0\n",
+            "long f(long a, long b) { return a / b; }")
+
+TEST_F(MmixTest, SignedRemainder)
+{
+    std::string code = Code(CompileToMmix("long f(long a, long b) { return a % b; }"));
+    EXPECT_NE(std::string::npos, code.find("div $3,$1,$2\n"
+                                           "get $255,rR\n"
+                                           "xor $1,$1,$2\n"
+                                           "zsn $1,$1,$2\n"
+                                           "csz $1,$255,0\n"
+                                           "subu $3,$255,$1\n"))
+        << code;
+}
+
+TEST_F(MmixTest, UnsignedDivide)
+{
+    std::string code = Code(CompileToMmix("unsigned long f(unsigned long a) { return a % 10; }"));
+    EXPECT_NE(std::string::npos, code.find("divu $1,$1,10\nget $1,rR\n")) << code;
+}
+
+TEST_F(MmixTest, UnaryOps)
+{
+    std::string code = Code(CompileToMmix(
+        "long f1(long a) { return -a; }\n"
+        "long f2(long a) { return ~a; }\n"
+        "int f3(long a) { return !a; }\n"));
+    EXPECT_NE(std::string::npos, code.find("negu $1,0,$1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("nor $1,$1,0\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("zsz $1,$1,1\n")) << code;
+}
+
+TEST_F(MmixTest, Shifts)
+{
+    std::string code = Code(CompileToMmix(
+        "long f1(long a, int n) { return a >> n; }\n"
+        "unsigned long f2(unsigned long a) { return a >> 3; }\n"
+        "long f3(long a) { return a << 60; }\n"));
+    EXPECT_NE(std::string::npos, code.find("sr $1,$1,$2\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sru $1,$1,3\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("slu $1,$1,60\n")) << code;
+}
+
+// A width conversion loads the source from its own width, extended as it says.
+TEST_F(MmixTest, WidthConversions)
+{
+    std::string code = Code(CompileToMmix(
+        "long f1(int a) { return a; }\n"
+        "unsigned long f2(unsigned a) { return a; }\n"
+        "int f3(long a) { return (signed char)a; }\n"));
+    EXPECT_NE(std::string::npos, code.find("ldt $1,$254,0\nsto $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldtu $1,$254,0\nsto $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nstbu $1,")) << code;
+}
+
+// The expression of `op` on a and b in C, and on the host.
+template <typename T>
+static void Case(std::ostringstream &src, int &n, const char *type, const char *op, T a, T b,
+                 T r)
+{
+    const char *u = std::is_unsigned<T>::value ? "UL" : "";
+    src << "    { volatile " << type << " a = " << +a << u << ", b = " << +b << u << "; if (("
+        << type << ")(a " << op << " b) != (" << type << ")" << +r << u << ") return " << ++n
+        << "; }\n";
+}
+
+// Division and remainder of every sign combination, at 64 and 32 bits, against the
+// host's; LONG_MIN / -1, which floors and truncates alike, and the unsigned ones.
+TEST_F(MmixTest, RunDivisionTable)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::ostringstream src;
+    src << "int main(void)\n{\n";
+    int n = 0;
+    for (long a : { 7L, -7L, 6L, -6L, 0L, 1L, -1L, LONG_MAX, LONG_MIN + 1 })
+        for (long b : { 2L, -2L, 3L, -3L, 1L, -1L, 7L, LONG_MAX }) {
+            Case<long>(src, n, "long", "/", a, b, a / b);
+            Case<long>(src, n, "long", "%", a, b, a % b);
+        }
+    for (int a : { 7, -7, INT_MAX, INT_MIN + 1, -100 })
+        for (int b : { 2, -2, 5, -5, -1 }) {
+            Case<int>(src, n, "int", "/", a, b, a / b);
+            Case<int>(src, n, "int", "%", a, b, a % b);
+        }
+    for (unsigned long a : { 7UL, ULONG_MAX, 1UL << 63, 12345678901UL })
+        for (unsigned long b : { 2UL, 3UL, ULONG_MAX, 1UL << 63 }) {
+            Case<unsigned long>(src, n, "unsigned long", "/", a, b, a / b);
+            Case<unsigned long>(src, n, "unsigned long", "%", a, b, a % b);
+        }
+    for (unsigned a : { 7U, UINT_MAX, 1U << 31 })
+        for (unsigned b : { 2U, 10U, UINT_MAX }) {
+            Case<unsigned>(src, n, "unsigned", "/", a, b, a / b);
+            Case<unsigned>(src, n, "unsigned", "%", a, b, a % b);
+        }
+    src << "    { volatile long a = -9223372036854775807L - 1, b = -1;\n"
+           "      if (a / b != a) return 250;\n"
+           "      if (a % b != 0) return 251; }\n";
+    src << "    return 0;\n}\n";
+    EXPECT_EQ("", CompileAndRunMmix(src.str()));
+    EXPECT_EQ(0, exit_status) << "case " << exit_status << " of\n" << src.str();
+}
+
+// Narrow results wrap in their own width; shifts, bitwise operations and comparisons at
+// every width against the host's.
+TEST_F(MmixTest, RunWidths)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::ostringstream src;
+    src << "int main(void)\n{\n";
+    int n = 0;
+    Case<int>(src, n, "int", "+", INT_MAX, 1, (int)((unsigned)INT_MAX + 1));
+    Case<int>(src, n, "int", "*", 65536, 65536, 0);
+    Case<int>(src, n, "int", "-", INT_MIN, 1, (int)((unsigned)INT_MIN - 1));
+    Case<unsigned>(src, n, "unsigned", "+", UINT_MAX, 1, 0);
+    Case<unsigned>(src, n, "unsigned", "-", 0, 1, UINT_MAX);
+    Case<short>(src, n, "short", "+", 32767, 1, (short)-32768);
+    Case<unsigned short>(src, n, "unsigned short", "*", 300, 300, (unsigned short)90000);
+    Case<signed char>(src, n, "signed char", "+", 127, 1, (signed char)-128);
+    Case<unsigned char>(src, n, "unsigned char", "-", 0, 1, 255);
+    Case<long>(src, n, "long", ">>", -1024, 3, -128);
+    Case<int>(src, n, "int", ">>", -1024, 3, -128);
+    Case<unsigned>(src, n, "unsigned", ">>", 0x80000000U, 31, 1);
+    Case<unsigned long>(src, n, "unsigned long", ">>", 1UL << 63, 63, 1);
+    Case<long>(src, n, "long", "<<", 1, 62, 1L << 62);
+    Case<int>(src, n, "int", "<<", 1, 31, INT_MIN);
+    Case<long>(src, n, "long", "&", -1, 0x0f0f, 0x0f0f);
+    Case<long>(src, n, "long", "|", 0x0f00, 0x00f0, 0x0ff0);
+    Case<long>(src, n, "long", "^", -1, 1, -2);
+    Case<long>(src, n, "long", "<", -1, 1, 1);
+    Case<unsigned long>(src, n, "unsigned long", "<", ULONG_MAX, 1, 0);
+    Case<int>(src, n, "int", ">=", INT_MIN, INT_MAX, 0);
+    Case<unsigned>(src, n, "unsigned", ">", UINT_MAX, 0, 1);
+    Case<long>(src, n, "long", "==", LONG_MIN, LONG_MIN, 1);
+    Case<long>(src, n, "long", "!=", 0, 0, 0);
+    src << "    { volatile long x = 0x123456789abcdefL; volatile int i = (int)x;\n"
+           "      volatile unsigned short s = (unsigned short)x; volatile signed char c = (signed char)x;\n"
+           "      if (i != (int)0x89abcdef) return 200;\n"
+           "      if (s != 0xcdef) return 201;\n"
+           "      if (c != (signed char)0xef) return 202;\n"
+           "      if ((long)c != -17) return 203;\n"
+           "      if ((unsigned long)(unsigned char)c != 0xef) return 204;\n"
+           "      if ((long)(unsigned)i != 0x89abcdefL) return 205;\n"
+           "      if (-x != -0x123456789abcdefL) return 206;\n"
+           "      if (~x != -0x123456789abcdefL - 1) return 207;\n"
+           "      if (!x != 0) return 208; }\n";
+    src << "    return 0;\n}\n";
+    EXPECT_EQ("", CompileAndRunMmix(src.str()));
+    EXPECT_EQ(0, exit_status) << "case " << exit_status << " of\n" << src.str();
+}
