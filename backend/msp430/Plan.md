@@ -212,7 +212,7 @@ arguments (*checked*, the same signatures).
 |---|---|
 | Fixed | R0 (PC), R1 (SP), R2 (SR/CG1), R3 (CG2) |
 | Arguments and results | R12–R15 |
-| Values not live across a call | R11–R15 |
+| Values not live across a call | R11–R14 (R15 is the selection's scratch) |
 | Values live across a call | R4–R10, pushed and popped in the prologue and epilogue |
 | Selection scratch | R15, never allocated (since T21) |
 
@@ -518,119 +518,102 @@ Phase 4 is done:
 
 ## Phase 5 — code quality
 
-- **T21 is done.**
-  - **The selection now works in place.** An operand may be a register or memory on
-    either side, so `d = a + b` is `mov a, d; add b, d` and a compare is a `cmp` of the
-    operands where they lie. r15 is the one scratch register: a pointer from memory, a
-    shift count, a constant compared, or a copy loop's pointer, with r13 and r14 pushed
-    around the loop. The same selection serves `--no-regalloc`, with every operand in
+Phase 5 is done:
+- **The selection works on operands where they lie (T21).**
+  - Any operand may be a register or memory, on either side. So `d = a + b` is
+    `mov a, d; add b, d`, and a compare is a `cmp` of the operands in place.
+  - r15 is the one scratch register: a pointer from memory, a shift count, a constant
+    compared, or a copy loop's pointer, with r13 and r14 pushed around the loop.
+  - Helper operands and call arguments go into place as one parallel move. A cycle is
+    broken by three `xor`s, so no temporary is needed.
+  - The same selection serves `--no-regalloc`, with every operand in memory.
+- **Register allocation (T21)** on `backend/common/regalloc.c`.
+  - **Classes:** an `int`, a pointer or a `char` takes one register; a `long` or a
+    `float` takes two, not necessarily adjacent; a `long long` or a `double` stays in
     memory.
-  - **Allocation.** The pool is r12, r13, r14 and r11 for values not live across a call
-    or a helper, then r10–r4. r15 is never allocated, so a parameter or a long's high
-    word that arrives there is moved. A function with an r8–r11 helper keeps r8–r10
-    free. Registers keep their own numbers on the allocator's side, since 0 is never in
-    the pool.
-  - **Helpers.** Their operands go into place, and arguments into r12–r15, as one
-    parallel move. A cycle is broken by three `xor`s, so no temporary is needed.
-  - **Narrower clobber sets: not done.** Every one of our helpers may clobber r11–r15,
-    as a call does, so a narrower set gains nothing.
-  - **Code size:** the C library goes from 60 964 to 41 800 bytes. GCC `-O2` gives
-    38 016 and clang `-O2` 40 142.
-  - **Cycles:** benchmarks linked with our runtime, in cycles / code bytes:
+  - **Pools:** r12, r13, r14 and r11 for values not live across a call or a helper,
+    then r10–r4, which the prologue pushes. r15 is never allocated, so a value that
+    arrives there is moved.
+  - **r8 helpers:** a function with a helper that takes its first operand in r8–r11
+    keeps r8–r10 free of variables.
+  - **Numbering:** registers keep their own numbers on the allocator's side, since 0 is
+    never in the pool.
+  - **No narrower clobber sets:** every one of our helpers may clobber r11–r15, as a
+    call does, so a narrower set gains nothing.
+  - The ch. 20 tests pass.
+- **Frameless functions (T22).** A leaf with its variables in registers has no slots and
+  saves nothing, so it touches neither SP nor the stack: `add r13, r12; ret`, as GCC's.
+  Its early returns are `ret` in place.
+- **In selection (T23):**
+  - a comparison (or `!x`) whose result only the next conditional jump reads is a `cmp`
+    and that jump, with no 0/1 in between;
+  - a constant first operand is turned around (`k < b` is `cmp #k+1, b; jge`);
+  - a 16-bit multiply by a small constant, and an index scaled by one, is done inline in
+    r15 by Horner's rule;
+  - a structure parameter is read through the incoming pointer, uncopied, when three
+    things hold:
+    - the callee only reads it, by member or whole;
+    - it makes no call and no store through a pointer;
+    - it writes no global.
 
-    | | phase 4 | T21 | GCC `-O2` | clang `-O2` |
-    |---|---|---|---|---|
-    | bubble sort, 64 ints | 381 326 / 648 | 125 436 / 288 | 32 309 / 156 | 45 803 / 142 |
-    | sieve to 2000 | 408 705 / 244 | 150 037 / 100 | 74 650 / 138 | 79 567 / 60 |
-    | CRC-16, 1 KB | 749 546 / 524 | 212 205 / 202 | 119 922 / 98 | 21 065 / 156 |
-    | binary64 loop | 6 093 268 / 814 | 6 083 527 / 664 | 6 054 279 / 310 | 6 053 422 / 676 |
-    | string copy and compare | 387 055 / 690 | 116 048 / 258 | 72 701 / 228 | 74 723 / 180 |
+    The caller's object then cannot change meanwhile, so `return s.b` is
+    `mov 2(r1), r15; mov 2(r15), r12; ret`.
+- **The peephole pass (T23, `peephole.c`)**, over the body to a fixed point:
+  - **Constants:** the constant-generator aliases (`clr`, `inc`, `incd`, `dec`, `decd`,
+    `tst`, `adc`, `inv`). A neutral constant goes (`bis #0`, `and #-1`), and so does
+    `add #0` ahead of an `addc`.
+  - **Jumps:** a branch over a jump becomes the inverse branch, and a jump to the next
+    line goes.
+  - **Forward pass:** it tracks copies, constants, memory words held in registers and
+    bytes already extended. Moves, reloads, stores of what is already there, and a
+    `mov.b r, r` of an extended byte go. A read of a copy reads the oldest register
+    holding it.
+  - **Backward pass**, on the liveness of r4–r15 and SR:
+    - dead instructions go;
+    - a load moves forward into its one use;
+    - a load, an operation and a store back become one operation on memory;
+    - an add of a constant to a base becomes the offset (`mov a(r15), r14`,
+      `mov 6(r12), r12`), so a struct copy is memory to memory;
+    - consecutive loads into registers use `@rN+`;
+    - a `tst` whose flags the instruction before already set goes, under the C and V
+      rules.
+  - **After the frame:** a jump to a lone `ret` is `ret`, and `call; ret` is a tail
+    jump `br`.
+  - Volatile accesses carry a flag that the pass leaves alone. Branch relaxation runs
+    after it.
+- **Measured** against `msp430-elf-gcc -O2 -mcpu=msp430` and clang `-O2`.
+  - **Code size, in bytes:** the C library is its 39 C sources; the book programs are the
+    677 that all four compile, text only.
 
-  - **Book programs set aside:** three programs are undefined at 16 bits, and their
-    results depend on garbage. Two declare `strlen` as returning `unsigned long`, so they
-    read r13; one reads past an `int` and past an array.
-- **T23, first part.**
-  - **In selection:**
-    - a comparison (or `!x`) whose result only the next conditional jump reads is a
-      `cmp` and that jump;
-    - a constant first operand is turned around (`k < b` is `cmp #k+1, b; jge`);
-    - a 16-bit multiply by a small constant, and an index scaled by one, is done inline
-      in r15 by Horner's rule.
-  - **`peephole.c`, over the body:**
-    - the constant-generator aliases;
-    - jump cleanup;
-    - forward: known copies, constants, memory words held in registers, and bytes
-      already extended, so moves, reloads and stores of what is already there go;
-    - backward, on the liveness of r4–r15 and SR: dead instructions go, a load folds
-      into the instruction that reads it, a load, operation and store become one memory
-      operation, and a redundant `tst` or neutral constant goes.
-  - **Three more rules:**
-    - a read of a copied register reads the oldest register holding the value;
-    - a load moves forward into its one use, past instructions that leave it alone;
-    - an add of a constant to a register then used as a base becomes the offset
-      (`add #a, r15; mov @r15, r14` is `mov a(r15), r14`; `p[3]` is `mov 6(r12), r12`;
-      a struct copy is memory to memory).
-  - **After the frame:** a jump to a lone `ret` is `ret`, and `call; ret` is `br`.
-  - **Results:**
-    - the C library is 36 406 bytes, against 38 016 for GCC `-O2`;
-    - in cycles / code bytes: sort 83 807 / 190, sieve 91 796 / 56, CRC 147 129 / 156,
-      binary64 loop 5 823 478 / 568, strings 108 082 / 214;
-    - what sort still loses to GCC is mostly the same index computed again and again:
-      common subexpressions, a TAC-level matter.
-- **T22 is done.** With its variables in registers, a leaf has no slots and saves
-  nothing, so it does no `sub`/`add` on SP and pushes nothing (`add r13, r12; ret`, as
-  GCC's). Its epilogue is then a bare `ret`, which every early return now does in place.
-  The C library goes to 41 766 bytes; the benchmarks have no early returns.
-- **T21. Register allocation** on `backend/common/regalloc.c`.
-  - **Classes:**
-    - `char`/`short`/`int`/pointer are `REGALLOC_INT`;
-    - `long`/`float` are `REGALLOC_PAIR` of consecutive registers;
-    - `long long`/`double` are `REGALLOC_NONE`.
-  - **Numbering:** registers are numbered from 1 on the allocator's side, as ARM32 and
-    AVR did. Only R4–R15 are allocatable.
-  - **Pools:**
-    - R12–R15 and R11 for values not live across a call, with result hints on R12
-      (R12:R13 for a `long`);
-    - R4–R10 for values live across a call, pushed and popped.
-  - **Helper calls:**
-    - every helper is reported through the `runtime_call` hook;
-    - the R8–R11-argument helpers also clobber R8–R11 as far as our code is concerned.
-      That is conservative, whatever GCC assumes;
-    - the integer helpers, whose contracts are narrower than a call, get a narrower
-      clobber set only if ch. 20 shows it to be worth it. Record the decision here.
+    | | phase 4 | T21 | T22 | T23 | GCC `-O2` | clang `-O2` |
+    |---|---|---|---|---|---|---|
+    | C library | 60 964 | 41 800 | 41 766 | 36 404 | 38 016 | 40 142 |
+    | book programs | 365 688 | | | 195 794 | 99 942 | 85 366 |
 
-  The ch. 20 tests pass.
-- **T22. Frameless functions.** A function with no slots, no outgoing stack arguments and
-  no call-saved registers does no `sub`/`add` on SP and pushes nothing. The common case
-  of a small leaf is then the bare body and `ret`, as GCC's `f1` is.
-- **T23. Peephole.**
-  - **Constants:**
-    - prefer the constant-generator forms: `clr`, `inc`, `incd`, `dec`, `decd`, `tst`,
-      and `#1`/`#2`/`#4`/`#8`/`#-1` immediates;
-    - fold a zero high word out of `bis`/`xor`, and an all-ones one out of `and`;
-    - inline shift-and-add for multiplication by a small constant.
-  - **Memory operands:**
-    - fold a load-then-operate into the memory form (`mov x(r1), r15; add r15, r14` ⇒
-      `add x(r1), r14`), and operate directly on a memory destination;
-    - use `@rN+` for consecutive word loads;
-    - no reload of a word just stored.
-  - **Flags:**
-    - a liveness pass over SR, driven by the per-opcode flag table;
-    - compare-and-branch fusion, with no 0/1 materialized;
-    - drop a `tst` or `cmp #0` whose flags the previous instruction already set, under
-      the C = !Z and V rules.
-  - **Extensions:** no `mov.b` or `sxt` of a value already extended.
-  - **Branches:** branch over jump, no jump to the next line, and a tail call as `br #f`
-    when the epilogue leaves nothing on the stack.
-  - **Struct parameters:** a callee that never writes to a struct parameter and never
-    takes its address reads through the incoming pointer, with no copy, as GCC does.
+  - **Cycles / code bytes:** benchmarks linked with our runtime, as built at the time of
+    each run. T22 changed none of them. The binary64 loop spends nearly all its time in
+    the runtime, which every column of a run shares, so only the last run's cycles are
+    given for it.
 
-  Branch relaxation (T10) runs after all of these.
+    | | phase 4 | T21 | T23 | GCC `-O2` | clang `-O2` |
+    |---|---|---|---|---|---|
+    | bubble sort, 64 ints | 381 326 / 648 | 125 436 / 288 | 83 807 / 190 | 32 309 / 156 | 45 803 / 142 |
+    | sieve to 2000 | 408 705 / 244 | 150 037 / 100 | 91 796 / 56 | 74 650 / 138 | 79 567 / 60 |
+    | CRC-16, 1 KB | 749 546 / 524 | 212 205 / 202 | 147 129 / 156 | 119 922 / 98 | 21 065 / 156 |
+    | binary64 loop | 5 838 325 / 814 | — / 664 | 5 823 478 / 568 | 5 799 336 / 310 | 5 798 287 / 676 |
+    | string copy and compare | 387 055 / 690 | 116 048 / 258 | 108 082 / 214 | 72 701 / 228 | 74 723 / 180 |
 
-  **Measure:** the code size and cycles of the book programs and the C library against
-  `msp430-elf-gcc -O2 -mcpu=msp430` and clang `-O2`, before and after each of T21–T23.
-  This is a table for the docs, not a gate. GCC's output is the first place to look for
-  idioms worth a peephole rule.
+  - **Reading the numbers:**
+    - The library is now smaller than both compilers'.
+    - The book programs are twice GCC's, since `-O2` folds and inlines most of them
+      whole.
+    - On sort, GCC still wins: the same index is computed again and again, a common
+      subexpression that is a TAC-level matter for every backend.
+    - clang's CRC is folded at compile time.
+- **Book programs set aside:** three programs are undefined at 16 bits, and their
+  results depend on garbage. Two declare `strlen` as returning `unsigned long`, so they
+  read r13; one reads past an `int` and past an array.
+- **Tests:** 914 MSP430 tests, and the full suite (9947), pass.
 
 ## Phase 6 — finishing
 
@@ -689,8 +672,8 @@ Phase 4 is done:
   object, corrupts the caller's data with no fault.
   - Mitigation: the copy is the first thing the prologue does (T27); T17's aggregate
     cases write to every parameter and check the caller's object; the no-copy shortcut
-    waits for T23 and requires that the parameter is never written and never has its
-    address taken.
+    (T23) requires that the parameter is only read, and that the callee makes no call,
+    no store through a pointer and no write to a global.
 - **Helper contracts.** GCC's and clang's code trust what their compilers believe about
   the R8–R11 operands of `__mspabi_addd` and the like, and clang's about `cmpd`'s
   unordered result. A wrong guess breaks only the foreign side, or only NaN comparisons,
