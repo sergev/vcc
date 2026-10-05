@@ -73,7 +73,7 @@ never renumbered. The prefix is `T`, for TI: `A`, `R`, `B`, `V`, `X` and `M` are
 | GCC's libraries | `libgcc.a` of the `430` multilib is linked after our `libc.a`. newlib is used only in tests, linked by `msp430-elf-gcc -mcpu=msp430 -msim` | Our runtime defines every helper our code calls. `libgcc.a` supplies what GCC's code calls beyond that (the `int` shift helpers and the shared epilogues), and is the reference our helpers are checked against. `-msim` brings newlib's startup, `msp430-sim.ld` and `libsim.a`, whose I/O mspsim serves |
 | Run environment | `mspsim -n <cycles> <elf>` | Our own simulator: ELF loader, console UART, an exit device, and newlib's host I/O |
 | I/O and exit | stdout through the USCI_A0 UART (`UCA0TXBUF` 0x0067, poll `IFG2` 0x0003 bit 1). `exit` writes the status to the stop register 0x01FE, which becomes mspsim's exit status | No timeout-and-kill protocol is needed, unlike AVR. The cycle limit `-n` gives deterministic timeouts |
-| Memory map | Data, `.bss` and stack in 0x0200–0x3FFF (15.5 KB); code and `.rodata` in 0x4000–0xFFDF (48 KB); vectors in 0xFFE0–0xFFFF, reset → `_start` | mspsim is all RAM, so the split is our choice. It mirrors a flash device, so the runtime stays honest about `.data` copying. Revisit at T5 if code size demands |
+| Memory map | Data, `.bss` and stack in 0x0200–0x1FFF (7.5 KB); code and `.rodata` in 0x2000–0xFFDF (56 KB); vectors in 0xFFE0–0xFFFF, reset → `_start` | mspsim is all RAM, so the split is our choice. It mirrors a flash device, so the runtime stays honest about `.data` copying. The ROM grew from 48 KB at T17: `printf` with the soft binary64 under the naive selection takes over 45 KB |
 | Backend IR | A small hand-written `Msp_Instr` list, as in `avr_ir.h`. Every instruction knows its size, for branch relaxation | `msp430.asdl` stays the reference spec. The IR covers only what we emit |
 | Executable | `genmsp430` (`backend/msp430/`), library `msp430`; installed as `vgenmsp430` | Mirrors `genavr`/`vgenavr` |
 
@@ -161,9 +161,12 @@ arguments (*checked*, the same signatures).
       struct S)` reads a pointer and then the object through it (*checked*).
 - **Stack arguments** sit above the return address, in parameter-list order, 2-aligned.
   The caller removes them.
-- **Variadic callees** take *every* argument on the stack, named ones included
-  (*checked*: `va(1, 2L, 3.0)` stores all three at `0(r1)`…`12(r1)`). `va_list` is a
-  plain pointer.
+- **Variadic callees** take their **last named argument** and all the variable ones on
+  the stack; the named ones before it, the hidden result pointer included, go by the
+  rules above (*checked*: `vi(1, 2L, 3, 4)` passes 1 in R12, 2 in R13:R14, and 3 and 4 on
+  the stack; `va(1, 2L, 3.0)` stores all three at `0(r1)`…`12(r1)`). clang puts every
+  argument of a variadic call on the stack, so it differs whenever a variadic function
+  has two named parameters or more. `va_list` is a plain pointer.
 - **Results:**
   - 16 bits in R12, 32 in R12:R13, 64 in R12–R15 (*checked*);
   - **every** struct or union through a hidden pointer passed in R12 as the first
@@ -191,6 +194,9 @@ arguments (*checked*, the same signatures).
     `fltullf`, `fltlid`, `fltuld`, `fltllid`, `fltulld`.
   - **Shared epilogues:** a function that saves R8–R10 may end with `br
     #__mspabi_func_epilog_N`.
+  - **Other names:** `divlu` and `divllu` for `divul` and `divull`; `fltid`, `fltud`,
+    `fltif` and `fltuf` from a 16-bit `int`; `__fixunssfsi` and `__fixunssfdi` from a
+    `float` to unsigned (libgcc has no `fixful`/`fixfull`).
   - **Library calls:** `memcpy` for struct copies, `memset` for zeroing, `sqrt`.
 
   **Special contracts.** The 64-bit two-operand helpers (`addd`, `subd`, `mpyd`, `divd`,
@@ -350,122 +356,88 @@ Phase 2 is done:
   - the frontend expands structure copies chunk by chunk, so the backend's copy loop
     serves only whole-aggregate moves.
 
-## Phase 3 — ABI conformance
+Phase 3 is done:
+- **GCC is the oracle and the toolchain (T27).**
+  - GNU `as`, `ld` and `ar` build the runtime and link every test.
+  - `libgcc.a` follows our `libc.a`.
+  - clang and `ld.lld` are a second toolchain the tests use when present. The whole
+    suite passed once on them as well.
+  - The size model follows GNU `as`:
+    - a source `0(rN)` is printed and counted as `@rN`;
+    - `rla`/`rlc` of one is spelt out as `add @rN, 0(rN)`;
+    - `push #4`/`#8` take an extension word.
 
-- **T27. GCC as the oracle and toolchain.** This comes first in Phase 3. Phases 0–2 were
-  built against clang; this step moves them to GCC. clang becomes the second oracle.
-  - **Tools** (`libc/msp430/CMakeLists.txt`):
-    - find `msp430-elf-as`, `-ld`, `-ar` and `-gcc` (`MSP430_AS`, `MSP430_LD`,
-      `MSP430_AR`, `MSP430_GCC`);
-    - assemble the runtime (`crt0.S` through `msp430-elf-gcc -c`, the `.s` files and the
-      C library's `genmsp430` output) with GNU `as`;
-    - archive with `msp430-elf-ar`;
-    - find GCC's `libgcc.a` through `msp430-elf-gcc -mcpu=msp430
-      -print-libgcc-file-name` (`MSP430_LIBGCC`).
-
-    `MSP430_TOOLS_FOUND` now means GNU binutils and mspsim. clang and `ld.lld` become
-    optional (`MSP430_CLANG_FOUND`).
-  - **Run harness** (`msp430_test.h`): the program is assembled by GNU `as` and linked by
-    `msp430-elf-ld -T link.ld crt0.o prog.o libc.a` (no `-n`).
-  - **Structures by reference:**
-    - **The caller** (`call.c`) passes the address of each struct or union argument as a
-      pointer argument in the usual register or stack place, and copies nothing. An
-      rvalue's temporary is already a frame slot, so its address serves.
-    - **The callee** (`frame.c`) gives each struct parameter a frame slot of its own and
-      copies the object into it through the incoming pointer in the prologue. The body
-      is unchanged.
-    - The variadic case (a pointer on the stack) is T16's.
-    - This is backend-only: the frontend still hands the backend a struct-typed
-      argument.
-  - **`wchar_t` = `long`:**
-    - `libc/msp430/include/` gets its own `stddef.h`, ahead of `ip16`;
-    - `WCHAR_MIN`/`WCHAR_MAX` become 32-bit, in a `stdint.h` of its own or through a
-      macro the `ip16` one tests;
-    - AVR keeps `int`, as avr-gcc has it.
-  - **Size model:**
-    - selection emits `@rN` for a `0(rN)` source, so that clang's and GNU `as`
-      encodings agree;
-    - `SizesAgreeWithAssembler` checks the model against GNU `as`, and against clang's
-      when present.
-  - **Book comparison:** `book_test.h` compares with GCC's build, not clang's. That
-    build is wholly GCC's: `msp430-elf-gcc -mcpu=msp430 -msim -O0`, with newlib and its
-    startup. So the reference shares neither our C library nor our runtime, and a bug in
-    either cannot hide by appearing on both sides.
-    The present skip list is rechecked: an entry that GCC's build runs correctly is a
-    bug of ours, not a limit of the target.
-  - **The clang-specific runtime stays.** `mspabi64.s` (the R8–R11 shims, which GCC's
-    code also calls) and the `__mspabi_cmpd`/`cmpf` that only clang calls are still
-    needed for clang interop.
-  - **Gate:** the 786 tests pass on the GNU tools. Rerun them with clang's assembler and
-    `ld.lld -n` once, to show that nothing was lost.
-- **T16. Variadic functions and `<stdarg.h>`.**
-  - **Calls:** for a variadic callee, *every* argument goes on the stack, named ones
-    included. A struct argument goes there as its pointer. An unprototyped callee is
-    called as non-variadic.
-  - **The variadic function** finds all its parameters on the stack, so its prologue
-    stores nothing.
-  - **`va_list`** is `char *`. GCC's and clang's `__builtin_va_list` are both a plain
-    2-byte pointer, so a `va_list` handed to or from their code is the same thing.
-  - **`va_start(ap, last)`** is `__va_start(ap)`, intercepted by the backend as on the
-    other targets.
-  - **`va_arg(ap, T)`:**
-    - for a scalar, it is the AVR pointer walk, with the size rounded up to 2;
-      alignment is at most 2, `char`/`short` promote to `int`, and `float` to the 8-byte
-      `double`;
-    - for a struct or union, it reads a pointer, and the object through it.
-  - **Gate:** `printf` in `libc.a` works.
-- **T17. Interop tests** with GCC in both directions, over a table of signatures, built
-  before the code they test. Then the same table with clang, structure arguments
-  excluded:
-  - **Register assignment:**
-    - the split `long` in R15 and the stack;
-    - a `long` in R13:R14;
-    - a `long long` after one `int` going to the stack while later `int`s backfill
-      registers;
-    - five `int`s.
-  - **Narrow types:** `char`, `signed char` and `unsigned char` arguments and results.
-  - **Aggregates:** structs of 1, 2, 3, 4, 6 and 10 bytes and a union, as arguments
-    mixed with scalars and as results. Each callee writes to its parameter, and the
-    caller checks that its own object is unchanged.
-  - **Wide scalars:** `long long`, `float` and `double` arguments and results.
-  - **Function pointers both ways.**
-  - **Preserved state:** R4–R10 survive our calls, including GCC's callers that return
-    through `__mspabi_func_epilog_N`.
-  - **Variadics both ways,** a struct among the variadic arguments, and a `va_list`
-    handed across.
-  - **Linking:** a mixed program is linked as ours are, then `libgcc.a` for the
-    GCC-only names (the `int` shift helpers, the shared epilogues).
-  - **GCC's code on our runtime:** it multiplies, divides, shifts, and does `float` and
-    `double` arithmetic and comparisons with NaN, so every helper contract is exercised
-    by GCC's own assumptions. The same program compiled by clang reaches
-    `__mspabi_cmpd`/`cmpf` and the R8–R11 shims.
-  - **Our helpers against libgcc's:**
-    - every helper both runtimes have is run over the same operand table, edge cases
-      included: division by zero, the most negative dividend, NaN, infinities,
-      subnormals, and conversions out of range;
-    - results are compared bit for bit;
-    - a disagreement is settled by C11 or IEEE 754 where they define the result, and
-      otherwise recorded in the runtime's contract table.
-  - **Our code with newlib:** a small program of ours calls newlib's `printf`, `strtod`
-    and `qsort` (with a callback of ours). Our object is linked by `msp430-elf-gcc
-    -mcpu=msp430 -msim` with newlib, its startup and `libgcc.a`, and runs under mspsim
-    with newlib's own I/O. This tests variadics and function pointers against a large
-    body of code nobody here wrote. The reverse, newlib's `qsort` calling our comparison
-    function, comes in the same test. Our own `main` is then called by newlib's `crt0`,
-    and its result passes through newlib's `exit`.
-  - **clang's assembler on every output**, when it is installed. `msp430_test.h` also
-    assembles each golden and run test's `.s` with `clang --target=msp430 -c`, as the
-    x86-64 tests do with a second assembler.
-- **T18. Differential book tests.** Every book program is also compiled by GCC
-  (`-mcpu=msp430 -msim -O0`, with newlib), run under mspsim, and the outputs and
-  statuses are compared, as in the AVR suite. This is what makes a 16-bit `int`
-  testable.
-  - **clang as a third compiler.** Each program is also built by clang and run. A whole
-    program has no cross-compiler calls, so the structure argument difference does not
-    arise.
-  - **Disagreements.** Our output must match both. Where GCC and clang disagree with
-    each other, the program depends on behaviour C leaves undefined or unspecified at 16
-    bits. It goes on a list with the reason, and there ours must match GCC's.
+    `SizesAgreeWithAssembler` checks the model against both assemblers.
+- **Structures go by reference, as GCC passes them.**
+  - The caller passes the address of its own object, uncopied, as an ordinary pointer
+    argument.
+  - The callee copies the object into its own slot in the prologue, through the address
+    kept meanwhile in the slot's first word.
+  - Struct parameter slots are therefore at least 2 bytes.
+- **GCC's types.** MSP430 has its own `stddef.h` and `stdint.h` (AVR keeps the `ip16`
+  ones):
+  - `wchar_t` is `long`;
+  - `wint_t` is `unsigned int`;
+  - `sig_atomic_t` and the fast 8-bit types are `int`;
+  - the 16-bit types stay `int`, where GCC has `short`, so that the shared `inttypes.h`
+    fits them.
+- **Variadics (T16), as GCC passes them.**
+  - The last named argument and every later one go on the stack; earlier named ones take
+    registers.
+  - A structure goes as its address. `va_arg` follows the address through
+    `__builtin_va_class`, now given by `tac_msp430_class`.
+  - `printf`, `sprintf` and `snprintf` are in `libc.a`.
+  - `int64.c`'s conversions moved to `int64conv.c`, so dividing a `long long` no longer
+    links the float runtime. This applies to AVR, ARM32 and RV32 too.
+- **Our code calls GCC's helpers by GCC's conventions (T17).** Our objects therefore link
+  with libgcc and newlib alone:
+  - `__mspabi_addd`/`mpyll` and the rest take a first operand in R8–R11, which the
+    prologue saves;
+  - `__mspabi_addf`, `fixdli`, `fltlid`, `cvtfd` and the like use the ordinary ABI;
+  - the libgcc predicates do the FP comparisons;
+  - `main` refers to `__crt0_call_exit` with `.refsym`, as GCC's does, so that newlib's
+    startup passes its result to `exit`. Our crt0 defines the name.
+- **The runtime serves GCC's code alone.**
+  - `shift.s` has the complete shift groups of libgcc's `slli.o`, `srai.o` and `srli.o`
+    (the `int` and `long long` shifts and the fixed-count entries), and the shared
+    epilogues. A libgcc shift object would otherwise define our names twice.
+  - There are aliases `divlu`/`divllu` and the 16-bit `fltid`/`fltud`/`fltif`/`fltuf`.
+  - `mspabi.c` is split into `mspabif.c` (binary32) and `mspabid.c` (binary64), so that a
+    program takes in only the runtime it uses.
+- **Interop (T17).**
+  - **Signature tables:** compiled by GCC and by us, each side calling the other, and
+    with clang without the structure arguments. They cover the split `long`, R13:R14,
+    `long long` backfill, five `int`s, narrow types, structures of 1–10 bytes, a union,
+    nested ones and function pointers.
+  - **Preserved registers:** R4–R10 survive our calls.
+  - **GCC's code on our runtime:** checked against the host bit for bit, with every
+    helper and the NaN comparisons. It is also linked with our runtime alone.
+  - **clang's code on our runtime:** the same, but for NaN `>`/`>=`.
+  - **Our helpers against libgcc's:** every `__mspabi_*` helper, linked side by side
+    with libgcc and `libmul_none.a` prefixed `gcc`, agrees bit for bit over the operand
+    table. Four programs keep it within the ROM.
+  - **Our code under newlib:** newlib's startup, `printf`, `strtod` and `qsort` with our
+    callback, and a GCC function taking our structure.
+  - **clang's assembler** also takes every output when present.
+- **Book programs (T18):** compared with GCC's own build, made with newlib through
+  `--wrap=main`, and with clang's.
+  - **Unskipped:** three programs, because GCC agrees with ours: `Chapter16_AccessThroughCharPointer`, `Chapter16_CompoundBitwiseOpsChars` and
+    `Chapter19_..._FoldCompoundBitwiseAssignAllTypes`.
+  - **Undefined at 16 bits:** in those three GCC and clang differ, so they are not
+    compared with clang.
+  - **The rest of the skip list** fails in GCC's build too, or GCC rejects it. The one
+    exception, `Chapter3_BitwiseShiftrNegative`, is undefined and GCC differs.
+- **Memory map:** 56 KB of ROM and 7.5 KB of RAM. The ROM grew because `printf` no longer
+  fit.
+- **Findings along the way:**
+  - GCC and clang differ in three ways:
+    - structure arguments;
+    - the variadic rule for named arguments;
+    - `wchar_t`.
+  - newlib's modular startup needs the `.refsym`.
+  - the shared `doprnt` prints at most about 16 significant digits (`%.17g` of 0.1 is
+    `0.1`) on every target; T20 looks at it.
+- **Tests:** 805 MSP430 tests, and the full suite (9837), pass.
 
 ## Phase 4 — library and headers
 
@@ -487,7 +459,9 @@ Phase 2 is done:
 - **T20. Libc and run tests.**
   - **`doprnt.c`** already sizes `%z`/`%t` by `size_t`/`ptrdiff_t`, and its buffers by
     `DBL_MANT_DIG` (AVR, M21). Check them for binary64 on a 16-bit `int`. The ~350-byte
-    `FBUFSIZE` fits the stack, but count it against the 15.5 KB.
+    `FBUFSIZE` fits the stack, but count it against the 7.5 KB.
+  - **`%.17g` stops at about 16 digits** in the shared `doprnt`, on every target: its
+    conversion multiplies the fraction by 10 in binary64. Decide whether to fix it.
   - **`frexp`/`ldexp`/`modf`** come from `libc/ilp32` (binary64).
   - **`malloc`** sits between `__heap_start` and the stack. Reuse AVR's design, ideally
     as one portable C allocator in `libc/common` if its assumptions allow, else
@@ -639,7 +613,7 @@ Phase 2 is done:
   bug reads the wrong word without a fault.
   - Mitigation: T2's layout checks against the compilers; alignment kept through
     `ALLOCATE_LOCAL` and the outgoing area; byte copies for 1-aligned structs.
-- **15.5 KB of RAM.** A stack overflow into `.bss` is silent.
+- **7.5 KB of RAM.** A stack overflow into `.bss` is silent.
   - Mitigation: the link-time stack reserve, the canary checked at `exit`, and the book
     skip list.
 - **Irregular flags.** `mov` sets none, `bit`/`and` set C = !Z, and `xor` sets V oddly. A
