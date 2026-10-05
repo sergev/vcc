@@ -75,3 +75,5 @@ add_executable(genmsp430
     msp430/main.c
 )
 target_link_libraries(genmsp430 msp430 backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genmsp430> DESTINATION bin RENAME vgenmsp430)

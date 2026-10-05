@@ -105,6 +105,13 @@ bool HaveAvrRun()
            access((std::string(AVR_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The GNU MSP430 binutils, mspsim and the build's MSP430 runtime.
+bool HaveMsp430Run()
+{
+    return MSP430_TOOLS_FOUND && HaveTool("msp430-elf-as") && HaveTool("msp430-elf-ld") &&
+           HaveTool(MSPSIM) && access((std::string(MSP430_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
 // `stderr_file` when they are given (which is how the -v echo is captured).  With a
@@ -209,7 +216,8 @@ protected:
     // path.  stdout lands in out.log, stderr in err.log.
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
-        bool besm6 = false, aarch64 = false, arm32 = false, x86 = false, avr = false;
+        bool besm6 = false, aarch64 = false, arm32 = false, x86 = false, avr = false,
+             msp430 = false;
         for (size_t i = 0; i + 1 < args.size(); i++) {
             if (args[i] == "-t" && args[i + 1] == "besm6")
                 besm6 = true;
@@ -221,6 +229,8 @@ protected:
                 x86 = true;
             if (args[i] == "-t" && args[i + 1] == "avr")
                 avr = true;
+            if (args[i] == "-t" && args[i + 1] == "msp430")
+                msp430 = true;
         }
         setenv("VCC_GEN",
                besm6     ? VCC_GENBESM_PATH
@@ -228,6 +238,7 @@ protected:
                : arm32   ? VCC_GENARM32_PATH
                : x86     ? VCC_GENX86_PATH
                : avr     ? VCC_GENAVR_PATH
+               : msp430  ? VCC_GENMSP430_PATH
                          : VCC_GENRISCV_PATH,
                1);
 
@@ -238,12 +249,13 @@ protected:
                               : arm32   ? ARM32_INCLUDE_DIR
                               : x86     ? X86_INCLUDE_DIR
                               : avr     ? AVR_INCLUDE_DIR
+                              : msp430  ? MSP430_INCLUDE_DIR
                                         : RISCV_INCLUDE_DIR;
             argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
             if (!besm6)
-                argv.push_back(std::string("-I") + (avr     ? IP16_INCLUDE_DIR
-                                                    : arm32 ? ILP32_INCLUDE_DIR
-                                                            : LP64_INCLUDE_DIR));
+                argv.push_back(std::string("-I") + (avr || msp430 ? IP16_INCLUDE_DIR
+                                                    : arm32       ? ILP32_INCLUDE_DIR
+                                                                  : LP64_INCLUDE_DIR));
             argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
         }
         argv.insert(argv.end(), args.begin(), args.end());
@@ -279,6 +291,7 @@ protected:
         fs::create_symlink(VCC_GENARM32_PATH, prefix + "/bin/vgenarm32");
         fs::create_symlink(VCC_GENX86_PATH, prefix + "/bin/vgenx86");
         fs::create_symlink(VCC_GENAVR_PATH, prefix + "/bin/vgenavr");
+        fs::create_symlink(VCC_GENMSP430_PATH, prefix + "/bin/vgenmsp430");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
@@ -289,11 +302,12 @@ protected:
                                  : target == "arm32"   ? ARM32_INCLUDE_DIR
                                  : target == "x86_64"  ? X86_INCLUDE_DIR
                                  : target == "avr"     ? AVR_INCLUDE_DIR
+                                 : target == "msp430"  ? MSP430_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
         const char *model_inc =
             target == "riscv64" || target == "aarch64" || target == "x86_64" ? LP64_INCLUDE_DIR
             : target == "riscv32" || target == "arm32"                         ? ILP32_INCLUDE_DIR
-            : target == "avr"                                                  ? IP16_INCLUDE_DIR
+            : target == "avr" || target == "msp430"                            ? IP16_INCLUDE_DIR
                                                                                : target_inc;
         for (const char *inc : { target_inc, model_inc, COMMON_INCLUDE_DIR }) {
             for (const auto &entry : fs::directory_iterator(inc)) {
@@ -376,6 +390,16 @@ protected:
                    out, Path("qemu.err"), 10, con);
         std::string code = ReadFile(con);
         *status = code.empty() ? -1 : (unsigned char)code[0];
+        return ReadFile(out);
+    }
+
+    // Run an MSP430 ELF or Intel HEX file under mspsim; returns its UART output, main's
+    // result in *status.
+    std::string RunMspsim(const std::string &firmware, int *status)
+    {
+        std::string out = Path("mspsim.out");
+        *status = RunProcess({ MSPSIM, "-q", "-n", "100000000", firmware }, out,
+                             Path("mspsim.err"), 10);
         return ReadFile(out);
     }
 };
@@ -610,6 +634,70 @@ twice:  lsl     r24
     int status;
     EXPECT_EQ(RunQemuAvr(Path("t.elf"), &status), "42\n");
     EXPECT_EQ(status, 3);
+}
+
+TEST_F(CcDriver, CompileToAssemblyMsp430)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "msp430", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find(".section .text.main,"), std::string::npos) << text;
+    EXPECT_NE(text.find("call    #printf"), std::string::npos) << text;
+}
+
+// Separate compilation for the MSP430, a .S among the sources, and the link of the
+// build's runtime by hand: the ELF runs on mspsim, and so does its Intel HEX.
+TEST_F(CcDriver, LinkAndRunMsp430)
+{
+    if (!HaveMsp430Run())
+        GTEST_SKIP() << "msp430-elf-as/ld or mspsim not found";
+    WriteSource("main.c", "#include <stdio.h>\n"
+                          "int twice(int);\n"
+                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S", R"(#ifdef __MSP430__
+        .globl  twice
+twice:  rla     r12
+        ret
+#endif
+)");
+    ASSERT_EQ(Vcc({ "-t", "msp430", "-c", "main.c", "twice.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    std::string lib = MSP430_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "msp430", "-nostdlib", "-T", MSP430_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunMspsim(Path("t.elf"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+
+    ASSERT_EQ(RunProcess({ MSP430_OBJCOPY, "-O", "ihex", Path("t.elf"), Path("t.hex") }), 0);
+    EXPECT_EQ(RunMspsim(Path("t.hex"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+}
+
+// clang's assembler and ld.lld through the overrides, which carry their own flags.
+TEST_F(CcDriver, LinkAndRunMsp430Clang)
+{
+    if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(RISCV_CLANG) || !HaveTool(RISCV_LD))
+        GTEST_SKIP() << "MSP430 clang/ld.lld or mspsim not found";
+    WriteSource("t.c", kHello);
+    setenv("VCC_AS", (std::string(RISCV_CLANG) + " --target=msp430 -c").c_str(), 1);
+    setenv("VCC_LD", (std::string(RISCV_LD) + " -n").c_str(), 1);
+    std::string lib = MSP430_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "msp430", "-v", "-nostdlib", "-T", MSP430_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "t.c", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunMspsim(Path("t.elf"), &status), "hello 42\n");
+    EXPECT_EQ(status, 0);
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(std::string(RISCV_CLANG) + " --target=msp430 -c -mcpu=msp430 -o "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(std::string(RISCV_LD) + " -n --gc-sections -T "), std::string::npos)
+        << echo;
 }
 
 TEST_F(CcDriver, CompileToAssemblyBesm6)
@@ -952,6 +1040,55 @@ int main(void)
     EXPECT_NE(echo.find(" --target=avr -mmcu=atmega1280 -c "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+}
+
+// The same for the MSP430: its own headers ahead of the 16-bit model's, the GNU
+// binutils, the link with --gc-sections, and GCC's libgcc.a last, so that an object
+// GCC compiled links too (__builtin_clz is __clzhi2, which only libgcc has).
+TEST_F(CcDriver, StagedPrefixMsp430)
+{
+    if (!HaveMsp430Run() || !HaveTool(MSP430_GCC) || access(MSP430_LIBGCC, R_OK) != 0)
+        GTEST_SKIP() << "msp430-elf-gcc/as/ld, libgcc.a or mspsim not found";
+    std::string prefix = StagePrefix("msp430");
+    std::string lib = prefix + "/share/vcc/msp430/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(MSP430_LIB_DIR) + "/" + name, lib + "/" + name);
+    fs::create_symlink(MSP430_LINK_SCRIPT, lib + "/link.ld");
+
+    WriteSource("lz.c", "int lz(unsigned x) { return __builtin_clz(x); }\n");
+    ASSERT_EQ(RunProcess({ MSP430_GCC, "-mcpu=msp430", "-O2", "-c", "-o", Path("lz.o"), Path("lz.c") }),
+              0);
+    WriteSource("t.c", R"(#include <stdio.h>
+#include <limits.h>
+#include <float.h>
+#include <stddef.h>
+int lz(unsigned);
+int main(void)
+{
+    long x = 1L << 20;
+    printf("%d %d %ld %g %d\n", (int)sizeof(int), (int)sizeof(wchar_t), x, 2.5, lz(0x100));
+    return INT_MAX == 32767 && DBL_MANT_DIG == 53 && CHAR_MAX == 255 ? 7 : 1;
+}
+)");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "msp430", "-v", "-o", "t.elf", "t.c", "lz.o" }), 0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunMspsim(Path("t.elf"), &status), "2 4 1048576 2.5 7\n");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t msp430 -nostdinc -I" + prefix +
+                        "/share/vcc/msp430/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t msp430 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenmsp430 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find("msp430-elf-as -mcpu=msp430 -o "), std::string::npos) << echo;
+    EXPECT_NE(echo.find("msp430-elf-ld --gc-sections -T " + lib + "/link.ld "), std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" lz.o -lc " + std::string(MSP430_LIBGCC) + " \n"), std::string::npos)
+        << echo;
 }
 
 TEST_F(CcDriver, StagedPrefixMissingPass)

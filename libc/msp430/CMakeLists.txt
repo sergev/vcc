@@ -6,14 +6,14 @@
 # assembler.  mspsim runs the programs.
 #
 find_program(MSPSIM NAMES mspsim HINTS $ENV{HOME}/.local/bin)
-foreach(tool gcc ld ar objcopy)
+foreach(tool gcc as ld ar objcopy)
     string(TOUPPER ${tool} var)
     find_program(MSP430_${var}_EXE NAMES msp430-elf-${tool} HINTS $ENV{HOME}/.local/bin)
 endforeach()
 
 set(MSP430_TOOLS_FOUND OFF)
 set(MSP430_LIBGCC "")
-if(MSP430_GCC_EXE AND MSP430_LD_EXE AND MSP430_AR_EXE AND MSP430_OBJCOPY_EXE)
+if(MSP430_GCC_EXE AND MSP430_AS_EXE AND MSP430_LD_EXE AND MSP430_AR_EXE AND MSP430_OBJCOPY_EXE)
     set(MSP430_TOOLS_FOUND ON)
     # The 430 multilib's libgcc: the helpers GCC's code calls beyond ours.
     execute_process(COMMAND ${MSP430_GCC_EXE} -mcpu=msp430 -print-libgcc-file-name
@@ -30,6 +30,7 @@ endif()
 # For the backend tests.
 set(MSP430_TOOLS_FOUND ${MSP430_TOOLS_FOUND} CACHE INTERNAL "")
 set(MSP430_GCC ${MSP430_GCC_EXE} CACHE INTERNAL "")
+set(MSP430_AS ${MSP430_AS_EXE} CACHE INTERNAL "")
 set(MSP430_LD ${MSP430_LD_EXE} CACHE INTERNAL "")
 set(MSP430_AR ${MSP430_AR_EXE} CACHE INTERNAL "")
 set(MSP430_OBJCOPY ${MSP430_OBJCOPY_EXE} CACHE INTERNAL "")
@@ -65,8 +66,21 @@ add_test(
             ${IP16_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, MSP430's own, the 16-bit model's and the shared ones, go into one
+# directory.  MSP430's stddef.h and stdint.h stand in for the 16-bit model's (wchar_t
+# is a long), as they do on the search path.
+file(GLOB MSP430_TARGET_HEADERS ${MSP430_INCLUDE_DIR}/*.h)
+file(GLOB MSP430_MODEL_HEADERS ${IP16_INCLUDE_DIR}/*.h)
+foreach(header ${MSP430_TARGET_HEADERS})
+    get_filename_component(name ${header} NAME)
+    list(REMOVE_ITEM MSP430_MODEL_HEADERS ${IP16_INCLUDE_DIR}/${name})
+endforeach()
+file(GLOB MSP430_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${MSP430_TARGET_HEADERS} ${MSP430_MODEL_HEADERS} ${MSP430_COMMON_HEADERS}
+    DESTINATION share/vcc/msp430/include)
+
 if(NOT MSP430_TOOLS_FOUND)
-    message(STATUS "No msp430-elf-gcc/ld/ar/objcopy: the MSP430 runtime is not built")
+    message(STATUS "No msp430-elf-gcc/as/ld/ar/objcopy: the MSP430 runtime is not built")
     return()
 endif()
 if(NOT MSPSIM)
@@ -134,3 +148,5 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${MSP430_LIBC_OBJS})
 add_custom_target(msp430-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+install(FILES ${out}/crt0.o ${out}/libc.a ${src}/link.ld DESTINATION share/vcc/msp430/lib)

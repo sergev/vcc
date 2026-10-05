@@ -8,11 +8,11 @@
 //     vparse     parse           .i   -> .ast
 //     vlower     lower + opt     .ast -> .tac
 //     vgen<T>    code gen        .tac -> .s
-//     as         assemble        .s   -> .o     (b6as | clang)
-//     ld         link            .o   -> a.out  (b6ld | ld.lld)
+//     as         assemble        .s   -> .o     (b6as | clang | msp430-elf-as)
+//     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld)
 //
 // The target is chosen with -t (riscv64 by default, like vcpp and vlower; or riscv32,
-// aarch64, arm32, x86_64, avr, besm6).
+// aarch64, arm32, x86_64, avr, msp430, besm6).
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
 // straight to the linker, as is a .a archive.
@@ -27,7 +27,8 @@
 // <that>/../share/vcc/<target>, so a copied tree keeps working.  The assembler and
 // linker belong to other projects and are found on PATH.  Every sub-tool can be
 // overridden with an environment variable (VCC_CPP, VCC_AS, ...); that is how the
-// tests run the driver against the build tree.
+// tests run the driver against the build tree.  VCC_AS and VCC_LD may carry
+// arguments of their own, e.g. "clang --target=msp430 -c".
 //
 // Ported from the v7besm project's b6cc (cmd/cc), itself a modern rewrite of the
 // Unix v7 cc(1) driver.
@@ -53,6 +54,15 @@
 #ifndef RISCV_LD
 #define RISCV_LD ""
 #endif
+#ifndef MSP430_AS
+#define MSP430_AS ""
+#endif
+#ifndef MSP430_LD
+#define MSP430_LD ""
+#endif
+#ifndef MSP430_LIBGCC
+#define MSP430_LIBGCC ""
+#endif
 
 static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 
@@ -60,11 +70,15 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // A target: its code generator, and how to assemble and link for it.  The
 // assembler and linker are given as an environment override, the path found when
 // vcc was configured (may be empty), and the bare name to look up on PATH.  The
-// targets other than the BESM-6 are assembled by clang and linked by ld.lld with a
-// linker script for qemu `virt` (`microvm` for x86-64, `arduino-mega` for AVR); the
-// clang configured for RISC-V serves the other targets too.
+// targets other than the BESM-6 and the MSP430 are assembled by clang and linked by
+// ld.lld with a linker script for qemu `virt` (`microvm` for x86-64, `arduino-mega`
+// for AVR); the clang configured for RISC-V serves the other targets too.  The
+// MSP430 is assembled and linked by the GNU MSP430 binutils, for mspsim, and its
+// link drops the sections nothing reaches (vgenmsp430 gives every function and
+// variable one) and ends with GCC's libgcc.a when it was found, so that objects
+// compiled by GCC link too.
 //
-enum arch { ARCH_BESM6, ARCH_LLVM };
+enum arch { ARCH_BESM6, ARCH_LLVM, ARCH_GNU };
 
 struct target {
     const char *name;
@@ -76,6 +90,8 @@ struct target {
     const char *as_name;      // assembler on PATH
     const char *ld_default;   // configure-time linker path, or ""
     const char *ld_name;      // linker on PATH
+    const char *ld_flag;      // extra linker flag, or NULL
+    const char *libgcc;       // configure-time libgcc.a, linked last when present, or NULL
 };
 
 static const struct target targets[] = {
@@ -92,6 +108,8 @@ static const struct target targets[] = {
       "ld.lld" },
     { "avr", ARCH_LLVM, "avr", "-mmcu=atmega1280", NULL, "vgenavr", RISCV_CLANG, "clang", RISCV_LD,
       "ld.lld" },
+    { "msp430", ARCH_GNU, NULL, "-mcpu=msp430", NULL, "vgenmsp430", MSP430_AS, "msp430-elf-as",
+      MSP430_LD, "msp430-elf-ld", "--gc-sections", MSP430_LIBGCC },
 };
 
 static const struct target *target = &targets[1]; // riscv64
@@ -407,19 +425,26 @@ static char *find_pass(const char *envvar, const char *name)
 }
 
 //
-// Locate a tool from another project (assembler, linker).  Resolution order:
-//   1. the environment override, if set (VCC_AS, VCC_LD);
+// Locate a tool from another project (assembler, linker) and push it onto the
+// argument vector `av`.  Resolution order:
+//   1. the environment override, if set (VCC_AS, VCC_LD), split into words at
+//      blanks, so that it may carry arguments ("ld.lld -n");
 //   2. the path found when vcc was configured, if any;
 //   3. the bare name, which run() looks up on PATH.
 //
-static const char *find_external(const char *envvar, const char *configured, const char *name)
+static void push_external(struct vec *av, const char *envvar, const char *configured,
+                          const char *name)
 {
     const char *override = getenv(envvar);
-    if (override && *override)
-        return override;
-    if (configured && *configured)
-        return configured;
-    return name;
+    if (override && strspn(override, " \t") < strlen(override)) {
+        char *words = own(strdup(override));
+        for (char *w = strtok(words, " \t"); w; w = strtok(NULL, " \t"))
+            vec_push(av, w);
+    } else if (configured && *configured) {
+        vec_push(av, (char *)configured);
+    } else {
+        vec_push(av, (char *)name);
+    }
 }
 
 //
@@ -565,14 +590,14 @@ static int run_codegen(const char *in, const char *out)
 //     arm32:   clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c -o out in
 //     x86_64:  clang --target=x86_64-none-elf -c -o out in
 //     avr:     clang --target=avr -mmcu=atmega1280 -c -o out in
+//     msp430:  msp430-elf-as -mcpu=msp430 -o out in
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
 {
-    const char *tool = find_external("VCC_AS", target->as_default, target->as_name);
     struct vec av = { 0 };
 
-    vec_push(&av, (char *)tool);
+    push_external(&av, "VCC_AS", target->as_default, target->as_name);
     switch (target->arch) {
     case ARCH_BESM6:
         vec_push(&av, "-X");
@@ -585,12 +610,15 @@ static int run_as(const char *in, const char *out)
             vec_push(&av, (char *)target->mabi);
         vec_push(&av, "-c");
         break;
+    case ARCH_GNU:
+        vec_push(&av, (char *)target->march);
+        break;
     }
     vec_push(&av, "-o");
     vec_push(&av, (char *)out);
     vec_push(&av, (char *)in);
     vec_push(&av, NULL);
-    int rc = run(tool, av.data);
+    int rc = run(av.data[0], av.data);
     vec_free(&av);
     return rc;
 }
@@ -695,6 +723,8 @@ static int compile_one(const char *src)
 //
 // Link all collected objects into an executable:
 //     besm6:   b6ld -X -e _start -o out -L<lib> <lib>/crt0.o objs ldflags -lc -lruntime
+//     msp430:  msp430-elf-ld --gc-sections -T <script> -o out -L<lib> <lib>/crt0.o objs
+//              ldflags -lc [libgcc.a]
 //     others: ld.lld -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc
 // where <lib> is <share>/lib.  -nostdlib drops the -L, crt0.o and the implicit
 // archives; the linker script (the qemu `virt` memory map) stays, unless
@@ -703,18 +733,20 @@ static int compile_one(const char *src)
 //
 static int link_objects(void)
 {
-    const char *tool = find_external("VCC_LD", target->ld_default, target->ld_name);
     char *libdir = concat(share_dir, "/lib");
 
     struct vec av = { 0 };
-    vec_push(&av, (char *)tool);
+    push_external(&av, "VCC_LD", target->ld_default, target->ld_name);
     switch (target->arch) {
     case ARCH_BESM6:
         vec_push(&av, "-X");
         vec_push(&av, "-e");
         vec_push(&av, "_start");
         break;
-    case ARCH_LLVM: {
+    case ARCH_LLVM:
+    case ARCH_GNU: {
+        if (target->ld_flag)
+            vec_push(&av, (char *)target->ld_flag);
         char *script = linkscript ? linkscript : concat(libdir, "/link.ld");
         if (access(script, R_OK) != 0) {
             error("linker script %s not found; use -T", script);
@@ -755,14 +787,18 @@ static int link_objects(void)
     // libruntime.a is LAST, and the order is not cosmetic: b6ld scans an archive
     // once, in order, and libc calls the b$* helpers while no helper calls back
     // into libc.
+    // On the MSP430, GCC's libgcc.a follows our libc.a for the helpers only GCC's
+    // code calls; without it, objects of our own compiler still link.
     if (!opt_nostdlib) {
         vec_push(&av, "-lc");
         if (target->arch == ARCH_BESM6)
             vec_push(&av, "-lruntime");
+        if (target->libgcc && *target->libgcc && access(target->libgcc, R_OK) == 0)
+            vec_push(&av, (char *)target->libgcc);
     }
     vec_push(&av, NULL);
 
-    int rc = run(tool, av.data);
+    int rc = run(av.data[0], av.data);
     vec_free(&av);
     return rc;
 }
@@ -793,7 +829,7 @@ static void usage(void)
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
     printf("    -t, --target NAME  Target: riscv64 (default), riscv32, aarch64, arm32, x86_64,\n");
-    printf("                       avr or besm6\n");
+    printf("                       avr, msp430 or besm6\n");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");
@@ -947,7 +983,7 @@ int main(int argc, char *argv[])
         error("-S%s needs -t besm6", codegen_dialect + 2);
         return 1;
     }
-    if (linkscript && target->arch != ARCH_LLVM) {
+    if (linkscript && target->arch == ARCH_BESM6) {
         error("-T is not supported for besm6");
         return 1;
     }

@@ -6,7 +6,8 @@
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
 # what checks the relocatable lookup.  Cases that assemble, link or run need
 # clang, ld.lld and qemu-system-riscv64, -aarch64, -arm, -x86_64 or -avr (or b6as/b6ld
-# for the BESM-6) and are skipped without them.
+# for the BESM-6, the GNU MSP430 binutils and mspsim for the MSP430) and are skipped
+# without them.
 #
 add_executable(cc-tests cc_test.cpp)
 target_link_libraries(cc-tests PRIVATE GTest::gtest_main)
@@ -22,6 +23,7 @@ target_compile_definitions(cc-tests PRIVATE
     VCC_GENARM32_PATH="$<TARGET_FILE:genarm32>"
     VCC_GENX86_PATH="$<TARGET_FILE:genx86>"
     VCC_GENAVR_PATH="$<TARGET_FILE:genavr>"
+    VCC_GENMSP430_PATH="$<TARGET_FILE:genmsp430>"
     BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}"
     RISCV_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
     RISCV32_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
@@ -29,6 +31,7 @@ target_compile_definitions(cc-tests PRIVATE
     ARM32_INCLUDE_DIR="${ARM32_INCLUDE_DIR}"
     X86_INCLUDE_DIR="${X86_INCLUDE_DIR}"
     AVR_INCLUDE_DIR="${AVR_INCLUDE_DIR}"
+    MSP430_INCLUDE_DIR="${MSP430_INCLUDE_DIR}"
     LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     ILP32_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     IP16_INCLUDE_DIR="${IP16_INCLUDE_DIR}"
@@ -56,8 +59,17 @@ target_compile_definitions(cc-tests PRIVATE
     AVR_TOOLS_FOUND=$<BOOL:${AVR_TOOLS_FOUND}>
     AVR_QEMU="${AVR_QEMU}"
     AVR_LIB_DIR="${AVR_LIB_DIR}"
-    AVR_LINK_SCRIPT="${AVR_LINK_SCRIPT}")
-add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86 genavr)
+    AVR_LINK_SCRIPT="${AVR_LINK_SCRIPT}"
+    MSP430_TOOLS_FOUND=$<BOOL:${MSP430_TOOLS_FOUND}>
+    MSP430_GCC="${MSP430_GCC}"
+    MSP430_OBJCOPY="${MSP430_OBJCOPY}"
+    MSP430_LIBGCC="${MSP430_LIBGCC}"
+    MSP430_CLANG_FOUND=$<BOOL:${MSP430_CLANG_FOUND}>
+    MSPSIM="${MSPSIM}"
+    MSP430_LIB_DIR="${MSP430_LIB_DIR}"
+    MSP430_LINK_SCRIPT="${MSP430_LINK_SCRIPT}")
+add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86 genavr
+    genmsp430)
 if(RISCV_TOOLS_FOUND)
     add_dependencies(cc-tests riscv-libc)
 endif()
@@ -75,5 +87,8 @@ if(X86_TOOLS_FOUND)
 endif()
 if(AVR_TOOLS_FOUND)
     add_dependencies(cc-tests avr-libc)
+endif()
+if(MSP430_TOOLS_FOUND)
+    add_dependencies(cc-tests msp430-libc)
 endif()
 gtest_discover_tests(cc-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

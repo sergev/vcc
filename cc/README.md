@@ -32,6 +32,7 @@ linker       link          .o   -> a.out
 | ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` | `ld.lld -T link.ld` |
 | x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `clang --target=x86_64-none-elf -c` | `ld.lld -T link.ld` |
 | AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `clang --target=avr -mmcu=atmega1280 -c` | `ld.lld -T link.ld` |
+| MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
@@ -50,7 +51,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr` or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430` or `besm6` |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -85,8 +86,9 @@ takes everything relative to it:
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
-clang and `ld.lld` found when the build was configured (all but the BESM-6), or else whatever
-`clang`/`ld.lld`/`b6as`/`b6ld` is on `PATH`.
+clang and `ld.lld` found when the build was configured (the GNU `msp430-elf-as` and
+`msp430-elf-ld` for the MSP430; nothing for the BESM-6), or else whatever
+`clang`/`ld.lld`/`msp430-elf-as`/`msp430-elf-ld`/`b6as`/`b6ld` is on `PATH`.
 
 Each tool can be overridden with an environment variable. This is how the tests run the
 driver against the build tree:
@@ -95,7 +97,7 @@ driver against the build tree:
 | --- | --- |
 | `VCC_CPP`, `VCC_PARSE`, `VCC_LOWER` | the preprocessor, parser and lowerer |
 | `VCC_GEN` | the code generator of the selected target |
-| `VCC_AS`, `VCC_LD` | the assembler and linker |
+| `VCC_AS`, `VCC_LD` | the assembler and linker; split into words at blanks, so they may carry arguments |
 
 ## Linking
 
@@ -123,6 +125,33 @@ USART1 (the `status` file) and waits, so qemu is stopped by hand, or by a script
 byte has arrived. For a real board, `llvm-objcopy -O ihex a.out a.hex` makes the Intel HEX
 image a flasher takes.
 
+MSP430:
+
+```text
+msp430-elf-ld --gc-sections -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc [libgcc.a]
+```
+
+`vgenmsp430` gives every function and variable a section of its own, so `--gc-sections`
+keeps only what is reached: `printf("%d")` would be 53 KB without it. GCC's `libgcc.a`
+comes last when it was found at configure time (`msp430-elf-gcc -mcpu=msp430
+-print-libgcc-file-name`) and still exists: our `libc.a` has every helper our own code
+calls, but objects compiled by GCC may call more (`__clzhi2` for `__builtin_clz`).
+
+The ELF is for the classic MSP430 with 48 KB of ROM at 0x4000 and 15.5 KB of RAM at 0x0200, and runs with
+[mspsim](https://github.com/sergev/mspsim): `mspsim a.out` prints the UART output and
+exits with `main`'s result (`-q` drops the banner, `-t` traces, `-g` starts in the
+debugger). `msp430-elf-objcopy -O ihex a.out a.hex` makes the Intel HEX image a flasher
+takes, and mspsim runs that too.
+
+clang's assembler and `ld.lld` can stand in for the GNU binutils:
+
+```sh
+VCC_AS="clang --target=msp430 -c" VCC_LD="ld.lld -n" vcc -t msp430 hello.c
+```
+
+`-n` keeps `ld.lld` from placing the ELF headers in a loaded segment, where they would
+land on the peripheral area. clang warns that it does not use `-mcpu=msp430`.
+
 BESM-6:
 
 ```text
@@ -147,13 +176,15 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
 - preprocessing and target selection
 - `-S` for every target and both BESM-6 dialects
 - the usage errors
-- `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR
+- `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR, and under
+  mspsim for the MSP430 (its Intel HEX as well, and with clang and `ld.lld` through
+  `VCC_AS`/`VCC_LD`)
 - the BESM-6 link line, checked with a stand-in linker
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the
 passes, `share/vcc/<target>/`) and run it with no overrides. That is what tests the
-relocatable lookup. Cases that need clang, `ld.lld`, qemu or `b6as` skip when they are
-missing.
+relocatable lookup. Cases that need clang, `ld.lld`, qemu, the GNU MSP430 binutils,
+mspsim or `b6as` skip when they are missing.
 
 ```sh
 ./build/cc/test/cc-tests
