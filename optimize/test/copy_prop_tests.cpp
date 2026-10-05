@@ -528,6 +528,37 @@ TEST_F(OptimizerTest, CopyPropStoreKillsStaticCopy)
     EXPECT_STREQ(last->u.return_.src->u.var_name, "x");
 }
 
+// Copy(i, p) → Load(p, x), with i an unsigned int and p a pointer of the same size
+// (a cast, lowered as a COPY on a 32-bit target). Forwarding i into the load's
+// pointer operand would give it an integer: the copy is not propagated.
+TEST_F(OptimizerTest, CopyPropKeepsValueClass)
+{
+    Tac_Instruction *entry = make_label("fn");
+    Tac_Instruction *copy  = make_copy(make_var("i"), make_var("p"));
+    Tac_Instruction *load  = make_load(make_var("p"), make_var("x"));
+    Tac_Instruction *ret   = make_return(make_var("x"));
+    entry->next            = copy;
+    copy->next             = load;
+    load->next             = ret;
+
+    Tac_TopLevel *tl            = make_fn_tl({ "i", "p", "x" });
+    Tac_Param *i                = tl->u.function.locals;
+    i->type                     = tac_new_type(TAC_TYPE_UINT);
+    i->next->type               = tac_new_type(TAC_TYPE_POINTER);
+    i->next->type->u.pointer.target_type = tac_new_type(TAC_TYPE_INT);
+    i->next->next->type         = tac_new_type(TAC_TYPE_INT);
+
+    OptFlags flags          = opt_flags_default();
+    flags.dead_store_elim   = false;
+    Tac_Instruction *result = optimize_function(entry, flags, tl);
+
+    const Tac_Instruction *in = result;
+    while (in && in->kind != TAC_INSTRUCTION_LOAD)
+        in = in->next;
+    ASSERT_NE(in, nullptr);
+    EXPECT_STREQ(in->u.load.src_ptr->u.var_name, "p");
+}
+
 // Copy(1, flag) → JIZ(flag, "Else") → Return(1) → Label("Else") → Return(0)
 // copy_prop substitutes flag→1 into the JIZ condition (Var→ConstInt).
 // constant_fold only folds JIZ(0,…) → Jump; JIZ(nonzero) is left as-is,

@@ -164,8 +164,42 @@ static void kill_alias_set(StringMap *cs, const StringMap *alias)
 // updating copy-set `cs` in place. This is both the Gen and Kill of the lattice.
 // ============================================================================
 
+// The value class of a type, as the verifier sees it: integer, pointer, each
+// floating type, aggregate. A copy is propagated only between names of one class.
+static int value_class(const Tac_Type *t)
+{
+    switch (t->kind) {
+    case TAC_TYPE_POINTER:
+        return 1;
+    case TAC_TYPE_FLOAT:
+        return 2;
+    case TAC_TYPE_DOUBLE:
+        return 3;
+    case TAC_TYPE_LONG_DOUBLE:
+        return 4;
+    case TAC_TYPE_ARRAY:
+    case TAC_TYPE_STRUCTURE:
+        return 5;
+    default:
+        return 0;
+    }
+}
+
+// May the copy `dst = src` be propagated? Not when it changes the value class: a
+// same-size integer copied into a pointer (a cast, lowered as a COPY on a 32-bit
+// target) must not be forwarded into the pointer operand of an ADD_PTR or LOAD.
+// Names of unknown type (globals, untyped hand-built TAC) are let through.
+static bool same_class(const StringMap *types, const char *dst, const Tac_Val *src)
+{
+    intptr_t td = 0, ts = 0;
+    if (!types || src->kind != TAC_VAL_VAR || !map_get((StringMap *)types, dst, &td) ||
+        !map_get((StringMap *)types, src->u.var_name, &ts) || !td || !ts)
+        return true;
+    return value_class((const Tac_Type *)td) == value_class((const Tac_Type *)ts);
+}
+
 static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const StringMap *static_names,
-                           const StringMap *address_taken)
+                           const StringMap *address_taken, const StringMap *types)
 {
     if (ins->kind == TAC_INSTRUCTION_COPY) {
         // Copy(src, dst): Kill old copies mentioning dst, then Gen (dst → src).
@@ -175,7 +209,8 @@ static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const Stri
             kill_name(cs, dst->u.var_name);
             // A volatile copy must re-execute its exact read on every use, so it
             // is not a propagatable copy: kill, but do not Gen a (dst → src) pair.
-            if (ins->is_volatile)
+            // Nor is one that changes the value class (see same_class).
+            if (ins->is_volatile || !same_class(types, dst->u.var_name, ins->u.copy.src))
                 return;
             CopyPair *p = xalloc(sizeof(CopyPair), __func__, __FILE__, __LINE__);
             p->name     = xstrdup(dst->u.var_name);
@@ -481,6 +516,18 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     StringMap static_names, address_taken;
     collect_alias_sets(cfg, fn, &static_names, &address_taken);
 
+    // The types of the private names, for the value-class check.
+    StringMap types;
+    map_init(&types);
+    if (fn && fn->kind == TAC_TOPLEVEL_FUNCTION) {
+        for (const Tac_Param *p = fn->u.function.params; p; p = p->next)
+            if (p->name)
+                map_insert(&types, p->name, (intptr_t)p->type, 0);
+        for (const Tac_Param *p = fn->u.function.locals; p; p = p->next)
+            if (p->name)
+                map_insert(&types, p->name, (intptr_t)p->type, 0);
+    }
+
     // Stage 2: the forward reaching-copies dataflow.
     int n = cfg->nblocks;
 
@@ -532,7 +579,7 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
             map_init(&new_out);
             copy_set_copy(&new_out, &new_in);
             for (const Tac_Instruction *ins = b->first; ins; ins = ins->next)
-                apply_transfer(&new_out, ins, &static_names, &address_taken);
+                apply_transfer(&new_out, ins, &static_names, &address_taken, &types);
 
             if (!copy_set_equal(&new_out, &out_sets[i])) {
                 OPT_TRACE("[copy-prop] block %d out-set changed\n", i);
@@ -590,7 +637,7 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
 
             // Advance the running reaching set past this (post-substitution)
             // instruction before moving on.
-            apply_transfer(&current_in, ins, &static_names, &address_taken);
+            apply_transfer(&current_in, ins, &static_names, &address_taken, &types);
             prev = ins;
             ins  = next;
         }
@@ -608,4 +655,5 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     opt_preds_free(&pr);
     map_destroy(&static_names);
     map_destroy(&address_taken);
+    map_destroy(&types);
 }
