@@ -130,15 +130,16 @@ TEST_F(EmitTest, Function)
     msp_append(fn, MSP_RET);
     std::string s = Capture([&](FILE *f) { msp_emit_func(f, fn); });
     msp_free_func(fn);
-    EXPECT_EQ(s, "    .text\n"
-                 "    .globl  main\n"
-                 "    .p2align 1\n"
-                 "    .type   main, @function\n"
-                 "main:\n"
-                 "    mov     #200, r12\n"
-                 ".L1:\n"
-                 "    ret\n"
-                 "    .size   main, .-main\n");
+    EXPECT_EQ(s, R"(    .text
+    .globl  main
+    .p2align 1
+    .type   main, @function
+main:
+    mov     #200, r12
+.L1:
+    ret
+    .size   main, .-main
+)");
 }
 
 // Every operand form and emulated instruction that clang's assembler accepts.  It

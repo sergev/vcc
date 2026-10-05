@@ -12,7 +12,11 @@ TEST_F(Msp430Test, AddLongChain)
 {
     std::string code = Code(CompileToMsp430("long g1, g2, g3; void f(void) { g3 = g1 + g2; }"));
     EXPECT_NE(std::string::npos,
-              code.find("mov &g1, r12\nmov &g1+2, r13\nadd &g2, r12\naddc &g2+2, r13\n"))
+              code.find(R"(mov &g1, r12
+mov &g1+2, r13
+add &g2, r12
+addc &g2+2, r13
+)"))
         << code;
 }
 
@@ -20,39 +24,59 @@ TEST_F(Msp430Test, AddLongChain)
 TEST_F(Msp430Test, CompareLongSigned)
 {
     std::string code = Code(CompileToMsp430("int f(long a, long b) { return a < b; }"));
-    EXPECT_NE(std::string::npos, code.find("cmp 6(r1), r13\njl ")) << code;
-    EXPECT_NE(std::string::npos, code.find("cmp 4(r1), r12\njlo ")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(cmp 6(r1), r13
+jl )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(cmp 4(r1), r12
+jlo )")) << code;
 }
 
 TEST_F(Msp430Test, CompareLongUnsigned)
 {
     std::string code =
         Code(CompileToMsp430("int f(unsigned long a, unsigned long b) { return a >= b; }"));
-    EXPECT_NE(std::string::npos, code.find("cmp 6(r1), r13\njlo ")) << code;
-    EXPECT_NE(std::string::npos, code.find("cmp 4(r1), r12\njhs ")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(cmp 6(r1), r13
+jlo )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(cmp 4(r1), r12
+jhs )")) << code;
 }
 
 // A shift by a small constant is unrolled, through the carry.
 TEST_F(Msp430Test, ShiftLeftLongUnrolled)
 {
     std::string code = Code(CompileToMsp430("long f(long a) { return a << 2; }"));
-    EXPECT_NE(std::string::npos, code.find("rla r12\nrlc r13\nrla r12\nrlc r13\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(rla r12
+rlc r13
+rla r12
+rlc r13
+)")) << code;
 }
 
 // By 20: a word moved, its sign filled in, then a loop of 4.
 TEST_F(Msp430Test, ShiftRightLongByWordThenLoop)
 {
     std::string code = Code(CompileToMsp430("long f(long a) { return a >> 20; }"));
-    EXPECT_NE(std::string::npos, code.find("mov r13, r12\nmov r12, r13\nrla r13\nsubc r13, r13\n"
-                                           "inv r13\nmov #4, r11\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov r13, r12
+mov r12, r13
+rla r13
+subc r13, r13
+inv r13
+mov #4, r11
+)"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("rra r13\nrrc r12\ndec r11\njne ")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(rra r13
+rrc r12
+dec r11
+jne )")) << code;
 }
 
 TEST_F(Msp430Test, NegateLong)
 {
     std::string code = Code(CompileToMsp430("long f(long a) { return -a; }"));
-    EXPECT_NE(std::string::npos, code.find("inv r12\ninv r13\ninc r12\nadc r13\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(inv r12
+inv r13
+inc r12
+adc r13
+)")) << code;
 }
 
 // Multiply and divide go through the runtime: __mspabi_ for 16 and 32 bits, libgcc's
@@ -84,14 +108,20 @@ TEST_F(Msp430Test, Helper64SecondOperandOnStack)
 TEST_F(Msp430Test, SignExtendIntToLong)
 {
     std::string code = Code(CompileToMsp430("long f(int a) { return a; }"));
-    EXPECT_NE(std::string::npos, code.find("mov r12, r13\nrla r13\nsubc r13, r13\ninv r13\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov r12, r13
+rla r13
+subc r13, r13
+inv r13
+)"))
         << code;
 }
 
 TEST_F(Msp430Test, ZeroExtendCharToLong)
 {
     std::string code = Code(CompileToMsp430("long f(unsigned char a) { return a; }"));
-    EXPECT_NE(std::string::npos, code.find("mov.b 0(r1), r12\nclr r13\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov.b 0(r1), r12
+clr r13
+)")) << code;
 }
 
 // The output routines our run tests share, compiled by us.

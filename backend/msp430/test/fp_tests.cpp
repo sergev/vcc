@@ -21,14 +21,19 @@ TEST_F(Msp430Test, DoubleAddCallsHelper)
 TEST_F(Msp430Test, FloatMultiplyCallsHelper)
 {
     std::string code = Code(CompileToMsp430("float f(float a, float b) { return a * b; }"));
-    EXPECT_NE(std::string::npos, code.find("mov 6(r1), r15\ncall #__mulsf3\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r15
+call #__mulsf3
+)")) << code;
 }
 
 // Each comparison through its own libgcc predicate, tested against zero: > as r >= 1.
 TEST_F(Msp430Test, DoubleCompare)
 {
     std::string code = Code(CompileToMsp430("int f(double a, double b) { return a > b; }"));
-    EXPECT_NE(std::string::npos, code.find("call #__gtdf2\ncmp #1, r12\nmov #1, r11\njge "))
+    EXPECT_NE(std::string::npos, code.find(R"(call #__gtdf2
+cmp #1, r12
+mov #1, r11
+jge )"))
         << code;
 }
 
@@ -45,7 +50,12 @@ TEST_F(Msp430Test, DoubleTruthTest)
 {
     std::string code = Code(CompileToMsp430("int f(double a) { return a ? 1 : 2; }"));
     EXPECT_NE(std::string::npos,
-              code.find("bic #-32768, r15\nbis r13, r12\nbis r14, r12\nbis r15, r12\ntst r12\n"))
+              code.find(R"(bic #-32768, r15
+bis r13, r12
+bis r14, r12
+bis r15, r12
+tst r12
+)"))
         << code;
 }
 
@@ -61,7 +71,9 @@ TEST_F(Msp430Test, Conversions)
         float g(double p6) { return p6; }
         long long h(double p7) { return p7; }
     )"));
-    for (const char *h : { "call #__floatsidf\n", "clr r13\ncall #__floatunsisf\n",
+    for (const char *h : { "call #__floatsidf\n", R"(clr r13
+call #__floatunsisf
+)",
                            "call #__fixdfsi\n", "call #__fixunssfsi\n", "call #__extendsfdf2\n",
                            "call #__truncdfsf2\n", "call #__fixdfdi\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;

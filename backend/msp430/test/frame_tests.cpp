@@ -5,20 +5,23 @@
 #include "msp430_test.h"
 
 // No slots: no frame at all.
-EXPECT_CODE(FramelessConstant, "mov #7, r12\nret\n", "int f(void) { return 7; }")
+EXPECT_CODE(FramelessConstant, R"(mov #7, r12
+ret
+)", "int f(void) { return 7; }")
 
 // Register parameters go to their slots; the frame is reserved and released around the
 // body.
 EXPECT_CODE(ParamsStored,
-            "sub #6, r1\n"
-            "mov r12, 0(r1)\n"
-            "mov r13, 2(r1)\n"
-            "mov 0(r1), r12\n"
-            "add 2(r1), r12\n"
-            "mov r12, 4(r1)\n"
-            "mov 4(r1), r12\n"
-            "add #6, r1\n"
-            "ret\n",
+            R"(sub #6, r1
+mov r12, 0(r1)
+mov r13, 2(r1)
+mov 0(r1), r12
+add 2(r1), r12
+mov r12, 4(r1)
+mov 4(r1), r12
+add #6, r1
+ret
+)",
             "int f(int a, int b) { return a + b; }")
 
 // The fifth int comes on the stack, above the frame and the return address, and is
@@ -37,19 +40,22 @@ TEST_F(Msp430Test, SplitLongParam)
 {
     std::string code =
         Code(CompileToMsp430("long f(int a, int b, int c, long d) { return d; }"));
-    EXPECT_NE(std::string::npos, code.find("mov r15, 6(r1)\nmov 12(r1), 8(r1)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r15, 6(r1)
+mov 12(r1), 8(r1)
+)")) << code;
 }
 
 // A char parameter is stored as a byte.
 EXPECT_CODE(CharParam,
-            "sub #4, r1\n"
-            "mov.b r12, 0(r1)\n"
-            "mov.b 0(r1), r12\n"
-            "sxt r12\n"
-            "mov r12, 2(r1)\n"
-            "mov 2(r1), r12\n"
-            "add #4, r1\n"
-            "ret\n",
+            R"(sub #4, r1
+mov.b r12, 0(r1)
+mov.b 0(r1), r12
+sxt r12
+mov r12, 2(r1)
+mov 2(r1), r12
+add #4, r1
+ret
+)",
             "int f(signed char c) { return c; }")
 
 // Slots are aligned to their types; a char array may be odd-sized.

@@ -80,24 +80,44 @@ protected:
 // Forward: a jump reaches 511 words ahead.
 TEST_F(RelaxTest, ForwardJumpInRange)
 {
-    EXPECT_EQ("f:\n    jeq     .Lt\n.Lt:\n    ret\n", Relaxed(MSP_JEQ, 0, 511, false));
+    EXPECT_EQ(R"(f:
+    jeq     .Lt
+.Lt:
+    ret
+)", Relaxed(MSP_JEQ, 0, 511, false));
 }
 
 TEST_F(RelaxTest, ForwardJumpOutOfRange)
 {
-    EXPECT_EQ("f:\n    jne     .Lv0\n    br      #.Lt\n.Lv0:\n.Lt:\n    ret\n",
+    EXPECT_EQ(R"(f:
+    jne     .Lv0
+    br      #.Lt
+.Lv0:
+.Lt:
+    ret
+)",
               Relaxed(MSP_JEQ, 0, 512, false));
 }
 
 // Backward: 512 words back.
 TEST_F(RelaxTest, BackwardJumpInRange)
 {
-    EXPECT_EQ("f:\n.Lt:\n    jl      .Lt\n    ret\n", Relaxed(MSP_JL, 511, 0, true));
+    EXPECT_EQ(R"(f:
+.Lt:
+    jl      .Lt
+    ret
+)", Relaxed(MSP_JL, 511, 0, true));
 }
 
 TEST_F(RelaxTest, BackwardJumpOutOfRange)
 {
-    EXPECT_EQ("f:\n.Lt:\n    jge     .Lv0\n    br      #.Lt\n.Lv0:\n    ret\n",
+    EXPECT_EQ(R"(f:
+.Lt:
+    jge     .Lv0
+    br      #.Lt
+.Lv0:
+    ret
+)",
               Relaxed(MSP_JL, 512, 0, true));
 }
 
@@ -113,16 +133,31 @@ TEST_F(RelaxTest, Inverses)
 // jn has no inverse: it jumps over a jmp to a br.
 TEST_F(RelaxTest, NegativeJumpOutOfRange)
 {
-    EXPECT_EQ("f:\n    jn      .Lv1\n    jmp     .Lv0\n.Lv1:\n    br      #.Lt\n.Lv0:\n.Lt:\n"
-              "    ret\n",
+    EXPECT_EQ(R"(f:
+    jn      .Lv1
+    jmp     .Lv0
+.Lv1:
+    br      #.Lt
+.Lv0:
+.Lt:
+    ret
+)",
               Relaxed(MSP_JN, 0, 600, false));
 }
 
 // An unconditional jump becomes a br.
 TEST_F(RelaxTest, UnconditionalJump)
 {
-    EXPECT_EQ("f:\n    jmp     .Lt\n.Lt:\n    ret\n", Relaxed(MSP_JMP, 0, 511, false));
-    EXPECT_EQ("f:\n    br      #.Lt\n.Lt:\n    ret\n", Relaxed(MSP_JMP, 0, 512, false));
+    EXPECT_EQ(R"(f:
+    jmp     .Lt
+.Lt:
+    ret
+)", Relaxed(MSP_JMP, 0, 511, false));
+    EXPECT_EQ(R"(f:
+    br      #.Lt
+.Lt:
+    ret
+)", Relaxed(MSP_JMP, 0, 512, false));
 }
 
 // A loop of over 1 KB: its backward jump and its exit are relaxed.
@@ -132,8 +167,14 @@ TEST_F(Msp430Test, RunLongLoop)
     std::string body;
     for (int i = 0; i < 100; i++)
         body += "        sum = sum + " + std::to_string(i % 7) + ";\n";
-    std::string src = "int main(void) {\n    int sum = 0;\n    for (int i = 0; i < 10; i++) {\n" +
-                      body + "    }\n    return sum;\n}\n";
+    std::string src = R"(int main(void) {
+    int sum = 0;
+    for (int i = 0; i < 10; i++) {
+)" +
+                      body + R"(    }
+    return sum;
+}
+)";
     std::string asm_text = CompileToMsp430(src.c_str()); // once: the symbols live per test
     EXPECT_NE(std::string::npos, Code(asm_text).find("br #")) << "not relaxed";
     EXPECT_EQ("2950\n", Run(asm_text, "crt0-status.o"));

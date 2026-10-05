@@ -12,24 +12,40 @@ TEST_F(Msp430Test, DataSections)
         static const char msg[] = "hi";
         const char *f(void) { return msg; }
     )");
-    EXPECT_NE(std::string::npos, s.find("    .data\n    .globl  d\n    .p2align 1\n"
-                                        "    .type   d, @object\n    .size   d, 2\nd:\n"
-                                        "    .short  5\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(    .data
+    .globl  d
+    .p2align 1
+    .type   d, @object
+    .size   d, 2
+d:
+    .short  5
+)"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("    .bss\n    .globl  b\n    .p2align 1\n"
-                                        "    .type   b, @object\n    .size   b, 4\nb:\n"
-                                        "    .zero   4\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(    .bss
+    .globl  b
+    .p2align 1
+    .type   b, @object
+    .size   b, 4
+b:
+    .zero   4
+)"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("msg:\n    .ascii  \"hi\"\n    .byte   0\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(msg:
+    .ascii  "hi"
+    .byte   0
+)")) << s;
 }
 
 // A char object is not aligned; anything wider is, to 2.
 TEST_F(Msp430Test, DataAlignment)
 {
     std::string s = CompileToMsp430("char c = 1; char s[3] = \"ab\"; int i = 2;");
-    EXPECT_EQ(std::string::npos, s.find(".p2align 1\n    .type   c,")) << s;
-    EXPECT_EQ(std::string::npos, s.find(".p2align 1\n    .type   s,")) << s;
-    EXPECT_NE(std::string::npos, s.find(".p2align 1\n    .type   i,")) << s;
+    EXPECT_EQ(std::string::npos, s.find(R"(.p2align 1
+    .type   c,)")) << s;
+    EXPECT_EQ(std::string::npos, s.find(R"(.p2align 1
+    .type   s,)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(.p2align 1
+    .type   i,)")) << s;
 }
 
 // Every initializer kind: integers by width, binary32 and binary64 bits, and
@@ -49,12 +65,34 @@ TEST_F(Msp430Test, DataInitializers)
         int (*fp)(void) = g;
         int *ip = &arr[1];
     )");
-    for (const char *e : { "c:\n    .byte   -1\n", "u:\n    .short  65535\n",
-                           "l:\n    .long   -2\n", "ll:\n    .quad   4886718345\n",
-                           "f:\n    .long   0x3fc00000\n", "d:\n    .quad   0x3fb999999999999a\n",
-                           "ld:\n    .quad   0x4000000000000000\n",
-                           "arr:\n    .short  1\n    .short  2\n    .zero   4\n",
-                           "fp:\n    .short  g\n", "ip:\n    .short  arr+2\n" })
+    for (const char *e : { R"(c:
+    .byte   -1
+)", R"(u:
+    .short  65535
+)",
+                           R"(l:
+    .long   -2
+)", R"(ll:
+    .quad   4886718345
+)",
+                           R"(f:
+    .long   0x3fc00000
+)", R"(d:
+    .quad   0x3fb999999999999a
+)",
+                           R"(ld:
+    .quad   0x4000000000000000
+)",
+                           R"(arr:
+    .short  1
+    .short  2
+    .zero   4
+)",
+                           R"(fp:
+    .short  g
+)", R"(ip:
+    .short  arr+2
+)" })
         EXPECT_NE(std::string::npos, s.find(e)) << e << s;
 }
 
@@ -77,8 +115,12 @@ TEST_F(Msp430Test, StaticLocals)
         int f(void) { static int n = 1; return n++; }
         int g(void) { static int n = 10; return n++; }
     )");
-    EXPECT_NE(std::string::npos, s.find("n:\n    .short  1\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("n$1:\n    .short  10\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(n:
+    .short  1
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(n$1:
+    .short  10
+)")) << s;
 }
 
 // Run: initialized data, bss, rodata, pointers in data, static locals.

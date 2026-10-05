@@ -30,11 +30,25 @@ EXPECT_CODE(VoidFallOff, "ret\n", "void f(void) { }")
 
 // The result registers by size: r12, r13:r12, r15:r12; little-endian.  A char comes back
 // extended to int, as clang's callers expect.
-EXPECT_CODE(ReturnSignedChar, "mov #-1, r12\nret\n", "signed char f(void) { return -1; }")
-EXPECT_CODE(ReturnPlainChar, "mov #255, r12\nret\n", "char f(void) { return -1; }")
-EXPECT_CODE(ReturnInt, "mov #4660, r12\nret\n", "int f(void) { return 0x1234; }")
-EXPECT_CODE(ReturnLong, "mov #772, r12\nmov #258, r13\nret\n",
+EXPECT_CODE(ReturnSignedChar, R"(mov #-1, r12
+ret
+)", "signed char f(void) { return -1; }")
+EXPECT_CODE(ReturnPlainChar, R"(mov #255, r12
+ret
+)", "char f(void) { return -1; }")
+EXPECT_CODE(ReturnInt, R"(mov #4660, r12
+ret
+)", "int f(void) { return 0x1234; }")
+EXPECT_CODE(ReturnLong, R"(mov #772, r12
+mov #258, r13
+ret
+)",
             "long f(void) { return 0x01020304L; }")
 EXPECT_CODE(ReturnLongLong,
-            "mov #1800, r12\nmov #1286, r13\nmov #772, r14\nmov #258, r15\nret\n",
+            R"(mov #1800, r12
+mov #1286, r13
+mov #772, r14
+mov #258, r15
+ret
+)",
             "long long f(void) { return 0x0102030405060708LL; }")

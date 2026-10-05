@@ -32,9 +32,15 @@ TEST_F(Msp430Test, StructArgCopyLoop)
         int g(struct B b);
         int f(struct B *p) { return g(*p); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("mov r1, r15\nmov #40, r13\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
+mov #40, r13
+)")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("mov @r14+, r12\nmov r12, 0(r15)\nincd r15\ndec r13\njne "))
+              code.find(R"(mov @r14+, r12
+mov r12, 0(r15)
+incd r15
+dec r13
+jne )"))
         << code;
 }
 
@@ -46,7 +52,10 @@ TEST_F(Msp430Test, StructArgOnStack)
         int g(int x, struct S s);
         int f(struct S *p) { return g(1, *p); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("mov r1, r15\nmov @r14, 0(r15)\nmov 2(r14), 2(r15)\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
+mov @r14, 0(r15)
+mov 2(r14), 2(r15)
+)"))
         << code;
 }
 
@@ -55,7 +64,8 @@ TEST_F(Msp430Test, StructResultPointerReturned)
 {
     std::string code = Code(CompileToMsp430(
         "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }"));
-    EXPECT_NE(std::string::npos, code.find("mov 0(r1), r12\nadd #")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r12
+add #)")) << code;
 }
 
 // Structures of every size passed and returned, a union, nested members, arrays of

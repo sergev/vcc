@@ -10,7 +10,12 @@ TEST_F(Msp430Test, ArgsInOrder)
 {
     std::string code = Code(CompileToMsp430("int g(int, long, int); int f(void) { return g(1, 2, 3); }"));
     EXPECT_NE(std::string::npos,
-              code.find("mov #1, r12\nmov #2, r13\nmov #0, r14\nmov #3, r15\ncall #g\n"))
+              code.find(R"(mov #1, r12
+mov #2, r13
+mov #0, r14
+mov #3, r15
+call #g
+)"))
         << code;
 }
 
@@ -20,7 +25,9 @@ TEST_F(Msp430Test, ArgSplitLong)
     std::string code = Code(CompileToMsp430(
         "int k(int, int, int, long); int f(void) { return k(1, 2, 3, 0x40005L); }"));
     EXPECT_NE(std::string::npos, code.find("mov #4, 0(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov #5, r15\ncall #k\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #5, r15
+call #k
+)")) << code;
 }
 
 // A long long that does not fit goes on the stack, and later ints still take registers;
@@ -29,10 +36,19 @@ TEST_F(Msp430Test, ArgBackfillAfterStack)
 {
     std::string code = Code(CompileToMsp430(
         "int u(int, long long, int, int, long); int f(void) { return u(1, 2, 3, 4, 5); }"));
-    EXPECT_NE(std::string::npos, code.find("mov #2, 0(r1)\nmov #0, 2(r1)\nmov #0, 4(r1)\n"
-                                           "mov #0, 6(r1)\nmov #5, 8(r1)\nmov #0, 10(r1)\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov #2, 0(r1)
+mov #0, 2(r1)
+mov #0, 4(r1)
+mov #0, 6(r1)
+mov #5, 8(r1)
+mov #0, 10(r1)
+)"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("mov #1, r12\nmov #3, r13\nmov #4, r14\ncall #u\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov #1, r12
+mov #3, r13
+mov #4, r14
+call #u
+)"))
         << code;
 }
 
@@ -42,7 +58,9 @@ TEST_F(Msp430Test, ArgDoubleOnStack)
     std::string code = Code(CompileToMsp430(
         "int u(int, int, int, double, int); int f(void) { return u(1, 2, 3, 4.0, 5); }"));
     EXPECT_NE(std::string::npos, code.find("mov #16400, 6(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov #5, r15\ncall #u\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #5, r15
+call #u
+)")) << code;
 }
 
 // A structure goes on the stack whatever its size, and does not stop a later long
@@ -55,7 +73,9 @@ TEST_F(Msp430Test, ArgStructOnStack)
         int f(struct S *p) { return u(*p, 1, 2, 3, 4); }
     )"));
     EXPECT_NE(std::string::npos, code.find("mov #0, 2(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov #4, r15\ncall #u\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #4, r15
+call #u
+)")) << code;
 }
 
 // A char goes extended to its register.
@@ -63,7 +83,9 @@ TEST_F(Msp430Test, ArgCharExtended)
 {
     std::string code = Code(CompileToMsp430(
         "int g(signed char); signed char c; int f(void) { return g(c); }"));
-    EXPECT_NE(std::string::npos, code.find("sxt r12\ncall #g\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(sxt r12
+call #g
+)")) << code;
 }
 
 // A variadic callee takes every argument on the stack.
@@ -72,7 +94,12 @@ TEST_F(Msp430Test, ArgsVariadicOnStack)
     std::string code = Code(CompileToMsp430(
         "int v(int, ...); int f(void) { return v(1, 2L, 3); }"));
     EXPECT_NE(std::string::npos,
-              code.find("mov #1, 0(r1)\nmov #2, 2(r1)\nmov #0, 4(r1)\nmov #3, 6(r1)\ncall #v\n"))
+              code.find(R"(mov #1, 0(r1)
+mov #2, 2(r1)
+mov #0, 4(r1)
+mov #3, 6(r1)
+call #v
+)"))
         << code;
 }
 
@@ -80,7 +107,10 @@ TEST_F(Msp430Test, ArgsVariadicOnStack)
 TEST_F(Msp430Test, IndirectCall)
 {
     std::string code = Code(CompileToMsp430("int f(int (*fp)(int)) { return fp(7); }"));
-    EXPECT_NE(std::string::npos, code.find("mov #7, r12\nmov 0(r1), r11\ncall r11\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #7, r12
+mov 0(r1), r11
+call r11
+)")) << code;
 }
 
 // Results: r12, r13:r12, r15:r12.
@@ -88,8 +118,12 @@ TEST_F(Msp430Test, ResultsStored)
 {
     std::string code = Code(CompileToMsp430(
         "long long g(void); long long x; void f(void) { x = g(); }"));
-    EXPECT_NE(std::string::npos, code.find("call #g\nmov r12, 0(r1)\nmov r13, 2(r1)\n"
-                                           "mov r14, 4(r1)\nmov r15, 6(r1)\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(call #g
+mov r12, 0(r1)
+mov r13, 2(r1)
+mov r14, 4(r1)
+mov r15, 6(r1)
+)"))
         << code;
 }
 

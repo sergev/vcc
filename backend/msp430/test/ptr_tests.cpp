@@ -9,7 +9,10 @@
 TEST_F(Msp430Test, LoadThroughPointer)
 {
     std::string code = Code(CompileToMsp430("long f(long *p) { return *p; }"));
-    EXPECT_NE(std::string::npos, code.find("mov 0(r1), r15\nmov @r15, 2(r1)\nmov 2(r15), 4(r1)\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r15
+mov @r15, 2(r1)
+mov 2(r15), 4(r1)
+)"))
         << code;
 }
 
@@ -17,7 +20,9 @@ TEST_F(Msp430Test, LoadThroughPointer)
 TEST_F(Msp430Test, StoreThroughPointer)
 {
     std::string code = Code(CompileToMsp430("void f(int *p) { *p = 1234; }"));
-    EXPECT_NE(std::string::npos, code.find("mov 0(r1), r15\nmov #1234, 0(r15)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r15
+mov #1234, 0(r15)
+)")) << code;
 }
 
 // A char goes through a pointer as a byte.
@@ -36,8 +41,12 @@ TEST_F(Msp430Test, IndexScaling)
         struct T { char c[3]; };
         char b(struct T *p, int i) { return p[i].c[1]; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("rla r12\nrla r12\nadd ")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov #3, r13\ncall #__mspabi_mpyi\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(rla r12
+rla r12
+add )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #3, r13
+call #__mspabi_mpyi
+)")) << code;
 }
 
 // A constant index folds into one add.
@@ -52,8 +61,11 @@ TEST_F(Msp430Test, AddressOfLocal)
 {
     std::string code = Code(
         CompileToMsp430("void g(int *); void f(void) { int x, y; g(&x); g(&y); }"));
-    EXPECT_NE(std::string::npos, code.find("mov r1, r12\nmov r12, ")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov r1, r12\nadd #2, r12\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
+mov r12, )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
+add #2, r12
+)")) << code;
 }
 
 // Pointers, arrays, chars and the string library, run.
