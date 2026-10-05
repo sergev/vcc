@@ -259,265 +259,56 @@ Phase 1 is done:
   - The runtime is tested against the host.
   - Book chapter 1 is compared with clang.
 
-## Phase 2 — instruction selection, book order
+Phase 2 is done:
+- **The naive selection** (`frame.c`, `instr.c`, `call.c`, `fp.c`, `data.c`, `relax.c`):
+  - every variable is in memory;
+  - copies, loads and stores go memory to memory;
+  - an operation loads its first operand into r12 up and takes the second from memory
+    or as an immediate.
+- **The frame** is off SP, with no frame pointer:
+  - the outgoing area at `0(r1)`, then the slots, each aligned to its type;
+  - the pushed registers above;
+  - operands into the incoming arguments completed by `gen_frame`.
+- **Calls** follow clang's rules exactly: r12–r15 in order, the split `long`, backfill
+  after a stack argument, every structure on the stack, every argument of a variadic
+  callee on the stack, results in r12 up, an indirect call through r11.
+- **Helpers.** Our code calls only ordinary-ABI helpers:
+  - `__mspabi_*` for 16 and 32 bits;
+  - the libgcc names for 64-bit integers and FP, with a second 64-bit operand at
+    `0(r1)`.
 
-Naive and correct first. Every TAC variable lives in a frame slot. Because the ISA is
-memory-to-memory, most operations need no register at all:
-
-```
-mov  4(r1), 8(r1)     ; t = a          (low word)
-mov  6(r1), 10(r1)    ;                (high word)
-add  12(r1), 8(r1)    ; t += b, low word, sets C
-addc 14(r1), 10(r1)   ; high word, with the carry
-```
-
-Scratch registers are needed only for pointer bases, helper operands and results.
-`mov` sets no flags, so a carry chain survives the moves between its links.
-
-Each step is done when its book chapters pass and a few golden tests pin the selected
-instructions.
-
-- **T8. Frame.** Slots come from typed TAC and `ALLOCATE_LOCAL`, each aligned to its
-  type (1 or 2). The frame size is rounded up to even.
-  - **Prologue:** push the call-saved registers used (R10 down to R4), then `sub #N,
-    r1`. The epilogue is the reverse, then `ret`.
-  - **No frame pointer:** every slot is `x(r1)` with a 16-bit offset. There is no
-    displacement limit to manage, unlike AVR's `Y+63`.
-  - **Outgoing arguments** have a preallocated area at the bottom of the frame
-    (`0(r1)` up), sized for the largest call, as on RISC-V. Arguments are stored there
-    with `mov`, not pushed, so SP is constant in the body and every slot offset is
-    fixed. clang instead does `sub`/`add` around each call; both are ABI-correct.
-  - **Incoming stack arguments** are above the saved registers and the 2-byte return
-    address. Incoming register parameters are stored to their slots in the prologue.
-
-  *Done.* The whole naive selection landed with this step: `frame.c`, `instr.c`,
-  `call.c`, `fp.c`, `data.c`, `relax.c`. The steps after it add their tests and book
-  chapters, and fix what those find.
-  - An operand into the incoming arguments is marked (`Msp_Operand.incoming`) and
-    completed by `gen_frame`, once the pushed registers are known.
-  - **Helpers.** Our code calls only ordinary-ABI helpers: `__mspabi_*` for 16 and 32
-    bits, the libgcc names for 64-bit integers and FP (`__muldi3`, `__adddf3`,
-    `__ltdf2`, …), with a second 64-bit operand at `0(r1)` in the outgoing area. The
-    R8–R11 `__mspabi_*` entry points become shims for clang's code (T13). This also gets
-    NaN right, which clang's single `__mspabi_cmpd` cannot do for both `<` and `>=`.
-  - `frame_tests.cpp` checks the parameters, the stack and split parameters, alignment,
-    and a run of a 1.2 KB frame.
-- **T9. Integer ops** (ch. 2–4, 11, 12). After the usual conversions, arithmetic is on
-  `int`, `long` or `long long`: 1, 2 or 4 words.
-  - **Add and subtract:**
-    - `add`/`addc` and `sub`/`subc` chains, directly on memory;
-    - a constant goes as `#k` per word, and a zero high word still needs `addc #0` for
-      the carry.
-  - **Logic and negation:**
-    - `and`, `bis` (or) and `xor` per word;
-    - `inv` for complement;
-    - negation is `inv` on every word, then `add #1` / `addc #0` up the chain.
-  - **Multiply:** `mpyi`, `mpyl` and `mpyll` helpers. Inline shift-and-add for
-    constants is T23's.
-  - **Divide and remainder:** the `__mspabi_div*`/`rem*` helpers. The `long long` ones
-    come from the shared C model `libc/ilp32/int64.c` under the MSPABI names, with a
-    small asm shim for each R8–R11 contract. Built with `genmsp430`, they land with
-    T14's library build.
-  - **Shifts:**
-    - By a constant:
-      - whole bytes and words move first (`swpb` plus a mask for 8; a word move for
-        16);
-      - then `rla` (or `add x, x`) per bit, or `rra`, or `clrc; rrc` for logical,
-        rippling through the words with `rlc`/`rrc`;
-      - a counted loop past a few bits.
-    - By a variable: an inline loop for `int` and `long long`, as clang does, and the
-      `slll`/`srll`/`sral` helpers for `long`.
-  - **Comparisons:**
-    - `cmp src, dst` computes `dst − src`, then `jeq`/`jne`, `jl`/`jge` (signed) or
-      `jlo`/`jhs` (`jnc`/`jc`, unsigned).
-    - There is no `jgt`/`jle`, so `>` and `<=` swap the operands. Against a constant
-      they may compare with `k+1` instead, when that does not overflow.
-    - Multi-word compares go from the high word down: signed or unsigned on the high
-      word, unsigned on the rest.
-    - A 0/1 result is `mov #1`, then a branch over `clr`.
-  - **Width conversions:**
-    - truncation is free (little-endian, low word first);
-    - `mov.b` into a register zero-extends;
-    - `sxt` sign-extends a byte;
-    - widening to `long` copies `#0`, or the sign word (`mov; swpb; sxt; swpb; sxt` or a
-      `tst`/`jn` pair) into the high words.
-
-  *Done.*
-  - The sign word is `mov; rla; subc; inv` (no label).
-  - Shifts by a variable are an inline loop for every width, `long` included, rather
-    than the `__mspabi_sll*` helpers.
-  - `int_tests.cpp` has goldens, and runs our arithmetic against the host: `int` and
-    `long` `+ - * / % & | ^` and every comparison over 12×12 operands; shifts by every
-    count, constant and variable; `long long` without the runtime.
-  - Book chapters 2–4, 11 and 12 are enabled.
-    - Skipped for good, as on AVR: `Chapter11_SwitchLong` (case values collide in a
-      32-bit `long`) and `Chapter12_UnsignedTypeSpecifiers` (loops forever with a 16-bit
-      `unsigned`).
-    - Skipped until T14 builds the 64-bit runtime: four `Chapter11` programs.
-- **T10. Control flow** (ch. 5–8) and **branch relaxation.**
-  - `.L` labels are unique per TU. A zero test is `tst` on a word, or `bis` across the
-    words of a wider value into a scratch register.
-  - Selection emits short forms only. `jXX` and `jmp` reach −1024..+1022 bytes (10-bit
-    word offset).
-  - A **relaxation pass runs last**, after peephole. It computes offsets from the T6
-    sizes and rewrites what is out of range:
-    - `jXX L` becomes `j!XX .+6; br #L`. The pairs are `jeq`/`jne`, `jl`/`jge` and
-      `jlo`/`jhs`.
-    - `jn` has no inverse, so it becomes `jn 1f; jmp 2f; 1: br #L; 2:`.
-    - `jmp L` becomes `br #L`.
-
-    It repeats until nothing changes; sizes only grow, so it terminates. A size the model
-    gets wrong in the safe direction (too large) only relaxes early. A wrong size in the
-    other direction is a loud assembler error, never a miscompile.
-  - A golden test has a branch over a body just under, at, and just over the limit. A
-    run test has a loop body larger than 1 KB.
-
-  *Done.* `relax_tests.cpp` checks every jump at 511 and 512 words, forward and back,
-  every inverse, `jn`'s jump-over and `jmp` → `br`, each result also assembled by clang;
-  and a run of a loop body over 1 KB. Book chapters 5–8 pass with no new skip.
-- **T11. Calls, scalar ABI** (ch. 9).
-  - **Arguments are placed per the ABI section:**
-    - R12–R15 by consecutive free registers, the split `long` included;
-    - a `long long` in registers only when all four are free;
-    - later arguments still take free registers;
-    - stack arguments are `mov`ed into the outgoing area in order.
-  - **Calls:** `call #f` for a direct call, and `call rN` with the pointer in a scratch
-    register for an indirect one. `FUN_CALL_NORETURN` is a plain `call`.
-  - **Narrow values** are extended by the sender and re-extended by the receiver.
-  - **Results** come back in R12, R12:R13 or R12–R15.
-  - **Parallel moves** go into the argument registers, ordered so that no source is
-    clobbered before it is read.
-
-  *Done.*
-  - No parallel moves are needed in the naive selection: every argument comes from
-    memory or is an immediate, so the stack parts go first, then the registers.
-  - An indirect call loads the pointer into r11. `call x(r1)` would read its operand
-    after pushing the return address.
-  - `call_tests.cpp` has a golden for each rule, and a run where our caller meets our
-    callee for every rule: the split `long`, backfill after a `long long`, a `double`
-    on the stack, structures, chars, seven arguments, recursion and a function pointer.
-  - Book chapter 9 passes.
-- **T12. Globals and static data** (ch. 10).
-  - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind emitted as `.byte`,
-    `.short`, `.long` or `.quad`. A `double` is a `.quad` of binary64 bits, a `float` a
-    `.long`.
-  - **Addresses:** `#sym+k` in code, and `.short sym+k` in data, for data and functions
-    alike.
-  - **Accesses** are absolute: `mov &g, 2(r1)`; `add #1, &g`. An indexed global is
-    `g(rN)`, as clang emits `mov.b data(r12), r13`.
-  - Static locals' `name$N` must assemble as they are. Check it, as on AVR.
-
-  *Done.* `data_tests.cpp` covers sections, alignment (none for `char`), every
-  initializer kind (`double` as `.quad` bits, a function address a plain `.short`),
-  absolute access, `n$1`, and a run of globals of every kind. Book chapter 10 passes.
-- **T13. Floating point** (ch. 13), in software.
-  - **A binary64 soft-float runtime,** new in `libc/common/float64.c`, beside AVR's
-    `float32.c` and the shared `float128.c`, sharing their structure and `libutil`
-    helpers where it can.
-    - Arithmetic, comparison, and conversion to and from 32- and 64-bit integers and
-      binary32.
-    - It must be correctly rounded (nearest-even), with subnormals, infinities and NaNs,
-      so it agrees bit for bit with the host's `double` and with the constant folder.
-  - **The `__mspabi_*` entry points** sit over `float32.c` and `float64.c`. The
-    ordinary-ABI ones (all of binary32, and the conversions) are C wrappers. The R8–R11
-    ones are asm shims that move the first operand to the stack, call the C routine, and
-    return in R12–R15.
-  - `cmpf`/`cmpd` return the unordered result that LLVM's lowering assumes (T5's table).
-    A clang-compiled NaN test against our runtime pins it at T17.
-  - Compiled by `genmsp430`, so it lands after T9–T12. Until then, the FP book chapter
-    waits.
-  - **Selection:**
-    - every operation is a helper call;
-    - negation is `xor #0x8000` on the top word, and `fabs` is `bic #0x8000`, both
-      inline;
-    - constants are `mov #` per word, with no constant pool;
-    - a truth test is "any bit but the sign set", inline, and true for NaN;
-    - `int`/`unsigned` conversions widen to 32 bits first, as clang does;
-    - `FLOAT_TO_DOUBLE`/`DOUBLE_TO_FLOAT` are `cvtfd`/`cvtdf`;
-    - the long double conversions emit nothing, since `long double` is `double`.
-  - **`sqrt`** stays a call (`hw_sqrt = 0`), to a C `sqrt` in the library.
-  - **Tests:** the runtime against the host's own binary64 and binary32 arithmetic over
-    a table of cases, including the halfway, subnormal and overflow edges. The host has
-    both types natively, so no case generator is needed.
-
-  *Done.*
-  - **`libc/common/float64.c`:** add, subtract, multiply, divide, `sqrt` (correctly
-    rounded, digit by digit), the six libgcc predicates, `__unorddf2`, the 32-bit
-    integer conversions, and `float` ↔ `double`.
-  - **Tested on the host,** compiled under renamed symbols (`float64_host.c`) and checked
-    bit for bit against the host's `double`:
-    - ~1.7 M operand pairs;
-    - subnormal and overflow products and quotients;
-    - 100 k square roots;
-    - constructed ties to even (a mutation that drops ties-to-even fails it);
-    - every conversion.
-  - **`libc/msp430/mspabi.c`** holds the ordinary-ABI `__mspabi_*` names over the libgcc
-    ones. **`mspabi64.s`** holds the ten R8–R11 shims (`mpyll`, the 64-bit divides,
-    `addd`/`subd`/`mpyd`/`divd`, `cmpd` over `__ltdf2`).
-  - **clang's NaN comparisons are wrong.** clang tests `__mspabi_cmpd`'s one result
-    against zero for every comparison, so for a NaN its `>` and `>=` come out true. Our
-    own code calls the libgcc predicates, and is right.
-  - `fp_tests.cpp` has goldens. Runs of our code check `double` and `float` arithmetic
-    bit for bit, every comparison with NaN, and every conversion.
-  - Book chapters 13–16 pass, and so do the four `Chapter11` programs. Skipped:
-    `DoubleAndIntParamsRecursive` and its `Library` twin exceed the cycle limit, clang's
-    build too.
-  - **Fixed** a load or store through a pointer whose pointee is wider than the value
-    (a row of a 2-D array): the memory-to-memory copy overran the destination slot.
-    Both are now clamped to the value's width (found by `Chapter15_PointerAdd`).
-  - Our frontend refuses `1.0 / 0.0` as a static initializer, on every target.
-- **T14. Pointers, arrays, chars, strings** (ch. 14–16).
-  - Loads and stores go through a base register: `mov 2(r1), r15` then `@r15`, `x(r15)`
-    or `@r15+`. Each is at the access's width, with `.b` for `char`.
-  - `ADD_PTR` scales by `rla` for powers of two, else by an inline shift-and-add
-    multiply, or `mpyi`.
-  - Pointer comparisons are unsigned.
-  - The byte-pointer TAC kinds are plain operations, as on RISC-V.
-  - **A word access ignores address bit 0**, on the hardware and in mspsim. A misaligned
-    `int` access silently reads the aligned word. Layout keeps everything aligned, and a
-    test casts `char *` buffers only at even offsets.
-  - From here, the C library (`libc/common`, plus `libc/msp430` C sources) is built with
-    `genmsp430` into `libc.a`, as AVR did at M15.
-
-  *Done.*
-  - `libc.a` now has the shared C library, built by `genmsp430`, but not the variadic
-    `printf` family (T16). It also has, from `libc/ilp32`, `int64.c` and the binary64
-    `frexp`/`ldexp`/`modf`.
-  - `muldi3.c` moved from `libc/avr` to `libc/common`, shared. AVR's tests pass
-    unchanged.
-  - `ptr_tests.cpp` has goldens: memory to memory through r15, index scaling by `rla`
-    or `__mspabi_mpyi`, byte access. A run covers arrays, a 2-D array of `long`,
-    pointer arithmetic and unsigned compares, plain `char` unsigned, and `strcpy`,
-    `strcmp`, `strlen`, `strchr`, `memcpy`, `memset` and `memcmp` from the library.
-  - **Book chapters 14–16 wait for T13:** 24 of their programs use `double`. Four
-    others are skipped for good, as on AVR:
-    - `SwitchDereferencedPointer` (case values collide);
-    - `BigArray` (a 16-bit `size_t`);
-    - `AccessThroughCharPointer` (reads past a 16-bit `int`);
-    - `CompoundBitwiseOpsChars` (shifts an `int` by 31).
-  - The four `Chapter11` programs that need `long long` division also wait for T13:
-    `int64.o` refers to the binary64 runtime.
-- **T15. Structs** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
-  - **Copies** use words for a 2-aligned struct (`mov @r14+, x(r15)`) and bytes for a
-    `char`-only one. Unrolled up to a threshold, then a counted loop, or `memcpy` as
-    clang does.
-  - **Arguments** are copied into the outgoing stack area, size rounded up to even, at
-    their place in the argument order.
-  - **Results** always use the frontend's hidden pointer (T1), which arrives in R12. The
-    callee returns it in R12 as well.
-
-  *Done.*
-  - The frontend copies a structure chunk by chunk, through loads and stores, on every
-    byte-addressed target. The backend's own copies (`copy_named`, `copy_bytes`:
-    unrolled up to 16 moves, else a loop through r12) serve whole-aggregate moves, such
-    as a structure argument.
-  - `malloc`/`calloc`/`realloc`/`free` arrive here, not at T20, since chapter 18 needs
-    them: `libc/msp430/malloc.c`, a bump allocator in C on AVR's design.
-  - `struct_tests.cpp` has goldens and runs: structures of 1, 3, 4, 10 and 60 bytes
-    passed and returned, a union, nested members, arrays of structures, the allocator.
-  - Book chapters 17–20 pass. Skipped, as on AVR: `Chapter17_SizeofExtern` (too large
-    for 15.5 KB of RAM) and `Chapter19_..._FoldCompoundBitwiseAssignAllTypes` (shifts an
-    `int` by 31).
+  The R8–R11 `__mspabi_*` names are shims for clang's code (`mspabi64.s`), and the
+  ordinary ones C wrappers (`mspabi.c`). Our comparisons are right for NaN; clang's
+  `>` and `>=` through `__mspabi_cmpd` are not.
+- **Runtime, built by `genmsp430`:**
+  - the shared C library, but not the `printf` family (T16);
+  - `float32.c`, and the new correctly rounded binary64 `float64.c` with `sqrt`,
+    checked bit for bit against the host's `double`;
+  - `int64.c`, `muldi3.c` (moved to `libc/common`), `frexp`/`ldexp`/`modf`;
+  - a bump `malloc` in C.
+- **Branch relaxation:** `jcc` → `j!cc; br`, `jn` → jump over a `jmp`, `jmp` → `br`,
+  checked at ±512 words and assembled by clang.
+- **Book chapters 1–20 pass,** compared with clang. Skipped, all for good and all as on
+  AVR or for the same reasons:
+  - `Chapter11_SwitchLong` and `Chapter14_SwitchDereferencedPointer`: case values
+    collide in a 32-bit `long`;
+  - `Chapter12_UnsignedTypeSpecifiers`: loops forever with a 16-bit `unsigned`;
+  - `Chapter13_DoubleAndIntParamsRecursive` and its `Library` twin: past the cycle
+    limit, clang's build too;
+  - `Chapter15_BigArray`: a 16-bit `size_t`;
+  - `Chapter16_AccessThroughCharPointer`: reads past a 16-bit `int`;
+  - `Chapter16_CompoundBitwiseOpsChars` and `Chapter19_..._FoldCompoundBitwiseAssignAllTypes`:
+    shift an `int` by 31;
+  - `Chapter17_SizeofExtern`: too large for 15.5 KB of RAM.
+- **786 MSP430 tests:** goldens, and runs of our code against the host for integer
+  arithmetic and shifts, FP arithmetic, comparisons and conversions, calls, data,
+  pointers and strings, structures, the allocator.
+- **Findings along the way:**
+  - a load through a pointer whose pointee is wider than the value overran the slot
+    (fixed);
+  - the frontend refuses `1.0 / 0.0` as a static initializer, on every target;
+  - the frontend expands structure copies chunk by chunk, so the backend's copy loop
+    serves only whole-aggregate moves.
 
 ## Phase 3 — ABI conformance
 
