@@ -69,7 +69,7 @@ inline QemuConfig msp430_gcc_config()
              "",
              false,
              { "--gc-sections" },
-             true,
+             "[Exit code ",
              { MSP430_LIBGCC } };
 }
 
@@ -90,7 +90,7 @@ inline QemuConfig msp430_clang_config()
              "",
              false,
              { "-n", "--gc-sections" },
-             true };
+             "[Exit code " };
 }
 
 class Msp430Test : public QemuTest {

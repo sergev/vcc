@@ -2,7 +2,8 @@
 // compile any clang part, link with ld.lld against the target's crt0 and libc.a, run
 // qemu under a timeout, and return the UART output with main's result (the qemu exit
 // status) in exit_status.  A backend fixture derives from it with a QemuConfig.  The
-// runner need not be qemu: MSP430 runs on the mspsim simulator, through the same steps.
+// runner need not be qemu: MSP430 runs on the mspsim simulator, MMIX on Knuth's mmix,
+// through the same steps.
 #pragma once
 
 #include <fstream>
@@ -18,7 +19,7 @@ struct QemuConfig {
     std::vector<std::string> target_flags; // --target=… and the ABI, for both
     std::vector<std::string> c_flags;      // more for C, e.g. -ffreestanding
     const char *ld;                        // ld.lld
-    const char *link_script;
+    const char *link_script;               // empty: the linker's default (MMIX)
     const char *lib_dir;           // crt0 objects and libc.a
     std::vector<std::string> qemu; // the command up to -kernel <exe> (or image_option)
     const char *scratch_suffix;    // keeps the scratch files of two widths apart
@@ -36,14 +37,23 @@ struct QemuConfig {
     // More linker options, before the objects: -n on MSP430, so that ld.lld loads no
     // ELF header into the peripheral area at address 0.
     std::vector<std::string> link_flags = {};
-    // The runner's exit status is main's result only when its log has the
-    // "[Exit code N after M cycles]" line, mspsim's report of a program that stopped
-    // itself; any other stop (the cycle limit, an illegal instruction, a CPU asleep for
-    // good) has a status of its own, which a result could collide with, and fails the run.
-    bool exit_report = false;
+    // The runner's exit status is main's result only when its log (stderr) has this
+    // line: mspsim's "[Exit code N after M cycles]", the report of a program that
+    // stopped itself, or the "[exit N]" trailer of MMIX's runtime, since mmix halts on
+    // the all-zero word as on an exit.  Any other stop (the cycle limit, an illegal
+    // instruction, a CPU asleep for good, a jump into zeroed memory) has a status of its
+    // own, which a result could collide with, and fails the run.  NULL: no report.
+    const char *exit_report = nullptr;
     // Libraries linked after libc.a: libgcc.a on MSP430, for the helpers GCC's code
     // calls beyond ours.
     std::vector<std::string> extra_libs = {};
+    // The command that assembles our output, before "-o <obj> <src>"; empty: clang (or
+    // GCC) with the target flags and -c.  MMIX runs GNU as itself, with the flags GCC
+    // passes it.
+    std::vector<std::string> assembler = {};
+    // The run's wall-clock limit, in seconds: the only limit on mmix, which counts no
+    // instructions.
+    int timeout = 5;
 };
 
 class QemuTest : public BackendTest {
@@ -99,9 +109,13 @@ protected:
                 std::ofstream s(s_path);
                 s << asm_text;
             }
-            std::vector<std::string> as = { cfg.clang };
-            as.insert(as.end(), cfg.target_flags.begin(), cfg.target_flags.end());
-            as.insert(as.end(), { "-c", "-o", o_path, s_path });
+            std::vector<std::string> as = cfg.assembler;
+            if (as.empty()) {
+                as.push_back(cfg.clang);
+                as.insert(as.end(), cfg.target_flags.begin(), cfg.target_flags.end());
+                as.push_back("-c");
+            }
+            as.insert(as.end(), { "-o", o_path, s_path });
             rc = RunTool(as, log_path);
             EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
             if (rc != 0)
@@ -130,12 +144,14 @@ protected:
         std::string lib               = cfg.lib_dir;
         std::vector<std::string> link = { cfg.ld };
         link.insert(link.end(), cfg.link_flags.begin(), cfg.link_flags.end());
-        link.insert(link.end(), { "-T", cfg.link_script, "-o", exe_path, lib + "/" + crt0 });
+        if (*cfg.link_script)
+            link.insert(link.end(), { "-T", cfg.link_script });
+        link.insert(link.end(), { "-o", exe_path, lib + "/" + crt0 });
         link.insert(link.end(), objs.begin(), objs.end());
         link.push_back(lib + "/libc.a");
         link.insert(link.end(), cfg.extra_libs.begin(), cfg.extra_libs.end());
         rc = RunTool(link, log_path);
-        EXPECT_EQ(0, rc) << "ld.lld failed on " << exe_path << ":\n" << ReadFile(log_path);
+        EXPECT_EQ(0, rc) << "the link failed on " << exe_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
         std::string status_path       = base + ".status";
@@ -148,7 +164,7 @@ protected:
         if (*cfg.image_option)
             qemu.push_back(cfg.image_option);
         qemu.push_back(exe_path);
-        rc = RunWithTimeout(qemu, out_path, log_path, 5,
+        rc = RunWithTimeout(qemu, out_path, log_path, cfg.timeout,
                             cfg.status_from_serial ? status_path : std::string());
         if (rc < 0) {
             ADD_FAILURE() << (rc == -2 ? "qemu timed out" : "qemu failed") << " on " << exe_path
@@ -157,7 +173,7 @@ protected:
             return "ERROR";
         }
         exit_status = rc;
-        if (cfg.exit_report && ReadFile(log_path).find("[Exit code ") == std::string::npos) {
+        if (cfg.exit_report && ReadFile(log_path).find(cfg.exit_report) == std::string::npos) {
             ADD_FAILURE() << "the program did not stop itself (status " << rc << ") on "
                           << exe_path << ":\n"
                           << ReadFile(log_path);

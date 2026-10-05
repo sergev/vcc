@@ -297,7 +297,7 @@ boundary.
   macro by the host's own `char` (signed on this arm64 Mac, so riscv64 and aarch64 would
   turn signed). So MMIX has its own `limits.h`, a copy of x86-64's, as T3 decided for
   MSP430. `TEST_MODEL_INCLUDE_DIR` is set when the MMIX test binary exists (K7).
-- **K4. CMake detection and the simulator fixture.**
+- **K4. CMake detection and the simulator fixture.** *Done.*
   - **`libc/mmix/CMakeLists.txt`** finds `mmix-knuth-mmixware-as`, `-ld`, `-ar` and `-gcc`
     and `mmix`. It sets `MMIX_TOOLS_FOUND`, `MMIX_AS`, `MMIX_LD`, `MMIX_AR`, `MMIX_GCC`,
     `MMIX_SIM` and `MMIX_LIB_DIR`.
@@ -312,6 +312,28 @@ boundary.
     status only.
   - **Timeout:** the wall-clock timeout is the only one. Size it from the measured 14 M
     instructions per second.
+
+  *Done.* `QemuConfig` has three new fields, and `exit_report` is now the line to look for
+  (MSP430 passes mspsim's `"[Exit code "`):
+  - **`assembler`:** the command before `-o obj src`. For MMIX this is `MMIX_AS` with
+    `MMIX_AS_FLAGS`.
+  - **An empty `link_script`:** no `-T`.
+  - **`timeout`:** 5 s by default.
+
+  K7's configuration:
+  - **Link:** `MMIX_LD` with `MMIX_LD_FLAGS`, `crt0.o` first.
+  - **Run:** `{ MMIX_SIM, "-q" }` with an empty `image_option`.
+  - **Exit report:** `"[exit "`.
+  - **Timeout:** 10 s, about 140 M instructions.
+
+  Checked by hand on a two-trap program:
+  - **The link needs `--defsym __.MMIX.start..text=0x100`,** as GCC passes it
+    (`MMIX_LD_FLAGS`). Linked from 0, the image halts on a privileged `unsave` at
+    `#fffffffffffffffc` before its first instruction.
+  - **The streams:** the program's StdOut and StdErr are the host's stdout and stderr,
+    and `$255` at `trap 0,0,0` is the exit status.
+  - **A failed run:** `mmix -q` reports a fault (a privileged instruction, a jump into
+    data) on **stdout**, with a status of its own. The missing trailer fails such a run.
 
 ## Phase 1 — skeleton
 
