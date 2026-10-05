@@ -7,6 +7,7 @@
 typedef struct {
     bool unreachable_elim; // --no-unreachable disables
     bool copy_propagation; // --no-copy-prop disables
+    bool cse;              // --no-cse disables
     bool dead_store_elim;  // --no-dead-store disables
     bool debug;            // --opt-debug enables the optimizer trace
 } OptFlags;

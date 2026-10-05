@@ -32,6 +32,7 @@
 Tac_Instruction *constant_fold(Tac_Instruction *body);
 void eliminate_unreachable(OptCfg *cfg);
 void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn);
+void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_dead_stores(const OptCfg *cfg, const Tac_TopLevel *fn);
 
 // Process-global trace switch (see optimize.h). Default off.
@@ -90,6 +91,12 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
             eliminate_unreachable(cfg);
         } else {
             OPT_TRACE("[optimize] pass unreachable-elim: skipped (disabled)\n");
+        }
+        if (flags.cse) {
+            OPT_TRACE("[optimize] running pass: cse\n");
+            eliminate_common_subexpressions(cfg, fn);
+        } else {
+            OPT_TRACE("[optimize] pass cse: skipped (disabled)\n");
         }
         if (flags.copy_propagation) {
             OPT_TRACE("[optimize] running pass: copy-prop\n");
