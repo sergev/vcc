@@ -166,3 +166,49 @@ int main(void) {
 }
 )PROG"));
 }
+
+// sqrt is float32.c's sqrtf (double is binary32), correctly rounded: the bits are the
+// host's sqrtf, for zeros of both signs, subnormals, the largest float and infinity; a
+// negative operand or a NaN gives a NaN.  sqrtf is the same function.
+TEST_F(AvrTest, SqrtRun)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    EXPECT_EQ(R"(00000000
+80000000
+3f800000
+3fb504f3
+3fddb3d7
+3f000000
+1e3ce4e7
+5f7fffff
+58635fa9
+1a3504f3
+7f800000
+1 1 1
+4.5
+)",
+              CompileAndRunAvr(R"(
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+static void bits(double r)
+{
+    unsigned long b;
+    memcpy(&b, &r, sizeof b);
+    printf("%08lx\n", b);
+}
+int main(void)
+{
+    static const double v[] = { 0.0, -0.0, 1.0, 2.0, 3.0, 0.25, 1e-40, 3.40282347e+38, 1e30,
+                                1.4e-45 };
+    for (int i = 0; i < 10; i++)
+        bits(sqrt(v[i]));
+    double inf = v[7] * 2, nan = inf - inf;
+    bits(sqrtf(inf));
+    double r1 = sqrt(-1.0), r2 = sqrt(nan), r3 = sqrtl(-inf);
+    printf("%d %d %d\n", r1 != r1, r2 != r2, r3 != r3);
+    printf("%g\n", sqrt(16.0) + sqrt(0.25));
+    return 0;
+}
+)"));
+}

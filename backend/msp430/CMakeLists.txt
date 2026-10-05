@@ -38,6 +38,8 @@ add_executable(msp430-tests
     test/fp_tests.cpp
     test/float64_tests.cpp
     test/float64_host.c
+    test/float32_tests.cpp
+    test/float32_host.c
     test/run_tests.cpp
     test/printf_tests.cpp
     test/str_tests.cpp

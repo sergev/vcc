@@ -446,7 +446,9 @@ Phase 4 is done:
   - **New:** `setjmp.h`. `jmp_buf` is nine words: R4–R10, SP after the return and the
     return address, the registers newlib's `jmp_buf` saves.
   - **Updated:** `math.h` lists what `libc.a` has. `sqrt` is the correctly rounded one
-    of `float64.c`, and the new `sqrtf.c` rounds it to `float`.
+    of `float64.c`; `sqrtf` is `float32.c`'s, the same digit-by-digit algorithm in
+    32-bit integers, checked against the host over all 2^32 inputs by a test run by
+    hand (`Float32Host.DISABLED_SqrtfEveryInput`, `float32_tests.cpp`).
   - **Checked against GCC:** `HeadersAgreeWithGcc` compares our headers' sizes, limits
     and `float.h` values with GCC's `-mcpu=msp430` headers, and they agree.
   - **Checked against clang:** `HeadersAgreeWithClang` compares the same values. clang

@@ -107,7 +107,7 @@ endforeach()
 foreach(name int64 int64conv)
     avr_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
-foreach(name frexp ldexp modf)
+foreach(name frexp ldexp modf sqrt)
     avr_compile_libc_c(${name} ${src})
 endforeach()
 

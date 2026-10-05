@@ -3,8 +3,8 @@
  *
  * float, double and long double are all binary32, so each double function serves as
  * its float and long double forms too.  Status: modf(), frexp(), ldexp(), fabs(),
- * fmin(), fmax() and fma() are implemented in libc.a; the rest are declared for future
- * implementation (TODO).
+ * fmin(), fmax(), fma() and sqrt() are implemented in libc.a; the rest are declared
+ * for future implementation (TODO).  sqrt() is float32.c's correctly rounded sqrtf().
  */
 #ifndef _MATH_H
 #define _MATH_H
@@ -29,6 +29,7 @@ double fabs(double x);
 double fmin(double x, double y);
 double fmax(double x, double y);
 double fma(double x, double y, double z);
+double sqrt(double x);
 
 #define frexpf frexp
 #define frexpl frexp
@@ -42,9 +43,10 @@ double fma(double x, double y, double z);
 #define fmaxl  fmax
 #define fmaf   fma
 #define fmal   fma
+#define sqrtf  sqrt
+#define sqrtl  sqrt
 
 /* ---- declared for future implementation (TODO) ---- */
-double sqrt(double x);
 double floor(double x);
 double ceil(double x);
 double round(double x);

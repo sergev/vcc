@@ -1,10 +1,10 @@
 /*
  * IEEE 754 binary32 arithmetic in software, under the libgcc names the code generator
  * calls (and clang, for a target with no FP hardware, as AVR): add, subtract, multiply,
- * divide, the comparisons and the conversions between float and 32-bit integers.
- * Correctly rounded to nearest-even, with subnormals, infinities and NaNs, so it agrees
- * with compiler-rt and with the constant folder bit for bit.  Written with integer
- * operations only; a float's bits are reached through a pointer.
+ * divide, square root, the comparisons and the conversions between float and 32-bit
+ * integers.  Correctly rounded to nearest-even, with subnormals, infinities and NaNs, so
+ * it agrees with compiler-rt and with the constant folder bit for bit.  Written with
+ * integer operations only; a float's bits are reached through a pointer.
  *
  * Inside, a finite value is a sign, a biased exponent e and a significand `sig` with
  * its leading one at bit 26: sig * 2^(e - 127 - 26).  The three bits below the 24 of
@@ -223,6 +223,49 @@ float __divsf3(float fa, float fb)
     }
     q |= rem != 0;
     return round_pack(sign, ea - eb + 127, q);
+}
+
+/* The square root, correctly rounded: the significand m (made even-scaled) is the top of
+ * a radicand m * 2^28, whose integer root, digit by digit, has its leading one at bit
+ * 26; the remainder is the sticky bit. */
+float sqrtf(float x)
+{
+    uint32_t a = bits(x);
+    if (is_nan(a))
+        return from_bits(a | QUIET);
+    if (is_zero(a))
+        return x;
+    if (a & SIGN)
+        return from_bits(QNAN);
+    if (is_inf(a))
+        return x;
+
+    uint32_t sig;
+    int e      = unpack(a, &sig) - 127;
+    uint32_t m = sig >> 2; /* leading one at bit 24; unpack's low three bits are zero */
+    int k      = e - 24;
+    if (k & 1) {
+        m <<= 1;
+        k--;
+    }
+    uint32_t q = 0, r = 0;
+    for (int i = 26; i >= 0; i--) {
+        int j       = 2 * i - 28; /* the radicand's bits 2i+1, 2i are m's bits j+1, j */
+        unsigned d2 = 0;
+        if (j + 1 >= 0)
+            d2 = (unsigned)((m >> (j + 1)) & 1) << 1;
+        if (j >= 0)
+            d2 |= (unsigned)((m >> j) & 1);
+        r            = (r << 2) | d2;
+        uint32_t t   = (q << 2) | 1;
+        if (r >= t) {
+            r -= t;
+            q = (q << 1) | 1;
+        } else {
+            q <<= 1;
+        }
+    }
+    return round_pack(0, k / 2 + 139, q | (r != 0));
 }
 
 /* -1, 0 or 1 as a <, == or > b; neither is a NaN. */
