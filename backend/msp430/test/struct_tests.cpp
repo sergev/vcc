@@ -33,7 +33,7 @@ TEST_F(Msp430Test, StructParamCopyLoop)
         int g(struct B b) { return b.a[39]; }
     )"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r12, 0(r1)
-mov @r1, r15
+mov r12, r15
 push r14
 push r13
 mov r1, r14
@@ -59,7 +59,7 @@ TEST_F(Msp430Test, StructArgAddressOnStack)
         int h(struct S *p) { return w(1, 2, 3, 4, *p); }
     )"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
-add #2, r15
+incd r15
 mov r15, 0(r1)
 mov #1, r12
 )")) << code;
@@ -80,7 +80,7 @@ mov 2(r15), 2(r1)
 // The callee hands the hidden pointer back in r12, where it came.
 EXPECT_CODE(StructResultPointerReturned, R"(sub #2, r1
 mov r13, 0(r1)
-mov @r1, r14
+mov r13, r14
 mov r12, r13
 mov r14, 0(r13)
 add #2, r1

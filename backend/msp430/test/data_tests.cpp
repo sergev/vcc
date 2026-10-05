@@ -106,7 +106,7 @@ TEST_F(Msp430Test, GlobalAccessAbsolute)
         void f(void) { a = b; p = &a; }
     )"));
     EXPECT_NE(std::string::npos, code.find("mov &b, &a\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov #a, r12\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov #a, &p\n")) << code;
 }
 
 // Block-scope statics of the same name stay apart, and assemble as they are named.

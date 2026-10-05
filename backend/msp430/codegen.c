@@ -6,8 +6,28 @@
 #include <string.h>
 
 #include "internal.h"
+#include "xalloc.h"
 
 bool msp430_regalloc = true;
+bool msp430_peephole = true;
+
+static void count_use(int var, void *arg)
+{
+    ((int *)arg)[var]++;
+}
+
+// The registers of the function's result, as a mask: r12 up, one per word; none for a
+// structure, which goes through the hidden pointer.
+static unsigned result_regs(const Tac_TopLevel *tl)
+{
+    const Tac_Type *ft = tl->u.function.type;
+    const Tac_Type *rt = ft ? ft->u.fun_type.ret_type : NULL;
+    if (!rt)
+        return 0xf000u;
+    if (rt->kind == TAC_TYPE_VOID || !msp_is_scalar(rt))
+        return 0;
+    return ((1u << msp_words(rt)) - 1) << 12;
+}
 
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
@@ -17,13 +37,36 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
         gen_regalloc(&g);
     place_params(&g);
     layout_frame(&g);
+    Flow *flow = NULL;
+    if (msp430_peephole) {
+        g.flow = flow = flow_build(tl);
+        g.uses        = xalloc((flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+        memset(g.uses, 0, (flow->nvars + 1) * sizeof(int));
+        for (int i = 0; i < flow->ninstrs; i++)
+            flow_uses(flow, flow->instrs[i], count_use, g.uses);
+    }
     store_params(&g);
-    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
-        gen_instr(&g, in, in->next == NULL);
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
+        g.vol = in->is_volatile;
+        if (gen_compare_branch(&g, in, in->next))
+            in = in->next;
+        else
+            gen_instr(&g, in, in->next == NULL);
+    }
+    g.vol           = false;
+    unsigned result = result_regs(tl);
+    if (msp430_peephole)
+        msp_peephole_pass(g.fn, result);
     gen_frame(&g);
+    if (msp430_peephole)
+        msp_peephole_frame(g.fn, result);
     msp_relax(g.fn);
     msp_emit_func(out, g.fn);
     gen_done(&g);
+    if (flow) {
+        xfree(g.uses);
+        flow_free(flow);
+    }
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)
         emit_static_variable(out, program, s->name, false, s->type, s->init_list, false,
                              s->alignment);

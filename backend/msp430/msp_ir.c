@@ -81,6 +81,33 @@ Msp_Instr *msp_append_to(Msp_Block *b, Msp_Op op)
     return in;
 }
 
+void msp_free_instr(Msp_Instr *in)
+{
+    for (int i = 0; i < MSP_MAX_OPERANDS; i++)
+        xfree(in->opnd[i].sym);
+    xfree(in);
+}
+
+Msp_Op msp_inverse(Msp_Op op)
+{
+    switch (op) {
+    case MSP_JEQ:
+        return MSP_JNE;
+    case MSP_JNE:
+        return MSP_JEQ;
+    case MSP_JLO:
+        return MSP_JHS;
+    case MSP_JHS:
+        return MSP_JLO;
+    case MSP_JL:
+        return MSP_JGE;
+    case MSP_JGE:
+        return MSP_JL;
+    default:
+        return MSP_NUM_OPS;
+    }
+}
+
 void msp_free_func(Msp_Func *fn)
 {
     Msp_Block *b = fn->blocks;
@@ -89,9 +116,7 @@ void msp_free_func(Msp_Func *fn)
         Msp_Instr *in    = b->head;
         while (in) {
             Msp_Instr *next = in->next;
-            for (int i = 0; i < MSP_MAX_OPERANDS; i++)
-                xfree(in->opnd[i].sym);
-            xfree(in);
+            msp_free_instr(in);
             in = next;
         }
         xfree(b->label);

@@ -12,6 +12,8 @@ extern "C" {
 
 // Allocate registers (on by default); off, every variable lives in memory.
 extern bool msp430_regalloc;
+// Run the peephole pass and fuse compares with branches (on by default).
+extern bool msp430_peephole;
 
 // Translate one TAC toplevel to MSP430 assembly on `out`.  `program` heads the whole
 // translation unit, lowered with -t msp430.

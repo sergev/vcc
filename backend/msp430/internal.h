@@ -64,6 +64,9 @@ typedef struct {
     int out_size;      // bytes of outgoing stack arguments
     int frame_size;    // bytes of the outgoing area and the slots, even
     int sp_bias;       // bytes pushed for the moment: added to every x(r1)
+    bool vol;          // the TAC instruction being selected is a volatile access
+    const Flow *flow;  // with the peephole pass: for compare-and-branch fusion
+    int *uses;         // the reads of each flow variable
     char exit[32];     // the label of the epilogue
 } Gen;
 
@@ -180,6 +183,10 @@ void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *na
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
+// A comparison (or a logical not) `in` whose result only `next`, a conditional jump,
+// reads: the compare and the jump, no 0 or 1 in between; false when they are not such a
+// pair.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
 // d = 1 when `cond` (a conditional jump) holds on the flags as they are, else 0.
 void gen_set_on(Gen *g, Msp_Op cond, const Tac_Val *d);
 // Call runtime helper `name`.
@@ -195,6 +202,9 @@ bool uses_helper(const Gen *g, const Tac_Instruction *in, bool *r8);
 // Floating point, in software (fp.c)
 //
 void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+// An FP comparison up to the flags; returns the jump taken when it holds, or
+// MSP_NUM_OPS when `in` is no comparison (nothing emitted).
+Msp_Op gen_fp_compare(Gen *g, const Tac_Instruction *in);
 // The outgoing stack bytes FP operator `op` on `size`-byte operands needs: 8 for a
 // binary64 comparison's second operand.
 int fp_out_size(Tac_BinaryOperator op, int size);
@@ -227,6 +237,14 @@ void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint);
 // Register allocation (regalloc.c)
 //
 void gen_regalloc(Gen *g);
+
+//
+// Peephole (peephole.c)
+//
+// The body, before the frame: jumps, known register contents, liveness.
+void msp_peephole_pass(Msp_Func *fn, unsigned result);
+// After the frame: the jumps again, and tail calls of a frameless function.
+void msp_peephole_frame(Msp_Func *fn, unsigned result);
 
 //
 // Branch relaxation (relax.c)

@@ -97,13 +97,16 @@ class Msp430Test : public QemuTest {
 protected:
     Msp430Test() : QemuTest("msp430", msp430_gcc_config())
     {
-        msp430_regalloc = true; // the default; a test may change it
+        // The defaults; a test may change them.
+        msp430_regalloc = true;
+        msp430_peephole = true;
     }
 
-    // Pin the selection on memory operands: every variable in its slot.
-    static void NoRegalloc()
+    // Pin instruction selection itself: every variable in its slot, no peephole pass.
+    static void NaiveSelection()
     {
         msp430_regalloc = false;
+        msp430_peephole = false;
     }
 
     // Assembly of every toplevel of the translation unit.

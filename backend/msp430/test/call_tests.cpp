@@ -12,9 +12,9 @@ TEST_F(Msp430Test, ArgsInOrder)
     EXPECT_NE(std::string::npos,
               code.find(R"(mov #1, r12
 mov #2, r13
-mov #0, r14
+clr r14
 mov #3, r15
-call #g
+br #g
 )"))
         << code;
 }
@@ -37,11 +37,11 @@ TEST_F(Msp430Test, ArgBackfillAfterStack)
     std::string code = Code(CompileToMsp430(
         "int u(int, long long, int, int, long); int f(void) { return u(1, 2, 3, 4, 5); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov #2, 0(r1)
-mov #0, 2(r1)
-mov #0, 4(r1)
-mov #0, 6(r1)
+clr 2(r1)
+clr 4(r1)
+clr 6(r1)
 mov #5, 8(r1)
-mov #0, 10(r1)
+clr 10(r1)
 )"))
         << code;
     EXPECT_NE(std::string::npos, code.find(R"(mov #1, r12
@@ -77,7 +77,7 @@ TEST_F(Msp430Test, ArgStructByAddress)
 mov #2, r14
 mov #22136, r15
 mov r1, r12
-add #2, r12
+incd r12
 call #u
 )")) << code;
 }
@@ -87,8 +87,9 @@ TEST_F(Msp430Test, ArgCharExtended)
 {
     std::string code = Code(CompileToMsp430(
         "int g(signed char); signed char c; int f(void) { return g(c); }"));
-    EXPECT_NE(std::string::npos, code.find(R"(sxt r12
-call #g
+    EXPECT_NE(std::string::npos, code.find(R"(mov.b &c, r12
+sxt r12
+br #g
 )")) << code;
 }
 
@@ -100,7 +101,7 @@ TEST_F(Msp430Test, ArgsVariadicOnStack)
     EXPECT_NE(std::string::npos,
               code.find(R"(mov #1, 0(r1)
 mov #2, 2(r1)
-mov #0, 4(r1)
+clr 4(r1)
 mov #3, 6(r1)
 call #v
 )"))
@@ -111,8 +112,7 @@ call #v
 // SP-relative operand.
 EXPECT_CODE(IndirectCall, R"(mov r12, r11
 mov #7, r12
-call r11
-ret
+br r11
 )", "int f(int (*fp)(int)) { return fp(7); }")
 
 // Results: r12, r13:r12, r15:r12.

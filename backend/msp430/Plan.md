@@ -549,6 +549,26 @@ Phase 4 is done:
   - **Book programs set aside:** three programs are undefined at 16 bits, and their
     results depend on garbage. Two declare `strlen` as returning `unsigned long`, so they
     read r13; one reads past an `int` and past an array.
+- **T23, first part.**
+  - **In selection:**
+    - a comparison (or `!x`) whose result only the next conditional jump reads is a
+      `cmp` and that jump;
+    - a constant first operand is turned around (`k < b` is `cmp #k+1, b; jge`);
+    - a 16-bit multiply by a small constant, and an index scaled by one, is done inline
+      in r15 by Horner's rule.
+  - **`peephole.c`, over the body:**
+    - the constant-generator aliases;
+    - jump cleanup;
+    - forward: known copies, constants, memory words held in registers, and bytes
+      already extended, so moves, reloads and stores of what is already there go;
+    - backward, on the liveness of r4–r15 and SR: dead instructions go, a load folds
+      into the instruction that reads it, a load, operation and store become one memory
+      operation, and a redundant `tst` or neutral constant goes.
+  - **After the frame:** a jump to a lone `ret` is `ret`, and `call; ret` is `br`.
+  - **Results:**
+    - the C library is 36 536 bytes, against 38 016 for GCC `-O2`;
+    - in cycles / code bytes: sort 104 998 / 238, sieve 120 533 / 74, CRC
+      147 897 / 162, binary64 loop 5 824 310 / 584, strings 108 374 / 226.
 - **T22 is done.** With its variables in registers, a leaf has no slots and saves
   nothing, so it does no `sub`/`add` on SP and pushes nothing (`add r13, r12; ret`, as
   GCC's). Its epilogue is then a bare `ret`, which every early return now does in place.

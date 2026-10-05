@@ -97,23 +97,34 @@ int fp_out_size(Tac_BinaryOperator op, int size)
     return size == 8 && !arith_helper(op, size) ? 8 : 0;
 }
 
+Msp_Op gen_fp_compare(Gen *g, const Tac_Instruction *in)
+{
+    int size = msp_type_size(val_type(g, in->u.binary.src1));
+    const char *name;
+    int k;
+    Msp_Op cond;
+    if (!compare_helper(in->u.binary.op, size, &name, &k, &cond))
+        return MSP_NUM_OPS;
+    load_operands(g, in->u.binary.src1, in->u.binary.src2, size, false);
+    call_helper(g, name);
+    emit2(g, MSP_CMP, msp_imm(k), msp_reg(12));
+    return cond;
+}
+
 void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     Tac_BinaryOperator op = in->u.binary.op;
     int size              = msp_type_size(val_type(g, in->u.binary.src1));
     const char *name      = arith_helper(op, size);
-    load_operands(g, in->u.binary.src1, in->u.binary.src2, size, name != NULL);
     if (name) {
+        load_operands(g, in->u.binary.src1, in->u.binary.src2, size, true);
         call_helper(g, name);
         store_val(g, in->u.binary.dst, 12, size / 2);
         return;
     }
-    int k;
-    Msp_Op cond;
-    if (!compare_helper(op, size, &name, &k, &cond))
+    Msp_Op cond = gen_fp_compare(g, in);
+    if (cond == MSP_NUM_OPS)
         fatal_error("msp430: %s: FP operator %d is not implemented", gen_name(g), op);
-    call_helper(g, name);
-    emit2(g, MSP_CMP, msp_imm(k), msp_reg(12));
     gen_set_on(g, cond, in->u.binary.dst);
 }
 

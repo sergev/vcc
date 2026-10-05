@@ -18,7 +18,7 @@ TEST_F(Msp430Test, DoubleAddCallsHelper)
 push r9
 push r10
 )")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r11
+    EXPECT_NE(std::string::npos, code.find(R"(mov r15, r11
 mov 24(r1), r12
 mov 26(r1), r13
 mov 28(r1), r14
@@ -32,12 +32,9 @@ ret
 )")) << code;
 }
 
-// A float's second operand goes in r15:r14, where it came: its high word, r15 being
-// the scratch register, is kept meanwhile in r11.
-EXPECT_CODE(FloatMultiplyCallsHelper, R"(mov r15, r11
-mov r11, r15
-call #__mspabi_mpyf
-ret
+// A float's second operand goes in r15:r14, where it came: nothing to move, and the
+// call a tail jump.
+EXPECT_CODE(FloatMultiplyCallsHelper, R"(br #__mspabi_mpyf
 )", "float f(float a, float b) { return a * b; }")
 
 // Each comparison through its own libgcc predicate, tested against zero: > as r >= 1.
@@ -88,9 +85,9 @@ TEST_F(Msp430Test, Conversions)
         long long h(double p7) { return p7; }
     )"));
     for (const char *h : { "call #__mspabi_fltlid\n", R"(clr r13
-call #__mspabi_fltulf
+br #__mspabi_fltulf
 )",
-                           "call #__mspabi_fixdli\n", "call #__fixunssfsi\n",
+                           "call #__mspabi_fixdli\n", "br #__fixunssfsi\n",
                            "call #__mspabi_cvtfd\n", "call #__mspabi_cvtdf\n",
                            "call #__mspabi_fixdlli\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;

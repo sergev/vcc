@@ -382,6 +382,61 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, Shift sh)
     free_words(s, n);
 }
 
+// Whether a 16-bit multiply by `k` is done inline: bit by bit from the top, a shift for
+// each bit below the top one and an add for each one set, a dozen steps at most.
+static bool mul_inline(uint64_t k)
+{
+    k &= 0xffff;
+    if (k == 0)
+        return true;
+    int top = 15;
+    while (!(k >> top & 1))
+        top--;
+    return top + __builtin_popcountll(k) <= 12;
+}
+
+// r15 = a * k, by Horner's rule: a is only read, so it may be anywhere.
+static void mul_const(Gen *g, const Tac_Val *a, uint64_t k)
+{
+    k &= 0xffff;
+    if (k == 0) {
+        emit1(g, MSP_CLR, msp_reg(MSP_SCRATCH));
+        return;
+    }
+    int top = 15;
+    while (!(k >> top & 1))
+        top--;
+    emit2(g, MSP_MOV, val_word(g, a, 0), msp_reg(MSP_SCRATCH));
+    for (int i = top - 1; i >= 0; i--) {
+        emit1(g, MSP_RLA, msp_reg(MSP_SCRATCH));
+        if (k >> i & 1)
+            emit2(g, MSP_ADD, val_word(g, a, 0), msp_reg(MSP_SCRATCH));
+    }
+}
+
+// The constant factor of a 16-bit multiply done inline, its other operand in *a; or
+// false.
+static bool inline_multiply(const Gen *g, const Tac_Instruction *in, const Tac_Val **a,
+                            uint64_t *k)
+{
+    Tac_BinaryOperator op = in->u.binary.op;
+    if (op != TAC_BINARY_MULTIPLY && op != TAC_BINARY_MULTIPLY_UNSIGNED)
+        return false;
+    if (msp_type_size(val_type(g, in->u.binary.dst)) != 2)
+        return false;
+    const Tac_Val *x = in->u.binary.src1, *y = in->u.binary.src2;
+    if (x->kind == TAC_VAL_CONSTANT) {
+        const Tac_Val *t = x;
+        x = y, y = t;
+    }
+    if (y->kind != TAC_VAL_CONSTANT || x->kind == TAC_VAL_CONSTANT ||
+        !mul_inline(const_bits(y->u.constant)))
+        return false;
+    *a = x;
+    *k = const_bits(y->u.constant);
+    return true;
+}
+
 // The row of the __mspabi_ multiply and divide helpers of `op`.
 static int arith_row(Tac_BinaryOperator op)
 {
@@ -522,6 +577,37 @@ static void compare_jump(Gen *g, const Tac_Val *a, const Tac_Val *b, int n, bool
         gen_label_block(g, skip);
 }
 
+// A one-word comparison a c b into flags, and the jump that tests them.  A constant a
+// turns around, since cmp cannot write an immediate: k == b is b == k, k < b is
+// b >= k+1, k >= b is b < k+1 (through r15 when k+1 overflows).
+static Msp_Op compare_one(Gen *g, const Tac_Val *a, const Tac_Val *b, Cond c, bool is_unsigned,
+                          bool byte)
+{
+    Msp_Operand wa = val_word(g, a, 0), wb = val_word(g, b, 0);
+    if (wa.kind == MSP_OPND_IMM && !wa.sym && wb.kind != MSP_OPND_IMM) {
+        int64_t k   = msp_imm_value(wa.imm, byte);
+        int64_t max = is_unsigned ? (byte ? 0xff : 0xffff) : (byte ? 0x7f : 0x7fff);
+        if (is_unsigned)
+            k &= byte ? 0xff : 0xffff;
+        if (c == C_EQ || c == C_NE || k < max) {
+            Msp_Operand t = wa;
+            wa            = wb;
+            wb            = t;
+            if (c == C_LT || c == C_GE) {
+                wb.imm = k + 1;
+                c      = c == C_LT ? C_GE : C_LT;
+            }
+        }
+    }
+    compare_words(g, wb, wa, byte);
+    return cond_jump(c, is_unsigned);
+}
+
+static Cond inverse_cond(Cond c)
+{
+    return c == C_EQ ? C_NE : c == C_NE ? C_EQ : c == C_LT ? C_GE : C_LT;
+}
+
 static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, bool swap, const Tac_Type *t)
 {
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2, *dst = in->u.binary.dst;
@@ -534,8 +620,7 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, bool swap, co
     bool byte        = msp_type_size(t) == 1;
     bool is_unsigned = unsigned_compare(in->u.binary.op) || t->kind == TAC_TYPE_POINTER;
     if (n == 1) {
-        compare_words(g, val_word(g, b, 0), val_word(g, a, 0), byte);
-        gen_set_on(g, cond_jump(c, is_unsigned), dst);
+        gen_set_on(g, compare_one(g, a, b, c, is_unsigned, byte), dst);
         return;
     }
     char yes[32], done[32];
@@ -599,6 +684,13 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     }
     if (arith_row(op) < 0)
         fatal_error("msp430: %s: binary operator %d is not implemented", gen_name(g), op);
+    const Tac_Val *x;
+    uint64_t k;
+    if (inline_multiply(g, in, &x, &k)) {
+        mul_const(g, x, k);
+        emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), val_word(g, d, 0));
+        return;
+    }
     arith_helper(g, in, msp_words(val_type(g, d)));
 }
 
@@ -638,7 +730,9 @@ bool uses_helper(const Gen *g, const Tac_Instruction *in, bool *r8)
             *r8 = size == 8 && fp_arith(in->u.binary.op, size);
             return true;
         }
-        if (arith_row(in->u.binary.op) < 0)
+        const Tac_Val *x;
+        uint64_t k;
+        if (arith_row(in->u.binary.op) < 0 || inline_multiply(g, in, &x, &k))
             return false;
         *r8 = msp_type_size(val_type(g, in->u.binary.dst)) == 8;
         return true;
@@ -664,7 +758,7 @@ bool uses_helper(const Gen *g, const Tac_Instruction *in, bool *r8)
         return true;
     case TAC_INSTRUCTION_ADD_PTR:
         return in->u.add_ptr.index->kind != TAC_VAL_CONSTANT &&
-               scale_shift(in->u.add_ptr.scale) < 0;
+               scale_shift(in->u.add_ptr.scale) < 0 && !mul_inline(in->u.add_ptr.scale);
     default:
         return false;
     }
@@ -803,6 +897,10 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
         if (!in_place)
             emit2(g, MSP_MOV, msp_copy(&r), msp_copy(&d));
         xfree(r.sym);
+    } else if (mul_inline(scale)) {
+        mul_const(g, index, scale);
+        emit2(g, MSP_ADD, msp_copy(&wp), msp_reg(MSP_SCRATCH));
+        emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_copy(&d));
     } else {
         // Through __mspabi_mpyi; a pointer in a register the call clobbers is pushed.
         bool push = wp.kind == MSP_OPND_REG && wp.reg >= 11;
@@ -869,6 +967,74 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     char *l = label_name(target);
     emit1(g, if_zero ? MSP_JEQ : MSP_JNE, msp_label(l));
     xfree(l);
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *dst;
+    if (in->kind == TAC_INSTRUCTION_BINARY)
+        dst = in->u.binary.dst;
+    else if (in->kind == TAC_INSTRUCTION_UNARY && in->u.unary.op == TAC_UNARY_NOT)
+        dst = in->u.unary.dst;
+    else
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition;
+    if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    bool if_zero = next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO;
+    char *l      = label_name(next->u.jump_if_zero.target);
+    if (in->kind == TAC_INSTRUCTION_UNARY) {
+        // if (!x): the jump on x's zero flag, the other way round.
+        const Tac_Val *src = in->u.unary.src;
+        if (msp_is_fp(val_type(g, src)))
+            gen_fp_test(g, src);
+        else
+            test_zero(g, src);
+        emit1(g, if_zero ? MSP_JNE : MSP_JEQ, msp_label(l));
+        xfree(l);
+        return true;
+    }
+    Tac_BinaryOperator op = in->u.binary.op;
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
+    const Tac_Type *t = operand_type(g, a, b);
+    Msp_Op jump;
+    Cond cond;
+    bool swap;
+    if (msp_is_fp(t)) {
+        jump = gen_fp_compare(g, in);
+        if (jump == MSP_NUM_OPS) {
+            xfree(l);
+            return false; // nothing emitted
+        }
+        emit1(g, if_zero ? msp_inverse(jump) : jump, msp_label(l));
+        xfree(l);
+        return true;
+    }
+    if (!compare_cond(op, &cond, &swap)) {
+        xfree(l);
+        return false;
+    }
+    if (swap) {
+        const Tac_Val *x = a;
+        a = b, b = x;
+    }
+    if (if_zero)
+        cond = inverse_cond(cond);
+    int n            = msp_words(t);
+    bool byte        = msp_type_size(t) == 1;
+    bool is_unsigned = unsigned_compare(op) || t->kind == TAC_TYPE_POINTER;
+    if (n == 1)
+        emit1(g, compare_one(g, a, b, cond, is_unsigned, byte), msp_label(l));
+    else
+        compare_jump(g, a, b, n, byte, cond, is_unsigned, l);
+    xfree(l);
+    return true;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last)

@@ -6,28 +6,6 @@
 #include "internal.h"
 #include "xalloc.h"
 
-// The jump taken when `op` is not, or MSP_NUM_OPS when it has none (jn) or is not a
-// conditional jump.
-static Msp_Op inverse(Msp_Op op)
-{
-    switch (op) {
-    case MSP_JEQ:
-        return MSP_JNE;
-    case MSP_JNE:
-        return MSP_JEQ;
-    case MSP_JLO:
-        return MSP_JHS;
-    case MSP_JHS:
-        return MSP_JLO;
-    case MSP_JL:
-        return MSP_JGE;
-    case MSP_JGE:
-        return MSP_JL;
-    default:
-        return MSP_NUM_OPS;
-    }
-}
-
 // The byte address of every label of `fn`, from its start.
 static void label_addresses(const Msp_Func *fn, StringMap *labels)
 {
@@ -67,7 +45,7 @@ static void relax_jump(Msp_Func *fn, Msp_Block *b, Msp_Instr *in)
         msp_split_after(fn, b->next, br, skip);
         return;
     }
-    in->op      = inverse(in->op);
+    in->op      = msp_inverse(in->op);
     in->opnd[0] = msp_label(skip);
     msp_split_after(fn, b, br, skip);
 }

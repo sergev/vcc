@@ -23,27 +23,25 @@ mov r12, &g3+2
 }
 
 // A signed 32-bit compare, in place: the high words signed, then the low words
-// unsigned.  (b's high word came in r15, the scratch register: it is kept in r11.)
-EXPECT_CODE(CompareLongSigned, R"(mov r15, r11
-cmp r11, r13
+// unsigned.
+EXPECT_CODE(CompareLongSigned, R"(cmp r15, r13
 jl .Lv1
 jne .Lv3
 cmp r14, r12
 jlo .Lv1
 clr r12
-jmp .Lv2
+ret
 mov #1, r12
 ret
 )", "int f(long a, long b) { return a < b; }")
 
-EXPECT_CODE(CompareLongUnsigned, R"(mov r15, r11
-cmp r11, r13
+EXPECT_CODE(CompareLongUnsigned, R"(cmp r15, r13
 jlo .Lv3
 jne .Lv1
 cmp r14, r12
 jhs .Lv1
 clr r12
-jmp .Lv2
+ret
 mov #1, r12
 ret
 )", "int f(unsigned long a, unsigned long b) { return a >= b; }")
@@ -59,12 +57,11 @@ rlc r13
 )")) << code;
 }
 
-// By 20: a word moved, its sign filled in, then a loop of 4.
+// By 20: a word moved, its sign filled in (r13 still holds the word), then a loop of 4.
 TEST_F(Msp430Test, ShiftRightLongByWordThenLoop)
 {
     std::string code = Code(CompileToMsp430("long f(long a) { return a >> 20; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r13, r12
-mov r12, r13
 rla r13
 subc r13, r13
 inv r13
@@ -87,7 +84,8 @@ adc r13
 )")) << code;
 }
 
-// Multiply and divide go through the runtime, by the __mspabi_ names GCC's code calls.
+// Multiply and divide go through the runtime, by the __mspabi_ names GCC's code calls
+// (a tail jump, the last thing a frameless function does).
 TEST_F(Msp430Test, HelpersByWidth)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -97,8 +95,8 @@ TEST_F(Msp430Test, HelpersByWidth)
         unsigned long d(unsigned long x, unsigned long y) { return x * y; }
         long long e(long long x, long long y) { return x / y; }
     )"));
-    for (const char *h : { "call #__mspabi_mpyi\n", "call #__mspabi_divu\n",
-                           "call #__mspabi_remli\n", "call #__mspabi_mpyl\n",
+    for (const char *h : { "br #__mspabi_mpyi\n", "br #__mspabi_divu\n",
+                           "br #__mspabi_remli\n", "br #__mspabi_mpyl\n",
                            "call #__mspabi_divlli\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;
 }
@@ -109,10 +107,11 @@ TEST_F(Msp430Test, Helper64FirstOperandInR8)
 {
     std::string code =
         Code(CompileToMsp430("long long f(long long x, long long y) { return x * y; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r8
-mov 2(r1), r9
-mov 4(r1), r10
-mov 6(r1), r11
+    EXPECT_NE(std::string::npos, code.find(R"(mov r12, r8
+mov r13, r9
+mov r14, r10
+mov r15, r11
+mov 24(r1), r12
 )")) << code;
     EXPECT_NE(std::string::npos, code.find("call #__mspabi_mpyll\n")) << code;
 }

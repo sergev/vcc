@@ -5,10 +5,9 @@
 #include "msp430_test.h"
 
 // A value live across a call takes a call-saved register, which the prologue pushes.
-// (The argument is moved back from it: r12 still holds it, which T23 sees.)
+// The argument is not moved back from it: r12 still holds it.
 EXPECT_CODE(LiveAcrossCallSaved, R"(push r10
 mov r12, r10
-mov r10, r12
 call #g
 add r10, r12
 pop r10
@@ -19,8 +18,7 @@ ret
 EXPECT_CODE(SwappedArgsByXor, R"(xor r13, r12
 xor r12, r13
 xor r13, r12
-call #g
-ret
+br #g
 )", "int g(int, int); int f(int a, int b) { return g(b, a); }")
 
 // An unused parameter is left where it came: its register serves the result.

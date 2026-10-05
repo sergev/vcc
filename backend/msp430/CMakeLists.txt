@@ -11,6 +11,7 @@ add_library(msp430 STATIC
     data.c
     fp.c
     regalloc.c
+    peephole.c
     codegen.c
 )
 target_include_directories(msp430 PUBLIC .)

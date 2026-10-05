@@ -9,19 +9,13 @@ EXPECT_CODE(FramelessConstant, R"(mov #7, r12
 ret
 )", "int f(void) { return 7; }")
 
-// A leaf with no slots and no call-saved register returns in place: no frame, no jump
-// to an epilogue that would be a bare ret.
-TEST_F(Msp430Test, FramelessEarlyReturn)
-{
-    std::string code =
-        Code(CompileToMsp430("int max(int a, int b) { if (a > b) return a; return b; }"));
-    EXPECT_EQ(std::string::npos, code.find("jmp")) << code;
-    EXPECT_EQ(std::string::npos, code.find("r1\n")) << code;
-    EXPECT_EQ(std::string::npos, code.find("push")) << code;
-    size_t first = code.find("ret\n");
-    EXPECT_NE(std::string::npos, first) << code;
-    EXPECT_NE(std::string::npos, code.find("ret\n", first + 1)) << code;
-}
+// A leaf with no slots and no call-saved register: no frame, the compare fused with its
+// branch, which goes straight to the bare ret.
+EXPECT_CODE(FramelessEarlyReturn, R"(cmp r12, r13
+jl .Lv0
+mov r13, r12
+ret
+)", "int max(int a, int b) { if (a > b) return a; return b; }")
 
 // With a frame, an early return still goes to the one epilogue.
 TEST_F(Msp430Test, EarlyReturnToEpilogue)
@@ -41,7 +35,7 @@ ret
 // released around the body, and the operation works on the slots.
 TEST_F(Msp430Test, ParamsStored)
 {
-    NoRegalloc();
+    NaiveSelection();
     EXPECT_EQ(R"(sub #6, r1
 mov r12, 0(r1)
 mov r13, 2(r1)
@@ -62,7 +56,7 @@ ret
 
 TEST_F(Msp430Test, StackParamAboveSlots)
 {
-    NoRegalloc();
+    NaiveSelection();
     std::string code = Code(CompileToMsp430(
         "int f(int a, int b, int c, int d, int e) { return e; }"));
     EXPECT_NE(std::string::npos, code.find("sub #8, r1\n")) << code;
@@ -78,7 +72,7 @@ ret
 
 TEST_F(Msp430Test, SplitLongParamStored)
 {
-    NoRegalloc();
+    NaiveSelection();
     std::string code =
         Code(CompileToMsp430("long f(int a, int b, int c, long d) { return d; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r15, 6(r1)
@@ -93,7 +87,7 @@ ret
 
 TEST_F(Msp430Test, CharParamStored)
 {
-    NoRegalloc();
+    NaiveSelection();
     EXPECT_EQ(R"(sub #4, r1
 mov.b r12, 0(r1)
 mov.b @r1, r15

@@ -278,7 +278,9 @@ const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
 
 Msp_Instr *emit0(Gen *g, Msp_Op op)
 {
-    return msp_append(g->fn, op);
+    Msp_Instr *in = msp_append(g->fn, op);
+    in->vol       = g->vol;
+    return in;
 }
 
 Msp_Instr *emit1(Gen *g, Msp_Op op, Msp_Operand a)

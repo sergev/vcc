@@ -14,7 +14,7 @@ ret
 // Through r15 from a pointer in memory, straight to the destination's slot.
 TEST_F(Msp430Test, LoadThroughPointerInMemory)
 {
-    NoRegalloc();
+    NaiveSelection();
     std::string code = Code(CompileToMsp430("long f(long *p) { return *p; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
 mov @r15, 2(r1)
@@ -34,7 +34,8 @@ mov.b r13, 0(r12)
 ret
 )", "void f(char *p, char *q) { *p = *q; }")
 
-// The index scaled by shifts for a power of two, by __mspabi_mpyi otherwise.
+// The index scaled by shifts for a power of two, by shifts and adds for a small
+// constant otherwise.
 TEST_F(Msp430Test, IndexScaling)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -49,14 +50,13 @@ rla r15
 add r12, r15
 mov r15, r12
 )")) << code;
-    // The pointer, in a register the call clobbers, kept on the stack.
-    EXPECT_NE(std::string::npos, code.find(R"(push r12
-mov r13, r12
-mov #3, r13
-call #__mspabi_mpyi
-pop r15
-add r15, r12
+    // By 3, inline: twice the index, plus the index.
+    EXPECT_NE(std::string::npos, code.find(R"(mov r13, r15
+rla r15
+add r13, r15
+add r12, r15
 )")) << code;
+    EXPECT_EQ(std::string::npos, code.find("__mspabi_mpyi")) << code;
 }
 
 // A constant index folds into one add.
@@ -75,7 +75,7 @@ TEST_F(Msp430Test, AddressOfLocal)
 call #g
 )")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
-add #2, r12
+incd r12
 )")) << code;
 }
 

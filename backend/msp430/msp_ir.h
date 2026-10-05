@@ -114,6 +114,7 @@ typedef struct Msp_Instr {
     struct Msp_Instr *next;
     Msp_Op op;
     bool byte; // the .b form
+    bool vol;  // part of a volatile access: the peephole pass leaves it alone
     Msp_Operand opnd[MSP_MAX_OPERANDS];
 } Msp_Instr;
 
@@ -140,6 +141,11 @@ Msp_Instr *msp_append(Msp_Func *fn, Msp_Op op);
 Msp_Instr *msp_append_to(Msp_Block *b, Msp_Op op);
 // Insert an instruction after `in` of block `b`.
 Msp_Instr *msp_insert_after(Msp_Block *b, Msp_Instr *in, Msp_Op op);
+// Free one instruction (its operands' symbols too).
+void msp_free_instr(Msp_Instr *in);
+// The conditional jump taken when `op` is not, or MSP_NUM_OPS when it has none (jn) or is
+// no conditional jump.
+Msp_Op msp_inverse(Msp_Op op);
 // Move the instructions after `in` into a new block labelled `label`, after `b`.
 Msp_Block *msp_split_after(Msp_Func *fn, Msp_Block *b, Msp_Instr *in, const char *label);
 void msp_free_func(Msp_Func *fn);

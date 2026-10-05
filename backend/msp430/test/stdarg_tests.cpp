@@ -13,7 +13,7 @@ TEST_F(Msp430Test, VariadicCallAllOnStack)
     std::string s = Code(CompileToMsp430("int v(int n, ...);\nint f(void) { return v(1, 2L); }"));
     EXPECT_NE(std::string::npos, s.find(R"(mov #1, 0(r1)
 mov #2, 2(r1)
-mov #0, 4(r1)
+clr 4(r1)
 call #v
 )")) << s;
 }
