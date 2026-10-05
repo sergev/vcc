@@ -439,6 +439,33 @@ instructions.
   - **Tests:** the runtime against the host's own binary64 and binary32 arithmetic over
     a table of cases, including the halfway, subnormal and overflow edges. The host has
     both types natively, so no case generator is needed.
+
+  *Done.*
+  - **`libc/common/float64.c`:** add, subtract, multiply, divide, `sqrt` (correctly
+    rounded, digit by digit), the six libgcc predicates, `__unorddf2`, the 32-bit
+    integer conversions, and `float` ↔ `double`.
+  - **Tested on the host,** compiled under renamed symbols (`float64_host.c`) and checked
+    bit for bit against the host's `double`:
+    - ~1.7 M operand pairs;
+    - subnormal and overflow products and quotients;
+    - 100 k square roots;
+    - constructed ties to even (a mutation that drops ties-to-even fails it);
+    - every conversion.
+  - **`libc/msp430/mspabi.c`** holds the ordinary-ABI `__mspabi_*` names over the libgcc
+    ones. **`mspabi64.s`** holds the ten R8–R11 shims (`mpyll`, the 64-bit divides,
+    `addd`/`subd`/`mpyd`/`divd`, `cmpd` over `__ltdf2`).
+  - **clang's NaN comparisons are wrong.** clang tests `__mspabi_cmpd`'s one result
+    against zero for every comparison, so for a NaN its `>` and `>=` come out true. Our
+    own code calls the libgcc predicates, and is right.
+  - `fp_tests.cpp` has goldens. Runs of our code check `double` and `float` arithmetic
+    bit for bit, every comparison with NaN, and every conversion.
+  - Book chapters 13–16 pass, and so do the four `Chapter11` programs. Skipped:
+    `DoubleAndIntParamsRecursive` and its `Library` twin exceed the cycle limit, clang's
+    build too.
+  - **Fixed** a load or store through a pointer whose pointee is wider than the value
+    (a row of a 2-D array): the memory-to-memory copy overran the destination slot.
+    Both are now clamped to the value's width (found by `Chapter15_PointerAdd`).
+  - Our frontend refuses `1.0 / 0.0` as a static initializer, on every target.
 - **T14. Pointers, arrays, chars, strings** (ch. 14–16).
   - Loads and stores go through a base register: `mov 2(r1), r15` then `@r15`, `x(r15)`
     or `@r15+`. Each is at the access's width, with `.b` for `char`.

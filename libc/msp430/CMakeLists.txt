@@ -67,7 +67,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves, and the integer helpers under their MSP430 EABI names.
 set(MSP430_LIBC_OBJS "")
-foreach(name console divmod mul shift)
+foreach(name console divmod mul shift mspabi64)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${RISCV_CLANG} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
@@ -93,16 +93,18 @@ macro(msp430_compile_libc_c name srcdir)
     list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The shared C library but the variadic part (T16); from libc/ilp32 the long long
-# division and conversions and the binary64 frexp/ldexp/modf.
+# The shared C library but the variadic part (T16), and the binary32 and binary64
+# soft-float runtimes; from libc/ilp32 the long long division and conversions and the
+# binary64 frexp/ldexp/modf; the MSP430 EABI names clang calls, over all of them.
 foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 puts putchar
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
-        strtok)
+        strtok float32 float64)
     msp430_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 foreach(name int64 frexp ldexp modf)
     msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
+msp430_compile_libc_c(mspabi ${src})
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a

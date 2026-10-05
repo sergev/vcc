@@ -475,8 +475,9 @@ static int access_size(const Gen *g, const Tac_Val *ptr, const Tac_Val *v)
     return msp_type_size(t);
 }
 
-// dst = *ptr, `size` bytes: memory to memory through the pointer in r15; an aggregate
-// copied from r14 to r15.
+// dst = *ptr, `size` bytes: memory to memory through the pointer in r15, as much as
+// the destination holds (the pointee may be wider, a row of a 2-D array) and its rest
+// zeroed; an aggregate copied from r14 to r15.
 static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, int size)
 {
     const Tac_Type *t = val_type(g, dst);
@@ -486,14 +487,23 @@ static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, int size)
         copy_bytes(g, size, msp_type_align(t));
         return;
     }
+    int dsize = msp_type_size(t);
     load_val(g, ptr, 15, 1, EXT_TYPE);
-    if (size == 1) {
+    if (size == 1 || dsize == 1) {
         emit2b(g, MSP_MOV, msp_ind(15), mem_at(g, dst->u.var_name, 0));
+        if (dsize > 1)
+            emit1b(g, MSP_CLR, mem_at(g, dst->u.var_name, 1));
+        for (int i = 1; i < dsize / 2; i++)
+            emit1(g, MSP_CLR, mem_at(g, dst->u.var_name, 2 * i));
         return;
     }
-    for (int i = 0; i < size / 2; i++)
-        emit2(g, MSP_MOV, i == 0 ? msp_ind(15) : msp_indexed(15, NULL, 2 * i),
-              mem_at(g, dst->u.var_name, 2 * i));
+    for (int i = 0; i < dsize / 2; i++) {
+        if (2 * i < size)
+            emit2(g, MSP_MOV, i == 0 ? msp_ind(15) : msp_indexed(15, NULL, 2 * i),
+                  mem_at(g, dst->u.var_name, 2 * i));
+        else
+            emit1(g, MSP_CLR, mem_at(g, dst->u.var_name, 2 * i));
+    }
 }
 
 // *ptr = src, `size` bytes: memory to memory through the pointer in r15; an aggregate
@@ -504,6 +514,15 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size)
         load_val(g, ptr, 15, 1, EXT_TYPE);
         address_of(g, 14, src->u.var_name, 0);
         copy_bytes(g, size, msp_type_align(val_type(g, src)));
+        return;
+    }
+    if (size > msp_type_size(val_type(g, src)) && size > 1) {
+        // A narrower value into a wider pointee: extended in registers first.
+        int n = size / 2;
+        load_val(g, src, 12, n, EXT_TYPE);
+        load_val(g, ptr, 15, 1, EXT_TYPE);
+        for (int i = 0; i < n; i++)
+            emit2(g, MSP_MOV, msp_reg(12 + i), msp_indexed(15, NULL, 2 * i));
         return;
     }
     load_val(g, ptr, 15, 1, EXT_TYPE);

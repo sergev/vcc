@@ -22,13 +22,11 @@ protected:
     {
         Msp430Test::SetUp();
         static const SkippedTest skipped[] = {
-            { "Chapter11_ArithmeticOps", "needs the 64-bit runtime (Plan.md, T14)" },
-            { "Chapter11_CompoundAssignToInt", "needs the 64-bit runtime (Plan.md, T14)" },
-            { "Chapter11_LargeConstants", "needs the 64-bit runtime (Plan.md, T14)" },
-            { "Chapter11_RewriteLargeMultiplyRegression",
-              "needs the 64-bit runtime (Plan.md, T14)" },
             { "Chapter11_SwitchLong", "case values collide in a 32-bit long" },
             { "Chapter12_UnsignedTypeSpecifiers", "loops forever with a 16-bit unsigned" },
+            { "Chapter13_DoubleAndIntParamsRecursive", "past the cycle limit, clang's too" },
+            { "Chapter13_DoubleAndIntParamsRecursiveLibrary",
+              "past the cycle limit, clang's too" },
             { "Chapter14_SwitchDereferencedPointer", "case values collide in a 32-bit long" },
             { "Chapter15_BigArray", "arrays too large for a 16-bit size_t" },
             { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
