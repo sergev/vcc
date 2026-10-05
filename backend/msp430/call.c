@@ -266,10 +266,16 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             emit2b(g, MSP_MOV, msp_reg(l->reg[0]), msp_reg(l->reg[0]));
     }
 
-    if (in->u.fun_call.indirect)
-        emit1(g, MSP_CALL, msp_reg(11));
-    else
-        emit1(g, MSP_CALL, msp_imm_sym(in->u.fun_call.fun_name, 0));
+    // The call reads only the registers its arguments are in.
+    unsigned args = 1;
+    for (i = 0; i < n; i++)
+        for (int j = 0; j < locs[i].parts; j++)
+            if (locs[i].reg[j])
+                args |= 1u << locs[i].reg[j];
+    Msp_Instr *call = in->u.fun_call.indirect
+                          ? emit1(g, MSP_CALL, msp_reg(11))
+                          : emit1(g, MSP_CALL, msp_imm_sym(in->u.fun_call.fun_name, 0));
+    call->args = args;
 
     const Tac_Val *dst = in->u.fun_call.dst;
     if (dst) {

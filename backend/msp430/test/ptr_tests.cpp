@@ -31,6 +31,61 @@ TEST_F(Msp430Test, LoadsAutoIncrement)
     EXPECT_NE(std::string::npos, code.find("mov @r12+, r11\nmov @r12+, r14\n")) << code;
 }
 
+// Stores to slots the peephole pass must keep: a local whose address a callee or a
+// pointer reads, a structure argument the callee reads by reference, a volatile.
+TEST_F(Msp430Test, RunSlotStoresKept)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+        int glob;
+        int h(int *p) { return *p + 1; }
+        int peek(int *p, int i) { return p[i]; }
+        int f1(int x) { int a = x; return h(&a); }
+        int f2(int x)
+        {
+            int a[4];
+            a[0] = x;
+            a[1] = x + 1;
+            a[2] = 7;
+            a[3] = 9;
+            return peek(a, 2) + peek(a, 1);
+        }
+        int f3(int x, int *q) { int a = x; int *p = &a; *q = 5; return *p; }
+        int f4(int c)
+        {
+            int a[3] = { 1, 2, 3 };
+            int *p = a;
+            if (c)
+                a[1] = 20;
+            return p[1];
+        }
+        struct S { int a, b, c; };
+        int sb(struct S s) { return s.a + s.b + s.c; }
+        int f5(int k) { struct S s = { 1, 2, 3 }; s.b = k; return sb(s); }
+        int f6(int x) { int a = x; int b = a * 3; a = 4; return b + a; }
+        long long f7(long long x) { volatile long long v = x; v = v + 1; return v; }
+        int main(void)
+        {
+            if (f1(41) != 42)
+                return 1;
+            if (f2(10) != 18)
+                return 2;
+            if (f3(8, &glob) != 8 || glob != 5)
+                return 3;
+            if (f4(0) != 2 || f4(1) != 20)
+                return 4;
+            if (f5(100) != 104)
+                return 5;
+            if (f6(5) != 19)
+                return 6;
+            if (f7(1LL << 40) != (1LL << 40) + 1)
+                return 7;
+            return 0;
+        }
+    )"));
+    EXPECT_EQ(0, exit_status);
+}
+
 // A store takes its value straight from the immediate (or memory).
 EXPECT_CODE(StoreThroughPointer, R"(mov #1234, 0(r12)
 ret

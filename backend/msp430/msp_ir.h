@@ -115,6 +115,9 @@ typedef struct Msp_Instr {
     Msp_Op op;
     bool byte; // the .b form
     bool vol;  // part of a volatile access: the peephole pass leaves it alone
+    // A call: the registers r12-r15 its arguments are in, as bits 12-15, with bit 0 set
+    // once they are known; 0 for a call that may read all four.
+    unsigned args;
     Msp_Operand opnd[MSP_MAX_OPERANDS];
 } Msp_Instr;
 

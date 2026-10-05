@@ -257,7 +257,10 @@ void gen_regalloc(Gen *g);
 // Peephole (peephole.c)
 //
 // The body, before the frame: jumps, known register contents, liveness.
-void msp_peephole_pass(Msp_Func *fn, unsigned result);
+// `out` is the size of the outgoing argument area at the bottom of the frame.
+void msp_peephole_pass(Msp_Func *fn, unsigned result, int out);
+// Whether the body still addresses the frame: an x(r1) slot, or r1 as a value.
+bool msp_frame_referenced(const Msp_Func *fn);
 // After the frame: the jumps again, and tail calls of a frameless function.
 void msp_peephole_frame(Msp_Func *fn, unsigned result);
 

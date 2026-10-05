@@ -18,7 +18,10 @@
 //     load, an operation and a store back into one operation on memory; a `tst` after an
 //     instruction that set the same flags from the same word goes, when only jumps that
 //     read those flags follow; an operation by a neutral constant (`add #0` ahead of an
-//     `addc`, `bis #0`, `and #-1`) goes.
+//     `addc`, `bis #0`, `and #-1`) goes;
+//   - backward, the liveness of the slot bytes: a store to slot bytes nothing reads
+//     before they are overwritten goes (a call reads only its stack arguments unless the
+//     frame's address escaped), and codegen.c drops a frame no instruction refers to.
 //
 // After the frame: the jumps again, a jump to a lone `ret` becomes `ret`, and a call
 // followed by a bare `ret` a tail jump `br`.
@@ -63,6 +66,12 @@ static bool r8_helper(const Msp_Instr *in)
         if (strcmp(names[i], s) == 0)
             return true;
     return false;
+}
+
+// The argument registers call (or tail call) `in` reads: those it recorded, else all.
+static Set call_args(const Msp_Instr *in)
+{
+    return in->args ? in->args & ARGS : ARGS;
 }
 
 // What the return reads: the result and the call-saved registers.
@@ -159,7 +168,7 @@ static void def_use(const Msp_Instr *in, unsigned result, Set *def, Set *use)
         break;
     case MSP_FORM_SINGLE:
         if (in->op == MSP_CALL) {
-            *use = opnd_regs(a) | ARGS | (r8_helper(in) ? ARGS_R8 : 0);
+            *use = opnd_regs(a) | call_args(in) | (r8_helper(in) ? ARGS_R8 : 0);
             *def = CLOBBER | (r8_helper(in) ? 0x0700u : 0);
             break;
         }
@@ -179,7 +188,7 @@ static void def_use(const Msp_Instr *in, unsigned result, Set *def, Set *use)
         }
         break;
     case MSP_FORM_SRC: // br: a tail call
-        *use = opnd_regs(a) | ARGS | (r8_helper(in) ? ARGS_R8 : 0) | ret_use(result);
+        *use = opnd_regs(a) | call_args(in) | (r8_helper(in) ? ARGS_R8 : 0) | ret_use(result);
         break;
     case MSP_FORM_JUMP:
         if (in->op != MSP_JMP)
@@ -1150,7 +1159,218 @@ static bool backward(Cfg *c)
     return changed;
 }
 
-void msp_peephole_pass(Msp_Func *fn, unsigned result)
+//
+// Dead stores to the frame: the liveness of the first 64 bytes of slots, one bit a byte.
+// A slot is read by an x(r1) operand, and by whatever could hold its address: on a path
+// past a read of r1 as a value (`mov r1, r12`), an access through any other register
+// may read every slot.  Otherwise a call reads only the outgoing arguments, the first
+// `out` bytes of the frame, below the slots; nothing is live after the function returns.  Offsets into the incoming
+// arguments are not slots.  A body that moves SP itself (a push, a pop) is left alone,
+// since its offsets do not name one slot throughout.
+//
+
+typedef uint64_t Bytes;
+
+#define ALL_BYTES (~(Bytes)0)
+
+// The bytes of slot memory operand `o` covers, `size` wide, or 0 for no slot operand.
+static Bytes slot_bytes(const Msp_Operand *o, int size)
+{
+    if (o->incoming || o->reg != MSP_SP || o->sym ||
+        (o->kind != MSP_OPND_INDEXED && o->kind != MSP_OPND_IND))
+        return 0;
+    int64_t off = o->kind == MSP_OPND_IND ? 0 : o->imm;
+    Bytes b     = 0;
+    for (int64_t i = off; i < off + size; i++)
+        if (i >= 0 && i < 64)
+            b |= (Bytes)1 << i;
+    return b;
+}
+
+// Whether `in` overwrites the operand it writes whole, reading nothing of it.
+static bool overwrites(const Msp_Instr *in)
+{
+    return in->op == MSP_MOV || in->op == MSP_CLR;
+}
+
+// The slot bytes plain store `in` overwrites, when all of them are tracked; else 0.
+static Bytes stored_slot(const Msp_Instr *in)
+{
+    const Msp_Operand *w = written(in);
+    if (!w || !overwrites(in) || in->vol || in->opnd[0].kind == MSP_OPND_POSTINC)
+        return 0;
+    int size = in->byte ? 1 : 2;
+    if (w->kind == MSP_OPND_INDEXED && (w->imm < 0 || w->imm + size > 64))
+        return 0;
+    return slot_bytes(w, size);
+}
+
+// The bytes of the outgoing argument area, the first `out` of the frame.
+static Bytes outgoing(int out)
+{
+    return out >= 64 ? ALL_BYTES : ((Bytes)1 << out) - 1;
+}
+
+// The slot bytes live before `in`, given those live after it, in a frame whose
+// outgoing argument area is `out` bytes.
+static Bytes slots_before(const Msp_Instr *in, Bytes after, bool escaped, int out)
+{
+    if (in->op == MSP_CALL || in->op == MSP_BR)
+        return escaped ? ALL_BYTES : after | outgoing(out);
+    if (in->op == MSP_RET)
+        return 0;
+    int size             = in->byte ? 1 : 2;
+    const Msp_Operand *w = written(in);
+    Bytes read           = 0;
+    for (int i = 0; i < MSP_MAX_OPERANDS; i++) {
+        const Msp_Operand *o = &in->opnd[i];
+        if (o == w && overwrites(in)) {
+            after &= ~slot_bytes(o, size);
+            continue;
+        }
+        bool through = (o->kind == MSP_OPND_INDEXED || o->kind == MSP_OPND_IND ||
+                        o->kind == MSP_OPND_POSTINC) &&
+                       o->reg != MSP_SP;
+        if (escaped && through)
+            return ALL_BYTES;
+        read |= slot_bytes(o, size);
+    }
+    return after | read;
+}
+
+static Bytes slot_target(const Cfg *c, const Bytes *in, const char *label)
+{
+    intptr_t t;
+    return label && map_get(&c->labels, label, &t) ? in[t] : 0;
+}
+
+// The slot bytes live after instruction i of block `bi`, given those after i+1.
+static Bytes slots_across(const Cfg *c, const Bytes *in, int bi, int i, Bytes after)
+{
+    const Msp_Instr *x = c->blk[bi].in[i];
+    if (x->op == MSP_JMP)
+        return slot_target(c, in, x->opnd[0].sym);
+    if (is_branch(x->op))
+        return after | slot_target(c, in, x->opnd[0].sym);
+    return after;
+}
+
+// Whether `in` reads r1 as a value: the frame's address escapes into a register.
+static bool reads_sp(const Msp_Instr *in)
+{
+    const Msp_Operand *w = written(in);
+    for (int j = 0; j < MSP_MAX_OPERANDS; j++) {
+        const Msp_Operand *o = &in->opnd[j];
+        if (o->kind == MSP_OPND_REG && o->reg == MSP_SP && o != w)
+            return true;
+    }
+    return false;
+}
+
+// Whether the body moves SP: a push, a pop, or a write to r1.
+static bool sp_moves(const Cfg *c)
+{
+    for (int bi = 0; bi < c->n; bi++)
+        for (int i = 0; i < c->blk[bi].n; i++) {
+            const Msp_Instr *in = c->blk[bi].in[i];
+            const Msp_Operand *w = written(in);
+            if (in->op == MSP_PUSH || in->op == MSP_POP ||
+                (w && w->kind == MSP_OPND_REG && w->reg == MSP_SP))
+                return true;
+        }
+    return false;
+}
+
+static void escape_to(const Cfg *c, bool *esc, const char *label, bool *changed)
+{
+    intptr_t t;
+    if (label && map_get(&c->labels, label, &t) && !esc[t]) {
+        esc[t]   = true;
+        *changed = true;
+    }
+}
+
+// For each block, whether a path from the entry to it reads r1 as a value.
+static bool *escapes(const Cfg *c)
+{
+    bool *esc    = xalloc((c->n + 1) * sizeof(bool), __func__, __FILE__, __LINE__);
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int bi = 0; bi < c->n; bi++) {
+            bool e = esc[bi], falls = true;
+            for (int i = 0; i < c->blk[bi].n && falls; i++) {
+                const Msp_Instr *in = c->blk[bi].in[i];
+                e |= reads_sp(in);
+                if (e && (in->op == MSP_JMP || is_branch(in->op)))
+                    escape_to(c, esc, in->opnd[0].sym, &changed);
+                falls = !is_jump(in->op);
+            }
+            if (e && falls && bi + 1 < c->n && !esc[bi + 1]) {
+                esc[bi + 1] = true;
+                changed     = true;
+            }
+        }
+    }
+    return esc;
+}
+
+// Whether instruction i of block `bi` may follow an escape of the frame's address.
+static bool escaped_at(const Cfg *c, const bool *esc, int bi, int i)
+{
+    if (esc[bi])
+        return true;
+    for (int j = 0; j <= i; j++)
+        if (reads_sp(c->blk[bi].in[j]))
+            return true;
+    return false;
+}
+
+static bool dead_slot_stores(Cfg *c, int out)
+{
+    if (sp_moves(c))
+        return false;
+    bool *esc    = escapes(c);
+    Bytes *in    = xalloc((c->n + 1) * sizeof(Bytes), __func__, __FILE__, __LINE__);
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int bi = c->n - 1; bi >= 0; bi--) {
+            Bytes live = bi + 1 < c->n ? in[bi + 1] : 0;
+            for (int i = c->blk[bi].n - 1; i >= 0; i--) {
+                live = slots_across(c, in, bi, i, live);
+                live = slots_before(c->blk[bi].in[i], live, escaped_at(c, esc, bi, i), out);
+            }
+            if (live != in[bi]) {
+                in[bi]  = live;
+                changed = true;
+            }
+        }
+    }
+    // A plain store to slot bytes none of which is read before it is overwritten goes.
+    bool dropped = false;
+    for (int bi = 0; bi < c->n; bi++) {
+        Blk *k     = &c->blk[bi];
+        Bytes live = bi + 1 < c->n ? in[bi + 1] : 0;
+        for (int i = k->n - 1; i >= 0; i--) {
+            Msp_Instr *x = k->in[i];
+            live         = slots_across(c, in, bi, i, live);
+            Bytes w      = stored_slot(x);
+            if (w && !(w & live)) {
+                drop(k, i);
+                dropped = true;
+                continue;
+            }
+            live = slots_before(x, live, escaped_at(c, esc, bi, i), out);
+        }
+        relink(k);
+    }
+    xfree(esc);
+    xfree(in);
+    return dropped;
+}
+
+void msp_peephole_pass(Msp_Func *fn, unsigned result, int out)
 {
     bool changed = true;
     while (changed) {
@@ -1161,7 +1381,24 @@ void msp_peephole_pass(Msp_Func *fn, unsigned result)
         changed |= forward(&c);
         changed |= backward(&c);
         cfg_free(&c);
+        cfg_build(&c, fn, result);
+        changed |= dead_slot_stores(&c, out);
+        cfg_free(&c);
     }
+}
+
+bool msp_frame_referenced(const Msp_Func *fn)
+{
+    for (const Msp_Block *b = fn->blocks; b; b = b->next)
+        for (const Msp_Instr *in = b->head; in; in = in->next)
+            for (int i = 0; i < MSP_MAX_OPERANDS; i++) {
+                const Msp_Operand *o = &in->opnd[i];
+                if (o->kind != MSP_OPND_NONE && o->kind != MSP_OPND_IMM &&
+                    o->kind != MSP_OPND_ABS && o->kind != MSP_OPND_LABEL &&
+                    o->reg == MSP_SP && !o->incoming)
+                    return true;
+            }
+    return false;
 }
 
 // Whether block j holds a lone ret.

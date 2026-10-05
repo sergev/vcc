@@ -133,7 +133,7 @@ It runs over the body to a fixed point.
 
   A read of a copy reads the oldest register holding it.
 - **Backward pass,** over the liveness of `r4`–`r15` and SR:
-  - dead instructions go;
+  - dead instructions go; a call reads only the registers its arguments are in;
   - a load moves forward into its one use;
   - a load, an operation and a store back become one operation on memory;
   - an add of a constant to a base becomes an offset (`mov 6(r12), r12`), so a
@@ -141,6 +141,19 @@ It runs over the body to a fixed point.
   - consecutive loads through a dying pointer use `@rN+`;
   - a `tst` goes when the instruction before already set its flags, under the C and V
     rules.
+- **Dead stores to the frame:** a backward pass over the liveness of each byte of the
+  first 64 bytes of slots. A plain store (`mov`, `clr`) to slot bytes that nothing reads
+  before they are overwritten, or the function returns, goes. What may read a slot:
+  - an `x(r1)` operand covering it;
+  - a call, which reads its stack arguments, the outgoing area below the slots;
+  - once r1 has been read as a value on some path to here (`mov r1, r12`, the frame's
+    address escaping), a call or any access through another register, which may read
+    every slot.
+
+  A body that pushes or pops is left alone, since its offsets do not name one slot
+  throughout. When no slot is referenced any more, the function has no frame at all.
+  So a `double` parameter passed straight on to a helper, or a structure read only
+  through its incoming pointer, costs no slot.
 - **After the frame:**
   - a jump to a lone `ret` is `ret`;
   - `call #f; ret` is the tail jump `br #f`.
@@ -372,7 +385,7 @@ Against GCC and clang at `-O2`, in bytes of code:
 
 | | ours | GCC `-O2` | clang `-O2` |
 | --- | --- | --- | --- |
-| the C library, its 39 C sources | 36 404 | 38 016 | 40 142 |
+| the C library, its 39 C sources | 35 012 | 38 016 | 40 142 |
 | 677 book programs | 195 794 | 99 942 | 85 366 |
 
 On small benchmarks, in cycles, with the same runtime:
@@ -386,7 +399,9 @@ On small benchmarks, in cycles, with the same runtime:
 
 The book programs are twice GCC's, because `-O2` folds and inlines most of them whole.
 On sort, the same array index is computed again and again, a common subexpression that
-is for the shared TAC optimizer to remove. clang computes the CRC at compile time.
+is for the shared TAC optimizer to remove. clang computes the CRC at compile time. The
+book and benchmark figures were measured before the dead frame stores went, which took
+3.8% off the library.
 
 ## Running a program by hand
 

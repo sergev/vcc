@@ -111,7 +111,7 @@ TEST_F(Msp430Test, Helper64FirstOperandInR8)
 mov r13, r9
 mov r14, r10
 mov r15, r11
-mov 24(r1), r12
+mov 8(r1), r12
 )")) << code;
     EXPECT_NE(std::string::npos, code.find("call #__mspabi_mpyll\n")) << code;
 }

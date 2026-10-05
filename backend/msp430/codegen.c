@@ -57,8 +57,12 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     }
     g.vol           = false;
     unsigned result = result_regs(tl);
-    if (msp430_peephole)
-        msp_peephole_pass(g.fn, result);
+    if (msp430_peephole) {
+        msp_peephole_pass(g.fn, result, g.out_size);
+        // The peephole pass may have removed every access to the slots.
+        if (!msp_frame_referenced(g.fn))
+            g.frame_size = 0;
+    }
     gen_frame(&g);
     if (msp430_peephole)
         msp_peephole_frame(g.fn, result);

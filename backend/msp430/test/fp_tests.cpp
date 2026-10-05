@@ -10,27 +10,25 @@
 #include "msp430_test.h"
 
 // A double's arithmetic as GCC calls it: the first operand in r11:r8, which the
-// prologue saves, the second in r15:r12.
-TEST_F(Msp430Test, DoubleAddCallsHelper)
-{
-    std::string code = Code(CompileToMsp430("double f(double a, double b) { return a + b; }"));
-    EXPECT_EQ(0u, code.find(R"(push r8
+// prologue saves, the second in r15:r12, here straight from the incoming stack
+// argument, with no slots.
+EXPECT_CODE(DoubleAddCallsHelper, R"(push r8
 push r9
 push r10
-)")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov r15, r11
-mov 24(r1), r12
-mov 26(r1), r13
-mov 28(r1), r14
-mov 30(r1), r15
+mov r12, r8
+mov r13, r9
+mov r14, r10
+mov r15, r11
+mov 8(r1), r12
+mov 10(r1), r13
+mov 12(r1), r14
+mov 14(r1), r15
 call #__mspabi_addd
-)")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(pop r10
+pop r10
 pop r9
 pop r8
 ret
-)")) << code;
-}
+)", "double f(double a, double b) { return a + b; }")
 
 // A float's second operand goes in r15:r14, where it came: nothing to move, and the
 // call a tail jump.
@@ -72,7 +70,8 @@ jeq )"))
         << code;
 }
 
-// Conversions by the helpers GCC's code calls; an int widens to 32 bits first.
+// Conversions by the helpers GCC's code calls; an int widens to 32 bits first.  The
+// parameters' slots are dead once the operands are in place, so each one is a tail call.
 TEST_F(Msp430Test, Conversions)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -84,13 +83,19 @@ TEST_F(Msp430Test, Conversions)
         float g(double p6) { return p6; }
         long long h(double p7) { return p7; }
     )"));
-    for (const char *h : { "call #__mspabi_fltlid\n", R"(clr r13
+    EXPECT_EQ(code, R"(mov r12, r13
+rla r13
+subc r13, r13
+inv r13
+br #__mspabi_fltlid
+clr r13
 br #__mspabi_fltulf
-)",
-                           "call #__mspabi_fixdli\n", "br #__fixunssfsi\n",
-                           "call #__mspabi_cvtfd\n", "call #__mspabi_cvtdf\n",
-                           "call #__mspabi_fixdlli\n" })
-        EXPECT_NE(std::string::npos, code.find(h)) << h << code;
+br #__mspabi_fixdli
+br #__fixunssfsi
+br #__mspabi_cvtfd
+br #__mspabi_cvtdf
+br #__mspabi_fixdlli
+)");
 }
 
 namespace {

@@ -88,12 +88,35 @@ TEST_F(Msp430Test, StructParamCopiedAcrossCall)
         void g(void);
         int w(struct S s) { g(); return s.b; }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov @r12, 0(r1)
-mov 2(r12), 2(r1)
+    // Only the member read after the call is copied.
+    EXPECT_NE(std::string::npos, code.find(R"(mov 2(r12), 2(r1)
 call #g
 mov 2(r1), r12
 )")) << code;
 }
+
+// Read through the pointer that came in a register, a structure parameter needs no slot,
+// and the function no frame.
+EXPECT_CODE(StructParamInRegisterFrameless, R"(mov 2(r12), r12
+ret
+)", "struct S { int a, b, c; }; int f(struct S s) { return s.b; }")
+
+// A structure parameter written and passed on: the copy of the member overwritten is
+// dead, and so is the slot's first word, which held the incoming address.  The call
+// reads r12 and r13 only, so nothing is moved into r15 for it.
+EXPECT_CODE(StructParamDeadCopyWords, R"(sub #6, r1
+mov 2(r12), 2(r1)
+mov 4(r12), 4(r1)
+mov r13, 0(r1)
+mov r1, r12
+call #g
+add #6, r1
+ret
+)", R"(
+    struct S { int a, b, c; };
+    int g(struct S s);
+    int f(struct S s, int k) { s.a = k; return g(s); }
+)")
 
 // Read through the pointer or copied, a structure parameter keeps its value, and the
 // caller's object stays as it was.
@@ -125,11 +148,9 @@ TEST_F(Msp430Test, RunStructParamByReference)
     EXPECT_EQ(0, exit_status);
 }
 
-// The callee hands the hidden pointer back in r12, where it came.
-EXPECT_CODE(StructResultPointerReturned, R"(sub #2, r1
-mov r13, 0(r1)
-mov r13, 0(r12)
-add #2, r1
+// The callee hands the hidden pointer back in r12, where it came.  The local is copied
+// from its register, so its slot is never read, and the store to it goes.
+EXPECT_CODE(StructResultPointerReturned, R"(mov r13, 0(r12)
 ret
 )", "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }")
 
