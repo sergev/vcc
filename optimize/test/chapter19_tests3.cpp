@@ -462,6 +462,14 @@ int target(int *stat_ptr) {
 }
 )SRC"),
               R"OPT(- instruction:
+  kind: copy
+  src:
+    kind: var
+    name: stat
+  dst:
+    kind: var
+    name: %a
+- instruction:
   kind: store
   src:
     kind: constant
@@ -475,7 +483,7 @@ int target(int *stat_ptr) {
   kind: return
   src:
     kind: var
-    name: stat
+    name: %a
 )OPT");
 }
 

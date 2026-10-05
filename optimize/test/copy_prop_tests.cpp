@@ -501,6 +501,33 @@ TEST_F(OptimizerTest, CopyPropFunCallKillsAddressTaken)
               "    name: x\n");
 }
 
+// Copy(g, x) → Store(5, p) → Return(x), x and p private, g a global.
+// p may point at g (its address taken in some other function), so the store
+// kills the (x → g) copy: Return(x) must not become Return(g).
+TEST_F(OptimizerTest, CopyPropStoreKillsStaticCopy)
+{
+    Tac_Instruction *entry = make_label("fn");
+    Tac_Instruction *copy  = make_copy(make_var("g"), make_var("x"));
+    Tac_Instruction *store = make_store(make_const_int(5), make_var("p"));
+    Tac_Instruction *ret   = make_return(make_var("x"));
+    entry->next            = copy;
+    copy->next             = store;
+    store->next            = ret;
+
+    const Tac_TopLevel *tl = make_fn_tl({ "x", "p" });
+
+    OptFlags flags          = opt_flags_default();
+    flags.dead_store_elim   = false;
+    Tac_Instruction *result = optimize_function(entry, flags, tl);
+
+    const Tac_Instruction *last = result;
+    while (last->next)
+        last = last->next;
+    ASSERT_EQ(last->kind, TAC_INSTRUCTION_RETURN);
+    ASSERT_EQ(last->u.return_.src->kind, TAC_VAL_VAR);
+    EXPECT_STREQ(last->u.return_.src->u.var_name, "x");
+}
+
 // Copy(1, flag) → JIZ(flag, "Else") → Return(1) → Label("Else") → Return(0)
 // copy_prop substitutes flag→1 into the JIZ condition (Var→ConstInt).
 // constant_fold only folds JIZ(0,…) → Jump; JIZ(nonzero) is left as-is,

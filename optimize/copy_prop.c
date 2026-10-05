@@ -23,7 +23,7 @@
 // Conservatism around aliasing (see alias.c): static-duration and address-taken
 // variables may be changed behind our back. A FunCall may touch any static or
 // address-taken variable, so it kills all copies involving them; a Store writes
-// through a pointer, so it kills copies involving address-taken variables.
+// through a pointer, which may point at either, so it kills the same copies.
 // Temporaries (%N) are never address-taken and propagate freely.
 //
 // See docs/TAC_Optimization.md §"Copy propagation".
@@ -305,11 +305,20 @@ static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const Stri
         return;
     }
 
-    if (ins->kind == TAC_INSTRUCTION_STORE) {
-        // A store writes through a pointer, which may alias any address-taken
-        // variable: kill copies involving them. (Store defines no named var.)
-        OPT_TRACE("[copy-prop] store: kill address-taken copies\n");
+    if (ins->kind == TAC_INSTRUCTION_STORE || ins->kind == TAC_INSTRUCTION_STORE_BYTE) {
+        // A store writes through a pointer, which may point at any address-taken
+        // variable — or at any static one, whose address another function may
+        // have taken: kill copies involving them. (Store defines no named var.)
+        OPT_TRACE("[copy-prop] store: kill static+address-taken copies\n");
+        kill_alias_set(cs, static_names);
         kill_alias_set(cs, address_taken);
+        return;
+    }
+
+    if (ins->kind == TAC_INSTRUCTION_COPY_TO_OFFSET ||
+        ins->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET) {
+        // A member write changes the aggregate named by dst.
+        kill_name(cs, ins->u.copy_to_offset.dst);
         return;
     }
 

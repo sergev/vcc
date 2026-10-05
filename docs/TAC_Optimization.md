@@ -202,7 +202,7 @@ Once the analysis converges, each use of a variable `x` is replaced by `src` if 
 
 Two categories of variables must be treated conservatively:
 
-1. **Observable variables** — anything with static storage duration (file-scope globals, `extern`s, local `static`s). A `FunCall` instruction may call any function, which may read or modify such a variable. At every `FunCall`, all copies involving observable variables are killed from the reaching set.
+1. **Observable variables** — anything with static storage duration (file-scope globals, `extern`s, local `static`s). A `FunCall` instruction may call any function, which may read or modify such a variable. At every `FunCall`, all copies involving observable variables are killed from the reaching set. So are they at every `Store`: a pointer may point at a global whose address was taken in another function, which the local classification cannot see.
 
 2. **Address-taken variables**. Any variable that appears as the `src` of a `GetAddress` instruction may be modified through the resulting pointer. At every `Store` or `FunCall`, copies involving such variables are killed.
 
