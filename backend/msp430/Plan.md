@@ -341,6 +341,19 @@ instructions.
     - `sxt` sign-extends a byte;
     - widening to `long` copies `#0`, or the sign word (`mov; swpb; sxt; swpb; sxt` or a
       `tst`/`jn` pair) into the high words.
+
+  *Done.*
+  - The sign word is `mov; rla; subc; inv` (no label).
+  - Shifts by a variable are an inline loop for every width, `long` included, rather
+    than the `__mspabi_sll*` helpers.
+  - `int_tests.cpp` has goldens, and runs our arithmetic against the host: `int` and
+    `long` `+ - * / % & | ^` and every comparison over 12×12 operands; shifts by every
+    count, constant and variable; `long long` without the runtime.
+  - Book chapters 2–4, 11 and 12 are enabled.
+    - Skipped for good, as on AVR: `Chapter11_SwitchLong` (case values collide in a
+      32-bit `long`) and `Chapter12_UnsignedTypeSpecifiers` (loops forever with a 16-bit
+      `unsigned`).
+    - Skipped until T14 builds the 64-bit runtime: four `Chapter11` programs.
 - **T10. Control flow** (ch. 5–8) and **branch relaxation.**
   - `.L` labels are unique per TU. A zero test is `tst` on a word, or `bis` across the
     words of a wider value into a scratch register.

@@ -21,12 +21,13 @@ target_link_libraries(msp430 backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(MSP430_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER MSP430_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
+list(FILTER MSP430_BOOK_SOURCES INCLUDE REGEX "/chapter([1-4]|1[12])_tests[0-9]*\\.cpp$")
 
 add_executable(msp430-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
+    test/int_tests.cpp
     test/run_tests.cpp
     ${MSP430_BOOK_SOURCES}
 )
