@@ -185,17 +185,35 @@ static int value_class(const Tac_Type *t)
     }
 }
 
+// A scalar type a store through a pointer to it writes in its own width and register
+// file.
+static bool is_scalar_pointee(const Tac_Type *t)
+{
+    return t && t->kind < TAC_TYPE_VOID;
+}
+
 // May the copy `dst = src` be propagated? Not when it changes the value class: a
 // same-size integer copied into a pointer (a cast, lowered as a COPY on a 32-bit
 // target) must not be forwarded into the pointer operand of an ADD_PTR or LOAD.
-// Names of unknown type (globals, untyped hand-built TAC) are let through.
+// Nor when it is a cast between pointers to different scalars: a STORE is as wide as
+// its pointer's pointee, so `*(unsigned long *)&d = 0` must not become a store
+// through the `double *`. Names of unknown type (globals, untyped hand-built TAC) are
+// let through.
 static bool same_class(const StringMap *types, const char *dst, const Tac_Val *src)
 {
     intptr_t td = 0, ts = 0;
     if (!types || src->kind != TAC_VAL_VAR || !map_get((StringMap *)types, dst, &td) ||
         !map_get((StringMap *)types, src->u.var_name, &ts) || !td || !ts)
         return true;
-    return value_class((const Tac_Type *)td) == value_class((const Tac_Type *)ts);
+    const Tac_Type *a = (const Tac_Type *)td, *b = (const Tac_Type *)ts;
+    if (value_class(a) != value_class(b))
+        return false;
+    if (a->kind == TAC_TYPE_POINTER && b->kind == TAC_TYPE_POINTER) {
+        const Tac_Type *pa = a->u.pointer.target_type, *pb = b->u.pointer.target_type;
+        if (is_scalar_pointee(pa) && is_scalar_pointee(pb) && pa->kind != pb->kind)
+            return false;
+    }
+    return true;
 }
 
 static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const StringMap *static_names,

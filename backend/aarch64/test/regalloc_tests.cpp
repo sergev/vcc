@@ -5,7 +5,8 @@
 //
 #include "aarch64_test.h"
 
-// A loop's values stay in argument registers: the pointer and count where they arrive.
+// A loop's values stay in argument registers: the pointer, stepped through the array,
+// where it arrives.
 TEST_F(Aarch64Test, LoopInRegisters)
 {
     aarch64_peephole = false;
@@ -18,10 +19,8 @@ long sum(long *p, int n)
     return s;
 }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(sxtw x2, w3
-add x2, x0, x2, lsl #3
-ldr x2, [x2]
-add x4, x4, x2
+    EXPECT_NE(std::string::npos, code.find(R"(ldr x1, [x0]
+add x2, x2, x1
 )")) << code;
     EXPECT_EQ(std::string::npos, code.find("[x29, #-")) << code;
 }

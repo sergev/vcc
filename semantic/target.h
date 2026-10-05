@@ -88,6 +88,9 @@ typedef struct {
     // host's binary64.  The constant folders compute in the host's double and round each
     // result to it.
     int double_mant_dig;
+    // The loop optimizations (rotation, invariant code motion, induction variables) are
+    // off: BESM-6 keeps the code it had before them.
+    int no_loop_opt;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

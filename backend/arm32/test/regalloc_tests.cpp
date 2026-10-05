@@ -6,7 +6,8 @@
 //
 #include "arm32_test.h"
 
-// A loop's values stay in argument registers: the pointer and count where they arrive.
+// A loop's values stay in argument registers: the pointer, stepped through the array,
+// where it arrives.
 TEST_F(Arm32Test, LoopInRegisters)
 {
     arm32_peephole = false;
@@ -19,10 +20,9 @@ int sum(int *p, int n)
     return s;
 }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(add r2, r0, r3, lsl #2
-ldr r2, [r2]
-add r4, r4, r2
-add r3, r3, #1
+    EXPECT_NE(std::string::npos, code.find(R"(ldr r1, [r0]
+add r2, r2, r1
+add r0, r0, #4
 )")) << code;
     EXPECT_EQ(std::string::npos, code.find("[r11, #-")) << code;
 }

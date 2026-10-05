@@ -106,8 +106,12 @@ The size model follows GNU `as`:
 - **Compare and branch.** A comparison (or `!x`) whose only use is the next conditional
   jump becomes a `cmp` and that jump, with no 0/1 in between. A constant first operand
   is turned around: `k < b` is `cmp #k+1, b; jge`.
-- **Inline multiply.** A 16-bit multiply by a small constant, and an index scaled by
-  one, is done inline in `r15` by Horner's rule.
+- **Inline multiply.** Every 16-bit multiply by a constant, and an index scaled by
+  one, is done inline in `r15` by Horner's rule: a shift per bit below the top one
+  and an add (or subtract) per digit. The digits are plain binary or canonical signed
+  digits, whichever is shorter, or those of `-k` with the product negated at the end
+  (`inv`, `inc`). So `x * 25173` is 21 instructions, about 21 cycles, against some 165
+  for a call of `__mspabi_mpyi`.
 - **Shifts.** The CPU shifts one bit at a time (`rla`, `rra`, `rrc`). An `int` or a
   `long long` shifts inline; a `long` shift by a variable count calls
   `__mspabi_slll`/`srll`/`sral`.
@@ -388,20 +392,26 @@ Against GCC and clang at `-O2`, in bytes of code:
 | the C library, its 39 C sources | 35 012 | 38 016 | 40 142 |
 | 677 book programs | 195 794 | 99 942 | 85 366 |
 
-On small benchmarks, in cycles, with the same runtime:
+On the benchmarks in `bench/msp430/`, in mspsim cycles and bytes of `.text`, both
+linked with our runtime (`scripts/bench_msp430.sh` builds and runs them):
 
-| | ours | GCC `-O2` | clang `-O2` |
-| --- | --- | --- | --- |
-| bubble sort, 64 `int`s | 83 807 | 32 309 | 45 803 |
-| sieve to 2000 | 91 796 | 74 650 | 79 567 |
-| CRC-16, 1 KB | 147 129 | 119 922 | 21 065 |
-| string copy and compare | 108 082 | 72 701 | 74 723 |
+| | ours | GCC `-O2` |
+| --- | --- | --- |
+| bubble sort, 64 `int`s (`sort.c`) | 39 569 / 346 | 32 845 / 284 |
+| sieve to 2000 (`sieve.c`) | 111 848 / 246 | 92 700 / 320 |
+| CRC-16, 1 KB (`crc16.c`) | 149 259 / 272 | 199 259 / 572 |
+| string copy and compare (`strings.c`) | 125 817 / 600 | 84 739 / 1 090 |
+
+Sort was 66 073 cycles before three changes: the inline constant multiply (the LCG
+that fills the array called `__mspabi_mpyi` 64 times), loops tested at their bottom,
+and induction-variable strength reduction, which steps a pointer through the array
+in place of the index (see [TAC_Optimization.md](TAC_Optimization.md)). Of the 2 016
+passes of its inner loop, each costs 13 cycles to GCC's 10: GCC loads through
+`@r13+` and stores to `-2(r13)`, where we copy the pointer to step it.
 
 The book programs are twice GCC's, because `-O2` folds and inlines most of them whole.
-On sort, the same array index is computed again and again, a common subexpression that
-is for the shared TAC optimizer to remove. clang computes the CRC at compile time. The
-book and benchmark figures were measured before the dead frame stores went, which took
-3.8% off the library.
+The book figures were measured before the dead frame stores went, which took 3.8% off
+the library.
 
 ## Running a program by hand
 

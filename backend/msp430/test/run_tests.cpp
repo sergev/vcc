@@ -369,3 +369,62 @@ TEST_F(Msp430Test, RunSetjmpLongjmpGccClang)
     EXPECT_EQ("", Run(msp430_clang_config(), "", "crt0.o", &src, flags, ".clang"));
     EXPECT_EQ(42, exit_status);
 }
+
+// The loops the induction-variable pass rewrites: a pointer stepped through the array in
+// place of the index, the test against an end pointer, the index gone when nothing else
+// reads it. main returns the number of the first wrong result, or 0.
+TEST_F(Msp430Test, RunReducedLoops)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+int a[10] = { 5, 3, 9, 1, 7, 2, 8, 6, 4, 0 };
+long l[4] = { 100000, 200000, 300000, 400000 };
+
+static int up(int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
+static int down(int *p, int n) { int s = 0; for (int i = n - 1; i >= 0; i--) s = s * 2 + p[i]; return s; }
+static int rises(int *p, int n)
+{
+    int k = 0;
+    for (int i = 0; i + 1 < n; i++)
+        if (p[i] < p[i + 1])
+            k++;
+    return k;
+}
+static int find(int *p, int n, int x)
+{
+    int i;
+    for (i = 0; i < n; i++)
+        if (p[i] == x)
+            break;
+    return i;
+}
+static unsigned evens(int *p, unsigned n) { unsigned s = 0; for (unsigned i = 0; i < n; i += 2) s += p[i]; return s; }
+static long wide(long *p, int n) { long s = 0; for (int i = 0; i != n; i++) s += p[i]; return s; }
+static void sort(int *v, int n)
+{
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - 1 - i; j++)
+            if (v[j] > v[j + 1]) {
+                int t = v[j];
+                v[j] = v[j + 1];
+                v[j + 1] = t;
+            }
+}
+
+int main(void)
+{
+    if (up(a, 10) != 45) return 1;
+    if (up(a, 0) != 0) return 2;
+    if (down(a, 4) != ((1 * 2 + 9) * 2 + 3) * 2 + 5) return 3;
+    if (rises(a, 10) != 3) return 4;
+    if (find(a, 10, 7) != 4 || find(a, 10, 11) != 10) return 5;
+    if (evens(a, 10) != 5 + 9 + 7 + 8 + 4) return 6;
+    if (wide(l, 4) != 1000000) return 7;
+    sort(a, 10);
+    for (int i = 0; i < 10; i++)
+        if (a[i] != i) return 8;
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}

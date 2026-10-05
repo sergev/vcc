@@ -18,8 +18,11 @@ int sum(int *a, int n)
 }
 )"));
     EXPECT_EQ(std::string::npos, s.find("Y+")) << s;
-    EXPECT_NE(std::string::npos, s.find(R"(ldd r20, Z+0
-ldd r21, Z+1
+    EXPECT_NE(std::string::npos, s.find(R"(ldd r22, Z+0
+ldd r23, Z+1
+add r20, r22
+adc r21, r23
+adiw r24, 2
 )")) << s;
 }
 

@@ -382,35 +382,77 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, Shift sh)
     free_words(s, n);
 }
 
-// Whether a 16-bit multiply by `k` is done inline: bit by bit from the top, a shift for
-// each bit below the top one and an add for each one set, a dozen steps at most.
-static bool mul_inline(uint64_t k)
+// A 16-bit multiply by a constant, in canonical signed digits: digit[i] of `v` is -1, 0
+// or 1, no two adjacent nonzero, `top` the highest nonzero one; the product negated at
+// the end when `neg`. The cost is one instruction a digit position, plus two for `neg`.
+typedef struct {
+    signed char digit[17];
+    int top;
+    bool neg;
+} MulPlan;
+
+static int naf(unsigned v, signed char *digit)
 {
-    k &= 0xffff;
-    if (k == 0)
-        return true;
-    int top = 15;
-    while (!(k >> top & 1))
-        top--;
-    return top + __builtin_popcountll(k) <= 12;
+    int top = -1;
+    for (int i = 0; v; i++, v >>= 1) {
+        digit[i] = 0;
+        if (v & 1) {
+            digit[i] = (v & 3) == 3 ? -1 : 1;
+            v -= digit[i];
+            top = i;
+        }
+    }
+    return top;
 }
 
-// r15 = a * k, by Horner's rule: a is only read, so it may be anywhere.
-static void mul_const(Gen *g, const Tac_Val *a, uint64_t k)
+static int plan_cost(const MulPlan *p)
+{
+    int n = p->top + (p->neg ? 2 : 0);
+    for (int i = 0; i < p->top; i++)
+        n += p->digit[i] != 0;
+    return n;
+}
+
+// The cheaper chain for a * v, v of 16 bits: plain binary, or signed digits when they
+// fit 16 bits and cost less (they cost a shift more at the top, so binary wins for 3).
+static MulPlan plan_for(unsigned v, bool neg)
+{
+    MulPlan bin = { .top = -1, .neg = neg }, csd = { .neg = neg };
+    for (int i = 0; i < 16; i++)
+        if ((bin.digit[i] = v >> i & 1))
+            bin.top = i;
+    csd.top = naf(v, csd.digit);
+    return csd.top <= 15 && plan_cost(&csd) < plan_cost(&bin) ? csd : bin;
+}
+
+// The cheapest Horner chain starting at a +1 digit: for a * k, or for -(a * -k).
+static MulPlan mul_plan(uint64_t k)
 {
     k &= 0xffff;
-    if (k == 0) {
+    MulPlan pos = plan_for((unsigned)k, false);
+    MulPlan neg = plan_for((unsigned)(0x10000 - k) & 0xffff, true);
+    return plan_cost(&neg) < plan_cost(&pos) ? neg : pos;
+}
+
+// r15 = a * k, by Horner's rule over the signed digits: a is only read, so it may be
+// anywhere.
+static void mul_const(Gen *g, const Tac_Val *a, uint64_t k)
+{
+    MulPlan p = mul_plan(k);
+    if (p.top < 0) {
         emit1(g, MSP_CLR, msp_reg(MSP_SCRATCH));
         return;
     }
-    int top = 15;
-    while (!(k >> top & 1))
-        top--;
     emit2(g, MSP_MOV, val_word(g, a, 0), msp_reg(MSP_SCRATCH));
-    for (int i = top - 1; i >= 0; i--) {
+    for (int i = p.top - 1; i >= 0; i--) {
         emit1(g, MSP_RLA, msp_reg(MSP_SCRATCH));
-        if (k >> i & 1)
-            emit2(g, MSP_ADD, val_word(g, a, 0), msp_reg(MSP_SCRATCH));
+        if (p.digit[i])
+            emit2(g, p.digit[i] > 0 ? MSP_ADD : MSP_SUB, val_word(g, a, 0),
+                  msp_reg(MSP_SCRATCH));
+    }
+    if (p.neg) {
+        emit1(g, MSP_INV, msp_reg(MSP_SCRATCH));
+        emit1(g, MSP_INC, msp_reg(MSP_SCRATCH));
     }
 }
 
@@ -429,8 +471,7 @@ static bool inline_multiply(const Gen *g, const Tac_Instruction *in, const Tac_V
         const Tac_Val *t = x;
         x = y, y = t;
     }
-    if (y->kind != TAC_VAL_CONSTANT || x->kind == TAC_VAL_CONSTANT ||
-        !mul_inline(const_bits(y->u.constant)))
+    if (y->kind != TAC_VAL_CONSTANT || x->kind == TAC_VAL_CONSTANT)
         return false;
     *a = x;
     *k = const_bits(y->u.constant);
@@ -757,8 +798,7 @@ bool uses_helper(const Gen *g, const Tac_Instruction *in, bool *r8)
     case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
         return true;
     case TAC_INSTRUCTION_ADD_PTR:
-        return in->u.add_ptr.index->kind != TAC_VAL_CONSTANT &&
-               scale_shift(in->u.add_ptr.scale) < 0 && !mul_inline(in->u.add_ptr.scale);
+        return false;
     default:
         return false;
     }
@@ -897,28 +937,10 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
         if (!in_place)
             emit2(g, MSP_MOV, msp_copy(&r), msp_copy(&d));
         xfree(r.sym);
-    } else if (mul_inline(scale)) {
+    } else {
         mul_const(g, index, scale);
         emit2(g, MSP_ADD, msp_copy(&wp), msp_reg(MSP_SCRATCH));
         emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_copy(&d));
-    } else {
-        // Through __mspabi_mpyi; a pointer in a register the call clobbers is pushed.
-        bool push = wp.kind == MSP_OPND_REG && wp.reg >= 11;
-        if (push) {
-            emit1(g, MSP_PUSH, msp_copy(&wp));
-            g->sp_bias += 2;
-        }
-        load_val(g, index, 12, 1, EXT_TYPE);
-        emit2(g, MSP_MOV, msp_imm(scale), msp_reg(13));
-        call_helper(g, "__mspabi_mpyi");
-        if (push) {
-            g->sp_bias -= 2;
-            emit1(g, MSP_POP, msp_reg(MSP_SCRATCH));
-            emit2(g, MSP_ADD, msp_reg(MSP_SCRATCH), msp_reg(12));
-        } else {
-            emit2(g, MSP_ADD, msp_copy(&wp), msp_reg(12));
-        }
-        store_val(g, dst, 12, 1);
     }
     xfree(d.sym);
     xfree(wp.sym);

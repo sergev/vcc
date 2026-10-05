@@ -40,12 +40,12 @@ long sum(long *p, int n)
     return s;
 }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(cmpl %esi, %ecx
-jge .LL0
-movslq %ecx, %rdx
-addq (%rdi,%rdx,8), %r8
-addl $1, %ecx
-jmp .L3
+    EXPECT_NE(std::string::npos, code.find(R"(testl %esi, %esi
+jle .LL0
+addq (%rdi), %rdx
+leaq 8(%rdi), %rdi
+cmpq %rcx, %rdi
+jb .L4
 )")) << code;
     EXPECT_EQ(std::string::npos, code.find("set")) << code;
 }

@@ -230,7 +230,12 @@ static const Target targets[] = {
       6,   // aggregate_align (6)
       6,   // struct_return_max (1 word)
       1,   // struct_args_split
-      besm6_immediate_args },
+      besm6_immediate_args,
+      NULL, // va_class
+      0,    // ldouble_mant_dig
+      0,    // hw_sqrt
+      0,    // double_mant_dig
+      1 },  // no_loop_opt
 };
 // clang-format on
 

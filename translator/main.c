@@ -47,6 +47,8 @@ typedef struct {
     int no_cse;              // --no-cse
     int opt_max_iter;        // --opt-max-iter N; -1 = the default
     int no_dead_store;       // --no-dead-store
+    int no_loop_rotate;      // --no-loop-rotate
+    int no_ivsr;             // --no-ivsr
     int opt_debug;           // --opt-debug
     int verify;              // --verify
 } Args;
@@ -70,6 +72,8 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-copy-prop      Disable copy propagation\n");
     fprintf(stderr, "    --no-cse            Disable common-subexpression elimination\n");
     fprintf(stderr, "    --no-dead-store     Disable dead store elimination\n");
+    fprintf(stderr, "    --no-loop-rotate    Disable loop rotation (a loop tested at its bottom)\n");
+    fprintf(stderr, "    --no-ivsr           Disable induction-variable strength reduction\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
     fprintf(stderr, "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
@@ -98,6 +102,8 @@ static void init_args(Args *args)
     args->no_cse         = 0;
     args->opt_max_iter   = -1;
     args->no_dead_store  = 0;
+    args->no_loop_rotate = 0;
+    args->no_ivsr        = 0;
     args->verify         = 0;
     args->opt_debug      = 0;
 }
@@ -148,6 +154,8 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "verify", no_argument, 0, 260 },         //
         { "no-cse", no_argument, 0, 261 },         //
         { "opt-max-iter", required_argument, 0, 262 }, //
+        { "no-loop-rotate", no_argument, 0, 263 }, //
+        { "no-ivsr", no_argument, 0, 264 },        //
         {},                                        //
     };
 
@@ -203,6 +211,12 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 262:
             args->opt_max_iter = atoi(optarg);
+            break;
+        case 263:
+            args->no_loop_rotate = 1;
+            break;
+        case 264:
+            args->no_ivsr = 1;
             break;
         case '?': // Unknown option
             return -1;
@@ -306,6 +320,8 @@ void process_file(const Args *args)
     else if (getenv("VCC_OPT_MAX_ITER")) // for bisecting a whole build
         flags.max_iterations = atoi(getenv("VCC_OPT_MAX_ITER"));
     flags.dead_store_elim  = !args->no_dead_store;
+    flags.loop_rotate      = !args->no_loop_rotate;
+    flags.ivsr             = !args->no_ivsr;
     if (args->verify)
         translate_verify = 1;
     flags.debug            = args->opt_debug;

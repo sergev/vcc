@@ -32,6 +32,7 @@
 
 #include "cfg.h"
 #include "string_map.h"
+#include "target.h"
 #include "xalloc.h"
 
 // Pass entry points, implemented in the sibling translation units.
@@ -40,6 +41,7 @@ void eliminate_unreachable(OptCfg *cfg);
 void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_dead_stores(const OptCfg *cfg, const Tac_TopLevel *fn);
+bool reduce_induction_variables(OptCfg *cfg, Tac_TopLevel *fn);
 
 _Noreturn void fatal_error(const char *fmt, ...);
 
@@ -69,6 +71,8 @@ OptFlags opt_flags_default(void)
         .copy_propagation = true,
         .cse              = true,
         .dead_store_elim  = true,
+        .loop_rotate      = true,
+        .ivsr             = true,
         .debug            = false,
         .max_iterations   = 0,
     };
@@ -95,7 +99,7 @@ static char *snapshot(const Tac_Instruction *body)
 // caller owns the returned list. Each TAC_TOPLEVEL_FUNCTION is optimized
 // independently (intraprocedural); `fn` is the function's own toplevel, supplying
 // its params + locals so the CFG passes can tell private locals from globals.
-Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const Tac_TopLevel *fn)
+Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, Tac_TopLevel *fn)
 {
     if (!body)
         return NULL;
@@ -159,6 +163,18 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
         bool unchanged = strcmp(before, after) == 0;
         xfree(before);
         xfree(after);
+        // At the fixed point of the scalar passes, the loop optimizations run on code
+        // they have simplified as far as it goes: a loop bound, say, is invariant only
+        // once CSE and copy propagation have found its one computation. When they
+        // change something, the scalar passes run again. They are off where the target
+        // opts out of them (BESM-6).
+        if (unchanged && flags.ivsr && !target_config->no_loop_opt) {
+            OPT_TRACE("[optimize] running pass: ivsr\n");
+            OptCfg *lcfg = cfg_build(new_body);
+            unchanged    = !reduce_induction_variables(lcfg, fn);
+            new_body     = cfg_flatten(lcfg);
+            cfg_free(lcfg);
+        }
         if (unchanged) {
             OPT_TRACE("[optimize] fixed point reached after %d iteration(s)\n", iter);
             return new_body;

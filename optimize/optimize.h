@@ -9,6 +9,8 @@ typedef struct {
     bool copy_propagation; // --no-copy-prop disables
     bool cse;              // --no-cse disables
     bool dead_store_elim;  // --no-dead-store disables
+    bool loop_rotate;      // --no-loop-rotate disables
+    bool ivsr;             // --no-ivsr disables induction-variable strength reduction
     bool debug;            // --opt-debug enables the optimizer trace
     int max_iterations;    // --opt-max-iter: rounds at most; 0 = until a fixed point
 } OptFlags;
@@ -40,7 +42,7 @@ void opt_trace_instr(const char *prefix, const Tac_Instruction *ins);
 // `fn` is the function's own toplevel — its params and automatic locals let the
 // CFG passes tell private locals from observable globals. Pass NULL when no such
 // context is available (the optimizer then makes no global-vs-local distinction).
-Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const Tac_TopLevel *fn);
+Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, Tac_TopLevel *fn);
 
 // Drop from fn's locals every name its body no longer mentions (temporaries and
 // variables whose last use a pass removed), so params + locals stay exactly the

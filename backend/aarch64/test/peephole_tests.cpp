@@ -38,16 +38,18 @@ EXPECT_PEEPHOLE(PeepholeConstantIndex, "ldr x0, [x0, #16]\nret\n",
 // A compare and branch, the index sign-extended and scaled in the load, a zero test as
 // cbz, the increment an immediate.
 EXPECT_PEEPHOLE(PeepholeLoop, R"(mov w1, w1
-mov w4, #0
-mov w3, #0
-cmp w3, w1
-b.ge .LL0
-ldr w2, [x0, w3, sxtw #2]
-cbz w2, .L8
-add w4, w4, #1
-add w3, w3, #1
-b .L2
-mov w0, w4
+mov w2, #0
+add x3, x0, w1, sxtw #2
+cmp w1, #0
+b.le .LL0
+ldr w1, [x0]
+cbz w1, .L8
+add w2, w2, #1
+mov x10, #1
+add x0, x0, x10, lsl #2
+cmp x0, x3
+b.lo .L3
+mov w0, w2
 ret
 )",
                 R"(int f(int *a, int n)

@@ -6,8 +6,8 @@
 //
 #include "x86_test.h"
 
-// A loop's values stay in argument registers, the pointer and count where they arrive;
-// nothing goes through the frame.
+// A loop's values stay in argument registers, the pointer, stepped through the array,
+// where it arrives; nothing goes through the frame.
 TEST_F(X86Test, LoopInRegisters)
 {
     x86_peephole = false;
@@ -20,11 +20,9 @@ long sum(long *p, int n)
     return s;
 }
 )"));
-    EXPECT_NE(std::string::npos, code.find(R"(movslq %ecx, %rdx
-leaq (%rdi,%rdx,8), %rdx
-movq (%rdx), %rdx
-addq %rdx, %r8
-addl $1, %ecx
+    EXPECT_NE(std::string::npos, code.find(R"(movq (%rdi), %rsi
+addq %rsi, %rdx
+leaq 8(%rdi), %rdi
 )")) << code;
     EXPECT_EQ(std::string::npos, code.find("(%rbp)")) << code;
     EXPECT_EQ(std::string::npos, code.find("pushq")) << code;

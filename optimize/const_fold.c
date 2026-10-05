@@ -739,6 +739,43 @@ static Tac_Val *fold_binary_const(Tac_BinaryOperator op, const Tac_Const *c1, co
 // True for all 14 type-conversion instruction kinds (the three integer-width
 // conversions plus the twelve floating-point conversions). They all share the
 // same {src, dst} union layout, so the driver can treat them uniformly.
+// The comparison `b op' a` equal to `a op b`, or -1 for an operator that is not a
+// comparison.
+static Tac_BinaryOperator mirror_comparison(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+    case TAC_BINARY_NOT_EQUAL:
+        return op;
+    case TAC_BINARY_LESS_THAN:
+        return TAC_BINARY_GREATER_THAN;
+    case TAC_BINARY_GREATER_THAN:
+        return TAC_BINARY_LESS_THAN;
+    case TAC_BINARY_LESS_OR_EQUAL:
+        return TAC_BINARY_GREATER_OR_EQUAL;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+        return TAC_BINARY_LESS_OR_EQUAL;
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+        return TAC_BINARY_GREATER_THAN_UNSIGNED;
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+        return TAC_BINARY_LESS_THAN_UNSIGNED;
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+        return TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED;
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+        return TAC_BINARY_LESS_OR_EQUAL_UNSIGNED;
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        return TAC_BINARY_GREATER_THAN_DOUBLE;
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        return TAC_BINARY_LESS_THAN_DOUBLE;
+    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
+        return TAC_BINARY_GREATER_OR_EQUAL_DOUBLE;
+    case TAC_BINARY_GREATER_OR_EQUAL_DOUBLE:
+        return TAC_BINARY_LESS_OR_EQUAL_DOUBLE;
+    default:
+        return (Tac_BinaryOperator)-1;
+    }
+}
+
 static bool is_conversion(Tac_InstructionKind k)
 {
     switch (k) {
@@ -1115,6 +1152,24 @@ Tac_Instruction *constant_fold(Tac_Instruction *body)
                 prev = copy;
                 cur  = next;
                 continue;
+            }
+        }
+
+        // A comparison of a constant with a variable → the mirrored comparison, the
+        // constant second, where the code generators take an immediate. A rotated loop's
+        // guard compares the initial value with the bound, so this is one of the loop
+        // optimizations, off where they are.
+        if (cur->kind == TAC_INSTRUCTION_BINARY && !target_config->no_loop_opt &&
+            cur->u.binary.src1->kind == TAC_VAL_CONSTANT &&
+            cur->u.binary.src2->kind != TAC_VAL_CONSTANT) {
+            Tac_BinaryOperator m = mirror_comparison(cur->u.binary.op);
+            if (m != (Tac_BinaryOperator)-1) {
+                opt_trace_instr("[const-fold] mirror:", cur);
+                Tac_Val *t          = cur->u.binary.src1;
+                cur->u.binary.src1  = cur->u.binary.src2;
+                cur->u.binary.src2  = t;
+                cur->u.binary.op    = m;
+                opt_trace_instr("[const-fold]       →", cur);
             }
         }
 

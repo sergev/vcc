@@ -841,7 +841,7 @@ int target(void) {
     return *ptr[0];
 }
 )SRC")),
-              "add_ptr=3 allocate_local=1 binary=1 copy=1 copy_byte_to_offset=4 copy_to_offset=2 "
+              "add_ptr=2 allocate_local=1 binary=1 copy=1 copy_byte_to_offset=4 copy_to_offset=2 "
               "get_address=2 jump_if_not_zero=1 label=1 load=1 return=1 store=1");
 }
 
@@ -860,7 +860,7 @@ int target(void) {
     return *ptr[0];
 }
 )SRC")),
-              "add_ptr=3 allocate_local=1 binary=1 copy=1 copy_byte_to_offset=4 copy_to_offset=2 "
+              "add_ptr=2 allocate_local=1 binary=1 copy=1 copy_byte_to_offset=4 copy_to_offset=2 "
               "get_address=2 jump_if_not_zero=1 label=1 load=1 return=1 store=1");
 }
 

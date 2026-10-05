@@ -22,6 +22,9 @@ int translate_verify;
 int translate_verify = 1;
 #endif
 
+// A while or for loop is tested at its bottom, behind a guard at its top: see gen_stmt.
+int translate_rotate_loops;
+
 //
 // Low-level TAC-building helpers
 //
@@ -1407,7 +1410,8 @@ static void verify_function(const Tac_TopLevel *chain, const Tac_TopLevel *fn)
 //
 Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
 {
-    Tac_TopLevel *tac = translate_external_decl(ast, label_seq);
+    translate_rotate_loops = flags.loop_rotate && !target_config->no_loop_opt;
+    Tac_TopLevel *tac      = translate_external_decl(ast, label_seq);
     if (unit_active) {
         // One EXTERN per name in a unit, and none for a name it defines.
         for (Tac_TopLevel **pp = &tac; *pp;) {

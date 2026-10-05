@@ -53,6 +53,7 @@ extern int translator_debug;
 // Nonzero: check every translated function with tac_verify_function and stop on a
 // problem.  Always on in a build without NDEBUG.
 extern int translate_verify;
+extern int translate_rotate_loops; // set by translate() from OptFlags.loop_rotate
 extern int import_debug;
 extern int export_debug;
 extern int wio_debug;

@@ -198,6 +198,16 @@ The analysis iterates over the CFG (in forward order) until the reaching-copies 
 
 Once the analysis converges, each use of a variable `x` is replaced by `src` if every reaching copy `(src, x)` agrees on the same `src` at that point.
 
+A copy is not propagated across a change of the value class (an integer copied into a pointer, on a 32-bit target, is a cast), nor between pointers to different scalar types. A `Store` is as wide as its pointer's pointee, so in
+
+```c
+double d;
+unsigned long *w = (unsigned long *)&d;
+*w = 0;
+```
+
+forwarding `&d` into the store would make it a store of a `double`: an integer constant in an FP register, or 8 bytes written where 4 were meant.
+
 ### Conservatism around aliased variables
 
 Two categories of variables must be treated conservatively:
@@ -315,6 +325,51 @@ Not every instruction with a destination variable can be removed when the destin
 
 Observable variables (globals, `extern`s, local `static`s) and address-taken variables must be treated as live at Exit (they may be read by the caller or by another function), so a store to one is never dead. At every `FunCall`, they must be treated as potentially redefined (the callee might write them), which restores their liveness. Observability is determined per function: a name is observable when it is neither a temporary nor one of the function's parameters or automatic locals (see `optimize/alias.c`).
 
+## Loop optimizations
+
+Three transformations work on loops. They are on for every target but BESM-6, which opts out (`Target.no_loop_opt`) so that its code stays as it was.
+
+### Loop rotation
+
+The translator lowers a `while` or `for` loop tested at its bottom, behind a copy of the test at its top as a guard:
+
+```
+    if (!cond) goto end            // the guard
+top:
+    body
+continue:
+    update
+    if (cond) goto top             // the test
+end:
+```
+
+The loop body runs with one conditional jump per iteration instead of a conditional jump out and an unconditional one back. The condition is lowered twice from the AST. When the guard is always true, as in `for (i = 0; i < 10; i++)`, constant folding drops it. Rotation is an option of the translator, `OptFlags.loop_rotate` (`--no-loop-rotate`).
+
+The guard of `for (i = 0; i < n; ...)` compares a constant with a variable once copy propagation has forwarded the 0. Constant folding mirrors such a comparison (`0 < n` → `n > 0`) so that the constant is second, where the code generators take an immediate.
+
+### Induction variables
+
+In
+
+```c
+for (j = 0; j < n; j++)  ... v[j] ... v[j + 1] ...
+```
+
+every iteration computes `v + j*s` for each subscript. Strength reduction (`optimize/ivsr.c`) gives each such address a pointer `q`, kept equal to `v + j*s` at every point of the loop: set ahead of the loop, stepped by `c*s` right after `j` steps by `c`. A subscript then reads `q` (`v[j]`) or `q` plus a constant (`v[j + 1]`).
+
+- **Loops** are the natural loops of the CFG: a back edge `b → h` where `h` dominates `b`, and the blocks that reach `b` without passing `h`. The **preheader** is the one predecessor of `h` outside the loop. A rotated loop has one, the guard. A loop without exactly one is left alone.
+- **A basic induction variable** `j` is a private, not address-taken integer with one definition in the loop: `j = j ± c`, or `j = t` where `t = j ± c` is the one definition of `t` and dominates the copy. (CSE often leaves the second form, with `t` computed in the header for the subscript and copied at the bottom.)
+- **A reduced address** is `ADD_PTR(v, x, s)`, with `v` private, not address-taken and not defined in the loop, and `x` equal to `j` plus a constant at that point: `j` itself, `t = j ± c`, or `sign_extend` of either (the index of a 64-bit target). The extension is allowed only for a signed `j`, whose overflow is undefined, so that the extension of `j + c` is the extension of `j` plus `c`. When `j` steps between the computation of `x` and its use, the step is taken back from the constant. "Between" is decided by dominance and by reachability within one iteration.
+- **Linear-function test replacement.** A loop test `x op bound`, with `x = j + c` and `bound` invariant, becomes `q + c*s op v + bound*s`, with the end pointer formed in the preheader. This is valid only while the pointers do not wrap. They do not when one of `q`'s addresses is formed every iteration (its block dominates every latch), since forming it is undefined otherwise, and the end pointer is then at most one past the last. A test carries over only against the direction of the step (`<` or `<=` for an increasing `j`, `>` or `>=` for a decreasing one), and `!=` or `==` in either direction.
+- **The induction variable goes** when nothing reads it but its own step. Its definitions ahead of the loop are then dead stores.
+- `p + 0`, for a pointer `p` of the destination's type, becomes a copy, since a reduced pointer often starts at `v + 0*s`. This is not done for an aggregate base, whose copy would copy the aggregate.
+
+The pass runs only at the fixed point of the scalar passes, and the loop goes on when it changes something (see below). A loop bound becomes invariant only once CSE and copy propagation have found its one computation. In `for (j = 0; j < n - 1 - i; j++)` the guard and the bottom test each compute `n - 1 - i`, and it takes several rounds to make the bottom one a copy of the guard's.
+
+The new pointers are typed temporaries added to the function's locals. The pass is idempotent: a reduced `ADD_PTR` reads `q`, which the loop defines, so it is no candidate the next time. It is controlled by `OptFlags.ivsr` (`--no-ivsr`).
+
+On the MSP430 bubble sort, rotation and this pass together take the inner loop from 21 cycles to 13 (GCC: 10).
+
 ## The optimization pipeline
 
 No single pass is sufficient on its own. The passes form a **virtuous cycle**:
@@ -356,6 +411,10 @@ optimize(body, flags):
 
         new_body = flatten_cfg(cfg)             // rejoin into flat list
 
+        if new_body spells as body did and flags.ivsr:
+            if reduce_induction_variables(new_body) changed it:
+                body = new_body; continue       // the scalar passes again
+
         if new_body spells as body did, or new_body is empty:
             return new_body                     // fixed point reached
 
@@ -370,7 +429,8 @@ Within one iteration, constant folding runs first on the flat list because it is
 
 ### Types
 
-No pass creates or renames a variable, and copy propagation substitutes only across
+Only strength reduction creates variables (typed temporaries, added to the
+function's `locals`), and copy propagation substitutes only across
 a `COPY`, which the translator emits only between types of the same size, so every
 operand keeps its width. The copies that CSE makes are between two names of the same
 type. After the loop, `optimize_prune_locals` drops from the
@@ -380,8 +440,8 @@ stay exactly the typed symbols of the optimized body.
 ### Command-line control
 
 By default all five passes are enabled. Individual passes can be disabled for debugging, except constant folding.
-For each pass, a separate CLI option exists in the `lower` binary: `--no-unreachable`, `--no-cse`, `--no-copy-prop`
-and `--no-dead-store`; `--opt-debug` traces the passes. `--opt-max-iter N` stops after N rounds (0, the
+For each pass, a separate CLI option exists in the `lower` binary: `--no-unreachable`, `--no-cse`, `--no-copy-prop`,
+`--no-dead-store`, `--no-ivsr` and `--no-loop-rotate` (the translator's); `--opt-debug` traces the passes. `--opt-max-iter N` stops after N rounds (0, the
 default, runs to a fixed point); the `VCC_OPT_MAX_ITER` environment variable sets it for a whole build, and the
 backend test fixtures read it as well, which is how a miscompile is bisected to the round that introduces it.
 The constant folding is always enabled, to simplify the subsequent code generation.

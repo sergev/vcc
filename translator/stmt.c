@@ -361,6 +361,24 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
     }
 }
 
+// The test of a loop: jump to `target` when `cond` is true (`if_true`) or false. A
+// rotated loop lowers its condition twice, once for each copy of the test.
+static void emit_loop_test(TacCtx *ctx, Expr *cond, bool if_true, const char *target)
+{
+    Tac_Val *v = gen_cond_val(ctx, cond);
+    Tac_Instruction *j;
+    if (if_true) {
+        j                              = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
+        j->u.jump_if_not_zero.condition = v;
+        j->u.jump_if_not_zero.target    = xstrdup(target);
+    } else {
+        j                          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
+        j->u.jump_if_zero.condition = v;
+        j->u.jump_if_zero.target    = xstrdup(target);
+    }
+    tac_append(ctx, j);
+}
+
 void gen_stmt(TacCtx *ctx, Stmt *stmt)
 {
     if (!stmt) {
@@ -427,12 +445,20 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         if (!cl || !bl) {
             fatal_error("while: missing loop labels (label_loops not run?)");
         }
+        if (translate_rotate_loops) {
+            // Rotated: the test at the bottom, and a copy of it at the top as a guard.
+            emit_loop_test(ctx, stmt->u.while_stmt.condition, false, bl);
+            char *top = new_temp(ctx);
+            emit_label(ctx, top);
+            gen_stmt(ctx, stmt->u.while_stmt.body);
+            emit_label(ctx, cl);
+            emit_loop_test(ctx, stmt->u.while_stmt.condition, true, top);
+            xfree(top);
+            emit_label(ctx, bl);
+            break;
+        }
         emit_label(ctx, cl);
-        Tac_Val *cond                = gen_cond_val(ctx, stmt->u.while_stmt.condition);
-        Tac_Instruction *jz          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
-        jz->u.jump_if_zero.condition = cond;
-        jz->u.jump_if_zero.target    = xstrdup(bl);
-        tac_append(ctx, jz);
+        emit_loop_test(ctx, stmt->u.while_stmt.condition, false, bl);
         gen_stmt(ctx, stmt->u.while_stmt.body);
         emit_jump(ctx, cl);
         emit_label(ctx, bl);
@@ -471,22 +497,24 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
                 gen_local_decl(ctx, stmt->u.for_stmt.init->u.decl);
             }
         }
-        char *test_lab = new_temp(ctx);
-        emit_label(ctx, test_lab);
-        if (stmt->u.for_stmt.condition) {
-            Tac_Val *cond                = gen_cond_val(ctx, stmt->u.for_stmt.condition);
-            Tac_Instruction *jz          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
-            jz->u.jump_if_zero.condition = cond;
-            jz->u.jump_if_zero.target    = xstrdup(bl);
-            tac_append(ctx, jz);
-        }
+        Expr *cond = stmt->u.for_stmt.condition;
+        bool rotate = translate_rotate_loops && cond;
+        if (rotate)
+            emit_loop_test(ctx, cond, false, bl); // the guard
+        char *top = new_temp(ctx);
+        emit_label(ctx, top);
+        if (cond && !rotate)
+            emit_loop_test(ctx, cond, false, bl);
         gen_stmt(ctx, stmt->u.for_stmt.body);
         emit_label(ctx, cl);
         if (stmt->u.for_stmt.update) {
             tac_free_val(gen_expr(ctx, stmt->u.for_stmt.update));
         }
-        emit_jump(ctx, test_lab);
-        xfree(test_lab); // emit_label and emit_jump each xstrdup; free the original
+        if (rotate)
+            emit_loop_test(ctx, cond, true, top);
+        else
+            emit_jump(ctx, top);
+        xfree(top); // emit_label and emit_jump each xstrdup; free the original
         emit_label(ctx, bl);
         break;
     }

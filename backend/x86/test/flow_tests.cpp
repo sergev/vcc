@@ -19,7 +19,7 @@ ret
 )",
             "int f(int a) { if (a) return 1; else return 2; }")
 
-// A 64-bit condition is tested at its width; a loop jumps back.
+// A 64-bit condition is tested at its width; a loop jumps back from its bottom test.
 TEST_F(X86Test, WhileLoop)
 {
     NaiveSelection();
@@ -33,7 +33,7 @@ long f(long n) {
     return s;
 })"));
     EXPECT_NE(std::string::npos, code.find("testq %rax, %rax\nje .L")) << code;
-    EXPECT_NE(std::string::npos, code.find("jmp .L")) << code;
+    EXPECT_NE(std::string::npos, code.find("testq %rax, %rax\njne .L")) << code;
 }
 
 TEST_F(X86Test, RunLoops)

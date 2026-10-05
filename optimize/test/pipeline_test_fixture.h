@@ -106,7 +106,16 @@ protected:
         return out;
     }
 
-    std::string OptimizeYaml(const char *src, OptFlags flags = opt_flags_default())
+    // Loops are lowered unrotated: the goldens test the optimizer passes, not the shape
+    // the translator gives a loop.
+    static OptFlags PipelineFlags()
+    {
+        OptFlags flags    = opt_flags_default();
+        flags.loop_rotate = false;
+        return flags;
+    }
+
+    std::string OptimizeYaml(const char *src, OptFlags flags = PipelineFlags())
     {
         std::string source = preprocess_source(src);
         if (source.empty()) {

@@ -7,17 +7,16 @@
 // A loop: the compare fused with its branch, the index folded into the load.
 TEST_F(Arm32Test, PeepholeLoop)
 {
-    EXPECT_EQ(R"(push {r4}
-mov r4, #0
-mov r3, #0
-cmp r3, r1
-bge .LL0
-ldr r2, [r0, r3, lsl #2]
-add r4, r4, r2
-add r3, r3, #1
-b .L2
-mov r0, r4
-pop {r4}
+    EXPECT_EQ(R"(mov r2, #0
+add r3, r0, r1, lsl #2
+cmp r1, #0
+ble .LL0
+ldr r1, [r0]
+add r2, r2, r1
+add r0, r0, #4
+cmp r0, r3
+blo .L3
+mov r0, r2
 bx lr
 )",
               Code(CompileToArm32(R"(

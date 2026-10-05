@@ -256,6 +256,57 @@ int main(void)
     EXPECT_EQ(0, exit_status);
 }
 
+// A multiply by a constant is inline for every 16-bit constant: shifts with an add or
+// subtract per signed digit, negated at the end when that is shorter. Checked against
+// the host for constants with many bits set, alternating bits and the sign bit.
+static const unsigned mul_consts[] = { 0,      1,      2,      3,      5,      7,
+                                       10,     1000,   25173,  0x5555, 0xaaaa, 0x7fff,
+                                       0x8000, 0x8001, 0xfff0, 0xfffd, 0xffff };
+
+// Minus 3: 3 in binary, negated.
+EXPECT_CODE(MultiplyByMinusThree, R"(mov r12, r15
+rla r15
+add r12, r15
+inv r15
+inc r15
+mov r15, r12
+ret
+)", "unsigned f(unsigned x) { return x * 0xfffdu; }")
+
+// 25173 is inline, not a call: 14 shifts and 6 adds.
+TEST_F(Msp430Test, MultiplyBy25173Inline)
+{
+    std::string code = Code(CompileToMsp430("unsigned f(unsigned x) { return x * 25173u; }"));
+    EXPECT_EQ(std::string::npos, code.find("mpyi")) << code;
+}
+
+TEST_F(Msp430Test, RunConstantMultiply)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    std::string body;
+    for (unsigned k : mul_consts)
+        body += "        puti((int)(x * " + std::to_string(k) + "u)); putbyte(' ');\n";
+    std::string src = std::string(print_c) + R"(
+volatile int a16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
+int main(void)
+{
+    for (int i = 0; i < 12; i++) {
+        unsigned x = a16[i];
+)" + body + R"(        putbyte('\n');
+    }
+    return 0;
+}
+)";
+    std::string e;
+    for (int16_t x : ops16) {
+        for (unsigned k : mul_consts)
+            e += std::to_string((int16_t)(uint16_t)((uint16_t)x * k)) + " ";
+        e += "\n";
+    }
+    EXPECT_EQ(e, CompileAndRunMsp430(src));
+    EXPECT_EQ(0, exit_status);
+}
+
 // Shifts by every count, constant and variable, of int and long, signed and not.
 TEST_F(Msp430Test, RunShifts)
 {

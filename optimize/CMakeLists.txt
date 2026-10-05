@@ -7,6 +7,7 @@ add_library(optimize STATIC
     dataflow.c
     copy_prop.c
     cse.c
+    ivsr.c
     dead_store.c
 )
 target_include_directories(optimize PUBLIC .)
@@ -25,6 +26,7 @@ add_executable(optimizer-tests
     test/copy_prop_tests.cpp
     test/dead_store_tests.cpp
     test/cse_tests.cpp
+    test/loop_tests.cpp
     test/pipeline_tests.cpp
     test/chapter19_tests1.cpp
     test/chapter19_tests2.cpp
