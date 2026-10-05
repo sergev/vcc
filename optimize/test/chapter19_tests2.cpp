@@ -136,7 +136,7 @@ int target(void) {
     return 0;  // success
 }
 )SRC")),
-              "binary=92 copy=52 fun_call=5 jump=43 jump_if_not_zero=35 jump_if_zero=19 label=97 return=17 unary=4");
+              "binary=92 copy=50 fun_call=5 jump=43 jump_if_not_zero=35 jump_if_zero=19 label=97 return=17 unary=4");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_PropagateIntoComplexExpressions)

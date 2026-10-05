@@ -937,42 +937,26 @@ TEST_F(OptimizerTest, DeadStoreLiveAcrossEmptyBlock)
     flags.max_iterations    = 1; // what one round does; later rounds fold further
     Tac_Instruction *result = optimize_function(seq[0], flags, nullptr);
 
-    // Both else-branch stores survive and feed the add (copy-prop stays
-    // conservative across the now-empty join blocks, so it does not fold the
-    // sum here — the end-to-end backend test confirms the eventual `return 8`).
+    // Both else-branch stores reach the add: copy propagation carries the constants
+    // through the empty join blocks, and dead-store elimination then drops the
+    // copies (the next round folds the sum to `return 8`).
     EXPECT_EQ(capture_instructions(result),
               "- instruction:\n"
               "  kind: label\n"
               "  name: fn\n"
               "- instruction:\n"
-              "  kind: copy\n"
-              "  src:\n"
+              "  kind: binary\n"
+              "  op: add\n"
+              "  src1:\n"
               "    kind: constant\n"
               "    const:\n"
               "      kind: int\n"
               "      value: 3\n"
-              "  dst:\n"
-              "    kind: var\n"
-              "    name: %1\n"
-              "- instruction:\n"
-              "  kind: copy\n"
-              "  src:\n"
+              "  src2:\n"
               "    kind: constant\n"
               "    const:\n"
               "      kind: int\n"
               "      value: 5\n"
-              "  dst:\n"
-              "    kind: var\n"
-              "    name: %2\n"
-              "- instruction:\n"
-              "  kind: binary\n"
-              "  op: add\n"
-              "  src1:\n"
-              "    kind: var\n"
-              "    name: %1\n"
-              "  src2:\n"
-              "    kind: var\n"
-              "    name: %2\n"
               "  dst:\n"
               "    kind: var\n"
               "    name: %3\n"

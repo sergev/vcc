@@ -1378,12 +1378,28 @@ static bool step_in_place(Ivsr *s)
 
 // p + 0 → p, for a pointer p of the destination's type: a reduced pointer starts at
 // base + j*scale, j often 0. (Not for an aggregate base, whose COPY would copy it.)
+// And x ± 0 → x for an integer x, the start inv - j of a pointer on inv - j.
 static bool fold_zero_offsets(Ivsr *s)
 {
     bool changed = false;
     for (int b = 0; b < s->n; b++)
         for (Tac_Instruction *in = s->cfg->blocks[b]->first; in; in = in->next) {
             long long v;
+            if (in->kind == TAC_INSTRUCTION_BINARY && !in->is_volatile &&
+                (in->u.binary.op == TAC_BINARY_ADD || in->u.binary.op == TAC_BINARY_ADD_UNSIGNED ||
+                 in->u.binary.op == TAC_BINARY_SUBTRACT ||
+                 in->u.binary.op == TAC_BINARY_SUBTRACT_UNSIGNED) &&
+                is_var(in->u.binary.src1) && is_var(in->u.binary.dst) &&
+                int_const(in->u.binary.src2, &v) && v == 0) {
+                opt_trace_instr("[ivsr] zero offset:", in);
+                Tac_Val *x = in->u.binary.src1, *dst = in->u.binary.dst;
+                tac_free_val(in->u.binary.src2);
+                in->kind       = TAC_INSTRUCTION_COPY;
+                in->u.copy.src = x;
+                in->u.copy.dst = dst;
+                changed        = true;
+                continue;
+            }
             if (in->kind != TAC_INSTRUCTION_ADD_PTR || in->is_volatile ||
                 !is_var(in->u.add_ptr.ptr) || !is_var(in->u.add_ptr.dst) ||
                 !int_const(in->u.add_ptr.index, &v) || v != 0)

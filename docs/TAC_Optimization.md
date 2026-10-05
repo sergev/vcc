@@ -189,7 +189,7 @@ We determine which copies are safe by computing **reaching copies** — a forwar
 The lattice element for each program point is a set of `(src, dst)` pairs representing copies that are valid on *every* path reaching that point.
 
 - **Initial value:** the reaching-copies set at Entry is empty.
-- **Meet (join at merge points):** intersection — a copy is reaching only if it holds on every incoming path.
+- **Meet (join at merge points):** intersection — a copy is reaching only if it holds on every incoming path. A predecessor not visited yet is left out of the meet, standing for every copy (an optimistic start, as in CSE), and a block none of whose predecessors has been visited waits for one; a reachable empty block passes its in-set on. So a copy made ahead of a loop reaches into it, where an empty start would lose it at the loop head, the back edge's out-set being unknown when the head is first met. BESM-6, which opts out of the loop optimizations, keeps the empty start, and its output with it.
 - **Transfer function for a single instruction:**
   - **Gen:** if the instruction is `Copy(src, dst)`, add `(src, dst)` to the set.
   - **Kill:** remove every pair `(s, d)` from the set where `s == dst` or `d == dst` (overwriting `dst` invalidates any copy that mentioned it as either operand).
@@ -244,7 +244,7 @@ CSE is a forward dataflow analysis on the CFG, with the same structure as reachi
 
 - **Lattice element:** a set of facts "expression E is held in variable h", keyed by E, holding on every path to the program point.
 - **Initial value:** empty at entry.
-- **Meet:** intersection. A fact survives only if every predecessor has it with the *same* holder. A predecessor that has not been visited yet is left out of the meet (an optimistic start). This keeps an expression computed before a loop available inside the loop. Copy propagation starts every out-set empty instead, which loses such facts at a loop head.
+- **Meet:** intersection. A fact survives only if every predecessor has it with the *same* holder. A predecessor that has not been visited yet is left out of the meet (an optimistic start). This keeps an expression computed before a loop available inside the loop. Copy propagation does the same, except on BESM-6.
 - **Transfer function for a single instruction:**
   - **Kill:** defining a variable v removes every fact whose holder is v or whose expression reads v.
   - **Gen:** a candidate `h = E` adds (E → h), unless E reads h itself (`x = x + 1`). If E already has a holder, the old holder is kept: the rewrite turns this instruction into a copy of it, so it still holds E, and keeping it lets the fact agree around a loop's back edge.
@@ -365,15 +365,13 @@ every iteration computes `v + j*s` for each subscript. Strength reduction (`opti
 - **The address of a global**, `t = &g`, moves to the preheader when the loop indexes `t` and `t` has this one definition. An array's address is taken where it is first subscripted, which is inside the loop when nothing ahead of it does, and `g[j]` then has no invariant base.
 - **The induction variable goes** when nothing reads it but its own step: nothing else in the loop, and nothing after the loop ahead of another definition. (Two loops that each declare `int i` share the name, so the question is one of liveness, not of the whole function.) Its definitions ahead of the loop are then dead stores.
 - **A pointer is stepped in place.** For `v[j]` and `v[j + 1]`, CSE and copy propagation leave `t = q + 1` formed for the second subscript and `q = t` at the bottom, with `q` still read in between (a store to `v[j]`), so no register can hold both. When `t = q + c` is the one definition of `t`, dominates the copy, and the copy runs every iteration, the pass steps `q` itself where `t` was formed, reads `t` as `q`, and reads `q` between the two as `q - c`. That is done only where the reads in between are addresses of loads and stores (or `ADD_PTR`s with a constant), where the offset folds into the addressing mode, and only when no exit taken in between leads to a read of `q`.
-- `p + 0`, for a pointer `p` of the destination's type, becomes a copy, since a reduced pointer often starts at `v + 0*s`. This is not done for an aggregate base, whose copy would copy the aggregate.
+- `p + 0`, for a pointer `p` of the destination's type, becomes a copy, since a reduced pointer often starts at `v + 0*s`. This is not done for an aggregate base, whose copy would copy the aggregate. Likewise `x ± 0` for an integer `x`, the start `inv - 0` of a pointer on `inv - j`. (Constant folding has no algebraic identities, and adding them there would change BESM-6 code.)
 
 The pass runs only at the fixed point of the scalar passes, and the loop goes on when it changes something (see below). A loop bound becomes invariant only once CSE and copy propagation have found its one computation. In `for (j = 0; j < n - 1 - i; j++)` the guard and the bottom test each compute `n - 1 - i`, and it takes several rounds to make the bottom one a copy of the guard's.
 
 The new pointers are typed temporaries added to the function's locals. The pass is idempotent: a reduced `ADD_PTR` reads `q`, which the loop defines, so it is no candidate the next time. It is controlled by `OptFlags.ivsr` (`--no-ivsr`).
 
 On the MSP430 bubble sort, rotation and this pass together take the inner loop from 21 cycles to 10, GCC's figure: `mov @r8+, r11`, `mov @r8, r14`, the compare and branch, and the test against the end pointer.
-
-Two things the scalar passes leave behind here: copy propagation starts its dataflow from empty sets, so a copy made ahead of a loop is not forwarded into it (the end pointer `v + 0*s` stays a copy of `v` in a register of its own), and constant folding does not fold `x - 0`.
 
 ## The optimization pipeline
 

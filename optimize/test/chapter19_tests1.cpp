@@ -2507,16 +2507,6 @@ int target(void) {
       kind: int
       value: 0
 - instruction:
-  kind: copy
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: 3
-  dst:
-    kind: var
-    name: %y
-- instruction:
   kind: label
   name: %2
 - instruction:
@@ -2548,8 +2538,10 @@ int target(void) {
 - instruction:
   kind: return
   src:
-    kind: var
-    name: %y
+    kind: constant
+    const:
+      kind: int
+      value: 3
 )OPT");
 }
 

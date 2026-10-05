@@ -47,16 +47,16 @@ TEST_F(Msp430Test, LoadThenStepAutoIncrement)
                     }
         }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov @r8+, r11
-mov @r8, r14
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r10+, r11
+mov @r10, r14
 cmp r11, r14
 jge .L17
-mov r14, -2(r8)
-mov r11, 0(r8)
+mov r14, -2(r10)
+mov r11, 0(r10)
 )"))
         << code;
     // The end pointer steps down by a constant the generator has.
-    EXPECT_NE(std::string::npos, code.find("decd r10\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("decd r9\n")) << code;
 }
 
 TEST_F(Msp430Test, RunBubbleSort)

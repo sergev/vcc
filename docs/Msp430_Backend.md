@@ -399,7 +399,7 @@ linked with our runtime (`scripts/bench_msp430.sh` builds and runs them):
 
 | | ours | GCC `-O2` |
 | --- | --- | --- |
-| bubble sort, 64 `int`s (`sort.c`) | 32 692 / 318 | 32 845 / 284 |
+| bubble sort, 64 `int`s (`sort.c`) | 32 686 / 312 | 32 845 / 284 |
 | sieve to 2000 (`sieve.c`) | 111 848 / 246 | 92 700 / 320 |
 | CRC-16, 1 KB (`crc16.c`) | 149 259 / 272 | 199 259 / 572 |
 | string copy and compare (`strings.c`) | 125 817 / 600 | 84 739 / 1 090 |

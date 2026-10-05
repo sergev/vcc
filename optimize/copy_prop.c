@@ -37,6 +37,7 @@
 #include "optimize.h"
 #include "string_map.h"
 #include "tac.h"
+#include "target.h"
 #include "xalloc.h"
 
 // ============================================================================
@@ -558,9 +559,16 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     // Allocate in/out sets, all starting empty (no copies reaching).
     StringMap *in_sets  = xalloc(n * sizeof(StringMap), __func__, __FILE__, __LINE__);
     StringMap *out_sets = xalloc(n * sizeof(StringMap), __func__, __FILE__, __LINE__);
+    // Whether a block's out-set has been computed yet. One that has not stands for
+    // every copy, the top of the lattice, so a copy made ahead of a loop reaches into
+    // it: the back edge's out-set is not yet known when the header is first met.
+    // Pessimistic (empty) where the target opts out of the loop optimizations.
+    bool *done = xalloc(n * sizeof(bool), __func__, __FILE__, __LINE__);
+    bool optimistic = !target_config->no_loop_opt;
     for (int i = 0; i < n; i++) {
         map_init(&in_sets[i]);
         map_init(&out_sets[i]);
+        done[i] = !optimistic;
     }
 
     // Fixpoint iteration: recompute each block's in/out until nothing changes.
@@ -574,7 +582,8 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
         OPT_TRACE("[copy-prop] fixpoint iteration %d\n", cp_iter);
         for (int i = 0; i < n; i++) {
             const OptBlock *b = cfg->blocks[i];
-            if (!b->reachable || !b->first)
+            // An empty block passes its in-set on (its successors wait for it).
+            if (!b->reachable || (!b->first && !optimistic))
                 continue;
 
             // in[b] = meet (intersection) of out[pred] over all predecessors.
@@ -587,9 +596,24 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
             StringMap new_in;
             map_init(&new_in);
             if (i != 0 && npreds[i] > 0) {
-                copy_set_copy(&new_in, &out_sets[preds[i][0]]);
-                for (int k = 1; k < npreds[i]; k++)
-                    copy_set_intersect(&new_in, &out_sets[preds[i][k]]);
+                bool first = true;
+                for (int k = 0; k < npreds[i]; k++) {
+                    int p = preds[i][k];
+                    if (!done[p] || (optimistic && !cfg->blocks[p]->reachable))
+                        continue;
+                    if (first)
+                        copy_set_copy(&new_in, &out_sets[p]);
+                    else
+                        copy_set_intersect(&new_in, &out_sets[p]);
+                    first = false;
+                }
+                // Every predecessor still unknown: wait for one, so that the sets only
+                // ever shrink from the top.
+                if (first) {
+                    map_destroy(&new_in);
+                    changed = true;
+                    continue;
+                }
             }
 
             // out[b] = transfer(in[b]): apply the Gen/Kill rules in order.
@@ -599,10 +623,11 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
             for (const Tac_Instruction *ins = b->first; ins; ins = ins->next)
                 apply_transfer(&new_out, ins, &static_names, &address_taken, &types);
 
-            if (!copy_set_equal(&new_out, &out_sets[i])) {
+            if (!done[i] || !copy_set_equal(&new_out, &out_sets[i])) {
                 OPT_TRACE("[copy-prop] block %d out-set changed\n", i);
                 changed = true;
             }
+            done[i] = true;
 
             copy_set_destroy(&in_sets[i]);
             copy_set_destroy(&out_sets[i]);
@@ -670,6 +695,7 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     }
     xfree(in_sets);
     xfree(out_sets);
+    xfree(done);
     opt_preds_free(&pr);
     map_destroy(&static_names);
     map_destroy(&address_taken);
