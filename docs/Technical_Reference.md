@@ -889,6 +889,11 @@ rejects it ("character constant too long"). With riscv64's 32-bit `int` that all
 4 bytes (`'abcd'` → `0x61626364`); BESM-6, with a 41-bit `int` and 48-bit `unsigned`,
 allows 5 and 6. The AST integer fields use 64-bit host storage.
 
+A constant of one byte without a prefix (`'\xff'`) is the value of a plain `char`
+converted to `int` (C11 §6.4.4.4p10): −1 where plain `char` is signed (x86-64, AVR, MMIX),
+255 where it is unsigned. `parse` has no target, so it keeps the byte and marks the literal
+`LITERAL_CHAR_BYTE`; the semantic pass sign-extends it (`type_char_literal`).
+
 ## Build system
 
 - **CMake** minimum 3.10; root project name: `c-scanner`.

@@ -404,9 +404,13 @@ typedef enum {
 //
 // How an integer constant was spelled, which with the target's widths decides its type
 // (C11 §6.4.4.1).  `parse` has no target, so it types the constant for the host; the
-// semantic pass retypes it when LITERAL_SPELLED is set.  0 for a character constant and
-// for a literal the compiler makes itself.  An unsuffixed floating constant from the
+// semantic pass retypes it when LITERAL_SPELLED is set.  0 for a multi-byte character
+// constant and for a literal the compiler makes itself.  An unsuffixed floating constant from the
 // source has LITERAL_SPELLED alone, which says its single_val is set.
+//
+// LITERAL_CHAR_BYTE marks an unprefixed character constant of one byte, whose value is
+// that of a plain char converted to int (C11 §6.4.4.4p10): negative for a byte over 127
+// where plain char is signed.  `parse` keeps the byte; the semantic pass extends it.
 //
 enum {
     LITERAL_SPELLED   = 1,  // the bits below are valid
@@ -414,6 +418,7 @@ enum {
     LITERAL_SUFFIX_U  = 4,  // U
     LITERAL_SUFFIX_L  = 8,  // L
     LITERAL_SUFFIX_LL = 16, // LL
+    LITERAL_CHAR_BYTE = 32, // a one-byte character constant, without LITERAL_SPELLED
 };
 
 struct Literal {

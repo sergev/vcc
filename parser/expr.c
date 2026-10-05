@@ -293,6 +293,8 @@ Expr *parse_constant()
             if (nbytes <= 5) {
                 expr->u.literal->kind      = LITERAL_INT;
                 expr->u.literal->u.int_val = (int64_t)v;
+                if (nbytes == 1 && current_lexeme[0] == '\'')
+                    expr->u.literal->spelling = LITERAL_CHAR_BYTE;
             } else {
                 expr->u.literal->kind       = LITERAL_UINT;
                 expr->u.literal->u.uint_val = v;

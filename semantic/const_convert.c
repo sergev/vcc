@@ -214,8 +214,16 @@ static bool int_literal_fits(uint64_t v, LiteralKind kind)
     return bits >= 64 ? v <= INT64_MAX : v <= ((uint64_t)1 << (bits - 1)) - 1;
 }
 
+void type_char_literal(Literal *lit)
+{
+    if ((lit->spelling & LITERAL_CHAR_BYTE) && lit->kind == LITERAL_INT &&
+        target_config->char_signed)
+        lit->u.int_val = (int8_t)lit->u.int_val;
+}
+
 void type_int_literal(Literal *lit)
 {
+    type_char_literal(lit);
     if (!(lit->spelling & LITERAL_SPELLED) || lit->kind > LITERAL_ULONG_LONG)
         return;
 

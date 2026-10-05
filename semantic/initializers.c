@@ -443,7 +443,8 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
     // the node to a LITERAL_INT and whose try_eval_const_int folds enumerators natively.
     if (init->kind == INITIALIZER_SINGLE && init->u.expr->kind == EXPR_LITERAL &&
         init->u.expr->u.literal->kind != LITERAL_ENUM) {
-        const Literal *literal = init->u.expr->u.literal;
+        Literal *literal = init->u.expr->u.literal;
+        type_char_literal(literal);
         check_int_literal_width(literal);
         if (is_zero_int(literal)) {
             Tac_StaticInit *zero_init = tac_new_static_init(TAC_STATIC_INIT_ZERO);

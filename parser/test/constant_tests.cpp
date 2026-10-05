@@ -218,11 +218,12 @@ TEST_F(ParserTest, CharConstant_badUtf8Sequence_negative)
 }
 
 // An integer constant records its spelling, from which the semantic pass types it for
-// the target (C11 §6.4.4.1); a character constant has none.
+// the target (C11 §6.4.4.1); a character constant has none, but one of a single byte is
+// marked, for the semantic pass to give it the value of a plain char.
 TEST_F(ParserTest, IntegerConstant_spelling)
 {
     Declaration *decl = GetDeclaration(
-        "int a = 10, b = 0x10, c = 010, d = 10u, e = 0x10L, f = 10ULL, g = 'a';");
+        "int a = 10, b = 0x10, c = 010, d = 10u, e = 0x10L, f = 10ULL, g = 'a', h = 'ab', i = L'a';");
     const unsigned expected[] = {
         LITERAL_SPELLED | LITERAL_DECIMAL,
         LITERAL_SPELLED,
@@ -230,6 +231,8 @@ TEST_F(ParserTest, IntegerConstant_spelling)
         LITERAL_SPELLED | LITERAL_DECIMAL | LITERAL_SUFFIX_U,
         LITERAL_SPELLED | LITERAL_SUFFIX_L,
         LITERAL_SPELLED | LITERAL_DECIMAL | LITERAL_SUFFIX_U | LITERAL_SUFFIX_LL,
+        LITERAL_CHAR_BYTE,
+        0,
         0,
     };
     const InitDeclarator *d = decl->u.var.declarators;

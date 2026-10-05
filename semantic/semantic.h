@@ -50,6 +50,10 @@ Tac_StaticInit *new_static_init_int(size_t size, bool is_signed, uint64_t bits);
 // fit the target's int/unsigned int.  Only a multi-character constant can be that wide.
 void check_int_literal_width(const Literal *lit);
 
+// A one-byte character constant (LITERAL_CHAR_BYTE) takes the value of a plain char
+// converted to int: its byte sign-extended where plain char is signed.  Idempotent.
+void type_char_literal(Literal *lit);
+
 // Give an integer constant its type by its spelling and the target's widths (C11
 // §6.4.4.1): `parse` typed it for the host.  A literal with no spelling is left alone.
 void type_int_literal(Literal *lit);

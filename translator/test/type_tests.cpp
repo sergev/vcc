@@ -315,6 +315,24 @@ TEST_F(TranslateTestMmix, StructLayout)
     tac_free_toplevel(tac);
 }
 
+// MMIX copies by the alignment's width, up to 8 bytes: chunks of the same width are loaded
+// and stored whole, so the big-endian byte order never shows.
+TEST_F(TranslateTestMmix, AggregateCopyByAlignment)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct L { char c; long l; } gl;
+        struct I { char c; int i; } gi;
+        struct C { char c[3]; } gc;
+        void f(void) { struct L x; x = gl; }
+        void g(void) { struct I y; y = gi; }
+        void h(void) { struct C z; z = gc; }
+    )");
+    EXPECT_EQ(ChunkStores(tac, "f"), "0:ulong 8:ulong");
+    EXPECT_EQ(ChunkStores(tac, "g"), "0:uint 4:uint");
+    EXPECT_EQ(ChunkStores(tac, "h"), "0:uchar 1:uchar 2:uchar");
+    tac_free_toplevel(tac);
+}
+
 // An alignment above one word still copies by words.
 TEST_F(TranslateTestX86, AggregateCopyCappedAtWord)
 {

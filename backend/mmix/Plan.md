@@ -231,7 +231,7 @@ boundary.
     `__MMIX_ABI_MMIXWARE__`, `__LP64__`, `_LP64`. There is no `__ELF__`, since GCC defines
     none. Add a case to `test_predefined_macros.cpp`.
   - **Check** that `lower -t mmix` accepts the name and lays out structures by the entry.
-- **K2. Frontend audit for the first big-endian byte-addressed target.** Run the test
+- **K2. Frontend audit for the first big-endian byte-addressed target.** *Done.* Run the test
   corpus through `lower -t mmix --verify`: the chapter sources, the translator fixtures
   and the libc sources. Then pin what is new, each with a `-t mmix` test:
   - **Layout against GCC:** struct and union layout and `offsetof` for a table of types,
@@ -253,6 +253,29 @@ boundary.
 
   Fix what is found in shared code and list it here. Bit-fields are parsed but not
   lowered on any target, so their big-endian allocation order is out of scope.
+
+  *Found and fixed:*
+  - **A one-byte character constant was never negative.** `'\xff'` was 255 on every
+    target, but C11 §6.4.4.4p10 (and GCC and clang) make it −1 where plain `char` is
+    signed: x86-64, AVR and MMIX. `parse` has no target, so it now marks such a literal
+    `LITERAL_CHAR_BYTE`, and the semantic pass sign-extends it (`type_char_literal`), in
+    expressions and static initializers alike. Wide (`L'\xff'`) and multi-character
+    constants are unchanged. No golden of any backend changed; BESM-6's `char` is
+    unsigned.
+
+  *Checked, no defect:*
+  - `translator/test/mmix_tests.cpp` and the `TranslateTestMmix` cases in `type_tests.cpp`
+    pin each item; the layouts of six structures match GCC's.
+  - All 35 `libc/common` and `libc/lp64` sources and 1980 test-fixture and book snippets
+    were lowered with `-t mmix --verify`, `-t x86_64` and `-t riscv64`. The outcomes
+    differ only where `__builtin_va_class` is rejected (`va_class` is `NULL`, as on
+    RISC-V).
+  - Byte order never reaches TAC: a static initializer is one typed item per member, an
+    aggregate copy loads and stores chunks of one width, the zero fill writes zeroes, and
+    multi-character constants are already big-endian. The `libc/common` sources pun only
+    between types of the same width.
+  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on ARM32; the
+    backend rounds it once.
 - **K3. Headers.** `libc/mmix/include/`, ahead of `libc/lp64/include/` and
   `libc/common/include/`:
   - `float.h`: binary32 `FLT_*`, binary64 `DBL_*` = `LDBL_*`, `FLT_EVAL_METHOD` 0.
