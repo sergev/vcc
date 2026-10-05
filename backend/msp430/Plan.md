@@ -387,6 +387,16 @@ instructions.
   - **Results** come back in R12, R12:R13 or R12–R15.
   - **Parallel moves** go into the argument registers, ordered so that no source is
     clobbered before it is read.
+
+  *Done.*
+  - No parallel moves are needed in the naive selection: every argument comes from
+    memory or is an immediate, so the stack parts go first, then the registers.
+  - An indirect call loads the pointer into r11. `call x(r1)` would read its operand
+    after pushing the return address.
+  - `call_tests.cpp` has a golden for each rule, and a run where our caller meets our
+    callee for every rule: the split `long`, backfill after a `long long`, a `double`
+    on the stack, structures, chars, seven arguments, recursion and a function pointer.
+  - Book chapter 9 passes.
 - **T12. Globals and static data** (ch. 10).
   - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind emitted as `.byte`,
     `.short`, `.long` or `.quad`. A `double` is a `.quad` of binary64 bits, a `float` a
