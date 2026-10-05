@@ -320,13 +320,13 @@ instructions.
   - **Jumps and labels are in already,** since chapter 4's `&&` and `||` need them
     (K10 tests them).
   - **`int_tests.cpp`:** the constant generator's table (and every value it builds),
-    golden sequences, and two run tables against the host: 202 division and remainder
+    golden sequences, and two run tables against the host: 244 division and remainder
     cases of every sign at 64 and 32 bits, signed and unsigned, with `LONG_MIN / -1`;
     and wrapping, shifts, bitwise operations, comparisons and conversions at every
     width.
   - **Book chapters 1–4 pass** against GCC. Chapters 11 and 12 use calls and globals,
     and a fatal error stops the whole test binary, so they wait for K11 and K12.
-- **K10. Control flow** (ch. 5–8).
+- **K10. Control flow** (ch. 5–8). *Done.*
   - **Branches** test one register against zero: `bz`, `bnz`, `bn`, `bnn`, `bp`, `bnp`,
     after a `cmp`/`cmpu` when the operands are not already a value and zero.
   - **Labels** are `L:n`, unique per TU.
@@ -334,6 +334,17 @@ instructions.
     emits the short forms, and `as -x` with the linker expands what is out of range, so
     there is no relaxation pass. A run test with a branch over a body larger than 256 KB
     checks that the expansion happens and is correct.
+
+  *Done.* Book chapters 1–8 pass against GCC: 270 tests.
+  - **`flow_tests.cpp`:** a branch on the value, labels unique in the unit, loops with
+    `break`/`continue` and the short-circuit operators.
+  - **`RunBranchesBeyondRange`:** a forward `bz`, a forward `jmp` and a backward `pbnz`
+    each cross 256 KB. `as -x` and `ld` turn an out-of-range branch into an inverted
+    short branch around `setl`…`inch $255` and `go $255,$255,0`; a `jmp` reaches
+    64 MB and stays.
+  - **The filler is `.skip`, not C.** A C body that large (3400 statements, 85 K
+    instructions) also ran correctly through the same expansion, but takes the frontend
+    and optimizer over 6 s to compile, too long for a unit test.
 - **K11. Calls, scalar ABI** (ch. 9).
   - **The register-stack protocol:**
     - `X` is above every value that must survive the call;
