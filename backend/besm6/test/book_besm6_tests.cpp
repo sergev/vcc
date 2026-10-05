@@ -380,17 +380,18 @@ int main(void) {
 })"));
 }
 
-// ui = -1u is 2^48-1 on BESM-6 (48-bit unsigned); shifts wrap at 48 bits.
+// ui = -1u is 2^48-1 on BESM-6 (48-bit unsigned); shifts wrap at 48 bits.  The
+// expected values above 2^41 carry a `u`: a signed literal keeps only its 41 value bits.
 TEST_F(Besm6BookTest, Chapter12_BitwiseUnsignedShift)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(int main(void) {
     unsigned int ui = -1u;  // 2^48 - 1, or 281474976710655
 
-    if ((ui << 2l) != 281474976710652) { // 2^48 - 4
+    if ((ui << 2l) != 281474976710652u) { // 2^48 - 4: unsigned, or it would lose bits 42-48
         return 1;
     }
 
-    if ((ui >> 2) != 70368744177663) { // 2^46 - 1
+    if ((ui >> 2) != 70368744177663u) { // 2^46 - 1
         return 2;
     }
 
@@ -1518,7 +1519,8 @@ int main(void) {
 })"));
 }
 
-// extra_credit/bitwise_ops_chars: the 48-bit unsigned analogue of 2^32-659 is 2^48-659.
+// extra_credit/bitwise_ops_chars: c converts to unsigned as its 41-bit word, so the
+// analogue of x86's 2^32-659 is 2^41-659.
 TEST_F(Besm6BookTest, Chapter16_BitwiseOpsChars)
 {
     EXPECT_EQ("0\n", CompileAndRunBook(R"(// make sure we perform integer promotions when performing bitwise operations on chars
@@ -1534,7 +1536,7 @@ int main(void) {
         return 2;  // fail
     }
 
-    if (((c ^ 1001u) | 360l) != 281474976709997) { // 2^48 - 659
+    if (((c ^ 1001u) | 360l) != 2199023254893u) { // 2^41 - 659
         return 3; // fail
     }
 

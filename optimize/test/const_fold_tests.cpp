@@ -535,3 +535,15 @@ TEST_F(OptimizerTest, BinaryFoldRightShiftNegativeX86Arithmetic)
     EXPECT_EQ(body->u.copy.src->u.constant->kind, TAC_CONST_INT);
     EXPECT_EQ(body->u.copy.src->u.constant->u.int_val, -255);
 }
+
+// A signed constant wider than the target's signed width means what the code
+// generator emits for it: on BESM-6 its low 41 bits.  So 2^48 - 659 as a long long
+// equals the unsigned long 2^41 - 659, as it does at run time.
+TEST_F(OptimizerTest, BinaryFoldWideSignedLiteralBesm6)
+{
+    TargetGuard besm6("besm6");
+    Tac_Instruction *body =
+        constant_fold(make_binary(TAC_BINARY_NOT_EQUAL, make_const_ulong((1UL << 41) - 659),
+                                  make_const_long_long((1LL << 48) - 659), make_var("t")));
+    AssertFoldedInt(body, 0);
+}

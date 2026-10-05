@@ -177,15 +177,19 @@ static bool const_is_integer_kind(Tac_ConstKind k)
 // Widen any integer constant to a signed 64-bit value (sign-extending the
 // signed kinds, zero-extending the unsigned ones). Signed binary operators are
 // evaluated through this view.
+//
+// A signed constant reads as the code generator emits it: narrowed to the target's
+// signed width.  A literal too wide for it (2^48 - 659 as a BESM-6 long long, whose
+// value bits are 41) is stored unmasked, but means its low bits there.
 static int64_t const_to_int64(const Tac_Const *c)
 {
     switch (c->kind) {
     case TAC_CONST_INT:
-        return c->u.int_val;
+        return sign_narrow((uint64_t)c->u.int_val, target_signed_bits(TAC_CONST_INT));
     case TAC_CONST_LONG:
-        return c->u.long_val;
+        return sign_narrow((uint64_t)c->u.long_val, target_signed_bits(TAC_CONST_LONG));
     case TAC_CONST_LONG_LONG:
-        return c->u.long_long_val;
+        return sign_narrow((uint64_t)c->u.long_long_val, target_signed_bits(TAC_CONST_LONG_LONG));
     case TAC_CONST_UINT:
         return (int64_t)c->u.uint_val;
     case TAC_CONST_ULONG:
@@ -212,25 +216,18 @@ static int64_t const_to_int64(const Tac_Const *c)
 // yields the 41-bit pattern, not a 64-bit sign-extension: e.g. (unsigned)(-1) is
 // 2^41-1, not 2^64-1.  Unsigned divide/remainder/compare and logical right shift —
 // which depend on the high bits — then fold to the value the hardware computes.
-// Non-negative constants keep their full value (a positive signed value's unsigned
-// reinterpretation is itself; this also preserves out-of-target-range positive
-// literals, which the frontend stores unmasked).  With no target configured the
-// width is 0 and unsigned_narrow is a no-op, so the host behavior is unchanged.
+// A positive literal too wide for the signed width is reduced the same way, to the
+// low bits the code generator emits for it.  With no target configured the width is
+// 0 and unsigned_narrow is a no-op, so the host behavior is unchanged.
 static uint64_t const_to_uint64(const Tac_Const *c)
 {
     switch (c->kind) {
     case TAC_CONST_INT:
-        return c->u.int_val < 0 ? unsigned_narrow((uint64_t)(int64_t)c->u.int_val,
-                                                   target_signed_bits(TAC_CONST_INT))
-                                : (uint64_t)(int64_t)c->u.int_val;
+        return unsigned_narrow((uint64_t)(int64_t)c->u.int_val, target_signed_bits(TAC_CONST_INT));
     case TAC_CONST_LONG:
-        return c->u.long_val < 0
-                   ? unsigned_narrow((uint64_t)c->u.long_val, target_signed_bits(TAC_CONST_LONG))
-                   : (uint64_t)c->u.long_val;
+        return unsigned_narrow((uint64_t)c->u.long_val, target_signed_bits(TAC_CONST_LONG));
     case TAC_CONST_LONG_LONG:
-        return c->u.long_long_val < 0 ? unsigned_narrow((uint64_t)c->u.long_long_val,
-                                                         target_signed_bits(TAC_CONST_LONG_LONG))
-                                      : (uint64_t)c->u.long_long_val;
+        return unsigned_narrow((uint64_t)c->u.long_long_val, target_signed_bits(TAC_CONST_LONG_LONG));
     case TAC_CONST_UINT:
         return c->u.uint_val;
     case TAC_CONST_ULONG:
