@@ -161,3 +161,14 @@ TEST_F(OptimizerTest, UnreachableDeadElseBranch)
               "      kind: int\n"
               "      value: 0\n");
 }
+
+// A void function may end in a loop's conditional jump: its trailing return is
+// gone, so the fall-through edge leads to the Exit, not to a block past the end.
+TEST_F(OptimizerTest, CondJumpEndsFunction)
+{
+    Tac_Instruction *body = chain({ make_label("top"), make_fun_call("bar"),
+                                    make_jump_if_not_zero(make_var("x"), "top") });
+    Tac_Instruction *result = optimize_function(body, opt_flags_default(), nullptr);
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->kind, TAC_INSTRUCTION_LABEL);
+}

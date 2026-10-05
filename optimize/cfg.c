@@ -108,12 +108,17 @@ OptCfg *cfg_build(Tac_Instruction *body)
                                      : term->u.jump_if_not_zero.target;
             intptr_t target_id;
             map_get(&label_map, target, &target_id);
+            // The last block falls through to the Exit: a void function may end
+            // in a loop's conditional jump, its trailing return removed.
             cfg->blocks[i]->succs    = xalloc(2 * sizeof(OptBlock *), __func__, __FILE__, __LINE__);
             cfg->blocks[i]->succs[0] = cfg->blocks[target_id];
-            cfg->blocks[i]->succs[1] = cfg->blocks[i + 1];
-            cfg->blocks[i]->nsucc    = 2;
+            cfg->blocks[i]->nsucc    = 1;
             OPT_TRACE("[cfg] block %d -[cond-taken]-> block %d\n", i, (int)target_id);
-            OPT_TRACE("[cfg] block %d -[cond-fallthru]-> block %d\n", i, i + 1);
+            if (i + 1 < nblocks) {
+                cfg->blocks[i]->succs[1] = cfg->blocks[i + 1];
+                cfg->blocks[i]->nsucc    = 2;
+                OPT_TRACE("[cfg] block %d -[cond-fallthru]-> block %d\n", i, i + 1);
+            }
         } else if (term->kind == TAC_INSTRUCTION_RETURN) {
             // Return: no successors — this is an edge to the implicit Exit.
             cfg->blocks[i]->nsucc = 0;
