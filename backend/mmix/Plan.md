@@ -180,7 +180,9 @@ the interop tests (K17).
       `bnp` alone would make `NaN <= x` true.
 - **Addresses:**
   - **Data:** `lda $1,arr` and `ldt $1,g`, with linker-allocated base registers.
-  - **String literals** in `.rodata` (the text segment): `geta $2,LC:0`.
+  - **String literals** in `.rodata` (the text segment): `geta $2,LC:0`. `geta` reaches
+    only multiples of 4, so GCC puts `.p2align 2` before each, and so must we: an
+    unaligned target fails the link ("relocation truncated to fit: R_MMIX_GETA").
   - **Constants:** `setl`/`incml`/`incmh`/`inch` (`0x123456789abcdef` is four
     instructions), `setl $2,#1` for small ones, and `seth $4,#4004` for the double 2.5.
 
@@ -193,7 +195,7 @@ the interop tests (K17).
 | The hole: `pushj` operand and call result | `$X` = `$(P+1)` (or `$P` in a leaf, which makes no call) |
 | Arguments and values not live across a call | `$(X+1)` … `$31` |
 | Selection scratch | `$255`, never allocated |
-| Fixed globals | `$254` SP, `$253` FP (unused), `$252` (unused), `$251` struct result, `$32`… the linker's base registers |
+| Fixed globals | `$254` SP, `$253` FP (unused), `$252` (unused), `$251` struct result; `$247`–`$254` reserved by `crt0.S` in `.MMIX.reg_contents`, as GCC's `crtn.o` does, so the linker allocates its base registers from `$246` down (it would take `$254` first) |
 
 The allocator works in GCC's fixed model:
 - `$0`–`$13` preserved;
@@ -214,111 +216,6 @@ as its exact binary64 value (see K13), never as binary32 bits, except at the ABI
 boundary.
 
 `make run` stays green after every K-step.
-
-## Phase 1 — skeleton
-
-- **K5. Runtime, hand-written part.** *Done.* `libc/mmix/`, in GNU `as` syntax with lowercase
-  mnemonics:
-  - **`crt0.s`:**
-    - `Main:` does `put rG,32`, as GCC's `crti` does, so our code and GCC's agree that
-      locals end at `$31`;
-    - it loads `$254` from `__Stack_start` and moves argc/argv from `$0`/`$1` into the
-      argument registers of `pushj $2,main`, then passes the result to `exit`;
-    - a `PRINT_STATUS` variant, as for the other targets.
-    - `rD` is 0 from the loader, and nothing ever writes it. `crt0` asserts that
-      assumption rather than setting it.
-  - **`console.s`:**
-    - `putbyte` fills a buffer that `flush` writes with `trap 0,6,1` (Fwrite to StdOut),
-      through the two-octa parameter block `$255` points at;
-    - `getch` reads with Fread from StdIn (`mmix -f` feeds it);
-    - `exit` flushes, prints the `[exit N]` trailer on StdErr, sets `$255` and does
-      `trap 0,0,0`.
-  - **No arithmetic helpers.** Multiply, divide, binary64 and its conversions are
-    instructions. This is the first target without a `mul.s`/`divmod.s` or a soft-float
-    runtime.
-  - **Tested on its own,** before any compiled code depends on it. An assembly program
-    prints through `putbyte`, reads a line through `getch`, and returns a status. The
-    trailer and the status are checked.
-
-  *Done.*
-  - **Files:** `crt0.S` (preprocessed by GCC, which passes `as` its flags) and
-    `console.s`, built into `crt0.o`, `crt0-status.o` and `libc.a`.
-  - **`console.s`:** `putbyte` buffers 1 KB; `putch`, `flush`, `getch` (−1 at end of
-    input) and `exit`; and `__mmix_fmtdec`, the decimal digits that `exit` and
-    `PRINT_STATUS` share.
-  - **`crt0`'s status:** it sign-extends main's `int` result before using it, since
-    GCC's `main` leaves it unextended.
-  - **The `mmix-runtime` CTest** (`test/console_test.sh` with `test/console_test.s`)
-    checks stdout, the trailer and the status: a copy of StdIn, an empty input, the
-    `PRINT_STATUS` line, and −3 with an argument (status 253).
-  - **Found: the linker took `$254` as a base register.** It allocates the registers for
-    `lda`/`ldo` from the top, `$254` first, and `crt0` then set the stack pointer over
-    it. GCC's `crtn.o` puts eight zero octas in `.MMIX.reg_contents`, which the linker
-    places just below `$255`, so allocation starts at `$246`. Our `crt0.S` does the
-    same, reserving `$247`–`$254`.
-  - **Found: a `geta` target must be 4-aligned.** `geta` reaches only multiples of 4, so
-    a `.rodata` string that `geta` addresses needs `.p2align 2`, as GCC emits.
-    Otherwise the link fails with "relocation truncated to fit: R_MMIX_GETA".
-    `genmmix` must align every `geta` target.
-- **K6. Skeleton.** *Done.* `backend/mmix/` with `CMakeLists.txt`, `mmix_ir.h`, `mmix_ir.c`,
-  `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing `genmmix`.
-  - **The IR** has a function, a block and an instruction (`op X,Y,Z`). Operands are:
-    - a register `$n`, physical or virtual;
-    - an 8-bit immediate;
-    - a 16-bit wyde immediate (`setl`…`andnl`);
-    - a symbol plus offset (the base-plus-offset forms, `geta`, `pushj`);
-    - a label.
-  - **The module header** emits sections, `.global`, `.p2align`, and `name:` labels with
-    `L:n` local labels.
-  - **A test pins the rendering** of every instruction form. Every golden is also
-    assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms` when it is installed, as
-    x86-64's are by GNU `as`.
-
-  *Done.*
-  - **The IR** (`Mmix_Func`/`Mmix_Block`/`Mmix_Instr`) has six operand kinds: register,
-    immediate, wyde, symbol plus offset, label and special register.
-  - **Forms:** each opcode has one of 17 operand forms, and `mmix_emit_instr` checks an
-    instruction against its form. A wrong operand, or an immediate outside its field
-    (8 bits; 16 in `pop`'s YZ and in a wyde; 0–4 for a rounding mode), is a fatal error,
-    not a wrong instruction.
-  - **`codegen.c`** returns a constant through `$0` and `pop 1,0`. `genmmix` is built.
-  - **`emit_tests.cpp`** pins each form's syntax and the fatal checks.
-    `AssemblerAcceptsEveryForm` assembles every opcode in each of its forms.
-  - **Found by the assembler** (now in the forms):
-    - the floating-point operations take no immediate;
-    - `neg`/`negu` need an immediate Y;
-    - `fix`, `fixu` and `fsqrt` take Y as a rounding mode and Z only as a register.
-  - **Checked by hand:** `int main(void) { return 200; }` through `genmmix`, `as`, `ld`
-    and `mmix` gives status 200.
-- **K7. Run harness and first program.** *Done.* `mmix_test.h` on the `QemuTest` fixture:
-  - **The run configuration** (`QemuConfig`, `libc/mmix/CMakeLists.txt`):
-    - `assembler` is `MMIX_AS` with `MMIX_AS_FLAGS`, an empty `link_script`;
-    - the link is `MMIX_LD` with `MMIX_LD_FLAGS`, `crt0.o` first;
-    - the run is `{ MMIX_SIM, "-q" }` with an empty `image_option`;
-    - `exit_report` is `"[exit "`, and the `timeout` is 10 s, about 140 M instructions.
-    - `mmix -q` reports a fault on stdout, with a status of its own; the missing trailer
-      fails the run.
-  - `TEST_MODEL_INCLUDE_DIR` is `libc/lp64/include`, after `libc/mmix/include`.
-  - `CompileToMmix` produces golden assembly.
-  - `CompileAndRunMmix` assembles, links `crt0.o`, the program and `libc.a`, and runs
-    under `mmix`.
-  - Tests guard with `SKIP_IF_NO_MMIX_TOOLS()`, and the test binary is `mmix-tests`.
-  - The book suite gets an `mmix` `BookTest` with its skip list, comparing with GCC's
-    build from the start (K18), since GCC is installed already.
-
-  Done when `int main(void) { return 200; }` runs and the fixture reports 200.
-
-  *Done.* `mmix-tests` has 27 tests, all passing:
-  - the emitter's (K6);
-  - golden assembly, which GNU `as` also assembles;
-  - `main` returning 200 and a wide constant;
-  - the book status line at −7, `INT_MAX` and `INT_MIN`;
-  - GCC's `main` on our `crt0-status`, whose unextended `int` result `crt0` extends;
-  - `putbyte` from assembly;
-  - a `trap 0,0,0` without our exit failing the run on the missing report;
-  - book chapter 1, compared with GCC's newlib build (`--wrap=main`).
-
-  `getch` is covered by the `mmix-runtime` CTest (K5), since the fixture feeds no stdin.
 
 ## Phase 2 — instruction selection, book order
 
@@ -400,7 +297,8 @@ instructions.
   - **A register-stack test:** values in `$0`…`$(X−1)` survive a call to a function that
     writes all 32 locals, and also deep recursion, which spills the register ring.
     `mmix -r` shows the ring when one fails.
-- **K12. Globals and static data** (ch. 10).
+- **K12. Globals and static data** (ch. 10). Every `geta` target is 4-aligned
+  (see Addresses above).
   - **Data:**
     - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind emitted as
       `.byte`, `.short`, `.long` or `.quad`. The assembler is big-endian, so the
