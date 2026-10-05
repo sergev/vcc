@@ -819,8 +819,13 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         break;
 
     case TAC_INSTRUCTION_ZERO_EXTEND:
+        // The source's own bits: copy propagation may hand an unsigned char view
+        // the signed char constant it was copied from, and -1 must widen to 255.
         if (dst_kind >= 0 && const_is_integer_kind(src->kind))
-            return make_int_const_val((Tac_ConstKind)dst_kind, const_to_uint64(src));
+            return make_int_const_val((Tac_ConstKind)dst_kind,
+                                      src->kind == TAC_CONST_SCHAR
+                                          ? (uint64_t)(uint8_t)src->u.char_val
+                                          : const_to_uint64(src));
         rc = tac_new_const(src->kind == TAC_CONST_UCHAR   ? TAC_CONST_UINT
                            : src->kind == TAC_CONST_UINT  ? TAC_CONST_ULONG
                            : src->kind == TAC_CONST_ULONG ? TAC_CONST_ULONG_LONG
@@ -958,23 +963,30 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         break;
     }
 
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    // These two carry no destination kind: the result may be an int or a long. So
+    // the folder answers only when it fits int (unsigned int), where the two agree,
+    // and leaves a wider one to the run time rather than wrap it to the int width.
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT: {
         if (src->kind != TAC_CONST_LONG_DOUBLE)
+            return NULL;
+        int64_t v = f128_to_i64(ld_value(src), 64);
+        if (sign_narrow((uint64_t)v, target_signed_bits(TAC_CONST_INT)) != v)
             return NULL;
         rc            = tac_new_const(TAC_CONST_INT);
-        rc->u.int_val =
-            sign_narrow((uint64_t)f128_to_i64(ld_value(src), 64),
-                        target_signed_bits(TAC_CONST_INT));
+        rc->u.int_val = v;
         break;
+    }
 
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT: {
         if (src->kind != TAC_CONST_LONG_DOUBLE)
             return NULL;
+        uint64_t u = f128_to_u64(ld_value(src), 64);
+        if (unsigned_narrow(u, target_unsigned_bits(TAC_CONST_UINT)) != u)
+            return NULL;
         rc             = tac_new_const(TAC_CONST_UINT);
-        rc->u.uint_val =
-            unsigned_narrow(f128_to_u64(ld_value(src), 64),
-                            target_unsigned_bits(TAC_CONST_UINT));
+        rc->u.uint_val = u;
         break;
+    }
 
         /* ---- floating-point ↔ floating-point ---- */
 

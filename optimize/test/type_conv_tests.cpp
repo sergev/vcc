@@ -269,6 +269,37 @@ TEST_F(OptimizerTest, ConvSignExtendNegativeToUnsignedX86)
     target_config = saved;
 }
 
+// A zero extension takes the source's own bits, even when copy propagation hands
+// it a signed char constant: (int)(unsigned char)(signed char)-1 is 255.
+TEST_F(OptimizerTest, ConvZeroExtendSignedCharConstant)
+{
+    Tac_Instruction *body =
+        make_conversion(TAC_INSTRUCTION_ZERO_EXTEND, make_const_char(-1), make_var("t"));
+    body->u.zero_extend.dst_kind = TAC_CONST_INT;
+    body                         = constant_fold(body);
+
+    AssertFoldedInt(body, 255);
+}
+
+// A long double conversion to an integer carries no destination kind, so the folder
+// only answers when the result fits the 32-bit kind; (unsigned long)1.8e19L is left
+// to the run time rather than wrapped to 32 bits.
+TEST_F(OptimizerTest, ConvLongDoubleToUintTooWideNotFolded)
+{
+    Tac_Instruction *body = make_conversion(TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT,
+                                            make_const_long_double(1.8e19L), make_var("t"));
+    body                  = constant_fold(body);
+    EXPECT_EQ(body->kind, TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT);
+}
+
+TEST_F(OptimizerTest, ConvLongDoubleToIntTooWideNotFolded)
+{
+    Tac_Instruction *body = make_conversion(TAC_INSTRUCTION_LONG_DOUBLE_TO_INT,
+                                            make_const_long_double(-1e12L), make_var("t"));
+    body                  = constant_fold(body);
+    EXPECT_EQ(body->kind, TAC_INSTRUCTION_LONG_DOUBLE_TO_INT);
+}
+
 TEST_F(OptimizerTest, ConvTruncateIntToCharSignedTarget)
 {
     const Target *saved = target_config;
