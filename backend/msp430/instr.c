@@ -919,7 +919,11 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
         int off = (int)(const_bits(index->u.constant) * (uint64_t)scale);
         if (!same_opnd(&d, &wp))
             emit2(g, MSP_MOV, msp_copy(&wp), msp_copy(&d));
-        if (off & 0xffff)
+        // -2, -4 and -8 as a subtraction, whose constant the generator has.
+        int neg = -off & 0xffff;
+        if (neg == 2 || neg == 4 || neg == 8)
+            emit2(g, MSP_SUB, msp_imm(neg), msp_copy(&d));
+        else if (off & 0xffff)
             emit2(g, MSP_ADD, msp_imm(off & 0xffff), msp_copy(&d));
     } else if (scale_shift(scale) >= 0) {
         // The scaled index in dst when it is a register apart from the pointer, else r15.

@@ -205,6 +205,110 @@ int sum(int *p, int n)
     EXPECT_NE(std::string::npos, y.find("op: greater_or_equal")) << y;
 }
 
+const char *bubble_src = R"(
+void sort(int *v, int n)
+{
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - 1 - i; j++)
+            if (v[j] > v[j + 1]) {
+                int t = v[j];
+                v[j] = v[j + 1];
+                v[j + 1] = t;
+            }
+}
+)";
+
+// v[j] and v[j + 1], both read and then written: one pointer, stepped where v[j + 1]
+// is formed and read one element lower by the store to v[j]. No second pointer is
+// copied back into it.
+TEST_F(PipelineTest, LoopPointerSteppedInPlace)
+{
+    std::string y = OptimizeYaml(bubble_src, LoopFlags());
+    // The step of the inner pointer, in place.
+    EXPECT_EQ(1, Count(y, "    name: %1000\n  index:\n    kind: constant\n    const:\n"
+                          "      kind: long\n      value: 1\n  scale: 4\n  dst:\n"
+                          "    kind: var\n    name: %1000\n"))
+        << y;
+    // v[j], stored to behind the step.
+    EXPECT_EQ(1, Count(y, "    name: %1000\n  index:\n    kind: constant\n    const:\n"
+                          "      kind: long\n      value: -1\n"))
+        << y;
+    // No second pointer: the end pointer and its step, and these two.
+    EXPECT_EQ(4, Count(y, "kind: add_ptr")) << y;
+}
+
+// The inner bound n - 1 - i: the end pointer v + (n - 1 - i) steps down with i, the
+// inner guard and the outer test compare it with v, and i goes.
+TEST_F(PipelineTest, LoopCountdownBoundReduced)
+{
+    std::string y = OptimizeYaml(bubble_src, LoopFlags());
+    EXPECT_EQ(std::string::npos, y.find("name: %i\n")) << y;
+    EXPECT_EQ(std::string::npos, y.find("name: %j\n")) << y;
+    // Only ahead of the loops is v indexed by a variable.
+    EXPECT_EQ(1, Count(y, "    name: %v\n  index:\n    kind: var")) << y;
+    // The end pointer, stepped down and compared twice: by the guard and by the test.
+    EXPECT_EQ(1, Count(y, "      value: -1\n  scale: 4\n  dst:\n    kind: var\n    name: %1004\n")) << y;
+    EXPECT_EQ(2, Count(y, "op: greater_than\n  src1:\n    kind: var\n    name: %1004\n")) << y;
+}
+
+// Without the pointer on n - 1 - i, i is read by something else than its test.
+TEST_F(PipelineTest, LoopCounterKeptWhenBoundReadElsewhere)
+{
+    std::string y = OptimizeYaml(R"(
+int g(int);
+void f(int *v, int n)
+{
+    for (int i = 0; i < n; i++) {
+        int m = n - i;
+        v[m] = g(m);
+    }
+}
+)",
+                                 LoopFlags());
+    EXPECT_NE(std::string::npos, y.find("name: %i\n")) << y;
+    EXPECT_EQ(1, Count(y, "    name: %v\n  index:\n    kind: var")) << y;
+}
+
+// The address of a global array, first taken in the loop, moves ahead of it; the
+// array is then walked by a pointer like any other.
+TEST_F(PipelineTest, LoopGlobalAddressHoisted)
+{
+    std::string y = OptimizeYaml(R"(
+int a[8];
+void fill(int x)
+{
+    for (int i = 0; i < 8; i++)
+        a[i] = x;
+}
+)",
+                                 LoopFlags());
+    size_t addr = y.find("kind: get_address"), label = y.find("kind: label");
+    ASSERT_NE(std::string::npos, addr) << y;
+    EXPECT_LT(addr, label) << y;
+    EXPECT_EQ(std::string::npos, y.find("name: %i\n")) << y;
+}
+
+// Two loops whose counters share a name: the second one's goes, though the first
+// reads its own.
+TEST_F(PipelineTest, LoopCounterDroppedBesideAnotherLoop)
+{
+    std::string y = OptimizeYaml(R"(
+int g(int);
+int f(int *p, int n)
+{
+    int s = 0;
+    for (int i = 0; i < n; i++)
+        s += g(i);
+    for (int i = 0; i < n; i++)
+        s += p[i];
+    return s;
+}
+)",
+                                 LoopFlags());
+    // i's step in the first loop only.
+    EXPECT_EQ(1, Count(y, "op: add\n  src1:\n    kind: var\n    name: %i\n")) << y;
+}
+
 // BESM-6 opts out of the loop optimizations: its code stays as it was.
 TEST_F(PipelineTest, LoopOptimizationsOffOnBesm6)
 {

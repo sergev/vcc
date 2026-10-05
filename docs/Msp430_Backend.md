@@ -143,6 +143,8 @@ It runs over the body to a fixed point.
   - an add of a constant to a base becomes an offset (`mov 6(r12), r12`), so a
     structure copy goes memory to memory;
   - consecutive loads through a dying pointer use `@rN+`;
+  - a load through a pointer stepped by its size right after, with the flags dead, uses
+    `@rN+` too;
   - a `tst` goes when the instruction before already set its flags, under the C and V
     rules.
 - **Dead stores to the frame:** a backward pass over the liveness of each byte of the
@@ -397,17 +399,22 @@ linked with our runtime (`scripts/bench_msp430.sh` builds and runs them):
 
 | | ours | GCC `-O2` |
 | --- | --- | --- |
-| bubble sort, 64 `int`s (`sort.c`) | 39 569 / 346 | 32 845 / 284 |
+| bubble sort, 64 `int`s (`sort.c`) | 32 692 / 318 | 32 845 / 284 |
 | sieve to 2000 (`sieve.c`) | 111 848 / 246 | 92 700 / 320 |
 | CRC-16, 1 KB (`crc16.c`) | 149 259 / 272 | 199 259 / 572 |
 | string copy and compare (`strings.c`) | 125 817 / 600 | 84 739 / 1 090 |
 
-Sort was 66 073 cycles before three changes: the inline constant multiply (the LCG
+Sort was 66 073 cycles before these changes: the inline constant multiply (the LCG
 that fills the array called `__mspabi_mpyi` 64 times), loops tested at their bottom,
 and induction-variable strength reduction, which steps a pointer through the array
-in place of the index (see [TAC_Optimization.md](TAC_Optimization.md)). Of the 2 016
-passes of its inner loop, each costs 13 cycles to GCC's 10: GCC loads through
-`@r13+` and stores to `-2(r13)`, where we copy the pointer to step it.
+in place of the index (see [TAC_Optimization.md](TAC_Optimization.md)). The pointer is
+stepped in place between the two loads, which the peephole pass makes
+`mov @r8+, r11` (a load through a register followed by the add of its size, the flags
+dead), and the swap stores behind it at `-2(r8)`: 10 cycles a pass, as GCC. The inner
+loop's end pointer steps down by `decd` once per outer pass (a pointer less 2, 4 or
+8 is a `sub`, whose constant the generator has), and both counters are gone. What GCC
+still saves is the call, by inlining `sort`, and the inner loop's guard, which it
+proves true.
 
 The book programs are twice GCC's, because `-O2` folds and inlines most of them whole.
 The book figures were measured before the dead frame stores went, which took 3.8% off

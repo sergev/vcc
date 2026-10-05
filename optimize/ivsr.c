@@ -36,6 +36,17 @@
 //     v + bound*s, formed ahead of the loop; then j goes when only its own step
 //     reads it.
 //
+//   - An index inv - j, inv invariant, is reduced alike: its pointer q is kept at
+//     v + (inv - j)*s and steps the other way. A test of inv - j carries over as
+//     one of j does; a test of j against inv itself, for a step of one, is the
+//     mirrored test of q against v.
+//   - The address of a global the loop indexes, t = &g, moves ahead of the loop
+//     first, so that g[j] has an invariant base.
+//   - Whether j is read elsewhere is a matter of the loop and of what follows it:
+//     another loop's counter of the same name is another variable.
+//   - A pointer stepped through a copy, t = q + c ... q = t, with q read in
+//     between, is stepped in place: see step_in_place.
+//
 // The pass runs at the fixed point of the scalar passes, which then run again
 // when it changed something: a loop bound is invariant only once CSE and copy
 // propagation have found its one computation.
@@ -508,12 +519,15 @@ static int steps_between(const Ivsr *s, const Tac_Instruction *from, int fb,
 }
 
 // A value x read by `use` in block `b` as j plus a constant, at the point of `use`:
-// the IV in *iv, the constant in *off, and whether x is j sign-extended in *ext.
+// the IV in *iv, the constant in *off, and whether x is j sign-extended in *ext. Or as
+// an invariant less j, plus the constant: the invariant's name in *inv, else NULL.
 static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Instruction *use,
-                         const Tac_Val *x, BasicIv *iv, long long *off, bool *ext)
+                         const Tac_Val *x, BasicIv *iv, long long *off, bool *ext,
+                         const char **inv)
 {
     if (!is_var(x))
         return false;
+    *inv             = NULL;
     *ext             = false;
     *off             = 0;
     const char *name = x->u.var_name;
@@ -537,8 +551,18 @@ static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Inst
         if (!xd || xd->kind != TAC_INSTRUCTION_BINARY || !is_var(xd->u.binary.src1))
             return false;
         j = xd->u.binary.src1->u.var_name;
-        if (!basic_iv(s, d, j, iv) || !is_step(xd, j, off))
+        Tac_BinaryOperator op = xd->u.binary.op;
+        const Tac_Val *m      = xd->u.binary.src2;
+        if ((op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_UNSIGNED) && !xd->is_volatile &&
+            is_var(m) && is_private(s, j) && !defined_in_loop(d, j) &&
+            basic_iv(s, d, m->u.var_name, iv) &&
+            const_kind(type_of(s, j)) == const_kind(type_of(s, m->u.var_name))) {
+            // x = inv - j.
+            *inv = j;
+            j    = m->u.var_name;
+        } else if (!basic_iv(s, d, j, iv) || !is_step(xd, j, off)) {
             return false;
+        }
         if (*ext && xd->u.binary.op != TAC_BINARY_ADD && xd->u.binary.op != TAC_BINARY_SUBTRACT)
             return false;
         // The extension reads t as computed: no step between them.
@@ -549,20 +573,22 @@ static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Inst
     }
     if (*ext && !is_signed_kind(const_kind(type_of(s, j))))
         return false;
-    // q follows j: a step between the read and the use is taken back from the constant.
+    // q follows j: a step between the read and the use is taken back from the constant
+    // (given back, for inv - j).
     if (from != use) {
         int k = steps_between(s, from, fb, use, b, iv);
         if (k < 0)
             return false;
-        *off -= k * iv->step;
+        *off += *inv ? k * iv->step : -k * iv->step;
     }
     return true;
 }
 
-// A pointer kept at base + j*scale through the loop.
+// A pointer kept at base + j*scale through the loop; at base + (inv - j)*scale with
+// an `inv`.
 typedef struct Reduced {
     struct Reduced *next;
-    char *base, *iv;
+    char *base, *iv, *inv;
     int scale;
     bool ext;
     char *type; // the pointer's type, spelled
@@ -595,22 +621,83 @@ static void count_name(const char *name, void *arg)
         m->count++;
 }
 
-// Whether an instruction of the function other than `a` and `b` reads `name`. One
-// that only defines it is a dead store once `a` and `b` are gone.
+// Whether instruction `in` reads `name`.
+static bool reads_name(const Tac_Instruction *in, const char *name)
+{
+    Mention m = { name, 0 };
+    tac_visit_names(in, count_name, &m);
+    const char *d = def_name(in);
+    return m.count > (d && !strcmp(d, name));
+}
+
+// Whether `name` is live into block `from`: read on some path from there ahead of a
+// definition. Instructions `a` and `b` do not count, neither as a read nor as a
+// definition.
+static bool live_into(const Ivsr *s, int from, const char *name, const Tac_Instruction *a,
+                      const Tac_Instruction *b)
+{
+    bool *seen = XALLOC(s->n, bool);
+    int *stack = XALLOC(s->n, int), sp = 0;
+    for (int i = 0; i < s->n; i++)
+        seen[i] = false;
+    seen[from]  = true;
+    stack[sp++] = from;
+    bool live   = false;
+    while (sp && !live) {
+        const OptBlock *blk = s->cfg->blocks[stack[--sp]];
+        bool defined        = false;
+        for (const Tac_Instruction *in = blk->first; in && !live && !defined; in = in->next) {
+            if (in == a || in == b)
+                continue;
+            if (reads_name(in, name))
+                live = true;
+            const char *d = def_name(in);
+            if (d && !strcmp(d, name))
+                defined = true;
+        }
+        for (int k = 0; k < blk->nsucc && !live && !defined; k++) {
+            int t = blk->succs[k]->id;
+            if (!seen[t]) {
+                seen[t]     = true;
+                stack[sp++] = t;
+            }
+        }
+    }
+    xfree(seen);
+    xfree(stack);
+    return live;
+}
+
+// Whether `name` is live at an exit of the loop, `a` and `b` not counting.
+static bool live_at_exit(const Ivsr *s, const char *name, const Tac_Instruction *a,
+                         const Tac_Instruction *b)
+{
+    for (int k = 0; k < s->n; k++) {
+        if (!s->in_loop[k])
+            continue;
+        const OptBlock *blk = s->cfg->blocks[k];
+        for (int e = 0; e < blk->nsucc; e++)
+            if (!s->in_loop[blk->succs[e]->id] && live_into(s, blk->succs[e]->id, name, a, b))
+                return true;
+    }
+    return false;
+}
+
+// Whether the loop's value of `name` is read by an instruction other than `a` and
+// `b`: in the loop, or after it ahead of another definition. With no such read, a
+// definition of it ahead of the loop is a dead store once `a` and `b` are gone, or
+// serves another loop that shares the name.
 static bool read_elsewhere(const Ivsr *s, const char *name, const Tac_Instruction *a,
                            const Tac_Instruction *b)
 {
-    for (int k = 0; k < s->n; k++)
-        for (const Tac_Instruction *in = s->cfg->blocks[k]->first; in; in = in->next) {
-            if (in == a || in == b)
-                continue;
-            Mention m = { name, 0 };
-            tac_visit_names(in, count_name, &m);
-            const char *d = def_name(in);
-            if (m.count > (d && !strcmp(d, name)))
+    for (int k = 0; k < s->n; k++) {
+        if (!s->in_loop[k])
+            continue;
+        for (const Tac_Instruction *in = s->cfg->blocks[k]->first; in; in = in->next)
+            if (in != a && in != b && reads_name(in, name))
                 return true;
-        }
-    return false;
+    }
+    return live_at_exit(s, name, a, b);
 }
 
 // The comparison of pointers that orders them as `op` orders a j stepping by `step`,
@@ -641,8 +728,34 @@ static int pointer_test(Tac_BinaryOperator op, bool is_signed, long long step)
     }
 }
 
-// Linear-function test replacement: a loop test `x op bound`, x = j + c, becomes
-// `q + c*scale op base + bound*scale`, the end pointer formed ahead of the loop. The
+// `op` with its operands exchanged.
+static Tac_BinaryOperator mirror_test(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_LESS_THAN:
+        return TAC_BINARY_GREATER_THAN;
+    case TAC_BINARY_LESS_OR_EQUAL:
+        return TAC_BINARY_GREATER_OR_EQUAL;
+    case TAC_BINARY_GREATER_THAN:
+        return TAC_BINARY_LESS_THAN;
+    case TAC_BINARY_GREATER_OR_EQUAL:
+        return TAC_BINARY_LESS_OR_EQUAL;
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+        return TAC_BINARY_GREATER_THAN_UNSIGNED;
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+        return TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED;
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+        return TAC_BINARY_LESS_THAN_UNSIGNED;
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+        return TAC_BINARY_LESS_OR_EQUAL_UNSIGNED;
+    default:
+        return op;
+    }
+}
+
+// Linear-function test replacement: a loop test `x op bound`, x = j + c or
+// inv - j + c, becomes `q + c*scale op base + bound*scale`, the end pointer formed
+// ahead of the loop. The
 // pointers are valid, so they do not wrap: one of q's addresses is formed every
 // iteration (`every`), the end one past the last. Then j itself goes, when its step is
 // all that is left of it. True when anything changed.
@@ -680,15 +793,39 @@ static bool replace_tests(Ivsr *s, const bool *in_loop, const LoopDefs *d, Reduc
         BasicIv iv;
         long long off;
         bool ext;
-        if (!affine_index(s, d, b, cmp, cmp->u.binary.src1, &iv, &off, &ext) || ext)
+        const char *xinv;
+        if (!affine_index(s, d, b, cmp, cmp->u.binary.src1, &iv, &off, &ext, &xinv) || ext)
             continue;
         int jkind = const_kind(type_of(s, iv.name));
-        int op    = pointer_test(cmp->u.binary.op, is_signed_kind(jkind), iv.step);
-        Reduced *r = reduced;
-        while (r && !(r->every && !strcmp(r->iv, iv.name)))
-            r = r->next;
-        if (op < 0 || !r)
+        // The pointer to test: one on j for a test of j, one on inv - j for a test of
+        // inv - j. Or one on inv - j for the test of j against inv itself, turned
+        // around: j + c op inv is (inv - j) - c po 0, for a step of one, which cannot
+        // pass inv by.
+        Reduced *r    = reduced;
+        bool mirrored = false;
+        for (; r; r = r->next) {
+            if (!r->every || strcmp(r->iv, iv.name))
+                continue;
+            if (xinv ? r->inv && !strcmp(xinv, r->inv) : !r->inv)
+                break;
+            if (!xinv && r->inv && is_var(bound) && !strcmp(bound->u.var_name, r->inv) &&
+                (iv.step == 1 || iv.step == -1)) {
+                mirrored = true;
+                break;
+            }
+        }
+        if (!r)
             continue;
+        int op = mirrored ? pointer_test(mirror_test(cmp->u.binary.op), is_signed_kind(jkind), -iv.step)
+                          : pointer_test(cmp->u.binary.op, is_signed_kind(jkind),
+                                         r->inv ? -iv.step : iv.step);
+        if (op < 0)
+            continue;
+        if (mirrored) {
+            bound = NULL;
+            bval  = 0;
+            off   = -off;
+        }
 
         // Ahead of the loop: end = base + bound*scale, the bound extended as q's index.
         const Tac_Type *qt = type_of(s, r->q);
@@ -793,6 +930,70 @@ static bool drop_dead_ivs(Ivsr *s, LoopDefs *d)
     return dv.n > 0;
 }
 
+// The number of definitions of `name` in the function.
+static int count_defs(const Ivsr *s, const char *name)
+{
+    int n = 0;
+    for (int b = 0; b < s->n; b++)
+        for (const Tac_Instruction *in = s->cfg->blocks[b]->first; in; in = in->next) {
+            const char *d = def_name(in);
+            if (d && !strcmp(d, name))
+                n++;
+        }
+    return n;
+}
+
+// Whether the loop has an ADD_PTR on pointer `name`.
+static bool indexed_in_loop(const Ivsr *s, const char *name)
+{
+    for (int b = 0; b < s->n; b++) {
+        if (!s->in_loop[b])
+            continue;
+        for (const Tac_Instruction *in = s->cfg->blocks[b]->first; in; in = in->next)
+            if (in->kind == TAC_INSTRUCTION_ADD_PTR && is_var(in->u.add_ptr.ptr) &&
+                !strcmp(in->u.add_ptr.ptr->u.var_name, name))
+                return true;
+    }
+    return false;
+}
+
+// Move the address of a global the loop indexes, t = &g, ahead of the loop: an
+// array's address is taken where it is first subscripted, which is in the loop when
+// nothing ahead of it does. The address is the same everywhere, and t, a private
+// variable with this one definition, is read nowhere that it does not reach. True when
+// anything moved.
+static bool hoist_addresses(Ivsr *s, int pre)
+{
+    bool changed = false;
+    for (int b = 0; b < s->n; b++) {
+        if (!s->in_loop[b])
+            continue;
+        OptBlock *blk = s->cfg->blocks[b];
+        for (Tac_Instruction *in = blk->first, *next; in; in = next) {
+            next = in->next;
+            if (in->kind != TAC_INSTRUCTION_GET_ADDRESS || in->is_volatile ||
+                !is_var(in->u.get_address.src) || !is_var(in->u.get_address.dst) ||
+                in->u.get_address.src->u.var_name[0] == '%')
+                continue;
+            const char *t = in->u.get_address.dst->u.var_name;
+            if (!is_private(s, t) || count_defs(s, t) != 1 || !indexed_in_loop(s, t))
+                continue;
+            opt_trace_instr("[ivsr] hoist:", in);
+            Tac_Instruction *p = prev_of(blk, in);
+            if (p)
+                p->next = in->next;
+            else
+                blk->first = in->next;
+            if (blk->last == in)
+                blk->last = p;
+            in->next = NULL;
+            insert_at_end(s->cfg->blocks[pre], in);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 // Reduce the addressing of the loop headed by `h` with blocks `in_loop`; true when
 // anything changed.
 static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
@@ -821,10 +1022,10 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
         }
     }
 
+    bool changed = hoist_addresses(s, pre);
     LoopDefs d;
     collect_defs(s, in_loop, &d);
     Reduced *reduced = NULL;
-    bool changed     = false;
     for (int b = 0; b < s->n; b++) {
         if (!in_loop[b])
             continue;
@@ -839,7 +1040,8 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
             BasicIv iv;
             long long off;
             bool ext;
-            if (!affine_index(s, &d, b, in, in->u.add_ptr.index, &iv, &off, &ext))
+            const char *inv;
+            if (!affine_index(s, &d, b, in, in->u.add_ptr.index, &iv, &off, &ext, &inv))
                 continue;
             int scale = in->u.add_ptr.scale;
             // The index's own constant kind: the extended one, or the IV's.
@@ -854,6 +1056,7 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
             char *ptype = tac_type_str(pt);
             Reduced *r  = reduced;
             while (r && !(!strcmp(r->base, base) && !strcmp(r->iv, iv.name) &&
+                          (inv ? r->inv && !strcmp(r->inv, inv) : !r->inv) &&
                           r->scale == scale && r->ext == ext && !strcmp(r->type, ptype)))
                 r = r->next;
             if (r) {
@@ -862,6 +1065,8 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
                 r        = XALLOC(1, Reduced);
                 r->base  = xstrdup(base);
                 r->iv    = xstrdup(iv.name);
+                r->inv   = inv ? xstrdup(inv) : NULL;
+                r->every = false;
                 r->scale = scale;
                 r->ext   = ext;
                 r->type  = ptype;
@@ -869,8 +1074,21 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
                 r->next  = reduced;
                 reduced  = r;
 
-                // Ahead of the loop: q = base + j*scale.
+                // Ahead of the loop: q = base + j*scale, or base + (inv - j)*scale.
                 Tac_Val *index = new_var(r->iv);
+                int jkind      = const_kind(type_of(s, r->iv));
+                if (inv) {
+                    char x0[32];
+                    fresh_temp(s, type_of(s, r->iv), x0);
+                    Tac_Instruction *sub = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+                    sub->u.binary.op     = is_signed_kind(jkind) ? TAC_BINARY_SUBTRACT
+                                                                 : TAC_BINARY_SUBTRACT_UNSIGNED;
+                    sub->u.binary.src1   = new_var(inv);
+                    sub->u.binary.src2   = index;
+                    sub->u.binary.dst    = new_var(x0);
+                    insert_at_end(s->cfg->blocks[pre], sub);
+                    index = new_var(x0);
+                }
                 if (ext) {
                     char e[32];
                     fresh_temp(s, xt, e);
@@ -891,7 +1109,7 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
                 // After j's step: q += step*scale.
                 Tac_Instruction *step = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
                 step->u.add_ptr.ptr   = new_var(r->q);
-                step->u.add_ptr.index = new_const(kind, iv.step);
+                step->u.add_ptr.index = new_const(kind, inv ? -iv.step : iv.step);
                 step->u.add_ptr.scale = scale;
                 step->u.add_ptr.dst   = new_var(r->q);
                 insert_after(s->cfg->blocks[iv.block], iv.def, step);
@@ -926,10 +1144,231 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
         xfree(reduced->type);
         xfree(reduced->base);
         xfree(reduced->iv);
+        if (reduced->inv)
+            xfree(reduced->inv);
         xfree(reduced);
         reduced = next;
     }
     free_defs(&d);
+    return changed;
+}
+
+// ============================================================================
+// A pointer stepped in place
+// ============================================================================
+//
+// Copy propagation leaves a reduced pointer stepped through a second one,
+//
+//     x = *q;  t = q + c;  y = *t;  ...  *q = y;  *t = x;  ...  q = t
+//
+// where q is read after t is formed, so that no register can hold both. Stepping q
+// itself where t was formed, and reading it c lower from there to the copy,
+//
+//     x = *q;  q = q + c;  y = *q;  ...  *(q - c) = y;  *q = x
+//
+// leaves one pointer, and the offset costs nothing in a load or a store.
+
+// The operands of `in` that may read a pointer, of the kinds this rewrite knows.
+static int pointer_reads(Tac_Instruction *in, Tac_Val ***slot)
+{
+    int n = 0;
+    switch (in->kind) {
+    case TAC_INSTRUCTION_COPY:
+        slot[n++] = &in->u.copy.src;
+        break;
+    case TAC_INSTRUCTION_LOAD:
+        slot[n++] = &in->u.load.src_ptr;
+        break;
+    case TAC_INSTRUCTION_STORE:
+        slot[n++] = &in->u.store.src;
+        slot[n++] = &in->u.store.dst_ptr;
+        break;
+    case TAC_INSTRUCTION_BINARY:
+        slot[n++] = &in->u.binary.src1;
+        slot[n++] = &in->u.binary.src2;
+        break;
+    case TAC_INSTRUCTION_ADD_PTR:
+        slot[n++] = &in->u.add_ptr.ptr;
+        slot[n++] = &in->u.add_ptr.index;
+        break;
+    default:
+        break;
+    }
+    return n;
+}
+
+static bool is_name(const Tac_Val *v, const char *name)
+{
+    return is_var(v) && !strcmp(v->u.var_name, name);
+}
+
+static int mentions(const Tac_Instruction *in, const char *name)
+{
+    Mention m = { name, 0 };
+    tac_visit_names(in, count_name, &m);
+    return m.count;
+}
+
+static int signed_kind(int kind)
+{
+    return kind == TAC_CONST_UINT    ? TAC_CONST_INT
+           : kind == TAC_CONST_ULONG ? TAC_CONST_LONG
+           : kind == TAC_CONST_ULONG_LONG ? TAC_CONST_LONG_LONG
+                                          : kind;
+}
+
+// Whether q is stepped and not yet copied at instruction `r` of block `rb`, in the
+// rewritten loop: `step` (t = q + c, in block sb) has run in this iteration and `copy`
+// (q = t) has not. -1 when it depends on the path.
+static int pending_at(const Ivsr *s, const Tac_Instruction *step, int sb, const BasicIv *copy,
+                      const Tac_Instruction *r, int rb)
+{
+    // An instruction `step` does not dominate comes before it in the iteration: `step`
+    // dominates the latches, so nothing it reaches can be reached around it.
+    if (!(rb == sb ? precedes(s->cfg->blocks[sb], step, r) : dominates(s, sb, rb)))
+        return 0;
+    int k = steps_between(s, step, sb, r, rb, copy);
+    return k < 0 ? -1 : !k;
+}
+
+// The rewrite for the copy `c` (q = t) in block `cb`: checked with `apply` off, done
+// with it on. True when it can be done.
+static bool step_pointer(Ivsr *s, const LoopDefs *d, Tac_Instruction *c, int cb, bool apply)
+{
+    const char *q = c->u.copy.dst->u.var_name, *t = c->u.copy.src->u.var_name;
+    int sb;
+    Tac_Instruction *step = single_def(d, t, &sb);
+    long long by;
+    if (!apply) {
+        if (!is_private(s, q) || !is_private(s, t) || single_def(d, q, NULL) != c || !step ||
+            step->kind != TAC_INSTRUCTION_ADD_PTR || step->is_volatile ||
+            !is_name(step->u.add_ptr.ptr, q) || !int_const(step->u.add_ptr.index, &by) || by == 0 ||
+            by * step->u.add_ptr.scale > 64 || by * step->u.add_ptr.scale < -64 ||
+            count_defs(s, t) != 1)
+            return false;
+        const Tac_Type *qt = type_of(s, q), *tt = type_of(s, t);
+        if (qt->kind != TAC_TYPE_POINTER || tt->kind != TAC_TYPE_POINTER)
+            return false;
+        char *qs = tac_type_str(qt), *ts = tac_type_str(tt);
+        bool same = !strcmp(qs, ts);
+        xfree(qs);
+        xfree(ts);
+        if (!same)
+            return false;
+        // The step ahead of the copy, and the copy in every iteration.
+        if (!(sb == cb ? precedes(s->cfg->blocks[sb], step, c) : dominates(s, sb, cb)))
+            return false;
+        for (int l = 0; l < s->preds.npreds[s->h]; l++) {
+            int p = s->preds.preds[s->h][l];
+            if (s->in_loop[p] && !dominates(s, cb, p))
+                return false;
+        }
+        if (live_at_exit(s, t, NULL, NULL))
+            return false;
+    }
+    int_const(step->u.add_ptr.index, &by);
+    int kind        = signed_kind(step->u.add_ptr.index->u.constant->kind);
+    int scale       = step->u.add_ptr.scale;
+    BasicIv copy    = { .name = q, .def = c, .block = cb, .step = 0 };
+    for (int b = 0; b < s->n; b++) {
+        if (!s->in_loop[b])
+            continue;
+        OptBlock *blk = s->cfg->blocks[b];
+        for (Tac_Instruction *in = blk->first; in; in = in->next) {
+            if (in == step || in == c)
+                continue;
+            Tac_Val **slot[4];
+            int n = pointer_reads(in, slot), nq = 0, nt = 0;
+            for (int k = 0; k < n; k++) {
+                nq += is_name(*slot[k], q);
+                nt += is_name(*slot[k], t);
+            }
+            const char *def = def_name(in);
+            if (!apply && (mentions(in, q) != nq || mentions(in, t) != nt ||
+                           (def && (!strcmp(def, q) || !strcmp(def, t)))))
+                return false;
+            if (nq) {
+                int pending = pending_at(s, step, sb, &copy, in, b);
+                if (pending < 0)
+                    return false;
+                // Only as an address, where the offset folds away.
+                bool load  = in->kind == TAC_INSTRUCTION_LOAD;
+                bool store = in->kind == TAC_INSTRUCTION_STORE && !is_name(in->u.store.src, q);
+                long long k;
+                bool add   = in->kind == TAC_INSTRUCTION_ADD_PTR && !is_name(in->u.add_ptr.index, q) &&
+                             int_const(in->u.add_ptr.index, &k) && in->u.add_ptr.scale == scale;
+                if (pending && !(load || store || add))
+                    return false;
+                if (pending && apply && add) {
+                    int akind = signed_kind(in->u.add_ptr.index->u.constant->kind);
+                    tac_free_val(in->u.add_ptr.index);
+                    in->u.add_ptr.index = new_const(akind, k - by);
+                } else if (pending && apply) {
+                    char low[32];
+                    fresh_temp(s, type_of(s, q), low);
+                    Tac_Instruction *a = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+                    a->u.add_ptr.ptr   = new_var(q);
+                    a->u.add_ptr.index = new_const(kind, -by);
+                    a->u.add_ptr.scale = scale;
+                    a->u.add_ptr.dst   = new_var(low);
+                    insert_before(blk, in, a);
+                    Tac_Val **at = load ? &in->u.load.src_ptr : &in->u.store.dst_ptr;
+                    tac_free_val(*at);
+                    *at = new_var(low);
+                }
+            }
+            if (nt && apply)
+                for (int k = 0; k < n; k++)
+                    if (is_name(*slot[k], t)) {
+                        tac_free_val(*slot[k]);
+                        *slot[k] = new_var(q);
+                    }
+        }
+        // An exit taken with q stepped: nothing after it may read q.
+        if (!apply)
+            for (int e = 0; e < blk->nsucc; e++) {
+                int x = blk->succs[e]->id;
+                if (s->in_loop[x])
+                    continue;
+                if (!blk->last)
+                    return false;
+                int pending = blk->last == step ? 1
+                              : blk->last == c  ? 0
+                                                : pending_at(s, step, sb, &copy, blk->last, b);
+                if (pending < 0 || (pending && live_into(s, x, q, NULL, NULL)))
+                    return false;
+            }
+    }
+    if (apply) {
+        opt_trace_instr("[ivsr] step in place:", step);
+        tac_free_val(step->u.add_ptr.dst);
+        step->u.add_ptr.dst = new_var(q);
+        remove_instr(s->cfg->blocks[cb], c);
+    }
+    return true;
+}
+
+// Step in place every pointer of the loop that can be; true when anything changed.
+static bool step_in_place(Ivsr *s)
+{
+    bool changed = false;
+    for (bool again = true; again;) {
+        again = false;
+        LoopDefs d;
+        collect_defs(s, s->in_loop, &d);
+        for (int b = 0; b < s->n && !again; b++) {
+            if (!s->in_loop[b])
+                continue;
+            for (Tac_Instruction *in = s->cfg->blocks[b]->first; in; in = in->next)
+                if (in->kind == TAC_INSTRUCTION_COPY && !in->is_volatile && is_var(in->u.copy.src) &&
+                    is_var(in->u.copy.dst) && step_pointer(s, &d, in, b, false)) {
+                    step_pointer(s, &d, in, b, true);
+                    again = changed = true;
+                    break;
+                }
+        }
+        free_defs(&d);
+    }
     return changed;
 }
 
@@ -1040,7 +1479,7 @@ bool reduce_induction_variables(OptCfg *cfg, Tac_TopLevel *fn)
         }
         s.h       = h;
         s.in_loop = in_loop;
-        if (reduce_loop(&s, h, in_loop))
+        if (reduce_loop(&s, h, in_loop) || step_in_place(&s))
             changed = true;
     }
     xfree(stack);

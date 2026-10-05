@@ -1100,6 +1100,22 @@ static bool backward(Cfg *c)
                     continue;
                 }
             }
+            // mov @p, x; add #size, p with the flags dead: mov @p+, x.
+            if (in->op == MSP_MOV && !in->vol && is_reg(&in->opnd[1]) && i + 1 < k->n &&
+                k->in[i + 1] &&
+                (in->opnd[0].kind == MSP_OPND_IND || msp_zero_indexed(&in->opnd[0]))) {
+                int p                = in->opnd[0].reg, sgn;
+                const Msp_Instr *inc = k->in[i + 1];
+                Msp_Operand by;
+                if (p >= 4 && in->opnd[1].reg != p && !inc->vol && adds_constant(inc, &by, &sgn) &&
+                    sgn > 0 && !by.sym && by.imm == (in->byte ? 1 : 2) && written(inc)->reg == p &&
+                    !(after[i + 1] & SR_BIT)) {
+                    in->opnd[0] = msp_postinc(p);
+                    drop(k, i + 1);
+                    changed = true;
+                    continue;
+                }
+            }
             // add #k, b; then b a base and dead: the offset in the address.
             Msp_Operand kk;
             int sign;

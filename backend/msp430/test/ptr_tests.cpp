@@ -31,6 +31,71 @@ TEST_F(Msp430Test, LoadsAutoIncrement)
     EXPECT_NE(std::string::npos, code.find("mov @r12+, r11\nmov @r12+, r14\n")) << code;
 }
 
+// A load through a pointer stepped right after it: @r12+. In a bubble sort the pointer
+// is stepped between the two loads, and the swap stores behind it.
+TEST_F(Msp430Test, LoadThenStepAutoIncrement)
+{
+    std::string code = Code(CompileToMsp430(R"(
+        void sort(int *v, int n)
+        {
+            for (int i = 0; i < n - 1; i++)
+                for (int j = 0; j < n - 1 - i; j++)
+                    if (v[j] > v[j + 1]) {
+                        int t = v[j];
+                        v[j] = v[j + 1];
+                        v[j + 1] = t;
+                    }
+        }
+    )"));
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r8+, r11
+mov @r8, r14
+cmp r11, r14
+jge .L17
+mov r14, -2(r8)
+mov r11, 0(r8)
+)"))
+        << code;
+    // The end pointer steps down by a constant the generator has.
+    EXPECT_NE(std::string::npos, code.find("decd r10\n")) << code;
+}
+
+TEST_F(Msp430Test, RunBubbleSort)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+        int a[16];
+        void sort(int *v, int n)
+        {
+            for (int i = 0; i < n - 1; i++)
+                for (int j = 0; j < n - 1 - i; j++)
+                    if (v[j] > v[j + 1]) {
+                        int t = v[j];
+                        v[j] = v[j + 1];
+                        v[j + 1] = t;
+                    }
+        }
+        int main(void)
+        {
+            unsigned x = 7;
+            int sum = 0;
+            for (int i = 0; i < 16; i++) {
+                x = x * 25173 + 13849;
+                a[i] = (int)x;
+                sum += a[i];
+            }
+            sort(a, 1);
+            sort(a, 0);
+            sort(a, 16);
+            for (int i = 0; i < 15; i++)
+                if (a[i] > a[i + 1])
+                    return 1;
+            for (int i = 0; i < 16; i++)
+                sum -= a[i];
+            return sum != 0;
+        }
+    )"));
+}
+
 // Stores to slots the peephole pass must keep: a local whose address a callee or a
 // pointer reads, a structure argument the callee reads by reference, a volatile.
 TEST_F(Msp430Test, RunSlotStoresKept)
