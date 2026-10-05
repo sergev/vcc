@@ -378,7 +378,7 @@ instructions.
     - GCC's unextended narrow results.
   - **Not in yet:** `float` arithmetic in those runs (K13), and chapters 11 and 12, which
     need globals (K12).
-- **K12. Globals and static data** (ch. 10). Every `geta` target is 4-aligned
+- **K12. Globals and static data** (ch. 10). *Done.* Every `geta` target is 4-aligned
   (see Addresses above).
   - **Data:**
     - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind emitted as
@@ -395,6 +395,25 @@ instructions.
   - **The base-register budget:** a test with many separate data objects measures how
     many base registers the linker allocates, against the `$32`–`$250` it has. Record the
     limit and what happens past it.
+
+  *Done.* Book chapters 1–12 pass against GCC: 397 tests (chapters 11 and 12 from K9
+  included).
+  - **`data.c`:** `.data`, `.bss` (all zeros), `.section .rodata` 4-aligned for `geta`;
+    `.byte`/`.short`/`.long`/`.quad`, a `float` as `.long` and a `double` as `.quad` of
+    its bits, a pointer as `.quad sym+off`, a string as `.ascii` and `.byte 0`.
+  - **Code:**
+    - a global is `ldo $x,g` and the like;
+    - a data address is `lda`;
+    - a function's address is `geta`, as GCC takes it;
+    - a `.rodata` object is `geta $255` and the register form.
+  - **Static locals** follow their function; `n$1` assembles as it is.
+  - **The base-register budget, measured:** `.MMIX.reg_contents` holds at most 223
+    global registers (`$32`–`$254`). With `crt0`'s eight reserved, code can reach 215
+    separate 256-byte windows of data. A 216th fails the link, "too many global
+    registers: 224, max 223", never silently. GCC has the same limit.
+  - **`data_tests.cpp`:** every initializer kind with padding, the sections, global
+    access and addresses, static locals, a run of data of every width (big-endian) with
+    static locals and pointers, and 200 separate windows.
 - **K13. Floating point** (ch. 13), in hardware.
   - **Arithmetic:** `fadd`, `fsub`, `fmul`, `fdiv` and `fsqrt` (`hw_sqrt`).
   - **Comparisons:**

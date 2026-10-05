@@ -7,6 +7,7 @@ add_library(mmix STATIC
     frame.c
     instr.c
     call.c
+    data.c
     fp.c
     codegen.c
 )
@@ -19,7 +20,7 @@ target_link_libraries(mmix backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(MMIX_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter[1-9]_tests[0-9]*\\.cpp$")
+list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-2])_tests[0-9]*\\.cpp$")
 
 add_executable(mmix-tests
     test/emit_tests.cpp
@@ -28,6 +29,7 @@ add_executable(mmix-tests
     test/int_tests.cpp
     test/flow_tests.cpp
     test/call_tests.cpp
+    test/data_tests.cpp
     test/run_tests.cpp
     ${MMIX_BOOK_SOURCES}
 )

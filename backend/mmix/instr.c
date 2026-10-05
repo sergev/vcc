@@ -307,6 +307,14 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
                       in->u.jump_if_zero.target);
         break;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        if (in->u.get_address.src->kind != TAC_VAL_VAR)
+            fatal_error("mmix: %s: the address of a constant", gen_name(g));
+        address_of(g, REG_A, in->u.get_address.src->u.var_name, 0);
+        store_val(g, REG_A, in->u.get_address.dst);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         gen_call(g, in);
