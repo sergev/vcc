@@ -65,6 +65,8 @@ typedef struct {
     char *holder;   // owned; the variable that holds the expression's value
     char *reads[2]; // owned; the variables the expression reads, or NULL
     bool load;      // a read through a pointer: any write to memory may change it
+    Tac_Const *konst; // owned; when the holder is a constant (forwarded from a
+                      // store), that constant; `holder` is then its spelling
 } Fact;
 
 static void fact_free(intptr_t value)
@@ -76,6 +78,8 @@ static void fact_free(intptr_t value)
     xfree(f->holder);
     xfree(f->reads[0]);
     xfree(f->reads[1]);
+    if (f->konst)
+        tac_free_const(f->konst);
     xfree(f);
 }
 
@@ -92,6 +96,11 @@ static Fact *fact_dup(const Fact *f)
     nf->reads[0] = f->reads[0] ? xstrdup(f->reads[0]) : NULL;
     nf->reads[1] = f->reads[1] ? xstrdup(f->reads[1]) : NULL;
     nf->load     = f->load;
+    nf->konst    = NULL;
+    if (f->konst) {
+        nf->konst  = tac_new_const(f->konst->kind);
+        *nf->konst = *f->konst;
+    }
     return nf;
 }
 
@@ -372,6 +381,42 @@ static bool same_type(const CseCtx *ctx, const char *holder, const char *dst)
     return tac_compare_type((const Tac_Type *)th, (const Tac_Type *)td);
 }
 
+// May the constant `k` stand in for `dst`? Its kind must be dst's own type.
+static bool const_fits(const CseCtx *ctx, const Tac_Const *k, const char *dst)
+{
+    intptr_t td = 0;
+    if (!ctx->have_fn)
+        return true;
+    if (!map_get((StringMap *)&ctx->private_types, dst, &td) || !td)
+        return false;
+    Tac_TypeKind t = ((const Tac_Type *)td)->kind;
+    switch (k->kind) {
+    case TAC_CONST_INT:
+        return t == TAC_TYPE_INT;
+    case TAC_CONST_LONG:
+        return t == TAC_TYPE_LONG;
+    case TAC_CONST_LONG_LONG:
+        return t == TAC_TYPE_LONG_LONG;
+    case TAC_CONST_UINT:
+        return t == TAC_TYPE_UINT;
+    case TAC_CONST_ULONG:
+        return t == TAC_TYPE_ULONG;
+    case TAC_CONST_ULONG_LONG:
+        return t == TAC_TYPE_ULONG_LONG;
+    case TAC_CONST_FLOAT:
+        return t == TAC_TYPE_FLOAT;
+    case TAC_CONST_DOUBLE:
+        return t == TAC_TYPE_DOUBLE;
+    case TAC_CONST_LONG_DOUBLE:
+        return t == TAC_TYPE_LONG_DOUBLE;
+    case TAC_CONST_SCHAR:
+        return t == TAC_TYPE_SCHAR;
+    case TAC_CONST_UCHAR:
+        return t == TAC_TYPE_UCHAR;
+    }
+    return false;
+}
+
 // ============================================================================
 // Candidates: an instruction taken apart into its destination, its operands
 // and the immediate fields that complete its spelling.
@@ -510,6 +555,42 @@ static void kill_written(StringMap *es, const CseCtx *ctx, const char *name)
         kill_loads(es);
 }
 
+// Store-to-load forwarding: after `*p = v`, a read `*p` is v until something is
+// written. v must be a private variable or a constant; a byte store truncates,
+// so only a word store gives the fact. It is spelled as a LOAD through p.
+static void gen_store(StringMap *es, const Tac_Instruction *ins, const CseCtx *ctx)
+{
+    const Tac_Val *p = ins->u.store.dst_ptr, *v = ins->u.store.src;
+    if (ins->kind != TAC_INSTRUCTION_STORE || ins->is_volatile || p->kind != TAC_VAL_VAR)
+        return;
+    if (v->kind == TAC_VAL_VAR && !is_private(ctx, v->u.var_name))
+        return;
+
+    Tac_Instruction probe;
+    memset(&probe, 0, sizeof probe);
+    probe.kind = TAC_INSTRUCTION_LOAD;
+    Candidate c;
+    memset(&c, 0, sizeof c);
+    c.opnd[0]        = p;
+    c.reads_operands = true;
+    c.load           = true;
+
+    Fact *f     = xalloc(sizeof(Fact), __func__, __FILE__, __LINE__);
+    f->key      = expr_key(&probe, &c);
+    f->reads[0] = xstrdup(p->u.var_name);
+    f->load     = true;
+    if (v->kind == TAC_VAL_VAR) {
+        f->holder = xstrdup(v->u.var_name);
+    } else {
+        StrBuf sb = { 0 };
+        spell_val(&sb, v);
+        f->holder  = sb.buf;
+        f->konst   = tac_new_const(v->u.constant->kind);
+        *f->konst  = *v->u.constant;
+    }
+    map_insert_free(es, f->key, (intptr_t)f, 0, fact_free);
+}
+
 // ============================================================================
 // apply_transfer: the Kill and Gen of one instruction, updating `es` in place.
 // ============================================================================
@@ -532,6 +613,7 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
         kill_alias_set(es, &ctx->observable);
         kill_alias_set(es, &ctx->address_taken);
         kill_loads(es);
+        gen_store(es, ins, ctx);
         return;
     case TAC_INSTRUCTION_COPY_TO_OFFSET:
     case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
@@ -607,6 +689,23 @@ static Tac_Instruction *rewrite(Tac_Instruction *ins, const StringMap *es, const
 
     const Fact *f    = (const Fact *)fval;
     const char *name = (*c.dst)->u.var_name;
+    if (f->konst) {
+        // A value forwarded from a store: a constant of the destination's type.
+        if (!is_private(ctx, name) || !const_fits(ctx, f->konst, name))
+            return ins;
+        opt_trace_instr("[cse] forward before:", ins);
+        Tac_Instruction *cp  = tac_new_instruction(TAC_INSTRUCTION_COPY);
+        Tac_Val *src         = tac_new_val(TAC_VAL_CONSTANT);
+        src->next            = NULL;
+        src->u.constant      = tac_new_const(f->konst->kind);
+        *src->u.constant     = *f->konst;
+        cp->u.copy.src       = src;
+        cp->u.copy.dst       = *c.dst;
+        *c.dst               = NULL;
+        cp->next             = ins->next;
+        opt_trace_instr("[cse] forward after: ", cp);
+        return cp;
+    }
     if (strcmp(f->holder, name) == 0) {
         opt_trace_instr("[cse] delete recomputation:", ins);
         *deleted = true;

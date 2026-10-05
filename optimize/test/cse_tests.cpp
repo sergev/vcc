@@ -561,6 +561,88 @@ TEST_F(CseTest, MemberReadAndStore)
 }
 
 // ---------------------------------------------------------------------------
+// Store-to-load forwarding.
+// ---------------------------------------------------------------------------
+
+// *p = v; x = *p  →  x = v.
+TEST_F(CseTest, ForwardStoredVariable)
+{
+    Tac_Instruction *body = chain({ make_store(make_var("v"), make_var("p")), load("p", "%1"),
+                                    make_return(make_var("%1")) });
+    EXPECT_EQ(Show(RunCse(body)), "*p = v\n"
+                                  "%1 = v\n"
+                                  "ret %1\n");
+}
+
+// A stored constant is forwarded too, when it is of the destination's type.
+TEST_F(CseTest, ForwardStoredConstant)
+{
+    Tac_Instruction *body =
+        chain({ make_store(make_const_int(7), make_var("p")), load("p", "%1"),
+                make_store(make_const_long(8), make_var("p")), load("p", "%2"),
+                make_return(make_var("%1")) });
+    Tac_TopLevel *fn            = make_fn_tl({ "p", "%1", "%2" });
+    fn->u.function.locals->type = tac_new_type(TAC_TYPE_POINTER);
+    fn->u.function.locals->type->u.pointer.target_type = tac_new_type(TAC_TYPE_INT);
+    fn->u.function.locals->next->type                  = tac_new_type(TAC_TYPE_INT);
+    fn->u.function.locals->next->next->type            = tac_new_type(TAC_TYPE_INT);
+    EXPECT_EQ(Show(RunCse(body, fn)), "*p = 7\n"
+                                      "%1 = 7\n"
+                                      "*p = 8L\n"
+                                      "%2 = *p\n" // a long 8 is not an int
+                                      "ret %1\n");
+}
+
+// *p = 1; *q = 2; x = *p: q may be p, so nothing is forwarded.
+TEST_F(CseTest, ForwardKilledByOtherStore)
+{
+    Tac_Instruction *body =
+        chain({ make_store(make_const_int(1), make_var("p")),
+                make_store(make_const_int(2), make_var("q")), load("p", "%1"),
+                make_return(make_var("%1")) });
+    EXPECT_EQ(Show(RunCse(body)), "*p = 1\n"
+                                  "*q = 2\n"
+                                  "%1 = *p\n"
+                                  "ret %1\n");
+}
+
+TEST_F(CseTest, ForwardKilledByCall)
+{
+    Tac_Instruction *body = chain({ make_store(make_var("v"), make_var("p")), make_fun_call("f"),
+                                    load("p", "%1"), make_return(make_var("%1")) });
+    EXPECT_EQ(Show(RunCse(body)), "*p = v\n"
+                                  "call f\n"
+                                  "%1 = *p\n"
+                                  "ret %1\n");
+}
+
+// The stored variable changing kills the fact.
+TEST_F(CseTest, ForwardKilledBySourceChange)
+{
+    Tac_Instruction *body = chain({ make_store(make_var("v"), make_var("p")),
+                                    make_copy(make_const_int(3), make_var("v")), load("p", "%1"),
+                                    make_return(make_var("%1")) });
+    EXPECT_EQ(Show(RunCse(body)), "*p = v\n"
+                                  "v = 3\n"
+                                  "%1 = *p\n"
+                                  "ret %1\n");
+}
+
+// A byte store truncates: nothing is forwarded from it.
+TEST_F(CseTest, NoForwardFromByteStore)
+{
+    Tac_Instruction *st   = make_store(make_var("v"), make_var("p"));
+    Tac_Instruction *ld   = load("p", "%1");
+    st->kind              = TAC_INSTRUCTION_STORE_BYTE;
+    ld->kind              = TAC_INSTRUCTION_LOAD_BYTE;
+    Tac_Instruction *body = chain({ st, ld, make_return(make_var("%1")) });
+    EXPECT_EQ(Show(RunCse(body)), "kind" + std::to_string(TAC_INSTRUCTION_STORE_BYTE) +
+                                      "\n"
+                                      "%1 = *p\n"
+                                      "ret %1\n");
+}
+
+// ---------------------------------------------------------------------------
 // The whole pipeline, on C source.
 // ---------------------------------------------------------------------------
 
@@ -626,4 +708,12 @@ TEST_F(CsePipelineTest, ArrayOfStructs)
                                      "{ return a[i].x + a[i].y; }",
                                      true)),
               "add_ptr=3 binary=1 load=2 return=1"); // 4 add_ptr without CSE
+}
+
+
+// *p = x; return *p reads nothing back.
+TEST_F(CsePipelineTest, StoreThenLoad)
+{
+    EXPECT_EQ(KindHistogram(Optimize("int f(int *p, int x) { *p = x; return *p; }", true)),
+              "return=1 store=1");
 }
