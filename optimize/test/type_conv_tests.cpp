@@ -238,6 +238,37 @@ TEST_F(OptimizerTest, ConvTruncateIntToCharUnsignedTarget)
     target_config = saved;
 }
 
+// A signed value converted to unsigned keeps its word on BESM-6: signed values are
+// 41 bits wide, so (unsigned)(signed char)-10 is 2^41 - 10, not 2^48 - 10.
+TEST_F(OptimizerTest, ConvSignExtendNegativeToUnsignedBesm6)
+{
+    const Target *saved = target_config;
+    target_config       = target_lookup("besm6");
+    Tac_Instruction *body =
+        make_conversion(TAC_INSTRUCTION_SIGN_EXTEND, make_const_char(-10), make_var("t"));
+    body->u.sign_extend.dst_kind = TAC_CONST_UINT;
+    body                         = constant_fold(body);
+
+    ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
+    EXPECT_EQ(body->u.copy.src->u.constant->kind, TAC_CONST_UINT);
+    EXPECT_EQ(body->u.copy.src->u.constant->u.uint_val, (1ULL << 41) - 10);
+    target_config = saved;
+}
+
+// The same conversion on a 32-bit-int target wraps modulo 2^32.
+TEST_F(OptimizerTest, ConvSignExtendNegativeToUnsignedX86)
+{
+    const Target *saved = target_config;
+    target_config       = target_lookup("x86_64");
+    Tac_Instruction *body =
+        make_conversion(TAC_INSTRUCTION_SIGN_EXTEND, make_const_char(-10), make_var("t"));
+    body->u.sign_extend.dst_kind = TAC_CONST_UINT;
+    body                         = constant_fold(body);
+
+    AssertFoldedUInt(body, 4294967286u);
+    target_config = saved;
+}
+
 TEST_F(OptimizerTest, ConvTruncateIntToCharSignedTarget)
 {
     const Target *saved = target_config;

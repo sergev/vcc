@@ -347,6 +347,30 @@ static int target_unsigned_bits(Tac_ConstKind kind)
     }
 }
 
+// The bits of a signed value sign-extended to `dst_kind`. To an unsigned word kind
+// the conversion keeps the word, which holds the value at the signed width of the
+// matching signed kind: a negative value wraps there, not at the unsigned width.
+// On BESM-6, where signed values are 41 bits of the 48-bit word,
+// (unsigned)(signed char)-10 is 2^41 - 10; elsewhere the two widths agree.
+static uint64_t sign_extend_bits(int64_t v, int dst_kind)
+{
+    Tac_ConstKind signed_kind;
+    switch (dst_kind) {
+    case TAC_CONST_UINT:
+        signed_kind = TAC_CONST_INT;
+        break;
+    case TAC_CONST_ULONG:
+        signed_kind = TAC_CONST_LONG;
+        break;
+    case TAC_CONST_ULONG_LONG:
+        signed_kind = TAC_CONST_LONG_LONG;
+        break;
+    default:
+        return (uint64_t)v;
+    }
+    return v < 0 ? unsigned_narrow((uint64_t)v, target_signed_bits(signed_kind)) : (uint64_t)v;
+}
+
 // Build a constant-valued Tac_Val of `kind` from a 64-bit result `bits`, wrapping
 // to the active target's value width for that kind.  This is where overflow
 // wrapping happens: signed kinds sign-extend from the target signed width and
@@ -772,7 +796,8 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
 
     case TAC_INSTRUCTION_SIGN_EXTEND:
         if (dst_kind >= 0 && const_is_integer_kind(src->kind))
-            return make_int_const_val((Tac_ConstKind)dst_kind, (uint64_t)const_to_int64(src));
+            return make_int_const_val((Tac_ConstKind)dst_kind,
+                                      sign_extend_bits(const_to_int64(src), dst_kind));
         rc = tac_new_const(src->kind == TAC_CONST_SCHAR   ? TAC_CONST_INT
                            : src->kind == TAC_CONST_INT  ? TAC_CONST_LONG
                            : src->kind == TAC_CONST_LONG ? TAC_CONST_LONG_LONG
