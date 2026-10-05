@@ -227,7 +227,7 @@ Naive and correct first:
 Each step is done when its book chapters pass and a few golden tests pin the selected
 instructions.
 
-- **K8. Frame.** Slots come from typed TAC and `ALLOCATE_LOCAL`, each aligned to its type,
+- **K8. Frame.** *Done.* Slots come from typed TAC and `ALLOCATE_LOCAL`, each aligned to its type,
   and the frame size is a multiple of 8.
   - **The memory stack:**
     - the prologue is `subu $254,$254,N` and the epilogue `addu $254,$254,N`, then `pop`;
@@ -241,6 +241,26 @@ instructions.
   - **Incoming stack arguments** are at `N + 8i` above the callee's SP.
   - **Incoming register parameters** arrive in `$0`… and are stored to their slots in the
     prologue.
+
+  *Done.*
+  - **`frame.c`:** types, constants, the frame, and memory access through `mem_op`: a
+    slot at `k($254)`, a global at `sym+off`, a read-only object through `geta $255`.
+  - **Naive registers:**
+    - A non-leaf function keeps `rJ` in `$0` (stored after the parameters), so every
+      call will be `pushj $1`, with the arguments in `$2`…`$17`.
+    - A leaf returns straight in `$0`; a non-leaf in `$1`, which the epilogue moves
+      after `put rJ`.
+    - `$1`–`$3` are scratch.
+  - **Memory:** a slot holds a value in its own width, so a store (`stbu`/`stwu`/`sttu`/
+    `sto`, unsigned, so no overflow event) truncates and a load (`ldb`…`ldo` by
+    signedness) extends. A `float` slot holds binary32 (`stsf`/`ldsf`); a `float`
+    parameter or result is its binary32 bits (`sttu`/`ldt`).
+  - **Constants:** `mmix_const_steps` already picks the shortest sequence (K9's
+    generator).
+  - **The epilogue label** is printed only when something jumps to it.
+  - **`frame_tests.cpp`:** parameters of each width, alignment, the 17th and 18th
+    parameters above the frame (an `int` at +4), a 328-byte frame through `$255`, and a
+    run with a frame over 255 bytes. Runs with calls follow at K11.
 - **K9. Integer ops** (ch. 2–4, 11, 12).
   - **Arithmetic:**
     - `addu`, `subu`, `mulu`, `negu`, and `and`/`or`/`xor`;

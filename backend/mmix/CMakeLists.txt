@@ -4,6 +4,10 @@
 add_library(mmix STATIC
     mmix_ir.c
     emit.c
+    frame.c
+    instr.c
+    call.c
+    fp.c
     codegen.c
 )
 target_include_directories(mmix PUBLIC .)
@@ -20,6 +24,7 @@ list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter1_tests\\.cpp$")
 add_executable(mmix-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
+    test/frame_tests.cpp
     test/run_tests.cpp
     ${MMIX_BOOK_SOURCES}
 )
