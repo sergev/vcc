@@ -112,15 +112,16 @@ macro(msp430_compile_libc_c name srcdir)
     list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The shared C library but the variadic part (T16), and the binary32 and binary64
+# The shared C library, and the binary32 and binary64
 # soft-float runtimes; from libc/ilp32 the long long division and conversions and the
 # binary64 frexp/ldexp/modf; the MSP430 EABI names GCC and clang call, over all of them.
-foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 puts putchar
+foreach(name atoi doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 printf
+        puts putchar snprintf sprintf
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
         strtok float32 float64)
     msp430_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
-foreach(name int64 frexp ldexp modf)
+foreach(name int64 int64conv frexp ldexp modf)
     msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
 foreach(name mspabi malloc)

@@ -10,8 +10,10 @@
 // address of its own object, uncopied, as a pointer argument, and the callee copies the
 // object into its frame on entry, before anything can change it.  (clang copies the
 // object onto the stack instead; the two do not interoperate there.)  A variadic callee
-// takes every argument on the stack.  Stack arguments lie in order above the return
-// address, 2-aligned.
+// takes its last named argument and all the variable ones on the stack; the named ones
+// before (the hidden result pointer counts) go by the rules above.  (clang puts every
+// argument of a variadic call on the stack.)  Stack arguments lie in order above the
+// return address, 2-aligned.
 //
 #include "internal.h"
 #include "xalloc.h"
@@ -26,8 +28,9 @@ typedef struct {
     int stack[MAX_PARTS]; // its offset in the stack argument area
 } ArgLoc;
 
-// Assign `n` arguments of types `types`; returns the bytes of stack arguments.
-static int assign_args(const Tac_Type *const *types, int n, bool variadic, ArgLoc *locs)
+// Assign `n` arguments of types `types`, those from index `stack_from` on all to the
+// stack; returns the bytes of stack arguments.
+static int assign_args(const Tac_Type *const *types, int n, int stack_from, ArgLoc *locs)
 {
     int next = 12, stack = 0;
     bool used_stack = false;
@@ -35,8 +38,9 @@ static int assign_args(const Tac_Type *const *types, int n, bool variadic, ArgLo
         ArgLoc *l = &locs[i];
         *l        = (ArgLoc){ 0 };
         l->agg    = !msp_is_scalar(types[i]);
-        l->parts  = l->agg ? 1 : msp_words(types[i]);
-        int left  = 16 - next;
+        l->parts      = l->agg ? 1 : msp_words(types[i]);
+        bool variadic = i >= stack_from;
+        int left      = 16 - next;
         bool regs = !variadic && l->parts <= left;
         if (!variadic && !used_stack && l->parts == 2 && left == 1) {
             l->reg[0]   = next++;
@@ -79,7 +83,8 @@ static ArgLoc *param_locs(const Gen *g, int *n)
             fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
         types[i++] = p->type;
     }
-    assign_args(types, *n, g->tl->u.function.variadic, locs);
+    // A variadic function's last named parameter starts the stack.
+    assign_args(types, *n, g->tl->u.function.variadic ? *n - 1 : *n, locs);
     xfree(types);
     return locs;
 }
@@ -155,7 +160,17 @@ static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, int *n, int *s
     int i                  = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next)
         types[i++] = val_type(g, a);
-    *stack = assign_args(types, *n, ft && ft->u.fun_type.variadic, locs);
+    // A variadic callee's last named argument starts the stack: count the named ones,
+    // and the hidden result pointer in front of them.
+    int stack_from = *n;
+    if (ft && ft->u.fun_type.variadic) {
+        const Tac_Type *ret = ft->u.fun_type.ret_type;
+        stack_from          = ret && !msp_is_scalar(ret) ? 1 : 0;
+        for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
+            stack_from++;
+        stack_from--;
+    }
+    *stack = assign_args(types, *n, stack_from, locs);
     xfree(types);
     return locs;
 }

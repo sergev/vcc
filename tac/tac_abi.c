@@ -115,6 +115,12 @@ int tac_aapcs64_class(const Tac_Type *t)
     return TAC_AAPCS64_GENERAL;
 }
 
+int tac_msp430_class(const Tac_Type *t)
+{
+    return t->kind == TAC_TYPE_ARRAY || t->kind == TAC_TYPE_STRUCTURE ? TAC_MSP430_BY_REF
+                                                                      : TAC_MSP430_VALUE;
+}
+
 int tac_aapcs32_class(const Tac_Type *t)
 {
     int esize;

@@ -653,6 +653,12 @@ int tac_aapcs64_hfa(const Tac_Type *t, int *esize);
 enum { TAC_AAPCS32_CORE = 0 };
 int tac_aapcs32_class(const Tac_Type *t);
 //
+// MSP430 EABI argument classes, as GCC implements it (tac_abi.c): a structure or union
+// goes by reference, a scalar by value.  The value of __builtin_va_class.
+//
+enum { TAC_MSP430_VALUE = 0, TAC_MSP430_BY_REF = 1 };
+int tac_msp430_class(const Tac_Type *t);
+//
 // System V AMD64 argument classes (tac_abi.c): in memory (over 16 bytes, or with an
 // eightbyte that merges to MEMORY), X87 (a long double, or a struct of one: returned in
 // st(0), passed in memory), or the class of each eightbyte, INTEGER or SSE, encoded

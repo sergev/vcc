@@ -67,14 +67,15 @@ static const Target targets[] = {
       8, 2,   // long double (same as double)
       2, 2,   // pointer (16-bit, 4 bytes on MSP430X)
       16, 16, 32, 64, // signed bits
-      0,   // plain char unsigned (clang: __CHAR_UNSIGNED__)
+      0,   // plain char unsigned (GCC and clang: __CHAR_UNSIGNED__)
       0,   // signed >> arithmetic
       1,   // aggregate_align (1)
       0,        // struct_return_max: every struct and union through a hidden
                 // pointer in R12, the first argument, even a 1-byte one
       0,        // struct_args_split
       NULL,     // immediate_args
-      NULL,     // va_class: every variadic argument is on the stack, va_arg a pointer walk
+      tac_msp430_class, // va_class: every variadic argument is on the stack, va_arg a
+                        // pointer walk that follows a structure's address
       0,        // ldouble_mant_dig: long double is double, binary64
       0,        // hw_sqrt: no FP hardware
       0 },      // double_mant_dig: binary64

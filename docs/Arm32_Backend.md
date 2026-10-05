@@ -146,7 +146,7 @@ In `libc/arm32/`:
 - `aeabi_divmod.s`, `aeabi_long.s`, `aeabi_conv.s`, `aeabi_mem.s` — the run-time ABI
   helpers, which both our code and clang's call. They take the base standard even in a
   hard-float program, so the conversions move values between core and VFP registers
-  around the C routines of `libc/ilp32/int64.c`.
+  around the C routines of `libc/ilp32/int64.c` and `int64conv.c`.
 - C library: `printf`, the string functions and the math helpers, all compiled by our
   compiler: most of it from `libc/common/`, the 64-bit and bit-level math from
   `libc/ilp32/`.

@@ -213,7 +213,7 @@ In `libc/avr/`:
 - C library: `printf` and the string and math functions from `libc/common/`; the
   binary32 soft-float runtime `libc/common/float32.c` (`__addsf3`, `__mulsf3`, `__divsf3`,
   the comparisons and conversions, correctly rounded, under the libgcc names with the
-  ordinary ABI); the `long long` division and conversions of `libc/ilp32/int64.c`, and
+  ordinary ABI); the `long long` division and conversions of `libc/ilp32/int64.c` and `int64conv.c`, and
   the multiply of `libc/common/muldi3.c`; and AVR's own `frexp.c`, `ldexp.c`, `modf.c`.
   All of it is compiled by `genavr` itself.
 - Headers: `libc/avr/include` holds AVR's own headers (`float.h`, `limits.h`, `math.h`,
