@@ -307,6 +307,10 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
                       in->u.jump_if_zero.target);
         break;
+    case TAC_INSTRUCTION_FUN_CALL:
+    case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+        gen_call(g, in);
+        break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:

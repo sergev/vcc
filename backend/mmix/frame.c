@@ -558,11 +558,22 @@ uint64_t const_as(const Tac_Const *c, const Tac_Type *t)
 
 void load_val_as(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
 {
-    if (v->kind == TAC_VAL_CONSTANT && !mmix_is_fp(val_type(g, v))) {
+    const Tac_Type *vt = val_type(g, v);
+    if (mmix_is_fp(vt) || !t || mmix_is_fp(t) || !mmix_is_scalar(t)) {
+        load_val(g, v, reg);
+        return;
+    }
+    if (v->kind == TAC_VAL_CONSTANT) {
         gen_const(g, reg, const_as(v->u.constant, t));
         return;
     }
-    load_val(g, v, reg);
+    // A variable of the operation's width but the other signedness (copy propagation
+    // through a cast that emitted nothing) is extended as the operation's type says.
+    int size = mmix_type_size(vt);
+    if (mmix_is_scalar(vt) && size == mmix_type_size(t) && size < 8)
+        mem_op(g, load_op_ext(size, !mmix_is_unsigned(t)), reg, v->u.var_name, 0);
+    else
+        load_val(g, v, reg);
 }
 
 Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)

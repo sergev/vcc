@@ -345,7 +345,7 @@ instructions.
   - **The filler is `.skip`, not C.** A C body that large (3400 statements, 85 K
     instructions) also ran correctly through the same expansion, but takes the frontend
     and optimizer over 6 s to compile, too long for a unit test.
-- **K11. Calls, scalar ABI** (ch. 9).
+- **K11. Calls, scalar ABI** (ch. 9). *Done.*
   - **The register-stack protocol:**
     - `X` is above every value that must survive the call;
     - arguments go in `$(X+1)`… (16 at most), the rest in the outgoing area;
@@ -358,6 +358,26 @@ instructions.
   - **A register-stack test:** values in `$0`…`$(X−1)` survive a call to a function that
     writes all 32 locals, and also deep recursion, which spills the register ring.
     `mmix -r` shows the ring when one fails.
+
+  *Done.* Book chapters 1–9 pass against GCC: 306 tests.
+  - **The naive call is `pushj $1`:** `rJ` in `$0` is the one value kept. The stack
+    arguments go first, through `$1`; then the register arguments straight into `$2`…;
+    an indirect call is `ldo $255` and `pushgo $1,$255,0`.
+  - **No parallel moves yet:** every argument comes from memory, so no source can be
+    clobbered. They come back with register allocation (K21).
+  - **Arguments take the parameter's type.** Copy propagation can leave an `int` variable
+    or constant where the callee declares `unsigned`, and GCC's callee trusts a
+    zero-extended register. `load_val_as` gives a variable of the same width the
+    operation's signedness too, in operations as in arguments.
+  - **`call_tests.cpp`:**
+    - golden calls: direct, indirect, stack arguments, an argument in the parameter's
+      type, a `float`'s bits;
+    - an assembly callee writing all 32 locals;
+    - recursion 100000 deep;
+    - eighteen arguments of every width, ours both ways and with GCC both ways;
+    - GCC's unextended narrow results.
+  - **Not in yet:** `float` arithmetic in those runs (K13), and chapters 11 and 12, which
+    need globals (K12).
 - **K12. Globals and static data** (ch. 10). Every `geta` target is 4-aligned
   (see Addresses above).
   - **Data:**
