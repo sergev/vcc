@@ -290,7 +290,7 @@ boundary.
     - `fix`, `fixu` and `fsqrt` take Y as a rounding mode and Z only as a register.
   - **Checked by hand:** `int main(void) { return 200; }` through `genmmix`, `as`, `ld`
     and `mmix` gives status 200.
-- **K7. Run harness and first program.** `mmix_test.h` on the `QemuTest` fixture:
+- **K7. Run harness and first program.** *Done.* `mmix_test.h` on the `QemuTest` fixture:
   - **The run configuration** (`QemuConfig`, `libc/mmix/CMakeLists.txt`):
     - `assembler` is `MMIX_AS` with `MMIX_AS_FLAGS`, an empty `link_script`;
     - the link is `MMIX_LD` with `MMIX_LD_FLAGS`, `crt0.o` first;
@@ -307,6 +307,18 @@ boundary.
     build from the start (K18), since GCC is installed already.
 
   Done when `int main(void) { return 200; }` runs and the fixture reports 200.
+
+  *Done.* `mmix-tests` has 27 tests, all passing:
+  - the emitter's (K6);
+  - golden assembly, which GNU `as` also assembles;
+  - `main` returning 200 and a wide constant;
+  - the book status line at −7, `INT_MAX` and `INT_MIN`;
+  - GCC's `main` on our `crt0-status`, whose unextended `int` result `crt0` extends;
+  - `putbyte` from assembly;
+  - a `trap 0,0,0` without our exit failing the run on the missing report;
+  - book chapter 1, compared with GCC's newlib build (`--wrap=main`).
+
+  `getch` is covered by the `mmix-runtime` CTest (K5), since the fixture feeds no stdin.
 
 ## Phase 2 — instruction selection, book order
 

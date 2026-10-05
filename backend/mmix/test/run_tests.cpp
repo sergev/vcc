@@ -1,0 +1,96 @@
+//
+// MMIX programs, and the runtime itself, on mmix.
+//
+#include <gtest/gtest-spi.h>
+
+#include "mmix_test.h"
+
+// main's result is mmix's exit status: $255 of the final trap, which crt0 sets.
+TEST_F(MmixTest, RunReturn200)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", CompileAndRunMmix("int main(void) { return 200; }"));
+    EXPECT_EQ(200, exit_status);
+}
+
+// The status is the low byte of the int.
+TEST_F(MmixTest, RunReturnWideConstant)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", CompileAndRunMmix("int main(void) { return 0x12345678; }"));
+    EXPECT_EQ(0x78, exit_status);
+}
+
+TEST_F(MmixTest, RunBookStatus)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("-7\n", CompileAndRunBook("int main(void) { return -7; }"));
+    EXPECT_EQ(249, exit_status);
+}
+
+TEST_F(MmixTest, RunBookStatusMax)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("2147483647\n", CompileAndRunBook("int main(void) { return 2147483647; }"));
+}
+
+TEST_F(MmixTest, RunBookStatusMin)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("-2147483648\n",
+              CompileAndRunBook("int main(void) { return -2147483647 - 1; }"));
+}
+
+// GCC's main leaves its int result unextended; crt0 extends it before printing.
+TEST_F(MmixTest, RunGccMainOnOurRuntime)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string src = "int main(void) { return -7; }";
+    EXPECT_EQ("-7\n", Run("", "crt0-status.o", &src, { "-O1" }, ".gcc"));
+    EXPECT_EQ(249, exit_status);
+}
+
+// A halt that is not our exit fails the run, though its status (0 here, as for a jump
+// into zeroed memory, which holds trap 0,0,0) could pass for a result: there is no
+// "[exit N]" report.
+TEST_F(MmixTest, RunHaltWithoutReportFails)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    ::testing::TestPartResultArray results;
+    std::string out;
+    {
+        ::testing::ScopedFakeTestPartResultReporter intercept(
+            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
+            &results);
+        out = RunAssembly("\t.text\n"
+                          "\t.global\tmain\n"
+                          "main:\n"
+                          "\tsetl\t$255,0\n"
+                          "\ttrap\t0,0,0\n");
+    }
+    EXPECT_EQ("ERROR", out);
+    ASSERT_EQ(1, results.size());
+    EXPECT_NE(std::string::npos,
+              std::string(results.GetTestPartResult(0).message()).find("did not stop itself"))
+        << results.GetTestPartResult(0).message();
+}
+
+// Hand-written assembly prints through putbyte, and returns a status.
+TEST_F(MmixTest, RuntimePutbyte)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("Hi\n", RunAssembly("\t.text\n"
+                                  "\t.global\tmain\n"
+                                  "main:\n"
+                                  "\tget\t$0,rJ\n"
+                                  "\tsetl\t$2,72\n"
+                                  "\tpushj\t$1,putbyte\n"
+                                  "\tsetl\t$2,105\n"
+                                  "\tpushj\t$1,putbyte\n"
+                                  "\tsetl\t$2,10\n"
+                                  "\tpushj\t$1,putbyte\n"
+                                  "\tput\trJ,$0\n"
+                                  "\tsetl\t$0,42\n"
+                                  "\tpop\t1,0\n"));
+    EXPECT_EQ(42, exit_status);
+}
