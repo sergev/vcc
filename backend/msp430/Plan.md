@@ -564,11 +564,19 @@ Phase 4 is done:
     - backward, on the liveness of r4–r15 and SR: dead instructions go, a load folds
       into the instruction that reads it, a load, operation and store become one memory
       operation, and a redundant `tst` or neutral constant goes.
+  - **Three more rules:**
+    - a read of a copied register reads the oldest register holding the value;
+    - a load moves forward into its one use, past instructions that leave it alone;
+    - an add of a constant to a register then used as a base becomes the offset
+      (`add #a, r15; mov @r15, r14` is `mov a(r15), r14`; `p[3]` is `mov 6(r12), r12`;
+      a struct copy is memory to memory).
   - **After the frame:** a jump to a lone `ret` is `ret`, and `call; ret` is `br`.
   - **Results:**
-    - the C library is 36 536 bytes, against 38 016 for GCC `-O2`;
-    - in cycles / code bytes: sort 104 998 / 238, sieve 120 533 / 74, CRC
-      147 897 / 162, binary64 loop 5 824 310 / 584, strings 108 374 / 226.
+    - the C library is 36 406 bytes, against 38 016 for GCC `-O2`;
+    - in cycles / code bytes: sort 83 807 / 190, sieve 91 796 / 56, CRC 147 129 / 156,
+      binary64 loop 5 823 478 / 568, strings 108 082 / 214;
+    - what sort still loses to GCC is mostly the same index computed again and again:
+      common subexpressions, a TAC-level matter.
 - **T22 is done.** With its variables in registers, a leaf has no slots and saves
   nothing, so it does no `sub`/`add` on SP and pushes nothing (`add r13, r12; ret`, as
   GCC's). Its epilogue is then a bare `ret`, which every early return now does in place.

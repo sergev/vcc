@@ -5,23 +5,19 @@
 #include "msp430_test.h"
 
 // The frontend copies a structure chunk by chunk, each a load and a store through the
-// pointers: words for a 2-aligned one, bytes for a char-only one.
-TEST_F(Msp430Test, StructCopyChunks)
-{
-    std::string code = Code(CompileToMsp430(R"(
-        struct P { int x; long y; };
-        void f(struct P *p, struct P *q) { *p = *q; }
-    )"));
-    EXPECT_NE(std::string::npos, code.find("mov @r14, r11\n")) << code;
-    EXPECT_EQ(std::string::npos, code.find("mov.b")) << code;
-}
+// pointers: words for a 2-aligned one, bytes for a char-only one; memory to memory,
+// each offset in the addresses.
+EXPECT_CODE(StructCopyChunks, R"(mov @r13, 0(r12)
+mov 2(r13), 2(r12)
+mov 4(r13), 4(r12)
+ret
+)", "struct P { int x; long y; }; void f(struct P *p, struct P *q) { *p = *q; }")
 
-TEST_F(Msp430Test, StructCopyBytes)
-{
-    std::string code = Code(CompileToMsp430(
-        "struct C { char c[3]; }; void f(struct C *p, struct C *q) { *p = *q; }"));
-    EXPECT_NE(std::string::npos, code.find("mov.b @r14, r11\n")) << code;
-}
+EXPECT_CODE(StructCopyBytes, R"(mov.b @r13, 0(r12)
+mov.b 1(r13), 1(r12)
+mov.b 2(r13), 2(r12)
+ret
+)", "struct C { char c[3]; }; void f(struct C *p, struct C *q) { *p = *q; }")
 
 // The callee copies a structure parameter into its slot on entry, from the address that
 // came in r12 (kept meanwhile in the slot's first word): a large one through a counted
@@ -80,9 +76,7 @@ mov 2(r15), 2(r1)
 // The callee hands the hidden pointer back in r12, where it came.
 EXPECT_CODE(StructResultPointerReturned, R"(sub #2, r1
 mov r13, 0(r1)
-mov r13, r14
-mov r12, r13
-mov r14, 0(r13)
+mov r13, 0(r12)
 add #2, r1
 ret
 )", "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }")

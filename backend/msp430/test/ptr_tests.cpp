@@ -29,8 +29,7 @@ ret
 )", "void f(int *p) { *p = 1234; }")
 
 // A char goes through a pointer as a byte.
-EXPECT_CODE(CharThroughPointer, R"(mov.b @r13, r13
-mov.b r13, 0(r12)
+EXPECT_CODE(CharThroughPointer, R"(mov.b @r13, 0(r12)
 ret
 )", "void f(char *p, char *q) { *p = *q; }")
 
@@ -43,28 +42,28 @@ TEST_F(Msp430Test, IndexScaling)
         struct T { char c[3]; };
         char b(struct T *p, int i) { return p[i].c[1]; }
     )"));
-    // In r15: the result goes where the pointer is.
+    // The address in r15, the loads through it.
     EXPECT_NE(std::string::npos, code.find(R"(mov r13, r15
 rla r15
 rla r15
 add r12, r15
-mov r15, r12
+mov 2(r15), r13
+mov @r15, r12
 )")) << code;
-    // By 3, inline: twice the index, plus the index.
+    // By 3, inline: twice the index, plus the index; the member's offset in the load.
     EXPECT_NE(std::string::npos, code.find(R"(mov r13, r15
 rla r15
 add r13, r15
 add r12, r15
+mov.b 1(r15), r12
 )")) << code;
     EXPECT_EQ(std::string::npos, code.find("__mspabi_mpyi")) << code;
 }
 
-// A constant index folds into one add.
-TEST_F(Msp430Test, ConstantIndex)
-{
-    std::string code = Code(CompileToMsp430("int f(int *p) { return p[3]; }"));
-    EXPECT_NE(std::string::npos, code.find("add #6, r12\n")) << code;
-}
+// A constant index folds into the load's offset.
+EXPECT_CODE(ConstantIndex, R"(mov 6(r12), r12
+ret
+)", "int f(int *p) { return p[3]; }")
 
 // The address of a slot is SP plus its offset (none at offset 0).
 TEST_F(Msp430Test, AddressOfLocal)

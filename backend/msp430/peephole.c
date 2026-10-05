@@ -668,6 +668,46 @@ static void step(Facts *f, const Msp_Instr *in, unsigned result)
         f->k[in->opnd[0].reg] = 0, f->zx[in->opnd[0].reg] = true;
 }
 
+// Register `r` of an operand read as a value (or as a base): the oldest register known
+// to hold the same.
+static bool rename_read(const Facts *f, Msp_Operand *o, bool value)
+{
+    if ((o->kind == MSP_OPND_REG && value) || o->kind == MSP_OPND_INDEXED ||
+        o->kind == MSP_OPND_IND) {
+        int r = root(f, o->reg);
+        if (o->reg >= 4 && r != o->reg) {
+            o->reg = r;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Every register `in` reads (and does not write) renamed to the oldest copy.
+static bool rename_reads(const Facts *f, Msp_Instr *in)
+{
+    bool changed = false;
+    switch (msp_form[in->op]) {
+    case MSP_FORM_DOUBLE:
+        changed |= rename_read(f, &in->opnd[0], true);
+        changed |= rename_read(f, &in->opnd[1], reads_only(in->op));
+        break;
+    case MSP_FORM_SINGLE:
+        changed |= rename_read(f, &in->opnd[0], in->op == MSP_PUSH || in->op == MSP_CALL);
+        break;
+    case MSP_FORM_DST:
+    case MSP_FORM_TWICE:
+        changed |= rename_read(f, &in->opnd[0], in->op == MSP_TST);
+        break;
+    case MSP_FORM_SRC:
+        changed |= rename_read(f, &in->opnd[0], true);
+        break;
+    default:
+        break;
+    }
+    return changed;
+}
+
 static bool forward(Cfg *c)
 {
     bool changed = false;
@@ -682,6 +722,7 @@ static bool forward(Cfg *c)
                 step(&f, in, c->result);
                 continue;
             }
+            changed |= rename_reads(&f, in);
             if (in->op == MSP_CLR && is_reg(a) && f.k[a->reg] == 0) {
                 drop(k, i);
                 changed = true;
@@ -835,6 +876,133 @@ static bool rmw_on(const Msp_Instr *rmw, int t)
     }
 }
 
+// Whether `in` writes memory, or moves SP (a slot's x(r1) then names another word).
+static bool writes_memory(const Msp_Instr *in)
+{
+    if (in->op == MSP_CALL || in->op == MSP_PUSH || in->op == MSP_POP)
+        return true;
+    const Msp_Operand *w = written(in);
+    return w && !is_reg(w);
+}
+
+// The `mov s, t` in block k before instruction i whose s the read of t at i can take
+// instead: t neither read nor written in between, nor s's registers written, nor memory
+// when s is in memory, and no jump.  Its index, or -1.
+static int sink_source(const Blk *k, int i, int t, unsigned result)
+{
+    for (int j = i - 1; j >= 0; j--) {
+        const Msp_Instr *p = k->in[j];
+        if (!p)
+            continue;
+        if (p->vol || is_branch(p->op))
+            return -1;
+        if (p->op == MSP_MOV && is_reg(&p->opnd[1]) && p->opnd[1].reg == t) {
+            const Msp_Operand *s = &p->opnd[0];
+            // s may involve t only right before i: t holds nothing else in between.
+            if (s->kind == MSP_OPND_POSTINC || ((opnd_regs(s) & R(t)) && j != i - 1))
+                return -1;
+            Set srcregs = opnd_regs(s);
+            bool mem    = s->kind != MSP_OPND_REG && s->kind != MSP_OPND_IMM;
+            for (int q = j + 1; q < i; q++) {
+                const Msp_Instr *m = k->in[q];
+                if (!m)
+                    continue;
+                Set def, use;
+                def_use(m, result, &def, &use);
+                if ((def & srcregs) || (mem && writes_memory(m)))
+                    return -1;
+            }
+            return j;
+        }
+        Set def, use;
+        def_use(p, result, &def, &use);
+        if ((def | use) & R(t))
+            return -1;
+    }
+    return -1;
+}
+
+// The constant `in` adds to its register, as an immediate and a sign; false for another
+// instruction.
+static bool adds_constant(const Msp_Instr *in, Msp_Operand *k, int *sign)
+{
+    *k    = (Msp_Operand){ .kind = MSP_OPND_IMM };
+    *sign = 1;
+    if (in->byte)
+        return false;
+    switch (in->op) {
+    case MSP_ADD:
+    case MSP_SUB:
+        if (in->opnd[0].kind != MSP_OPND_IMM || in->opnd[0].incoming || !is_reg(&in->opnd[1]))
+            return false;
+        *k    = in->opnd[0];
+        *sign = in->op == MSP_SUB ? -1 : 1;
+        return !k->sym || *sign > 0;
+    case MSP_INC:
+    case MSP_INCD:
+    case MSP_DEC:
+    case MSP_DECD:
+        if (!is_reg(&in->opnd[0]))
+            return false;
+        k->imm = in->op == MSP_INC || in->op == MSP_DEC ? 1 : 2;
+        *sign  = in->op == MSP_DEC || in->op == MSP_DECD ? -1 : 1;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Whether `in` reads register b only as the base of its memory operands (@b or x(b)),
+// besides perhaps writing it by a mov; no auto-increment, no call or push.
+static bool base_only(const Msp_Instr *in, int b)
+{
+    if (in->op == MSP_CALL || in->op == MSP_PUSH || in->op == MSP_BR)
+        return false;
+    bool based = false;
+    int n      = msp_form[in->op] == MSP_FORM_DOUBLE ? 2 : msp_form[in->op] == MSP_FORM_JUMP ||
+                                                       msp_form[in->op] == MSP_FORM_NONE
+                                                   ? 0
+                                                   : 1;
+    for (int o = 0; o < n; o++) {
+        const Msp_Operand *x = &in->opnd[o];
+        if (!(opnd_regs(x) & R(b)))
+            continue;
+        if (x->kind == MSP_OPND_IND || (x->kind == MSP_OPND_INDEXED && !x->incoming)) {
+            based = true;
+            continue;
+        }
+        if (is_reg(x) && o == 1 && in->op == MSP_MOV)
+            continue; // overwritten, after the address is used
+        return false;
+    }
+    return based;
+}
+
+// Fold an add of constant `k` (times `sign`) into every operand of `in` based on
+// register b: @b becomes k(b), x(b) x+k(b); false when an operand cannot take a symbol.
+static bool fold_offset(Msp_Instr *in, int b, const Msp_Operand *k, int sign)
+{
+    for (int pass = 0; pass < 2; pass++)
+        for (int o = 0; o < MSP_MAX_OPERANDS; o++) {
+            Msp_Operand *x = &in->opnd[o];
+            if ((x->kind != MSP_OPND_IND && x->kind != MSP_OPND_INDEXED) || x->reg != b)
+                continue;
+            if (pass == 0) {
+                if (k->sym && x->sym)
+                    return false;
+                continue;
+            }
+            if (x->kind == MSP_OPND_IND) {
+                x->kind = MSP_OPND_INDEXED;
+                x->imm  = 0;
+            }
+            x->imm = msp_imm_value(x->imm + sign * k->imm, false); // 16 bits, wrapped
+            if (k->sym)
+                x->sym = xstrdup(k->sym);
+        }
+    return true;
+}
+
 static bool backward(Cfg *c)
 {
     liveness(c);
@@ -902,6 +1070,37 @@ static bool backward(Cfg *c)
                     continue;
                 }
             }
+            // add #k, b; then b a base and dead: the offset in the address.
+            Msp_Operand kk;
+            int sign;
+            if (next && !next->vol && adds_constant(in, &kk, &sign) && !(after[i] & SR_BIT)) {
+                int b                 = written(in)->reg;
+                const Msp_Operand *nw = written(next);
+                bool redefined = nw && is_reg(nw) && nw->reg == b && next->op == MSP_MOV;
+                if (b >= 4 && base_only(next, b) && (redefined || !(after[i + 1] & R(b))) &&
+                    fold_offset(next, b, &kk, sign)) {
+                    drop(k, i);
+                    changed = true;
+                    continue;
+                }
+            }
+            // mov s, t; ...; op t, x with t dead after: op s, x.
+            if (msp_form[in->op] == MSP_FORM_DOUBLE && is_reg(&in->opnd[0])) {
+                int t = in->opnd[0].reg;
+                int j = t >= 4 && !(opnd_regs(&in->opnd[1]) & R(t)) && !(after[i] & R(t))
+                            ? sink_source(k, i, t, c->result)
+                            : -1;
+                const Msp_Operand *s = j >= 0 ? &k->in[j]->opnd[0] : NULL;
+                if (s && !(k->in[j]->byte && !in->byte) &&
+                    (s->kind != MSP_OPND_POSTINC || is_reg(&in->opnd[1]))) {
+                    in->opnd[0] = msp_copy(s);
+                    drop(k, j);
+                    changed = true;
+                    if (j == i - 1)
+                        i--;
+                    continue;
+                }
+            }
             if (!prev || prev->vol || prev->op != MSP_MOV || !is_reg(&prev->opnd[1]))
                 continue;
             int t                  = prev->opnd[1].reg;
@@ -921,17 +1120,6 @@ static bool backward(Cfg *c)
                 drop(k, i - 1);
                 changed = true;
                 i--; // the mov before is gone
-                continue;
-            }
-            // mov s, t; op t, x with t dead after: op s, x.
-            if (msp_form[in->op] == MSP_FORM_DOUBLE && is_reg(&in->opnd[0]) &&
-                in->opnd[0].reg == t && !(opnd_regs(&in->opnd[1]) & R(t)) &&
-                !(after[i] & R(t)) && !(prev->byte && !in->byte) &&
-                (src->kind != MSP_OPND_POSTINC || is_reg(&in->opnd[1]))) {
-                in->opnd[0] = msp_copy(src);
-                drop(k, i - 1);
-                changed = true;
-                i--;
                 continue;
             }
         }
