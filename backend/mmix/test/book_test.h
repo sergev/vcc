@@ -13,6 +13,8 @@ protected:
     {
         MmixTest::SetUp();
         static const SkippedTest skipped[] = {
+            { "Chapter13_StandardLibraryCall", "needs the C library (K14)" },
+            { "Chapter13_DoubleParamsAndResultLibrary", "needs the C library (K14)" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

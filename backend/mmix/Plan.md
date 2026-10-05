@@ -414,7 +414,7 @@ instructions.
   - **`data_tests.cpp`:** every initializer kind with padding, the sections, global
     access and addresses, static locals, a run of data of every width (big-endian) with
     static locals and pointers, and 200 separate windows.
-- **K13. Floating point** (ch. 13), in hardware.
+- **K13. Floating point** (ch. 13), in hardware. *Done.*
   - **Arithmetic:** `fadd`, `fsub`, `fmul`, `fdiv` and `fsqrt` (`hw_sqrt`).
   - **Comparisons:**
     - `<` and `>` are `fcmp` with `bn`/`bp`;
@@ -447,6 +447,32 @@ instructions.
   - **`long double`** is `double`: its conversions emit nothing.
   - **Tests:** the arithmetic, comparisons and conversions against the host's binary64
     and binary32 over a table of cases, NaN and the halfway and subnormal edges included.
+
+  *Done.* Book chapter 13 passes against GCC, but for its two programs that call the C
+  library, skipped until `libc.a` is built (K14).
+  - **`fp.c`:**
+    - `fadd`/`fsub`/`fmul`/`fdiv`, `fsqrt $x,0,$y` (rA's rounding mode);
+    - `feql` for `==`, then `zsz` for `!=`;
+    - `fcmp` with `zsn`/`zsp` for `<`/`>`, and `fcmp`, `fun`, `zsnp`/`zsnn` and
+      `csnz` for `<=`/`>=`;
+    - the sign flipped with `seth $255,#8000; xor`;
+    - the truth test `slu $x,$x,1`.
+  - **Conversions:**
+    - `fix`/`fixu` with mode 1 (toward zero);
+    - `flot`/`flotu`;
+    - between the FP types only the load and the store (`ldsf` widens exactly, `stsf`
+      rounds).
+  - **`sflot`/`sflotu` round once to binary32 (checked).** 2^62 + 2^38 + 1 becomes
+    2^62 + 2^39, where `flot` and then `stsf` would round twice, to 2^62. So integer to
+    `float` is `sflot` and `stsf`.
+  - **No scratch slot for rounding:** in naive selection every `float` result is stored
+    with `stsf`, which rounds it, so it needs none. Register allocation (K21) will need
+    the `stsf`/`ldsf` pair through one.
+  - **`fp_tests.cpp`:** golden sequences, and a run of 561 cases against the host:
+    binary64 + − × ÷ and the comparisons over 9×9 operands (subnormals, −0, 1e300); the
+    same for binary32 over 7×7, overflow to infinity included; NaN unordered; −0 false;
+    `sqrt`; and the conversions, the double-rounding case and `1e19` to `unsigned long`
+    included.
 - **K14. Pointers, arrays, chars, strings** (ch. 14–16).
   - **Loads and stores:**
     - `ldb`/`ldbu`/`ldw`/`ldwu`/`ldt`/`ldtu`/`ldo` and `stb`/`stw`/`stt`/`sto`;

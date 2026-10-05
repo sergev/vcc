@@ -284,6 +284,26 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_TRUNCATE:
         gen_convert(g, in->u.truncate.src, in->u.truncate.dst, -1);
         break;
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        gen_fp_convert(g, in->u.int_to_double.src, in->u.int_to_double.dst, in->kind);
+        break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);
         break;
