@@ -728,6 +728,16 @@ void gen_frame(Gen *g)
     }
     complete_incoming(g, g->frame_size + 2 * nsaved + 2);
 
+    // Frameless: the epilogue is a bare ret, which every early return does in place.
+    if (nsaved == 0 && g->frame_size == 0)
+        for (Msp_Block *b = g->fn->blocks; b; b = b->next)
+            for (Msp_Instr *in = b->head; in; in = in->next)
+                if (in->op == MSP_JMP && strcmp(in->opnd[0].sym, g->exit) == 0) {
+                    in->op = MSP_RET;
+                    xfree(in->opnd[0].sym);
+                    in->opnd[0] = (Msp_Operand){ 0 };
+                }
+
     // Epilogue, the reverse.
     msp_new_block(g->fn, g->exit);
     if (g->frame_size)

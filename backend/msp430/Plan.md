@@ -549,6 +549,10 @@ Phase 4 is done:
   - **Book programs set aside:** three programs are undefined at 16 bits, and their
     results depend on garbage. Two declare `strlen` as returning `unsigned long`, so they
     read r13; one reads past an `int` and past an array.
+- **T22 is done.** With its variables in registers, a leaf has no slots and saves
+  nothing, so it does no `sub`/`add` on SP and pushes nothing (`add r13, r12; ret`, as
+  GCC's). Its epilogue is then a bare `ret`, which every early return now does in place.
+  The C library goes to 41 766 bytes; the benchmarks have no early returns.
 - **T21. Register allocation** on `backend/common/regalloc.c`.
   - **Classes:**
     - `char`/`short`/`int`/pointer are `REGALLOC_INT`;

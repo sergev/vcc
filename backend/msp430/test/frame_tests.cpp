@@ -9,6 +9,29 @@ EXPECT_CODE(FramelessConstant, R"(mov #7, r12
 ret
 )", "int f(void) { return 7; }")
 
+// A leaf with no slots and no call-saved register returns in place: no frame, no jump
+// to an epilogue that would be a bare ret.
+TEST_F(Msp430Test, FramelessEarlyReturn)
+{
+    std::string code =
+        Code(CompileToMsp430("int max(int a, int b) { if (a > b) return a; return b; }"));
+    EXPECT_EQ(std::string::npos, code.find("jmp")) << code;
+    EXPECT_EQ(std::string::npos, code.find("r1\n")) << code;
+    EXPECT_EQ(std::string::npos, code.find("push")) << code;
+    size_t first = code.find("ret\n");
+    EXPECT_NE(std::string::npos, first) << code;
+    EXPECT_NE(std::string::npos, code.find("ret\n", first + 1)) << code;
+}
+
+// With a frame, an early return still goes to the one epilogue.
+TEST_F(Msp430Test, EarlyReturnToEpilogue)
+{
+    std::string code = Code(CompileToMsp430(
+        "int g(int); int f(int a) { if (a) return g(a) + a; return 0; }"));
+    EXPECT_NE(std::string::npos, code.find("jmp")) << code;
+    EXPECT_NE(std::string::npos, code.find("pop r10\nret\n")) << code;
+}
+
 // Allocated: the parameters stay in the registers they came in, and the frame vanishes.
 EXPECT_CODE(ParamsInRegisters, R"(add r13, r12
 ret
