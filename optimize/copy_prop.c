@@ -33,6 +33,7 @@
 
 #include "alias.h"
 #include "cfg.h"
+#include "dataflow.h"
 #include "optimize.h"
 #include "string_map.h"
 #include "tac.h"
@@ -66,50 +67,6 @@ static void pair_free(intptr_t value)
 static void copy_set_destroy(StringMap *cs)
 {
     map_destroy_free(cs, pair_free);
-}
-
-// ============================================================================
-// KeyBuf — a growable list of keys to delete *after* iterating. StringMap is an
-// AVL tree; removing nodes from it while map_iterate is walking it would corrupt
-// the traversal. So the kill/intersect callbacks only *collect* keys here, and
-// keybuf_flush performs the actual removals once iteration has finished.
-// ============================================================================
-
-typedef struct {
-    char **keys;
-    int count;
-    int cap;
-} KeyBuf;
-
-static void keybuf_push(KeyBuf *kb, char *key)
-{
-    if (kb->count == kb->cap) {
-        int new_cap     = kb->cap ? kb->cap * 2 : 8;
-        char **new_keys = xalloc(new_cap * sizeof(char *), __func__, __FILE__, __LINE__);
-        for (int i = 0; i < kb->count; i++)
-            new_keys[i] = kb->keys[i];
-        xfree(kb->keys);
-        kb->keys = new_keys;
-        kb->cap  = new_cap;
-    }
-    kb->keys[kb->count++] = key;
-}
-
-// Remove all collected keys from cs; free the associated CopyPair values.
-// kb.keys[i] points into the CopyPair's name field; pair_free will free it.
-// map_remove_key frees the StringNode's own copy of the key string.
-static void keybuf_flush(KeyBuf *kb, StringMap *cs)
-{
-    for (int i = 0; i < kb->count; i++) {
-        intptr_t old_val = 0;
-        map_get(cs, kb->keys[i], &old_val);
-        map_remove_key(cs, kb->keys[i]);
-        if (old_val)
-            pair_free(old_val);
-    }
-    xfree(kb->keys);
-    kb->keys  = NULL;
-    kb->count = kb->cap = 0;
 }
 
 // ============================================================================
@@ -167,7 +124,7 @@ static void kill_name(StringMap *cs, const char *name)
     KeyBuf kb       = { 0 };
     KillNameCtx ctx = { &kb, name };
     map_iterate(cs, kill_name_cb, &ctx);
-    keybuf_flush(&kb, cs);
+    keybuf_flush(&kb, cs, pair_free);
 }
 
 // ============================================================================
@@ -199,65 +156,7 @@ static void kill_alias_set(StringMap *cs, const StringMap *alias)
     KeyBuf kb        = { 0 };
     KillAliasCtx ctx = { &kb, alias };
     map_iterate(cs, kill_alias_cb, &ctx);
-    keybuf_flush(&kb, cs);
-}
-
-// ============================================================================
-// get_defining_dst: returns the dst Tac_Val* for instructions that define a
-// named variable, so the transfer function knows which copies to Kill. COPY,
-// FUN_CALL and STORE are handled separately by apply_transfer (COPY also Gens a
-// pair; FUN_CALL/STORE additionally kill aliased copies). Returns NULL for
-// instructions that define nothing (control flow, the side-effecting writes).
-// ============================================================================
-
-static const Tac_Val *get_defining_dst(const Tac_Instruction *ins)
-{
-    switch (ins->kind) {
-    case TAC_INSTRUCTION_UNARY:
-        return ins->u.unary.dst;
-    case TAC_INSTRUCTION_BINARY:
-        return ins->u.binary.dst;
-    case TAC_INSTRUCTION_SIGN_EXTEND:
-    case TAC_INSTRUCTION_TRUNCATE:
-    case TAC_INSTRUCTION_ZERO_EXTEND:
-    case TAC_INSTRUCTION_DOUBLE_TO_INT:
-    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
-    case TAC_INSTRUCTION_INT_TO_DOUBLE:
-    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
-    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
-    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
-    case TAC_INSTRUCTION_INT_TO_FLOAT:
-    case TAC_INSTRUCTION_UINT_TO_FLOAT:
-    case TAC_INSTRUCTION_FLOAT_TO_INT:
-    case TAC_INSTRUCTION_FLOAT_TO_UINT:
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
-    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
-    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
-    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
-    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
-    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
-    case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:
-    case TAC_INSTRUCTION_CHAR_PTR_TO_PTR:
-        return ins->u.sign_extend.dst; // all 14 conversions share this layout
-    case TAC_INSTRUCTION_GET_ADDRESS:
-    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
-    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
-        return ins->u.get_address.dst;
-    case TAC_INSTRUCTION_LOAD:
-    case TAC_INSTRUCTION_LOAD_BYTE:
-        return ins->u.load.dst;
-    case TAC_INSTRUCTION_ADD_PTR:
-        return ins->u.add_ptr.dst;
-    case TAC_INSTRUCTION_PTR_DIFF:
-        return ins->u.ptr_diff.dst;
-    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
-    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
-        return ins->u.copy_from_offset.dst;
-    default:
-        return NULL;
-    }
+    keybuf_flush(&kb, cs, pair_free);
 }
 
 // ============================================================================
@@ -323,7 +222,7 @@ static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const Stri
     }
 
     // Every other defining instruction just Kills copies mentioning its dst.
-    const Tac_Val *dst = get_defining_dst(ins);
+    const Tac_Val *dst = opt_defining_dst(ins);
     if (dst && dst->kind == TAC_VAL_VAR) {
         OPT_TRACE("[copy-prop] kill copies involving %s\n", dst->u.var_name);
         kill_name(cs, dst->u.var_name);
@@ -362,7 +261,7 @@ static void copy_set_intersect(StringMap *result, const StringMap *other)
     KeyBuf kb        = { 0 };
     IntersectCtx ctx = { &kb, other };
     map_iterate(result, intersect_cb, &ctx);
-    keybuf_flush(&kb, result);
+    keybuf_flush(&kb, result, pair_free);
 }
 
 // ============================================================================
@@ -585,28 +484,11 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     // Stage 2: the forward reaching-copies dataflow.
     int n = cfg->nblocks;
 
-    // The meet combines predecessors' out-sets, so build predecessor lists by
-    // inverting the successor edges. First count preds, then fill them.
-    int *npreds = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
-    int **preds = xalloc(n * sizeof(int *), __func__, __FILE__, __LINE__);
-    for (int i = 0; i < n; i++)
-        npreds[i] = 0;
-    for (int i = 0; i < n; i++) {
-        const OptBlock *b = cfg->blocks[i];
-        for (int j = 0; j < b->nsucc; j++)
-            npreds[b->succs[j]->id]++;
-    }
-    for (int i = 0; i < n; i++) {
-        preds[i] = npreds[i] ? xalloc(npreds[i] * sizeof(int), __func__, __FILE__, __LINE__) : NULL;
-        npreds[i] = 0;
-    }
-    for (int i = 0; i < n; i++) {
-        const OptBlock *b = cfg->blocks[i];
-        for (int j = 0; j < b->nsucc; j++) {
-            int sid                   = b->succs[j]->id;
-            preds[sid][npreds[sid]++] = i;
-        }
-    }
+    // The meet combines predecessors' out-sets.
+    OptPreds pr;
+    opt_preds_build(&pr, cfg);
+    const int *npreds = pr.npreds;
+    int *const *preds = pr.preds;
 
     // Allocate in/out sets, all starting empty (no copies reaching).
     StringMap *in_sets  = xalloc(n * sizeof(StringMap), __func__, __FILE__, __LINE__);
@@ -720,12 +602,10 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     for (int i = 0; i < n; i++) {
         copy_set_destroy(&in_sets[i]);
         copy_set_destroy(&out_sets[i]);
-        xfree(preds[i]);
     }
     xfree(in_sets);
     xfree(out_sets);
-    xfree(preds);
-    xfree(npreds);
+    opt_preds_free(&pr);
     map_destroy(&static_names);
     map_destroy(&address_taken);
 }

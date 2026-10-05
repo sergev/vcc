@@ -4,6 +4,7 @@ add_library(optimize STATIC
     cfg.c
     unreachable.c
     alias.c
+    dataflow.c
     copy_prop.c
     dead_store.c
 )
