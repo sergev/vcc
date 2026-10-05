@@ -31,6 +31,9 @@ protected:
             { "Chapter15_BigArray", "arrays too large for a 16-bit size_t" },
             { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
             { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31: undefined" },
+            { "Chapter17_SizeofExtern", "arrays too large for 15.5 KB of RAM" },
+            { "Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes",
+              "shifts an int by 31: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

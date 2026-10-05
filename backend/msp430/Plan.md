@@ -506,6 +506,19 @@ instructions.
   - **Results** always use the frontend's hidden pointer (T1), which arrives in R12. The
     callee returns it in R12 as well.
 
+  *Done.*
+  - The frontend copies a structure chunk by chunk, through loads and stores, on every
+    byte-addressed target. The backend's own copies (`copy_named`, `copy_bytes`:
+    unrolled up to 16 moves, else a loop through r12) serve whole-aggregate moves, such
+    as a structure argument.
+  - `malloc`/`calloc`/`realloc`/`free` arrive here, not at T20, since chapter 18 needs
+    them: `libc/msp430/malloc.c`, a bump allocator in C on AVR's design.
+  - `struct_tests.cpp` has goldens and runs: structures of 1, 3, 4, 10 and 60 bytes
+    passed and returned, a union, nested members, arrays of structures, the allocator.
+  - Book chapters 17–20 pass. Skipped, as on AVR: `Chapter17_SizeofExtern` (too large
+    for 15.5 KB of RAM) and `Chapter19_..._FoldCompoundBitwiseAssignAllTypes` (shifts an
+    `int` by 31).
+
 ## Phase 3 — ABI conformance
 
 - **T16. Variadic functions and `<stdarg.h>`.**

@@ -104,7 +104,9 @@ endforeach()
 foreach(name int64 frexp ldexp modf)
     msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
-msp430_compile_libc_c(mspabi ${src})
+foreach(name mspabi malloc)
+    msp430_compile_libc_c(${name} ${src})
+endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
