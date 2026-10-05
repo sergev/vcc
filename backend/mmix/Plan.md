@@ -276,7 +276,7 @@ boundary.
     between types of the same width.
   - An unfolded `long double` constant keeps its binary128 bits in TAC, as on ARM32; the
     backend rounds it once.
-- **K3. Headers.** `libc/mmix/include/`, ahead of `libc/lp64/include/` and
+- **K3. Headers.** *Done.* `libc/mmix/include/`, ahead of `libc/lp64/include/` and
   `libc/common/include/`:
   - `float.h`: binary32 `FLT_*`, binary64 `DBL_*` = `LDBL_*`, `FLT_EVAL_METHOD` 0.
   - `stddef.h`, `stdint.h`: `wchar_t` = `int`, `wint_t` = `unsigned int`, and GCC's fast
@@ -291,6 +291,12 @@ boundary.
   - `inttypes.h` and `math.h` from `libc/lp64/include/`.
   - `TEST_MODEL_INCLUDE_DIR` is `libc/lp64/include` for MMIX.
   - Add the `mmix-headers` CTest and its `-cpp` twin.
+
+  *Done, but for `limits.h`:* keying `CHAR_MIN`/`CHAR_MAX` off `__CHAR_UNSIGNED__` breaks
+  under the host's `cc -E`, which the build and the fixtures use and which defines the
+  macro by the host's own `char` (signed on this arm64 Mac, so riscv64 and aarch64 would
+  turn signed). So MMIX has its own `limits.h`, a copy of x86-64's, as T3 decided for
+  MSP430. `TEST_MODEL_INCLUDE_DIR` is set when the MMIX test binary exists (K7).
 - **K4. CMake detection and the simulator fixture.**
   - **`libc/mmix/CMakeLists.txt`** finds `mmix-knuth-mmixware-as`, `-ld`, `-ar` and `-gcc`
     and `mmix`. It sets `MMIX_TOOLS_FOUND`, `MMIX_AS`, `MMIX_LD`, `MMIX_AR`, `MMIX_GCC`,

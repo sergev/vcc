@@ -1,7 +1,8 @@
 # LP64 standard library headers
 
 The C11 headers that depend only on the LP64 data model shared by riscv64 and
-aarch64: `float.h`, `inttypes.h`, `limits.h`, `math.h`.  They are searched after the
+aarch64: `float.h`, `inttypes.h`, `limits.h`, `math.h`.  x86-64 and MMIX take
+`inttypes.h` and `math.h` from here, with a `float.h` and `limits.h` of their own.  They are searched after the
 target's own directory ([libc/riscv64/include](../../riscv64/include) or
 [libc/aarch64/include](../../aarch64/include)) and before
 [libc/common/include](../../common/include):

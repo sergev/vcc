@@ -61,7 +61,7 @@ endif()
 # anywhere on the line.  Exposed to all subdirectories as SystemCpp (always
 # invoked with -E).  A target's headers are its own directory (BESM6_INCLUDE_DIR,
 # RISCV_INCLUDE_DIR, RISCV32_INCLUDE_DIR, AARCH64_INCLUDE_DIR, ARM32_INCLUDE_DIR, X86_INCLUDE_DIR, AVR_INCLUDE_DIR,
-# MSP430_INCLUDE_DIR), then the data-model ones (LP64_INCLUDE_DIR for riscv64, aarch64 and x86_64,
+# MSP430_INCLUDE_DIR, MMIX_INCLUDE_DIR), then the data-model ones (LP64_INCLUDE_DIR for riscv64, aarch64, x86_64 and mmix,
 # ILP32_INCLUDE_DIR for riscv32 and arm32, IP16_INCLUDE_DIR for avr and msp430), and last the target-neutral
 # LIBC_COMMON_INCLUDE_DIR.
 #
@@ -74,6 +74,7 @@ set(ARM32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/arm32/include)
 set(X86_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/x86/include)
 set(AVR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/avr/include)
 set(MSP430_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/msp430/include)
+set(MMIX_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/mmix/include)
 set(LP64_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/lp64/include)
 set(ILP32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/ilp32/include)
 set(IP16_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/ip16/include)

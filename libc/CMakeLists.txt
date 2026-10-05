@@ -37,3 +37,4 @@ add_subdirectory(x86)
 add_subdirectory(avr)
 # msp430 too.
 add_subdirectory(msp430)
+add_subdirectory(mmix)
