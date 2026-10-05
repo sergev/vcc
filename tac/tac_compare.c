@@ -7,9 +7,13 @@
 // Treat two floating-point constants as equal when they compare equal OR both
 // are NaN. Raw == makes NaN != NaN, which would keep the optimizer's fixed-point
 // loop from ever converging on a folded NaN constant (e.g. 0.0/0.0).
+//
+// 0.0 and -0.0 compare equal with ==, but they are different constants (1/x tells
+// them apart): copy propagation must not merge `r = 0.0` on one path with
+// `r = -0.0` on another.
 static bool fp_equal(long double x, long double y)
 {
-    return x == y || (isnan(x) && isnan(y));
+    return (x == y && signbit(x) == signbit(y)) || (isnan(x) && isnan(y));
 }
 
 // Binary128 constants are equal when their bits are, or both are NaN.
