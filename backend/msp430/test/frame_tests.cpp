@@ -9,35 +9,53 @@ EXPECT_CODE(FramelessConstant, R"(mov #7, r12
 ret
 )", "int f(void) { return 7; }")
 
-// Register parameters go to their slots; the frame is reserved and released around the
-// body.
-EXPECT_CODE(ParamsStored,
-            R"(sub #6, r1
+// Allocated: the parameters stay in the registers they came in, and the frame vanishes.
+EXPECT_CODE(ParamsInRegisters, R"(add r13, r12
+ret
+)", "int f(int a, int b) { return a + b; }")
+
+// Without allocation, register parameters go to their slots; the frame is reserved and
+// released around the body, and the operation works on the slots.
+TEST_F(Msp430Test, ParamsStored)
+{
+    NoRegalloc();
+    EXPECT_EQ(R"(sub #6, r1
 mov r12, 0(r1)
 mov r13, 2(r1)
-mov @r1, r12
-add 2(r1), r12
-mov r12, 4(r1)
+mov @r1, 4(r1)
+add 2(r1), 4(r1)
 mov 4(r1), r12
 add #6, r1
 ret
 )",
-            "int f(int a, int b) { return a + b; }")
+              Code(CompileToMsp430("int f(int a, int b) { return a + b; }")));
+}
 
-// The fifth int comes on the stack, above the frame and the return address, and is
-// read where it lies.
-TEST_F(Msp430Test, StackParamAboveFrame)
+// The fifth int comes on the stack, above the return address (and the frame, when
+// there is one), and is read where it lies.
+EXPECT_CODE(StackParamAboveFrame, R"(mov 2(r1), r12
+ret
+)", "int f(int a, int b, int c, int d, int e) { return e; }")
+
+TEST_F(Msp430Test, StackParamAboveSlots)
 {
+    NoRegalloc();
     std::string code = Code(CompileToMsp430(
         "int f(int a, int b, int c, int d, int e) { return e; }"));
     EXPECT_NE(std::string::npos, code.find("sub #8, r1\n")) << code;
     EXPECT_NE(std::string::npos, code.find("mov 10(r1), r12\n")) << code;
 }
 
-// A long with only r15 left: its low word in r15, its high word on the stack, copied
-// into the slot.
-TEST_F(Msp430Test, SplitLongParam)
+// A long with only r15 left: its low word in r15, its high word on the stack, taken
+// into registers, or copied into the slot.
+EXPECT_CODE(SplitLongParam, R"(mov r15, r12
+mov 2(r1), r13
+ret
+)", "long f(int a, int b, int c, long d) { return d; }")
+
+TEST_F(Msp430Test, SplitLongParamStored)
 {
+    NoRegalloc();
     std::string code =
         Code(CompileToMsp430("long f(int a, int b, int c, long d) { return d; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r15, 6(r1)
@@ -45,18 +63,25 @@ mov 12(r1), 8(r1)
 )")) << code;
 }
 
-// A char parameter is stored as a byte.
-EXPECT_CODE(CharParam,
-            R"(sub #4, r1
+// A char parameter is extended where it is, or stored as a byte.
+EXPECT_CODE(CharParam, R"(sxt r12
+ret
+)", "int f(signed char c) { return c; }")
+
+TEST_F(Msp430Test, CharParamStored)
+{
+    NoRegalloc();
+    EXPECT_EQ(R"(sub #4, r1
 mov.b r12, 0(r1)
-mov.b @r1, r12
-sxt r12
-mov r12, 2(r1)
+mov.b @r1, r15
+sxt r15
+mov r15, 2(r1)
 mov 2(r1), r12
 add #4, r1
 ret
 )",
-            "int f(signed char c) { return c; }")
+              Code(CompileToMsp430("int f(signed char c) { return c; }")));
+}
 
 // Slots are aligned to their types; a char array may be odd-sized.
 TEST_F(Msp430Test, SlotsAligned)

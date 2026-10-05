@@ -12,7 +12,7 @@ TEST_F(Msp430Test, StructCopyChunks)
         struct P { int x; long y; };
         void f(struct P *p, struct P *q) { *p = *q; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("mov @r15, ")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov @r14, r11\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("mov.b")) << code;
 }
 
@@ -20,12 +20,12 @@ TEST_F(Msp430Test, StructCopyBytes)
 {
     std::string code = Code(CompileToMsp430(
         "struct C { char c[3]; }; void f(struct C *p, struct C *q) { *p = *q; }"));
-    EXPECT_NE(std::string::npos, code.find("mov.b @r15, ")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov.b @r14, r11\n")) << code;
 }
 
 // The callee copies a structure parameter into its slot on entry, from the address that
 // came in r12 (kept meanwhile in the slot's first word): a large one through a counted
-// loop, @r14+ only into a register (clang's assembler).
+// loop from r15, memory to memory, r13 and r14 pushed around it.
 TEST_F(Msp430Test, StructParamCopyLoop)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -33,17 +33,20 @@ TEST_F(Msp430Test, StructParamCopyLoop)
         int g(struct B b) { return b.a[39]; }
     )"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r12, 0(r1)
-mov @r1, r14
-mov r1, r15
+mov @r1, r15
+push r14
+push r13
+mov r1, r14
+add #4, r14
 mov #40, r13
-)")) << code;
-    EXPECT_NE(std::string::npos,
-              code.find(R"(mov @r14+, r12
-mov r12, 0(r15)
+mov @r15, 0(r14)
 incd r15
+incd r14
 dec r13
-jne )"))
-        << code;
+jne .Lv1
+pop r13
+pop r14
+)")) << code;
 }
 
 // A structure argument past the registers goes as its address on the stack; the callee
@@ -55,9 +58,9 @@ TEST_F(Msp430Test, StructArgAddressOnStack)
         int w(int, int, int, int, struct S);
         int h(struct S *p) { return w(1, 2, 3, 4, *p); }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r11
-add #)")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov r11, 0(r1)
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
+add #2, r15
+mov r15, 0(r1)
 mov #1, r12
 )")) << code;
 }
@@ -68,22 +71,21 @@ TEST_F(Msp430Test, StructParamFromStack)
         struct S { int a, b; };
         int w(int a, int b, int c, int d, struct S s) { return s.b; }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 16(r1), r14
-mov r1, r15
-add #8, r15
-mov @r14, 0(r15)
-mov 2(r14), 2(r15)
+    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r15
+mov @r15, 0(r1)
+mov 2(r15), 2(r1)
 )")) << code;
 }
 
-// The callee hands the hidden pointer back in r12.
-TEST_F(Msp430Test, StructResultPointerReturned)
-{
-    std::string code = Code(CompileToMsp430(
-        "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r12
-add #)")) << code;
-}
+// The callee hands the hidden pointer back in r12, where it came.
+EXPECT_CODE(StructResultPointerReturned, R"(sub #2, r1
+mov r13, 0(r1)
+mov @r1, r14
+mov r12, r13
+mov r14, 0(r13)
+add #2, r1
+ret
+)", "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }")
 
 // Structures of every size passed and returned, a union, nested members, arrays of
 // structures and their copies.

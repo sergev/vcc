@@ -169,12 +169,16 @@ TEST_F(RelaxTest, UnconditionalJump)
 TEST_F(Msp430Test, RunLongLoop)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    // 300 adds of a constant no generator supplies: 4 bytes each, in a register.
     std::string body;
-    for (int i = 0; i < 100; i++)
-        body += "        sum = sum + " + std::to_string(i % 7) + ";\n";
+    int sum = 0;
+    for (int i = 0; i < 300; i++) {
+        body += "        sum = sum + " + std::to_string(i % 7 + 10) + ";\n";
+        sum += 2 * (i % 7 + 10);
+    }
     std::string src = R"(int main(void) {
     int sum = 0;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 2; i++) {
 )" +
                       body + R"(    }
     return sum;
@@ -182,5 +186,5 @@ TEST_F(Msp430Test, RunLongLoop)
 )";
     std::string asm_text = CompileToMsp430(src.c_str()); // once: the symbols live per test
     EXPECT_NE(std::string::npos, Code(asm_text).find("br #")) << "not relaxed";
-    EXPECT_EQ("2950\n", Run(asm_text, "crt0-status.o"));
+    EXPECT_EQ(std::to_string(sum) + "\n", Run(asm_text, "crt0-status.o"));
 }

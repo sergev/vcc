@@ -32,14 +32,13 @@ ret
 )")) << code;
 }
 
-// A float's second operand goes in r15:r14.
-TEST_F(Msp430Test, FloatMultiplyCallsHelper)
-{
-    std::string code = Code(CompileToMsp430("float f(float a, float b) { return a * b; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r15
+// A float's second operand goes in r15:r14, where it came: its high word, r15 being
+// the scratch register, is kept meanwhile in r11.
+EXPECT_CODE(FloatMultiplyCallsHelper, R"(mov r15, r11
+mov r11, r15
 call #__mspabi_mpyf
-)")) << code;
-}
+ret
+)", "float f(float a, float b) { return a * b; }")
 
 // Each comparison through its own libgcc predicate, tested against zero: > as r >= 1.
 TEST_F(Msp430Test, DoubleCompare)
@@ -47,30 +46,32 @@ TEST_F(Msp430Test, DoubleCompare)
     std::string code = Code(CompileToMsp430("int f(double a, double b) { return a > b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(call #__gtdf2
 cmp #1, r12
-mov #1, r11
+mov #1, r12
 jge )"))
         << code;
 }
 
-// Negation flips the sign bit, inline.
+// Negation flips the sign bit, inline, in the result's slot (a double stays in memory).
 TEST_F(Msp430Test, DoubleNegateInline)
 {
     std::string code = Code(CompileToMsp430("double f(double a) { return -a; }"));
-    EXPECT_NE(std::string::npos, code.find("xor #-32768, r15\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("xor #-32768, 14(r1)\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("call")) << code;
 }
 
-// The truth test: any bit but the sign.
+// The truth test: any bit but the sign, word by word where the value lies.
 TEST_F(Msp430Test, DoubleTruthTest)
 {
     std::string code = Code(CompileToMsp430("int f(double a) { return a ? 1 : 2; }"));
     EXPECT_NE(std::string::npos,
-              code.find(R"(bic #-32768, r15
-bis r13, r12
-bis r14, r12
-bis r15, r12
-tst r12
-)"))
+              code.find(R"(tst 0(r1)
+jne .Lv1
+tst 2(r1)
+jne .Lv1
+tst 4(r1)
+jne .Lv1
+bit #32767, 6(r1)
+jeq )"))
         << code;
 }
 

@@ -7,10 +7,12 @@
 //   - binary64 arithmetic, __mspabi_addd and the like: the first operand in r11:r8 (so
 //     the prologue saves r8-r10), the second in r15:r12;
 //   - comparisons, the libgcc predicates __ltdf2 and the like: a float in r13:r12 and
-//     r15:r14, a double in r15:r12 and on the stack at 0(r1);
+//     r15:r14, a double in r15:r12 and on the stack at 0(r1), the result 0/1 set from
+//     the flags straight into its variable;
 //   - conversions, __mspabi_fixdli, __mspabi_fltlid and the like (__fixunssfsi and
 //     __fixunssfdi from float to unsigned), the operand in r12 up;
-// the result in r12 up, a comparison's an int in r12.
+// the result in r12 up, a comparison's an int in r12.  Negation flips the sign bit and
+// the truth test looks at the bits, in place.
 //
 #include "internal.h"
 
@@ -68,21 +70,26 @@ static bool compare_helper(Tac_BinaryOperator op, int size, const char **name, i
     }
 }
 
-// Two FP operands into place for a helper: r13:r12 and r15:r14; for binary64,
-// r11:r8 and r15:r12 (`r8`), or r15:r12 and 0(r1).
+// Two FP operands into place for a helper, at once: r13:r12 and r15:r14; for binary64,
+// r11:r8 and r15:r12 (`r8`), or r15:r12 and 0(r1), the stack first.
 static void load_operands(Gen *g, const Tac_Val *a, const Tac_Val *b, int size, bool r8)
 {
     if (size == 8 && r8) {
-        load_val(g, a, 8, 4, EXT_TYPE);
-        load_val(g, b, 12, 4, EXT_TYPE);
+        Load l[2] = { { a, 8, 4, EXT_TYPE }, { b, 12, 4, EXT_TYPE } };
+        load_vals(g, l, 2);
     } else if (size == 8) {
         for (int i = 0; i < 4; i++)
             emit2(g, MSP_MOV, val_word(g, b, i), msp_indexed(MSP_SP, NULL, 2 * i));
         load_val(g, a, 12, 4, EXT_TYPE);
     } else {
-        load_val(g, a, 12, 2, EXT_TYPE);
-        load_val(g, b, 14, 2, EXT_TYPE);
+        Load l[2] = { { a, 12, 2, EXT_TYPE }, { b, 14, 2, EXT_TYPE } };
+        load_vals(g, l, 2);
     }
+}
+
+bool fp_arith(Tac_BinaryOperator op, int size)
+{
+    return arith_helper(op, size) != NULL;
 }
 
 int fp_out_size(Tac_BinaryOperator op, int size)
@@ -107,8 +114,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
         fatal_error("msp430: %s: FP operator %d is not implemented", gen_name(g), op);
     call_helper(g, name);
     emit2(g, MSP_CMP, msp_imm(k), msp_reg(12));
-    gen_set_on(g, cond);
-    store_val(g, in->u.binary.dst, 11, 1);
+    gen_set_on(g, cond, in->u.binary.dst);
 }
 
 void gen_fp_unary(Gen *g, const Tac_Instruction *in)
@@ -117,15 +123,17 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
     int n              = msp_words(val_type(g, src));
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
-    case TAC_UNARY_NEGATE_DOUBLE:
-        load_val(g, src, 12, n, EXT_TYPE);
-        emit2(g, MSP_XOR, msp_imm(0x8000), msp_reg(12 + n - 1));
-        store_val(g, dst, 12, n);
+    case TAC_UNARY_NEGATE_DOUBLE: {
+        Move m[4];
+        for (int i = 0; i < n; i++)
+            m[i] = (Move){ val_word(g, dst, i), val_word(g, src, i), false };
+        parallel_moves(g, m, n);
+        emit2(g, MSP_XOR, msp_imm(0x8000), val_word(g, dst, n - 1));
         break;
+    }
     case TAC_UNARY_NOT:
         gen_fp_test(g, src);
-        gen_set_on(g, MSP_JEQ);
-        store_val(g, dst, 11, 1);
+        gen_set_on(g, MSP_JEQ, dst);
         break;
     default:
         fatal_error("msp430: %s: FP unary operator %d is not implemented", gen_name(g),
@@ -136,11 +144,22 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
 void gen_fp_test(Gen *g, const Tac_Val *v)
 {
     int n = msp_words(val_type(g, v));
-    load_val(g, v, 12, n, EXT_TYPE);
-    emit2(g, MSP_BIC, msp_imm(0x8000), msp_reg(12 + n - 1));
-    for (int i = 1; i < n; i++)
-        emit2(g, MSP_BIS, msp_reg(12 + i), msp_reg(12));
-    emit1(g, MSP_TST, msp_reg(12));
+    if (v->kind == TAC_VAL_CONSTANT) {
+        // Zero or not, known now: the flags of 0 or 1.
+        uint64_t bits = const_bits(v->u.constant) & ~(1ull << (16 * n - 1));
+        emit2(g, MSP_MOV, msp_imm(bits != 0), msp_reg(MSP_SCRATCH));
+        emit1(g, MSP_TST, msp_reg(MSP_SCRATCH));
+        return;
+    }
+    // The low words, then the top one without its sign.
+    char nonzero[32];
+    new_label(nonzero);
+    for (int i = 0; i < n - 1; i++) {
+        emit1(g, MSP_TST, val_word(g, v, i));
+        emit1(g, MSP_JNE, msp_label(nonzero));
+    }
+    emit2(g, MSP_BIT, msp_imm(0x7fff), val_word(g, v, n - 1));
+    gen_label_block(g, nonzero);
 }
 
 void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)

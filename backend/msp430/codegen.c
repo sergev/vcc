@@ -7,10 +7,14 @@
 
 #include "internal.h"
 
+bool msp430_regalloc = true;
+
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
     gen_init(&g, program, tl);
+    if (msp430_regalloc)
+        gen_regalloc(&g);
     place_params(&g);
     layout_frame(&g);
     store_params(&g);

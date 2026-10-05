@@ -73,11 +73,11 @@ TEST_F(Msp430Test, ArgStructByAddress)
         int f(struct S *p) { return u(*p, 1, 2, 0x12345678L); }
     )"));
     EXPECT_NE(std::string::npos, code.find("mov #4660, 0(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
-add #)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(mov #1, r13
 mov #2, r14
 mov #22136, r15
+mov r1, r12
+add #2, r12
 call #u
 )")) << code;
 }
@@ -107,15 +107,13 @@ call #v
         << code;
 }
 
-// Through a pointer: loaded into r11, not called through an SP-relative operand.
-TEST_F(Msp430Test, IndirectCall)
-{
-    std::string code = Code(CompileToMsp430("int f(int (*fp)(int)) { return fp(7); }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov #7, r12
-mov @r1, r11
+// Through a pointer: moved into r11 with the arguments, never called through an
+// SP-relative operand.
+EXPECT_CODE(IndirectCall, R"(mov r12, r11
+mov #7, r12
 call r11
-)")) << code;
-}
+ret
+)", "int f(int (*fp)(int)) { return fp(7); }")
 
 // Results: r12, r13:r12, r15:r12.
 TEST_F(Msp430Test, ResultsStored)

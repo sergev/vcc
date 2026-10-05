@@ -1,13 +1,20 @@
 //
-// MSP430 pointers, arrays, chars and strings: loads and stores memory to memory through
-// the pointer in r15, index scaling, byte access; and runs, the C library built by
-// genmsp430 included.
+// MSP430 pointers, arrays, chars and strings: loads and stores through the pointer's
+// register (or r15, loaded with it), index scaling, byte access; and runs, the C library
+// built by genmsp430 included.
 //
 #include "msp430_test.h"
 
-// A load through a pointer goes straight to the destination's slot.
-TEST_F(Msp430Test, LoadThroughPointer)
+// A load through a pointer in a register: the word into the pointer's own register last.
+EXPECT_CODE(LoadThroughPointer, R"(mov 2(r12), r13
+mov @r12, r12
+ret
+)", "long f(long *p) { return *p; }")
+
+// Through r15 from a pointer in memory, straight to the destination's slot.
+TEST_F(Msp430Test, LoadThroughPointerInMemory)
 {
+    NoRegalloc();
     std::string code = Code(CompileToMsp430("long f(long *p) { return *p; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
 mov @r15, 2(r1)
@@ -17,21 +24,15 @@ mov 2(r15), 4(r1)
 }
 
 // A store takes its value straight from the immediate (or memory).
-TEST_F(Msp430Test, StoreThroughPointer)
-{
-    std::string code = Code(CompileToMsp430("void f(int *p) { *p = 1234; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
-mov #1234, 0(r15)
-)")) << code;
-}
+EXPECT_CODE(StoreThroughPointer, R"(mov #1234, 0(r12)
+ret
+)", "void f(int *p) { *p = 1234; }")
 
 // A char goes through a pointer as a byte.
-TEST_F(Msp430Test, CharThroughPointer)
-{
-    std::string code = Code(CompileToMsp430("void f(char *p, char *q) { *p = *q; }"));
-    EXPECT_NE(std::string::npos, code.find("mov.b @r15, ")) << code;
-    EXPECT_NE(std::string::npos, code.find(", 0(r15)\n")) << code;
-}
+EXPECT_CODE(CharThroughPointer, R"(mov.b @r13, r13
+mov.b r13, 0(r12)
+ret
+)", "void f(char *p, char *q) { *p = *q; }")
 
 // The index scaled by shifts for a power of two, by __mspabi_mpyi otherwise.
 TEST_F(Msp430Test, IndexScaling)
@@ -41,11 +42,20 @@ TEST_F(Msp430Test, IndexScaling)
         struct T { char c[3]; };
         char b(struct T *p, int i) { return p[i].c[1]; }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(rla r12
-rla r12
-add )")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov #3, r13
+    // In r15: the result goes where the pointer is.
+    EXPECT_NE(std::string::npos, code.find(R"(mov r13, r15
+rla r15
+rla r15
+add r12, r15
+mov r15, r12
+)")) << code;
+    // The pointer, in a register the call clobbers, kept on the stack.
+    EXPECT_NE(std::string::npos, code.find(R"(push r12
+mov r13, r12
+mov #3, r13
 call #__mspabi_mpyi
+pop r15
+add r15, r12
 )")) << code;
 }
 
@@ -62,7 +72,8 @@ TEST_F(Msp430Test, AddressOfLocal)
     std::string code = Code(
         CompileToMsp430("void g(int *); void f(void) { int x, y; g(&x); g(&y); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
-mov r12, )")) << code;
+call #g
+)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
 add #2, r12
 )")) << code;

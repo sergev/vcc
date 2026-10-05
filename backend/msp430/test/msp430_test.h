@@ -95,7 +95,16 @@ inline QemuConfig msp430_clang_config()
 
 class Msp430Test : public QemuTest {
 protected:
-    Msp430Test() : QemuTest("msp430", msp430_gcc_config()) {}
+    Msp430Test() : QemuTest("msp430", msp430_gcc_config())
+    {
+        msp430_regalloc = true; // the default; a test may change it
+    }
+
+    // Pin the selection on memory operands: every variable in its slot.
+    static void NoRegalloc()
+    {
+        msp430_regalloc = false;
+    }
 
     // Assembly of every toplevel of the translation unit.
     std::string CompileToMsp430(const char *src)

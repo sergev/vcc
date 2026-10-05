@@ -1,6 +1,7 @@
 #ifndef MSP_CODEGEN_H
 #define MSP_CODEGEN_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "tac.h"
@@ -8,6 +9,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Allocate registers (on by default); off, every variable lives in memory.
+extern bool msp430_regalloc;
 
 // Translate one TAC toplevel to MSP430 assembly on `out`.  `program` heads the whole
 // translation unit, lowered with -t msp430.

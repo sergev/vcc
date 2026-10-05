@@ -10,6 +10,7 @@ add_library(msp430 STATIC
     relax.c
     data.c
     fp.c
+    regalloc.c
     codegen.c
 )
 target_include_directories(msp430 PUBLIC .)
@@ -29,6 +30,7 @@ add_executable(msp430-tests
     test/frame_tests.cpp
     test/int_tests.cpp
     test/relax_tests.cpp
+    test/regalloc_tests.cpp
     test/call_tests.cpp
     test/data_tests.cpp
     test/ptr_tests.cpp

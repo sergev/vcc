@@ -27,9 +27,9 @@ TEST_F(Msp430Test, VariadicCallStructAddress)
         int f(struct S *p) { return v(1, *p); }
     )"));
     EXPECT_NE(std::string::npos, s.find(R"(mov #1, 0(r1)
-mov r1, r11
-add #6, r11
-mov r11, 2(r1)
+mov r1, r15
+add #4, r15
+mov r15, 2(r1)
 call #v
 )")) << s;
 }

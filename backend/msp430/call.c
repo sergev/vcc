@@ -104,19 +104,21 @@ void place_params(Gen *g)
     ArgLoc *locs = param_locs(g, &n);
     int i        = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++)
-        if (!locs[i].agg && all_on_stack(&locs[i]))
+        if (!locs[i].agg && all_on_stack(&locs[i]) && !var_reg(g, p->name, 0))
             place_stack_param(g, p->name, p->type, locs[i].stack[0]);
     xfree(locs);
 }
 
-// The register parameters go to their slots first, a structure's address into the first
-// word of its slot (layout_frame makes it big enough); then each structure is copied
-// in, through r12-r15, from the address in its slot or among the stack arguments.
+// The parameters into place: first those in memory, a structure's address into the first
+// word of its slot (layout_frame makes it big enough); then those in registers, all at
+// once, from the registers and the stack; then each structure copied in through r15,
+// from the address in its slot or among the stack arguments.
 void store_params(Gen *g)
 {
     int n;
     ArgLoc *locs = param_locs(g, &n);
-    int i        = 0;
+    Move m[MAX_PARTS * 4 + 4];
+    int k = 0, i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
         const ArgLoc *l = &locs[i];
         if (l->agg) {
@@ -124,32 +126,43 @@ void store_params(Gen *g)
                 emit2(g, MSP_MOV, msp_reg(l->reg[0]), mem_at(g, p->name, 0));
             continue;
         }
-        if (all_on_stack(l))
+        if (map_get(&g->dead, p->name, NULL))
             continue;
-        if (msp_type_size(p->type) == 1) {
+        bool in_reg = var_reg(g, p->name, 0) != 0;
+        if (!in_reg && all_on_stack(l))
+            continue; // it lives where it came
+        if (!in_reg && msp_type_size(p->type) == 1) {
             emit2b(g, MSP_MOV, msp_reg(l->reg[0]), mem_at(g, p->name, 0));
             continue;
         }
         for (int j = 0; j < l->parts; j++) {
             Msp_Operand src = l->reg[j] ? msp_reg(l->reg[j]) : incoming_at(l->stack[j]);
-            emit2(g, MSP_MOV, src, mem_at(g, p->name, 2 * j));
+            if (in_reg)
+                m[k++] = (Move){ mem_at(g, p->name, 2 * j), src, false };
+            else
+                emit2(g, MSP_MOV, src, mem_at(g, p->name, 2 * j));
         }
     }
+    parallel_moves(g, m, k);
     i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
         const ArgLoc *l = &locs[i];
         if (!l->agg)
             continue;
         emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(l->stack[0]),
-              msp_reg(14));
-        address_of(g, 15, p->name, 0);
-        copy_bytes(g, msp_type_size(p->type), msp_type_align(p->type));
+              msp_reg(MSP_SCRATCH));
+        copy_ptr(g, true, MSP_SCRATCH, p->name, 0, msp_type_size(p->type),
+                 msp_type_align(p->type));
     }
     xfree(locs);
 }
 
-// The types and locations of the arguments of call `in`, `n` of them; free both.
-static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, int *n, int *stack)
+// The types and locations of the arguments of call `in`, whose types `type_of` gives,
+// `n` of them; free the result.
+typedef const Tac_Type *(*TypeOf)(const Gen *g, const void *arg, const Tac_Val *v);
+
+static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, TypeOf type_of,
+                         const void *arg, int *n, int *stack)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type;
     *n                 = 0;
@@ -159,7 +172,7 @@ static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, int *n, int *s
     ArgLoc *locs           = xalloc((*n + 1) * sizeof(*locs), __func__, __FILE__, __LINE__);
     int i                  = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next)
-        types[i++] = val_type(g, a);
+        types[i++] = type_of(g, arg, a);
     // A variadic callee's last named argument starts the stack: count the named ones,
     // and the hidden result pointer in front of them.
     int stack_from = *n;
@@ -175,65 +188,85 @@ static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, int *n, int *s
     return locs;
 }
 
+static const Tac_Type *gen_type(const Gen *g, const void *arg, const Tac_Val *v)
+{
+    (void)arg;
+    return val_type(g, v);
+}
+
 int call_stack_size(const Gen *g, const Tac_Instruction *in)
 {
     int n, stack;
-    xfree(call_locs(g, in, &n, &stack));
+    xfree(call_locs(g, in, gen_type, NULL, &n, &stack));
     return stack;
 }
 
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     int n, stack;
-    ArgLoc *locs = call_locs(g, in, &n, &stack);
+    ArgLoc *locs = call_locs(g, in, gen_type, NULL, &n, &stack);
 
-    // The stack parts first, then the registers, straight from memory: nothing lives
-    // in a register across the moves.
+    // The stack parts first: they write only the outgoing area.
     int i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
-        const ArgLoc *l   = &locs[i];
-        const Tac_Type *t = val_type(g, a);
+        const ArgLoc *l = &locs[i];
         if (l->agg) {
             if (!l->reg[0]) {
-                address_of(g, 11, a->u.var_name, 0);
-                emit2(g, MSP_MOV, msp_reg(11), msp_indexed(MSP_SP, NULL, l->stack[0]));
+                address_of(g, msp_reg(MSP_SCRATCH), a->u.var_name, 0);
+                emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_indexed(MSP_SP, NULL, l->stack[0]));
             }
             continue;
         }
-        if (msp_type_size(t) == 1 && !l->reg[0]) {
-            load_val(g, a, 11, 1, EXT_TYPE); // a char goes extended
-            emit2(g, MSP_MOV, msp_reg(11), msp_indexed(MSP_SP, NULL, l->stack[0]));
+        if (msp_type_size(val_type(g, a)) == 1 && !l->reg[0]) {
+            load_val(g, a, MSP_SCRATCH, 1, EXT_TYPE); // a char goes extended
+            emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_indexed(MSP_SP, NULL, l->stack[0]));
             continue;
         }
         for (int j = 0; j < l->parts; j++)
             if (!l->reg[j])
                 emit2(g, MSP_MOV, val_word(g, a, j), msp_indexed(MSP_SP, NULL, l->stack[j]));
     }
+
+    // Then the registers at once, and the target of an indirect call into r11 with them
+    // (call reads an SP-relative operand after it pushes).
+    Move m[MAX_PARTS + 1];
+    int k = 0;
+    i     = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
+        const ArgLoc *l = &locs[i];
+        if (l->agg)
+            continue;
+        bool byte = msp_type_size(val_type(g, a)) == 1;
+        for (int j = 0; j < l->parts; j++)
+            if (l->reg[j])
+                m[k++] = (Move){ msp_reg(l->reg[j]), val_word(g, a, j), byte };
+    }
+    if (in->u.fun_call.indirect)
+        m[k++] = (Move){ msp_reg(11), mem_at(g, in->u.fun_call.fun_name, 0), false };
+    parallel_moves(g, m, k);
     i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         const ArgLoc *l = &locs[i];
         if (!l->reg[0])
             continue;
         if (l->agg) {
-            address_of(g, l->reg[0], a->u.var_name, 0);
+            address_of(g, msp_reg(l->reg[0]), a->u.var_name, 0);
             continue;
         }
-        if (msp_type_size(val_type(g, a)) == 1) {
-            load_val(g, a, l->reg[0], 1, EXT_TYPE);
+        // A char goes extended: mov.b from memory zero-extends, but not from a register.
+        const Tac_Type *t = val_type(g, a);
+        if (msp_type_size(t) != 1)
             continue;
-        }
-        for (int j = 0; j < l->parts; j++)
-            if (l->reg[j])
-                emit2(g, MSP_MOV, val_word(g, a, j), msp_reg(l->reg[j]));
+        if (ext_sign(t, EXT_TYPE))
+            emit1(g, MSP_SXT, msp_reg(l->reg[0]));
+        else if (a->kind == TAC_VAL_VAR && var_reg(g, a->u.var_name, 0))
+            emit2b(g, MSP_MOV, msp_reg(l->reg[0]), msp_reg(l->reg[0]));
     }
 
-    if (in->u.fun_call.indirect) {
-        // Not through an SP-relative operand: call pushes before it reads one.
-        emit2(g, MSP_MOV, mem_at(g, in->u.fun_call.fun_name, 0), msp_reg(11));
+    if (in->u.fun_call.indirect)
         emit1(g, MSP_CALL, msp_reg(11));
-    } else {
+    else
         emit1(g, MSP_CALL, msp_imm_sym(in->u.fun_call.fun_name, 0));
-    }
 
     const Tac_Val *dst = in->u.fun_call.dst;
     if (dst) {
@@ -248,11 +281,66 @@ void gen_call(Gen *g, const Tac_Instruction *in)
 void gen_return(Gen *g, const Tac_Val *v, bool last)
 {
     if (v) {
-        // A structure result comes as the hidden pointer, which goes back in r12.
+        // A structure result comes as the hidden pointer; ours is not passed back.
         const Tac_Type *t = val_type(g, v);
         if (msp_is_scalar(t))
             load_val(g, v, 12, msp_words(t), EXT_TYPE);
     }
     if (!last)
         emit1(g, MSP_JMP, msp_label(g->exit));
+}
+
+const Tac_Type *flow_val_type(const Gen *g, const Flow *f, const Tac_Val *v)
+{
+    int var = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
+    return var >= 0 && f->types[var] ? f->types[var] : val_type(g, v);
+}
+
+void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi)
+{
+    int n;
+    ArgLoc *locs = param_locs(g, &n);
+    int i        = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
+        const ArgLoc *l = &locs[i];
+        if (l->agg || l->parts > 2)
+            continue;
+        if (l->reg[0])
+            map_insert(hints, p->name, l->reg[0], 0);
+        if (l->parts == 2 && l->reg[1])
+            map_insert(hints_hi, p->name, l->reg[1], 0);
+    }
+    xfree(locs);
+}
+
+static const Tac_Type *flow_type(const Gen *g, const void *arg, const Tac_Val *v)
+{
+    return flow_val_type(g, arg, v);
+}
+
+void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+{
+    int n, stack;
+    ArgLoc *locs = call_locs(g, in, flow_type, f, &n, &stack);
+    int i        = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
+        const ArgLoc *l = &locs[i];
+        int var         = a->kind == TAC_VAL_VAR ? flow_var(f, a->u.var_name) : -1;
+        if (var < 0 || l->agg || l->parts > 2)
+            continue;
+        if (l->reg[0] && !hint[var])
+            hint[var] = l->reg[0];
+        if (l->parts == 2 && l->reg[1] && !hint[var + f->nvars])
+            hint[var + f->nvars] = l->reg[1];
+    }
+    const Tac_Val *dst = in->u.fun_call.dst;
+    int var            = dst ? flow_var(f, dst->u.var_name) : -1;
+    if (var >= 0 && f->types[var] && msp_is_scalar(f->types[var])) {
+        int size = msp_type_size(f->types[var]);
+        if (size <= 4 && !hint[var])
+            hint[var] = 12;
+        if (size == 4 && !hint[var + f->nvars])
+            hint[var + f->nvars] = 13;
+    }
+    xfree(locs);
 }

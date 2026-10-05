@@ -12,33 +12,41 @@ TEST_F(Msp430Test, AddLongChain)
 {
     std::string code = Code(CompileToMsp430("long g1, g2, g3; void f(void) { g3 = g1 + g2; }"));
     EXPECT_NE(std::string::npos,
-              code.find(R"(mov &g1, r12
-mov &g1+2, r13
-add &g2, r12
-addc &g2+2, r13
+              code.find(R"(mov &g1, r13
+mov &g1+2, r12
+add &g2, r13
+addc &g2+2, r12
+mov r13, &g3
+mov r12, &g3+2
 )"))
         << code;
 }
 
-// A signed 32-bit compare: the high words signed, then the low words unsigned.
-TEST_F(Msp430Test, CompareLongSigned)
-{
-    std::string code = Code(CompileToMsp430("int f(long a, long b) { return a < b; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(cmp 6(r1), r13
-jl )")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(cmp 4(r1), r12
-jlo )")) << code;
-}
+// A signed 32-bit compare, in place: the high words signed, then the low words
+// unsigned.  (b's high word came in r15, the scratch register: it is kept in r11.)
+EXPECT_CODE(CompareLongSigned, R"(mov r15, r11
+cmp r11, r13
+jl .Lv1
+jne .Lv3
+cmp r14, r12
+jlo .Lv1
+clr r12
+jmp .Lv2
+mov #1, r12
+ret
+)", "int f(long a, long b) { return a < b; }")
 
-TEST_F(Msp430Test, CompareLongUnsigned)
-{
-    std::string code =
-        Code(CompileToMsp430("int f(unsigned long a, unsigned long b) { return a >= b; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(cmp 6(r1), r13
-jlo )")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(cmp 4(r1), r12
-jhs )")) << code;
-}
+EXPECT_CODE(CompareLongUnsigned, R"(mov r15, r11
+cmp r11, r13
+jlo .Lv3
+jne .Lv1
+cmp r14, r12
+jhs .Lv1
+clr r12
+jmp .Lv2
+mov #1, r12
+ret
+)", "int f(unsigned long a, unsigned long b) { return a >= b; }")
 
 // A shift by a small constant is unrolled, through the carry.
 TEST_F(Msp430Test, ShiftLeftLongUnrolled)
@@ -60,12 +68,12 @@ mov r12, r13
 rla r13
 subc r13, r13
 inv r13
-mov #4, r11
+mov #4, r15
 )"))
         << code;
     EXPECT_NE(std::string::npos, code.find(R"(rra r13
 rrc r12
-dec r11
+dec r15
 jne )")) << code;
 }
 
@@ -121,13 +129,10 @@ inv r13
         << code;
 }
 
-TEST_F(Msp430Test, ZeroExtendCharToLong)
-{
-    std::string code = Code(CompileToMsp430("long f(unsigned char a) { return a; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov.b @r1, r12
+EXPECT_CODE(ZeroExtendCharToLong, R"(mov.b r12, r12
 clr r13
-)")) << code;
-}
+ret
+)", "long f(unsigned char a) { return a; }")
 
 // The output routines our run tests share, compiled by us.
 static const char print_c[] = R"(

@@ -32,6 +32,12 @@ protected:
             { "Chapter14_SwitchDereferencedPointer",
               "case values collide in a 32-bit long, as GCC says" },
             { "Chapter15_BigArray", "arrays too large for a 16-bit size_t, as GCC says" },
+            { "Chapter16_AccessThroughCharPointer",
+              "reads past a 16-bit int and past an array: the stack's garbage" },
+            { "Chapter16_StandardLibraryCalls",
+              "declares strlen unsigned long: its high word is r13's garbage" },
+            { "Chapter16_StringsInFunctionCalls",
+              "declares strlen unsigned long: its high word is r13's garbage" },
             { "Chapter17_SizeofExtern", "arrays too large for 15.5 KB of RAM, as GCC says" },
             { nullptr, nullptr },
         };
@@ -62,7 +68,6 @@ protected:
     static bool ClangDiffers()
     {
         static const SkippedTest differs[] = {
-            { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
             { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31" },
             { "Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes", "shifts an int by 31" },
             { nullptr, nullptr },

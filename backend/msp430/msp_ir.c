@@ -147,6 +147,13 @@ Msp_Operand msp_label(const char *sym)
     return (Msp_Operand){ .kind = MSP_OPND_LABEL, .sym = xstrdup(sym) };
 }
 
+Msp_Operand msp_copy(const Msp_Operand *o)
+{
+    Msp_Operand c = *o;
+    c.sym         = dup_sym(o->sym);
+    return c;
+}
+
 int64_t msp_imm_value(int64_t imm, bool byte)
 {
     return byte ? (int64_t)(int8_t)imm : (int64_t)(int16_t)imm;

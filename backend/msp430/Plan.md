@@ -214,7 +214,7 @@ arguments (*checked*, the same signatures).
 | Arguments and results | R12–R15 |
 | Values not live across a call | R11–R15 |
 | Values live across a call | R4–R10, pushed and popped in the prologue and epilogue |
-| Naive-selection scratch | R14, R15 (pointer bases, helper operands), R11 |
+| Selection scratch | R15, never allocated (since T21) |
 
 **The allocation unit is one 16-bit register.**
 - `char`, `short`, `int` and pointers are one register.
@@ -518,6 +518,37 @@ Phase 4 is done:
 
 ## Phase 5 — code quality
 
+- **T21 is done.**
+  - **The selection now works in place.** An operand may be a register or memory on
+    either side, so `d = a + b` is `mov a, d; add b, d` and a compare is a `cmp` of the
+    operands where they lie. r15 is the one scratch register: a pointer from memory, a
+    shift count, a constant compared, or a copy loop's pointer, with r13 and r14 pushed
+    around the loop. The same selection serves `--no-regalloc`, with every operand in
+    memory.
+  - **Allocation.** The pool is r12, r13, r14 and r11 for values not live across a call
+    or a helper, then r10–r4. r15 is never allocated, so a parameter or a long's high
+    word that arrives there is moved. A function with an r8–r11 helper keeps r8–r10
+    free. Registers keep their own numbers on the allocator's side, since 0 is never in
+    the pool.
+  - **Helpers.** Their operands go into place, and arguments into r12–r15, as one
+    parallel move. A cycle is broken by three `xor`s, so no temporary is needed.
+  - **Narrower clobber sets: not done.** Every one of our helpers may clobber r11–r15,
+    as a call does, so a narrower set gains nothing.
+  - **Code size:** the C library goes from 60 964 to 41 800 bytes. GCC `-O2` gives
+    38 016 and clang `-O2` 40 142.
+  - **Cycles:** benchmarks linked with our runtime, in cycles / code bytes:
+
+    | | phase 4 | T21 | GCC `-O2` | clang `-O2` |
+    |---|---|---|---|---|
+    | bubble sort, 64 ints | 381 326 / 648 | 125 436 / 288 | 32 309 / 156 | 45 803 / 142 |
+    | sieve to 2000 | 408 705 / 244 | 150 037 / 100 | 74 650 / 138 | 79 567 / 60 |
+    | CRC-16, 1 KB | 749 546 / 524 | 212 205 / 202 | 119 922 / 98 | 21 065 / 156 |
+    | binary64 loop | 6 093 268 / 814 | 6 083 527 / 664 | 6 054 279 / 310 | 6 053 422 / 676 |
+    | string copy and compare | 387 055 / 690 | 116 048 / 258 | 72 701 / 228 | 74 723 / 180 |
+
+  - **Book programs set aside:** three programs are undefined at 16 bits, and their
+    results depend on garbage. Two declare `strlen` as returning `unsigned long`, so they
+    read r13; one reads past an `int` and past an array.
 - **T21. Register allocation** on `backend/common/regalloc.c`.
   - **Classes:**
     - `char`/`short`/`int`/pointer are `REGALLOC_INT`;

@@ -115,6 +115,8 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     new_label(g->exit);
     map_init(&g->frame);
     map_init(&g->globals);
+    map_init(&g->regs);
+    map_init(&g->dead);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -144,6 +146,8 @@ void gen_done(Gen *g)
 {
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
+    map_destroy(&g->regs);
+    map_destroy(&g->dead);
     msp_free_func(g->fn);
 }
 
@@ -197,7 +201,7 @@ void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         if (!p->type)
             fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
-        if (find_slot(g, p->name))
+        if (find_slot(g, p->name) || var_reg(g, p->name, 0))
             continue;
         // A structure parameter's slot first holds its address (store_params).
         int size = msp_type_size(p->type), align = msp_type_align(p->type);
@@ -210,7 +214,7 @@ void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
-        if (find_slot(g, p->name))
+        if (find_slot(g, p->name) || var_reg(g, p->name, 0))
             continue;
         int size = msp_type_size(p->type), align = msp_type_align(p->type);
         intptr_t v;
@@ -345,11 +349,29 @@ uint64_t const_bits(const Tac_Const *c)
     return 0;
 }
 
+int var_reg(const Gen *g, const char *name, int word)
+{
+    intptr_t v;
+    if (!map_get(&g->regs, name, &v))
+        return 0;
+    return word == 0 ? (int)(v & 0xff) : word == 1 ? (int)(v >> 8) : 0;
+}
+
 Msp_Operand mem_at(const Gen *g, const char *name, int off)
 {
+    int reg = var_reg(g, name, 0);
+    if (reg) {
+        if (off & 1)
+            fatal_error("msp430: %s: byte %d of register variable %s", gen_name(g), off, name);
+        reg = var_reg(g, name, off / 2);
+        if (!reg)
+            fatal_error("msp430: %s: word %d of register variable %s", gen_name(g), off / 2,
+                        name);
+        return msp_reg(reg);
+    }
     const Slot *s = find_slot(g, name);
     if (s) {
-        Msp_Operand o = msp_indexed(MSP_SP, NULL, s->off + off);
+        Msp_Operand o = msp_indexed(MSP_SP, NULL, s->off + off + g->sp_bias);
         o.incoming    = s->incoming;
         return o;
     }
@@ -376,50 +398,109 @@ Msp_Operand val_word(const Gen *g, const Tac_Val *v, int i)
     return mem_at(g, v->u.var_name, 2 * i);
 }
 
-void address_of(Gen *g, int reg, const char *name, int off)
+static bool same_sym(const char *a, const char *b)
+{
+    return (!a && !b) || (a && b && strcmp(a, b) == 0);
+}
+
+bool same_opnd(const Msp_Operand *a, const Msp_Operand *b)
+{
+    if (a->kind != b->kind)
+        return false;
+    switch (a->kind) {
+    case MSP_OPND_REG:
+        return a->reg == b->reg;
+    case MSP_OPND_INDEXED:
+        return a->reg == b->reg && a->imm == b->imm && a->incoming == b->incoming &&
+               same_sym(a->sym, b->sym);
+    case MSP_OPND_ABS:
+        return a->imm == b->imm && same_sym(a->sym, b->sym);
+    default:
+        return false;
+    }
+}
+
+bool opnd_uses_reg(const Msp_Operand *o, int reg)
+{
+    switch (o->kind) {
+    case MSP_OPND_REG:
+    case MSP_OPND_INDEXED:
+    case MSP_OPND_IND:
+    case MSP_OPND_POSTINC:
+        return o->reg == reg;
+    default:
+        return false;
+    }
+}
+
+Msp_Operand high_byte(const Msp_Operand *o)
+{
+    Msp_Operand h = *o;
+    if (h.kind != MSP_OPND_INDEXED && h.kind != MSP_OPND_ABS)
+        fatal_error("msp430: the high byte of a register");
+    h.sym = h.sym ? xstrdup(h.sym) : NULL;
+    h.imm++;
+    return h;
+}
+
+void address_of(Gen *g, Msp_Operand dst, const char *name, int off)
 {
     const Slot *s = find_slot(g, name);
     if (s) {
-        emit2(g, MSP_MOV, msp_reg(MSP_SP), msp_reg(reg));
-        Msp_Operand k = msp_imm(s->off + off);
+        emit2(g, MSP_MOV, msp_reg(MSP_SP), dst);
+        Msp_Operand k = msp_imm(s->off + off + g->sp_bias);
         k.incoming    = s->incoming;
         if (k.imm != 0 || k.incoming)
-            emit2(g, MSP_ADD, k, msp_reg(reg));
+            emit2(g, MSP_ADD, k, msp_copy(&dst));
         return;
     }
-    if (name[0] == '%')
+    if (name[0] == '%' || var_reg(g, name, 0))
         fatal_error("msp430: %s: no slot for %s", gen_name(g), name);
-    emit2(g, MSP_MOV, msp_imm_sym(name, off), msp_reg(reg));
+    emit2(g, MSP_MOV, msp_imm_sym(name, off), dst);
 }
 
 enum { UNROLL = 16 }; // the most moves of a copy unrolled
 
-// A counted copy loop: `n` units from @r14+ to 0(r15), through r12, counted in r13.
-static void copy_loop(Gen *g, int n, bool byte)
+// A counted copy loop: `n` units from @r15 to @r14 (`load`), or from @r14 to @r15,
+// counted in r13; r13 and r14 pushed around it, r14 pointed at `name` + off.
+static void copy_loop(Gen *g, bool load, const char *name, int off, int n, bool byte)
 {
+    emit1(g, MSP_PUSH, msp_reg(14));
+    emit1(g, MSP_PUSH, msp_reg(13));
+    g->sp_bias += 4;
+    address_of(g, msp_reg(14), name, off);
+    g->sp_bias -= 4;
+    emit2(g, MSP_MOV, msp_imm(n), msp_reg(13));
     char loop[32];
     new_label(loop);
-    emit2(g, MSP_MOV, msp_imm(n), msp_reg(13));
     gen_label_block(g, loop);
-    Msp_Instr *ld = emit2(g, MSP_MOV, msp_postinc(14), msp_reg(12));
-    Msp_Instr *st = emit2(g, MSP_MOV, msp_reg(12), msp_indexed(15, NULL, 0));
-    ld->byte = st->byte = byte;
-    emit1(g, byte ? MSP_INC : MSP_INCD, msp_reg(15));
+    int from = load ? MSP_SCRATCH : 14, to = load ? 14 : MSP_SCRATCH;
+    Msp_Instr *in = emit2(g, MSP_MOV, msp_ind(from), msp_indexed(to, NULL, 0));
+    in->byte      = byte;
+    emit1(g, byte ? MSP_INC : MSP_INCD, msp_reg(MSP_SCRATCH));
+    emit1(g, byte ? MSP_INC : MSP_INCD, msp_reg(14));
     emit1(g, MSP_DEC, msp_reg(13));
     emit1(g, MSP_JNE, msp_label(loop));
+    emit1(g, MSP_POP, msp_reg(13));
+    emit1(g, MSP_POP, msp_reg(14));
 }
 
-void copy_bytes(Gen *g, int size, int align)
+void copy_ptr(Gen *g, bool load, int ptr, const char *name, int off, int size, int align)
 {
+    if (off & 1)
+        align = 1;
     bool words = align >= 2 && size % 2 == 0;
     int unit = words ? 2 : 1, n = size / unit;
     if (n > UNROLL) {
-        copy_loop(g, n, !words);
+        if (ptr != MSP_SCRATCH)
+            emit2(g, MSP_MOV, msp_reg(ptr), msp_reg(MSP_SCRATCH));
+        copy_loop(g, load, name, off, n, !words);
         return;
     }
     for (int k = 0; k < n; k++) {
-        Msp_Operand src = k == 0 ? msp_ind(14) : msp_indexed(14, NULL, k * unit);
-        Msp_Instr *in   = emit2(g, MSP_MOV, src, msp_indexed(15, NULL, k * unit));
+        Msp_Operand at  = msp_indexed(ptr, NULL, k * unit);
+        Msp_Operand obj = mem_at(g, name, off + k * unit);
+        Msp_Instr *in   = load ? emit2(g, MSP_MOV, at, obj) : emit2(g, MSP_MOV, obj, at);
         in->byte        = !words;
     }
 }
@@ -432,9 +513,8 @@ void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, in
     bool words = align >= 2 && size % 2 == 0;
     int unit = words ? 2 : 1, n = size / unit;
     if (n > UNROLL) {
-        address_of(g, 14, src, soff);
-        address_of(g, 15, dst, doff);
-        copy_loop(g, n, !words);
+        address_of(g, msp_reg(MSP_SCRATCH), src, soff);
+        copy_loop(g, true, dst, doff, n, !words);
         return;
     }
     for (int k = 0; k < n; k++) {
@@ -444,58 +524,140 @@ void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, in
     }
 }
 
-void extend_regs(Gen *g, int reg, int from, int n, bool sign)
+// Whether a pending move other than `skip` reads `o`.
+static bool is_read(const Move *m, int n, int skip, const Msp_Operand *o)
+{
+    for (int i = 0; i < n; i++)
+        if (i != skip && same_opnd(&m[i].src, o))
+            return true;
+    return false;
+}
+
+// Remove move i, keeping the others in order.
+static void drop_move(Move *m, int *n, int i)
+{
+    xfree(m[i].dst.sym);
+    xfree(m[i].src.sym);
+    memmove(&m[i], &m[i + 1], (size_t)(--*n - i) * sizeof(Move));
+}
+
+void parallel_moves(Gen *g, Move *m, int n)
+{
+    for (int i = 0; i < n;) {
+        if (same_opnd(&m[i].dst, &m[i].src))
+            drop_move(m, &n, i);
+        else
+            i++;
+    }
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++)
+            if (!is_read(m, n, i, &m[i].dst))
+                pick = i;
+        if (pick >= 0) {
+            Msp_Instr *in = emit2(g, MSP_MOV, msp_copy(&m[pick].src), msp_copy(&m[pick].dst));
+            in->byte      = m[pick].byte;
+            drop_move(m, &n, pick);
+            continue;
+        }
+        // A cycle: swap the first destination with its source; the moves that read the
+        // destination now read the source.
+        Msp_Operand *a = &m[0].dst, *b = &m[0].src;
+        bool byte      = m[0].byte && (a->kind != MSP_OPND_REG || b->kind != MSP_OPND_REG);
+        emit2(g, MSP_XOR, msp_copy(b), msp_copy(a))->byte = byte;
+        emit2(g, MSP_XOR, msp_copy(a), msp_copy(b))->byte = byte;
+        emit2(g, MSP_XOR, msp_copy(b), msp_copy(a))->byte = byte;
+        for (int i = 1; i < n; i++)
+            if (same_opnd(&m[i].src, a)) {
+                xfree(m[i].src.sym);
+                m[i].src = msp_copy(b);
+            }
+        drop_move(m, &n, 0);
+        for (int i = 0; i < n;) {
+            if (same_opnd(&m[i].dst, &m[i].src))
+                drop_move(m, &n, i); // the swap did it
+            else
+                i++;
+        }
+    }
+}
+
+void extend_words(Gen *g, const Msp_Operand *w, int from, int n, bool sign)
 {
     if (from >= n)
         return;
     if (!sign) {
         for (int i = from; i < n; i++)
-            emit1(g, MSP_CLR, msp_reg(reg + i));
+            emit1(g, MSP_CLR, msp_copy(&w[i]));
         return;
     }
     // The sign into C, then 0xffff + C complemented: 0x0000 or 0xffff.
-    int top = reg + from;
-    emit2(g, MSP_MOV, msp_reg(reg + from - 1), msp_reg(top));
-    emit1(g, MSP_RLA, msp_reg(top));
-    emit2(g, MSP_SUBC, msp_reg(top), msp_reg(top));
-    emit1(g, MSP_INV, msp_reg(top));
+    const Msp_Operand *top = &w[from];
+    emit2(g, MSP_MOV, msp_copy(&w[from - 1]), msp_copy(top));
+    emit1(g, MSP_RLA, msp_copy(top));
+    emit2(g, MSP_SUBC, msp_copy(top), msp_copy(top));
+    emit1(g, MSP_INV, msp_copy(top));
     for (int i = from + 1; i < n; i++)
-        emit2(g, MSP_MOV, msp_reg(top), msp_reg(reg + i));
+        emit2(g, MSP_MOV, msp_copy(top), msp_copy(&w[i]));
 }
 
-static bool ext_sign(const Tac_Type *t, Ext ext)
+bool ext_sign(const Tac_Type *t, Ext ext)
 {
     return ext == EXT_SIGN || (ext == EXT_TYPE && !msp_is_unsigned(t) && !msp_is_fp(t));
 }
 
+void load_vals(Gen *g, const Load *l, int n)
+{
+    Move m[16];
+    int k = 0;
+    for (int j = 0; j < n; j++) {
+        const Tac_Type *t = val_type(g, l[j].v);
+        int size          = msp_type_size(t);
+        if (l[j].v->kind == TAC_VAL_CONSTANT) {
+            // The bits extended as asked, word by word.
+            uint64_t bits = const_bits(l[j].v->u.constant);
+            if (size < 8) {
+                uint64_t mask = (1ull << (8 * size)) - 1;
+                bool neg      = ext_sign(t, l[j].ext) && (bits >> (8 * size - 1) & 1);
+                bits          = neg ? bits | ~mask : bits & mask;
+            }
+            for (int i = 0; i < l[j].n; i++)
+                m[k++] = (Move){ msp_reg(l[j].reg + i),
+                                 msp_imm(i < 4 ? (int64_t)(bits >> (16 * i) & 0xffff) : 0),
+                                 false };
+            continue;
+        }
+        int w = size == 1 ? 1 : size / 2;
+        for (int i = 0; i < w && i < l[j].n; i++)
+            m[k++] = (Move){ msp_reg(l[j].reg + i), val_word(g, l[j].v, i), size == 1 };
+    }
+    parallel_moves(g, m, k);
+    // The words past a narrower variable; a char from a register has its high byte to
+    // clear.
+    for (int j = 0; j < n; j++) {
+        const Tac_Val *v = l[j].v;
+        if (v->kind != TAC_VAL_VAR)
+            continue;
+        const Tac_Type *t = val_type(g, v);
+        int size = msp_type_size(t), reg = l[j].reg;
+        bool sign = ext_sign(t, l[j].ext);
+        if (size == 1) {
+            if (sign)
+                emit1(g, MSP_SXT, msp_reg(reg));
+            else if (var_reg(g, v->u.var_name, 0))
+                emit2b(g, MSP_MOV, msp_reg(reg), msp_reg(reg));
+        }
+        Msp_Operand w[4];
+        for (int i = 0; i < l[j].n; i++)
+            w[i] = msp_reg(reg + i);
+        extend_words(g, w, size == 1 ? 1 : size / 2, l[j].n, sign);
+    }
+}
+
 void load_val(Gen *g, const Tac_Val *v, int reg, int n, Ext ext)
 {
-    const Tac_Type *t = val_type(g, v);
-    int size          = msp_type_size(t);
-    bool sign         = ext_sign(t, ext);
-    if (v->kind == TAC_VAL_CONSTANT) {
-        uint64_t bits = const_bits(v->u.constant);
-        if (size < 8) {
-            uint64_t mask = (1ull << (8 * size)) - 1;
-            bool neg      = sign && (bits >> (8 * size - 1) & 1);
-            bits          = neg ? bits | ~mask : bits & mask;
-        }
-        for (int i = 0; i < n; i++)
-            emit2(g, MSP_MOV, msp_imm(i < 4 ? (int64_t)(bits >> (16 * i) & 0xffff) : 0),
-                  msp_reg(reg + i));
-        return;
-    }
-    if (size == 1) {
-        emit2b(g, MSP_MOV, mem_at(g, v->u.var_name, 0), msp_reg(reg)); // zero-extends
-        if (sign)
-            emit1(g, MSP_SXT, msp_reg(reg));
-        extend_regs(g, reg, 1, n, sign);
-        return;
-    }
-    int w = size / 2, m = w < n ? w : n;
-    for (int i = 0; i < m; i++)
-        emit2(g, MSP_MOV, mem_at(g, v->u.var_name, 2 * i), msp_reg(reg + i));
-    extend_regs(g, reg, m, n, sign);
+    Load l = { v, reg, n, ext };
+    load_vals(g, &l, 1);
 }
 
 void store_val(Gen *g, const Tac_Val *v, int reg, int n)
@@ -507,12 +669,13 @@ void store_val(Gen *g, const Tac_Val *v, int reg, int n)
         emit2b(g, MSP_MOV, msp_reg(reg), mem_at(g, v->u.var_name, 0));
         return;
     }
-    for (int i = 0; i < size / 2; i++) {
-        if (i < n)
-            emit2(g, MSP_MOV, msp_reg(reg + i), mem_at(g, v->u.var_name, 2 * i));
-        else
-            emit1(g, MSP_CLR, mem_at(g, v->u.var_name, 2 * i));
-    }
+    Move m[4];
+    int k = 0;
+    for (int i = 0; i < size / 2 && i < n; i++)
+        m[k++] = (Move){ mem_at(g, v->u.var_name, 2 * i), msp_reg(reg + i), false };
+    parallel_moves(g, m, k);
+    for (int i = n; i < size / 2; i++)
+        emit1(g, MSP_CLR, mem_at(g, v->u.var_name, 2 * i));
 }
 
 void gen_label_block(Gen *g, const char *label)

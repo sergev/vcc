@@ -152,6 +152,8 @@ Msp_Operand msp_postinc(int reg);
 Msp_Operand msp_imm(int64_t imm);
 Msp_Operand msp_imm_sym(const char *sym, int64_t off);
 Msp_Operand msp_label(const char *sym);
+// A copy of `o`, with its own symbol.
+Msp_Operand msp_copy(const Msp_Operand *o);
 
 // An immediate as the assembler reads it: sign-normalized to the operation's width, so
 // that all ones is -1, which the constant generator supplies.
