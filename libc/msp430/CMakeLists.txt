@@ -86,7 +86,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves, and the integer helpers under their MSP430 EABI names.
 set(MSP430_LIBC_OBJS "")
-foreach(name console divmod mul shift mspabi64)
+foreach(name console divmod mul shift mspabi64 setjmp)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${MSP430_GCC} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
@@ -124,7 +124,7 @@ endforeach()
 foreach(name int64 int64conv frexp ldexp modf)
     msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
-foreach(name mspabif mspabid malloc)
+foreach(name mspabif mspabid malloc sqrtf)
     msp430_compile_libc_c(${name} ${src})
 endforeach()
 

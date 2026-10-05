@@ -310,3 +310,62 @@ TEST_F(Msp430Test, RunHeaderTypes)
     )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// setjmp/longjmp from libc.a: a jump out of nested frames, longjmp(env, 0) arriving as
+// 1, and a second setjmp on the same buffer.
+static const char setjmp_program[] = R"(
+#include <setjmp.h>
+static jmp_buf env;
+static int depth;
+__attribute__((noinline)) static void dive(int n, int val)
+{
+    depth = n;
+    if (n == 5)
+        longjmp(env, val);
+    dive(n + 1, val);
+}
+int main(void)
+{
+    volatile int round = 0;
+    int r = setjmp(env);
+    round++;
+    if (round == 1) {
+        if (r != 0)
+            return 1;
+        dive(0, 7);
+    }
+    if (round == 2) {
+        if (r != 7 || depth != 5)
+            return 2;
+        dive(0, 0);
+    }
+    if (round == 3 && r != 1)
+        return 3;
+    return round == 3 ? 42 : 4;
+}
+)";
+
+TEST_F(Msp430Test, RunSetjmpLongjmp)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    std::string src = setjmp_program;
+    src.replace(src.find("__attribute__((noinline)) "), 26, "");
+    EXPECT_EQ("", CompileAndRunMsp430(src));
+    EXPECT_EQ(42, exit_status);
+}
+
+// The same from GCC's and clang's code, which keep values in the call-saved registers,
+// with our <setjmp.h>.
+TEST_F(Msp430Test, RunSetjmpLongjmpGccClang)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    std::string src = setjmp_program;
+    std::vector<std::string> flags = { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
+                                       TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR };
+    EXPECT_EQ("", Run("", "crt0.o", &src, flags, ".gcc"));
+    EXPECT_EQ(42, exit_status);
+    if (!msp430_clang_available())
+        return;
+    EXPECT_EQ("", Run(msp430_clang_config(), "", "crt0.o", &src, flags, ".clang"));
+    EXPECT_EQ(42, exit_status);
+}

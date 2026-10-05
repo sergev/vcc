@@ -2,8 +2,8 @@
  * <float.h> — characteristics of floating types (C11 §7.7), MSP430.
  *
  * float and double are IEEE-754 binary32 and binary64, both in software; long double
- * is binary64 too (clang's choice for the target), so every LDBL_ value equals its
- * DBL_ one.
+ * is binary64 too (GCC's and clang's choice for the target), so every LDBL_ value
+ * equals its DBL_ one.
  */
 #ifndef _FLOAT_H
 #define _FLOAT_H

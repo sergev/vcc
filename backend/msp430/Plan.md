@@ -451,8 +451,9 @@ Phase 3 is done:
 
   Add an `msp430-headers` CTest and its `-cpp` twin. Check our headers' sizes, limits and
   type identities against GCC's `-mcpu=msp430 -dM -E`, as ARM32, x86-64 and AVR did
-  against clang. Then check them against clang's, where only `wchar_t`/`WCHAR_*` should
-  differ.
+  against clang. Then check them against clang's. **Done:** clang differs from GCC in
+  `wchar_t` and `wint_t` (`int`), `sig_atomic_t` (`long`) and the fast 8-bit types
+  (`char`), not in `wchar_t` alone; we follow GCC.
 
   Compare `jmp_buf` with newlib's (`~/.local/msp430-elf/include/machine/setjmp.h`) to
   check which registers must be saved, not its layout: it is a different library.

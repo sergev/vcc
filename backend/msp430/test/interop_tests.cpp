@@ -858,3 +858,109 @@ long gcc_norm(struct pt p, int scale)
               NewlibRun(gcc, { "-O1" }, { o_path }));
     EXPECT_EQ(42, exit_status);
 }
+
+namespace {
+
+// The values our headers give, as NAME(i, f) fills them.  The first NW are the types in
+// which GCC and clang differ: wchar_t, wint_t, sig_atomic_t and the fast 8-bit types.
+const char header_values[] = R"(
+#include <float.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+enum { NW = 9, NI = 30, NF = 9 };
+void NAME(long long *i, double *f)
+{
+    long long iv[NI] = { sizeof(wchar_t), (wchar_t)-1 > 0, WCHAR_MIN, WCHAR_MAX,
+                         WINT_MIN, WINT_MAX, SIG_ATOMIC_MAX, SIG_ATOMIC_MIN,
+                         sizeof(int_fast8_t) * 10 + sizeof(uint_fast8_t),
+                         sizeof(max_align_t), _Alignof(max_align_t),
+                         SIZE_MAX, PTRDIFF_MIN, PTRDIFF_MAX, INTPTR_MIN, UINTPTR_MAX,
+                         INT64_MIN, UINT32_MAX, CHAR_MIN, CHAR_MAX, LONG_MAX, INT_MIN,
+                         UINT_MAX, sizeof(size_t) * 10 + sizeof(ptrdiff_t),
+                         sizeof(int_fast16_t) * 10 + sizeof(int_least32_t),
+                         sizeof(int_fast32_t), sizeof(intmax_t),
+                         LDBL_MANT_DIG * 10000 + LDBL_MAX_EXP, DECIMAL_DIG + LDBL_DIG * 100,
+                         sizeof(long double) * 10 + sizeof(double) };
+    double fv[NF] = { LDBL_EPSILON, LDBL_MIN, LDBL_MAX, LDBL_TRUE_MIN, DBL_EPSILON,
+                      DBL_MAX, FLT_EPSILON, FLT_TRUE_MIN, FLT_MIN_10_EXP + FLT_MAX_10_EXP };
+    for (int k = 0; k < NI; k++)
+        i[k] = iv[k];
+    for (int k = 0; k < NF; k++)
+        f[k] = fv[k];
+}
+)";
+
+// Ours, and a main that compares them with their_values(), from index `from`.
+std::string OurHeaderValues(const char *from)
+{
+    std::string ours = header_values;
+    ours.replace(ours.find("NAME"), 4, "our_values");
+    return ours + R"(
+void their_values(long long *i, double *f);
+int main(void)
+{
+    long long oi[NI], ti[NI];
+    double of[NF], tf[NF];
+    our_values(oi, of);
+    their_values(ti, tf);
+    for (int k = )" + from + R"(; k < NI; k++)
+        if (oi[k] != ti[k])
+            return 1 + k;
+    for (int k = 0; k < NF; k++)
+        if (of[k] != tf[k])
+            return 100 + k;
+    return 0;
+})";
+}
+
+std::string TheirHeaderValues()
+{
+    std::string theirs = header_values;
+    theirs.replace(theirs.find("NAME"), 4, "their_values");
+    return theirs;
+}
+
+} // namespace
+
+// Our headers against GCC's own for the target: the same constants, types and layouts.
+TEST_F(Msp430Test, HeadersAgreeWithGcc)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", GccRun(TheirHeaderValues(), CompileToMsp430(OurHeaderValues("0").c_str())));
+    EXPECT_EQ(0, exit_status);
+}
+
+// And against clang's, but for the types where clang differs from GCC: its wchar_t and
+// wint_t are int, its sig_atomic_t long and its fast 8-bit types char.
+TEST_F(Msp430Test, HeadersAgreeWithClang)
+{
+    SKIP_IF_NO_MSP430_CLANG();
+    std::string ours = CompileToMsp430(OurHeaderValues("NW").c_str());
+    EXPECT_EQ("", ClangRun(TheirHeaderValues(), ours));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The shared headers in a 16-bit int: RAND_MAX fits it, char32_t holds 32 bits.
+TEST_F(Msp430Test, SharedHeadersFitInt16)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+#include <stdlib.h>
+#include <uchar.h>
+#include <limits.h>
+#include <inttypes.h>
+#include <math.h>
+int main(void)
+{
+    if (RAND_MAX != INT_MAX) return 1;
+    if (sizeof(char32_t) != 4 || sizeof(char16_t) != 2) return 2;
+    if ((char32_t)-1 < 0x7fffffff) return 3;
+    if (sizeof(PRId32) != 3 || PRId32[0] != 'l' || PRIdPTR[0] != 'd') return 4;
+    if (fabs(-2.5) != 2.5 || !(INFINITY > DBL_MAX)) return 5;
+    if (sqrt(2.0) != 1.4142135623730951 || sqrtf(2.0f) != 1.41421354f) return 6;
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}

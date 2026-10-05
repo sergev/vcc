@@ -1,10 +1,11 @@
 /*
  * <math.h> — mathematics (C11 §7.12), MSP430.
  *
- * Status: the MSP430 runtime is not written yet (backend/msp430/Plan.md, T13 and
- * T20); these are the declarations it will implement, as on the ILP32 targets.  The
- * functions are double-typed (binary64), but for sqrtf().  There is no FP hardware,
- * so sqrt() is an ordinary call.
+ * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax(), fma(), sqrt() and
+ * sqrtf() are implemented in libc.a; the rest are declared for future implementation
+ * (TODO).  The functions are double-typed (binary64), but for sqrtf(); long double is
+ * binary64 too.  There is no FP hardware: sqrt() is an ordinary call, correctly rounded
+ * in software (libc/common/float64.c).
  */
 #ifndef _MATH_H
 #define _MATH_H
@@ -21,7 +22,7 @@
 #define M_PI 3.14159265358979
 #define M_E  2.71828182845905
 
-/* ---- to be implemented in libc.a ---- */
+/* ---- implemented in libc.a ---- */
 double modf(double x, double *iptr);
 double frexp(double x, int *exp);
 double ldexp(double x, int exp);
