@@ -593,14 +593,6 @@ int target(int flag, int flag2, int y) {
 }
 )SRC"),
               R"OPT(- instruction:
-  kind: copy
-  src:
-    kind: var
-    name: %y
-  dst:
-    kind: var
-    name: %x
-- instruction:
   kind: jump_if_zero
   condition:
     kind: var
@@ -622,14 +614,6 @@ int target(int flag, int flag2, int y) {
     name: %flag2
   target: %2
 - instruction:
-  kind: copy
-  src:
-    kind: var
-    name: %y
-  dst:
-    kind: var
-    name: %x
-- instruction:
   kind: jump
   target: %3
 - instruction:
@@ -643,7 +627,7 @@ int target(int flag, int flag2, int y) {
   op: add
   src1:
     kind: var
-    name: %x
+    name: %y
   src2:
     kind: var
     name: %y
@@ -1260,36 +1244,6 @@ int main(void) {
 - instruction:
   kind: label
   name: %1
-- instruction:
-  kind: binary
-  op: not_equal
-  src1:
-    kind: var
-    name: x
-  src2:
-    kind: constant
-    const:
-      kind: int
-      value: 4
-  dst:
-    kind: var
-    name: %3
-- instruction:
-  kind: jump_if_zero
-  condition:
-    kind: var
-    name: %3
-  target: %4
-- instruction:
-  kind: return
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: 2
-- instruction:
-  kind: label
-  name: %4
 - instruction:
   kind: return
   src:
@@ -2129,7 +2083,7 @@ int target(int flag) {
 
 }
 )SRC")),
-              "binary=18 copy=16 jump=10 jump_if_zero=13 label=23 return=4");
+              "binary=14 copy=14 jump=10 jump_if_zero=13 label=23 return=4");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_DontPropagate_SwitchFallthrough)
@@ -2378,26 +2332,12 @@ int target(int *ptr1, int *ptr2) {
     kind: var
     name: %i
 - instruction:
-  kind: binary
-  op: add
-  src1:
-    kind: constant
-    const:
-      kind: int
-      value: 4
-  src2:
-    kind: constant
-    const:
-      kind: int
-      value: 20
-  dst:
-    kind: var
-    name: %2
-- instruction:
   kind: return
   src:
-    kind: var
-    name: %2
+    kind: constant
+    const:
+      kind: int
+      value: 24
 )OPT");
 }
 

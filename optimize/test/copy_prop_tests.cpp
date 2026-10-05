@@ -579,6 +579,7 @@ TEST_F(OptimizerTest, CopyPropSubstInCondition)
     lbl->next              = ret0;
 
     OptFlags flags          = opt_flags_default();
+    flags.max_iterations    = 1; // what one round does; later rounds fold further
     flags.dead_store_elim   = false;
     Tac_Instruction *result = optimize_function(entry, flags, nullptr);
 

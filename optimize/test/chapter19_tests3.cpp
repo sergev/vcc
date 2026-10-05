@@ -142,14 +142,6 @@ double target(int flag, int flag2, double y) {
 }
 )SRC"),
               R"OPT(- instruction:
-  kind: copy
-  src:
-    kind: var
-    name: %y
-  dst:
-    kind: var
-    name: %x
-- instruction:
   kind: jump_if_zero
   condition:
     kind: var
@@ -171,14 +163,6 @@ double target(int flag, int flag2, double y) {
     name: %flag2
   target: %2
 - instruction:
-  kind: copy
-  src:
-    kind: var
-    name: %y
-  dst:
-    kind: var
-    name: %x
-- instruction:
   kind: jump
   target: %3
 - instruction:
@@ -192,7 +176,7 @@ double target(int flag, int flag2, double y) {
   op: add_double
   src1:
     kind: var
-    name: %x
+    name: %y
   src2:
     kind: var
     name: %y
@@ -705,24 +689,16 @@ int target(void) {
     kind: var
     name: %0
 - instruction:
-  kind: sign_extend
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: -100
-  dst:
-    kind: var
-    name: %2
-- instruction:
   kind: binary
   op: not_equal
   src1:
     kind: var
     name: %0
   src2:
-    kind: var
-    name: %2
+    kind: constant
+    const:
+      kind: long
+      value: -100
   dst:
     kind: var
     name: %3
@@ -750,24 +726,16 @@ int target(void) {
     kind: var
     name: %6
 - instruction:
-  kind: sign_extend
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: -100
-  dst:
-    kind: var
-    name: %8
-- instruction:
   kind: binary
   op: not_equal
   src1:
     kind: var
     name: %6
   src2:
-    kind: var
-    name: %8
+    kind: constant
+    const:
+      kind: long
+      value: -100
   dst:
     kind: var
     name: %9
@@ -814,20 +782,12 @@ int target(void) {
   size: 8
   alignment: 8
 - instruction:
-  kind: sign_extend
+  kind: copy_to_offset
   src:
     kind: constant
     const:
-      kind: int
+      kind: long
       value: -100
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: copy_to_offset
-  src:
-    kind: var
-    name: %2
   dst: %u2
   offset: 0
 - instruction:
@@ -2290,14 +2250,6 @@ int main(void) {
   kind: copy
   src:
     kind: var
-    name: %3
-  dst:
-    kind: var
-    name: %n2
-- instruction:
-  kind: copy
-  src:
-    kind: var
     name: %n1
   dst:
     kind: var
@@ -2354,7 +2306,7 @@ int main(void) {
   kind: return
   src:
     kind: var
-    name: %n2
+    name: %3
 - instruction:
   kind: fun_call
   fun_name: fib

@@ -69,11 +69,7 @@ protected:
     bool IsTarget(const char *name) const { return strcmp(target_name, name) == 0; }
 
     // Disable optimization.
-    void DisableOptimization()
-    {
-        opt_flags                = {};
-        opt_flags.max_iterations = OPT_ITER_LEGACY;
-    }
+    void DisableOptimization() { opt_flags = {}; }
 
     // Parse C source, typecheck and translate every declaration, and return the whole
     // TAC chain (free it with tac_free_toplevel), or nullptr if preprocessing failed.

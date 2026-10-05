@@ -70,7 +70,7 @@ OptFlags opt_flags_default(void)
         .cse              = true,
         .dead_store_elim  = true,
         .debug            = false,
-        .max_iterations   = OPT_ITER_LEGACY,
+        .max_iterations   = 0,
     };
 }
 
@@ -107,8 +107,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
         iter++;
         OPT_TRACE("[optimize] iteration %d\n", iter);
 
-        bool legacy  = flags.max_iterations == OPT_ITER_LEGACY;
-        char *before = legacy ? NULL : snapshot(body);
+        char *before = snapshot(body);
 
         // Constant folding first, on the flat list (no CFG required).
         OPT_TRACE("[optimize] running pass: const-fold\n");
@@ -143,8 +142,6 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
             OPT_TRACE("[optimize] pass dead-store-elim: skipped (disabled)\n");
         }
 
-        bool entry_freed = cfg->blocks[0]->first != body;
-
         // Rejoin the (possibly modified) blocks into a flat list.
         Tac_Instruction *new_body = cfg_flatten(cfg);
         cfg_free(cfg);
@@ -154,16 +151,6 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
             xfree(before);
             OPT_TRACE("[optimize] converged (empty body) after %d iteration(s)\n", iter);
             return new_body;
-        }
-
-        if (legacy) {
-            if (!entry_freed) {
-                OPT_TRACE("[optimize] stopped after %d iteration(s)\n", iter);
-                return new_body;
-            }
-            OPT_TRACE("[optimize] entry instruction freed by a pass; iterating\n");
-            body = new_body;
-            continue;
         }
 
         // Fixed point: the passes rewrite the list in place, so the round is
@@ -179,6 +166,17 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
         if (flags.max_iterations > 0 && iter >= flags.max_iterations) {
             OPT_TRACE("[optimize] stopped after %d iteration(s)\n", iter);
             return new_body;
+        }
+        if (iter >= OPT_MAX_ROUNDS) {
+            // Every pass only ever removes or simplifies, so the passes cannot
+            // undo each other forever: running into the cap means a bug.
+#ifndef NDEBUG
+            fatal_error("optimizer: %s does not converge in %d rounds",
+                        fn ? fn->u.function.name : "?", OPT_MAX_ROUNDS);
+#else
+            OPT_TRACE("[optimize] no fixed point after %d rounds; stopping\n", iter);
+            return new_body;
+#endif
         }
         OPT_TRACE("[optimize] body changed; iterating\n");
         body = new_body;

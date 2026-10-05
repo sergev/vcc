@@ -10,14 +10,11 @@ typedef struct {
     bool cse;              // --no-cse disables
     bool dead_store_elim;  // --no-dead-store disables
     bool debug;            // --opt-debug enables the optimizer trace
-    int max_iterations;    // --opt-max-iter: rounds at most; 0 = until a fixed point,
-                           // OPT_ITER_LEGACY = the old loop (see optimize_function)
+    int max_iterations;    // --opt-max-iter: rounds at most; 0 = until a fixed point
 } OptFlags;
 
-// The old loop's rule, kept as the default until the latent bugs a real fixed
-// point exposes are fixed: a further round only when a pass freed the entry
-// instruction (the old comparison could see no other change).
-enum { OPT_ITER_LEGACY = -1 };
+// A fixed point is always reached well before this many rounds; see optimize_function.
+enum { OPT_MAX_ROUNDS = 64 };
 
 OptFlags opt_flags_default(void);
 

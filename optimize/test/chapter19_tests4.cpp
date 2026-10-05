@@ -2149,20 +2149,12 @@ int main(void) {
   size: 8
   alignment: 8
 - instruction:
-  kind: sign_extend
+  kind: copy_to_offset
   src:
     kind: constant
     const:
-      kind: int
+      kind: long
       value: -1
-  dst:
-    kind: var
-    name: %1
-- instruction:
-  kind: copy_to_offset
-  src:
-    kind: var
-    name: %1
   dst: %my_union
   offset: 0
 - instruction:
@@ -2896,31 +2888,11 @@ int target(int a) {
     name: %a
   target: %0
 - instruction:
-  kind: copy
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: 1
-  dst:
-    kind: var
-    name: %2
-- instruction:
   kind: jump
   target: %1
 - instruction:
   kind: label
   name: %0
-- instruction:
-  kind: copy
-  src:
-    kind: constant
-    const:
-      kind: int
-      value: 1
-  dst:
-    kind: var
-    name: %2
 - instruction:
   kind: label
   name: %1
@@ -2940,24 +2912,12 @@ int target(int a) {
   kind: label
   name: %4
 - instruction:
-  kind: binary
-  op: add
-  src1:
-    kind: var
-    name: %2
-  src2:
+  kind: return
+  src:
     kind: constant
     const:
       kind: int
-      value: 0
-  dst:
-    kind: var
-    name: %6
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %6
+      value: 1
 )OPT");
 }
 
@@ -3399,20 +3359,12 @@ int target(void) {
       kind: int
       value: 1
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 10
-  dst:
-    kind: var
-    name: %x
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %x
 )OPT");
 }
 

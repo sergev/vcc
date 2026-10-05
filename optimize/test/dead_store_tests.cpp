@@ -579,6 +579,7 @@ TEST_F(OptimizerTest, DeadStoreAddressTakenSurvives)
     cp->next               = ret;
 
     OptFlags flags          = opt_flags_default();
+    flags.max_iterations    = 1; // what one round does; later rounds fold further
     flags.copy_propagation  = false;
     Tac_Instruction *result = optimize_function(entry, flags, nullptr);
 
@@ -933,6 +934,7 @@ TEST_F(OptimizerTest, DeadStoreLiveAcrossEmptyBlock)
         seq[i]->next = seq[i + 1];
 
     OptFlags flags          = opt_flags_default();
+    flags.max_iterations    = 1; // what one round does; later rounds fold further
     Tac_Instruction *result = optimize_function(seq[0], flags, nullptr);
 
     // Both else-branch stores survive and feed the add (copy-prop stays

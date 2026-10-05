@@ -282,20 +282,12 @@ int target_remove_jnz(void) {
       kind: int
       value: 0
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 1
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %2
 - instruction:
   kind: return
   src:
@@ -304,20 +296,12 @@ int target_remove_jnz(void) {
       kind: int
       value: 1
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 1
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %2
 )OPT");
 }
 
@@ -423,20 +407,12 @@ int target_for_loop_false(void) {
       kind: int
       value: 3
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 2
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %2
 - instruction:
   kind: return
   src:
@@ -452,20 +428,12 @@ int target_for_loop_false(void) {
       kind: int
       value: 10
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 0
-  dst:
-    kind: var
-    name: %retval
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %retval
 - instruction:
   kind: return
   src:
@@ -481,20 +449,12 @@ int target_for_loop_false(void) {
       kind: int
       value: 100
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 0
-  dst:
-    kind: var
-    name: %retval
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %retval
 )OPT");
 }
 
@@ -886,20 +846,12 @@ int target_remove_jnz(void) {
       kind: int
       value: 0
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 1
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %2
 - instruction:
   kind: return
   src:
@@ -908,20 +860,12 @@ int target_remove_jnz(void) {
       kind: int
       value: 1
 - instruction:
-  kind: copy
+  kind: return
   src:
     kind: constant
     const:
       kind: int
       value: 1
-  dst:
-    kind: var
-    name: %2
-- instruction:
-  kind: return
-  src:
-    kind: var
-    name: %2
 )OPT");
 }
 
