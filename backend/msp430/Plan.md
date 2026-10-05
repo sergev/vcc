@@ -406,6 +406,10 @@ instructions.
   - **Accesses** are absolute: `mov &g, 2(r1)`; `add #1, &g`. An indexed global is
     `g(rN)`, as clang emits `mov.b data(r12), r13`.
   - Static locals' `name$N` must assemble as they are. Check it, as on AVR.
+
+  *Done.* `data_tests.cpp` covers sections, alignment (none for `char`), every
+  initializer kind (`double` as `.quad` bits, a function address a plain `.short`),
+  absolute access, `n$1`, and a run of globals of every kind. Book chapter 10 passes.
 - **T13. Floating point** (ch. 13), in software.
   - **A binary64 soft-float runtime,** new in `libc/common/float64.c`, beside AVR's
     `float32.c` and the shared `float128.c`, sharing their structure and `libutil`
