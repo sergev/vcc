@@ -124,7 +124,7 @@ endforeach()
 foreach(name int64 int64conv frexp ldexp modf)
     msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
-foreach(name mspabi malloc)
+foreach(name mspabif mspabid malloc)
     msp430_compile_libc_c(${name} ${src})
 endforeach()
 

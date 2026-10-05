@@ -34,6 +34,7 @@ add_executable(msp430-tests
     test/ptr_tests.cpp
     test/struct_tests.cpp
     test/stdarg_tests.cpp
+    test/interop_tests.cpp
     test/fp_tests.cpp
     test/float64_tests.cpp
     test/float64_host.c

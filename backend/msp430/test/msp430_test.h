@@ -111,7 +111,24 @@ protected:
         if (len > 0)
             EXPECT_EQ(1u, fread(&s[0], static_cast<size_t>(len), 1, f));
         fclose(f);
+        if (msp430_clang_available())
+            AssembleWithClang(s);
         return s;
+    }
+
+    // Our output is portable between the two assemblers: clang's must take it too.
+    void AssembleWithClang(const std::string &asm_text)
+    {
+        std::string base = QemuScratchPath(".clang-as");
+        {
+            std::ofstream f(base + ".s");
+            f << asm_text;
+        }
+        EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o", base + ".o",
+                               base + ".s" },
+                             base + ".log"))
+            << "clang's assembler rejects our output:\n"
+            << ReadFile(base + ".log");
     }
 
     // Instruction lines of `asm_text`, unindented and with one space after the

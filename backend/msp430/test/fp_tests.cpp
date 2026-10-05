@@ -9,20 +9,35 @@
 
 #include "msp430_test.h"
 
-// A double's second operand goes on the stack, in the outgoing area.
+// A double's arithmetic as GCC calls it: the first operand in r11:r8, which the
+// prologue saves, the second in r15:r12.
 TEST_F(Msp430Test, DoubleAddCallsHelper)
 {
     std::string code = Code(CompileToMsp430("double f(double a, double b) { return a + b; }"));
-    EXPECT_NE(std::string::npos, code.find(", 6(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("call #__adddf3\n")) << code;
+    EXPECT_EQ(0u, code.find(R"(push r8
+push r9
+push r10
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r11
+mov 24(r1), r12
+mov 26(r1), r13
+mov 28(r1), r14
+mov 30(r1), r15
+call #__mspabi_addd
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(pop r10
+pop r9
+pop r8
+ret
+)")) << code;
 }
 
-// A float's goes in r15:r14.
+// A float's second operand goes in r15:r14.
 TEST_F(Msp430Test, FloatMultiplyCallsHelper)
 {
     std::string code = Code(CompileToMsp430("float f(float a, float b) { return a * b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r15
-call #__mulsf3
+call #__mspabi_mpyf
 )")) << code;
 }
 
@@ -59,7 +74,7 @@ tst r12
         << code;
 }
 
-// Conversions by their helpers; an int widens to 32 bits first.
+// Conversions by the helpers GCC's code calls; an int widens to 32 bits first.
 TEST_F(Msp430Test, Conversions)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -71,11 +86,12 @@ TEST_F(Msp430Test, Conversions)
         float g(double p6) { return p6; }
         long long h(double p7) { return p7; }
     )"));
-    for (const char *h : { "call #__floatsidf\n", R"(clr r13
-call #__floatunsisf
+    for (const char *h : { "call #__mspabi_fltlid\n", R"(clr r13
+call #__mspabi_fltulf
 )",
-                           "call #__fixdfsi\n", "call #__fixunssfsi\n", "call #__extendsfdf2\n",
-                           "call #__truncdfsf2\n", "call #__fixdfdi\n" })
+                           "call #__mspabi_fixdli\n", "call #__fixunssfsi\n",
+                           "call #__mspabi_cvtfd\n", "call #__mspabi_cvtdf\n",
+                           "call #__mspabi_fixdlli\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;
 }
 

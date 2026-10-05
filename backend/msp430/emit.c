@@ -107,6 +107,11 @@ void msp_emit_func(FILE *out, const Msp_Func *fn)
     fprintf(out, "    .p2align 1\n");
     fprintf(out, "    %-7s %s, @function\n", ".type", fn->name);
     fprintf(out, "%s:\n", fn->name);
+    // As GCC does: newlib's startup is assembled from pieces, and the one that passes
+    // main's result to exit is linked only when something refers to it (our crt0
+    // defines the name too).
+    if (strcmp(fn->name, "main") == 0)
+        fprintf(out, "    %-7s __crt0_call_exit\n", ".refsym");
     for (const Msp_Block *b = fn->blocks; b; b = b->next) {
         if (b->label)
             fprintf(out, "%s:\n", b->label);

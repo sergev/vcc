@@ -37,6 +37,9 @@ _start:
 ; The canary between .bss and the heap: exit reports a stack that ran into it.
     mov     #0xa55a, &__stack_canary
 
+; GCC's main, and ours, refer to this piece of newlib's startup; here it is a name.
+    .globl  __crt0_call_exit
+__crt0_call_exit:
     call    #main
 #ifdef PRINT_STATUS
     mov     r12, r10                    ; the status, for exit

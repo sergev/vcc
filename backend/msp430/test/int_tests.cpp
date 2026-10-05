@@ -79,8 +79,7 @@ adc r13
 )")) << code;
 }
 
-// Multiply and divide go through the runtime: __mspabi_ for 16 and 32 bits, libgcc's
-// names for 64.
+// Multiply and divide go through the runtime, by the __mspabi_ names GCC's code calls.
 TEST_F(Msp430Test, HelpersByWidth)
 {
     std::string code = Code(CompileToMsp430(R"(
@@ -91,17 +90,23 @@ TEST_F(Msp430Test, HelpersByWidth)
         long long e(long long x, long long y) { return x / y; }
     )"));
     for (const char *h : { "call #__mspabi_mpyi\n", "call #__mspabi_divu\n",
-                           "call #__mspabi_remli\n", "call #__mspabi_mpyl\n", "call #__divdi3\n" })
+                           "call #__mspabi_remli\n", "call #__mspabi_mpyl\n",
+                           "call #__mspabi_divlli\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;
 }
 
-// A 64-bit helper takes its second operand at 0(r1), in the outgoing area.
-TEST_F(Msp430Test, Helper64SecondOperandOnStack)
+// A 64-bit helper takes its first operand in r11:r8, the second in r15:r12, and needs
+// no outgoing area.
+TEST_F(Msp430Test, Helper64FirstOperandInR8)
 {
     std::string code =
         Code(CompileToMsp430("long long f(long long x, long long y) { return x * y; }"));
-    EXPECT_NE(std::string::npos, code.find("mov 32(r1), 6(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("call #__muldi3\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r8
+mov 2(r1), r9
+mov 4(r1), r10
+mov 6(r1), r11
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("call #__mspabi_mpyll\n")) << code;
 }
 
 // Widening: a signed int's sign word, an unsigned char zero-extended by mov.b.

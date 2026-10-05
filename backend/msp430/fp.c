@@ -1,9 +1,16 @@
 //
 // Floating point, in software: float is IEEE binary32, double and long double binary64,
-// and every operation but negation and the truth test is a call of the runtime under
-// its libgcc name (libc/common/float32.c and float64.c), with the ordinary ABI: a float
-// in r13:r12 (a second one in r15:r14), a double in r15:r12 (a second one on the stack
-// at 0(r1)), the result in r12 up, a comparison's an int in r12.
+// and every operation but negation and the truth test is a call of the runtime, by the
+// names and conventions GCC's code uses, which libgcc provides as well as our runtime
+// (libc/common/float32.c and float64.c, libc/msp430/mspabi*.[cs]):
+//   - binary32 arithmetic, __mspabi_addf and the like: r13:r12 and r15:r14;
+//   - binary64 arithmetic, __mspabi_addd and the like: the first operand in r11:r8 (so
+//     the prologue saves r8-r10), the second in r15:r12;
+//   - comparisons, the libgcc predicates __ltdf2 and the like: a float in r13:r12 and
+//     r15:r14, a double in r15:r12 and on the stack at 0(r1);
+//   - conversions, __mspabi_fixdli, __mspabi_fltlid and the like (__fixunssfsi and
+//     __fixunssfdi from float to unsigned), the operand in r12 up;
+// the result in r12 up, a comparison's an int in r12.
 //
 #include "internal.h"
 
@@ -13,13 +20,13 @@ static const char *arith_helper(Tac_BinaryOperator op, int size)
     bool d = size == 8;
     switch (op) {
     case TAC_BINARY_ADD_DOUBLE:
-        return d ? "__adddf3" : "__addsf3";
+        return d ? "__mspabi_addd" : "__mspabi_addf";
     case TAC_BINARY_SUBTRACT_DOUBLE:
-        return d ? "__subdf3" : "__subsf3";
+        return d ? "__mspabi_subd" : "__mspabi_subf";
     case TAC_BINARY_MULTIPLY_DOUBLE:
-        return d ? "__muldf3" : "__mulsf3";
+        return d ? "__mspabi_mpyd" : "__mspabi_mpyf";
     case TAC_BINARY_DIVIDE_DOUBLE:
-        return d ? "__divdf3" : "__divsf3";
+        return d ? "__mspabi_divd" : "__mspabi_divf";
     default:
         return NULL;
     }
@@ -61,10 +68,14 @@ static bool compare_helper(Tac_BinaryOperator op, int size, const char **name, i
     }
 }
 
-// Two FP operands into place for a helper: r13:r12 and r15:r14, or r15:r12 and 0(r1).
-static void load_operands(Gen *g, const Tac_Val *a, const Tac_Val *b, int size)
+// Two FP operands into place for a helper: r13:r12 and r15:r14; for binary64,
+// r11:r8 and r15:r12 (`r8`), or r15:r12 and 0(r1).
+static void load_operands(Gen *g, const Tac_Val *a, const Tac_Val *b, int size, bool r8)
 {
-    if (size == 8) {
+    if (size == 8 && r8) {
+        load_val(g, a, 8, 4, EXT_TYPE);
+        load_val(g, b, 12, 4, EXT_TYPE);
+    } else if (size == 8) {
         for (int i = 0; i < 4; i++)
             emit2(g, MSP_MOV, val_word(g, b, i), msp_indexed(MSP_SP, NULL, 2 * i));
         load_val(g, a, 12, 4, EXT_TYPE);
@@ -74,12 +85,17 @@ static void load_operands(Gen *g, const Tac_Val *a, const Tac_Val *b, int size)
     }
 }
 
+int fp_out_size(Tac_BinaryOperator op, int size)
+{
+    return size == 8 && !arith_helper(op, size) ? 8 : 0;
+}
+
 void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     Tac_BinaryOperator op = in->u.binary.op;
     int size              = msp_type_size(val_type(g, in->u.binary.src1));
-    load_operands(g, in->u.binary.src1, in->u.binary.src2, size);
-    const char *name = arith_helper(op, size);
+    const char *name      = arith_helper(op, size);
+    load_operands(g, in->u.binary.src1, in->u.binary.src2, size, name != NULL);
     if (name) {
         call_helper(g, name);
         store_val(g, in->u.binary.dst, 12, size / 2);
@@ -145,13 +161,13 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         bool d = dsize == 8;
         if (ssize == 8) {
             load_val(g, src, 12, 4, EXT_TYPE);
-            call_helper(g, d ? (is_unsigned ? "__floatundidf" : "__floatdidf")
-                             : (is_unsigned ? "__floatundisf" : "__floatdisf"));
+            call_helper(g, d ? (is_unsigned ? "__mspabi_fltulld" : "__mspabi_fltllid")
+                             : (is_unsigned ? "__mspabi_fltullf" : "__mspabi_fltllif"));
         } else {
             // Widened to 32 bits by the source's own signedness.
             load_val(g, src, 12, 2, is_unsigned ? EXT_ZERO : EXT_SIGN);
-            call_helper(g, d ? (is_unsigned ? "__floatunsidf" : "__floatsidf")
-                             : (is_unsigned ? "__floatunsisf" : "__floatsisf"));
+            call_helper(g, d ? (is_unsigned ? "__mspabi_fltuld" : "__mspabi_fltlid")
+                             : (is_unsigned ? "__mspabi_fltulf" : "__mspabi_fltlif"));
         }
         store_val(g, dst, 12, dwords);
         break;
@@ -168,20 +184,20 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         bool d = ssize == 8;
         load_val(g, src, 12, ssize / 2, EXT_TYPE);
         if (dsize == 8)
-            call_helper(g, d ? (is_unsigned ? "__fixunsdfdi" : "__fixdfdi")
-                             : (is_unsigned ? "__fixunssfdi" : "__fixsfdi"));
-        else // a 32-bit unsigned needs its own; narrower ones fit the signed long
-            call_helper(g, d ? (is_unsigned && dsize == 4 ? "__fixunsdfsi" : "__fixdfsi")
-                             : (is_unsigned && dsize == 4 ? "__fixunssfsi" : "__fixsfsi"));
+            call_helper(g, d ? (is_unsigned ? "__mspabi_fixdull" : "__mspabi_fixdlli")
+                             : (is_unsigned ? "__fixunssfdi" : "__mspabi_fixflli"));
+        else // to 32 bits, as GCC's code converts a narrower integer too
+            call_helper(g, d ? (is_unsigned ? "__mspabi_fixdul" : "__mspabi_fixdli")
+                             : (is_unsigned ? "__fixunssfsi" : "__mspabi_fixfli"));
         store_val(g, dst, 12, dwords);
         break;
     }
     default: // between float and double (long double is double)
         load_val(g, src, 12, ssize / 2, EXT_TYPE);
         if (ssize == 4 && dsize == 8)
-            call_helper(g, "__extendsfdf2");
+            call_helper(g, "__mspabi_cvtfd");
         else if (ssize == 8 && dsize == 4)
-            call_helper(g, "__truncdfsf2");
+            call_helper(g, "__mspabi_cvtdf");
         store_val(g, dst, 12, dwords);
         break;
     }

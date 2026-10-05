@@ -217,25 +217,18 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, Shift sh)
     store_val(g, in->u.binary.dst, 12, n);
 }
 
-// The second 64-bit operand of a helper, on the stack at 0(r1).
-static void push_operand64(Gen *g, const Tac_Val *v)
-{
-    for (int i = 0; i < 4; i++)
-        emit2(g, MSP_MOV, val_word(g, v, i), msp_indexed(MSP_SP, NULL, 2 * i));
-}
-
-// A multiply, divide or remainder through the runtime: the __mspabi_ helpers for 16
-// and 32 bits (operands in r12 and r13, or r13:r12 and r15:r14), libgcc's for 64
-// (r15:r12 and the stack); the result in r12 up.
+// A multiply, divide or remainder through the runtime, the __mspabi_ helpers GCC's code
+// calls: operands in r12 and r13, or r13:r12 and r15:r14, or for 64 bits r11:r8 (the
+// prologue then saves r8-r10) and r15:r12; the result in r12 up.
 static void arith_helper(Gen *g, const Tac_Instruction *in, int n)
 {
     static const char *const names[][3] = {
         // 16, 32, 64 bits
-        { "__mspabi_mpyi", "__mspabi_mpyl", "__muldi3" },
-        { "__mspabi_divi", "__mspabi_divli", "__divdi3" },
-        { "__mspabi_divu", "__mspabi_divul", "__udivdi3" },
-        { "__mspabi_remi", "__mspabi_remli", "__moddi3" },
-        { "__mspabi_remu", "__mspabi_remul", "__umoddi3" },
+        { "__mspabi_mpyi", "__mspabi_mpyl", "__mspabi_mpyll" },
+        { "__mspabi_divi", "__mspabi_divli", "__mspabi_divlli" },
+        { "__mspabi_divu", "__mspabi_divul", "__mspabi_divull" },
+        { "__mspabi_remi", "__mspabi_remli", "__mspabi_remlli" },
+        { "__mspabi_remu", "__mspabi_remul", "__mspabi_remull" },
     };
     int row;
     switch (in->u.binary.op) {
@@ -258,8 +251,8 @@ static void arith_helper(Gen *g, const Tac_Instruction *in, int n)
     }
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     if (n == 4) {
-        push_operand64(g, b);
-        load_val(g, a, 12, 4, EXT_TYPE);
+        load_val(g, a, 8, 4, EXT_TYPE);
+        load_val(g, b, 12, 4, EXT_TYPE);
     } else {
         load_val(g, a, 12, n, EXT_TYPE);
         load_val(g, b, n == 1 ? 13 : 14, n, EXT_TYPE);
@@ -443,14 +436,9 @@ int instr_out_size(const Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         return call_stack_size(g, in);
     case TAC_INSTRUCTION_BINARY: {
-        // A 64-bit helper takes its second operand on the stack.
+        // A binary64 comparison takes its second operand on the stack.
         const Tac_Type *t = operand_type(g, in->u.binary.src1, in->u.binary.src2);
-        Cond c;
-        bool swap;
-        bool cmp = compare_cond(in->u.binary.op, &c, &swap);
-        if (msp_type_size(t) == 8 && (msp_is_fp(t) || !cmp))
-            return 8;
-        return 0;
+        return msp_is_fp(t) ? fp_out_size(in->u.binary.op, msp_type_size(t)) : 0;
     }
     default:
         return 0;

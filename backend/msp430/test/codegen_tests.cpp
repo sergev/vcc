@@ -10,6 +10,7 @@ TEST_F(Msp430Test, ReturnConstant)
     .p2align 1
     .type   main, @function
 main:
+    .refsym __crt0_call_exit
     mov     #2, r12
 .Lv0:
     ret

@@ -10,11 +10,12 @@
 // other name at its symbol, reached as &sym.  The ISA takes memory operands on both
 // sides, so a copy, a store or a load is a memory-to-memory move; an operation loads its
 // first operand into r12-r15 (block A, the first argument registers), takes the second
-// straight from memory or as an immediate, and stores the result.  A helper call takes
-// its operands as an ordinary call does: the 16- and 32-bit integer helpers are the
-// __mspabi_* ones, the 64-bit and floating-point ones go by their libgcc names
-// (__muldi3, __adddf3, ...) with a second 64-bit operand on the stack.  r11 holds a
-// 0/1 result, a shift count, a loop count or a call target; r14 and r15 hold pointers.
+// straight from memory or as an immediate, and stores the result.  A helper is the
+// one GCC's code calls, so that our objects link with libgcc as well as with our
+// runtime: the __mspabi_* names with their operands in r12-r15, a 64-bit first operand
+// in r8-r11 (the prologue then saves r8-r10); the libgcc predicates for an FP
+// comparison, a second double on the stack.  r11 holds a 0/1 result, a shift count, a
+// loop count or a call target; r14 and r15 hold pointers.
 //
 // Frame (SP is constant in the body; every offset is from it):
 //   frame + 2*saved + 2 ...  incoming stack arguments
@@ -147,6 +148,9 @@ int instr_out_size(const Gen *g, const Tac_Instruction *in);
 // Floating point, in software (fp.c)
 //
 void gen_fp_binary(Gen *g, const Tac_Instruction *in);
+// The outgoing stack bytes FP operator `op` on `size`-byte operands needs: 8 for a
+// binary64 comparison's second operand.
+int fp_out_size(Tac_BinaryOperator op, int size);
 void gen_fp_unary(Gen *g, const Tac_Instruction *in);
 // The zero flag of FP value `v`: set when it is a zero of either sign (not a NaN).
 void gen_fp_test(Gen *g, const Tac_Val *v);

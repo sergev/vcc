@@ -86,8 +86,11 @@ __mspabi_remi:
 
 ; The remainder in R11:R10, the bit count in R9.
     .globl  __mspabi_divul
+    .globl  __mspabi_divlu              ; GCC's other name for it
+    .type   __mspabi_divlu, @function
     .type   __mspabi_divul, @function
 __mspabi_divul:
+__mspabi_divlu:
     push    r10
     push    r9
     clr     r10

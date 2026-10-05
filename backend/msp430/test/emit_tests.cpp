@@ -135,6 +135,7 @@ TEST_F(EmitTest, Function)
     .p2align 1
     .type   main, @function
 main:
+    .refsym __crt0_call_exit
     mov     #200, r12
 .L1:
     ret

@@ -1,11 +1,11 @@
-; The MSP430 EABI helpers with two 64-bit operands, as clang calls them: the first
+; The MSP430 EABI helpers with two 64-bit operands, as GCC and clang call them: the first
 ; operand in r8-r11 (r11 high), the second in r12-r15, the result in r12-r15 (an int in
 ; r12 for a comparison).  Each shim moves them to the ordinary ABI of the libgcc-named
 ; routine it calls -- the first operand in r12-r15, the second on the stack -- and
 ; preserves r4-r10, as an ordinary call does.
 ;
 ;   __mspabi_mpyll   __muldi3       __mspabi_divlli  __divdi3     __mspabi_remlli  __moddi3
-;   __mspabi_divull  __udivdi3      __mspabi_remull  __umoddi3
+;   __mspabi_divull  __udivdi3      __mspabi_remull  __umoddi3   __mspabi_divllu  __udivdi3
 ;   __mspabi_addd    __adddf3       __mspabi_subd    __subdf3     __mspabi_mpyd    __muldf3
 ;   __mspabi_divd    __divdf3       __mspabi_cmpd    __ltdf2 (-1, 0 or 1; 1 when unordered)
 
@@ -33,6 +33,7 @@
     shim    __mspabi_divlli, __divdi3
     shim    __mspabi_remlli, __moddi3
     shim    __mspabi_divull, __udivdi3
+    shim    __mspabi_divllu, __udivdi3      ; GCC's other name for it
     shim    __mspabi_remull, __umoddi3
     shim    __mspabi_addd, __adddf3
     shim    __mspabi_subd, __subdf3
