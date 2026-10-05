@@ -27,8 +27,12 @@
 
 #include "optimize.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "cfg.h"
 #include "string_map.h"
+#include "xalloc.h"
 
 // Pass entry points, implemented in the sibling translation units.
 Tac_Instruction *constant_fold(Tac_Instruction *body);
@@ -36,6 +40,8 @@ void eliminate_unreachable(OptCfg *cfg);
 void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_dead_stores(const OptCfg *cfg, const Tac_TopLevel *fn);
+
+_Noreturn void fatal_error(const char *fmt, ...);
 
 // Process-global trace switch (see optimize.h). Default off.
 int optimize_debug;
@@ -63,8 +69,25 @@ OptFlags opt_flags_default(void)
         .copy_propagation = true,
         .cse              = true,
         .dead_store_elim  = true,
-        .debug            = false
+        .debug            = false,
+        .max_iterations   = OPT_ITER_LEGACY,
     };
+}
+
+// The instruction list spelled as YAML: the fixed-point test compares the
+// spelling before and after a round. The result is xalloc'ed.
+static char *snapshot(const Tac_Instruction *body)
+{
+    char *buf  = NULL;
+    size_t len = 0;
+    FILE *f    = open_memstream(&buf, &len);
+    if (!f)
+        fatal_error("optimizer: open_memstream failed");
+    tac_export_yaml_instruction_list(f, body, 0);
+    fclose(f);
+    char *copy = xstrdup(buf);
+    free(buf);
+    return copy;
 }
 
 // Run the pipeline on one function body to a fixed point and return the
@@ -83,6 +106,9 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
     for (;;) {
         iter++;
         OPT_TRACE("[optimize] iteration %d\n", iter);
+
+        bool legacy  = flags.max_iterations == OPT_ITER_LEGACY;
+        char *before = legacy ? NULL : snapshot(body);
 
         // Constant folding first, on the flat list (no CFG required).
         OPT_TRACE("[optimize] running pass: const-fold\n");
@@ -117,13 +143,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
             OPT_TRACE("[optimize] pass dead-store-elim: skipped (disabled)\n");
         }
 
-        // A pass (e.g. dead_store_elim) may remove the entry block's first
-        // instruction, freeing it and leaving `body` dangling. When that
-        // happens the entry block's `first` no longer equals `body`. We must
-        // detect this *before* cfg_flatten, because afterward we may neither
-        // dereference `body` (use-after-free in tac_compare_instruction) nor
-        // free it again (double free).
-        bool body_freed = (cfg->blocks[0]->first != body);
+        bool entry_freed = cfg->blocks[0]->first != body;
 
         // Rejoin the (possibly modified) blocks into a flat list.
         Tac_Instruction *new_body = cfg_flatten(cfg);
@@ -131,25 +151,36 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, const 
 
         // An empty result is also a terminal condition: nothing left to iterate.
         if (!new_body) {
+            xfree(before);
             OPT_TRACE("[optimize] converged (empty body) after %d iteration(s)\n", iter);
             return new_body;
         }
 
-        // Fixed point: when this iteration produced a structurally identical
-        // list, the loop has converged and we return. Otherwise free the now-
-        // superseded old body and iterate again on the new one. (When the entry
-        // instruction was freed by a pass, `body` is already gone, so we skip
-        // both the comparison and the free.)
-        if (!body_freed && tac_compare_instruction(new_body, body)) {
+        if (legacy) {
+            if (!entry_freed) {
+                OPT_TRACE("[optimize] stopped after %d iteration(s)\n", iter);
+                return new_body;
+            }
+            OPT_TRACE("[optimize] entry instruction freed by a pass; iterating\n");
+            body = new_body;
+            continue;
+        }
+
+        // Fixed point: the passes rewrite the list in place, so the round is
+        // compared against a snapshot of the list taken before it.
+        char *after    = snapshot(new_body);
+        bool unchanged = strcmp(before, after) == 0;
+        xfree(before);
+        xfree(after);
+        if (unchanged) {
             OPT_TRACE("[optimize] fixed point reached after %d iteration(s)\n", iter);
             return new_body;
         }
-        if (body_freed) {
-            OPT_TRACE("[optimize] entry instruction freed by a pass; iterating\n");
-        } else {
-            OPT_TRACE("[optimize] body changed; iterating\n");
-            tac_free_instruction(body);
+        if (flags.max_iterations > 0 && iter >= flags.max_iterations) {
+            OPT_TRACE("[optimize] stopped after %d iteration(s)\n", iter);
+            return new_body;
         }
+        OPT_TRACE("[optimize] body changed; iterating\n");
         body = new_body;
     }
 }

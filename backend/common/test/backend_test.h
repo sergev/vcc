@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -43,6 +44,8 @@ protected:
         target_config = target_lookup(target_name);
         ASSERT_NE(nullptr, target_config);
         opt_flags        = opt_flags_default();
+        if (const char *n = getenv("VCC_OPT_MAX_ITER")) // for bisecting a failure
+            opt_flags.max_iterations = atoi(n);
         translate_verify = 1;
         input_file       = tmpfile();
         ASSERT_NE(nullptr, input_file);
@@ -66,7 +69,11 @@ protected:
     bool IsTarget(const char *name) const { return strcmp(target_name, name) == 0; }
 
     // Disable optimization.
-    void DisableOptimization() { opt_flags = {}; }
+    void DisableOptimization()
+    {
+        opt_flags                = {};
+        opt_flags.max_iterations = OPT_ITER_LEGACY;
+    }
 
     // Parse C source, typecheck and translate every declaration, and return the whole
     // TAC chain (free it with tac_free_toplevel), or nullptr if preprocessing failed.

@@ -45,6 +45,7 @@ typedef struct {
     int no_unreachable;      // --no-unreachable
     int no_copy_prop;        // --no-copy-prop
     int no_cse;              // --no-cse
+    int opt_max_iter;        // --opt-max-iter N; -1 = the default
     int no_dead_store;       // --no-dead-store
     int opt_debug;           // --opt-debug
     int verify;              // --verify
@@ -70,6 +71,7 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-cse            Disable common-subexpression elimination\n");
     fprintf(stderr, "    --no-dead-store     Disable dead store elimination\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
+    fprintf(stderr, "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
     fprintf(stderr, "    -t, --target NAME   Target architecture (default: riscv64)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
@@ -94,6 +96,7 @@ static void init_args(Args *args)
     args->no_unreachable = 0;
     args->no_copy_prop   = 0;
     args->no_cse         = 0;
+    args->opt_max_iter   = -1;
     args->no_dead_store  = 0;
     args->verify         = 0;
     args->opt_debug      = 0;
@@ -144,6 +147,7 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "opt-debug", no_argument, 0, 259 },      //
         { "verify", no_argument, 0, 260 },         //
         { "no-cse", no_argument, 0, 261 },         //
+        { "opt-max-iter", required_argument, 0, 262 }, //
         {},                                        //
     };
 
@@ -196,6 +200,9 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 261:
             args->no_cse = 1;
+            break;
+        case 262:
+            args->opt_max_iter = atoi(optarg);
             break;
         case '?': // Unknown option
             return -1;
@@ -294,6 +301,10 @@ void process_file(const Args *args)
     flags.copy_propagation = !args->no_copy_prop;
     if (args->no_cse)
         flags.cse = false;
+    if (args->opt_max_iter >= 0)
+        flags.max_iterations = args->opt_max_iter;
+    else if (getenv("VCC_OPT_MAX_ITER")) // for bisecting a whole build
+        flags.max_iterations = atoi(getenv("VCC_OPT_MAX_ITER"));
     flags.dead_store_elim  = !args->no_dead_store;
     if (args->verify)
         translate_verify = 1;
