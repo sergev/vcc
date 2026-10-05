@@ -68,6 +68,19 @@ protected:
             case TAC_INSTRUCTION_STORE:
                 out += "*" + Val(i->u.store.dst_ptr) + " = " + Val(i->u.store.src);
                 break;
+            case TAC_INSTRUCTION_LOAD:
+            case TAC_INSTRUCTION_LOAD_BYTE:
+                out += Val(i->u.load.dst) + " = *" + Val(i->u.load.src_ptr);
+                break;
+            case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+                out += Val(i->u.copy_from_offset.dst) + " = " + i->u.copy_from_offset.src + "." +
+                       std::to_string(i->u.copy_from_offset.offset);
+                break;
+            case TAC_INSTRUCTION_COPY_TO_OFFSET:
+                out += std::string(i->u.copy_to_offset.dst) + "." +
+                       std::to_string(i->u.copy_to_offset.offset) + " = " +
+                       Val(i->u.copy_to_offset.src);
+                break;
             case TAC_INSTRUCTION_FUN_CALL:
                 out += std::string("call ") + i->u.fun_call.fun_name;
                 break;
@@ -90,6 +103,20 @@ protected:
             out += "\n";
         }
         return out;
+    }
+
+    static Tac_Instruction *load(const char *p, const char *dst)
+    {
+        return make_load(make_var(p), make_var(dst));
+    }
+
+    static Tac_Instruction *member(const char *agg, int offset, const char *dst)
+    {
+        Tac_Instruction *i           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
+        i->u.copy_from_offset.src    = xstrdup(agg);
+        i->u.copy_from_offset.offset = offset;
+        i->u.copy_from_offset.dst    = make_var(dst);
+        return i;
     }
 
     static Tac_Instruction *add(const char *a, const char *b, const char *dst)
@@ -389,6 +416,151 @@ TEST_F(CseTest, LocalAddressNotHeld)
 }
 
 // ---------------------------------------------------------------------------
+// Memory reads.
+// ---------------------------------------------------------------------------
+
+// *p read twice with nothing written in between: the second read is a copy.
+TEST_F(CseTest, LoadReused)
+{
+    Tac_Instruction *body = chain({ load("p", "%1"), load("p", "%2"), add("%1", "%2", "%3"),
+                                    make_return(make_var("%3")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "%2 = %1\n"
+                                  "%3 = op0 %1 %2\n"
+                                  "ret %3\n");
+}
+
+// Any store may write *p, whatever pointer it goes through.
+TEST_F(CseTest, LoadKilledByStore)
+{
+    Tac_Instruction *body = chain({ load("p", "%1"), make_store(make_const_int(0), make_var("q")),
+                                    load("p", "%2"), make_return(make_var("%2")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "*q = 0\n"
+                                  "%2 = *p\n"
+                                  "ret %2\n");
+}
+
+TEST_F(CseTest, LoadKilledByCall)
+{
+    Tac_Instruction *body = chain(
+        { load("p", "%1"), make_fun_call("f"), load("p", "%2"), make_return(make_var("%2")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "call f\n"
+                                  "%2 = *p\n"
+                                  "ret %2\n");
+}
+
+// p may point at the global g, or at the address-taken local x; not at the
+// private local y.
+TEST_F(CseTest, LoadKilledByAliasedWrite)
+{
+    Tac_Instruction *body = chain(
+        { make_get_address(make_var("x"), make_var("%9")), load("p", "%1"),
+          make_copy(make_const_int(1), make_var("g")), load("p", "%2"),
+          make_copy(make_const_int(1), make_var("x")), load("p", "%3"),
+          make_copy(make_const_int(1), make_var("y")), load("p", "%4"),
+          make_return(make_var("%4")) });
+    const Tac_TopLevel *fn = make_fn_tl({ "p", "x", "y", "%1", "%2", "%3", "%4", "%9" });
+    EXPECT_EQ(Show(RunCse(body, fn)), "%9 = &x\n"
+                                      "%1 = *p\n"
+                                      "g = 1\n"
+                                      "%2 = *p\n"
+                                      "x = 1\n"
+                                      "%3 = *p\n"
+                                      "y = 1\n"
+                                      "%4 = %3\n"
+                                      "ret %4\n");
+}
+
+// Redefining the pointer kills a read through it.
+TEST_F(CseTest, LoadKilledByPointerChange)
+{
+    Tac_Instruction *body = chain({ load("p", "%1"), make_copy(make_var("q"), make_var("p")),
+                                    load("p", "%2"), make_return(make_var("%2")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "p = q\n"
+                                  "%2 = *p\n"
+                                  "ret %2\n");
+}
+
+// A volatile read is neither a holder nor reused.
+TEST_F(CseTest, VolatileLoadUntouched)
+{
+    Tac_Instruction *body = chain({ as_volatile(load("p", "%1")), as_volatile(load("p", "%2")),
+                                    make_return(make_var("%2")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "%2 = *p\n"
+                                  "ret %2\n");
+}
+
+// A read ahead of a loop that stores nothing stays available inside it.
+TEST_F(CseTest, LoadAvailableInLoop)
+{
+    Tac_Instruction *body = chain(
+        { load("p", "%1"), make_label("top"), load("p", "%2"),
+          make_binary(TAC_BINARY_ADD, make_var("i"), make_var("%2"), make_var("%3")),
+          make_copy(make_var("%3"), make_var("i")), make_jump_if_zero(make_var("i"), "top"),
+          make_return(make_var("i")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "top:\n"
+                                  "%2 = %1\n"
+                                  "%3 = op0 i %2\n"
+                                  "i = %3\n"
+                                  "jz i top\n"
+                                  "ret i\n");
+}
+
+// A byte read through a fat pointer is reused like a word read, but not for it.
+TEST_F(CseTest, LoadByteReused)
+{
+    Tac_Instruction *b1 = load("p", "%1");
+    Tac_Instruction *b2 = load("p", "%2");
+    b1->kind = b2->kind   = TAC_INSTRUCTION_LOAD_BYTE;
+    Tac_Instruction *body = chain({ b1, load("p", "%3"), b2, make_return(make_var("%2")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = *p\n"
+                                  "%3 = *p\n"
+                                  "%2 = %1\n"
+                                  "ret %2\n");
+}
+
+// A member read is reused until its aggregate is written; a write to another
+// aggregate leaves it.
+TEST_F(CseTest, MemberRead)
+{
+    Tac_Instruction *body = chain(
+        { member("s", 4, "%1"), make_copy_to_offset(make_const_int(1), "t", 4),
+          member("s", 4, "%2"), member("s", 8, "%3"),
+          make_copy_to_offset(make_const_int(2), "s", 0), member("s", 4, "%4"),
+          make_return(make_var("%4")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = s.4\n"
+                                  "t.4 = 1\n"
+                                  "%2 = %1\n"
+                                  "%3 = s.8\n"
+                                  "s.0 = 2\n"
+                                  "%4 = s.4\n"
+                                  "ret %4\n");
+}
+
+// A store through a pointer kills a member read of an address-taken aggregate,
+// not of a private one.
+TEST_F(CseTest, MemberReadAndStore)
+{
+    Tac_Instruction *body = chain(
+        { make_get_address(make_var("s"), make_var("%9")), member("s", 0, "%1"),
+          member("t", 0, "%2"), make_store(make_const_int(0), make_var("q")),
+          member("s", 0, "%3"), member("t", 0, "%4"), make_return(make_var("%4")) });
+    const Tac_TopLevel *fn = make_fn_tl({ "s", "t", "q", "%1", "%2", "%3", "%4", "%9" });
+    EXPECT_EQ(Show(RunCse(body, fn)), "%9 = &s\n"
+                                      "%1 = s.0\n"
+                                      "%2 = t.0\n"
+                                      "*q = 0\n"
+                                      "%3 = s.0\n"
+                                      "%4 = %2\n"
+                                      "ret %4\n");
+}
+
+// ---------------------------------------------------------------------------
 // The whole pipeline, on C source.
 // ---------------------------------------------------------------------------
 
@@ -436,4 +608,22 @@ TEST_F(CsePipelineTest, GlobalAcrossCall)
                   "int g; void h(void); int f(void) { int a = g + 1; h(); return a + (g + 1); }",
                   true)),
               "binary=3 fun_call=1 return=1");
+}
+
+
+// p->x * p->x reads p->x once.
+TEST_F(CsePipelineTest, RepeatedMemberThroughPointer)
+{
+    EXPECT_EQ(KindHistogram(Optimize(
+                  "struct P { int x, y; }; int f(struct P *p) { return p->x * p->x; }", true)),
+              "add_ptr=1 binary=1 load=1 return=1");
+}
+
+// a[i].x + a[i].y computes the element address once.
+TEST_F(CsePipelineTest, ArrayOfStructs)
+{
+    EXPECT_EQ(KindHistogram(Optimize("struct P { int x, y; }; int f(struct P *a, long i) "
+                                     "{ return a[i].x + a[i].y; }",
+                                     true)),
+              "add_ptr=3 binary=1 load=2 return=1"); // 4 add_ptr without CSE
 }

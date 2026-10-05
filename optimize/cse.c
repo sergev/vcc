@@ -28,15 +28,18 @@
 // address never changes, so GET_ADDRESS reads no operand value; the address of
 // a frame slot is cheaper to recompute than to hold). Removing a recomputation
 // that an identical one dominates never introduces a trap, so division is
-// included.
-// Memory reads (LOAD, COPY_FROM_OFFSET) are not candidates.
+// included. So are the memory reads, LOAD through a pointer and COPY_FROM_OFFSET
+// of a named aggregate's member; volatile ones excepted.
 //
 // Conservatism around aliasing (see alias.c): static-duration and address-taken
 // variables may be changed behind our back. A FunCall may write any of them,
 // and so may a Store through a pointer — a global's address may have been taken
-// in another function — so both kill every fact that mentions one. A holder is
-// always private (a temporary, parameter or automatic local) and of the same
-// type as the destination it replaces.
+// in another function — so both kill every fact that mentions one. A read
+// through a pointer may see any memory: a store, a call, or a write to a static
+// or address-taken variable kills it (no type-based aliasing — the code this
+// compiler builds puns types freely). A holder is always private (a temporary,
+// parameter or automatic local) and of the same type as the destination it
+// replaces.
 //
 // See docs/TAC_Optimization.md §"Common-subexpression elimination".
 // ============================================================================
@@ -61,6 +64,7 @@ typedef struct {
     char *key;      // owned; the expression's spelling, == the map key
     char *holder;   // owned; the variable that holds the expression's value
     char *reads[2]; // owned; the variables the expression reads, or NULL
+    bool load;      // a read through a pointer: any write to memory may change it
 } Fact;
 
 static void fact_free(intptr_t value)
@@ -87,6 +91,7 @@ static Fact *fact_dup(const Fact *f)
     nf->holder   = xstrdup(f->holder);
     nf->reads[0] = f->reads[0] ? xstrdup(f->reads[0]) : NULL;
     nf->reads[1] = f->reads[1] ? xstrdup(f->reads[1]) : NULL;
+    nf->load     = f->load;
     return nf;
 }
 
@@ -156,6 +161,24 @@ static void kill_alias_set(StringMap *es, const StringMap *alias)
     KeyBuf kb        = { 0 };
     KillAliasCtx ctx = { &kb, alias };
     map_iterate(es, kill_alias_cb, &ctx);
+    keybuf_flush(&kb, es, fact_free);
+}
+
+// A write that may reach memory through a pointer: every read through a pointer
+// is then stale. (A member read of a named aggregate needs no such rule: it reads
+// the aggregate's name, so the alias and name kills above cover it.)
+static void kill_loads_cb(const char *key, intptr_t value, const void *arg)
+{
+    (void)key;
+    Fact *f = (Fact *)value;
+    if (f->load)
+        keybuf_push((KeyBuf *)arg, f->key);
+}
+
+static void kill_loads(StringMap *es)
+{
+    KeyBuf kb = { 0 };
+    map_iterate(es, kill_loads_cb, &kb);
     keybuf_flush(&kb, es, fact_free);
 }
 
@@ -358,7 +381,9 @@ typedef struct {
     Tac_Val **dst;          // the dst field, so a rewrite can take it over
     const Tac_Val *opnd[2]; // the operands read (NULL when fewer)
     bool reads_operands;    // false for GET_ADDRESS: an address reads no value
-    int op;                 // operator, scale or dst_kind; 0 when none
+    int op;                 // operator, scale, dst_kind or member offset; 0 when none
+    const char *agg;        // COPY_FROM_OFFSET: the aggregate it reads
+    bool load;              // LOAD: a read through a pointer
 } Candidate;
 
 static bool as_candidate(Tac_Instruction *ins, const CseCtx *ctx, Candidate *c)
@@ -429,6 +454,18 @@ static bool as_candidate(Tac_Instruction *ins, const CseCtx *ctx, Candidate *c)
         c->opnd[0]        = ins->u.get_address.src;
         c->reads_operands = false;
         break;
+    case TAC_INSTRUCTION_LOAD:
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        c->dst     = &ins->u.load.dst;
+        c->opnd[0] = ins->u.load.src_ptr;
+        c->load    = true;
+        break;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        c->dst = &ins->u.copy_from_offset.dst;
+        c->agg = ins->u.copy_from_offset.src;
+        c->op  = ins->u.copy_from_offset.offset;
+        break;
     default:
         return false;
     }
@@ -454,11 +491,23 @@ static char *expr_key(const Tac_Instruction *ins, const Candidate *c)
     }
     StrBuf key = { 0 };
     sb_printf(&key, "%d:%d", (int)ins->kind, c->op);
+    if (c->agg)
+        sb_printf(&key, "|v:%s", c->agg);
     if (a)
         spell_val(&key, a);
     if (b)
         spell_val(&key, b);
     return key.buf;
+}
+
+// A write to the variable `name`: facts that mention it die, and, if a pointer
+// may reach it (a static or address-taken variable), every read through one.
+static void kill_written(StringMap *es, const CseCtx *ctx, const char *name)
+{
+    kill_name(es, name);
+    if (map_get((StringMap *)&ctx->observable, name, NULL) ||
+        map_get((StringMap *)&ctx->address_taken, name, NULL))
+        kill_loads(es);
 }
 
 // ============================================================================
@@ -473,6 +522,7 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
         // The callee may write any static or address-taken variable.
         kill_alias_set(es, &ctx->observable);
         kill_alias_set(es, &ctx->address_taken);
+        kill_loads(es);
         if (ins->u.fun_call.dst && ins->u.fun_call.dst->kind == TAC_VAL_VAR)
             kill_name(es, ins->u.fun_call.dst->u.var_name);
         return;
@@ -481,14 +531,15 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
         // The pointer may point at any static or address-taken variable.
         kill_alias_set(es, &ctx->observable);
         kill_alias_set(es, &ctx->address_taken);
+        kill_loads(es);
         return;
     case TAC_INSTRUCTION_COPY_TO_OFFSET:
     case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
-        kill_name(es, ins->u.copy_to_offset.dst);
+        kill_written(es, ctx, ins->u.copy_to_offset.dst);
         return;
     case TAC_INSTRUCTION_COPY:
         if (ins->u.copy.dst->kind == TAC_VAL_VAR)
-            kill_name(es, ins->u.copy.dst->u.var_name);
+            kill_written(es, ctx, ins->u.copy.dst->u.var_name);
         return;
     default:
         break;
@@ -498,7 +549,7 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
     if (!dst || dst->kind != TAC_VAL_VAR)
         return;
     const char *name = dst->u.var_name;
-    kill_name(es, name);
+    kill_written(es, ctx, name);
 
     // Gen: a candidate whose holder is private and not among its own operands.
     Candidate c;
@@ -523,6 +574,14 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
         fact_free((intptr_t)f);
         return;
     }
+    if (c.agg) {
+        if (strcmp(c.agg, name) == 0) {
+            fact_free((intptr_t)f);
+            return;
+        }
+        f->reads[0] = xstrdup(c.agg);
+    }
+    f->load   = c.load;
     f->holder = xstrdup(name);
     map_insert_free(es, f->key, (intptr_t)f, 0, fact_free);
 }
