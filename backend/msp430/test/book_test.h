@@ -1,6 +1,6 @@
 // The MSP430 fixture for the shared "Writing a C Compiler" suite
 // (backend/common/test/book/): programs run on mspsim, each also built wholly by GCC with
-// newlib and the two outputs compared.  The book's expected values assume a 32-bit int
+// newlib, and by clang on our runtime, and the outputs compared.  The book's expected values assume a 32-bit int
 // and a 64-bit long, GCC's MSP430 output does not: GCC is the oracle here, and the book's
 // own expectation is set aside (its failures are intercepted and dropped).  The chapters
 // are enabled in CMakeLists.txt as the code generator reaches them.
@@ -57,7 +57,25 @@ protected:
         Msp430Test::TearDown();
     }
 
-    // Run a book program, and check that GCC -O0 with newlib gives the same.
+    // The programs whose behaviour C leaves undefined at 16 bits, where GCC and clang
+    // differ: ours must match GCC's, and is not compared with clang's.
+    static bool ClangDiffers()
+    {
+        static const SkippedTest differs[] = {
+            { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
+            { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31" },
+            { "Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes", "shifts an int by 31" },
+            { nullptr, nullptr },
+        };
+        const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
+        for (const SkippedTest *d = differs; d->name; d++)
+            if (strcmp(d->name, name) == 0)
+                return true;
+        return false;
+    }
+
+    // Run a book program, and check that GCC -O0 with newlib gives the same, and clang
+    // -O0 on our runtime too where present.
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = Msp430Test::CompileAndRunBook(src);
@@ -65,6 +83,11 @@ protected:
         EXPECT_NE("ERROR", ours) << "did not run";
         EXPECT_EQ(GccRunBook(src), ours) << "differs from GCC";
         EXPECT_EQ(exit_status, status) << "exit status differs from GCC";
+        if (msp430_clang_available() && !ClangDiffers()) {
+            std::string clang = ClangRunBook(src);
+            EXPECT_EQ(clang, ours) << "differs from clang";
+            EXPECT_EQ(exit_status, status) << "exit status differs from clang";
+        }
         exit_status = status;
         return ours;
     }
