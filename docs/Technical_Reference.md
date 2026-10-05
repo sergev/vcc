@@ -3,14 +3,15 @@
 This document lists repository layout, build details, components, tests, and development notes. The [README](../README.md) is the overview for new readers.
 
 VCC is one machine-independent C11 front end (scanner, parser, semantic analysis, TAC
-lowering and optimization) feeding per-target code generators. Six are complete:
+lowering and optimization) feeding per-target code generators. Seven are complete:
 RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, see
 [Riscv_Backend.md](Riscv_Backend.md)), AArch64 AAPCS64 (`genaarch64`, see
 [Aarch64_Backend.md](Aarch64_Backend.md)), ARMv7-A AAPCS-VFP (`genarm32`, see
 [Arm32_Backend.md](Arm32_Backend.md)), x86-64 System V (`genx86`, see
 [X86_64_Backend.md](X86_64_Backend.md)), AVR ATmega1280 with the avr-gcc ABI (`genavr`, see
-[Avr_Backend.md](Avr_Backend.md)) and BESM-6 (`genbesm`). The examples in this document use
-RISC-V; the other directories under `backend/` (`mmix/`, `msp430/`) hold design notes only.
+[Avr_Backend.md](Avr_Backend.md)), the classic MSP430 with the EABI as GCC has it (`genmsp430`,
+see [Msp430_Backend.md](Msp430_Backend.md)) and BESM-6 (`genbesm`). The examples in this
+document use RISC-V; the other directory under `backend/`, `mmix/`, holds design notes only.
 
 ## Repository layout
 
@@ -24,8 +25,9 @@ vcc/
 │   ├── arm32/      # ARM32 codegen: IR (a32.h), register allocation, instruction selection, peephole, tests
 │   ├── x86/        # x86-64 codegen: IR (x86.h), register allocation, instruction selection, x87, peephole, tests
 │   ├── avr/        # AVR codegen: IR (avr_ir.h), register allocation, two-form selection, peephole, branch relaxation, tests
+│   ├── msp430/     # MSP430 codegen: IR (msp_ir.h), register allocation, memory-to-memory selection, peephole, branch relaxation, tests
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), three assembler dialects, tests, BESM-6 docs
-│   └── ...         # mmix/, msp430/ — ISA ASDL specs and notes, not implemented
+│   └── mmix/       # MMIX ISA ASDL spec and notes, not implemented
 ├── cc/             # Compiler driver vcc (from v7besm's b6cc), its end-to-end tests
 ├── cpp/            # C preprocessor (v7 cpp, C11; from v7besm's b6cpp), its conformance tests
 ├── docs/           # Project documentation (this file)
@@ -57,6 +59,7 @@ vcc/
 | `genarm32` | `build/backend/genarm32` | `bin/vgenarm32` | binary TAC (`-t arm32`) | ARM32 unified assembly (`.s`) |
 | `genx86` | `build/backend/genx86` | `bin/vgenx86` | binary TAC (`-t x86_64`) | x86-64 AT&T assembly (`.s`) |
 | `genavr` | `build/backend/genavr` | `bin/vgenavr` | binary TAC (`-t avr`) | AVR GNU avr-as assembly (`.s`) |
+| `genmsp430` | `build/backend/genmsp430` | `bin/vgenmsp430` | binary TAC (`-t msp430`) | MSP430 GNU msp430-as assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
 `parse` and `lower` are built from the root `CMakeLists.txt`, `cc` and `cpp` from
@@ -140,7 +143,7 @@ does not define.
 fixes type sizes, alignment, the signedness of plain `char` and struct layout. The
 default is `riscv64`; BESM-6 code must be lowered with `-t besm6`. `lower -h` lists
 the known descriptors: `avr`, `msp430`, `arm32`, `aarch64`, `x86_64`, `riscv32`,
-`riscv64`, `mmix`, `besm6` (only `riscv64` and `besm6` have a code generator).
+`riscv64`, `mmix`, `besm6` (all but `mmix` have a code generator).
 
 **Options** (see `translator/main.c`): `--tac` (default), `--yaml`, `--dot`, `-t`/`--target`,
 `--no-unreachable`, `--no-copy-prop`, `--no-dead-store`, `--opt-debug`, `--verify`, `-v`,
@@ -169,7 +172,8 @@ does `genarm32` (TAC lowered with `-t arm32`, assembled by
 `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16`) and `genx86` (TAC
 lowered with `-t x86_64`, assembled by `clang --target=x86_64-none-elf`). `genavr` (TAC
 lowered with `-t avr`, assembled by `clang --target=avr -mmcu=atmega1280`) takes
-`--no-regalloc` and `--no-peephole`, and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
+`--no-regalloc` and `--no-peephole`, as does `genmsp430` (TAC lowered with `-t msp430`,
+assembled by `msp430-elf-as -mcpu=msp430`), and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
 
 ### Installation
 
@@ -180,13 +184,14 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`, `vgenbesm6` |
+| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`, `vgenmsp430`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
 | `share/vcc/aarch64/lib/`, `include/` | the same for AArch64 (the runtime only when the clang has an AArch64 target) |
 | `share/vcc/arm32/lib/`, `include/` | the same for ARM32 (the runtime only when the clang has an ARM target) |
 | `share/vcc/x86_64/lib/`, `include/` | the same for x86-64 (the runtime only when the clang has an x86-64 target) |
 | `share/vcc/avr/lib/`, `include/` | the same for AVR (the runtime only when the clang has an AVR target) |
+| `share/vcc/msp430/lib/`, `include/` | the same for MSP430, `link.ld` for mspsim (the runtime only when the GNU MSP430 toolchain was found) |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
 | `share/vcc/besm6/include/` | the C11 freestanding headers and `besm6.h` (the hosted libc comes from [v7besm](https://github.com/besm6/v7besm)) |
 
@@ -401,6 +406,27 @@ backend and `__builtin_va_class` alike. See [X86_64_Backend.md](X86_64_Backend.m
 The 16-bit `int` and binary32 `double` come from the `avr` descriptor in
 `semantic/target.c`. See [Avr_Backend.md](Avr_Backend.md).
 
+### MSP430 backend (`backend/msp430/`)
+
+| File | Role |
+|------|------|
+| `msp_ir.h`, `msp_ir.c` | IR: functions as blocks of instructions, each knowing its size (2, 4 or 6 bytes) by GNU `as`'s rules |
+| `regalloc.c` | The target side of `backend/common/regalloc.c`, the 16-bit register as unit, `r15` kept as scratch |
+| `instr.c`, `fp.c` | Instruction selection on operands where they lie (register or memory, either side), compare-and-branch fusion, inline constant multiply; binary32 and binary64 through the helpers |
+| `call.c` | GCC's calls: `r12`–`r15`, the split `long`, structures by reference with the callee's copy (or none, when the parameter is only read), variadics from the last named argument on the stack |
+| `frame.c` | Slots, value access, parallel moves, copy loops, prologue/epilogue (frameless functions) |
+| `peephole.c` | Peephole pass: constant-generator aliases, copy, constant and memory forwarding, dead code over register and SR liveness, loads sunk into their use, `@rN+`, tail calls |
+| `relax.c` | Branch relaxation, which the toolchain does not do |
+| `data.c` | Static data, a section per variable |
+| `emit.c` | GNU msp430-as output, a section per function |
+| `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
+| `main.c` | `genmsp430` entry |
+| `msp430.asdl`, `msp430.md` | Reference ISA description and its notes, MSP430X included (not used by the build) |
+| `test/*_tests.cpp` | GoogleTest suite (`msp430-tests`) |
+
+The 16-bit `int`, the unsigned `char`, alignment 2 and the binary64 `double` come from
+the `msp430` descriptor in `semantic/target.c`. See [Msp430_Backend.md](Msp430_Backend.md).
+
 **Walkthrough.** For
 
 ```c
@@ -450,9 +476,10 @@ instruction selection on its own.
 | `libc/arm32/include/` | ARM32's own headers (`float.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/x86/include/` | x86-64's own headers (`float.h`, `limits.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/avr/include/` | AVR's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`) |
-| `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `stdarg.h`); the backend is being written |
+| `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
 | `libc/ip16/include/` | 16-bit data-model headers: `inttypes.h`, shared by avr and msp430, and avr's `stddef.h` and `stdint.h` (msp430 has its own, with a `long` `wchar_t`) |
-| `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too |
+| `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too, and MSP430 |
+| `libc/common/float64.c` | binary64 soft-float (`__adddf3`, `__ltdf2`, `sqrt`, …), correctly rounded, for MSP430 |
 | `libc/common/*.c` | Target-neutral C library: `printf`/`sprintf`/`snprintf`, `<string.h>`, `atoi`, `fabs`/`fma`/`fmax`/`fmin`, `puts`/`putchar` |
 | `libc/common/include/` | Target-neutral headers, searched after the target's |
 
@@ -1002,4 +1029,5 @@ dot -Tpng tac.dot -o tac.png
 - **ARM32:** [AAPCS32](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst) — the procedure call standard `genarm32` follows (its VFP variant), and the [RTABI](https://github.com/ARM-software/abi-aa/blob/main/rtabi32/rtabi32.rst) helpers `libc/arm32` provides.
 - **x86-64:** [System V AMD64 psABI](https://gitlab.com/x86-psABIs/x86-64-ABI) — the calling convention `genx86` follows, the eightbyte classification and `va_arg` included.
 - **AVR:** [avr-gcc ABI](https://gcc.gnu.org/wiki/avr-gcc) — the calling convention `genavr` follows, as clang implements it; the [AVR instruction set manual](https://ww1.microchip.com/downloads/en/devicedoc/atmel-0856-avr-instruction-set-manual.pdf).
+- **MSP430:** [MSP430 Embedded Application Binary Interface](https://www.ti.com/lit/pdf/slaa534) (TI SLAA534) — the ABI `genmsp430` follows, as msp430-elf-gcc implements it; [mspsim](https://github.com/sergev/mspsim), the simulator the programs run on, and its `MSP430_Instruction_Set.md`.
 - **BESM-6:** [v7besm](https://github.com/besm6/v7besm) (Unix v7 on BESM-6), [dubna](https://github.com/besm6/dubna) (Dubna monitor simulator).

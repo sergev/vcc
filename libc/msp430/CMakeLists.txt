@@ -1,5 +1,5 @@
 #
-# MSP430 runtime for the mspsim simulator (the classic MSP430; see backend/msp430/Plan.md).
+# MSP430 runtime for the mspsim simulator (the classic MSP430; see docs/Msp430_Backend.md).
 # Built with the GNU MSP430 toolchain: msp430-elf-gcc drives GNU as for the assembly (and
 # is the tests' second compiler), msp430-elf-ld links, msp430-elf-ar archives.  clang's
 # MSP430 target and ld.lld, when present, are the tests' third compiler and second

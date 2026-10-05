@@ -1,6 +1,6 @@
 //
 // MSP430 code generator internals (the MSP430 EABI as GCC implements it; see
-// backend/msp430/Plan.md).
+// docs/Msp430_Backend.md).
 //
 // Registers: r0 is PC, r1 SP, r2 SR (and a constant generator), r3 the other constant
 // generator.  Arguments go in r12-r15, results in r12, r13:r12 or r15:r12.  r11-r15 are

@@ -376,6 +376,12 @@ reported, with its reason, so nothing is silently lost. (A name prefix such as G
   `int`, case values that collide in a 32-bit `long`, programs too large for 8 KB of
   SRAM or a 16-bit `size_t`, and the slowest under qemu; each reason is in
   [backend/avr/test/book_test.h](../backend/avr/test/book_test.h).
+- **MSP430 compares every program with GCC's build**, made by `msp430-elf-gcc` with
+  newlib, and with clang's. It skips what fails in GCC's build too, or is undefined with a
+  16-bit `int` and comes out differently there: case values that collide in a 32-bit
+  `long`, a 16-bit `size_t`, arrays too large for 15.5 KB of RAM, the slowest under the
+  cycle limit, and programs that read garbage at 16 bits; each reason is in
+  [backend/msp430/test/book_test.h](../backend/msp430/test/book_test.h).
 
 The discipline behind this is worth making explicit, because it is the difference between a
 test suite you can trust and one you cannot:

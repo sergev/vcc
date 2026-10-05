@@ -1,7 +1,7 @@
 //
-// MSP430 calls: the arguments by the EABI rules as clang applies them, results,
-// indirect calls; and runs of every rule, caller and callee both ours (T17 checks them
-// against clang).
+// MSP430 calls: the arguments by the EABI rules as GCC applies them, results,
+// indirect calls; and runs of every rule, caller and callee both ours (interop_tests.cpp
+// checks them against GCC and clang).
 //
 #include "msp430_test.h"
 

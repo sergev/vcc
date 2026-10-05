@@ -20,4 +20,4 @@ by its address: `va_list` is a `char *`, as GCC's is.  `jmp_buf` holds R4-R10, S
 the return address.  The types and constants agree with GCC's `-mcpu=msp430` headers,
 and with clang's but for `wchar_t`, `wint_t`, `sig_atomic_t` and the fast 8-bit types
 (`HeadersAgreeWithGcc`/`HeadersAgreeWithClang` in `backend/msp430/test/interop_tests.cpp`).
-See [backend/msp430/Plan.md](../../../backend/msp430/Plan.md).
+See [docs/Msp430_Backend.md](../../../docs/Msp430_Backend.md).
