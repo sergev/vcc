@@ -69,7 +69,7 @@ for Knuth: `A`, `R`, `B`, `V`, `X`, `M` and `T` are taken.
 | Floating point | `float` binary32 (load/store only), `double` = `long double` binary64, in hardware; `FLT_EVAL_METHOD` 0 | `__LDBL_MANT_DIG__` 53, `__SIZEOF_LONG_DOUBLE__` 8 (checked) |
 | ABI | The MMIXware ABI as GCC 16.2 implements it (details below); not `-mabi=gnu` | Interop with GCC-compiled code, libgcc and newlib |
 | Output | GNU `as` syntax with lowercase mnemonics; `name:` labels, `L:n` local labels, `$n` registers, `#` hex immediates; `.text`/`.data`/`.section .rodata`/`.bss`, `.byte`/`.short`/`.long`/`.quad`, `.p2align` | Accepted by `mmix-knuth-mmixware-as` (checked). `.L1:` is *not* accepted: a leading `.` reads as a pseudo-op |
-| Toolchain | `mmix-knuth-mmixware-as -x -no-predefined-syms` (the flags GCC passes), `mmix-knuth-mmixware-ld`, whose default emulation writes `.mmo`; `mmix-knuth-mmixware-ar` | The GNU tools that go with the oracle. `-x` lets the assembler and linker expand out-of-range branches, `geta`, `pushj` and `jmp`, and allocate base registers |
+| Toolchain | `mmix-knuth-mmixware-as -x -no-predefined-syms` (the flags GCC passes), `mmix-knuth-mmixware-ld --defsym __.MMIX.start..text=0x100` (as GCC links; from 0 the image does not start), whose default emulation writes `.mmo`; `mmix-knuth-mmixware-ar` | The GNU tools that go with the oracle. `-x` lets the assembler and linker expand out-of-range branches, `geta`, `pushj` and `jmp`, and allocate base registers |
 | Startup | Our own `crt0` with `Main`; GCC's `crti.o`/`crtn.o` only when linking against newlib in tests | The `.mmo` loader enters at `Main`, with argc in `$0` and argv in `$1` |
 | Run environment | `mmix -q <image.mmo>` | Knuth's reference simulator: about 14 M instructions per second here. Program stdout is the host's stdout. `$255` at `trap 0,0,0` becomes the exit status |
 | I/O and exit | `trap 0,Fwrite,StdOut` (6, handle 1) from a buffered `putbyte`; `trap 0,Fread,StdIn` (3, handle 0) for `getch`; `exit` sets `$255` and does `trap 0,Halt,0` (0) | MMIXware's simulator calls, as newlib's `libc/sys/mmixware` uses them. `-no-predefined-syms` means the numbers are written out |
@@ -215,126 +215,6 @@ boundary.
 
 `make run` stays green after every K-step.
 
-## Phase 0 — groundwork
-
-- **K1. Target plumbing.** *Done.*
-  - **`semantic/target.c`:** complete the `mmix` entry, which today stops after
-    `aggregate_align`:
-    - `struct_return_max = SIZE_MAX`: the backend returns every structure through `$251`
-      itself, as AArch64 handles `x8`;
-    - `struct_args_split = 0`, `immediate_args = NULL`;
-    - `va_class = NULL`: `va_arg` needs only `sizeof`, K16;
-    - `ldouble_mant_dig = 0`, `double_mant_dig = 0` (binary64);
-    - `hw_sqrt = 1` (`fsqrt`).
-    - Confirm `char_signed = 1` against GCC, and fix the comment.
-  - **`cpp -t mmix`** predefines GCC's set: `__mmix__`, `__MMIX__`,
-    `__MMIX_ABI_MMIXWARE__`, `__LP64__`, `_LP64`. There is no `__ELF__`, since GCC defines
-    none. Add a case to `test_predefined_macros.cpp`.
-  - **Check** that `lower -t mmix` accepts the name and lays out structures by the entry.
-- **K2. Frontend audit for the first big-endian byte-addressed target.** *Done.* Run the test
-  corpus through `lower -t mmix --verify`: the chapter sources, the translator fixtures
-  and the libc sources. Then pin what is new, each with a `-t mmix` test:
-  - **Layout against GCC:** struct and union layout and `offsetof` for a table of types,
-    in `type_tests.cpp`.
-  - **LP64 with an 8-byte `long double`:** a combination no target has had. Check
-    `long double` constants, folding and conversions, and `sizeof`.
-  - **Signed `char` with a 64-bit `long`:** `'\xff'`, comparisons, `switch` on a `char`.
-  - **Byte order in shared code:** anything that packs bytes into wider values or reads
-    them back:
-    - static initializers of mixed widths;
-    - the aggregate copy chunking and the bulk zero fill;
-    - multi-character constants, which are already GCC-style big-endian;
-    - the string-literal emitters.
-  - **`libc/common`** sources, for word-at-a-time tricks or unions that assume
-    little-endian.
-  - **Every struct result** through the backend (K1): a struct-returning call used as an
-    argument, in a `?:` and in a chained assignment, lowered without the frontend's hidden
-    pointer.
-
-  Fix what is found in shared code and list it here. Bit-fields are parsed but not
-  lowered on any target, so their big-endian allocation order is out of scope.
-
-  *Found and fixed:*
-  - **A one-byte character constant was never negative.** `'\xff'` was 255 on every
-    target, but C11 §6.4.4.4p10 (and GCC and clang) make it −1 where plain `char` is
-    signed: x86-64, AVR and MMIX. `parse` has no target, so it now marks such a literal
-    `LITERAL_CHAR_BYTE`, and the semantic pass sign-extends it (`type_char_literal`), in
-    expressions and static initializers alike. Wide (`L'\xff'`) and multi-character
-    constants are unchanged. No golden of any backend changed; BESM-6's `char` is
-    unsigned.
-
-  *Checked, no defect:*
-  - `translator/test/mmix_tests.cpp` and the `TranslateTestMmix` cases in `type_tests.cpp`
-    pin each item; the layouts of six structures match GCC's.
-  - All 35 `libc/common` and `libc/lp64` sources and 1980 test-fixture and book snippets
-    were lowered with `-t mmix --verify`, `-t x86_64` and `-t riscv64`. The outcomes
-    differ only where `__builtin_va_class` is rejected (`va_class` is `NULL`, as on
-    RISC-V).
-  - Byte order never reaches TAC: a static initializer is one typed item per member, an
-    aggregate copy loads and stores chunks of one width, the zero fill writes zeroes, and
-    multi-character constants are already big-endian. The `libc/common` sources pun only
-    between types of the same width.
-  - An unfolded `long double` constant keeps its binary128 bits in TAC, as on ARM32; the
-    backend rounds it once.
-- **K3. Headers.** *Done.* `libc/mmix/include/`, ahead of `libc/lp64/include/` and
-  `libc/common/include/`:
-  - `float.h`: binary32 `FLT_*`, binary64 `DBL_*` = `LDBL_*`, `FLT_EVAL_METHOD` 0.
-  - `stddef.h`, `stdint.h`: `wchar_t` = `int`, `wint_t` = `unsigned int`, and GCC's fast
-    types (`int` for 8–32 bits).
-  - `stdarg.h` with K16's macros, and `setjmp.h` at K19.
-  - **`limits.h`:**
-    - x86-64 has its own copy only because its plain `char` is signed.
-    - Key `CHAR_MIN`/`CHAR_MAX` in `libc/lp64/include/limits.h` off `__CHAR_UNSIGNED__`,
-      as `ip16` did for AVR and MSP430. x86-64's copy then goes, and MMIX shares the
-      result.
-    - x86-64's and AArch64's preprocessed headers and goldens stay unchanged.
-  - `inttypes.h` and `math.h` from `libc/lp64/include/`.
-  - `TEST_MODEL_INCLUDE_DIR` is `libc/lp64/include` for MMIX.
-  - Add the `mmix-headers` CTest and its `-cpp` twin.
-
-  *Done, but for `limits.h`:* keying `CHAR_MIN`/`CHAR_MAX` off `__CHAR_UNSIGNED__` breaks
-  under the host's `cc -E`, which the build and the fixtures use and which defines the
-  macro by the host's own `char` (signed on this arm64 Mac, so riscv64 and aarch64 would
-  turn signed). So MMIX has its own `limits.h`, a copy of x86-64's, as T3 decided for
-  MSP430. `TEST_MODEL_INCLUDE_DIR` is set when the MMIX test binary exists (K7).
-- **K4. CMake detection and the simulator fixture.** *Done.*
-  - **`libc/mmix/CMakeLists.txt`** finds `mmix-knuth-mmixware-as`, `-ld`, `-ar` and `-gcc`
-    and `mmix`. It sets `MMIX_TOOLS_FOUND`, `MMIX_AS`, `MMIX_LD`, `MMIX_AR`, `MMIX_GCC`,
-    `MMIX_SIM` and `MMIX_LIB_DIR`.
-  - **`QemuConfig` runs mmix:**
-    - the GNU assembler with `-x -no-predefined-syms`;
-    - `ld` with its default `mmo` output;
-    - `mmix -q <image>` with the image as a plain argument;
-    - the exit status taken from `$255`.
-  - **Halting in zeroed memory looks like `exit(0)`,** so our runtime's `exit` prints a
-    trailer on stderr, `[exit N]`. `exit_report` fails a run of our runtime without it.
-    Runs built with GCC and newlib, which print no trailer, are judged on output and
-    status only.
-  - **Timeout:** the wall-clock timeout is the only one. Size it from the measured 14 M
-    instructions per second.
-
-  *Done.* `QemuConfig` has three new fields, and `exit_report` is now the line to look for
-  (MSP430 passes mspsim's `"[Exit code "`):
-  - **`assembler`:** the command before `-o obj src`. For MMIX this is `MMIX_AS` with
-    `MMIX_AS_FLAGS`.
-  - **An empty `link_script`:** no `-T`.
-  - **`timeout`:** 5 s by default.
-
-  K7's configuration:
-  - **Link:** `MMIX_LD` with `MMIX_LD_FLAGS`, `crt0.o` first.
-  - **Run:** `{ MMIX_SIM, "-q" }` with an empty `image_option`.
-  - **Exit report:** `"[exit "`.
-  - **Timeout:** 10 s, about 140 M instructions.
-
-  Checked by hand on a two-trap program:
-  - **The link needs `--defsym __.MMIX.start..text=0x100`,** as GCC passes it
-    (`MMIX_LD_FLAGS`). Linked from 0, the image halts on a privileged `unsave` at
-    `#fffffffffffffffc` before its first instruction.
-  - **The streams:** the program's StdOut and StdErr are the host's stdout and stderr,
-    and `$255` at `trap 0,0,0` is the exit status.
-  - **A failed run:** `mmix -q` reports a fault (a privileged instruction, a jump into
-    data) on **stdout**, with a status of its own. The missing trailer fails such a run.
-
 ## Phase 1 — skeleton
 
 - **K5. Runtime, hand-written part.** `libc/mmix/`, in GNU `as` syntax with lowercase
@@ -372,7 +252,15 @@ boundary.
   - **A test pins the rendering** of every instruction form. Every golden is also
     assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms` when it is installed, as
     x86-64's are by GNU `as`.
-- **K7. Run harness and first program.** `mmix_test.h` on the fixture of K4:
+- **K7. Run harness and first program.** `mmix_test.h` on the `QemuTest` fixture:
+  - **The run configuration** (`QemuConfig`, `libc/mmix/CMakeLists.txt`):
+    - `assembler` is `MMIX_AS` with `MMIX_AS_FLAGS`, an empty `link_script`;
+    - the link is `MMIX_LD` with `MMIX_LD_FLAGS`, `crt0.o` first;
+    - the run is `{ MMIX_SIM, "-q" }` with an empty `image_option`;
+    - `exit_report` is `"[exit "`, and the `timeout` is 10 s, about 140 M instructions.
+    - `mmix -q` reports a fault on stdout, with a status of its own; the missing trailer
+      fails the run.
+  - `TEST_MODEL_INCLUDE_DIR` is `libc/lp64/include`, after `libc/mmix/include`.
   - `CompileToMmix` produces golden assembly.
   - `CompileAndRunMmix` assembles, links `crt0.o`, the program and `libc.a`, and runs
     under `mmix`.
@@ -753,14 +641,14 @@ instructions.
     is one function with a unit test of its mapping.
 - **The first big-endian byte-addressed target.** Hidden little-endian assumptions in
   shared code, the libc, the test fixtures and the book expectations.
-  - Mitigation: K2's audit; every book program compared with GCC (K18); big-endian
+  - Mitigation: the frontend audit (done); every book program compared with GCC (K18); big-endian
     versions of the byte-order programs, as BESM-6 has.
 - **A halt in zeroed memory looks like `exit(0)`.** `trap 0,0,0` is the all-zero word.
-  - Mitigation: the `[exit N]` trailer that the fixture requires of our runtime (K4), and
+  - Mitigation: the `[exit N]` trailer that the fixture requires of our runtime, and
     tests that check output, not only status.
 - **Silent misaligned access.** An octa, tetra or wyde access drops the low address bits,
   so a layout or pointer bug reads the wrong data without a fault.
-  - Mitigation: K2's layout checks against GCC; alignment kept through `ALLOCATE_LOCAL`
+  - Mitigation: the layout tests against GCC (`TranslateTestMmix`); alignment kept through `ALLOCATE_LOCAL`
     and the outgoing area; the structure tests at every size.
 - **Signed division floors.** Using `div` as if it truncated gives wrong quotients and
   remainders for negative operands only.
