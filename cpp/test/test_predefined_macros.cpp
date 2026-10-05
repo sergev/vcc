@@ -205,6 +205,14 @@ TEST_F(Predefined, Msp430Target) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "msp430"}));
 }
 
+// MMIX: GCC's set, signed plain char, LP64, and no __ELF__ (GCC defines none).
+TEST_F(Predefined, MmixTarget) {
+    EXPECT_TRUE(TokensAre("#if __mmix__ && __MMIX__ && __MMIX_ABI_MMIXWARE__ && __LP64__ && "
+                          "_LP64 && !defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
+                          "!defined(__riscv) && !defined(__x86_64__)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "mmix"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"

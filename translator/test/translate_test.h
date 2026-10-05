@@ -224,6 +224,17 @@ protected:
     }
 };
 
+// Fixture for MMIX: LP64, big-endian, signed plain char, long double = double, every
+// struct returned by the backend through $251 rather than a hidden argument.
+class TranslateTestMmix : public TranslateTest {
+protected:
+    void SetUp() override
+    {
+        TranslateTest::SetUp();
+        target_config = target_lookup("mmix");
+    }
+};
+
 // Fixture for the byte-addressed LP64 target the RISC-V backend uses.
 class TranslateTestRiscv : public TranslateTest {
 protected:

@@ -23,7 +23,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430` or `besm6`. Selects the predefined macros and the standard include directory. |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6`. Selects the predefined macros and the standard include directory. |
 | `-Ipath` | Add a directory to the header search list (up to 8). |
 | `-nostdinc` | Do not search the target's standard include directory. |
 | `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |
@@ -63,6 +63,7 @@ build/cpp/cpp -t besm6 -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog
 | `x86_64` | `__x86_64__`, `__x86_64`, `__amd64__`, `__amd64`, `__LP64__`, `_LP64`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`, `__SSE2_MATH__`, `__code_model_small__`, `__ELF__` | `<prefix>/share/vcc/x86_64/include` |
 | `avr` | `__AVR`, `__AVR__`, `__AVR_ARCH__` = 51, `__AVR_ATmega1280__`, `__AVR_HAVE_MUL__`, `__AVR_HAVE_MOVW__`, `__AVR_HAVE_LPMX__`, `__AVR_HAVE_ELPM__`, `__AVR_HAVE_ELPMX__`, `__AVR_HAVE_JMP_CALL__`, `__AVR_2_BYTE_PC__`, `__ELF__` | `<prefix>/share/vcc/avr/include` |
 | `msp430` | `__MSP430__`, `__CHAR_UNSIGNED__`, `__ELF__` | `<prefix>/share/vcc/msp430/include` |
+| `mmix` | `__mmix__`, `__MMIX__`, `__MMIX_ABI_MMIXWARE__`, `__LP64__`, `_LP64` (GCC's; no `__ELF__`) | `<prefix>/share/vcc/mmix/include` |
 | `besm6` | `besm6`, `__besm6__` | `<prefix>/share/vcc/besm6/include` |
 
 The RISC-V set is a subset of clang's, so a header written for clang takes the same

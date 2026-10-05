@@ -201,9 +201,17 @@ static const Target targets[] = {
       8, 8,   // long double (same as double; no wider FP hardware)
       8, 8,   // pointer
       16, 32, 64, 64, // signed bits
-      1,   // plain char signed (MMIXware convention)
+      1,   // plain char signed (GCC: no __CHAR_UNSIGNED__)
       0,   // signed >> arithmetic
-      1 }, // aggregate_align (1)
+      1,   // aggregate_align (1)
+      SIZE_MAX, // struct_return_max: never lowered by the front end; the backend
+                // returns every struct and union through the address in $251
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL,     // va_class: va_arg is a walk over 8-byte slots, no argument classes
+      0,        // ldouble_mant_dig: long double is double, binary64
+      1,        // hw_sqrt: fsqrt
+      0 },      // double_mant_dig: binary64
 
     // BESM-6: 48-bit word-oriented machine.
     // sizeof() values are in 8-bit bytes (CHAR_BIT = 8).

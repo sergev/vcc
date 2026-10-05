@@ -217,7 +217,7 @@ boundary.
 
 ## Phase 0 — groundwork
 
-- **K1. Target plumbing.**
+- **K1. Target plumbing.** *Done.*
   - **`semantic/target.c`:** complete the `mmix` entry, which today stops after
     `aggregate_align`:
     - `struct_return_max = SIZE_MAX`: the backend returns every structure through `$251`

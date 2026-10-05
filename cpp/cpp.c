@@ -43,8 +43,9 @@ struct symtab *paint_stack[SYMSIZ];
 //
 // The targets the compiler supports, and the macros each predefines.  The
 // RISC-V, AArch64, ARM32, x86-64, AVR and MSP430 sets are clang's, so a header written for clang selects the same
-// branches here; `besm6' is what the v7besm sources key on.  Ordinary macros,
-// freely #undef'able (§6.10.8.4 covers only the standard ones).
+// branches here; MMIX's is GCC's, since LLVM has no MMIX; `besm6' is what the v7besm
+// sources key on.  Ordinary macros, freely #undef'able (§6.10.8.4 covers only the
+// standard ones).
 //
 struct target {
     const char *name;
@@ -71,6 +72,7 @@ static const struct target targets[] = {
                    "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__", "__AVR_HAVE_JMP_CALL__",
                    "__AVR_2_BYTE_PC__", "__ELF__" } },
     { "msp430",  { "__MSP430__", "__CHAR_UNSIGNED__", "__ELF__" } },
+    { "mmix",    { "__mmix__", "__MMIX__", "__MMIX_ABI_MMIXWARE__", "__LP64__", "_LP64" } },
 };
 
 static const struct target *target;     // selected by -t; default riscv64, like lower
@@ -106,7 +108,7 @@ void usage()
     printf("Usage:\n");
     printf("    %s [options] [infile [outfile]]\n", cpp.prog_name ? cpp.prog_name : "cpp");
     printf("Options:\n");
-    printf("    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr or msp430 (default riscv64)\n");
+    printf("    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430 or mmix (default riscv64)\n");
     printf("    -I path             Add path to the search list for header files\n");
     printf("    -nostdinc           Do not search the target's standard include directory\n");
     printf("    -D macro[=value]    Fake a definition at the beginning\n");

@@ -284,6 +284,37 @@ TEST_F(TranslateTestMsp430, AggregateCopyByAlignment)
     tac_free_toplevel(tac);
 }
 
+// MMIX aligns every scalar to its size, long double (= double) to 8; the offsets and
+// sizes are mmix-knuth-mmixware-gcc's.
+TEST_F(TranslateTestMmix, StructLayout)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct A { char c; int i; long l; double d; };
+        struct B { char c; long long ll; char e; };
+        struct C { char a, b, c; };
+        struct D { char c; float f; short s; };
+        union U { char c; long l; };
+        struct E { char c; struct C in; long double ld; };
+        int f(struct A a, struct B b, struct C c, struct D d, union U u, struct E e)
+        { return 0; }
+    )");
+    const Tac_Type *a = SymbolType(tac, "f", "%a");
+    EXPECT_EQ(TypeStr(a), "struct A(24,8)");
+    EXPECT_EQ(Members(a), "c@0:schar i@4:int l@8:long d@16:double");
+    const Tac_Type *b = SymbolType(tac, "f", "%b");
+    EXPECT_EQ(TypeStr(b), "struct B(24,8)");
+    EXPECT_EQ(Members(b), "c@0:schar ll@8:long_long e@16:schar");
+    EXPECT_EQ(TypeStr(SymbolType(tac, "f", "%c")), "struct C(3,1)");
+    const Tac_Type *d = SymbolType(tac, "f", "%d");
+    EXPECT_EQ(TypeStr(d), "struct D(12,4)");
+    EXPECT_EQ(Members(d), "c@0:schar f@4:float s@8:short");
+    EXPECT_EQ(TypeStr(SymbolType(tac, "f", "%u")), "union U(8,8)");
+    const Tac_Type *e = SymbolType(tac, "f", "%e");
+    EXPECT_EQ(TypeStr(e), "struct E(16,8)");
+    EXPECT_EQ(Members(e), "c@0:schar in@1:struct C(3,1) ld@8:long_double");
+    tac_free_toplevel(tac);
+}
+
 // An alignment above one word still copies by words.
 TEST_F(TranslateTestX86, AggregateCopyCappedAtWord)
 {
@@ -373,6 +404,26 @@ TEST_F(TranslateTestMsp430, EveryStructReturnThroughHiddenPointer)
     const Tac_Instruction *call = FirstCall(Function(tac, "use"));
     EXPECT_EQ(CountArgs(call), 2); // the result slot's address, then c
     EXPECT_EQ(call->u.fun_call.dst, nullptr);
+    tac_free_toplevel(tac);
+}
+
+// MMIX returns every struct and union through $251, set by the backend: the front end
+// adds no hidden pointer at any size.
+TEST_F(TranslateTestMmix, NoStructReturnThroughHiddenPointer)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct S1 { char c; };
+        struct T { long a, b, c; };
+        struct S1 make(char c) { struct S1 s = { c }; return s; }
+        struct T make_t(long a) { struct T t = { a, a, a }; return t; }
+        long use(void) { struct T q = make_t(1); return q.c; }
+    )");
+    EXPECT_STREQ(Function(tac, "make")->u.function.params->name, "%c");
+    EXPECT_STREQ(Function(tac, "make_t")->u.function.params->name, "%a");
+    const Tac_Instruction *call = FirstCall(Function(tac, "use"));
+    EXPECT_EQ(CountArgs(call), 1);
+    ASSERT_NE(call->u.fun_call.dst, nullptr);
+    EXPECT_EQ(TypeStr(SymbolType(tac, "use", call->u.fun_call.dst->u.var_name)), "struct T(24,8)");
     tac_free_toplevel(tac);
 }
 
