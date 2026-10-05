@@ -1,6 +1,9 @@
 /*
- * <stdint.h> — integer types (C11 §7.20), the 16-bit data model of AVR (MSP430 has its
- * own): int is 16 bits, long 32, long long 64, pointers 16.
+ * <stdint.h> — integer types (C11 §7.20), MSP430: int is 16 bits, long 32, long long 64,
+ * pointers 16.  The ranges are msp430-elf-gcc's: the fast 8-bit types int, sig_atomic_t
+ * int, wchar_t long and wint_t unsigned int.  The 16-bit types stay int, where GCC has
+ * short (the same representation), so that the shared <inttypes.h> fits them.  Ahead
+ * of the shared 16-bit one in libc/ip16/include, which AVR keeps.
  */
 #ifndef _STDINT_H
 #define _STDINT_H
@@ -23,11 +26,11 @@ typedef unsigned int       uint_least16_t;
 typedef unsigned long      uint_least32_t;
 typedef unsigned long long uint_least64_t;
 
-typedef signed char        int_fast8_t;
+typedef int                int_fast8_t;
 typedef int                int_fast16_t;
 typedef long               int_fast32_t;
 typedef long long          int_fast64_t;
-typedef unsigned char      uint_fast8_t;
+typedef unsigned int       uint_fast8_t;
 typedef unsigned int       uint_fast16_t;
 typedef unsigned long      uint_fast32_t;
 typedef unsigned long long uint_fast64_t;
@@ -63,9 +66,9 @@ typedef unsigned long long uintmax_t;
 #define INT_LEAST64_MAX  INT64_MAX
 #define UINT_LEAST64_MAX UINT64_MAX
 
-#define INT_FAST8_MIN   INT8_MIN
-#define INT_FAST8_MAX   INT8_MAX
-#define UINT_FAST8_MAX  UINT8_MAX
+#define INT_FAST8_MIN   INT16_MIN
+#define INT_FAST8_MAX   INT16_MAX
+#define UINT_FAST8_MAX  UINT16_MAX
 #define INT_FAST16_MIN  INT16_MIN
 #define INT_FAST16_MAX  INT16_MAX
 #define UINT_FAST16_MAX UINT16_MAX
@@ -85,13 +88,13 @@ typedef unsigned long long uintmax_t;
 
 #define PTRDIFF_MIN    INT16_MIN
 #define PTRDIFF_MAX    INT16_MAX
-#define SIG_ATOMIC_MIN INT8_MIN
-#define SIG_ATOMIC_MAX INT8_MAX
+#define SIG_ATOMIC_MIN INT16_MIN
+#define SIG_ATOMIC_MAX INT16_MAX
 #define SIZE_MAX       UINT16_MAX
-#define WCHAR_MIN      INT16_MIN
-#define WCHAR_MAX      INT16_MAX
-#define WINT_MIN       INT16_MIN
-#define WINT_MAX       INT16_MAX
+#define WCHAR_MIN      INT32_MIN
+#define WCHAR_MAX      INT32_MAX
+#define WINT_MIN       0U
+#define WINT_MAX       UINT16_MAX
 
 #define INT8_C(c)    c
 #define UINT8_C(c)   c

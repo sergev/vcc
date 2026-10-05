@@ -63,17 +63,21 @@ call #u
 )")) << code;
 }
 
-// A structure goes on the stack whatever its size, and does not stop a later long
-// splitting.
-TEST_F(Msp430Test, ArgStructOnStack)
+// A structure goes as its address, a pointer argument like any other: in r12 here, so a
+// later long splits between r15 and the stack (as GCC's u(*p, 1, 2, 0x12345678L) does).
+TEST_F(Msp430Test, ArgStructByAddress)
 {
     std::string code = Code(CompileToMsp430(R"(
         struct S { int a; };
-        int u(struct S, int, int, int, long);
-        int f(struct S *p) { return u(*p, 1, 2, 3, 4); }
+        int u(struct S, int, int, long);
+        int f(struct S *p) { return u(*p, 1, 2, 0x12345678L); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("mov #0, 2(r1)\n")) << code;
-    EXPECT_NE(std::string::npos, code.find(R"(mov #4, r15
+    EXPECT_NE(std::string::npos, code.find("mov #4660, 0(r1)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
+add #)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov #1, r13
+mov #2, r14
+mov #22136, r15
 call #u
 )")) << code;
 }
@@ -108,7 +112,7 @@ TEST_F(Msp430Test, IndirectCall)
 {
     std::string code = Code(CompileToMsp430("int f(int (*fp)(int)) { return fp(7); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov #7, r12
-mov 0(r1), r11
+mov @r1, r11
 call r11
 )")) << code;
 }

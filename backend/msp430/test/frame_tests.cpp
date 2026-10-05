@@ -15,7 +15,7 @@ EXPECT_CODE(ParamsStored,
             R"(sub #6, r1
 mov r12, 0(r1)
 mov r13, 2(r1)
-mov 0(r1), r12
+mov @r1, r12
 add 2(r1), r12
 mov r12, 4(r1)
 mov 4(r1), r12
@@ -49,7 +49,7 @@ mov 12(r1), 8(r1)
 EXPECT_CODE(CharParam,
             R"(sub #4, r1
 mov.b r12, 0(r1)
-mov.b 0(r1), r12
+mov.b @r1, r12
 sxt r12
 mov r12, 2(r1)
 mov 2(r1), r12

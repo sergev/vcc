@@ -152,22 +152,33 @@ int64_t msp_imm_value(int64_t imm, bool byte)
     return byte ? (int64_t)(int8_t)imm : (int64_t)(int16_t)imm;
 }
 
-// The extension words an operand takes, in bytes.
-static int ext_size(const Msp_Operand *o, bool byte)
+bool msp_zero_indexed(const Msp_Operand *o)
+{
+    return o->kind == MSP_OPND_INDEXED && !o->sym && o->imm == 0 && !o->incoming &&
+           o->reg != MSP_PC && o->reg != MSP_SR && o->reg != MSP_CG;
+}
+
+// The extension words an operand of `in` takes, in bytes; `source` for an operand in a
+// source (As) field, where 0(rN) is printed as @rN.
+static int ext_size(const Msp_Instr *in, const Msp_Operand *o, bool source)
 {
     switch (o->kind) {
     case MSP_OPND_INDEXED:
+        return source && msp_zero_indexed(o) ? 0 : 2;
     case MSP_OPND_ABS:
         return 2;
     case MSP_OPND_IMM:
         if (o->sym)
             return 2;
-        switch (msp_imm_value(o->imm, byte)) {
+        switch (msp_imm_value(o->imm, in->byte)) {
+        case 4:
+        case 8:
+            // GNU as never pushes these through the constant generator (the CPU4
+            // erratum); clang does, a word shorter.
+            return in->op == MSP_PUSH ? 2 : 0;
         case 0:
         case 1:
         case 2:
-        case 4:
-        case 8:
         case -1:
             return 0;
         default:
@@ -182,13 +193,15 @@ int msp_instr_size(const Msp_Instr *in)
 {
     switch (msp_form[in->op]) {
     case MSP_FORM_DOUBLE:
-        return 2 + ext_size(&in->opnd[0], in->byte) + ext_size(&in->opnd[1], in->byte);
+        return 2 + ext_size(in, &in->opnd[0], true) + ext_size(in, &in->opnd[1], false);
     case MSP_FORM_SINGLE:
+        return 2 + ext_size(in, &in->opnd[0], true);
     case MSP_FORM_DST:
-    case MSP_FORM_SRC:
-        return 2 + ext_size(&in->opnd[0], in->byte);
+        return 2 + ext_size(in, &in->opnd[0], false);
+    case MSP_FORM_SRC: // br 0(rN) stays: clang has no `br @rN`
+        return 2 + ext_size(in, &in->opnd[0], false);
     case MSP_FORM_TWICE:
-        return 2 + 2 * ext_size(&in->opnd[0], in->byte);
+        return 2 + ext_size(in, &in->opnd[0], true) + ext_size(in, &in->opnd[0], false);
     case MSP_FORM_JUMP:
     case MSP_FORM_NONE:
         return 2;

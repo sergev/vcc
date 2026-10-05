@@ -251,8 +251,9 @@ data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg
 `limits.h` for the signed `char`), and riscv32 and arm32
 `inttypes.h`/`limits.h`/`math.h` in `libc/ilp32/include/`, searched second
 (`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`); AVR and MSP430
-share the 16-bit `inttypes.h`/`stddef.h`/`stdint.h` in `libc/ip16/include/` (plain `char`
-keeps `limits.h` apart, and `double` `float.h`) — and `libc/common/include/` the target-neutral
+share the 16-bit `inttypes.h` in `libc/ip16/include/`, whose `stddef.h`/`stdint.h` are AVR's
+(MSP430's `wchar_t` is msp430-elf-gcc's `long`; plain `char` keeps `limits.h` apart, and
+`double` `float.h`) — and `libc/common/include/` the target-neutral
 rest, searched last (the freestanding subset is complete; the hosted subset declares the
 few implemented libc routines plus future ones — see `libc/besm6/include/README.md`).
 `parse` has no preprocessor, so these are consumed by a preprocessor first: our own

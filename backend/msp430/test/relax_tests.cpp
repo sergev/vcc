@@ -1,6 +1,6 @@
 //
 // MSP430 branch relaxation: jumps just within, at and just past their reach, on
-// hand-built IR, each also assembled by clang; and a loop body over 1 KB run on mspsim.
+// hand-built IR, each also assembled by GNU as and clang; and a loop body over 1 KB run on mspsim.
 //
 #include "msp430_test.h"
 
@@ -56,7 +56,7 @@ std::string Skeleton(const std::string &s)
 
 class RelaxTest : public ::testing::Test {
 protected:
-    // The relaxed function's skeleton; clang must assemble the whole of it.
+    // The relaxed function's skeleton; GNU as, and clang if present, must assemble it.
     std::string Relaxed(Msp_Op op, int before, int after, bool backward)
     {
         std::string s = RelaxedAsm(op, before, after, backward);
@@ -68,10 +68,15 @@ protected:
                 std::ofstream f(base + ".s");
                 f << s;
             }
-            EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o", base + ".o",
+            EXPECT_EQ(0, RunTool({ MSP430_GCC, "-mcpu=msp430", "-c", "-o", base + ".o",
                                    base + ".s" },
                                  base + ".log"))
                 << ReadFile(base + ".log");
+            if (msp430_clang_available())
+                EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o",
+                                       base + ".clang.o", base + ".s" },
+                                     base + ".log"))
+                    << ReadFile(base + ".log");
         }
         return Skeleton(s);
     }

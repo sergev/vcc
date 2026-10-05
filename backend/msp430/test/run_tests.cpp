@@ -1,6 +1,6 @@
 //
 // MSP430 programs, and the runtime itself, on mspsim.  The runtime tests are written in
-// C for clang, whose code calls the helpers of libc.a; the expected output is computed
+// C for GCC, whose code calls the helpers of libc.a; the expected output is computed
 // here on the host.
 //
 #include <gtest/gtest-spi.h>
@@ -147,7 +147,7 @@ int main(void)
     return 0;
 }
 )";
-    EXPECT_EQ("1001 ab rom", ClangRun(src));
+    EXPECT_EQ("1001 ab rom", GccRun(src));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -210,7 +210,7 @@ int main(void)
                             std::to_string((uint32_t)p % (uint32_t)q) + " ";
             expected += std::to_string((int32_t)((uint32_t)p * (uint32_t)q)) + "\n";
         }
-    EXPECT_EQ(expected, ClangRun(src));
+    EXPECT_EQ(expected, GccRun(src));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -241,7 +241,7 @@ int main(void)
     return 0;
 }
 )";
-    EXPECT_EQ("65535 1234 -32768 0 4294967295 123456789 -2147483648 0", ClangRun(src));
+    EXPECT_EQ("65535 1234 -32768 0 4294967295 123456789 -2147483648 0", GccRun(src));
 }
 
 // Shifts of a long by a variable count through __mspabi_slll, __mspabi_srll and
@@ -269,7 +269,7 @@ int main(void)
         for (int n = 0; n < 32; n++)
             expected += std::to_string((uint32_t)x << n) + " " +
                         std::to_string((uint32_t)x >> n) + " " + std::to_string(x >> n) + "\n";
-    EXPECT_EQ(expected, ClangRun(src));
+    EXPECT_EQ(expected, GccRun(src));
 }
 
 // A stack that ran into the canary below it is reported, with status 0xfd.
@@ -284,6 +284,29 @@ int main(void)
     return 0;
 }
 )";
-    EXPECT_EQ("stack overflow\n", ClangRun(src));
+    EXPECT_EQ("stack overflow\n", GccRun(src));
     EXPECT_EQ(0xfd, exit_status);
+}
+
+// The types of <stddef.h> and <stdint.h> are GCC's: wchar_t is long, wint_t unsigned int,
+// sig_atomic_t and the fast 8-bit types int.
+TEST_F(Msp430Test, RunHeaderTypes)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+        #include <stddef.h>
+        #include <stdint.h>
+        int main(void)
+        {
+            if (sizeof(wchar_t) != 4 || WCHAR_MAX != 2147483647L || WCHAR_MIN >= 0)
+                return 1;
+            if (WINT_MIN != 0 || WINT_MAX != 65535U || SIG_ATOMIC_MAX != 32767)
+                return 2;
+            if (sizeof(int_fast8_t) != 2 || INT_FAST8_MAX != 32767 || UINT_FAST8_MAX != 65535U)
+                return 3;
+            wchar_t w = -70000L;
+            return w < 0 ? 0 : 4;
+        }
+    )"));
+    EXPECT_EQ(0, exit_status);
 }

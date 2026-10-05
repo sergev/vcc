@@ -142,7 +142,7 @@ main:
 )");
 }
 
-// Every operand form and emulated instruction that clang's assembler accepts.  It
+// Every operand form and emulated instruction that both assemblers accept.  clang's
 // rejects some the ISA has: @rN+ as a source with a non-register destination, `push`
 // of anything but a register or an immediate, `pop` to memory, and `br @rN`.
 static std::vector<Msp_Instr> SizeCases()
@@ -151,7 +151,14 @@ static std::vector<Msp_Instr> SizeCases()
     return {
         Make(MSP_MOV, { msp_reg(12), msp_reg(13) }),
         Make(MSP_MOV, { msp_indexed(sp, nullptr, 4), msp_reg(13) }),
-        Make(MSP_MOV, { msp_indexed(12, nullptr, 0), msp_reg(13) }),
+        Make(MSP_MOV, { msp_indexed(12, nullptr, 0), msp_reg(13) }), // @r12
+        Make(MSP_MOV, { msp_indexed(12, nullptr, 0), msp_indexed(13, nullptr, 0) }),
+        Make(MSP_RRA, { msp_indexed(12, nullptr, 0) }),
+        Make(MSP_RLA, { msp_indexed(12, nullptr, 0) }), // add @r12, 0(r12)
+        Make(MSP_RLC, { msp_indexed(12, nullptr, 2) }),
+        Make(MSP_PUSH, { msp_imm(4) }),
+        Make(MSP_PUSH, { msp_imm(8) }),
+        Make(MSP_PUSH, { msp_imm(2) }),
         Make(MSP_MOV, { msp_indexed(12, "g", 2), msp_reg(13) }),
         Make(MSP_MOV, { msp_abs("g", 0), msp_reg(13) }),
         Make(MSP_MOV, { msp_ind(12), msp_reg(13) }),
@@ -210,12 +217,13 @@ static std::vector<Msp_Instr> SizeCases()
     };
 }
 
-// The model's sizes against clang's assembler: each case is assembled between two
-// labels, and a data table of their differences is extracted from the object.
-TEST_F(EmitTest, SizesAgreeWithAssembler)
+// The model's sizes against an assembler: each case is assembled between two labels, and
+// a data table of their differences is extracted.  `as` is the assembler command up to
+// "-c -o OBJ SRC"; `ld`, if given, links the object first (GNU as leaves the differences
+// to the linker, which may relax); `tag` names the scratch files.
+static void CheckSizesWith(const std::vector<std::string> &as, const std::string &ld,
+                           const std::string &objcopy, const std::string &tag)
 {
-    if (!MSP430_TOOLS_FOUND || !tool_available(MSP430_CLANG))
-        GTEST_SKIP() << "MSP430 clang not found";
     std::vector<std::string> lines;
     std::vector<int> model;
     for (Msp_Instr &in : SizeCases()) {
@@ -223,10 +231,12 @@ TEST_F(EmitTest, SizesAgreeWithAssembler)
         model.push_back(msp_instr_size(&in));
         Free(in);
     }
-    std::string s_path           = TEST_DIR "/EmitTest.Sizes.s";
-    std::string o_path           = TEST_DIR "/EmitTest.Sizes.o";
-    std::string bin_path         = TEST_DIR "/EmitTest.Sizes.bin";
-    std::string log_path         = TEST_DIR "/EmitTest.Sizes.log";
+    std::string base     = TEST_DIR "/EmitTest.Sizes." + tag;
+    std::string s_path   = base + ".s";
+    std::string o_path   = base + ".o";
+    std::string bin_path = base + ".bin";
+    std::string exe_path = base + ".elf";
+    std::string log_path = base + ".log";
     {
         std::ofstream s(s_path);
         s << "    .text\n";
@@ -238,16 +248,44 @@ TEST_F(EmitTest, SizesAgreeWithAssembler)
         for (size_t i = 0; i < lines.size(); i++)
             s << "    .byte .Ls" << i + 1 << " - .Ls" << i << "\n";
     }
-    std::string clang = MSP430_CLANG;
-    std::string objcopy =
-        clang.substr(0, clang.find_last_of('/') + 1) + "llvm-objcopy"; // beside clang
-    ASSERT_EQ(0, RunTool({ clang, "--target=msp430", "-c", "-o", o_path, s_path }, log_path))
-        << ReadFile(log_path);
+    std::vector<std::string> cmd = as;
+    cmd.insert(cmd.end(), { "-c", "-o", o_path, s_path });
+    ASSERT_EQ(0, RunTool(cmd, log_path)) << ReadFile(log_path);
+    if (!ld.empty()) {
+        ASSERT_EQ(0, RunTool({ ld, "--no-relax", "-T", MSP430_LINK_SCRIPT, "-e", "0", "-o", exe_path, o_path },
+                             log_path))
+            << ReadFile(log_path);
+        o_path = exe_path;
+    }
     ASSERT_EQ(0, RunTool({ objcopy, "-O", "binary", "--only-section=.sizes", o_path, bin_path },
                          log_path))
         << ReadFile(log_path);
     std::string sizes = ReadFile(bin_path);
     ASSERT_EQ(sizes.size(), lines.size());
-    for (size_t i = 0; i < lines.size(); i++)
-        EXPECT_EQ(model[i], (unsigned char)sizes[i]) << lines[i];
+    for (size_t i = 0; i < lines.size(); i++) {
+        // clang pushes #4 and #8 through the constant generator; the model, as GNU as,
+        // does not (the CPU4 erratum).
+        bool cg_push = tag == "clang" && (lines[i].find("push    #4\n") != std::string::npos ||
+                                          lines[i].find("push    #8\n") != std::string::npos);
+        EXPECT_EQ(model[i] - (cg_push ? 2 : 0), (unsigned char)sizes[i]) << tag << ": " << lines[i];
+    }
+}
+
+// GNU as, the assembler of the toolchain.
+TEST_F(EmitTest, SizesAgreeWithAssembler)
+{
+    if (!MSP430_TOOLS_FOUND || !tool_available(MSP430_GCC))
+        GTEST_SKIP() << "msp430-elf-gcc not found";
+    CheckSizesWith({ MSP430_GCC, "-mcpu=msp430" }, MSP430_LD, MSP430_OBJCOPY, "gnu");
+}
+
+// clang's assembler encodes every case the same way.
+TEST_F(EmitTest, SizesAgreeWithClangAssembler)
+{
+    if (!MSP430_CLANG_FOUND || !tool_available(MSP430_CLANG))
+        GTEST_SKIP() << "MSP430 clang not found";
+    std::string clang = MSP430_CLANG;
+    std::string objcopy =
+        clang.substr(0, clang.find_last_of('/') + 1) + "llvm-objcopy"; // beside clang
+    CheckSizesWith({ clang, "--target=msp430" }, "", objcopy, "clang");
 }

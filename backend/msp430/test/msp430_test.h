@@ -1,6 +1,8 @@
 // Fixture for the MSP430 code generator tests: compile C in-process (the frontend lowered
 // for msp430), take the assembly, and optionally run it on the mspsim simulator
-// (qemu_test.h), main's result coming back as mspsim's exit status.
+// (qemu_test.h), main's result coming back as mspsim's exit status.  Programs are
+// assembled and linked with the GNU MSP430 toolchain, GCC being the oracle; clang and
+// ld.lld, when present, are a second toolchain.
 #pragma once
 
 #include <cstdio>
@@ -17,43 +19,82 @@ extern "C" {
 // The MSP430 tools, from CMake; a missing one names a path that does not exist.
 inline bool msp430_tools_available()
 {
-    return MSP430_TOOLS_FOUND && tool_available(MSP430_CLANG) && tool_available(MSP430_LLD) &&
+    return MSP430_TOOLS_FOUND && tool_available(MSP430_GCC) && tool_available(MSP430_LD) &&
            tool_available(MSPSIM);
 }
 
-// Skip a run test when the MSP430 toolchain or mspsim is absent.
-#define SKIP_IF_NO_MSP430_TOOLS()                                                       \
-    do {                                                                                \
-        if (!msp430_tools_available())                                                  \
-            GTEST_SKIP() << "MSP430 clang/ld.lld/mspsim not found; skipping run test"; \
+inline bool msp430_clang_available()
+{
+    return msp430_tools_available() && MSP430_CLANG_FOUND && tool_available(MSP430_CLANG) &&
+           tool_available(MSP430_LLD);
+}
+
+// Skip a run test when the GNU MSP430 toolchain or mspsim is absent.
+#define SKIP_IF_NO_MSP430_TOOLS()                                                        \
+    do {                                                                                 \
+        if (!msp430_tools_available())                                                   \
+            GTEST_SKIP() << "msp430-elf-gcc/ld or mspsim not found; skipping run test"; \
+    } while (0)
+
+// Skip a test that needs clang's MSP430 target and ld.lld as well.
+#define SKIP_IF_NO_MSP430_CLANG()                                                  \
+    do {                                                                           \
+        if (!msp430_clang_available())                                             \
+            GTEST_SKIP() << "MSP430 clang/ld.lld not found; skipping clang test"; \
     } while (0)
 
 // The cycle limit of a run: about four seconds of mspsim, below the fixture's
 // five-second wall-clock backstop.
 #define MSP430_CYCLE_LIMIT "200000000"
 
+// The run configurations.  The target flags are MSP430_TARGET_FLAGS of
+// libc/msp430/CMakeLists.txt.  mspsim exits with main's result, which its
+// "[Exit code N ...]" line confirms.
+//
+// GCC: msp430-elf-gcc assembles our output and compiles the C parts, msp430-elf-ld links,
+// and libgcc.a follows our libc.a for the helpers only GCC's code calls.
+inline QemuConfig msp430_gcc_config()
+{
+    return { "msp430-tests",
+             MSP430_GCC,
+             { "-mcpu=msp430" },
+             { "-ffreestanding", "-fno-builtin" },
+             MSP430_LD,
+             MSP430_LINK_SCRIPT,
+             MSP430_LIB_DIR,
+             { MSPSIM, "-n", MSP430_CYCLE_LIMIT },
+             "",
+             false,
+             "",
+             false,
+             {},
+             true,
+             { MSP430_LIBGCC } };
+}
+
+// clang: its assembler and ld.lld, whose -n keeps the ELF header out of the peripheral
+// area.
+inline QemuConfig msp430_clang_config()
+{
+    return { "msp430-tests",
+             MSP430_CLANG,
+             { "--target=msp430" },
+             { "-ffreestanding", "-fno-builtin" },
+             MSP430_LLD,
+             MSP430_LINK_SCRIPT,
+             MSP430_LIB_DIR,
+             { MSPSIM, "-n", MSP430_CYCLE_LIMIT },
+             "",
+             false,
+             "",
+             false,
+             { "-n" },
+             true };
+}
+
 class Msp430Test : public QemuTest {
 protected:
-    // The target flags are MSP430_TARGET_FLAGS of libc/msp430/CMakeLists.txt.  mspsim
-    // exits with main's result, which its "[Exit code N ...]" line confirms; ld.lld -n
-    // keeps the ELF header out of the peripheral area.
-    Msp430Test()
-        : QemuTest("msp430", { "msp430-tests",
-                               MSP430_CLANG,
-                               { "--target=msp430" },
-                               { "-ffreestanding", "-fno-builtin" },
-                               MSP430_LLD,
-                               MSP430_LINK_SCRIPT,
-                               MSP430_LIB_DIR,
-                               { MSPSIM, "-n", MSP430_CYCLE_LIMIT },
-                               "",
-                               false,
-                               "",
-                               false,
-                               { "-n" },
-                               true })
-    {
-    }
+    Msp430Test() : QemuTest("msp430", msp430_gcc_config()) {}
 
     // Assembly of every toplevel of the translation unit.
     std::string CompileToMsp430(const char *src)
@@ -112,19 +153,95 @@ protected:
         return Run(asm_text, crt0);
     }
 
-    // Run a program written in C for clang (-O1), with optional hand-written assembly.
+    // Run a program written in C for GCC (-O1) on our runtime, with optional
+    // hand-written or genmsp430 assembly.
+    std::string GccRun(const std::string &src, const std::string &asm_text = "")
+    {
+        return Run(asm_text, "crt0.o", &src, { "-O1" }, ".gcc");
+    }
+
+    // The same with clang (-O1) and ld.lld.
     std::string ClangRun(const std::string &src, const std::string &asm_text = "")
     {
-        return Run(asm_text, "crt0.o", &src, { "-O1" }, ".clang");
+        return Run(msp430_clang_config(), asm_text, "crt0.o", &src, { "-O1" }, ".clang");
     }
 
     // Run a book program compiled by clang (-O0 by default) with the target headers.
     std::string ClangRunBook(const std::string &src, const char *opt = "-O0")
     {
-        return Run("", "crt0-status.o", &src,
+        return Run(msp430_clang_config(), "", "crt0-status.o", &src,
                    { opt, "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
                      TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
                    ".clang");
+    }
+
+    // Run a program built wholly by GCC: msp430-elf-gcc -msim links newlib, its startup
+    // and msp430-sim.ld, and mspsim serves newlib's host I/O.  `objs` are more objects
+    // (ours, say) to link in.  Returns stdout, with exit()'s status in exit_status.
+    std::string NewlibRun(const std::string &src, const std::vector<std::string> &flags,
+                          const std::vector<std::string> &objs = {},
+                          const std::string &extra_src = "", const char *tag = ".newlib")
+    {
+        exit_status          = -1;
+        std::string base     = QemuScratchPath(tag);
+        std::string c_path   = base + ".c";
+        std::string x_path   = base + "-extra.c";
+        std::string exe_path = base + ".elf";
+        std::string out_path = base + ".out";
+        std::string log_path = base + ".log";
+        FlockGuard lock(c_path);
+        if (!lock.locked()) {
+            ADD_FAILURE() << "Concurrent msp430-tests run detected (" << c_path << ")";
+            return "ERROR";
+        }
+        {
+            std::ofstream c(c_path);
+            c << src;
+        }
+        std::vector<std::string> cc = { MSP430_GCC, "-mcpu=msp430", "-msim" };
+        cc.insert(cc.end(), flags.begin(), flags.end());
+        cc.insert(cc.end(), { "-o", exe_path, c_path });
+        if (!extra_src.empty()) {
+            std::ofstream x(x_path);
+            x << extra_src;
+            cc.push_back(x_path);
+        }
+        cc.insert(cc.end(), objs.begin(), objs.end());
+        cc.push_back("-lm");
+        int rc = RunTool(cc, log_path);
+        EXPECT_EQ(0, rc) << "msp430-elf-gcc failed on " << c_path << ":\n" << ReadFile(log_path);
+        if (rc != 0)
+            return "ERROR";
+        rc = RunWithTimeout({ MSPSIM, "-n", MSP430_CYCLE_LIMIT, exe_path }, out_path, log_path, 5);
+        if (rc < 0 || ReadFile(log_path).find("[Exit code ") == std::string::npos) {
+            ADD_FAILURE() << "mspsim did not finish " << exe_path << " (status " << rc << "):\n"
+                          << ReadFile(log_path);
+            return "ERROR";
+        }
+        exit_status = rc;
+        return ReadFile(out_path);
+    }
+
+    // Run a book program built by GCC (-O0) with newlib, its result printed as "%d\n" as
+    // crt0-status does for ours: --wrap=main sends newlib's startup to a wrapper, which
+    // calls the program's own main (so its implicit "return 0" holds).  An exit() call
+    // prints nothing, as in ours.  putch is ours, not newlib's: a weak one stands in.
+    std::string GccRunBook(const std::string &src)
+    {
+        static const char wrapper[] = R"(#include <stdio.h>
+int __real_main(void);
+__attribute__((weak)) int putch(int c)
+{
+    return putchar(c);
+}
+int __wrap_main(void)
+{
+    int status = __real_main();
+    printf("%d\n", status);
+    return status;
+}
+)";
+        return NewlibRun(src, { "-O0", "-w", "-Wl,--wrap=main" }, {}, wrapper, ".gcc");
     }
 };
 

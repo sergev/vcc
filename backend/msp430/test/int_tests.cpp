@@ -119,7 +119,7 @@ inv r13
 TEST_F(Msp430Test, ZeroExtendCharToLong)
 {
     std::string code = Code(CompileToMsp430("long f(unsigned char a) { return a; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov.b 0(r1), r12
+    EXPECT_NE(std::string::npos, code.find(R"(mov.b @r1, r12
 clr r13
 )")) << code;
 }

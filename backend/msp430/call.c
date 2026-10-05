@@ -1,21 +1,24 @@
 //
-// Parameters, calls and returns: the MSP430 EABI as clang implements it.
+// Parameters, calls and returns: the MSP430 EABI as GCC implements it.
 //
 // Arguments are assigned left to right to r12, r13, r14 and r15, a 16-bit value (a char
 // extended) one register, a 32-bit one the next two, a 64-bit one all four.  One that
 // does not fit goes on the stack, and the later ones still take the registers left,
 // with one exception: a 32-bit value with only r15 left is split, its low word in r15
 // and its high word on the stack, unless something has already gone on the stack (it
-// then goes there whole).  A structure or union goes on the stack whatever its size,
-// and does not count as "gone on the stack".  A variadic callee takes every argument
-// on the stack.  Stack arguments lie in order above the return address, 2-aligned.
+// then goes there whole).  A structure or union goes by reference: the caller passes the
+// address of its own object, uncopied, as a pointer argument, and the callee copies the
+// object into its frame on entry, before anything can change it.  (clang copies the
+// object onto the stack instead; the two do not interoperate there.)  A variadic callee
+// takes every argument on the stack.  Stack arguments lie in order above the return
+// address, 2-aligned.
 //
 #include "internal.h"
 #include "xalloc.h"
 
 enum { MAX_PARTS = 4 };
 
-// Where an argument goes: an aggregate whole at `stack[0]`, a scalar word by word.
+// Where an argument goes, word by word; an aggregate is its address, one word.
 typedef struct {
     bool agg;
     int parts;            // words of a scalar
@@ -31,13 +34,8 @@ static int assign_args(const Tac_Type *const *types, int n, bool variadic, ArgLo
     for (int i = 0; i < n; i++) {
         ArgLoc *l = &locs[i];
         *l        = (ArgLoc){ 0 };
-        if (!msp_is_scalar(types[i])) {
-            l->agg      = true;
-            l->stack[0] = stack;
-            stack += (msp_type_size(types[i]) + 1) & ~1;
-            continue;
-        }
-        l->parts  = msp_words(types[i]);
+        l->agg    = !msp_is_scalar(types[i]);
+        l->parts  = l->agg ? 1 : msp_words(types[i]);
         int left  = 16 - next;
         bool regs = !variadic && l->parts <= left;
         if (!variadic && !used_stack && l->parts == 2 && left == 1) {
@@ -101,11 +99,14 @@ void place_params(Gen *g)
     ArgLoc *locs = param_locs(g, &n);
     int i        = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++)
-        if (locs[i].agg || all_on_stack(&locs[i]))
+        if (!locs[i].agg && all_on_stack(&locs[i]))
             place_stack_param(g, p->name, p->type, locs[i].stack[0]);
     xfree(locs);
 }
 
+// The register parameters go to their slots first, a structure's address into the first
+// word of its slot (layout_frame makes it big enough); then each structure is copied
+// in, through r12-r15, from the address in its slot or among the stack arguments.
 void store_params(Gen *g)
 {
     int n;
@@ -113,7 +114,12 @@ void store_params(Gen *g)
     int i        = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
         const ArgLoc *l = &locs[i];
-        if (l->agg || all_on_stack(l))
+        if (l->agg) {
+            if (l->reg[0])
+                emit2(g, MSP_MOV, msp_reg(l->reg[0]), mem_at(g, p->name, 0));
+            continue;
+        }
+        if (all_on_stack(l))
             continue;
         if (msp_type_size(p->type) == 1) {
             emit2b(g, MSP_MOV, msp_reg(l->reg[0]), mem_at(g, p->name, 0));
@@ -123,6 +129,16 @@ void store_params(Gen *g)
             Msp_Operand src = l->reg[j] ? msp_reg(l->reg[j]) : incoming_at(l->stack[j]);
             emit2(g, MSP_MOV, src, mem_at(g, p->name, 2 * j));
         }
+    }
+    i = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
+        const ArgLoc *l = &locs[i];
+        if (!l->agg)
+            continue;
+        emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(l->stack[0]),
+              msp_reg(14));
+        address_of(g, 15, p->name, 0);
+        copy_bytes(g, msp_type_size(p->type), msp_type_align(p->type));
     }
     xfree(locs);
 }
@@ -163,12 +179,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         const ArgLoc *l   = &locs[i];
         const Tac_Type *t = val_type(g, a);
         if (l->agg) {
-            int size = msp_type_size(t);
-            address_of(g, 14, a->u.var_name, 0);
-            emit2(g, MSP_MOV, msp_reg(MSP_SP), msp_reg(15));
-            if (l->stack[0])
-                emit2(g, MSP_ADD, msp_imm(l->stack[0]), msp_reg(15));
-            copy_bytes(g, size, msp_type_align(t));
+            if (!l->reg[0]) {
+                address_of(g, 11, a->u.var_name, 0);
+                emit2(g, MSP_MOV, msp_reg(11), msp_indexed(MSP_SP, NULL, l->stack[0]));
+            }
             continue;
         }
         if (msp_type_size(t) == 1 && !l->reg[0]) {
@@ -183,8 +197,12 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         const ArgLoc *l = &locs[i];
-        if (l->agg || !l->reg[0])
+        if (!l->reg[0])
             continue;
+        if (l->agg) {
+            address_of(g, l->reg[0], a->u.var_name, 0);
+            continue;
+        }
         if (msp_type_size(val_type(g, a)) == 1) {
             load_val(g, a, l->reg[0], 1, EXT_TYPE);
             continue;

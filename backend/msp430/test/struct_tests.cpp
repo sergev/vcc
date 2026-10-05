@@ -23,16 +23,18 @@ TEST_F(Msp430Test, StructCopyBytes)
     EXPECT_NE(std::string::npos, code.find("mov.b @r15, ")) << code;
 }
 
-// A large structure argument goes to the stack through a counted loop; @r14+ only into
-// a register (clang's assembler).
-TEST_F(Msp430Test, StructArgCopyLoop)
+// The callee copies a structure parameter into its slot on entry, from the address that
+// came in r12 (kept meanwhile in the slot's first word): a large one through a counted
+// loop, @r14+ only into a register (clang's assembler).
+TEST_F(Msp430Test, StructParamCopyLoop)
 {
     std::string code = Code(CompileToMsp430(R"(
         struct B { int a[40]; };
-        int g(struct B b);
-        int f(struct B *p) { return g(*p); }
+        int g(struct B b) { return b.a[39]; }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
+    EXPECT_NE(std::string::npos, code.find(R"(mov r12, 0(r1)
+mov @r1, r14
+mov r1, r15
 mov #40, r13
 )")) << code;
     EXPECT_NE(std::string::npos,
@@ -44,19 +46,34 @@ jne )"))
         << code;
 }
 
-// A structure argument is copied into the outgoing area.
-TEST_F(Msp430Test, StructArgOnStack)
+// A structure argument past the registers goes as its address on the stack; the callee
+// takes it from there.
+TEST_F(Msp430Test, StructArgAddressOnStack)
 {
     std::string code = Code(CompileToMsp430(R"(
         struct S { int a, b; };
-        int g(int x, struct S s);
-        int f(struct S *p) { return g(1, *p); }
+        int w(int, int, int, int, struct S);
+        int h(struct S *p) { return w(1, 2, 3, 4, *p); }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r15
+    EXPECT_NE(std::string::npos, code.find(R"(mov r1, r11
+add #)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mov r11, 0(r1)
+mov #1, r12
+)")) << code;
+}
+
+TEST_F(Msp430Test, StructParamFromStack)
+{
+    std::string code = Code(CompileToMsp430(R"(
+        struct S { int a, b; };
+        int w(int a, int b, int c, int d, struct S s) { return s.b; }
+    )"));
+    EXPECT_NE(std::string::npos, code.find(R"(mov 16(r1), r14
+mov r1, r15
+add #8, r15
 mov @r14, 0(r15)
 mov 2(r14), 2(r15)
-)"))
-        << code;
+)")) << code;
 }
 
 // The callee hands the hidden pointer back in r12.
@@ -64,7 +81,7 @@ TEST_F(Msp430Test, StructResultPointerReturned)
 {
     std::string code = Code(CompileToMsp430(
         "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r12
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r12
 add #)")) << code;
 }
 
@@ -147,4 +164,76 @@ TEST_F(Msp430Test, RunMalloc)
             return 0;
         }
     )"));
+}
+
+// Structures by reference across the two compilers: GCC's callee and ours each write to
+// the parameter, and each caller's object stays as it was; results come back through
+// the hidden pointer both ways.
+TEST_F(Msp430Test, RunStructsWithGcc)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    std::string ours = CompileToMsp430(R"(
+        struct S3 { char c[3]; };
+        struct S4 { int a, b; };
+        struct S10 { char c; long l; double d; };
+        int gcc_take(int x, struct S4 s, int y);
+        struct S4 gcc_ret(struct S4 s);
+        int gcc_calls_ours(void);
+        int our_take(struct S3 s, long l, struct S10 t)
+        {
+            s.c[0] = 'q';
+            t.l++;
+            return s.c[0] + s.c[1] + (int)l + (int)(t.l - 70000L) + t.c;
+        }
+        struct S4 our_ret(int k, struct S4 s)
+        {
+            s.a *= k;
+            return s;
+        }
+        int main(void)
+        {
+            struct S4 a = { 1, 2 };
+            if (gcc_take(10, a, 20) != 133)
+                return 1;
+            if (a.a != 1 || a.b != 2)
+                return 2;
+            struct S4 b = gcc_ret(a);
+            if (b.a != 1 || b.b != 6 || a.b != 2)
+                return 3;
+            int r = gcc_calls_ours();
+            return r == 'q' + 'y' + 5 + 1 + 'c' ? 0 : 4;
+        }
+    )");
+    std::string gcc = R"(
+        struct S3 { char c[3]; };
+        struct S4 { int a, b; };
+        struct S10 { char c; long l; double d; };
+        int our_take(struct S3 s, long l, struct S10 t);
+        struct S4 our_ret(int k, struct S4 s);
+        int gcc_take(int x, struct S4 s, int y)
+        {
+            s.a += 100;
+            return s.a + s.b + x + y;
+        }
+        struct S4 gcc_ret(struct S4 s)
+        {
+            s.b *= 3;
+            return s;
+        }
+        int gcc_calls_ours(void)
+        {
+            struct S3 s = { { 'x', 'y', 'z' } };
+            struct S10 t = { 'c', 70000L, 1.5 };
+            int r = our_take(s, 5L, t);
+            if (s.c[0] != 'x' || t.l != 70000L || t.d != 1.5)
+                return -1;
+            struct S4 u = { 7, 8 };
+            struct S4 v = our_ret(3, u);
+            if (v.a != 21 || v.b != 8 || u.a != 7)
+                return -2;
+            return r;
+        }
+    )";
+    EXPECT_EQ("", GccRun(gcc, ours));
+    EXPECT_EQ(0, exit_status);
 }

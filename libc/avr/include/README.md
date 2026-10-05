@@ -2,7 +2,7 @@
 
 The C11 headers that depend on AVR's data model: `float.h`, `limits.h`, `math.h`,
 `setjmp.h` and `stdarg.h`.  `inttypes.h`, `stddef.h` and `stdint.h` describe the 16-bit
-data model AVR shares with MSP430, in [libc/ip16/include](../../ip16/include), searched
+data model (MSP430 shares `inttypes.h`), in [libc/ip16/include](../../ip16/include), searched
 second; the target-neutral ones are in [libc/common/include](../../common/include),
 searched last:
 

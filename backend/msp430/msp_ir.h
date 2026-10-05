@@ -157,11 +157,16 @@ Msp_Operand msp_label(const char *sym);
 // that all ones is -1, which the constant generator supplies.
 int64_t msp_imm_value(int64_t imm, bool byte);
 // The instruction's size in bytes: a word, plus one per extension word.  Indexed and
-// absolute operands take one, and so does an immediate other than 0, 1, 2, 4, 8 and -1
-// (the constant generators), or one with a symbol.
+// absolute operands take one (but a source 0(rN), which is @rN), and so does an
+// immediate other than 0, 1, 2, 4, 8 and -1 (the constant generators), or one with a
+// symbol; `push #4` and `push #8` take one too, as GNU as encodes them.
+// x(rN) with x = 0 and no symbol, which a source field takes as @rN: GNU as encodes it
+// so, one word shorter, and the emitter prints it so for clang to agree.
+bool msp_zero_indexed(const Msp_Operand *o);
+
 int msp_instr_size(const Msp_Instr *in);
 
-// GNU msp430-as syntax, as clang emits it.
+// GNU msp430-as syntax, which GNU as and clang's assembler both accept and encode alike.
 void msp_emit_func(FILE *out, const Msp_Func *fn);
 // One instruction, as a line of msp_emit_func.
 void msp_emit_instr(FILE *out, const Msp_Instr *in);

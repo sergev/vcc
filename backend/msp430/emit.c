@@ -1,6 +1,6 @@
 //
-// MSP430 IR → GNU msp430-as syntax (ELF), as clang emits it and its integrated assembler
-// accepts it.
+// MSP430 IR → GNU msp430-as syntax (ELF), which GNU as and clang's integrated assembler
+// both accept, and encode alike.
 //
 #include <inttypes.h>
 #include <string.h>
@@ -29,8 +29,13 @@ static void emit_reg(FILE *out, int reg)
         fprintf(out, "r%d", reg);
 }
 
-static void emit_operand(FILE *out, const Msp_Operand *o, bool byte)
+static void emit_operand(FILE *out, const Msp_Operand *o, bool byte, bool source)
 {
+    if (source && msp_zero_indexed(o)) {
+        fputc('@', out);
+        emit_reg(out, o->reg);
+        return;
+    }
     switch (o->kind) {
     case MSP_OPND_NONE:
         break;
@@ -64,20 +69,32 @@ static void emit_operand(FILE *out, const Msp_Operand *o, bool byte)
     }
 }
 
-// An instruction: 4-space indent, mnemonic (with .b) padded to 8 columns.
+// An instruction: 4-space indent, mnemonic (with .b) padded to 8 columns.  A 0(rN) in a
+// source field prints as @rN (msp_zero_indexed); rla/rlc of one is spelt out as the add
+// it is, since only its source half can be @rN.
 void msp_emit_instr(FILE *out, const Msp_Instr *in)
 {
+    Msp_Form form    = msp_form[in->op];
+    const char *mnem = msp_mnemonic[in->op];
+    Msp_Operand opnd[MSP_MAX_OPERANDS] = { in->opnd[0], in->opnd[1] };
+    if (form == MSP_FORM_TWICE && msp_zero_indexed(&in->opnd[0])) {
+        mnem    = in->op == MSP_RLA ? "add" : "addc";
+        form    = MSP_FORM_DOUBLE;
+        opnd[1] = in->opnd[0];
+    }
+
     char text[16];
-    snprintf(text, sizeof text, "%s%s", msp_mnemonic[in->op], in->byte ? ".b" : "");
+    snprintf(text, sizeof text, "%s%s", mnem, in->byte ? ".b" : "");
     fprintf(out, "    %s", text);
-    for (int i = 0; i < MSP_MAX_OPERANDS && in->opnd[i].kind != MSP_OPND_NONE; i++) {
+    for (int i = 0; i < MSP_MAX_OPERANDS && opnd[i].kind != MSP_OPND_NONE; i++) {
         if (i == 0) {
             int pad = 8 - (int)strlen(text);
             fprintf(out, "%*s", pad > 1 ? pad : 1, "");
         } else {
             fputs(", ", out);
         }
-        emit_operand(out, &in->opnd[i], in->byte);
+        bool source = i == 0 && (form == MSP_FORM_DOUBLE || form == MSP_FORM_SINGLE);
+        emit_operand(out, &opnd[i], in->byte, source);
     }
     fputc('\n', out);
 }

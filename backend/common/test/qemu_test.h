@@ -41,6 +41,9 @@ struct QemuConfig {
     // itself; any other stop (the cycle limit, an illegal instruction, a CPU asleep for
     // good) has a status of its own, which a result could collide with, and fails the run.
     bool exit_report = false;
+    // Libraries linked after libc.a: libgcc.a on MSP430, for the helpers GCC's code
+    // calls beyond ours.
+    std::vector<std::string> extra_libs = {};
 };
 
 class QemuTest : public BackendTest {
@@ -67,6 +70,14 @@ protected:
                     const std::string *clang_src                = nullptr,
                     const std::vector<std::string> &clang_flags = {}, const char *tag = "")
     {
+        return Run(config, asm_text, crt0, clang_src, clang_flags, tag);
+    }
+
+    // The same with another toolchain: MSP430 also links with clang and ld.lld.
+    std::string Run(const QemuConfig &cfg, const std::string &asm_text, const char *crt0,
+                    const std::string *clang_src                = nullptr,
+                    const std::vector<std::string> &clang_flags = {}, const char *tag = "")
+    {
         exit_status          = -1;
         std::string base     = QemuScratchPath(tag);
         std::string s_path   = base + ".s";
@@ -78,7 +89,7 @@ protected:
         // Guards the scratch files against a concurrent run of the same test.
         FlockGuard lock(s_path);
         if (!lock.locked()) {
-            ADD_FAILURE() << "Concurrent " << config.suite << " run detected (" << s_path << ")";
+            ADD_FAILURE() << "Concurrent " << cfg.suite << " run detected (" << s_path << ")";
             return "ERROR";
         }
         std::vector<std::string> objs;
@@ -88,8 +99,8 @@ protected:
                 std::ofstream s(s_path);
                 s << asm_text;
             }
-            std::vector<std::string> as = { config.clang };
-            as.insert(as.end(), config.target_flags.begin(), config.target_flags.end());
+            std::vector<std::string> as = { cfg.clang };
+            as.insert(as.end(), cfg.target_flags.begin(), cfg.target_flags.end());
             as.insert(as.end(), { "-c", "-o", o_path, s_path });
             rc = RunTool(as, log_path);
             EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
@@ -104,9 +115,9 @@ protected:
                 std::ofstream c(c_path);
                 c << *clang_src;
             }
-            std::vector<std::string> cc = { config.clang };
-            cc.insert(cc.end(), config.target_flags.begin(), config.target_flags.end());
-            cc.insert(cc.end(), config.c_flags.begin(), config.c_flags.end());
+            std::vector<std::string> cc = { cfg.clang };
+            cc.insert(cc.end(), cfg.target_flags.begin(), cfg.target_flags.end());
+            cc.insert(cc.end(), cfg.c_flags.begin(), cfg.c_flags.end());
             cc.insert(cc.end(), { "-c", "-o", co_path });
             cc.insert(cc.end(), clang_flags.begin(), clang_flags.end());
             cc.push_back(c_path);
@@ -116,28 +127,29 @@ protected:
                 return "ERROR";
             objs.push_back(co_path);
         }
-        std::string lib               = config.lib_dir;
-        std::vector<std::string> link = { config.ld };
-        link.insert(link.end(), config.link_flags.begin(), config.link_flags.end());
-        link.insert(link.end(), { "-T", config.link_script, "-o", exe_path, lib + "/" + crt0 });
+        std::string lib               = cfg.lib_dir;
+        std::vector<std::string> link = { cfg.ld };
+        link.insert(link.end(), cfg.link_flags.begin(), cfg.link_flags.end());
+        link.insert(link.end(), { "-T", cfg.link_script, "-o", exe_path, lib + "/" + crt0 });
         link.insert(link.end(), objs.begin(), objs.end());
         link.push_back(lib + "/libc.a");
+        link.insert(link.end(), cfg.extra_libs.begin(), cfg.extra_libs.end());
         rc = RunTool(link, log_path);
         EXPECT_EQ(0, rc) << "ld.lld failed on " << exe_path << ":\n" << ReadFile(log_path);
         if (rc != 0)
             return "ERROR";
         std::string status_path       = base + ".status";
-        std::vector<std::string> qemu = config.qemu;
+        std::vector<std::string> qemu = cfg.qemu;
         std::remove(status_path.c_str());
-        if (config.status_from_debugcon)
+        if (cfg.status_from_debugcon)
             qemu.insert(qemu.end(), { "-debugcon", "file:" + status_path });
-        if (config.status_from_serial)
+        if (cfg.status_from_serial)
             qemu.insert(qemu.end(), { "-serial", "file:" + status_path });
-        if (*config.image_option)
-            qemu.push_back(config.image_option);
+        if (*cfg.image_option)
+            qemu.push_back(cfg.image_option);
         qemu.push_back(exe_path);
         rc = RunWithTimeout(qemu, out_path, log_path, 5,
-                            config.status_from_serial ? status_path : std::string());
+                            cfg.status_from_serial ? status_path : std::string());
         if (rc < 0) {
             ADD_FAILURE() << (rc == -2 ? "qemu timed out" : "qemu failed") << " on " << exe_path
                           << ":\n"
@@ -145,17 +157,17 @@ protected:
             return "ERROR";
         }
         exit_status = rc;
-        if (config.exit_report && ReadFile(log_path).find("[Exit code ") == std::string::npos) {
+        if (cfg.exit_report && ReadFile(log_path).find("[Exit code ") == std::string::npos) {
             ADD_FAILURE() << "the program did not stop itself (status " << rc << ") on "
                           << exe_path << ":\n"
                           << ReadFile(log_path);
             return "ERROR";
         }
-        if (config.status_from_debugcon || config.status_from_serial) {
+        if (cfg.status_from_debugcon || cfg.status_from_serial) {
             std::string status = ReadFile(status_path);
             if (status.empty()) {
                 ADD_FAILURE() << "no exit status on the "
-                              << (config.status_from_serial ? "status serial port"
+                              << (cfg.status_from_serial ? "status serial port"
                                                             : "debug console")
                               << " of " << exe_path << ":\n"
                               << ReadFile(log_path);

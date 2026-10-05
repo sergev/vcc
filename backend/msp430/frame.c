@@ -197,8 +197,15 @@ void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         if (!p->type)
             fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
-        if (!find_slot(g, p->name))
-            add_slot(g, p->name, p->type, msp_type_size(p->type), msp_type_align(p->type));
+        if (find_slot(g, p->name))
+            continue;
+        // A structure parameter's slot first holds its address (store_params).
+        int size = msp_type_size(p->type), align = msp_type_align(p->type);
+        if (!msp_is_scalar(p->type)) {
+            size  = size < 2 ? 2 : size;
+            align = 2;
+        }
+        add_slot(g, p->name, p->type, size, align);
     }
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)

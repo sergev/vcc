@@ -9,7 +9,7 @@
 TEST_F(Msp430Test, LoadThroughPointer)
 {
     std::string code = Code(CompileToMsp430("long f(long *p) { return *p; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r15
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
 mov @r15, 2(r1)
 mov 2(r15), 4(r1)
 )"))
@@ -20,7 +20,7 @@ mov 2(r15), 4(r1)
 TEST_F(Msp430Test, StoreThroughPointer)
 {
     std::string code = Code(CompileToMsp430("void f(int *p) { *p = 1234; }"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 0(r1), r15
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
 mov #1234, 0(r15)
 )")) << code;
 }

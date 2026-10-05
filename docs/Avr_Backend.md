@@ -217,8 +217,8 @@ In `libc/avr/`:
   the multiply of `libc/common/muldi3.c`; and AVR's own `frexp.c`, `ldexp.c`, `modf.c`.
   All of it is compiled by `genavr` itself.
 - Headers: `libc/avr/include` holds AVR's own headers (`float.h`, `limits.h`, `math.h`,
-  `setjmp.h`, `stdarg.h`), `libc/ip16/include` those of the 16-bit data model it shares
-  with MSP430 (`inttypes.h`, `stddef.h`, `stdint.h`), and `libc/common/include` the
+  `setjmp.h`, `stdarg.h`), `libc/ip16/include` those of the 16-bit data model
+  (`inttypes.h`, shared with MSP430, and `stddef.h`, `stdint.h`), and `libc/common/include` the
   target-neutral ones. See
   [libc/avr/include/README.md](../libc/avr/include/README.md).
 

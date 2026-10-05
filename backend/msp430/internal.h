@@ -1,5 +1,5 @@
 //
-// MSP430 code generator internals (the MSP430 EABI as clang implements it; see
+// MSP430 code generator internals (the MSP430 EABI as GCC implements it; see
 // backend/msp430/Plan.md).
 //
 // Registers: r0 is PC, r1 SP, r2 SR (and a constant generator), r3 the other constant

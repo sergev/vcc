@@ -1,7 +1,7 @@
 //
-// Branch relaxation.  A jump reaches -512..+511 words, and clang's assembler rejects
-// one out of range rather than relaxing it, so the backend sizes its own: from the
-// instruction sizes, each jump's distance to its label is known exactly.
+// Branch relaxation.  A jump reaches -512..+511 words, and the assemblers reject one out
+// of range rather than relaxing it, so the backend sizes its own: from the instruction
+// sizes, each jump's distance to its label is known exactly.
 //
 #include "internal.h"
 #include "xalloc.h"
