@@ -368,10 +368,13 @@ std::string RuntimeExpected(bool nan_order)
     s += Hex((uint32_t)la / (uint32_t)lb, 8);
     s += Hex((uint16_t)(ia * ib), 4) + Hex((uint16_t)(ia / ib), 4) + Hex((uint16_t)(ia % ib), 4) +
          Hex((uint16_t)(ua16 / 7u), 4);
+    // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
     s += Hex((uint16_t)(int16_t)(ia * (1 << n)), 4) + Hex((uint16_t)(ia >> n), 4) +
          Hex((uint16_t)(ua16 >> n2), 4);
+    // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
     s += Hex((uint32_t)((uint32_t)la << n2), 8) + Hex((uint32_t)(la >> n), 8) +
          Hex((uint32_t)la >> n2, 8);
+    // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
     s += Hex((uint64_t)a << n2, 16) + Hex((uint64_t)(a >> n), 16) + Hex(ua >> n2, 16);
     s += Hex(FBits(fx + fy), 8) + Hex(FBits(fx - fy), 8) + Hex(FBits(fx * fy), 8) +
          Hex(FBits(fx / fy), 8);
@@ -383,6 +386,7 @@ std::string RuntimeExpected(bool nan_order)
     s += Hex((uint64_t)(int64_t)(fx * 1e9f), 16);
     s += Hex(FBits((float)la), 8) + Hex(DBits((double)la), 16) + Hex(DBits((double)a), 16);
     s += Hex(FBits((float)a), 8) + Hex(DBits((double)ia), 16) + Hex(FBits((float)ua16), 8);
+    // cppcheck-suppress duplicateExpression ; 0.0 / 0.0 makes the quiet NaN
     double qn = nan0 / nan0;
     float fn  = (float)qn;
     s += Hex((qn == qn) | (qn != qn) << 1 | (dx == dy) << 2 | (dx != dy) << 3 | (fn == fn) << 4 |

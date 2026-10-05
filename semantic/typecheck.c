@@ -671,6 +671,7 @@ static void round_float(TypeKind kind, ConstVal *v)
 {
     if (v->is_real && kind == TYPE_FLOAT && target_config &&
         target_config->float_size < target_config->double_size)
+        // cppcheck-suppress suspiciousFloatingPointCast ; rounding to float is the point
         v->d = (float)v->d;
 }
 

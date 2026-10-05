@@ -23,11 +23,13 @@
 
 static uint64_t bits(double d)
 {
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     return *(uint64_t *)&d;
 }
 
 static double from_bits(uint64_t u)
 {
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     return *(double *)&u;
 }
 
@@ -366,6 +368,7 @@ double __floatunsidf(unsigned long u)
 /* float → double: exact. */
 double __extendsfdf2(float f)
 {
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     uint32_t a    = *(uint32_t *)&f;
     uint64_t sign = (uint64_t)(a & 0x80000000UL) << 32;
     int exp       = (int)((a >> 23) & 0xff);
@@ -415,5 +418,6 @@ float __truncdfsf2(double d)
             u = 0x7f800000UL;
         u |= sign;
     }
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     return *(float *)&u;
 }

@@ -24,17 +24,17 @@ TEST(TacAbi, Sysv64Class)
     EXPECT_EQ(TAC_SYSV64_X87, tac_sysv64_class(&ld));
 
     // { double; long } is SSE then INTEGER.
-    Tac_Member m2 = { .name = (char *)"b", .offset = 8, .type = &l };
-    Tac_Member m1 = { .next = &m2, .name = (char *)"a", .offset = 0, .type = &d };
+    Tac_Member m2 = { .name = const_cast<char *>("b"), .offset = 8, .type = &l };
+    Tac_Member m1 = { .next = &m2, .name = const_cast<char *>("a"), .offset = 0, .type = &d };
     Tac_Type s    = { .kind = TAC_TYPE_STRUCTURE };
     s.u.structure.members = &m1;
     s.u.structure.size    = 16;
     EXPECT_EQ(TAC_SYSV64_SSE | TAC_SYSV64_INTEGER << 2, tac_sysv64_class(&s));
 
     // { float; float; int }: two floats share an SSE eightbyte, the int its own.
-    Tac_Member n3 = { .name = (char *)"c", .offset = 8, .type = &i };
-    Tac_Member n2 = { .next = &n3, .name = (char *)"b", .offset = 4, .type = &f };
-    Tac_Member n1 = { .next = &n2, .name = (char *)"a", .offset = 0, .type = &f };
+    Tac_Member n3 = { .name = const_cast<char *>("c"), .offset = 8, .type = &i };
+    Tac_Member n2 = { .next = &n3, .name = const_cast<char *>("b"), .offset = 4, .type = &f };
+    Tac_Member n1 = { .next = &n2, .name = const_cast<char *>("a"), .offset = 0, .type = &f };
     s.u.structure.members = &n1;
     s.u.structure.size    = 12;
     EXPECT_EQ(TAC_SYSV64_SSE | TAC_SYSV64_INTEGER << 2, tac_sysv64_class(&s));
@@ -52,16 +52,16 @@ TEST(TacAbi, Sysv64Class)
 
     // { long double } is X87; { long double; int } and a union of long double and
     // double are MEMORY.
-    Tac_Member x1 = { .name = (char *)"v", .offset = 0, .type = &ld };
+    Tac_Member x1 = { .name = const_cast<char *>("v"), .offset = 0, .type = &ld };
     s.u.structure.members = &x1;
     s.u.structure.size    = 16;
     EXPECT_EQ(TAC_SYSV64_X87, tac_sysv64_class(&s));
-    Tac_Member x2 = { .name = (char *)"k", .offset = 16, .type = &i };
+    Tac_Member x2 = { .name = const_cast<char *>("k"), .offset = 16, .type = &i };
     x1.next              = &x2;
     s.u.structure.size   = 32;
     EXPECT_EQ(TAC_SYSV64_MEMORY, tac_sysv64_class(&s));
-    Tac_Member u2 = { .name = (char *)"d", .offset = 0, .type = &d };
-    Tac_Member u1 = { .next = &u2, .name = (char *)"v", .offset = 0, .type = &ld };
+    Tac_Member u2 = { .name = const_cast<char *>("d"), .offset = 0, .type = &d };
+    Tac_Member u1 = { .next = &u2, .name = const_cast<char *>("v"), .offset = 0, .type = &ld };
     s.u.structure.members  = &u1;
     s.u.structure.size     = 16;
     s.u.structure.is_union = true;

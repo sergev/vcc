@@ -391,7 +391,7 @@ static void address_into(Gen *g, const char *name, int reg)
             emit2(g, AVR_ADIW, avr_reg(reg), avr_imm(s->q));
         } else {
             emit2(g, AVR_SUBI, avr_reg(reg), avr_imm(-s->q & 0xff));
-            emit2(g, AVR_SBCI, avr_reg(reg + 1), avr_imm((-s->q >> 8) & 0xff));
+            emit2(g, AVR_SBCI, avr_reg(reg + 1), avr_imm(((unsigned)-s->q >> 8) & 0xff));
         }
     } else {
         bool fn = is_function(g, name);

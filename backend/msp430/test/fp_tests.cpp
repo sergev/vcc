@@ -255,7 +255,7 @@ int main(void)
             e += (char)('0' + ((a >= b) | (a == b) << 1 | (a != b) << 2));
             e += (char)('0' + ((x < y) | (x <= y) << 1 | (x > y) << 2));
             e += (char)('0' + ((x >= y) | (x == y) << 1 | (x != y) << 2));
-            e += (char)('0' + (!a | !x << 1 | (a ? 1 : 0) << 2));
+            e += (char)('0' + ((a ? 0 : 1) | (x ? 0 : 1) << 1 | (a ? 1 : 0) << 2));
             e += ' ';
         }
     EXPECT_EQ(e, CompileAndRunMsp430(src));
@@ -301,6 +301,7 @@ int main(void)
     std::string e;
     for (double x : d) {
         e += Hex(Bits32((float)x), 8);
+        // cppcheck-suppress suspiciousFloatingPointCast ; the rounding to float is the point
         e += Hex(Bits((double)(float)x), 16);
         if (x > -32769.0 && x < 32768.0)
             e += Hex((uint16_t)(int16_t)x, 4).substr(0, 4);

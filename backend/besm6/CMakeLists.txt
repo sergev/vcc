@@ -27,8 +27,10 @@ target_link_libraries(besm tac libutil)
 # besm-tests binary (see below and libc/besm6/CMakeLists.txt).
 
 #
-# Tests for the BESM-6 backend
+# Tests for the BESM-6 backend.  They need the runtime libc/besm6 builds, so they are
+# skipped where the BESM-6 toolchain (b6as) is not installed.
 #
+if(BESM6_TOOLS_FOUND)
 add_executable(besm-tests
     test/label_tests.cpp
     test/frame_tests.cpp
@@ -73,5 +75,6 @@ target_compile_definitions(besm-tests PRIVATE
 target_include_directories(besm-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(besm-tests)
 gtest_discover_tests(besm-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 10)
+endif() # BESM6_TOOLS_FOUND
 
 # The besm-headers standard-library header check moved to libc/besm6 with the headers.

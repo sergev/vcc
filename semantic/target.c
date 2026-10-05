@@ -283,6 +283,7 @@ int target_double_is_single(void)
 
 double target_double_round(double d)
 {
+    // cppcheck-suppress suspiciousFloatingPointCast ; rounding to single is the point
     return target_double_is_single() ? (double)(float)d : d;
 }
 

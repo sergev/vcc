@@ -363,7 +363,7 @@ static void live_compute(Live *lv, X86_Func *fn, bool upper)
     lv->upper   = upper;
     lv->halves  = NULL;
     lv->nblocks = 0;
-    for (X86_Block *b = fn->blocks; b; b = b->next)
+    for (const X86_Block *b = fn->blocks; b; b = b->next)
         lv->nblocks++;
     int n        = lv->nblocks ? lv->nblocks : 1;
     lv->blocks   = xalloc(n * sizeof(X86_Block *), __func__, __FILE__, __LINE__);
@@ -379,7 +379,7 @@ static void live_compute(Live *lv, X86_Func *fn, bool upper)
     while (changed) {
         changed = false;
         for (i = lv->nblocks - 1; i >= 0; i--) {
-            X86_Block *b        = lv->blocks[i];
+            const X86_Block *b  = lv->blocks[i];
             const X86_Instr *t  = b->tail;
             Regs out            = 0;
             if (t && t->op == X86_JMP) {
@@ -472,7 +472,7 @@ static void delete_at(X86_Block *b, X86_Instr **link)
         b->tail = p;
 }
 
-static void delete_instr(X86_Block *b, X86_Instr *in)
+static void delete_instr(X86_Block *b, const X86_Instr *in)
 {
     for (X86_Instr **link = &b->head; *link; link = &(*link)->next)
         if (*link == in) {
@@ -627,14 +627,14 @@ static int move_bits(const X86_Instr *in)
 
 // Whether the upper half of general register `r`, after `in`, is never read before
 // it is written.
-static bool upper_unread(const Live *lv, int bi, X86_Instr *in, int r)
+static bool upper_unread(const Live *lv, int bi, const X86_Instr *in, int r)
 {
     return (live_after(lv->halves, bi, in) & bit(r)) == 0;
 }
 
 // Delete what does nothing: a move to itself, an extension repeated in place, a lea
 // of its own base, an add or sub of zero, a result nobody reads.
-static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link, X86_Instr *prev)
+static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link, const X86_Instr *prev)
 {
     X86_Instr *in = *link;
     if (in->is_volatile)
@@ -787,7 +787,7 @@ static bool compute_in_place(const Live *lv, int bi, X86_Block *b, X86_Instr **l
     }
     if (!start || !replaceable(start, t, bits) || (hidden_regs(start) & bit(d)))
         return false;
-    for (X86_Instr *p = start->next; p != mv; p = p->next)
+    for (const X86_Instr *p = start->next; p != mv; p = p->next)
         if (mentions(p, d) || (mentions(p, t) && !replaceable(p, t, bits)) || p->op == X86_J)
             return false;
     for (X86_Instr *p = start; p != mv; p = p->next)
@@ -1049,8 +1049,9 @@ static bool rewrite_branches(X86_Func *fn)
 {
     bool changed = false;
     for (X86_Block *b = fn->blocks; b; b = b->next) {
-        for (X86_Instr *in = b->head; in; in = in->next) {
+        for (const X86_Instr *in = b->head; in; in = in->next) {
             if ((in->op == X86_JMP || in->op == X86_RET) && in->next) {
+                // cppcheck-suppress knownConditionTrueFalse ; delete_instr unlinks in->next through b
                 while (in->next)
                     delete_instr(b, in->next);
                 changed = true;
@@ -1171,13 +1172,13 @@ static void append_seq(X86_Block *a, X86_Instr *first, X86_Instr *last)
 }
 
 // The only instruction of block `b`, or NULL.
-static X86_Instr *only(X86_Block *b)
+static X86_Instr *only(const X86_Block *b)
 {
     return b && b->head && b->head == b->tail ? b->head : NULL;
 }
 
 // Unlink `from` and the instructions after it from block `b`.
-static void detach_from(X86_Block *b, X86_Instr *from)
+static void detach_from(X86_Block *b, const X86_Instr *from)
 {
     X86_Instr **link = &b->head;
     while (*link != from)
@@ -1211,7 +1212,7 @@ static bool make_cmov(X86_Func *fn)
             if (j->op != X86_J || (j->next && j->next->op == X86_J))
                 continue;
             bool pair = false;
-            for (X86_Instr *p = a->head; p; p = p->next)
+            for (const X86_Instr *p = a->head; p; p = p->next)
                 if (p->next == j && p->op == X86_J)
                     pair = true;
             if (pair)
@@ -1306,7 +1307,7 @@ static bool make_cmov(X86_Func *fn)
 //
 // The pass
 //
-static bool rewrite(const Live *lv, int bi, X86_Block *b, X86_Instr **link, X86_Instr *prev)
+static bool rewrite(const Live *lv, int bi, X86_Block *b, X86_Instr **link, const X86_Instr *prev)
 {
     return delete_noop(lv, bi, b, link, prev) || forward_move(lv, bi, b, link) ||
            compute_in_place(lv, bi, b, link) || fold_load(lv, bi, b, link) ||
@@ -1326,8 +1327,8 @@ void x86_peephole_func(X86_Func *fn)
         live_compute(&halves, fn, true);
         lv.halves = &halves;
         for (int bi = 0; bi < lv.nblocks; bi++) {
-            X86_Block *b    = lv.blocks[bi];
-            X86_Instr *prev = NULL;
+            X86_Block *b          = lv.blocks[bi];
+            const X86_Instr *prev = NULL;
             for (X86_Instr **link = &b->head; *link;) {
                 if (rewrite(&lv, bi, b, link, prev)) {
                     changed = true;

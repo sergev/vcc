@@ -23,6 +23,7 @@ protected:
     }
 
     // Run a book program, and check that clang -O0 gives the same.
+    // cppcheck-suppress duplInheritedMember ; deliberately wraps X86Test::CompileAndRunBook
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = X86Test::CompileAndRunBook(src);

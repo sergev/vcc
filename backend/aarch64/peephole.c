@@ -293,11 +293,13 @@ static bool fold_constant(A64_Instr **link)
     A64_Operand *m = &o[1];
     if (is_mem_op(n->op) && m->kind == A64_OPND_MEM && m->sub == A64_MEM_INDEX &&
         m->index == t && m->reg != t && !(o[0].kind == A64_OPND_REG && o[0].reg == t)) {
-        int64_t index = v;
+        int64_t index;
         if (m->index_width == A64_W)
             index = m->ext == A64_EXT_SXTW ? (int64_t)(int32_t)v : (int64_t)(uint32_t)v;
         else if (bits == 32)
             index = (int64_t)(uint32_t)v; // a W write cleared the upper half
+        else
+            index = v;
         int64_t off = index * (1 << m->imm);
         if (!fits_ldst(off, access_size(n)))
             return false;
@@ -390,8 +392,8 @@ static bool can_substitute(const A64_Instr *in, int t, A64_Width w)
 {
     for (int i = 0; i < A64_MAX_OPERANDS; i++) {
         const A64_Operand *o = &in->opnd[i];
-        bool mem             = o->kind == A64_OPND_MEM && (o->reg == t || (o->sub == A64_MEM_INDEX && o->index == t));
-        if (mem && w != A64_X)
+        bool is_mem          = o->kind == A64_OPND_MEM && (o->reg == t || (o->sub == A64_MEM_INDEX && o->index == t));
+        if (is_mem && w != A64_X)
             return false;
         if (!reads_operand(in, i, t))
             continue;
@@ -424,8 +426,8 @@ static bool forward_move(A64_Instr **link)
     if (!is_scratch(t) || t == r || r == A64_SP || r == A64_ZR)
         return false;
     bool clobbered = false;
-    A64_Instr *end = NULL;
-    for (A64_Instr *n = mv->next; n; n = n->next) {
+    const A64_Instr *end = NULL;
+    for (const A64_Instr *n = mv->next; n; n = n->next) {
         if (reads(n, t) && (clobbered || is_call(n->op) || !can_substitute(n, t, w)))
             return false;
         if (writes(n, t)) {
@@ -468,7 +470,7 @@ static bool compute_in_place(A64_Instr *in)
             (n->opnd[0].width == w || (n->opnd[0].width == A64_X && w == A64_W)) &&
             n->opnd[0].reg != A64_SP && n->opnd[0].reg != A64_ZR && dies_after(n, t)) {
             int d = n->opnd[0].reg;
-            for (A64_Instr *m = in->next; m != n; m = m->next)
+            for (const A64_Instr *m = in->next; m != n; m = m->next)
                 if (reads(m, d) || writes(m, d) || !can_substitute(m, t, A64_X))
                     return false;
             for (A64_Instr *m = in->next; m != n; m = m->next)
@@ -675,7 +677,7 @@ static bool upper_unread(const A64_Instr *in, int r)
 static bool rewrite(A64_Instr **link)
 {
     A64_Instr *in = *link, *next = in->next;
-    A64_Operand *o = in->opnd;
+    const A64_Operand *o = in->opnd;
 
     // A move to itself: of a whole register (a W move clears the upper half).
     if (is_move(in) && o[0].reg == o[1].reg &&
@@ -734,7 +736,7 @@ static A64_Instr **last_link(A64_Block *b, int back)
 {
     A64_Instr **link = &b->head;
     int n            = 0;
-    for (A64_Instr *in = b->head; in; in = in->next)
+    for (const A64_Instr *in = b->head; in; in = in->next)
         n++;
     if (n <= back)
         return NULL;

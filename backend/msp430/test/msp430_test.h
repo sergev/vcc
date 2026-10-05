@@ -25,6 +25,7 @@ inline bool msp430_tools_available()
 
 inline bool msp430_clang_available()
 {
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
     return msp430_tools_available() && MSP430_CLANG_FOUND && tool_available(MSP430_CLANG) &&
            tool_available(MSP430_LLD);
 }
@@ -124,6 +125,7 @@ protected:
         if (len > 0)
             EXPECT_EQ(1u, fread(&s[0], static_cast<size_t>(len), 1, f));
         fclose(f);
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
         if (msp430_clang_available())
             AssembleWithClang(s);
         return s;
@@ -159,7 +161,7 @@ protected:
             line      = line.substr(4);
             size_t sp = line.find(' ');
             if (sp != std::string::npos)
-                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+                line.erase(sp + 1, line.find_first_not_of(' ', sp) - (sp + 1));
             out += line + "\n";
         }
         return out;
@@ -215,7 +217,6 @@ protected:
         exit_status          = -1;
         std::string base     = QemuScratchPath(tag);
         std::string c_path   = base + ".c";
-        std::string x_path   = base + "-extra.c";
         std::string exe_path = base + ".elf";
         std::string out_path = base + ".out";
         std::string log_path = base + ".log";
@@ -232,6 +233,7 @@ protected:
         cc.insert(cc.end(), flags.begin(), flags.end());
         cc.insert(cc.end(), { "-o", exe_path, c_path });
         if (!extra_src.empty()) {
+            std::string x_path = base + "-extra.c";
             std::ofstream x(x_path);
             x << extra_src;
             cc.push_back(x_path);

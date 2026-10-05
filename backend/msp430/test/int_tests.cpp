@@ -218,7 +218,7 @@ int main(void)
             uint16_t ux = x, uy = y;
             num((int16_t)(uint16_t)(ux + uy));
             num((int16_t)(uint16_t)(ux - uy));
-            num((int16_t)(uint16_t)(ux * uy));
+            num((int16_t)(uint16_t)((uint32_t)ux * uy));
             num(x & y);
             num(x | y);
             num(x ^ y);
@@ -348,21 +348,25 @@ int main(void)
         int32_t y = vl[i];
         for (int n = 0; n < 16; n++) {
             num((int16_t)(uint16_t)((uint16_t)x << n));
+            // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
             num(x >> n);
             num((uint16_t)x >> n);
         }
         for (int n = 0; n < 32; n++) {
             num((int32_t)((uint32_t)y << n));
+            // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift is the expectation
             num(y >> n);
             num((uint32_t)y >> n);
         }
         for (int k : { 0, 1, 3, 4, 7, 8, 15 }) {
             num((int16_t)(uint16_t)((uint16_t)x << k));
+            // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
             num(x >> k);
             num((uint16_t)x >> k);
         }
         for (int k : { 1, 3, 4, 15, 16, 17, 20, 31 }) {
             num((int32_t)((uint32_t)y << k));
+            // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
             num(y >> k);
             num((uint32_t)y >> k);
         }
@@ -414,13 +418,17 @@ int main(void)
     hex(~y);
     hex((uint64_t)x << 1);
     hex((uint64_t)x << 33);
+    // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
     hex(y >> 7);
+    // cppcheck-suppress shiftNegativeLHS ; the arithmetic shift is the expectation
     hex(y >> 40);
     hex((uint64_t)y >> 40);
     for (int n = 0; n < 64; n += 9)
+        // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift is the expectation
         hex(y >> n);
     hex((int64_t)-5);
     hex(200);
+    // cppcheck-suppress knownConditionTrueFalse ; constant operands, computing the expectation
     e += std::to_string((x < y) + 2 * (x > y) + 4 * (x == y) + 8 * ((uint64_t)x < (uint64_t)y));
     EXPECT_EQ(e, CompileAndRunMsp430(src));
 }

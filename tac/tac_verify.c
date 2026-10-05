@@ -513,6 +513,7 @@ int tac_verify_function(const Tac_TopLevel *fn, const Tac_Layout *layout, Tac_Gl
 }
 
 // Global names of a program chain, for tac_verify_program.
+// cppcheck-suppress constParameterCallback ; the signature is the lookup callback's
 static const Tac_Type *program_global(const char *name, void *arg)
 {
     for (const Tac_TopLevel *t = arg; t; t = t->next) {

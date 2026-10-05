@@ -518,7 +518,7 @@ TEST_F(OptimizerTest, CopyPropStoreKillsStaticCopy)
 
     OptFlags flags          = opt_flags_default();
     flags.dead_store_elim   = false;
-    Tac_Instruction *result = optimize_function(entry, flags, tl);
+    const Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     const Tac_Instruction *last = result;
     while (last->next)
@@ -550,7 +550,7 @@ TEST_F(OptimizerTest, CopyPropKeepsValueClass)
 
     OptFlags flags          = opt_flags_default();
     flags.dead_store_elim   = false;
-    Tac_Instruction *result = optimize_function(entry, flags, tl);
+    const Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     const Tac_Instruction *in = result;
     while (in && in->kind != TAC_INSTRUCTION_LOAD)

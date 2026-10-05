@@ -708,7 +708,7 @@ void parallel_move(Gen *g, Move *m, int n)
                     i = k;
         bool vfp = a32_is_vfp(m[i].src), d = m[i].kind == MOVE_D;
         int tmp  = -1;
-        int cand[2] = { vfp ? F0 : T0, vfp ? F1 : T1 };
+        const int cand[2] = { vfp ? F0 : T0, vfp ? F1 : T1 };
         for (int c = 0; c < 2 && tmp < 0; c++) {
             bool busy = false;
             for (int j = 0; j < n; j++)
@@ -892,7 +892,7 @@ static int64_t sp_offset(const Gen *g, const Frame *fr, int64_t off)
 // Whether every use of the frame base in the body can be rebased onto sp (a memory
 // operand that still fits its instruction, or an add or sub of an immediate that is
 // still one); with `apply`, do it.
-static bool rebase_to_sp(Gen *g, const Frame *fr, bool apply)
+static bool rebase_to_sp(const Gen *g, const Frame *fr, bool apply)
 {
     for (A32_Block *b = g->fn->blocks; b; b = b->next) {
         for (A32_Instr *in = b->head; in; in = in->next) {
@@ -933,7 +933,7 @@ static bool rebase_to_sp(Gen *g, const Frame *fr, bool apply)
 }
 
 // The frame base is r11.
-static void base_on_r11(Gen *g)
+static void base_on_r11(const Gen *g)
 {
     for (A32_Block *b = g->fn->blocks; b; b = b->next) {
         for (A32_Instr *in = b->head; in; in = in->next) {

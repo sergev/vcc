@@ -649,6 +649,7 @@ TEST_F(CcDriver, CompileToAssemblyMsp430)
 // build's runtime by hand: the ELF runs on mspsim, and so does its Intel HEX.
 TEST_F(CcDriver, LinkAndRunMsp430)
 {
+    // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run())
         GTEST_SKIP() << "msp430-elf-as/ld or mspsim not found";
     WriteSource("main.c", "#include <stdio.h>\n"
@@ -679,6 +680,7 @@ twice:  rla     r12
 // clang's assembler and ld.lld through the overrides, which carry their own flags.
 TEST_F(CcDriver, LinkAndRunMsp430Clang)
 {
+    // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(RISCV_CLANG) || !HaveTool(RISCV_LD))
         GTEST_SKIP() << "MSP430 clang/ld.lld or mspsim not found";
     WriteSource("t.c", kHello);
@@ -1047,6 +1049,7 @@ int main(void)
 // GCC compiled links too (__builtin_clz is __clzhi2, which only libgcc has).
 TEST_F(CcDriver, StagedPrefixMsp430)
 {
+    // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run() || !HaveTool(MSP430_GCC) || access(MSP430_LIBGCC, R_OK) != 0)
         GTEST_SKIP() << "msp430-elf-gcc/as/ld, libgcc.a or mspsim not found";
     std::string prefix = StagePrefix("msp430");

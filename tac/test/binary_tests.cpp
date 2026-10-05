@@ -32,7 +32,7 @@ protected:
         xfree_all();
     }
 
-    Tac_Program *roundtrip(Tac_Program *prog)
+    Tac_Program *roundtrip(const Tac_Program *prog)
     {
         WFILE wout;
         wopen(&wout, tmppath, "w");

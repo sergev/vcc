@@ -316,7 +316,7 @@ static void parse_args(int argc, char *argv[])
 static void register_builtins(void)
 {
     int i;
-    char *p, *tf, **cp2;
+    char *tf, **cp2;
 
     // after user -I files here is the target's standard include directory
     if (!opt_nostdinc) {
@@ -390,6 +390,7 @@ static void register_builtins(void)
         define_symbol(*cp2++);
     cp2 = cpp.pre_undefs;
     while (cp2 < cpp.pre_undefs_end) {
+        char *p;
         if ((p = find_char(*cp2, '=')))
             *p++ = '\0';
         lookup(*cp2++, DROP);

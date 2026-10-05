@@ -28,6 +28,11 @@ std::string Relaxed(AVR_Op op, int before, int after, bool backward)
     avr_append(fn, AVR_RET);
     avr_relax(fn);
     FILE *f = tmpfile();
+    if (!f) {
+        avr_free_func(fn);
+        ADD_FAILURE() << "tmpfile failed";
+        return "";
+    }
     avr_emit_func(f, fn);
     avr_free_func(fn);
     long len = ftell(f);

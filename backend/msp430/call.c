@@ -305,7 +305,7 @@ const Tac_Type *flow_val_type(const Gen *g, const Flow *f, const Tac_Val *v)
     return var >= 0 && f->types[var] ? f->types[var] : val_type(g, v);
 }
 
-void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi)
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
 {
     int n;
     ArgLoc *locs = param_locs(g, &n);
@@ -327,7 +327,7 @@ static const Tac_Type *flow_type(const Gen *g, const void *arg, const Tac_Val *v
     return flow_val_type(g, arg, v);
 }
 
-void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
 {
     int n, stack;
     ArgLoc *locs = call_locs(g, in, flow_type, f, &n, &stack);

@@ -463,7 +463,7 @@ static bool basic_iv(const Ivsr *s, const LoopDefs *d, const char *j, BasicIv *i
     if (in->kind != TAC_INSTRUCTION_COPY || !is_var(in->u.copy.src))
         return false;
     int tb;
-    Tac_Instruction *t = single_def(d, in->u.copy.src->u.var_name, &tb);
+    const Tac_Instruction *t = single_def(d, in->u.copy.src->u.var_name, &tb);
     if (!t || !is_step(t, j, &iv->step))
         return false;
     // t computed ahead of the copy in every iteration that copies it: j, whose one
@@ -1379,7 +1379,7 @@ static bool step_in_place(Ivsr *s)
 // p + 0 → p, for a pointer p of the destination's type: a reduced pointer starts at
 // base + j*scale, j often 0. (Not for an aggregate base, whose COPY would copy it.)
 // And x ± 0 → x for an integer x, the start inv - j of a pointer on inv - j.
-static bool fold_zero_offsets(Ivsr *s)
+static bool fold_zero_offsets(const Ivsr *s)
 {
     bool changed = false;
     for (int b = 0; b < s->n; b++)

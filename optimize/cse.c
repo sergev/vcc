@@ -107,10 +107,11 @@ static Fact *fact_dup(const Fact *f)
 static void copy_cb(const char *key, intptr_t value, const void *arg)
 {
     (void)key;
-    Fact *nf = fact_dup((const Fact *)value);
+    const Fact *nf = fact_dup((const Fact *)value);
     map_insert_free((StringMap *)arg, nf->key, (intptr_t)nf, 0, fact_free);
 }
 
+// cppcheck-suppress constParameterPointer ; dst is written, through the map_iterate context
 static void expr_set_copy(StringMap *dst, const StringMap *src)
 {
     map_iterate((StringMap *)src, copy_cb, dst);
@@ -159,7 +160,7 @@ static void kill_alias_cb(const char *key, intptr_t value, const void *arg)
     (void)key;
     const KillAliasCtx *ctx = (const KillAliasCtx *)arg;
     Fact *f                 = (Fact *)value;
-    StringMap *alias        = (StringMap *)ctx->alias;
+    const StringMap *alias  = ctx->alias;
     if (map_get(alias, f->holder, NULL) || (f->reads[0] && map_get(alias, f->reads[0], NULL)) ||
         (f->reads[1] && map_get(alias, f->reads[1], NULL)))
         keybuf_push(ctx->kb, f->key);

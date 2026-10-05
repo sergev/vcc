@@ -279,7 +279,7 @@ static bool delete_reload(Rv_Instr *st, Rv_Op load)
     int r = st->opnd[0].reg, base = st->opnd[1].reg;
     int64_t off = st->opnd[1].imm;
     for (Rv_Instr **link = &st->next; *link; link = &(*link)->next) {
-        Rv_Instr *n = *link;
+        const Rv_Instr *n = *link;
         if (n->op == load && n->opnd[0].reg == r && n->opnd[1].reg == base &&
             n->opnd[1].imm == off) {
             if (n->is_volatile)
@@ -307,9 +307,9 @@ static bool forward_move(Rv_Instr **link)
 {
     Rv_Instr *mv = *link;
     int t = mv->opnd[0].reg, r = mv->opnd[1].reg;
-    bool clobbered = false;
-    Rv_Instr *end  = NULL;
-    for (Rv_Instr *n = mv->next;; n = n->next) {
+    bool clobbered      = false;
+    const Rv_Instr *end = NULL;
+    for (const Rv_Instr *n = mv->next;; n = n->next) {
         if (!n) {
             if (!is_scratch(t))
                 return false;
@@ -345,7 +345,7 @@ static bool move_back(Rv_Instr *mv)
 {
     int x = mv->opnd[0].reg, y = mv->opnd[1].reg;
     for (Rv_Instr **link = &mv->next; *link; link = &(*link)->next) {
-        Rv_Instr *n = *link;
+        const Rv_Instr *n = *link;
         if (n->op == mv->op && n->opnd[0].reg == y && n->opnd[1].reg == x) {
             delete_at(link);
             return true;
@@ -367,7 +367,7 @@ static bool compute_in_place(Rv_Instr *in)
         if (is_move(n->op) && n->opnd[1].reg == t && n->opnd[0].reg != t &&
             rv_is_freg(n->opnd[0].reg) == rv_is_freg(t) && dies_after(n, t)) {
             int d = n->opnd[0].reg;
-            for (Rv_Instr *m = in->next; m != n; m = m->next)
+            for (const Rv_Instr *m = in->next; m != n; m = m->next)
                 if (reads(m, d) || writes(m, d))
                     return false;
             for (Rv_Instr *m = in->next; m != n; m = m->next)
@@ -386,8 +386,9 @@ static bool compute_in_place(Rv_Instr *in)
 // One rewrite at *link; true when something changed.
 static bool rewrite(Rv_Instr **link)
 {
-    Rv_Instr *in = *link, *next = in->next;
-    Rv_Operand *o = in->opnd;
+    Rv_Instr *in         = *link;
+    const Rv_Instr *next = in->next;
+    const Rv_Operand *o  = in->opnd;
 
     if (in->op == RV_LI && is_scratch(o[0].reg) && fold_li(link))
         return true;
@@ -460,7 +461,7 @@ static Rv_Instr **last_link(Rv_Block *b, int back)
 {
     Rv_Instr **link = &b->head;
     int n           = 0;
-    for (Rv_Instr *in = b->head; in; in = in->next)
+    for (const Rv_Instr *in = b->head; in; in = in->next)
         n++;
     if (n <= back)
         return NULL;

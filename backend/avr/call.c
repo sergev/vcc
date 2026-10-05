@@ -178,6 +178,7 @@ void store_params(Gen *g)
             s[m++] = p->reg + k;
         }
     }
+    // cppcheck-suppress uninitvar ; only the first m entries are read, all set above
     parallel_move(g, d, s, m);
     for (int i = 0; i < v.n; i++) {
         const Piece *p   = &v.p[i];
@@ -213,7 +214,7 @@ static void release_stack(Gen *g, int n)
         emit2(g, AVR_ADIW, avr_reg(AVR_Z), avr_imm(n));
     } else {
         emit2(g, AVR_SUBI, avr_reg(AVR_Z), avr_imm(-n & 0xff));
-        emit2(g, AVR_SBCI, avr_reg(AVR_Z + 1), avr_imm((-n >> 8) & 0xff));
+        emit2(g, AVR_SBCI, avr_reg(AVR_Z + 1), avr_imm(((unsigned)-n >> 8) & 0xff));
     }
     emit2(g, AVR_IN, avr_reg(AVR_TMP), avr_sym(AVR_MOD_NONE, "__SREG__", 0));
     emit0(g, AVR_CLI);
@@ -364,7 +365,7 @@ static void piece_hints(const Piece *p, const Tac_Type *t, int *lo, int *hi)
         *hi = p->reg + 2;
 }
 
-void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi)
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
 {
     Pieces v = { 0 };
     param_pieces(g, &v);
@@ -380,7 +381,7 @@ void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi)
     xfree(v.p);
 }
 
-void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type;
     int n              = 0;

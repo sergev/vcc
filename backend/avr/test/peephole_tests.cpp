@@ -21,7 +21,7 @@ public:
     }
     ~Fn() { avr_free_func(fn); }
 
-    Fn &op(AVR_Op op, AVR_Operand a = {}, AVR_Operand b = {}, bool vol = false)
+    Fn &op(AVR_Op op, const AVR_Operand &a = {}, const AVR_Operand &b = {}, bool vol = false)
     {
         AVR_Instr *in = avr_append(fn, op);
         in->opnd[0]   = a;
@@ -42,6 +42,10 @@ public:
         if (frame)
             avr_peephole_frame(fn);
         FILE *f = tmpfile();
+        if (!f) {
+            ADD_FAILURE() << "tmpfile failed";
+            return "";
+        }
         avr_emit_func(f, fn);
         long len = ftell(f);
         rewind(f);
@@ -64,7 +68,7 @@ public:
             line      = line.substr(4);
             size_t sp = line.find(' ');
             if (sp != std::string::npos)
-                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+                line.erase(sp + 1, line.find_first_not_of(' ', sp) - (sp + 1));
             out += line + "\n";
         }
         return out;

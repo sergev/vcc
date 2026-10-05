@@ -19,6 +19,7 @@ protected:
     }
 
     // Run a book program, and check that clang -O0 gives the same.
+    // cppcheck-suppress duplInheritedMember ; hides the base version on purpose, and calls it
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = Aarch64Test::CompileAndRunBook(src);

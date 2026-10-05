@@ -280,7 +280,7 @@ static void cfg_build(Cfg *c, AVR_Func *fn)
 {
     c->fn = fn;
     c->n  = 0;
-    for (AVR_Block *b = fn->blocks; b; b = b->next)
+    for (const AVR_Block *b = fn->blocks; b; b = b->next)
         c->n++;
     c->blk = xalloc((c->n + 1) * sizeof(Blk), __func__, __FILE__, __LINE__);
     map_init(&c->labels);
@@ -289,7 +289,7 @@ static void cfg_build(Cfg *c, AVR_Func *fn)
         Blk *k = &c->blk[i];
         k->b   = b;
         k->n   = 0;
-        for (AVR_Instr *in = b->head; in; in = in->next)
+        for (const AVR_Instr *in = b->head; in; in = in->next)
             k->n++;
         k->in = xalloc((k->n + 1) * sizeof(AVR_Instr *), __func__, __FILE__, __LINE__);
         int j = 0;

@@ -397,14 +397,14 @@ F128_API int f128_cmp(Float128 x, Float128 y)
     if (!(xh | x.lo | yh | y.lo))
         return 0; // +0 == -0
     if ((x.hi ^ y.hi) & SIGN)
-        return x.hi & SIGN ? -1 : 1;
+        return (x.hi & SIGN) ? -1 : 1;
     if (xh != yh)
         c = xh < yh ? -1 : 1;
     else if (x.lo != y.lo)
         c = x.lo < y.lo ? -1 : 1;
     else
         c = 0;
-    return x.hi & SIGN ? -c : c;
+    return (x.hi & SIGN) ? -c : c;
 }
 
 // The integer part of |x| when below 2^bits, and *big = 0; else *big = 1.
@@ -477,7 +477,7 @@ static Float128 widen(u64 bits, int fbits, int ebits)
     m.lo = bits & (((u64)1 << fbits) - 1);
     if (e == emax) {
         m = u128_shl(m, 112 - fbits);
-        return make(s | EXPS | m.hi | (m.hi | m.lo ? QUIET : 0), m.lo);
+        return make(s | EXPS | m.hi | ((m.hi | m.lo) ? QUIET : 0), m.lo);
     }
     if (e == 0) {
         int shift;
@@ -833,7 +833,7 @@ Float128 f128_round(Float128 x, int mant_dig)
 {
     Num a = unpack(x);
     int shift, c;
-    U128 q, rem, half, one;
+    U128 q, rem, half;
     if (a.cls != F_FINITE || mant_dig >= 113)
         return x;
     shift = 113 - mant_dig;
@@ -848,6 +848,7 @@ Float128 f128_round(Float128 x, int mant_dig)
     half    = u128_shl(half, shift - 1);
     c       = u128_cmp(rem, half);
     if (c > 0 || (c == 0 && (q.lo & 1))) {
+        U128 one;
         one.hi = 0;
         one.lo = 1;
         q      = u128_add(q, one);

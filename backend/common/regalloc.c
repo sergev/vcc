@@ -34,6 +34,7 @@ static int hi_node(const Alloc *a, int v)
     return v < a->n && a->cand[v + a->n] ? v + a->n : -1;
 }
 
+// cppcheck-suppress constParameterPointer ; adds to the graph, through row()
 static void add_edge(Alloc *a, int x, int y)
 {
     if (x == y || !a->cand[x] || !a->cand[y] || a->fp[x] != a->fp[y])
@@ -130,7 +131,7 @@ typedef struct {
 // Edges between every word of variables x and y.
 static void add_var_edge(Alloc *a, int x, int y)
 {
-    int xs[2] = { x, hi_node(a, x) }, ys[2] = { y, hi_node(a, y) };
+    const int xs[2] = { x, hi_node(a, x) }, ys[2] = { y, hi_node(a, y) };
     for (int i = 0; i < 2; i++)
         for (int j = 0; j < 2; j++)
             if (xs[i] >= 0 && ys[j] >= 0)
@@ -350,7 +351,7 @@ static void color(Alloc *a)
         int pv = flow_var(a->flow, p->name);
         if (pv < 0)
             continue;
-        int words[2] = { pv, hi_node(a, pv) };
+        const int words[2] = { pv, hi_node(a, pv) };
         for (int i = 0; i < 2; i++) {
             int v = words[i], r = v >= 0 ? find(a, v) : -1;
             if (v < 0 || !a->cand[v] || a->color[r] ||

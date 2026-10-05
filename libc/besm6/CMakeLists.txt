@@ -12,6 +12,22 @@
 #   * higher-level routines written in C (LIBC_C), compiled by our own toolchain
 #     (parse -> lower -> genbesm) into Madlen and assembled alongside the helpers.
 #
+# The runtime needs the BESM-6 toolchain of the sibling v7besm project (b6as, b6ar,
+# b6ranlib for the Unix archives; besmc for libc.bin and libbem.bin) on PATH.  Without
+# b6as none of it is built and besm-tests is skipped (backend/besm6/CMakeLists.txt);
+# the compiler-owned headers and the header checks below need no BESM-6 tools.
+#
+find_program(B6AS NAMES b6as HINTS $ENV{HOME}/.local/bin)
+if(B6AS)
+    set(BESM6_TOOLS_FOUND ON)
+else()
+    set(BESM6_TOOLS_FOUND OFF)
+    message(STATUS "b6as not found: skipping the BESM-6 runtime and besm-tests")
+endif()
+# For the backend tests.
+set(BESM6_TOOLS_FOUND ${BESM6_TOOLS_FOUND} CACHE INTERNAL "")
+
+if(BESM6_TOOLS_FOUND)
 set(LIBC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/madlen)
 set(LIBC_MADLEN
     b_div b_eq b_ge b_gt b_le b_lt b_mod b_mul b_ne b_not
@@ -127,6 +143,7 @@ add_custom_command(
 add_custom_target(besm-libc-dubna ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libc.bin)
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libc.bin DESTINATION share/vcc/besm6/lib)
+endif() # BESM6_TOOLS_FOUND
 
 #
 # The compiler-owned headers: the C11 freestanding subset (C11 §4) plus besm6.h.
@@ -151,11 +168,15 @@ install(FILES
 
 # The Unix (b6as) runtime archives (libruntime.a, libc0.a).  A child scope so it inherits
 # LIBC_C_PORTABLE and LIBC_MADLEN (the reuse surface) set above.
-add_subdirectory(unix)
+if(BESM6_TOOLS_FOUND)
+    add_subdirectory(unix)
+endif()
 
 # The Bemsh (Cyrillic autocode) runtime library (libbem.bin).  A child scope so it inherits
 # LIBC_C_PORTABLE and LIBC_MADLEN (the reuse surface); see bemsh/CMakeLists.txt.
-add_subdirectory(bemsh)
+if(BESM6_TOOLS_FOUND)
+    add_subdirectory(bemsh)
+endif()
 
 # The target C11 standard headers in include/ are NOT installed: the sibling v7besm
 # project ships the authoritative headers.  They stay in the source tree, where the libc

@@ -210,7 +210,7 @@ static bool split_fp(const ArgLoc *a)
 }
 
 // No fmv.x.d on rv32: a double goes between the register files through memory.
-static void check_fp_move(Gen *g, const Tac_Type *t)
+static void check_fp_move(const Gen *g, const Tac_Type *t)
 {
     if (riscv_xlen == 4 && rv_is_double(t))
         fatal_error("riscv: %s: fmv of a double on rv32", gen_name(g));

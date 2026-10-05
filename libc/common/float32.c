@@ -22,11 +22,13 @@
 
 static uint32_t bits(float f)
 {
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     return *(uint32_t *)&f;
 }
 
 static float from_bits(uint32_t u)
 {
+    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
     return *(float *)&u;
 }
 

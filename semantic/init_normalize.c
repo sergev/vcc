@@ -197,6 +197,7 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
             if ((*cur)->designators) {
                 // The chain goes on into the designated subobject, where initialization
                 // then continues in order (§6.7.9p17).
+                // cppcheck-suppress nullPointerRedundantCheck ; a struct designator set field
                 const Type *sub = unalias(t->kind == TYPE_ARRAY ? t->u.array.element : field->type);
                 Initializer **sub_init = &(*slot)->init;
                 if (!is_aggregate(sub))
@@ -225,6 +226,7 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
             (*slot)->designators = NULL;
             set_slot(&(*slot)->init, NULL);
         }
+        // cppcheck-suppress nullPointerRedundantCheck ; a struct slot has its member
         Type *sub = t->kind == TYPE_ARRAY ? t->u.array.element : field->type;
         place(sub, &(*slot)->init, cur, mode);
         slot = &(*slot)->next;
@@ -297,6 +299,7 @@ static Initializer *normalize_compound(Type *t, Initializer *init, InitMode mode
     return node;
 }
 
+// cppcheck-suppress constParameterPointer ; the array size is set in *type (and typecheck.h)
 Initializer *normalize_init(Type *type, Initializer *init, InitMode mode)
 {
     if (semantic_debug) {

@@ -17,7 +17,7 @@ protected:
 
     void SetUp() override
     {
-        int sizes[] = { 1, 1, 2, 4, 8, 8, 2, 4, 8, 8, 4, 8, 16 };
+        const int sizes[] = { 1, 1, 2, 4, 8, 8, 2, 4, 8, 8, 4, 8, 16 };
         for (int k = 0; k < TAC_TYPE_VOID; k++)
             layout.scalar[k] = sizes[k];
         layout.pointer = 8;
@@ -96,6 +96,8 @@ protected:
     std::string Verify()
     {
         FILE *f = tmpfile();
+        if (!f)
+            return "tmpfile failed";
         tac_verify_function(fn, &layout, nullptr, nullptr, f);
         long len = ftell(f);
         rewind(f);
