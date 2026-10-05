@@ -371,6 +371,10 @@ instructions.
     other direction is a loud assembler error, never a miscompile.
   - A golden test has a branch over a body just under, at, and just over the limit. A
     run test has a loop body larger than 1 KB.
+
+  *Done.* `relax_tests.cpp` checks every jump at 511 and 512 words, forward and back,
+  every inverse, `jn`'s jump-over and `jmp` → `br`, each result also assembled by clang;
+  and a run of a loop body over 1 KB. Book chapters 5–8 pass with no new skip.
 - **T11. Calls, scalar ABI** (ch. 9).
   - **Arguments are placed per the ABI section:**
     - R12–R15 by consecutive free registers, the split `long` included;
