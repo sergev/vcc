@@ -5,7 +5,7 @@
  * (the 64-bit ones are in libc/ilp32/int64.c).  Correctly rounded to nearest-even, with
  * subnormals, infinities and NaNs, so it agrees with the host's double and with the
  * constant folder bit for bit.  Written with integer operations only; a double's bits
- * are reached through a pointer.  The binary32 sibling is float32.c.
+ * are reached through a union.  The binary32 sibling is float32.c.
  *
  * Inside, a finite value is a sign, a biased exponent e and a significand `sig` with
  * its leading one at bit 55: sig * 2^(e - 1023 - 55).  The three bits below the 53 of
@@ -23,14 +23,16 @@
 
 static uint64_t bits(double d)
 {
-    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
-    return *(uint64_t *)&d;
+    union { double d; uint64_t u; } v;
+    v.d = d;
+    return v.u;
 }
 
 static double from_bits(uint64_t u)
 {
-    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
-    return *(double *)&u;
+    union { double d; uint64_t u; } v;
+    v.u = u;
+    return v.d;
 }
 
 static int is_nan(uint64_t a)
@@ -368,8 +370,9 @@ double __floatunsidf(unsigned long u)
 /* float → double: exact. */
 double __extendsfdf2(float f)
 {
-    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
-    uint32_t a    = *(uint32_t *)&f;
+    union { float f; uint32_t u; } v;
+    v.f           = f;
+    uint32_t a    = v.u;
     uint64_t sign = (uint64_t)(a & 0x80000000UL) << 32;
     int exp       = (int)((a >> 23) & 0xff);
     uint64_t frac = a & 0x007fffffUL;
@@ -418,6 +421,7 @@ float __truncdfsf2(double d)
             u = 0x7f800000UL;
         u |= sign;
     }
-    /* cppcheck-suppress invalidPointerCast ; type punning for the bit pattern */
-    return *(float *)&u;
+    union { float f; uint32_t u; } v;
+    v.u = u;
+    return v.f;
 }

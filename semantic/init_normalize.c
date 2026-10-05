@@ -184,6 +184,8 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                  InitMode mode)
 {
     InitItem **slot       = &node->u.items;
+    // The member of the slot at hand; NULL for an array.  A struct's canonical node has
+    // one slot per member, so the member never runs out before the slots do.
     const FieldDef *field = t->kind == TYPE_ARRAY ? NULL : structtab_find(t->u.struct_t.name)->members;
     bool unsized          = t->kind == TYPE_ARRAY && !t->u.array.size;
 
@@ -197,7 +199,6 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
             if ((*cur)->designators) {
                 // The chain goes on into the designated subobject, where initialization
                 // then continues in order (§6.7.9p17).
-                // cppcheck-suppress nullPointerRedundantCheck ; a struct designator set field
                 const Type *sub = unalias(t->kind == TYPE_ARRAY ? t->u.array.element : field->type);
                 Initializer **sub_init = &(*slot)->init;
                 if (!is_aggregate(sub))
@@ -209,7 +210,7 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                     *sub_init = new_canonical(sub);
                 fill(sub, *sub_init, cur, false, true, mode);
                 slot = &(*slot)->next;
-                if (field)
+                if (t->kind != TYPE_ARRAY)
                     field = field->next;
                 continue;
             }
@@ -226,11 +227,10 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
             (*slot)->designators = NULL;
             set_slot(&(*slot)->init, NULL);
         }
-        // cppcheck-suppress nullPointerRedundantCheck ; a struct slot has its member
         Type *sub = t->kind == TYPE_ARRAY ? t->u.array.element : field->type;
         place(sub, &(*slot)->init, cur, mode);
         slot = &(*slot)->next;
-        if (field)
+        if (t->kind != TYPE_ARRAY)
             field = field->next;
     }
 }
