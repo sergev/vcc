@@ -35,6 +35,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     gen_init(&g, program, tl);
     if (msp430_regalloc)
         gen_regalloc(&g);
+    if (msp430_peephole)
+        find_byref_params(&g);
     place_params(&g);
     layout_frame(&g);
     Flow *flow = NULL;

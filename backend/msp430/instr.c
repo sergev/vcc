@@ -949,6 +949,8 @@ static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac
         copy_named(g, dst->u.var_name, 0, name, offset, size, msp_type_align(t));
         return;
     }
+    if (is_byref(g, name))
+        load_byref(g, name);
     if (size == 1) {
         emit2b(g, MSP_MOV, mem_at(g, name, offset), mem_at(g, dst->u.var_name, 0));
         return;

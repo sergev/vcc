@@ -15,6 +15,8 @@
 // argument of a variadic call on the stack.)  Stack arguments lie in order above the
 // return address, 2-aligned.
 //
+#include <string.h>
+
 #include "internal.h"
 #include "xalloc.h"
 
@@ -104,7 +106,8 @@ void place_params(Gen *g)
     ArgLoc *locs = param_locs(g, &n);
     int i        = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++)
-        if (!locs[i].agg && all_on_stack(&locs[i]) && !var_reg(g, p->name, 0))
+        if ((!locs[i].agg || is_byref(g, p->name)) && all_on_stack(&locs[i]) &&
+            !var_reg(g, p->name, 0))
             place_stack_param(g, p->name, p->type, locs[i].stack[0]);
     xfree(locs);
 }
@@ -123,7 +126,7 @@ void store_params(Gen *g)
         const ArgLoc *l = &locs[i];
         if (l->agg) {
             if (l->reg[0])
-                emit2(g, MSP_MOV, msp_reg(l->reg[0]), mem_at(g, p->name, 0));
+                emit2(g, MSP_MOV, msp_reg(l->reg[0]), slot_at(g, p->name, 0));
             continue;
         }
         if (map_get(&g->dead, p->name, NULL))
@@ -147,7 +150,7 @@ void store_params(Gen *g)
     i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
         const ArgLoc *l = &locs[i];
-        if (!l->agg)
+        if (!l->agg || is_byref(g, p->name))
             continue;
         emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(l->stack[0]),
               msp_reg(MSP_SCRATCH));
@@ -343,4 +346,132 @@ void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
             hint[var + f->nvars] = 13;
     }
     xfree(locs);
+}
+
+const Tac_Val *instr_dst(const Tac_Instruction *in)
+{
+    switch (in->kind) {
+    case TAC_INSTRUCTION_BINARY:
+        return in->u.binary.dst;
+    case TAC_INSTRUCTION_UNARY:
+        return in->u.unary.dst;
+    case TAC_INSTRUCTION_LOAD:
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        return in->u.load.dst;
+    case TAC_INSTRUCTION_GET_ADDRESS:
+    case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+    case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        return in->u.get_address.dst;
+    case TAC_INSTRUCTION_ADD_PTR:
+        return in->u.add_ptr.dst;
+    case TAC_INSTRUCTION_PTR_DIFF:
+        return in->u.ptr_diff.dst;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        return in->u.copy_from_offset.dst;
+    case TAC_INSTRUCTION_COPY:
+    case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:
+    case TAC_INSTRUCTION_CHAR_PTR_TO_PTR:
+    case TAC_INSTRUCTION_SIGN_EXTEND:
+    case TAC_INSTRUCTION_ZERO_EXTEND:
+    case TAC_INSTRUCTION_TRUNCATE:
+    case TAC_INSTRUCTION_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_DOUBLE:
+    case TAC_INSTRUCTION_FLOAT_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_INT_TO_FLOAT:
+    case TAC_INSTRUCTION_UINT_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_INT:
+    case TAC_INSTRUCTION_FLOAT_TO_UINT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        return in->u.copy.dst; // every conversion begins {src, dst}
+    default:
+        return NULL;
+    }
+}
+
+bool is_byref(const Gen *g, const char *name)
+{
+    return map_get(&g->byref, name, NULL);
+}
+
+static bool is_var(const Tac_Val *v, const char *name)
+{
+    return v && v->kind == TAC_VAL_VAR && strcmp(v->u.var_name, name) == 0;
+}
+
+// Whether structure parameter `name` is only read in the body: a member copied out, or
+// the whole copied into another object.
+static bool only_read(const Gen *g, const char *name)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
+        if (is_var(instr_dst(in), name))
+            return false;
+        switch (in->kind) {
+        case TAC_INSTRUCTION_GET_ADDRESS:
+        case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
+        case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+            if (is_var(in->u.get_address.src, name))
+                return false;
+            continue;
+        case TAC_INSTRUCTION_COPY_TO_OFFSET:
+        case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+            if (strcmp(in->u.copy_to_offset.dst, name) == 0 ||
+                is_var(in->u.copy_to_offset.src, name))
+                return false;
+            continue;
+        case TAC_INSTRUCTION_RETURN:
+            if (is_var(in->u.return_.src, name))
+                return false;
+            continue;
+        default:
+            continue;
+        }
+    }
+    return true;
+}
+
+// Whether the body may change memory other than its own frame: a call, a store through a
+// pointer, a write to a global.
+static bool writes_outside(const Gen *g)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
+        switch (in->kind) {
+        case TAC_INSTRUCTION_FUN_CALL:
+        case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+        case TAC_INSTRUCTION_STORE:
+        case TAC_INSTRUCTION_STORE_BYTE:
+            return true;
+        case TAC_INSTRUCTION_COPY_TO_OFFSET:
+        case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+            if (in->u.copy_to_offset.dst[0] != '%')
+                return true;
+            break;
+        default: {
+            const Tac_Val *d = instr_dst(in);
+            if (d && d->kind == TAC_VAL_VAR && d->u.var_name[0] != '%')
+                return true;
+            break;
+        }
+        }
+    }
+    return false;
+}
+
+void find_byref_params(Gen *g)
+{
+    if (g->tl->u.function.variadic || writes_outside(g))
+        return;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next)
+        if (p->type && !msp_is_scalar(p->type) && only_read(g, p->name))
+            map_insert(&g->byref, p->name, 1, 0);
 }

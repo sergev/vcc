@@ -117,6 +117,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->globals);
     map_init(&g->regs);
     map_init(&g->dead);
+    map_init(&g->byref);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -148,6 +149,7 @@ void gen_done(Gen *g)
     map_destroy(&g->globals);
     map_destroy(&g->regs);
     map_destroy(&g->dead);
+    map_destroy(&g->byref);
     msp_free_func(g->fn);
 }
 
@@ -203,10 +205,11 @@ void layout_frame(Gen *g)
             fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
         if (find_slot(g, p->name) || var_reg(g, p->name, 0))
             continue;
-        // A structure parameter's slot first holds its address (store_params).
+        // A structure parameter's slot first holds its address (store_params); one
+        // read through it holds nothing else.
         int size = msp_type_size(p->type), align = msp_type_align(p->type);
         if (!msp_is_scalar(p->type)) {
-            size  = size < 2 ? 2 : size;
+            size  = size < 2 || is_byref(g, p->name) ? 2 : size;
             align = 2;
         }
         add_slot(g, p->name, p->type, size, align);
@@ -359,8 +362,28 @@ int var_reg(const Gen *g, const char *name, int word)
     return word == 0 ? (int)(v & 0xff) : word == 1 ? (int)(v >> 8) : 0;
 }
 
+Msp_Operand slot_at(const Gen *g, const char *name, int off)
+{
+    const Slot *s = find_slot(g, name);
+    if (s) {
+        Msp_Operand o = msp_indexed(MSP_SP, NULL, s->off + off + g->sp_bias);
+        o.incoming    = s->incoming;
+        return o;
+    }
+    if (name[0] == '%')
+        fatal_error("msp430: %s: no slot for %s", gen_name(g), name);
+    return msp_abs(name, off);
+}
+
+void load_byref(Gen *g, const char *name)
+{
+    emit2(g, MSP_MOV, slot_at(g, name, 0), msp_reg(MSP_SCRATCH));
+}
+
 Msp_Operand mem_at(const Gen *g, const char *name, int off)
 {
+    if (is_byref(g, name))
+        return msp_indexed(MSP_SCRATCH, NULL, off); // after load_byref
     int reg = var_reg(g, name, 0);
     if (reg) {
         if (off & 1)
@@ -371,15 +394,7 @@ Msp_Operand mem_at(const Gen *g, const char *name, int off)
                         name);
         return msp_reg(reg);
     }
-    const Slot *s = find_slot(g, name);
-    if (s) {
-        Msp_Operand o = msp_indexed(MSP_SP, NULL, s->off + off + g->sp_bias);
-        o.incoming    = s->incoming;
-        return o;
-    }
-    if (name[0] == '%')
-        fatal_error("msp430: %s: no slot for %s", gen_name(g), name);
-    return msp_abs(name, off);
+    return slot_at(g, name, off);
 }
 
 Msp_Operand incoming_at(int off)
@@ -447,6 +462,12 @@ Msp_Operand high_byte(const Msp_Operand *o)
 
 void address_of(Gen *g, Msp_Operand dst, const char *name, int off)
 {
+    if (is_byref(g, name)) {
+        emit2(g, MSP_MOV, slot_at(g, name, 0), dst);
+        if (off)
+            emit2(g, MSP_ADD, msp_imm(off), msp_copy(&dst));
+        return;
+    }
     const Slot *s = find_slot(g, name);
     if (s) {
         emit2(g, MSP_MOV, msp_reg(MSP_SP), dst);
@@ -519,6 +540,8 @@ void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, in
         copy_loop(g, true, dst, doff, n, !words);
         return;
     }
+    if (is_byref(g, src))
+        load_byref(g, src);
     for (int k = 0; k < n; k++) {
         Msp_Instr *in = emit2(g, MSP_MOV, mem_at(g, src, soff + k * unit),
                               mem_at(g, dst, doff + k * unit));

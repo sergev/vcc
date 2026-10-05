@@ -60,6 +60,7 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     StringMap regs;    // register variable → low register | high register << 8
     StringMap dead;    // parameters dead on entry: left where they arrive
+    StringMap byref;   // structure parameters read through their pointer, uncopied
     bool no_r8;        // a helper takes r8-r11: no variable there
     int out_size;      // bytes of outgoing stack arguments
     int frame_size;    // bytes of the outgoing area and the slots, even
@@ -114,6 +115,9 @@ int var_reg(const Gen *g, const char *name, int word);
 // Byte `off` of named object `name`: its register (word off/2) for a register
 // variable, x(r1) for a slot, &name+off for a global.
 Msp_Operand mem_at(const Gen *g, const char *name, int off);
+// Byte `off` of named object `name` in its slot or at its symbol, a structure parameter
+// read through its pointer included (whose slot holds the pointer).
+Msp_Operand slot_at(const Gen *g, const char *name, int off);
 // Byte `off` of the incoming stack arguments.
 Msp_Operand incoming_at(int off);
 // Word `i` of scalar `v` (its byte, for a char): an immediate for a constant.
@@ -223,6 +227,17 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
 void place_params(Gen *g);
 // Store the register parameters (and the stack part of a split long) into their slots.
 void store_params(Gen *g);
+// Find the structure parameters the function reads through the incoming pointer, with
+// no copy: it only reads them, by member or whole, and makes no call, no store through
+// a pointer and no write to a global, so the caller's object cannot change meanwhile.
+void find_byref_params(Gen *g);
+// Whether `name` is such a parameter; its members are then x(r15), r15 loaded by
+// load_byref.
+bool is_byref(const Gen *g, const char *name);
+// r15 = the address of structure parameter `name`, read through its pointer.
+void load_byref(Gen *g, const char *name);
+// The variable `in` writes, or NULL (a call's is its own).
+const Tac_Val *instr_dst(const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);

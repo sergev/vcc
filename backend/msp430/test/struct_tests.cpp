@@ -61,16 +61,68 @@ mov #1, r12
 )")) << code;
 }
 
-TEST_F(Msp430Test, StructParamFromStack)
+// A structure the callee only reads, with no call and no store that could change the
+// caller's object meanwhile, is read through the pointer that came, uncopied.
+EXPECT_CODE(StructParamFromStack, R"(mov 2(r1), r15
+mov 2(r15), r12
+ret
+)", "struct S { int a, b; }; int w(int a, int b, int c, int d, struct S s) { return s.b; }")
+
+// One the callee writes is copied into its slot first.
+TEST_F(Msp430Test, StructParamWrittenCopied)
 {
     std::string code = Code(CompileToMsp430(R"(
         struct S { int a, b; };
-        int w(int a, int b, int c, int d, struct S s) { return s.b; }
+        int w(int a, int b, int c, int d, struct S s) { s.b += a; return s.b; }
     )"));
-    EXPECT_NE(std::string::npos, code.find(R"(mov 6(r1), r15
-mov @r15, 0(r1)
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r15, 0(r1)
 mov 2(r15), 2(r1)
 )")) << code;
+}
+
+// So is one read in a function that makes a call: the callee might change the object.
+TEST_F(Msp430Test, StructParamCopiedAcrossCall)
+{
+    std::string code = Code(CompileToMsp430(R"(
+        struct S { int a, b; };
+        void g(void);
+        int w(struct S s) { g(); return s.b; }
+    )"));
+    EXPECT_NE(std::string::npos, code.find(R"(mov @r12, 0(r1)
+mov 2(r12), 2(r1)
+call #g
+mov 2(r1), r12
+)")) << code;
+}
+
+// Read through the pointer or copied, a structure parameter keeps its value, and the
+// caller's object stays as it was.
+TEST_F(Msp430Test, RunStructParamByReference)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    EXPECT_EQ("", CompileAndRunMsp430(R"(
+        struct S { int a, b; long c; char d[3]; };
+        struct S glob = { 1, 2, 3L, "xy" };
+        static int sum(struct S s) { return s.a + s.b + (int)s.c + s.d[0] + s.d[1]; }
+        static struct S id(struct S s) { return s; }
+        static int changed(struct S s) { s.a = 100; return s.a + s.b; }
+        static int across(struct S s) { glob.a = 50; return s.a; }
+        int main(void)
+        {
+            struct S x = { 10, 20, 30L, "AB" };
+            if (sum(x) != 10 + 20 + 30 + 'A' + 'B')
+                return 1;
+            struct S y = id(x);
+            if (y.a != 10 || y.c != 30L || y.d[1] != 'B')
+                return 2;
+            if (changed(x) != 120 || x.a != 10)
+                return 3;
+            if (across(glob) != 1 || glob.a != 50)
+                return 4;
+            return 0;
+        }
+    )"));
+    EXPECT_EQ(0, exit_status);
 }
 
 // The callee hands the hidden pointer back in r12, where it came.

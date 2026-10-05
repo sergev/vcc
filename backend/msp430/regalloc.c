@@ -29,26 +29,13 @@ static RegAlloc_Class classify(void *arg, const Tac_Type *t)
     return size <= 2 ? REGALLOC_INT : size == 4 ? REGALLOC_PAIR : REGALLOC_NONE;
 }
 
-// The variable a helper instruction writes.
-static const Tac_Val *helper_dst(const Tac_Instruction *in)
-{
-    switch (in->kind) {
-    case TAC_INSTRUCTION_BINARY:
-        return in->u.binary.dst;
-    case TAC_INSTRUCTION_ADD_PTR:
-        return in->u.add_ptr.dst;
-    default:
-        return in->u.int_to_double.dst; // a conversion
-    }
-}
-
 static bool runtime_call(void *arg, const Flow *f, const Tac_Instruction *in, const Tac_Val **res)
 {
     (void)f;
     bool r8;
     if (!uses_helper(((Target *)arg)->g, in, &r8))
         return false;
-    *res = helper_dst(in);
+    *res = instr_dst(in);
     return true;
 }
 
