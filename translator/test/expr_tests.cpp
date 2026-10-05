@@ -465,7 +465,7 @@ TEST_F(TranslateTestX86, SizeofType_Int)
       src:
         kind: constant
         const:
-          kind: int
+          kind: ulong
           value: 4
 )");
 }
@@ -483,7 +483,7 @@ TEST_F(TranslateTestX86, SizeofType_Long)
       src:
         kind: constant
         const:
-          kind: int
+          kind: ulong
           value: 8
 )");
 }
@@ -501,7 +501,7 @@ TEST_F(TranslateTestX86, SizeofExpr)
       src:
         kind: constant
         const:
-          kind: int
+          kind: ulong
           value: 4
 )");
 }
@@ -519,7 +519,7 @@ TEST_F(TranslateTestX86, AlignofDouble)
       src:
         kind: constant
         const:
-          kind: int
+          kind: ulong
           value: 8
 )");
 }

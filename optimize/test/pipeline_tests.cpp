@@ -153,6 +153,19 @@ TEST_F(PipelineTest, CopyPropChain)
               "    name: %x\n");
 }
 
+// sizeof is a size_t constant: va_arg's `ap - ((sizeof(T) + 7) & ~7)` folds, over
+// several rounds, to a 64-bit -8. As an int constant it went through unsigned int
+// and became 2^32 - 8, which the pointer arithmetic zero-extended.
+TEST_F(PipelineTest, SizeofFoldsAsSizeT)
+{
+    OptFlags flags       = opt_flags_default();
+    flags.max_iterations = 0;
+    std::string yaml =
+        OptimizeYaml("char *f(char *p) { return p - ((sizeof(long) + 7) & ~7); }", flags);
+    EXPECT_NE(std::string::npos, yaml.find("value: 18446744073709551608")) << yaml;
+    EXPECT_EQ(std::string::npos, yaml.find("value: 4294967288")) << yaml;
+}
+
 // ---------------------------------------------------------------------------
 // Dead store elimination
 // ---------------------------------------------------------------------------

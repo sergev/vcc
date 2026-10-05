@@ -202,6 +202,21 @@ Tac_Val *new_var_val(TacCtx *ctx, Tac_Type *type)
 
 //
 // A second, independently owned reference to the same value.
+// A constant of the target's size_t, the type of sizeof and _Alignof. It must
+// carry that kind, not int's: folded, `p - sizeof(T)` negates it, and a 32-bit
+// negative would then be zero-extended into a 64-bit pointer offset.
+Tac_Val *val_size(uint64_t v)
+{
+    switch (size_kind()) {
+    case TYPE_UINT:
+        return val_uint(v);
+    case TYPE_ULONG:
+        return val_ulong((unsigned long)v);
+    default:
+        return val_ulong_long((unsigned long long)v);
+    }
+}
+
 //
 // Every Tac_Val belongs to the one instruction it is attached to, so a value handed both
 // to an instruction and back to the caller has to be duplicated -- returning the pointer

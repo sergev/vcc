@@ -79,6 +79,7 @@ Tac_Val *val_long_long(long long v);
 Tac_Val *val_uint(uint64_t v);
 Tac_Val *val_ulong(unsigned long v);
 Tac_Val *val_ulong_long(unsigned long long v);
+Tac_Val *val_size(uint64_t v);
 Tac_Val *val_float(float v);
 Tac_Val *val_double(double v);
 Tac_Val *val_long_double(Float128 v);

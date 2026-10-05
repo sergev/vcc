@@ -1591,11 +1591,11 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         return val_var(dst->u.var_name);
     }
     case EXPR_SIZEOF_EXPR:
-        return val_int(get_size(e->u.sizeof_expr->type));
+        return val_size(get_size(e->u.sizeof_expr->type));
     case EXPR_SIZEOF_TYPE:
-        return val_int(get_size(e->u.sizeof_type));
+        return val_size(get_size(e->u.sizeof_type));
     case EXPR_ALIGNOF:
-        return val_int(get_alignment(e->u.align_of));
+        return val_size(get_alignment(e->u.align_of));
     case EXPR_VA_CLASS:
         return val_int(va_class_of(e->u.va_class));
     case EXPR_FIELD_ACCESS: {
