@@ -217,7 +217,7 @@ boundary.
 
 ## Phase 1 — skeleton
 
-- **K5. Runtime, hand-written part.** `libc/mmix/`, in GNU `as` syntax with lowercase
+- **K5. Runtime, hand-written part.** *Done.* `libc/mmix/`, in GNU `as` syntax with lowercase
   mnemonics:
   - **`crt0.s`:**
     - `Main:` does `put rG,32`, as GCC's `crti` does, so our code and GCC's agree that
@@ -239,6 +239,27 @@ boundary.
   - **Tested on its own,** before any compiled code depends on it. An assembly program
     prints through `putbyte`, reads a line through `getch`, and returns a status. The
     trailer and the status are checked.
+
+  *Done.*
+  - **Files:** `crt0.S` (preprocessed by GCC, which passes `as` its flags) and
+    `console.s`, built into `crt0.o`, `crt0-status.o` and `libc.a`.
+  - **`console.s`:** `putbyte` buffers 1 KB; `putch`, `flush`, `getch` (−1 at end of
+    input) and `exit`; and `__mmix_fmtdec`, the decimal digits that `exit` and
+    `PRINT_STATUS` share.
+  - **`crt0`'s status:** it sign-extends main's `int` result before using it, since
+    GCC's `main` leaves it unextended.
+  - **The `mmix-runtime` CTest** (`test/console_test.sh` with `test/console_test.s`)
+    checks stdout, the trailer and the status: a copy of StdIn, an empty input, the
+    `PRINT_STATUS` line, and −3 with an argument (status 253).
+  - **Found: the linker took `$254` as a base register.** It allocates the registers for
+    `lda`/`ldo` from the top, `$254` first, and `crt0` then set the stack pointer over
+    it. GCC's `crtn.o` puts eight zero octas in `.MMIX.reg_contents`, which the linker
+    places just below `$255`, so allocation starts at `$246`. Our `crt0.S` does the
+    same, reserving `$247`–`$254`.
+  - **Found: a `geta` target must be 4-aligned.** `geta` reaches only multiples of 4, so
+    a `.rodata` string that `geta` addresses needs `.p2align 2`, as GCC emits.
+    Otherwise the link fails with "relocation truncated to fit: R_MMIX_GETA".
+    `genmmix` must align every `geta` target.
 - **K6. Skeleton.** `backend/mmix/` with `CMakeLists.txt`, `mmix_ir.h`, `mmix_ir.c`,
   `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing `genmmix`.
   - **The IR** has a function, a block and an instruction (`op X,Y,Z`). Operands are:

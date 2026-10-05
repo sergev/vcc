@@ -53,3 +53,39 @@ add_test(
             ${MMIX_INCLUDE_DIR}
             ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
+
+if(NOT MMIX_TOOLS_FOUND)
+    return()
+endif()
+
+set(src ${CMAKE_CURRENT_SOURCE_DIR})
+set(out ${CMAKE_CURRENT_BINARY_DIR})
+
+# crt0.S goes through GCC for the preprocessor, which passes the assembler MMIX_AS_FLAGS.
+add_custom_command(OUTPUT ${out}/crt0.o
+    COMMAND ${MMIX_GCC} -c -o ${out}/crt0.o ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+add_custom_command(OUTPUT ${out}/crt0-status.o
+    COMMAND ${MMIX_GCC} -c -DPRINT_STATUS -o ${out}/crt0-status.o ${src}/crt0.S
+    DEPENDS ${src}/crt0.S)
+# Assembly leaves.  No arithmetic helpers: multiply, divide and binary64 are instructions.
+set(MMIX_LIBC_OBJS "")
+foreach(name console)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${MMIX_AS} ${MMIX_AS_FLAGS} -o ${out}/${name}.o ${src}/${name}.s
+        DEPENDS ${src}/${name}.s)
+    list(APPEND MMIX_LIBC_OBJS ${out}/${name}.o)
+endforeach()
+
+add_custom_command(OUTPUT ${out}/libc.a
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
+    COMMAND ${MMIX_AR} rcs ${out}/libc.a ${MMIX_LIBC_OBJS}
+    DEPENDS ${MMIX_LIBC_OBJS})
+add_custom_target(mmix-libc ALL
+    DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+# The runtime on its own: console I/O, the exit report and the status.
+add_test(
+    NAME mmix-runtime
+    COMMAND ${src}/test/console_test.sh ${MMIX_AS} ${MMIX_LD} ${MMIX_SIM} ${out} ${src}/test
+            ${out}/runtime-test)
