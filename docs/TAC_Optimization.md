@@ -245,7 +245,7 @@ As in dead store elimination, a block that is still reachable but has been empti
 
 ### Candidates and expression keys
 
-A candidate is a pure computation: the result depends only on the operands, and there is no side effect. The candidates are `Binary`, `Unary`, every conversion, `AddPtr`, `PtrDiff`, and `GetAddress` (with its byte and decay forms) of a static object. An address does not depend on the object's value, so it is not killed when the object is assigned. The address of a frame slot is *not* a candidate. It takes one instruction to recompute from the stack or frame pointer, and holding it would only add register pressure. Volatile instructions are never touched. Division is a candidate: CSE only removes an evaluation that an identical one dominates, so it never introduces a trap. Memory reads (`Load`, `CopyFromOffset`) are not candidates yet.
+A candidate is a pure computation: the result depends only on the operands, and there is no side effect. The candidates are `Binary`, `Unary`, every conversion, `AddPtr`, `PtrDiff`, and `GetAddress` (with its byte and decay forms) of a static object. An address does not depend on the object's value, so it is not killed when the object is assigned. The address of a frame slot is *not* a candidate. It takes one instruction to recompute from the stack or frame pointer, and holding it would only add register pressure. Volatile instructions are never touched. Division is a candidate: CSE only removes an evaluation that an identical one dominates, so it never introduces a trap. So are the memory reads: a `Load` (or `LoadByte`) through a pointer, keyed by the pointer, and a `CopyFromOffset` member read of a named aggregate, keyed by the aggregate and the offset; see below for when they are killed.
 
 An expression's key is its instruction kind and operator, its immediate field (the `AddPtr` scale, or the destination kind of the integer conversions), and its operands. A variable is spelled by its name. A constant is spelled by its kind and exact bits, so `-0.0` and `0.0` stay apart, and so do an `int` 1 and a `long` 1. The operands of commutative operators are sorted, so `a + b` and `b + a` share a key. The destination type is not part of the key; instead, a fact is used only for a destination of the same type as its holder. This is what keeps `Truncate(x)` to `char` apart from `Truncate(x)` to `short`.
 
@@ -256,6 +256,12 @@ A holder is always private: a temporary, a parameter or an automatic local. Expr
 - at every `FunCall`, since the callee may write them;
 - at every `Store`, since the pointer may point at any of them, including a global whose address another function took;
 - at every `CopyToOffset`, for the aggregate it writes.
+
+A read through a pointer may see any memory, so every `Load` fact is killed by anything that may write memory a pointer reaches: a `Store`, a `FunCall`, or a write — a `Copy`, a computation, a `CopyToOffset` — to a global or address-taken variable. There is no type-based alias analysis: the code this compiler builds (the v7 Unix sources among it) puns types freely. A member read of a named aggregate needs no extra rule. It reads the aggregate's name, so a write to the aggregate kills it, and so does a store or call when the aggregate is global or address-taken.
+
+### Store-to-load forwarding
+
+After `Store(v, p)`, a `Load` through `p` reads `v` until something writes memory. The store first kills every load fact, as any store does, and then adds the fact `Load p → v`, so `*p = x; return *p;` returns `x` without reading memory, while `*p = 1; *q = 2; x = *p` forwards nothing: `q` may be `p`. The stored value must be a private variable or a constant. A constant holder is rewritten into a `Copy` of that constant, and only for a destination of the constant's own type. A byte store (`StoreByte`) truncates, so it gives no fact.
 
 ## Dead store elimination
 
@@ -321,6 +327,8 @@ No single pass is sufficient on its own. The passes form a **virtuous cycle**:
 
 Because the passes amplify each other, the optimizer runs them in a loop until the instruction list stabilizes.
 
+The passes rewrite the list in place, so a round's result cannot be compared with its input directly. `optimize_function` spells the list as YAML before a round and compares the spelling after it. That costs little next to the passes themselves. Every pass only removes or simplifies, so the loop always reaches a fixed point; it is capped at `OPT_MAX_ROUNDS` (64) rounds anyway, and a Debug build stops with a fatal error if the cap is reached, since that would mean two passes undo each other.
+
 ### Pseudocode
 
 ```
@@ -348,13 +356,13 @@ optimize(body, flags):
 
         new_body = flatten_cfg(cfg)             // rejoin into flat list
 
-        if new_body == body or new_body is empty:
+        if new_body spells as body did, or new_body is empty:
             return new_body                     // fixed point reached
 
         body = new_body
 ```
 
-Equality of instruction lists is tested with `tac_compare_instruction` (declared in `tac/tac.h`). An empty body after optimization is also a termination condition: if the optimizer removes everything, there is nothing left to iterate over.
+Equality is tested on the YAML spelling of the list (`tac_export_yaml_instruction_list`). An empty body after optimization is also a termination condition: if the optimizer removes everything, there is nothing left to iterate over.
 
 ### Pass ordering
 
@@ -373,7 +381,9 @@ stay exactly the typed symbols of the optimized body.
 
 By default all five passes are enabled. Individual passes can be disabled for debugging, except constant folding.
 For each pass, a separate CLI option exists in the `lower` binary: `--no-unreachable`, `--no-cse`, `--no-copy-prop`
-and `--no-dead-store`; `--opt-debug` traces the passes.
+and `--no-dead-store`; `--opt-debug` traces the passes. `--opt-max-iter N` stops after N rounds (0, the
+default, runs to a fixed point); the `VCC_OPT_MAX_ITER` environment variable sets it for a whole build, and the
+backend test fixtures read it as well, which is how a miscompile is bisected to the round that introduces it.
 The constant folding is always enabled, to simplify the subsequent code generation.
 
 ## Implementation plan
@@ -403,7 +413,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags);
 
 - `tac_new_instruction`, `tac_new_val`, `tac_new_const` — allocate replacement nodes.
 - `tac_free_instruction` — free removed nodes.
-- `tac_compare_instruction` — fixed-point check (declared in `tac/tac.h`).
+- `tac_export_yaml_instruction_list` — the spelling the fixed-point check compares.
 - `xalloc` / `xfree` — memory for CFG data structures.
 - `libutil/string_map` — map from variable name to copy-set entry or liveness bit, used in the dataflow analyses.
 
