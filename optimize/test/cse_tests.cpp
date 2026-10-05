@@ -236,6 +236,30 @@ TEST_F(CseTest, KilledInLoop)
                                   "ret a\n");
 }
 
+// The loop is entered through a block that unreachable-code elimination
+// empties (its jump falls through anyway). The empty block still carries a+b
+// in %1 into the loop head; left out of the meet, it would let the back edge's
+// %2 = a+b look available on entry, and the first computation of %2 be deleted.
+TEST_F(CseTest, EmptyBlockIntoLoop)
+{
+    Tac_Instruction *body = chain(
+        { add("a", "b", "%1"), make_jump_if_zero(make_var("c"), "out"), make_jump("top"),
+          make_label("top"), make_jump_if_zero(make_var("i"), "out"), add("a", "b", "%2"),
+          make_binary(TAC_BINARY_SUBTRACT, make_var("i"), make_const_int(1), make_var("i")),
+          make_store(make_var("i"), make_var("%2")), make_jump("top"), make_label("out"),
+          make_return(make_var("i")) });
+    EXPECT_EQ(Show(RunCse(body)), "%1 = op0 a b\n"
+                                  "jz c out\n"
+                                  "top:\n"
+                                  "jz i out\n"
+                                  "%2 = %1\n"
+                                  "i = op1 i 1\n"
+                                  "*%2 = i\n"
+                                  "jump top\n"
+                                  "out:\n"
+                                  "ret i\n");
+}
+
 // A call kills an expression over a global; one over a private local survives.
 TEST_F(CseTest, CallKillsGlobal)
 {
@@ -336,18 +360,32 @@ TEST_F(CseTest, DifferentTypeNotMerged)
                                       "ret %3\n");
 }
 
-// The address of a variable does not depend on its value: &x is available
-// across an assignment to x.
+// The address of a global does not depend on its value: &g is available
+// across an assignment to g, and across a call.
 TEST_F(CseTest, AddressAcrossAssignment)
 {
+    Tac_Instruction *body = chain(
+        { make_get_address(make_var("g"), make_var("%1")), make_copy(make_const_int(1), make_var("g")),
+          make_fun_call("f"), make_get_address(make_var("g"), make_var("%2")),
+          make_return(make_var("%2")) });
+    const Tac_TopLevel *fn = make_fn_tl({ "%1", "%2" });
+    EXPECT_EQ(Show(RunCse(body, fn)), "%1 = &g\n"
+                                      "g = 1\n"
+                                      "call f\n"
+                                      "%2 = %1\n"
+                                      "ret %2\n");
+}
+
+// The address of a frame slot is not held: it costs one instruction to redo.
+TEST_F(CseTest, LocalAddressNotHeld)
+{
     Tac_Instruction *body = chain({ make_get_address(make_var("x"), make_var("%1")),
-                                    make_copy(make_const_int(1), make_var("x")),
                                     make_get_address(make_var("x"), make_var("%2")),
                                     make_return(make_var("%2")) });
-    EXPECT_EQ(Show(RunCse(body)), "%1 = &x\n"
-                                  "x = 1\n"
-                                  "%2 = %1\n"
-                                  "ret %2\n");
+    const Tac_TopLevel *fn = make_fn_tl({ "x", "%1", "%2" });
+    EXPECT_EQ(Show(RunCse(body, fn)), "%1 = &x\n"
+                                      "%2 = &x\n"
+                                      "ret %2\n");
 }
 
 // ---------------------------------------------------------------------------

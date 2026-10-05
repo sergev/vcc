@@ -1,6 +1,6 @@
 # TAC-Level Optimization
 
-This article describes the four machine-independent optimization passes we plan to implement on the TAC intermediate representation: **constant folding**, **unreachable code elimination**, **copy propagation**, and **dead store elimination**. The approach closely follows Chapter 19 of [Nora Sandler, *Writing a C Compiler*](https://nostarch.com/writing-c-compiler), adapted to the types and conventions of this codebase.
+This article describes the five machine-independent optimization passes on the TAC intermediate representation: **constant folding**, **unreachable code elimination**, **common-subexpression elimination**, **copy propagation**, and **dead store elimination**. Except for common-subexpression elimination, the approach closely follows Chapter 19 of [Nora Sandler, *Writing a C Compiler*](https://nostarch.com/writing-c-compiler), adapted to the types and conventions of this codebase.
 
 ## Why optimize at TAC level?
 
@@ -12,7 +12,7 @@ Optimizing at TAC level is the right place to fix this because:
 - TAC is machine-independent — optimizations written here benefit every backend (RISC-V, BESM-6, and future targets).
 - TAC instructions have a simple, uniform structure that makes optimization algorithms easy to express.
 
-Optimizations that transform one function at a time, without knowledge of the rest of the program, are called **intraprocedural** optimizations. The four passes described here are all intraprocedural. Each `TAC_TOPLEVEL_FUNCTION` is processed independently; static variables, function calls, and pointer aliasing are handled conservatively.
+Optimizations that transform one function at a time, without knowledge of the rest of the program, are called **intraprocedural** optimizations. The five passes described here are all intraprocedural. Each `TAC_TOPLEVEL_FUNCTION` is processed independently; static variables, function calls, and pointer aliasing are handled conservatively.
 
 The canonical source of truth for TAC node types is [tac/tacky.asdl](../tac/tacky.asdl). The C representation is in [tac/tac.h](../tac/tac.h).
 
@@ -212,6 +212,51 @@ The optimizer classifies a name *locally*, without consulting the rest of the pr
 
 After substitution, some `Copy(x, x)` instructions may appear (the source and destination are the same variable). These are no-ops and are removed immediately.
 
+## Common-subexpression elimination
+
+Common-subexpression elimination (CSE) removes a computation whose value is already held in a variable. The pass is in `optimize/cse.c`.
+
+### A simple example
+
+```
+%0 = x * y
+%1 = x * y
+%2 = %0 + %1
+```
+
+On every path to the second multiply, `x * y` has been computed into `%0`, and neither `x`, `y` nor `%0` has changed since. The multiply becomes a copy, `%1 = %0`. Copy propagation then rewrites `%2 = %0 + %0`, and dead store elimination removes the copy. CSE runs just before copy propagation in each iteration, so all three steps happen in the same iteration. The pass introduces no new variables. A copy always goes from an existing holder, so the function's typed `locals` stay exactly the names of its body.
+
+The redundancy is common in lowered TAC: `a[i] = a[i] + 1` computes the element address `ADD_PTR(a, i)` twice, once for the load and once for the store.
+
+### Available-expressions analysis
+
+CSE is a forward dataflow analysis on the CFG, with the same structure as reaching copies:
+
+- **Lattice element:** a set of facts "expression E is held in variable h", keyed by E, holding on every path to the program point.
+- **Initial value:** empty at entry.
+- **Meet:** intersection. A fact survives only if every predecessor has it with the *same* holder. A predecessor that has not been visited yet is left out of the meet (an optimistic start). This keeps an expression computed before a loop available inside the loop. Copy propagation starts every out-set empty instead, which loses such facts at a loop head.
+- **Transfer function for a single instruction:**
+  - **Kill:** defining a variable v removes every fact whose holder is v or whose expression reads v.
+  - **Gen:** a candidate `h = E` adds (E → h), unless E reads h itself (`x = x + 1`). If E already has a holder, the old holder is kept: the rewrite turns this instruction into a copy of it, so it still holds E, and keeping it lets the fact agree around a loop's back edge.
+
+The rewrite replays each block from its in-set. A candidate `d = E` with (E → h) available becomes `d = h`, provided d is private and has the same type as h. When d is h itself, the recomputation is deleted.
+
+As in dead store elimination, a block that is still reachable but has been emptied by an earlier pass takes part as an identity node. Left unvisited, an empty block on the way into a loop would let a fact from the back edge look available on entry.
+
+### Candidates and expression keys
+
+A candidate is a pure computation: the result depends only on the operands, and there is no side effect. The candidates are `Binary`, `Unary`, every conversion, `AddPtr`, `PtrDiff`, and `GetAddress` (with its byte and decay forms) of a static object. An address does not depend on the object's value, so it is not killed when the object is assigned. The address of a frame slot is *not* a candidate. It takes one instruction to recompute from the stack or frame pointer, and holding it would only add register pressure. Volatile instructions are never touched. Division is a candidate: CSE only removes an evaluation that an identical one dominates, so it never introduces a trap. Memory reads (`Load`, `CopyFromOffset`) are not candidates yet.
+
+An expression's key is its instruction kind and operator, its immediate field (the `AddPtr` scale, or the destination kind of the integer conversions), and its operands. A variable is spelled by its name. A constant is spelled by its kind and exact bits, so `-0.0` and `0.0` stay apart, and so do an `int` 1 and a `long` 1. The operands of commutative operators are sorted, so `a + b` and `b + a` share a key. The destination type is not part of the key; instead, a fact is used only for a destination of the same type as its holder. This is what keeps `Truncate(x)` to `char` apart from `Truncate(x)` to `short`.
+
+### Conservatism around aliased variables
+
+A holder is always private: a temporary, a parameter or an automatic local. Expressions may read globals and address-taken variables, so facts that mention them are killed:
+
+- at every `FunCall`, since the callee may write them;
+- at every `Store`, since the pointer may point at any of them, including a global whose address another function took;
+- at every `CopyToOffset`, for the aggregate it writes.
+
 ## Dead store elimination
 
 An instruction is a **dead store** if it assigns a value to a variable that is never subsequently read before the variable's value is overwritten again or the function exits. Dead stores can be removed safely because they have no observable effect on the program.
@@ -270,6 +315,7 @@ No single pass is sufficient on its own. The passes form a **virtuous cycle**:
 
 - Constant folding produces constants that copy propagation can substitute into expressions, which constant folding can then evaluate again.
 - Constant folding turns conditional jumps into unconditional ones, creating unreachable blocks that unreachable code elimination can remove.
+- Common-subexpression elimination turns a recomputation into a copy, which copy propagation forwards and dead store elimination removes.
 - Copy propagation eliminates the variable in a copy's destination, turning the copy into a dead store that dead store elimination can remove.
 - Dead store elimination removes instructions, which may make previously reachable blocks empty, which unreachable code elimination can then clean up.
 
@@ -291,6 +337,9 @@ optimize(body, flags):
         if flags.unreachable_code_elim:
             cfg = eliminate_unreachable(cfg)
 
+        if flags.cse:
+            cfg = eliminate_common_subexpressions(cfg)
+
         if flags.copy_propagation:
             cfg = propagate_copies(cfg)
 
@@ -309,20 +358,22 @@ Equality of instruction lists is tested with `tac_compare_instruction` (declared
 
 ### Pass ordering
 
-Within one iteration, constant folding runs first on the flat list because it is the only pass that does not need a CFG. The remaining three passes operate on the CFG representation and run in the order shown: unreachable code elimination, copy propagation, dead store elimination. This ordering ensures that each pass can take advantage of what the previous pass produced within the same iteration.
+Within one iteration, constant folding runs first on the flat list because it is the only pass that does not need a CFG. The remaining four passes operate on the CFG representation and run in the order shown: unreachable code elimination, common-subexpression elimination, copy propagation, dead store elimination. This ordering ensures that each pass can take advantage of what the previous pass produced within the same iteration. In particular, the copies that CSE leaves behind are forwarded and removed in the same iteration.
 
 ### Types
 
 No pass creates or renames a variable, and copy propagation substitutes only across
 a `COPY`, which the translator emits only between types of the same size, so every
-operand keeps its width. After the loop, `optimize_prune_locals` drops from the
+operand keeps its width. The copies that CSE makes are between two names of the same
+type. After the loop, `optimize_prune_locals` drops from the
 function's `locals` every name the body no longer mentions, so `params` + `locals`
 stay exactly the typed symbols of the optimized body.
 
 ### Command-line control
 
-By default all four passes are enabled. Individual passes can be disabled for debugging, except constant folding.
-For each pass, a separate CLI option exists in the `lower` binary.
+By default all five passes are enabled. Individual passes can be disabled for debugging, except constant folding.
+For each pass, a separate CLI option exists in the `lower` binary: `--no-unreachable`, `--no-cse`, `--no-copy-prop`
+and `--no-dead-store`; `--opt-debug` traces the passes.
 The constant folding is always enabled, to simplify the subsequent code generation.
 
 ## Implementation plan
@@ -336,6 +387,8 @@ The optimizer lives in a new top-level directory `optimizer/`:
 | `const_fold.c` | Constant folding pass |
 | `cfg.h`, `cfg.c` | CFG construction and flattening |
 | `unreachable.c` | Unreachable code elimination |
+| `dataflow.h`, `dataflow.c` | Helpers shared by the forward dataflow passes |
+| `cse.c` | Available-expressions analysis and rewrite |
 | `copy_prop.c` | Reaching-copies analysis and substitution |
 | `dead_store.c` | Liveness analysis and dead store removal |
 

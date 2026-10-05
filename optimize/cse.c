@@ -24,9 +24,11 @@
 //
 // Candidates are the pure value computations, which have no side effect and
 // whose result depends on their operands alone: BINARY, UNARY, the conversions,
-// ADD_PTR, PTR_DIFF and the three GET_ADDRESS kinds (an address never changes,
-// so GET_ADDRESS reads no operand value). Removing a recomputation that an
-// identical one dominates never introduces a trap, so division is included.
+// ADD_PTR, PTR_DIFF and the three GET_ADDRESS kinds of a static object (an
+// address never changes, so GET_ADDRESS reads no operand value; the address of
+// a frame slot is cheaper to recompute than to hold). Removing a recomputation
+// that an identical one dominates never introduces a trap, so division is
+// included.
 // Memory reads (LOAD, COPY_FROM_OFFSET) are not candidates.
 //
 // Conservatism around aliasing (see alias.c): static-duration and address-taken
@@ -317,8 +319,41 @@ static bool is_commutative(Tac_BinaryOperator op)
     }
 }
 
-// A candidate instruction, taken apart: its destination, operands and the
-// immediate fields that complete its spelling.
+// ============================================================================
+// The pass context: the alias classes, and the private names with their types.
+// ============================================================================
+
+typedef struct {
+    StringMap observable;
+    StringMap address_taken;
+    StringMap private_types; // param/local name → its Tac_Type* (may be NULL)
+    bool have_fn;            // false: no function context, every name private
+} CseCtx;
+
+static bool is_private(const CseCtx *ctx, const char *name)
+{
+    return !ctx->have_fn || map_get((StringMap *)&ctx->private_types, name, NULL);
+}
+
+// May `holder` stand in for `dst`? Both private, and of the same type.
+static bool same_type(const CseCtx *ctx, const char *holder, const char *dst)
+{
+    if (!ctx->have_fn)
+        return true;
+    intptr_t th = 0, td = 0;
+    if (!map_get((StringMap *)&ctx->private_types, holder, &th) ||
+        !map_get((StringMap *)&ctx->private_types, dst, &td))
+        return false;
+    if (!th || !td)
+        return !th && !td; // untyped hand-built TAC: only names typed alike
+    return tac_compare_type((const Tac_Type *)th, (const Tac_Type *)td);
+}
+
+// ============================================================================
+// Candidates: an instruction taken apart into its destination, its operands
+// and the immediate fields that complete its spelling.
+// ============================================================================
+
 typedef struct {
     Tac_Val **dst;          // the dst field, so a rewrite can take it over
     const Tac_Val *opnd[2]; // the operands read (NULL when fewer)
@@ -326,7 +361,7 @@ typedef struct {
     int op;                 // operator, scale or dst_kind; 0 when none
 } Candidate;
 
-static bool as_candidate(Tac_Instruction *ins, Candidate *c)
+static bool as_candidate(Tac_Instruction *ins, const CseCtx *ctx, Candidate *c)
 {
     memset(c, 0, sizeof *c);
     c->reads_operands = true;
@@ -385,6 +420,11 @@ static bool as_candidate(Tac_Instruction *ins, Candidate *c)
     case TAC_INSTRUCTION_GET_ADDRESS:
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
+        // The address of a frame slot is one instruction off the stack or frame
+        // pointer: holding it in a register instead only adds to the pressure.
+        if (ins->u.get_address.src->kind == TAC_VAL_VAR &&
+            is_private(ctx, ins->u.get_address.src->u.var_name))
+            return false;
         c->dst            = &ins->u.get_address.dst;
         c->opnd[0]        = ins->u.get_address.src;
         c->reads_operands = false;
@@ -419,37 +459,6 @@ static char *expr_key(const Tac_Instruction *ins, const Candidate *c)
     if (b)
         spell_val(&key, b);
     return key.buf;
-}
-
-// ============================================================================
-// The pass context: the alias classes, and the private names with their types.
-// ============================================================================
-
-typedef struct {
-    StringMap observable;
-    StringMap address_taken;
-    StringMap private_types; // param/local name → its Tac_Type* (may be NULL)
-    bool have_fn;            // false: no function context, every name private
-} CseCtx;
-
-static bool is_private(const CseCtx *ctx, const char *name)
-{
-    return !ctx->have_fn || map_get((StringMap *)&ctx->private_types, name, NULL);
-}
-
-// May `holder` stand in for `dst`? Both private, and of the same type.
-static bool same_type(const CseCtx *ctx, const char *holder, const char *dst)
-{
-    if (!ctx->have_fn)
-        return true;
-    intptr_t th = 0, td = 0;
-    if (!map_get((StringMap *)&ctx->private_types, holder, &th) ||
-        !map_get((StringMap *)&ctx->private_types, dst, &td))
-        return false;
-    if (!th || !td)
-        return !th && !td; // untyped hand-built TAC: only names typed alike
-
-    return tac_compare_type((const Tac_Type *)th, (const Tac_Type *)td);
 }
 
 // ============================================================================
@@ -493,7 +502,7 @@ static void apply_transfer(StringMap *es, Tac_Instruction *ins, const CseCtx *ct
 
     // Gen: a candidate whose holder is private and not among its own operands.
     Candidate c;
-    if (!as_candidate(ins, &c) || !is_private(ctx, name))
+    if (!as_candidate(ins, ctx, &c) || !is_private(ctx, name))
         return;
     Fact *f = xalloc(sizeof(Fact), __func__, __FILE__, __LINE__);
     for (int i = 0; i < 2; i++) {
@@ -528,7 +537,7 @@ static Tac_Instruction *rewrite(Tac_Instruction *ins, const StringMap *es, const
 {
     *deleted = false;
     Candidate c;
-    if (!as_candidate(ins, &c))
+    if (!as_candidate(ins, ctx, &c))
         return ins;
     char *key     = expr_key(ins, &c);
     intptr_t fval = 0;
@@ -597,8 +606,9 @@ void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn)
     }
 
     // Fixpoint iteration. A block's in-set is the intersection of its visited
-    // predecessors' out-sets; the sets only shrink once every block has been
-    // visited, so the loop terminates.
+    // predecessors' out-sets; the sets only shrink once every reachable block
+    // has been visited, so the loop terminates. An unreachable predecessor is
+    // never visited, and rightly left out of the meet.
     bool changed = true;
     int iter     = 0;
     while (changed) {
@@ -607,7 +617,9 @@ void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn)
         OPT_TRACE("[cse] fixpoint iteration %d\n", iter);
         for (int i = 0; i < n; i++) {
             OptBlock *b = cfg->blocks[i];
-            if (!b->reachable || !b->first)
+            // An empty block still takes part: it passes its in-set through, and
+            // left unvisited it would be ignored by the meet of its successors.
+            if (!b->reachable)
                 continue;
 
             // The entry block's in-set is the boundary value (empty): control

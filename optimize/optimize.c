@@ -1,13 +1,15 @@
 // ============================================================================
 // optimize.c — the machine-independent TAC optimization pipeline.
 //
-// No single pass is sufficient on its own; the four passes form a virtuous
+// No single pass is sufficient on its own; the five passes form a virtuous
 // cycle and amplify one another:
 //
 //   - Constant folding produces constants that copy propagation can substitute
 //     into expressions, which constant folding can then evaluate again.
 //   - Constant folding turns conditional jumps into unconditional ones, creating
 //     unreachable blocks that unreachable-code elimination can remove.
+//   - Common-subexpression elimination turns a recomputation into a copy,
+//     which copy propagation forwards and dead-store elimination removes.
 //   - Copy propagation eliminates the variable in a copy's destination, turning
 //     the copy into a dead store that dead-store elimination can remove.
 //   - Dead-store elimination removes instructions, which may make previously
@@ -16,9 +18,9 @@
 // Because the passes feed each other, the optimizer runs them in a loop until
 // the instruction list stops changing (a fixed point). Within one iteration the
 // pass order is fixed: constant folding runs first — it is the only pass that
-// works on the flat instruction list and needs no CFG — and the remaining three
-// run on the CFG in the order unreachable → copy-prop → dead-store, so each can
-// exploit what the previous one produced in the same iteration.
+// works on the flat instruction list and needs no CFG — and the remaining four
+// run on the CFG in the order unreachable → cse → copy-prop → dead-store, so
+// each can exploit what the previous one produced in the same iteration.
 //
 // See docs/TAC_Optimization.md §"The optimization pipeline".
 // ============================================================================
@@ -57,7 +59,11 @@ void opt_trace_instr(const char *prefix, const Tac_Instruction *ins)
 OptFlags opt_flags_default(void)
 {
     return (OptFlags){
-        .unreachable_elim = true, .copy_propagation = true, .dead_store_elim = true, .debug = false
+        .unreachable_elim = true,
+        .copy_propagation = true,
+        .cse              = true,
+        .dead_store_elim  = true,
+        .debug            = false
     };
 }
 
