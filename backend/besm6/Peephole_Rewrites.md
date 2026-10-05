@@ -503,7 +503,24 @@ it can be matched. A `call`, which may write anything, is already a basic-block 
 
 This is worth stating plainly because the natural design — a table of "a store to a frame slot
 kills all dereferences, a store through a pointer kills everything" — is dead code on this
-architecture. A machine with a store-immediate or a memory-to-memory move would need it.
+architecture as long as A mirrors one location. A machine with a store-immediate or a
+memory-to-memory move would need it.
+
+#### A second mirror
+
+A store does more than settle the tracked location: since it writes A's value, A afterwards
+mirrors the stored location **and** the one it mirrored before. `*p = x; return x;` — the shape
+TAC store-to-load forwarding makes of `*p = x; return *p;` — then needs no reload of `x`. The
+pass keeps that earlier location as a second mirror (`a_also`), and rule 5.1 matches either.
+
+Here the clobber table comes back, in a small way, because the second mirror is not settled by
+the store. Its *contents* are safe for the same reason as above — the store wrote A's value
+wherever it wrote. Its *meaning* is not, when it is a `LOC_DEREF`: a store to that dereference's
+pointer slot (or global) changes which word it denotes, and so may a store through any pointer,
+which can overwrite the pointer itself (`*pp = *q` with `pp == &q`). So a dereference mirror is
+dropped by a store to its pointer and by every store through a pointer; a frame slot or a global
+survives any store. `CodegenTest.DerefMirrorDroppedByStoreThroughPointer` runs the `pp == &q`
+case.
 
 ### 5.10 I/O address folding
 

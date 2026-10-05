@@ -565,6 +565,44 @@ c
               output);
 }
 
+// A store leaves A mirroring the stored location *and* the one it was loaded from: after
+// `*p = x`, returning x reloads nothing.  (TAC store-to-load forwarding turns `return *p`
+// into exactly this shape.)
+TEST_F(CodegenTest, ReloadOfStoredValueRemoved)
+{
+    std::string output = CompileToMadlen("int f(int *p, int x) { *p = x; return x; }");
+    EXPECT_EQ(R"(c
+        f:   ,name,
+    b/ret:   ,subp,
+             ,its, 13
+             ,call, b/save
+           6 ,xta, 1
+           6 ,wtc,
+             ,atx,
+             ,uj, b/ret
+             ,end,
+)",
+              output);
+}
+
+// The second mirror must not outlive a pointer it depends on.  A holds *q, and is stored
+// through pp, which points at q itself: q now holds that value, so *q denotes another
+// word, and the reload of *q must read memory.  (y read as a pointer is the word 4.)
+TEST_F(CodegenTest, DerefMirrorDroppedByStoreThroughPointer)
+{
+    std::string out = CompileAndRun(R"(
+        #include <stdio.h>
+        int y = 4;
+        int *py = &y;
+        int **q = &py;
+        int *f(int ***pp) { int *v = *q; *pp = (int **)v; return *q; }
+        void program(void) {
+            printf("%d\n", (int)(long)f(&q));
+        }
+    )");
+    EXPECT_EQ("4\n", out);
+}
+
 // A store through a *different* pointer leaves A mirroring `*q`, not `*p`, so the reload of
 // `*p` must survive: `q` may point anywhere.  The two locations differ by the frame slot
 // their pointer lives in (`6 ,wtc,` vs `6 ,wtc, 1`), which is what `loc_eq` compares.

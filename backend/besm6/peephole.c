@@ -292,8 +292,16 @@ static Omega omega_after(const Besm_Instr *i)
 // at the cursor, and `a_loc` is only ever read to match a *later* group, so the instruction
 // a tracked name points into always outlives the state that names it.
 //
+// A store does more than settle `a_loc`: it writes A's value, so A mirrors the stored
+// location *as well as* the one it mirrored before — `*p = x; return x;` needs no reload
+// of x.  The second mirror is `a_also`.  It survives a store unless its own meaning
+// changed: a dereference does when its pointer is the location stored to, and when the
+// store goes through a pointer at all (it may overwrite the other pointer).  A frame slot
+// or a global keeps its meaning, and its contents stay equal to A either way.
+//
 typedef struct {
     Loc a_loc;    // the location A currently mirrors (LOC_NONE: unknown)
+    Loc a_also;   // a second location A mirrors, left by a store (LOC_NONE: none)
     bool r_known; // true: r_val is the current mode register R
     int r_val;
     Omega omega;         // the ω group a conditional branch here would test
@@ -305,6 +313,7 @@ typedef struct {
 static void state_reset(PeepState *st)
 {
     st->a_loc          = loc_none();
+    st->a_also         = loc_none();
     st->r_known        = false;
     st->omega          = OMEGA_UNKNOWN;
     st->in_unreachable = false;
@@ -481,6 +490,41 @@ static bool is_block_boundary(const Besm_Instr *i)
 // Every other instruction may clobber A, so conservatively mark A unknown; later
 // rules refine this.
 //
+// Does the mirror `m` keep its meaning across a store to `stored`?
+static bool mirror_survives(Loc m, Loc stored)
+{
+    if (m.kind != LOC_DEREF)
+        return m.kind != LOC_NONE;
+    if (stored.kind == LOC_DEREF)
+        return false;
+    if (m.name == NULL)
+        return !(stored.kind == LOC_FRAME && stored.reg == m.reg && stored.off == m.off);
+    return !(stored.kind == LOC_GLOBAL && strcmp(stored.name, m.name) == 0);
+}
+
+// A loads `loaded`: it mirrors that location alone.
+static void mirror_load(PeepState *st, Loc loaded)
+{
+    st->a_loc  = loaded;
+    st->a_also = loc_none();
+}
+
+// A is stored to `stored`: it mirrors that, and keeps one earlier mirror still valid.
+static void mirror_store(PeepState *st, Loc stored)
+{
+    Loc keep = loc_eq(st->a_loc, stored) ? st->a_also : st->a_loc;
+    if (!mirror_survives(keep, stored))
+        keep = loc_none();
+    st->a_loc  = stored;
+    st->a_also = keep;
+}
+
+// Does A hold the value of `l`?
+static bool a_mirrors(const PeepState *st, Loc l)
+{
+    return loc_eq(l, st->a_loc) || loc_eq(l, st->a_also);
+}
+
 static void state_step(PeepState *st, const Besm_Instr *i)
 {
     // Mode register R: `ntr` (SETR) sets it to its operand.  Nothing else changes R
@@ -494,11 +538,13 @@ static void state_step(PeepState *st, const Besm_Instr *i)
     omega_step(st, i);
     switch (i->kind) {
     case BESM_MEM_XTA:
+        mirror_load(st, plain_loc(i));
+        return;
     case BESM_MEM_ATX:
-        st->a_loc = plain_loc(i);
+        mirror_store(st, plain_loc(i));
         return;
     default:
-        st->a_loc = loc_none();
+        mirror_load(st, loc_none());
         return;
     }
 }
@@ -515,7 +561,7 @@ static void state_step(PeepState *st, const Besm_Instr *i)
 //
 static bool rule_redundant_reload(const Besm_Instr *cur, const PeepState *st)
 {
-    return cur->kind == BESM_MEM_XTA && !cur->is_volatile && loc_eq(plain_loc(cur), st->a_loc);
+    return cur->kind == BESM_MEM_XTA && !cur->is_volatile && a_mirrors(st, plain_loc(cur));
 }
 
 //
@@ -1119,7 +1165,7 @@ static bool peephole_sweep(Besm_Block *block, const Frame *frame, const bool *mu
                 // Rule #27 for a global: the whole `utc name` + `xta` group reloads a
                 // location A already holds.  Delete setter and consumer together.
                 if (consumer->kind == BESM_MEM_XTA && !consumer->is_volatile &&
-                    loc_eq(gl, st.a_loc)) {
+                    a_mirrors(&st, gl)) {
                     Besm_Instr *next = consumer->next;
                     delete_group(block, prev, cur, count);
                     cur     = next;
@@ -1132,10 +1178,12 @@ static bool peephole_sweep(Besm_Block *block, const Frame *frame, const bool *mu
                 // computation names no location, and every other consumer — `xts`, `asx`,
                 // arithmetic, `vtm`, `vjm` — clobbers A.  Both land on LOC_NONE.  No group
                 // member is a SETR, so R is unchanged.
-                if (consumer->kind == BESM_MEM_XTA || consumer->kind == BESM_MEM_ATX)
-                    st.a_loc = gl;
+                if (consumer->kind == BESM_MEM_XTA)
+                    mirror_load(&st, gl);
+                else if (consumer->kind == BESM_MEM_ATX)
+                    mirror_store(&st, gl);
                 else
-                    st.a_loc = loc_none();
+                    mirror_load(&st, loc_none());
                 if (is_block_boundary(consumer)) // `wtc` + `vjm`: the indirect call
                     state_reset(&st);
                 // Only the consumer can touch ω: UTC and WTC keep it.  A group whose
