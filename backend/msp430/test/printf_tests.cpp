@@ -514,7 +514,7 @@ int main(void) {
 }
 
 // %f of DBL_MAX, the longest conversion: doprnt's 352-byte buffer on the stack fits the
-// 7.5 KB of RAM.  Only the first 15 digits are compared: the shared engine divides the
+// 15.5 KB of RAM.  Only the first 15 digits are compared: the shared engine divides the
 // integer part by 10 in binary64, so the digits past DBL_DIG need not be the host's.
 TEST_F(Msp430Test, PrintfDblMaxFits)
 {

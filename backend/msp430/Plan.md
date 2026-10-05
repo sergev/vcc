@@ -73,7 +73,7 @@ never renumbered. The prefix is `T`, for TI: `A`, `R`, `B`, `V`, `X` and `M` are
 | GCC's libraries | `libgcc.a` of the `430` multilib is linked after our `libc.a`. newlib is used only in tests, linked by `msp430-elf-gcc -mcpu=msp430 -msim` | Our runtime defines every helper our code calls. `libgcc.a` supplies what GCC's code calls beyond that (the `int` shift helpers and the shared epilogues), and is the reference our helpers are checked against. `-msim` brings newlib's startup, `msp430-sim.ld` and `libsim.a`, whose I/O mspsim serves |
 | Run environment | `mspsim -n <cycles> <elf>` | Our own simulator: ELF loader, console UART, an exit device, and newlib's host I/O |
 | I/O and exit | stdout through the USCI_A0 UART (`UCA0TXBUF` 0x0067, poll `IFG2` 0x0003 bit 1). `exit` writes the status to the stop register 0x01FE, which becomes mspsim's exit status | No timeout-and-kill protocol is needed, unlike AVR. The cycle limit `-n` gives deterministic timeouts |
-| Memory map | Data, `.bss` and stack in 0x0200–0x1FFF (7.5 KB); code and `.rodata` in 0x2000–0xFFDF (56 KB); vectors in 0xFFE0–0xFFFF, reset → `_start` | mspsim is all RAM, so the split is our choice. It mirrors a flash device, so the runtime stays honest about `.data` copying. The ROM grew from 48 KB at T17: `printf` with the soft binary64 under the naive selection takes over 45 KB |
+| Memory map | Data, `.bss` and stack in 0x0200–0x3FFF (15.5 KB); code and `.rodata` in 0x4000–0xFFDF (48 KB); vectors in 0xFFE0–0xFFFF, reset → `_start` | mspsim is all RAM, so the split is our choice. It mirrors a flash device, so the runtime stays honest about `.data` copying. The ROM grew to 56 KB at T17, for `printf` with the soft binary64 under the naive selection; after Phase 5 it is back at 48 KB, and the RAM at 15.5 KB |
 | Backend IR | A small hand-written `Msp_Instr` list, as in `avr_ir.h`. Every instruction knows its size, for branch relaxation | `msp430.asdl` stays the reference spec. The IR covers only what we emit |
 | Executable | `genmsp430` (`backend/msp430/`), library `msp430`; installed as `vgenmsp430` | Mirrors `genavr`/`vgenavr` |
 
@@ -695,7 +695,7 @@ Phase 5 is done:
   bug reads the wrong word without a fault.
   - Mitigation: T2's layout checks against the compilers; alignment kept through
     `ALLOCATE_LOCAL` and the outgoing area; byte copies for 1-aligned structs.
-- **7.5 KB of RAM.** A stack overflow into `.bss` is silent.
+- **15.5 KB of RAM.** A stack overflow into `.bss` is silent.
   - Mitigation: the link-time stack reserve, the canary checked at `exit`, and the book
     skip list.
 - **Irregular flags.** `mov` sets none, `bit`/`and` set C = !Z, and `xor` sets V oddly. A

@@ -1,9 +1,7 @@
 /*
  * The classic MSP430 under mspsim, whose 64 KB are all RAM: the peripherals below 0x200,
- * then 7.5 KB of "RAM" for .data, .bss, the heap and the stack, and 56 KB of "ROM" for
- * code, .rodata and the load image of .data, then the vectors at 0xffe0.  (The naive
- * code and the soft binary64 need the ROM: printf alone takes over 30 KB, even with
- * --gc-sections.)  The split
+ * then 15.5 KB of "RAM" for .data, .bss, the heap and the stack, and 48 KB of "ROM" for
+ * code, .rodata and the load image of .data, then the vectors at 0xffe0.  The split
  * mirrors a flash device, so crt0 copies .data as it would have to there.  The heap
  * follows .bss and grows up; the stack starts at the top of RAM and grows down.
  *
@@ -16,8 +14,8 @@ ENTRY(_start)
 
 MEMORY
 {
-    ram (rwx)    : ORIGIN = 0x0200, LENGTH = 0x1e00
-    rom (rx)     : ORIGIN = 0x2000, LENGTH = 0xdfe0
+    ram (rwx)    : ORIGIN = 0x0200, LENGTH = 0x3e00
+    rom (rx)     : ORIGIN = 0x4000, LENGTH = 0xbfe0
     vectors (rx) : ORIGIN = 0xffe0, LENGTH = 0x20
 }
 
