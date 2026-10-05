@@ -451,6 +451,25 @@ instructions.
     test casts `char *` buffers only at even offsets.
   - From here, the C library (`libc/common`, plus `libc/msp430` C sources) is built with
     `genmsp430` into `libc.a`, as AVR did at M15.
+
+  *Done.*
+  - `libc.a` now has the shared C library, built by `genmsp430`, but not the variadic
+    `printf` family (T16). It also has, from `libc/ilp32`, `int64.c` and the binary64
+    `frexp`/`ldexp`/`modf`.
+  - `muldi3.c` moved from `libc/avr` to `libc/common`, shared. AVR's tests pass
+    unchanged.
+  - `ptr_tests.cpp` has goldens: memory to memory through r15, index scaling by `rla`
+    or `__mspabi_mpyi`, byte access. A run covers arrays, a 2-D array of `long`,
+    pointer arithmetic and unsigned compares, plain `char` unsigned, and `strcpy`,
+    `strcmp`, `strlen`, `strchr`, `memcpy`, `memset` and `memcmp` from the library.
+  - **Book chapters 14–16 wait for T13:** 24 of their programs use `double`. Four
+    others are skipped for good, as on AVR:
+    - `SwitchDereferencedPointer` (case values collide);
+    - `BigArray` (a 16-bit `size_t`);
+    - `AccessThroughCharPointer` (reads past a 16-bit `int`);
+    - `CompoundBitwiseOpsChars` (shifts an `int` by 31).
+  - The four `Chapter11` programs that need `long long` division also wait for T13:
+    `int64.o` refers to the binary64 runtime.
 - **T15. Structs** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
   - **Copies** use words for a 2-aligned struct (`mov @r14+, x(r15)`) and bytes for a
     `char`-only one. Unrolled up to a threshold, then a counted loop, or `memcpy` as

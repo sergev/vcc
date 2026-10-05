@@ -101,11 +101,11 @@ endmacro()
 foreach(name atoi doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset printf
         puts putchar snprintf sprintf
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
-        strtok float32)
+        strtok float32 muldi3)
     avr_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 avr_compile_libc_c(int64 ${LIBC_ILP32_DIR})
-foreach(name frexp ldexp modf muldi3)
+foreach(name frexp ldexp modf)
     avr_compile_libc_c(${name} ${src})
 endforeach()
 

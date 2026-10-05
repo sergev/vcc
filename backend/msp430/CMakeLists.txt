@@ -31,6 +31,7 @@ add_executable(msp430-tests
     test/relax_tests.cpp
     test/call_tests.cpp
     test/data_tests.cpp
+    test/ptr_tests.cpp
     test/run_tests.cpp
     ${MSP430_BOOK_SOURCES}
 )

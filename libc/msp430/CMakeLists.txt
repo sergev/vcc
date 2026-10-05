@@ -74,6 +74,36 @@ foreach(name console divmod mul shift)
     list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
+
+# C sources, through cpp -> parse -> lower -> genmsp430 -> clang, with the MSP430 headers,
+# then the 16-bit model's, then the shared ones.
+set(MSP430_LIBC_INCLUDES -I${MSP430_INCLUDE_DIR} -I${IP16_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB MSP430_LIBC_HEADERS ${MSP430_INCLUDE_DIR}/*.h ${IP16_INCLUDE_DIR}/*.h
+    ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+macro(msp430_compile_libc_c name srcdir)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc ${MSP430_LIBC_INCLUDES}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t msp430 ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genmsp430 ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${RISCV_CLANG} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${srcdir}/${name}.c ${MSP430_LIBC_HEADERS} parse lower genmsp430
+        COMMENT "Compiling ${name}.c -> ${name}.o (MSP430)")
+    list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
+endmacro()
+
+# The shared C library but the variadic part (T16); from libc/ilp32 the long long
+# division and conversions and the binary64 frexp/ldexp/modf.
+foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 puts putchar
+        strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
+        strtok)
+    msp430_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+foreach(name int64 frexp ldexp modf)
+    msp430_compile_libc_c(${name} ${LIBC_ILP32_DIR})
+endforeach()
+
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
     COMMAND ${RISCV_AR} rcs ${out}/libc.a ${MSP430_LIBC_OBJS}

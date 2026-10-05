@@ -29,6 +29,10 @@ protected:
               "needs the 64-bit runtime (Plan.md, T14)" },
             { "Chapter11_SwitchLong", "case values collide in a 32-bit long" },
             { "Chapter12_UnsignedTypeSpecifiers", "loops forever with a 16-bit unsigned" },
+            { "Chapter14_SwitchDereferencedPointer", "case values collide in a 32-bit long" },
+            { "Chapter15_BigArray", "arrays too large for a 16-bit size_t" },
+            { "Chapter16_AccessThroughCharPointer", "reads past a 16-bit int" },
+            { "Chapter16_CompoundBitwiseOpsChars", "shifts an int by 31: undefined" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);
