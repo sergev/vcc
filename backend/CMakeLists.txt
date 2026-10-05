@@ -6,6 +6,7 @@ add_subdirectory(arm32)
 add_subdirectory(x86)
 add_subdirectory(avr)
 add_subdirectory(msp430)
+add_subdirectory(mmix)
 
 #
 # `genbesm` executable
@@ -77,3 +78,11 @@ add_executable(genmsp430
 target_link_libraries(genmsp430 msp430 backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genmsp430> DESTINATION bin RENAME vgenmsp430)
+
+#
+# `genmmix` executable
+#
+add_executable(genmmix
+    mmix/main.c
+)
+target_link_libraries(genmmix mmix backend_common)

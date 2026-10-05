@@ -260,7 +260,7 @@ boundary.
     a `.rodata` string that `geta` addresses needs `.p2align 2`, as GCC emits.
     Otherwise the link fails with "relocation truncated to fit: R_MMIX_GETA".
     `genmmix` must align every `geta` target.
-- **K6. Skeleton.** `backend/mmix/` with `CMakeLists.txt`, `mmix_ir.h`, `mmix_ir.c`,
+- **K6. Skeleton.** *Done.* `backend/mmix/` with `CMakeLists.txt`, `mmix_ir.h`, `mmix_ir.c`,
   `codegen.c`, `emit.c` and `main.c` (on `backend/common/driver.c`), producing `genmmix`.
   - **The IR** has a function, a block and an instruction (`op X,Y,Z`). Operands are:
     - a register `$n`, physical or virtual;
@@ -273,6 +273,23 @@ boundary.
   - **A test pins the rendering** of every instruction form. Every golden is also
     assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms` when it is installed, as
     x86-64's are by GNU `as`.
+
+  *Done.*
+  - **The IR** (`Mmix_Func`/`Mmix_Block`/`Mmix_Instr`) has six operand kinds: register,
+    immediate, wyde, symbol plus offset, label and special register.
+  - **Forms:** each opcode has one of 17 operand forms, and `mmix_emit_instr` checks an
+    instruction against its form. A wrong operand, or an immediate outside its field
+    (8 bits; 16 in `pop`'s YZ and in a wyde; 0–4 for a rounding mode), is a fatal error,
+    not a wrong instruction.
+  - **`codegen.c`** returns a constant through `$0` and `pop 1,0`. `genmmix` is built.
+  - **`emit_tests.cpp`** pins each form's syntax and the fatal checks.
+    `AssemblerAcceptsEveryForm` assembles every opcode in each of its forms.
+  - **Found by the assembler** (now in the forms):
+    - the floating-point operations take no immediate;
+    - `neg`/`negu` need an immediate Y;
+    - `fix`, `fixu` and `fsqrt` take Y as a rounding mode and Z only as a register.
+  - **Checked by hand:** `int main(void) { return 200; }` through `genmmix`, `as`, `ld`
+    and `mmix` gives status 200.
 - **K7. Run harness and first program.** `mmix_test.h` on the `QemuTest` fixture:
   - **The run configuration** (`QemuConfig`, `libc/mmix/CMakeLists.txt`):
     - `assembler` is `MMIX_AS` with `MMIX_AS_FLAGS`, an empty `link_script`;
