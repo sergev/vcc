@@ -1070,6 +1070,27 @@ static bool backward(Cfg *c)
                     continue;
                 }
             }
+            // mov @p, x; mov 2(p), y; ... into registers, p dead after: mov @p+, x; mov
+            // @p+, y (into a register only: clang's assembler).
+            if (in->op == MSP_MOV && is_reg(&in->opnd[1]) &&
+                (in->opnd[0].kind == MSP_OPND_IND || msp_zero_indexed(&in->opnd[0]))) {
+                int p = in->opnd[0].reg, step = in->byte ? 1 : 2, n = 1;
+                while (i + n < k->n) {
+                    const Msp_Instr *m = k->in[i + n];
+                    if (!m || m->vol || m->op != MSP_MOV || m->byte != in->byte ||
+                        !is_reg(&m->opnd[1]) || m->opnd[1].reg == p ||
+                        m->opnd[0].kind != MSP_OPND_INDEXED || m->opnd[0].reg != p ||
+                        m->opnd[0].sym || m->opnd[0].incoming || m->opnd[0].imm != step * n)
+                        break;
+                    n++;
+                }
+                if (p >= 4 && in->opnd[1].reg != p && n >= 2 && !(after[i + n - 1] & R(p))) {
+                    for (int j = 0; j < n; j++)
+                        k->in[i + j]->opnd[0] = msp_postinc(p);
+                    changed = true;
+                    continue;
+                }
+            }
             // add #k, b; then b a base and dead: the offset in the address.
             Msp_Operand kk;
             int sign;

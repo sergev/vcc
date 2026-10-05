@@ -23,6 +23,14 @@ mov 2(r15), 4(r1)
         << code;
 }
 
+// Consecutive words into registers through a pointer dead after: @r12+, no index word.
+TEST_F(Msp430Test, LoadsAutoIncrement)
+{
+    std::string code =
+        Code(CompileToMsp430("long add2(long *p, long *q) { return *p + *q; }"));
+    EXPECT_NE(std::string::npos, code.find("mov @r12+, r11\nmov @r12+, r14\n")) << code;
+}
+
 // A store takes its value straight from the immediate (or memory).
 EXPECT_CODE(StoreThroughPointer, R"(mov #1234, 0(r12)
 ret
