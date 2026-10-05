@@ -39,6 +39,10 @@ add_executable(msp430-tests
     test/float64_tests.cpp
     test/float64_host.c
     test/run_tests.cpp
+    test/printf_tests.cpp
+    test/str_tests.cpp
+    test/mem_tests.cpp
+    test/math_tests.cpp
     ${MSP430_BOOK_SOURCES}
 )
 target_link_libraries(msp430-tests msp430 parser translator semantic GTest::gtest_main

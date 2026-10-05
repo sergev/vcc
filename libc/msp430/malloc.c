@@ -36,13 +36,17 @@ void *calloc(size_t n, size_t size)
     return p;
 }
 
+/* A block that shrinks stays where it is. */
 void *realloc(void *p, size_t n)
 {
+    if (!p)
+        return malloc(n);
+    size_t old = ((size_t *)p)[-1];
+    if (n <= old)
+        return p;
     void *q = malloc(n);
-    if (q && p) {
-        size_t old = ((size_t *)p)[-1];
-        memcpy(q, p, old < n ? old : n);
-    }
+    if (q)
+        memcpy(q, p, old);
     return q;
 }
 

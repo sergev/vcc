@@ -121,7 +121,13 @@ void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *na
     while ((1 << log2) < align)
         log2++;
     bool bss = all_zero(init);
-    fprintf(out, "    %s\n", readonly ? ".section .rodata" : bss ? ".bss" : ".data");
+    // A section of its own, as for a function (emit.c).
+    if (readonly)
+        fprintf(out, "    .section .rodata.%s,\"a\",@progbits\n", name);
+    else if (bss)
+        fprintf(out, "    .section .bss.%s,\"aw\",@nobits\n", name);
+    else
+        fprintf(out, "    .section .data.%s,\"aw\",@progbits\n", name);
     if (global)
         fprintf(out, "    .globl  %s\n", name);
     if (log2)

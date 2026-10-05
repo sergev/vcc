@@ -441,47 +441,78 @@ Phase 3 is done:
 
 ## Phase 4 — library and headers
 
-- **T19. Headers.** `libc/msp430/include/`, ahead of `libc/ip16/include/` (T3) and
-  `libc/common/include/`:
-  - `float.h`: binary32 `FLT_*`, binary64 `DBL_*` = `LDBL_*`, and `FLT_EVAL_METHOD` 0;
-  - `math.h` for binary64 `double`, with `long double` = `double`;
-  - `setjmp.h`: R4–R10, SP and the return address;
-  - T16's `stdarg.h`, and T27's `stddef.h`;
-  - `RAND_MAX` 32767, in the target-owned place AVR moved it to.
+Phase 4 is done:
+- **Headers (T19).**
+  - **New:** `setjmp.h`. `jmp_buf` is nine words: R4–R10, SP after the return and the
+    return address, the registers newlib's `jmp_buf` saves.
+  - **Updated:** `math.h` lists what `libc.a` has. `sqrt` is the correctly rounded one
+    of `float64.c`, and the new `sqrtf.c` rounds it to `float`.
+  - **Checked against GCC:** `HeadersAgreeWithGcc` compares our headers' sizes, limits
+    and `float.h` values with GCC's `-mcpu=msp430` headers, and they agree.
+  - **Checked against clang:** `HeadersAgreeWithClang` compares the same values. clang
+    differs from GCC in more than `wchar_t`: its `wchar_t` and `wint_t` are `int`, its
+    `sig_atomic_t` `long` and its fast 8-bit types `char`. We follow GCC.
+  - **Shared headers:** `SharedHeadersFitInt16` covers `RAND_MAX`, `char32_t`,
+    `inttypes.h`, `sqrt` and `sqrtf`.
+- **`setjmp`/`longjmp` (T20)** are in `setjmp.s`. They work from our code and from GCC's
+  and clang's (`RunSetjmpLongjmp`, `RunSetjmpLongjmpGccClang`).
+- **Run tests (T20).**
+  - **Ported:** the `printf`/`str`/`mem`/`math` tests come from AVR, with the host's
+    output as the expectation. Two changes: plain `char` is unsigned, and a block is
+    2-aligned. MSP430's `double` is the host's, so no digit carve-out is needed.
+  - **Added:** x86-64's bit-exact `sqrt` runs, and a `sqrt`/`sqrtf` library test with
+    GCC.
+- **Against newlib (T20).** `RunAgainstNewlib` builds a case a second time with GCC and
+  newlib, runs it under mspsim, and requires the same output and result.
+  - **Every `str` and `mem` case** runs this way, except the `strerror` texts and
+    `realloc`'s shrink in place.
+  - **Every integer `printf` case within newlib-nano's formats** runs this way, plus a
+    new `h`/`l` case.
+  - **newlib-nano's limits:** it has no `ll`, `j`, `z`, `t` or `hh`, it dereferences a
+    null `%s`, and it has no floating point (`-u _printf_float` links no converter).
+- **`malloc` (T20)** stays MSP430's own C bump allocator, AVR's design. AVR keeps its
+  assembly version, which is smaller there. `realloc` now keeps a block that shrinks in
+  place, as AVR's does.
+- **Sections and `--gc-sections`.**
+  - **Why:** one object per source file, in whole-object linking, made `printf("%d")`
+    53 KB. Every member came in whole, and `mspabid.o` → `int64conv.o` → `mspabif.o`
+    pulled in the binary32 runtime as well.
+  - **Change:** `genmsp430` now gives every function and variable a section of its own
+    (`.text.f`, `.data.x`, `.bss.x`, `.rodata.x`), as GCC's `-ffunction-sections
+    -fdata-sections` does. The tests link with `--gc-sections`; T24's driver must too.
+  - **Result:** `printf("%d")` is now 33.8 KB.
+- **`doprnt` (T20).**
+  - **`FBUFSIZE`:** the 352-byte buffer fits. `%f` of `DBL_MAX`, the longest conversion,
+    runs in the 7.5 KB of RAM (`PrintfDblMaxFits`).
+  - **`%.17g` is not fixed.** The engine generates digits by `modf` in binary64: it
+    multiplies the fraction by 10 and divides the integer part by 10, so digits past
+    `DBL_DIG` need not be exact. `%.17g` of 0.1 prints `0.1`, and the 16th digit of
+    `DBL_MAX` comes out as 7 where the host prints 5.
+  - **Why not:** an exact conversion needs multiword arithmetic, roughly 1100 bits for a
+    binary64 fraction. That is more code and cycles on every target, and the 16-bit ones
+    can afford it least. It would be a shared task on its own, not an MSP430 one.
+- **Costs against GCC (T20)**, in mspsim cycles; GCC `-O1` code, ours still naive (Phase 5):
 
-  Add an `msp430-headers` CTest and its `-cpp` twin. Check our headers' sizes, limits and
-  type identities against GCC's `-mcpu=msp430 -dM -E`, as ARM32, x86-64 and AVR did
-  against clang. Then check them against clang's. **Done:** clang differs from GCC in
-  `wchar_t` and `wint_t` (`int`), `sig_atomic_t` (`long`) and the fast 8-bit types
-  (`char`), not in `wchar_t` alone; we follow GCC.
+  | | ours | GCC / newlib-nano |
+  |---|---|---|
+  | `printf("%d\n")` | 20 900 cycles, 33.8 KB | 6 000 cycles, 9.3 KB |
+  | `printf("%g\n")` | 184 000 cycles | — (no float formats) |
+  | `printf("%f", DBL_MAX)` | 26.6 M cycles | — |
+  | binary64 `+` `-` `*` `/` | 3 900, 4 200, 27 600, 16 500 | 4 800, 4 800, 23 600, 11 300 |
+  | binary32 `+` `-` `*` `/` | 2 400, 2 600, 3 300, 6 100 | 2 200, 2 200, 6 600, 2 700 |
+  | the four binary64 operations | 15.1 KB | 5.5 KB |
+  | the four binary32 operations | 6.4 KB | 2.8 KB |
 
-  Compare `jmp_buf` with newlib's (`~/.local/msp430-elf/include/machine/setjmp.h`) to
-  check which registers must be saved, not its layout: it is a different library.
-- **T20. Libc and run tests.**
-  - **`doprnt.c`** already sizes `%z`/`%t` by `size_t`/`ptrdiff_t`, and its buffers by
-    `DBL_MANT_DIG` (AVR, M21). Check them for binary64 on a 16-bit `int`. The ~350-byte
-    `FBUFSIZE` fits the stack, but count it against the 7.5 KB.
-  - **`%.17g` stops at about 16 digits** in the shared `doprnt`, on every target: its
-    conversion multiplies the fraction by 10 in binary64. Decide whether to fix it.
-  - **`frexp`/`ldexp`/`modf`** come from `libc/ilp32` (binary64).
-  - **`malloc`** sits between `__heap_start` and the stack. Reuse AVR's design, ideally
-    as one portable C allocator in `libc/common` if its assumptions allow, else
-    MSP430's own.
-  - **`setjmp`/`longjmp`** in assembly.
-  - **Run tests:** port the `printf`/`str`/`mem`/`math` run tests, with host libc output
-    as the expectation. MSP430's `double` is the host's, so no digit carve-out is needed.
-    Measure the cycle cost of `printf("%g")` through soft binary64.
-  - **Integer formats against newlib.** Build the integer-format cases with
-    `msp430-elf-gcc -msim` as well, and run them through newlib's `printf` under
-    mspsim: a second expectation, from a `printf` on the target. newlib was built
-    without float formatting, so it cannot check `%f`/`%e`/`%g`.
-  - **The `str` and `mem` run tests** run against newlib the same way.
-    Each case is one program, compiled once by `genmsp430` with our `libc.a` and once by
-    GCC with newlib, and the two outputs must be equal. This adds to the host
-    expectation; it does not replace it.
-  - **Cost against GCC.** Compare the cycles and code size of our `printf` and the
-    `float64.c` operations with newlib's `printf` and `libgcc`'s FP. This is a
-    measurement for the docs, not a gate.
+  Speed is comparable, and our code is 2.5–3 times larger.
+  - **Integer `printf` is 3.5 times slower,** because `doprnt` formats every integer as
+    a `long long`.
+  - **Size:** `__doprnt` alone is 9.8 KB, and every `printf` links the binary64 core
+    (`cvt`, `+ - * /`, about 13 KB more).
+
+  A newlib-style split, with float formatting in its own object linked on demand,
+  would remove that core from integer-only programs. It is left for after Phase 5,
+  which shrinks the code first.
+- **Tests:** 897 MSP430 tests pass.
 
 ## Phase 5 — code quality
 
@@ -541,8 +572,8 @@ Phase 3 is done:
 - **T24. Driver.** `vcc -t msp430` runs:
   - `vcpp -t msp430`, `vparse`, `vlower -t msp430`, `vgenmsp430`;
   - `msp430-elf-as -mcpu=msp430`;
-  - `msp430-elf-ld -T link.ld crt0.o … -lc`, then `libgcc.a` when it is found, so that
-    objects compiled by GCC link too.
+  - `msp430-elf-ld --gc-sections -T link.ld crt0.o … -lc`, then `libgcc.a` when it is
+    found, so that objects compiled by GCC link too.
 
   `cc-tests` cases, including a staged prefix. The output is an ELF that mspsim runs
   directly. Intel HEX (`msp430-elf-objcopy -O ihex`) is documented, and also runs.
@@ -557,7 +588,9 @@ Phase 3 is done:
     - the memory-to-memory selection and the constant generators;
     - frames and branch relaxation;
     - calls and variadics, with the split-`long` rule and structures by reference;
-    - where clang differs (structure arguments, `wchar_t`, `cmpd`);
+    - where clang differs (structure arguments, the variadic rule, `wchar_t`,
+      `wint_t`, `sig_atomic_t`, the fast 8-bit types, `cmpd`);
+    - sections per function and `--gc-sections`, and the costs against GCC (Phase 4);
     - the soft binary64 and the MSPABI helper contracts;
     - running a program by hand under mspsim, with `-t` tracing and `-g` debugging.
   - README and CLAUDE.md for seven targets, `libc/msp430/include/README.md`,

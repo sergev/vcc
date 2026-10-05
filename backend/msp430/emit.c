@@ -101,7 +101,9 @@ void msp_emit_instr(FILE *out, const Msp_Instr *in)
 
 void msp_emit_func(FILE *out, const Msp_Func *fn)
 {
-    fprintf(out, "    .text\n");
+    // A section of its own, as GCC's -ffunction-sections, so that a link with
+    // --gc-sections takes only the functions a program reaches from libc.a's objects.
+    fprintf(out, "    .section .text.%s,\"ax\",@progbits\n", fn->name);
     if (fn->global)
         fprintf(out, "    %-7s %s\n", ".globl", fn->name);
     fprintf(out, "    .p2align 1\n");

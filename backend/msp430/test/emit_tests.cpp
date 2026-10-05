@@ -130,7 +130,7 @@ TEST_F(EmitTest, Function)
     msp_append(fn, MSP_RET);
     std::string s = Capture([&](FILE *f) { msp_emit_func(f, fn); });
     msp_free_func(fn);
-    EXPECT_EQ(s, R"(    .text
+    EXPECT_EQ(s, R"(    .section .text.main,"ax",@progbits
     .globl  main
     .p2align 1
     .type   main, @function

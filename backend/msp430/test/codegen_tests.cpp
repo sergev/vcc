@@ -5,7 +5,7 @@
 
 TEST_F(Msp430Test, ReturnConstant)
 {
-    EXPECT_EQ(R"(    .text
+    EXPECT_EQ(R"(    .section .text.main,"ax",@progbits
     .globl  main
     .p2align 1
     .type   main, @function

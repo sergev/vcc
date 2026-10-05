@@ -52,7 +52,8 @@ inline bool msp430_clang_available()
 // "[Exit code N ...]" line confirms.
 //
 // GCC: msp430-elf-gcc assembles our output and compiles the C parts, msp430-elf-ld links,
-// and libgcc.a follows our libc.a for the helpers only GCC's code calls.
+// and libgcc.a follows our libc.a for the helpers only GCC's code calls.  Both links
+// drop the sections nothing reaches: genmsp430 gives every function and variable one.
 inline QemuConfig msp430_gcc_config()
 {
     return { "msp430-tests",
@@ -67,7 +68,7 @@ inline QemuConfig msp430_gcc_config()
              false,
              "",
              false,
-             {},
+             { "--gc-sections" },
              true,
              { MSP430_LIBGCC } };
 }
@@ -88,7 +89,7 @@ inline QemuConfig msp430_clang_config()
              false,
              "",
              false,
-             { "-n" },
+             { "-n", "--gc-sections" },
              true };
 }
 
@@ -237,6 +238,19 @@ protected:
         }
         exit_status = rc;
         return ReadFile(out_path);
+    }
+
+    // Run a program on our libc.a, and once more built by GCC (-O1 -fno-builtin) with
+    // newlib: the two outputs and results must agree.  Returns ours, with main's result in
+    // exit_status.
+    std::string RunAgainstNewlib(const std::string &src)
+    {
+        std::string ours = CompileAndRunMsp430(src);
+        int status       = exit_status;
+        EXPECT_EQ(ours, NewlibRun(src, { "-O1", "-fno-builtin", "-w" })) << "newlib disagrees";
+        EXPECT_EQ(status, exit_status) << "newlib's result disagrees";
+        exit_status = status;
+        return ours;
     }
 
     // Run a book program built by GCC (-O0) with newlib, its result printed as "%d\n" as

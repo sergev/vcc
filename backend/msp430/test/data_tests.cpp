@@ -12,7 +12,7 @@ TEST_F(Msp430Test, DataSections)
         static const char msg[] = "hi";
         const char *f(void) { return msg; }
     )");
-    EXPECT_NE(std::string::npos, s.find(R"(    .data
+    EXPECT_NE(std::string::npos, s.find(R"(    .section .data.d,"aw",@progbits
     .globl  d
     .p2align 1
     .type   d, @object
@@ -21,7 +21,7 @@ d:
     .short  5
 )"))
         << s;
-    EXPECT_NE(std::string::npos, s.find(R"(    .bss
+    EXPECT_NE(std::string::npos, s.find(R"(    .section .bss.b,"aw",@nobits
     .globl  b
     .p2align 1
     .type   b, @object
@@ -30,6 +30,7 @@ b:
     .zero   4
 )"))
         << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .section .data.msg,"aw",@progbits)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(msg:
     .ascii  "hi"
     .byte   0
