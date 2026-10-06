@@ -229,6 +229,8 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->frame);
     map_init(&g->globals);
     map_init(&g->consts);
+    map_init(&g->regs);
+    map_init(&g->dead);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
@@ -260,6 +262,8 @@ void gen_done(Gen *g)
     map_destroy_free(&g->frame, free_slot);
     map_destroy(&g->globals);
     map_destroy(&g->consts);
+    map_destroy(&g->regs);
+    map_destroy(&g->dead);
     mmix_free_func(g->fn);
 }
 
@@ -270,7 +274,35 @@ const char *gen_name(const Gen *g)
 
 int ret_reg(const Gen *g)
 {
-    return g->leaf ? 0 : REG_A;
+    return g->leaf || g->P > 0 ? 0 : hole_reg(g);
+}
+
+int rj_reg(const Gen *g)
+{
+    return g->P;
+}
+
+int hole_reg(const Gen *g)
+{
+    return phys_reg(g, V_HOLE);
+}
+
+int phys_reg(const Gen *g, int v)
+{
+    if (v < V_RJ)
+        return v;
+    return g->leaf ? v - V_HOLE + g->P : v - V_RJ + g->P;
+}
+
+int var_reg(const Gen *g, const char *name)
+{
+    intptr_t r;
+    return map_get(&g->regs, name, &r) ? phys_reg(g, (int)r - 1) : -1;
+}
+
+int val_reg(const Gen *g, const Tac_Val *v)
+{
+    return v->kind == TAC_VAL_VAR ? var_reg(g, v->u.var_name) : -1;
 }
 
 static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int off)
@@ -341,6 +373,19 @@ static void add_slot(Gen *g, const char *name, const Tac_Type *type, int size, i
     g->frame_size += size;
 }
 
+// Whether a float variable has a register, so the function needs the slot %.fround to
+// round it, or to convert it to or from the binary32 bits the ABI passes.
+static bool uses_float(const Gen *g)
+{
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next)
+        if (p->type && mmix_is_float(p->type) && var_reg(g, p->name) >= 0)
+            return true;
+    for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next)
+        if (p->type && mmix_is_float(p->type) && var_reg(g, p->name) >= 0)
+            return true;
+    return false;
+}
+
 void layout_frame(Gen *g)
 {
     StringMap allocs;
@@ -367,15 +412,17 @@ void layout_frame(Gen *g)
             fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
         if (param_byref(p->type)) // the callee's copy, 8-aligned for the address it holds first
             add_slot(g, p->name, p->type, mmix_type_size(p->type), 8);
-        else if (nparam < MAX_REG_ARGS)
+        else if (nparam < MAX_REG_ARGS && var_reg(g, p->name) < 0)
             add_slot(g, p->name, p->type, mmix_type_size(p->type), mmix_type_align(p->type));
     }
     if (returns_struct(g))
         add_slot(g, SRET_SLOT, NULL, 8, 8);
+    if (uses_float(g))
+        add_slot(g, FROUND_SLOT, NULL, 8, 8);
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
-        if (find_slot(g, p->name))
+        if (find_slot(g, p->name) || var_reg(g, p->name) >= 0)
             continue;
         int size = mmix_type_size(p->type), align = mmix_type_align(p->type);
         intptr_t v;
@@ -406,7 +453,7 @@ void layout_frame(Gen *g)
     // the frame, a narrow value (or a small structure) in its low-order (last) bytes.
     int i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
-        if (i < MAX_REG_ARGS || param_byref(p->type))
+        if (i < MAX_REG_ARGS || param_byref(p->type) || var_reg(g, p->name) >= 0)
             continue;
         int size = mmix_type_size(p->type);
         insert_slot(g, p->name, p->type, stack_param_off(g, i) + (size < 8 ? 8 - size : 0));
@@ -627,10 +674,42 @@ void address_of(Gen *g, int reg, const char *name, int64_t off)
     emit2(g, MMIX_LDA, mmix_reg(reg), mmix_sym(name, off));
 }
 
+void move_reg(Gen *g, int dst, int src)
+{
+    if (dst != src)
+        emit2(g, MMIX_SET, mmix_reg(dst), mmix_reg(src));
+}
+
+void extend_reg(Gen *g, int dst, int src, int size, bool sign)
+{
+    if (size >= 8) {
+        move_reg(g, dst, src);
+        return;
+    }
+    if (!sign && size == 1) {
+        emit3(g, MMIX_AND, mmix_reg(dst), mmix_reg(src), mmix_imm(255));
+        return;
+    }
+    int shift = 64 - 8 * size;
+    emit3(g, MMIX_SLU, mmix_reg(dst), mmix_reg(src), mmix_imm(shift));
+    emit3(g, sign ? MMIX_SR : MMIX_SRU, mmix_reg(dst), mmix_reg(dst), mmix_imm(shift));
+}
+
+void round_float(Gen *g, int reg)
+{
+    mem_op(g, MMIX_STSF, reg, FROUND_SLOT, 0);
+    mem_op(g, MMIX_LDSF, reg, FROUND_SLOT, 0);
+}
+
 void load_val(Gen *g, const Tac_Val *v, int reg)
 {
     if (v->kind == TAC_VAL_CONSTANT) {
         gen_const(g, reg, const_bits(v->u.constant));
+        return;
+    }
+    int r = val_reg(g, v);
+    if (r >= 0) {
+        move_reg(g, reg, r);
         return;
     }
     const Tac_Type *t = val_type(g, v);
@@ -653,24 +732,42 @@ uint64_t const_as(const Tac_Const *c, const Tac_Type *t)
     return bits;
 }
 
+// Whether variable `v` of type `vt` must be extended again to be in type `t`: of the
+// same width but the other signedness (copy propagation through a cast that emitted
+// nothing).
+static bool reextend(const Tac_Type *vt, const Tac_Type *t)
+{
+    if (!t || mmix_is_fp(vt) || mmix_is_fp(t) || !mmix_is_scalar(t) || !mmix_is_scalar(vt))
+        return false;
+    int size = mmix_type_size(vt);
+    return size == mmix_type_size(t) && size < 8 && mmix_is_unsigned(vt) != mmix_is_unsigned(t);
+}
+
 void load_val_as(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
 {
     const Tac_Type *vt = val_type(g, v);
-    if (mmix_is_fp(vt) || !t || mmix_is_fp(t) || !mmix_is_scalar(t)) {
-        load_val(g, v, reg);
-        return;
-    }
     if (v->kind == TAC_VAL_CONSTANT) {
-        gen_const(g, reg, const_as(v->u.constant, t));
+        gen_const(g, reg, mmix_is_fp(vt) ? const_bits(v->u.constant) : const_as(v->u.constant, t));
         return;
     }
-    // A variable of the operation's width but the other signedness (copy propagation
-    // through a cast that emitted nothing) is extended as the operation's type says.
-    int size = mmix_type_size(vt);
-    if (mmix_is_scalar(vt) && size == mmix_type_size(t) && size < 8)
-        mem_op(g, load_op_ext(size, !mmix_is_unsigned(t)), reg, v->u.var_name, 0);
-    else
+    if (!reextend(vt, t)) {
         load_val(g, v, reg);
+        return;
+    }
+    int r = val_reg(g, v), size = mmix_type_size(vt);
+    if (r >= 0)
+        extend_reg(g, reg, r, size, !mmix_is_unsigned(t));
+    else
+        mem_op(g, load_op_ext(size, !mmix_is_unsigned(t)), reg, v->u.var_name, 0);
+}
+
+int use_val(Gen *g, const Tac_Val *v, int scratch, const Tac_Type *t)
+{
+    int r = val_reg(g, v);
+    if (r >= 0 && !reextend(val_type(g, v), t))
+        return r;
+    load_val_as(g, v, scratch, t);
+    return scratch;
 }
 
 Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
@@ -680,15 +777,39 @@ Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
         if (bits <= 255)
             return mmix_imm((int64_t)bits);
     }
-    load_val_as(g, v, reg, t);
-    return mmix_reg(reg);
+    return mmix_reg(use_val(g, v, reg, t));
+}
+
+int def_reg(const Gen *g, const Tac_Val *dst, int scratch)
+{
+    int r = val_reg(g, dst);
+    return r >= 0 ? r : scratch;
+}
+
+void def_done(Gen *g, int reg, const Tac_Val *dst, bool canonical)
+{
+    if (dst->kind != TAC_VAL_VAR)
+        fatal_error("mmix: %s: store to a constant", gen_name(g));
+    const Tac_Type *t = val_type(g, dst);
+    int r             = var_reg(g, dst->u.var_name);
+    if (r < 0) {
+        mem_op(g, store_op(t), reg, dst->u.var_name, 0);
+        return;
+    }
+    if (canonical)
+        move_reg(g, r, reg);
+    else if (mmix_is_float(t)) {
+        move_reg(g, r, reg);
+        round_float(g, r);
+    } else if (mmix_is_fp(t))
+        move_reg(g, r, reg);
+    else
+        extend_reg(g, r, reg, mmix_type_size(t), !mmix_is_unsigned(t));
 }
 
 void store_val(Gen *g, int reg, const Tac_Val *v)
 {
-    if (v->kind != TAC_VAL_VAR)
-        fatal_error("mmix: %s: store to a constant", gen_name(g));
-    mem_op(g, store_op(val_type(g, v)), reg, v->u.var_name, 0);
+    def_done(g, reg, v, false);
 }
 
 enum { UNROLL = 16 }; // the most moves of a copy unrolled
@@ -820,9 +941,9 @@ static bool label_used(const Mmix_Func *fn, const char *label)
 
 void gen_frame(Gen *g)
 {
-    // The prologue: the frame first, then the register parameters into their slots,
-    // then rJ into $0, which the first of them has left.  The prologue block is not the
-    // last, so nothing here may start a block.
+    // The prologue: the frame first, then the parameters to their places, then rJ into
+    // $P, which no parameter is kept in.  The prologue block is not the last, so nothing
+    // here may start a block.
     Mmix_Block *body = switch_block(g, g->prologue);
     if (g->frame_size)
         adjust_sp(g, MMIX_SUBU);
@@ -830,17 +951,16 @@ void gen_frame(Gen *g)
         mem_op(g, MMIX_STO, MMIX_SRET, SRET_SLOT, 0);
     store_params(g);
     if (!g->leaf)
-        emit2(g, MMIX_GET, mmix_reg(REG_RJ), mmix_special(MMIX_rJ));
+        emit2(g, MMIX_GET, mmix_reg(rj_reg(g)), mmix_special(MMIX_rJ));
     switch_block(g, body);
 
     // The epilogue: rJ back, the result into $0, the frame freed.
     mmix_new_block(g->fn, label_used(g->fn, g->exit) ? g->exit : NULL);
     bool value = returns_value(g);
-    if (!g->leaf) {
-        emit2(g, MMIX_PUT, mmix_special(MMIX_rJ), mmix_reg(REG_RJ));
-        if (value)
-            emit2(g, MMIX_SET, mmix_reg(0), mmix_reg(REG_A));
-    }
+    if (!g->leaf)
+        emit2(g, MMIX_PUT, mmix_special(MMIX_rJ), mmix_reg(rj_reg(g)));
+    if (value)
+        move_reg(g, 0, ret_reg(g));
     if (g->frame_size)
         adjust_sp(g, MMIX_ADDU);
     emit2(g, MMIX_POP, mmix_imm(value ? 1 : 0), mmix_imm(0));

@@ -63,6 +63,7 @@ static const char seventeen[] = "long a0, long a1, long a2, long a3, long a4, lo
 // a narrow one in the last bytes of its slot (big-endian).
 TEST_F(MmixTest, StackParamsAboveFrame)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         (std::string("long f(") + seventeen + ", long a16, int a17) { return a16; }\n" +
          "int g(" + seventeen + ", long a16, int a17) { return a17; }\n")
@@ -78,13 +79,13 @@ EXPECT_CODE(LargeFrame,
             "setl $255,#148\n"
             "subu $254,$254,$255\n"
             "sto $0,$254,0\n"
-            "ldo $1,$254,0\n"
+            "ldo $248,$254,0\n"
             "setl $255,#138\n"
-            "sto $1,$254,$255\n"
+            "sto $248,$254,$255\n"
             "setl $255,#138\n"
-            "ldo $1,$254,$255\n"
+            "ldo $248,$254,$255\n"
             "setl $255,#140\n"
-            "sto $1,$254,$255\n"
+            "sto $248,$254,$255\n"
             "setl $255,#140\n"
             "ldo $0,$254,$255\n"
             "setl $255,#148\n"

@@ -167,11 +167,12 @@ int main(void) {
 // A call of sqrt is the fsqrt instruction (in rA's rounding mode), not a call.
 TEST_F(MmixTest, SqrtInstruction)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
 #include <math.h>
 double f(double x) { return sqrt(x); }
 )"));
-    EXPECT_NE(std::string::npos, code.find("fsqrt $1,0,$1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fsqrt $248,0,$248\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("pushj")) << code;
 }
 

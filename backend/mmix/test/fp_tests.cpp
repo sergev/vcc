@@ -11,6 +11,7 @@
 
 TEST_F(MmixTest, DoubleArithmetic)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         double f1(double a, double b) { return a + b; }
         double f2(double a, double b) { return a / b; }
@@ -18,40 +19,43 @@ TEST_F(MmixTest, DoubleArithmetic)
         double sqrt(double);
         double f4(double a) { return sqrt(a); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nldo $2,$254,8\nfadd $3,$1,$2\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fdiv $3,$1,$2\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("seth $255,#8000\nxor $1,$1,$255\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fsqrt $1,0,$1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nldo $249,$254,8\nfadd $250,$248,$249\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fdiv $250,$248,$249\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("seth $255,#8000\nxor $248,$248,$255\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fsqrt $248,0,$248\n")) << code;
 }
 
 // A float is loaded with ldsf, computed in binary64, and rounded by stsf on its store.
 TEST_F(MmixTest, FloatArithmetic)
 {
+    NaiveSelection();
     std::string code =
         Code(CompileToMmix("float f(float a, float b) { return a * b; }"));
-    EXPECT_NE(std::string::npos, code.find("ldsf $1,$254,0\nldsf $2,$254,4\nfmul $3,$1,$2\nstsf $3,"))
+    EXPECT_NE(std::string::npos, code.find("ldsf $248,$254,0\nldsf $249,$254,4\nfmul $250,$248,$249\nstsf $250,"))
         << code;
 }
 
 // <= and >= rule out an unordered pair with fun; == is feql, != its complement.
 TEST_F(MmixTest, DoubleComparisons)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         int f1(double a, double b) { return a < b; }
         int f2(double a, double b) { return a <= b; }
         int f3(double a, double b) { return a == b; }
         int f4(double a, double b) { return a != b; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("fcmp $3,$1,$2\nzsn $3,$3,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fcmp $250,$248,$249\nzsn $250,$250,1\n")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("fcmp $3,$1,$2\nfun $255,$1,$2\nzsnp $3,$3,1\ncsnz $3,$255,0\n"))
+              code.find("fcmp $250,$248,$249\nfun $255,$248,$249\nzsnp $250,$250,1\ncsnz $250,$255,0\n"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("feql $3,$1,$2\nsttu $3,")) << code;
-    EXPECT_NE(std::string::npos, code.find("feql $3,$1,$2\nzsz $3,$3,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("feql $250,$248,$249\nsttu $250,")) << code;
+    EXPECT_NE(std::string::npos, code.find("feql $250,$248,$249\nzsz $250,$250,1\n")) << code;
 }
 
 TEST_F(MmixTest, FpConversions)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         long f1(double d) { return d; }
         unsigned long f2(double d) { return d; }
@@ -60,19 +64,20 @@ TEST_F(MmixTest, FpConversions)
         float f5(long l) { return l; }
         float f6(unsigned l) { return l; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("fix $1,1,$1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fixu $1,1,$1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("flot $1,$1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("flotu $1,$1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("sflot $1,$1\nstsf $1,")) << code;
-    EXPECT_NE(std::string::npos, code.find("sflotu $1,$1\nstsf $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("fix $248,1,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fixu $248,1,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("flot $248,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("flotu $248,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sflot $248,$248\nstsf $248,")) << code;
+    EXPECT_NE(std::string::npos, code.find("sflotu $248,$248\nstsf $248,")) << code;
 }
 
 // A truth test is any bit but the sign.
 TEST_F(MmixTest, FpTruthTest)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("int f(double d) { if (d) return 1; return 2; }"));
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nslu $1,$1,1\nbz $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nslu $248,$248,1\nbz $248,")) << code;
 }
 
 // A double constant as an exact C expression.

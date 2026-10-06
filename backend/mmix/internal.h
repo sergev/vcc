@@ -8,16 +8,25 @@
 // pointer, $251 the structure-result address, $255 scratch, and the linker allocates
 // base registers below $247.
 //
-// Naive selection: every TAC variable lives in memory, a `%` name in a frame slot
-// (k($254)), any other name at its symbol.  An operation loads its operands into the
-// scratch registers $1-$3, operates, and stores the result.  A non-leaf function keeps
-// rJ in $0, so every call is pushj $1: its arguments go in $2..$17, its result comes back
-// in $1, and nothing else lives in a register across it.  A leaf keeps nothing, and
-// returns its result straight in $0.  $255 holds an address or an offset that does not
-// fit the instruction.  A register value is always extended to 64 bits, as its type
-// says; memory holds a narrow value in its own width, so a store truncates and a load
-// extends.  A float is held in a register as its exact binary64 value: ldsf and stsf
-// convert, and stsf rounds.
+// Registers, as the allocator numbers them (regalloc.c), in GCC's fixed model: $0-$13
+// hold values live across a call, $14 rJ, $15 the hole of every call (pushj $15), and
+// $16-$31 the arguments and the values live across no call.  A scalar `%` name that is
+// never in memory may get one of them (a value live across a call one of $0-$13);
+// any other `%` name lives in a frame slot (k($254)), any other name at its symbol.
+// The compaction then moves $14 up: P being one more than the highest of $0-$13 in use,
+// rJ goes in $P, the hole in $(P+1) and the arguments from $(P+2), one uniform shift of
+// $14-$31 (a leaf has no rJ: $15-$31 go from $P).  With nothing allocated, P is 0:
+// every call is pushj $1, with rJ in $0.  A result goes back in $0, or in the hole when
+// rJ is in $0.
+//
+// An instruction works on registers directly, and goes through the scratch registers
+// $248-$250 for an operand in memory or a constant: globals that GCC treats as
+// call-clobbered and crt0 reserves, so none is ever allocated and none holds a value
+// across a call.  $255 holds an address or an offset that does not fit the instruction.
+// A register value is always extended to 64 bits, as its type says; memory holds a
+// narrow value in its own width, so a store truncates and a load extends.  A float is
+// held in a register as its exact binary64 value: ldsf and stsf convert, and stsf
+// rounds; a float result in a register is rounded through the slot %.fround.
 //
 // Frame (SP is constant in the body; every offset is from it):
 //   frame + 8*i ...     incoming stack arguments, the 17th and later
@@ -45,13 +54,16 @@
 #include "tac.h"
 
 enum {
-    REG_RJ   = 0, // rJ in a non-leaf function
-    REG_A    = 1, // scratch, and a call's hole
-    REG_B    = 2,
-    REG_C    = 3,
-    REG_ARG0 = 2, // the first argument of a call: pushj $1
+    REG_A        = 248, // scratch
+    REG_B        = 249,
+    REG_C        = 250,
+    V_RJ         = 14, // the allocator's numbering: rJ,
+    V_HOLE       = 15, // the hole,
+    V_ARG0       = 16, // the first argument,
+    V_LAST       = 31, // the last local
     MAX_REG_ARGS = 16,
 };
+#define FROUND_SLOT "%.fround"
 
 typedef struct {
     const Tac_Type *type;
@@ -72,6 +84,9 @@ typedef struct {
     int frame_size;    // bytes of the outgoing area and the slots, a multiple of 8
     int va_off;        // a variadic function: the first variable argument's slot
     bool leaf;         // makes no call: rJ stays where it is
+    StringMap regs;    // name → its register in the allocator's numbering + 1
+    StringMap dead;    // allocated parameters dead on entry
+    int P;             // the compaction: $0..$(P-1) hold values live across a call
     char exit[32];     // the label of the epilogue
 } Gen;
 
@@ -123,8 +138,17 @@ Mmix_Instr *emit0(Gen *g, Mmix_Op op);
 Mmix_Instr *emit1(Gen *g, Mmix_Op op, Mmix_Operand a);
 Mmix_Instr *emit2(Gen *g, Mmix_Op op, Mmix_Operand a, Mmix_Operand b);
 Mmix_Instr *emit3(Gen *g, Mmix_Op op, Mmix_Operand a, Mmix_Operand b, Mmix_Operand c);
-// The register a result goes back in: $0 in a leaf, else $1, which the epilogue moves.
+// The register a result goes back in: $0, or the hole when rJ is in $0, which the
+// epilogue moves.
 int ret_reg(const Gen *g);
+// rJ's register in a function that makes a call, and the hole of its calls.
+int rj_reg(const Gen *g);
+int hole_reg(const Gen *g);
+// The register of allocator register `v`, after the compaction.
+int phys_reg(const Gen *g, int v);
+// The register of variable `name`, or -1 when it is in memory.
+int var_reg(const Gen *g, const char *name);
+int val_reg(const Gen *g, const Tac_Val *v);
 
 // The 64-bit value of constant `c` as a register holds it: an integer extended as its
 // kind says, a float or double as binary64 (a float's exact value), a long double
@@ -162,6 +186,21 @@ uint64_t const_as(const Tac_Const *c, const Tac_Type *t);
 Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t);
 // Store `reg` into variable `v`, in its own width.
 void store_val(Gen *g, int reg, const Tac_Val *v);
+// The register holding `v` in type `t` (its own when NULL): its own when it has one and
+// needs no other extension, else `scratch`, loaded.
+int use_val(Gen *g, const Tac_Val *v, int scratch, const Tac_Type *t);
+// The register a result for `dst` is computed in: its own, or `scratch`.
+int def_reg(const Gen *g, const Tac_Val *dst, int scratch);
+// The result for `dst` is in `reg` (from def_reg): stored when `dst` is in memory, else
+// extended when not `canonical` (an integer result that may have overflowed its type),
+// rounded when a float.
+void def_done(Gen *g, int reg, const Tac_Val *dst, bool canonical);
+// `dst` = `src` extended from its low `size` bytes as `sign` says (size 8: a move).
+void extend_reg(Gen *g, int dst, int src, int size, bool sign);
+// `dst` = `src`, unless the same.
+void move_reg(Gen *g, int dst, int src);
+// Round the binary64 value in `reg` to binary32, through the slot %.fround.
+void round_float(Gen *g, int reg);
 // Whether a structure goes in a register (8 bytes or less) rather than by reference.
 bool struct_in_reg(const Tac_Type *t);
 // Whether the function returns a structure, through $251.
@@ -196,12 +235,18 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
 int instr_out_size(const Gen *g, const Tac_Instruction *in);
 
 //
+// Register allocation (regalloc.c)
+//
+void gen_regalloc(Gen *g);
+
+//
 // Floating point, in hardware (fp.c)
 //
 void gen_fp_binary(Gen *g, const Tac_Instruction *in);
 void gen_fp_unary(Gen *g, const Tac_Instruction *in);
-// `reg` = whether FP value `v` is not a zero of either sign (NaN is true): nonzero then.
-void gen_fp_test(Gen *g, const Tac_Val *v, int reg);
+// Whether FP value `v` is not a zero of either sign (NaN is true): nonzero then, in
+// `scratch`, which is returned.
+int gen_fp_test(Gen *g, const Tac_Val *v, int scratch);
 void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
 
 //

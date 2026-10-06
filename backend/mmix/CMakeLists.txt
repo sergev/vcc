@@ -10,6 +10,7 @@ add_library(mmix STATIC
     data.c
     fp.c
     codegen.c
+    regalloc.c
 )
 target_include_directories(mmix PUBLIC .)
 target_link_libraries(mmix backend_common tac libutil)
@@ -34,6 +35,7 @@ add_executable(mmix-tests
     test/ptr_tests.cpp
     test/struct_tests.cpp
     test/stdarg_tests.cpp
+    test/regalloc_tests.cpp
     test/interop_tests.cpp
     test/math_tests.cpp
     test/mem_tests.cpp

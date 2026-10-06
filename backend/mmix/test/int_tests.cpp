@@ -86,9 +86,9 @@ TEST(MmixConst, Table)
 EXPECT_CODE(AddImmediate,
             "subu $254,$254,16\n"
             "sto $0,$254,0\n"
-            "ldo $1,$254,0\n"
-            "addu $1,$1,200\n"
-            "sto $1,$254,8\n"
+            "ldo $248,$254,0\n"
+            "addu $248,$248,200\n"
+            "sto $248,$254,8\n"
             "ldo $0,$254,8\n"
             "addu $254,$254,16\n"
             "pop 1,0\n",
@@ -98,25 +98,27 @@ EXPECT_CODE(AddImmediate,
 // stored in its own width, which wraps it.
 TEST_F(MmixTest, SignedAddIsAddu)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("int f(int a, int b) { return a + b; }"));
-    EXPECT_NE(std::string::npos, code.find("addu $1,$1,$2\nsttu $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("addu $248,$248,$249\nsttu $248,")) << code;
     EXPECT_EQ(std::string::npos, code.find("add $")) << code;
 }
 
 // A comparison is cmp and a conditional set; against zero the value decides alone.
 TEST_F(MmixTest, Comparisons)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "int f1(long a, long b) { return a < b; }\n"
         "int f2(unsigned a, unsigned b) { return a >= b; }\n"
         "int f3(long a) { return a > 7; }\n"
         "int f4(long a) { return a < 0; }\n"
         "int f5(unsigned long a) { return a == 0; }\n"));
-    EXPECT_NE(std::string::npos, code.find("cmp $1,$1,$2\nzsn $1,$1,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("cmpu $1,$1,$2\nzsnn $1,$1,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("cmp $1,$1,7\nzsp $1,$1,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nzsn $1,$1,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nzsz $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("cmp $248,$248,$249\nzsn $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("cmpu $248,$248,$249\nzsnn $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("cmp $248,$248,7\nzsp $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nzsn $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nzsz $248,$248,1\n")) << code;
 }
 
 // Signed division: div floors, and the fix-up truncates; the remainder from rR.
@@ -124,15 +126,15 @@ EXPECT_CODE(SignedDivide,
             "subu $254,$254,24\n"
             "sto $0,$254,0\n"
             "sto $1,$254,8\n"
-            "ldo $1,$254,0\n"
-            "ldo $2,$254,8\n"
-            "div $3,$1,$2\n"
+            "ldo $248,$254,0\n"
+            "ldo $249,$254,8\n"
+            "div $250,$248,$249\n"
             "get $255,rR\n"
-            "xor $1,$1,$2\n"
-            "zsn $1,$1,1\n"
-            "csz $1,$255,0\n"
-            "addu $3,$3,$1\n"
-            "sto $3,$254,16\n"
+            "xor $248,$248,$249\n"
+            "zsn $248,$248,1\n"
+            "csz $248,$255,0\n"
+            "addu $250,$250,$248\n"
+            "sto $250,$254,16\n"
             "ldo $0,$254,16\n"
             "addu $254,$254,24\n"
             "pop 1,0\n",
@@ -140,54 +142,60 @@ EXPECT_CODE(SignedDivide,
 
 TEST_F(MmixTest, SignedRemainder)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long a, long b) { return a % b; }"));
-    EXPECT_NE(std::string::npos, code.find("div $3,$1,$2\n"
+    EXPECT_NE(std::string::npos, code.find("div $250,$248,$249\n"
                                            "get $255,rR\n"
-                                           "xor $1,$1,$2\n"
-                                           "zsn $1,$1,$2\n"
-                                           "csz $1,$255,0\n"
-                                           "subu $3,$255,$1\n"))
+                                           "xor $248,$248,$249\n"
+                                           "zsn $248,$248,$249\n"
+                                           "csz $248,$255,0\n"
+                                           "subu $250,$255,$248\n"))
         << code;
 }
 
 TEST_F(MmixTest, UnsignedDivide)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("unsigned long f(unsigned long a) { return a % 10; }"));
-    EXPECT_NE(std::string::npos, code.find("divu $1,$1,10\nget $1,rR\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("divu $248,$248,10\nget $248,rR\n")) << code;
 }
 
 TEST_F(MmixTest, UnaryOps)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "long f1(long a) { return -a; }\n"
         "long f2(long a) { return ~a; }\n"
         "int f3(long a) { return !a; }\n"));
-    EXPECT_NE(std::string::npos, code.find("negu $1,0,$1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("nor $1,$1,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("zsz $1,$1,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("negu $248,0,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("nor $248,$248,0\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("zsz $248,$248,1\n")) << code;
 }
 
 TEST_F(MmixTest, Shifts)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "long f1(long a, int n) { return a >> n; }\n"
         "unsigned long f2(unsigned long a) { return a >> 3; }\n"
         "long f3(long a) { return a << 60; }\n"));
-    EXPECT_NE(std::string::npos, code.find("sr $1,$1,$2\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("sru $1,$1,3\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("slu $1,$1,60\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sr $248,$248,$249\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sru $248,$248,3\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("slu $248,$248,60\n")) << code;
 }
 
-// A width conversion loads the source from its own width, extended as it says.
+// A width conversion loads the source from its own width, extended as it says; a
+// truncation loads only the low-order bytes, which are the last (big-endian).
 TEST_F(MmixTest, WidthConversions)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "long f1(int a) { return a; }\n"
         "unsigned long f2(unsigned a) { return a; }\n"
         "int f3(long a) { return (signed char)a; }\n"));
-    EXPECT_NE(std::string::npos, code.find("ldt $1,$254,0\nsto $1,")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldtu $1,$254,0\nsto $1,")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nstbu $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldt $248,$254,0\nsto $248,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldtu $248,$254,0\nsto $248,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldb $248,$254,7\nstbu $248,")) << code;
 }
 
 // The expression of `op` on a and b in C, and on the host.

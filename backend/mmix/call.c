@@ -38,10 +38,94 @@ static void store_abi(Gen *g, int reg, const char *name, const Tac_Type *t)
     mem_op(g, mmix_is_float(t) ? MMIX_STTU : store_op(t), reg, name, 0);
 }
 
+// A move between registers, as if at once with the others of a parallel move: a copy,
+// an extension again (to a parameter's type), or a float between binary64 in a
+// register and the binary32 bits the ABI passes, through %.fround.
+typedef enum { MOVE_SET, MOVE_EXT, MOVE_TO_BITS, MOVE_FROM_BITS } MoveKind;
+typedef struct {
+    int dst, src;
+    MoveKind kind;
+    int size; // MOVE_EXT: the width
+    bool sign;
+} Move;
+
+static void emit_move(Gen *g, const Move *m)
+{
+    switch (m->kind) {
+    case MOVE_SET:
+        move_reg(g, m->dst, m->src);
+        break;
+    case MOVE_EXT:
+        extend_reg(g, m->dst, m->src, m->size, m->sign);
+        break;
+    case MOVE_TO_BITS:
+        mem_op(g, MMIX_STSF, m->src, FROUND_SLOT, 0);
+        mem_op(g, MMIX_LDT, m->dst, FROUND_SLOT, 0);
+        break;
+    case MOVE_FROM_BITS:
+        mem_op(g, MMIX_STTU, m->src, FROUND_SLOT, 0);
+        mem_op(g, MMIX_LDSF, m->dst, FROUND_SLOT, 0);
+        break;
+    }
+}
+
+// A move goes when no other still reads its destination.  When every one waits, one
+// whose source another writes has that source copied to $250 first.
+static void parallel_move(Gen *g, Move *m, int n)
+{
+    while (n > 0) {
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            bool blocked = false;
+            for (int j = 0; j < n && !blocked; j++)
+                blocked = j != i && m[j].src == m[i].dst;
+            if (!blocked)
+                pick = i;
+        }
+        if (pick >= 0) {
+            if (m[pick].kind != MOVE_SET || m[pick].dst != m[pick].src)
+                emit_move(g, &m[pick]);
+            m[pick] = m[--n];
+            continue;
+        }
+        // Every one waits: a cycle.  Any of its sources goes to $250.
+        move_reg(g, REG_C, m[0].src);
+        m[0].src = REG_C;
+    }
+}
+
+// The move of value `v`, in register `src`, to register `dst` as the ABI passes it in
+// type `t`: a float as its binary32 bits, an integer of `t`'s width extended as `t` says.
+static Move abi_move(const Gen *g, int dst, int src, const Tac_Val *v, const Tac_Type *t)
+{
+    const Tac_Type *vt = val_type(g, v);
+    if (!t)
+        t = vt;
+    Move m = { dst, src, MOVE_SET, 8, false };
+    if (mmix_is_float(vt))
+        m.kind = MOVE_TO_BITS;
+    else if (!mmix_is_fp(vt) && !mmix_is_fp(t) && mmix_is_scalar(t) &&
+             (mmix_type_size(t) < mmix_type_size(vt) ||
+              (mmix_type_size(t) == mmix_type_size(vt) && mmix_type_size(t) < 8 &&
+               mmix_is_unsigned(t) != mmix_is_unsigned(vt)))) {
+        m.kind = MOVE_EXT;
+        m.size = mmix_type_size(t);
+        m.sign = !mmix_is_unsigned(t);
+    }
+    return m;
+}
+
 // A scalar value into register `reg` as the ABI passes it, in type `t` (its own when
 // NULL): extended to 64 bits, a float as its binary32 bits.
 static void load_abi(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
 {
+    int r = val_reg(g, v);
+    if (r >= 0) {
+        Move m = abi_move(g, reg, r, v, t);
+        if (m.kind != MOVE_SET || reg != r)
+            emit_move(g, &m);
+        return;
+    }
     if (!t)
         t = val_type(g, v);
     if (!mmix_is_float(t)) {
@@ -54,24 +138,62 @@ static void load_abi(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
         mem_op(g, MMIX_LDT, reg, v->u.var_name, 0);
 }
 
-// The register parameters into their slots: of a structure over 8 bytes, the address of
-// the caller's object, in the first octa of the slot that copy_byref_params fills.
+// A result of type `t` in register `src`, as the ABI returns it, into `dst`: a float
+// from its binary32 bits, a narrow integer extended (GCC's callee leaves it as it is).
+static void take_result(Gen *g, int src, const Tac_Val *dst)
+{
+    const Tac_Type *t = val_type(g, dst);
+    int r             = val_reg(g, dst);
+    if (r < 0) {
+        store_abi(g, src, dst->u.var_name, t);
+        return;
+    }
+    Move m = { r, src, MOVE_SET, 8, false };
+    if (mmix_is_float(t))
+        m.kind = MOVE_FROM_BITS;
+    else if (!mmix_is_fp(t) && mmix_type_size(t) < 8)
+        m = (Move){ r, src, MOVE_EXT, mmix_type_size(t), !mmix_is_unsigned(t) };
+    emit_move(g, &m);
+}
+
+// The variadic save area, then the parameters that stay in memory, then those in
+// registers moved to their own (as if at once), then those on the stack loaded into
+// theirs.  Of a structure over 8 bytes, the address of the caller's object goes in the
+// first octa of the slot that copy_byref_params fills.  A narrow integer comes
+// extended, which the caller does (GCC's too).
 void store_params(Gen *g)
 {
-    int i = 0;
+    // A variadic function's save area: every argument register after the named ones,
+    // whether the caller passed it or not (a register above rL reads as 0).
+    if (g->tl->u.function.variadic)
+        for (int r = param_count(g); r < MAX_REG_ARGS; r++)
+            mem_op_at(g, MMIX_STO, r, MMIX_SP, g->va_off + 8 * (r - param_count(g)));
+    Move m[MAX_REG_ARGS];
+    int n = 0, i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p && i < MAX_REG_ARGS; p = p->next, i++) {
-        if (mmix_is_scalar(p->type))
+        int r = var_reg(g, p->name);
+        intptr_t dead;
+        if (r >= 0) {
+            if (!map_get(&g->dead, p->name, &dead))
+                m[n++] = (Move){ r, i, mmix_is_float(p->type) ? MOVE_FROM_BITS : MOVE_SET, 8,
+                                 false };
+        } else if (mmix_is_scalar(p->type))
             store_abi(g, i, p->name, p->type);
         else if (struct_in_reg(p->type))
             store_small_struct(g, i, p->name, p->type);
         else
             mem_op(g, MMIX_STO, i, p->name, 0);
     }
-    // A variadic function's save area: every argument register after the named ones,
-    // whether the caller passed it or not (a register above rL reads as 0).
-    if (g->tl->u.function.variadic)
-        for (int r = param_count(g); r < MAX_REG_ARGS; r++)
-            mem_op_at(g, MMIX_STO, r, MMIX_SP, g->va_off + 8 * (r - param_count(g)));
+    parallel_move(g, m, n);
+    i = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
+        int r = var_reg(g, p->name);
+        intptr_t dead;
+        if (i < MAX_REG_ARGS || r < 0 || map_get(&g->dead, p->name, &dead))
+            continue;
+        int size = mmix_type_size(p->type);
+        mem_op_at(g, load_op(p->type), r, MMIX_SP, stack_param_off(g, i) + 8 - size);
+    }
 }
 
 void copy_byref_params(Gen *g)
@@ -143,12 +265,6 @@ static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type 
         add_offset(g, reg, MMIX_SP, copy);
 }
 
-// pushj $1: rJ is in $0, which the call keeps; the arguments go in $2..$17 and on the
-// stack at 0($254) up, the result comes back in $1.  First the copies of the large
-// structure arguments, through $1-$3 (the callee copies too, as GCC's does, but ours keep
-// an argument apart from the result's destination in x = f(x)); then the stack arguments, through $1 and $2; then
-// the register arguments, while no argument register holds anything yet.  A structure
-// result goes where $251 points: the destination, or a scratch copy when there is none.
 // va_start(ap), a call of __va_start(&ap): ap = the first variable argument's slot.
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
@@ -161,6 +277,14 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     mem_op_at(g, MMIX_STO, REG_B, REG_A, 0);
 }
 
+// pushj $H, H the hole: the arguments go in $(H+1).. and on the stack at 0($254) up,
+// the result comes back in $H.  First the copies of the large structure arguments
+// (the callee copies too, as GCC's does, but ours keep an argument apart from the
+// result's destination in x = f(x)), then the stack arguments, through the scratch
+// registers; then a function pointer into $249, since an argument register may hold
+// it; then the register arguments in registers, as if at once, then the others loaded.
+// A structure result goes where $251 points: the destination, or a scratch copy when
+// there is none.
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     if (is_va_start(in)) {
@@ -190,9 +314,23 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         load_arg(g, a, REG_A, REG_B, param_type(ft, i), copy[i]);
         mem_op_at(g, MMIX_STO, REG_A, MMIX_SP, 8 * (i - MAX_REG_ARGS));
     }
+    if (in->u.fun_call.indirect)
+        load_val(g, &(Tac_Val){ .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name },
+                 REG_B);
+    int hole = hole_reg(g);
+    Move m[MAX_REG_ARGS];
+    int n = 0;
+    i     = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a && i < MAX_REG_ARGS; a = a->next, i++) {
+        int r = val_reg(g, a);
+        if (r >= 0)
+            m[n++] = abi_move(g, hole + 1 + i, r, a, param_type(ft, i));
+    }
+    parallel_move(g, m, n);
     i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a && i < MAX_REG_ARGS; a = a->next, i++)
-        load_arg(g, a, REG_ARG0 + i, REG_A, param_type(ft, i), copy[i]);
+        if (val_reg(g, a) < 0)
+            load_arg(g, a, hole + 1 + i, REG_A, param_type(ft, i), copy[i]);
 
     const Tac_Val *dst = in->u.fun_call.dst;
     bool sret          = dst ? !mmix_is_scalar(val_type(g, dst))
@@ -205,13 +343,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             add_offset(g, MMIX_SRET, MMIX_SP, cursor);
     }
 
-    if (in->u.fun_call.indirect) {
-        mem_op(g, MMIX_LDO, MMIX_TMP, in->u.fun_call.fun_name, 0);
-        emit3(g, MMIX_PUSHGO, mmix_reg(REG_A), mmix_reg(MMIX_TMP), mmix_imm(0));
-    } else {
-        emit2(g, MMIX_PUSHJ, mmix_reg(REG_A), mmix_sym(in->u.fun_call.fun_name, 0));
-    }
+    if (in->u.fun_call.indirect)
+        emit3(g, MMIX_PUSHGO, mmix_reg(hole), mmix_reg(REG_B), mmix_imm(0));
+    else
+        emit2(g, MMIX_PUSHJ, mmix_reg(hole), mmix_sym(in->u.fun_call.fun_name, 0));
 
     if (dst && !sret)
-        store_abi(g, REG_A, dst->u.var_name, val_type(g, dst));
+        take_result(g, hole, dst);
 }

@@ -9,8 +9,9 @@
 // A conditional jump tests the value itself: bz or bnz.
 TEST_F(MmixTest, BranchOnValue)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long a) { if (a) return 1; return 2; }"));
-    EXPECT_NE(std::string::npos, code.find("ldo $1,$254,0\nbz $1,L:")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nbz $248,L:")) << code;
 }
 
 // A loop jumps back to its top; every label is L: and defined once in the unit.

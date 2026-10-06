@@ -9,6 +9,7 @@
 // in two tetras.
 TEST_F(MmixTest, SmallStructArgument)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         struct c3 { char a, b, c; };
         struct i2 { int a, b; };
@@ -17,14 +18,14 @@ TEST_F(MmixTest, SmallStructArgument)
         long f2(struct i2 *p) { return g8(*p); }
     )"));
     EXPECT_NE(std::string::npos, code.find("ldbu $2,$254,8\n"
-                                           "ldbu $1,$254,9\n"
+                                           "ldbu $248,$254,9\n"
                                            "slu $2,$2,8\n"
-                                           "or $2,$2,$1\n"
-                                           "ldbu $1,$254,10\n"
+                                           "or $2,$2,$248\n"
+                                           "ldbu $248,$254,10\n"
                                            "slu $2,$2,8\n"
-                                           "or $2,$2,$1\n"))
+                                           "or $2,$2,$248\n"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("ldtu $2,$254,8\nldtu $1,$254,12\nslu $2,$2,32\n"))
+    EXPECT_NE(std::string::npos, code.find("ldtu $2,$254,8\nldtu $248,$254,12\nslu $2,$2,32\n"))
         << code;
 }
 

@@ -61,7 +61,16 @@ inline QemuConfig mmix_config()
 
 class MmixTest : public QemuTest {
 protected:
-    MmixTest() : QemuTest("mmix", mmix_config()) {}
+    MmixTest() : QemuTest("mmix", mmix_config())
+    {
+        mmix_regalloc = true; // the default; a test may change it
+    }
+
+    // Pin instruction selection itself: every variable in its slot.
+    static void NaiveSelection()
+    {
+        mmix_regalloc = false;
+    }
 
     // Assembly of every toplevel of the translation unit.  When GNU as is installed, it
     // must take the output too.
@@ -252,5 +261,6 @@ int __wrap_main(void)
 #define EXPECT_CODE(name, expected, src)              \
     TEST_F(MmixTest, name)                            \
     {                                                 \
+        NaiveSelection();                             \
         EXPECT_EQ(expected, Code(CompileToMmix(src))); \
     }

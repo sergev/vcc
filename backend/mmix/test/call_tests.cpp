@@ -21,11 +21,13 @@ EXPECT_CODE(CallSequence,
             "pop 1,0\n",
             "long g(long, long); long f(long a) { return g(a, 2); }")
 
-// A call through a pointer: pushgo to the address in $255.
+// A call through a pointer: pushgo to the address in $249, loaded before the arguments,
+// since one of their registers may hold it.
 TEST_F(MmixTest, IndirectCall)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long (*p)(long)) { return p(3); }"));
-    EXPECT_NE(std::string::npos, code.find("setl $2,#3\nldo $255,$254,0\npushgo $1,$255,0\n"))
+    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nsetl $2,#3\npushgo $1,$249,0\n"))
         << code;
 }
 
@@ -33,12 +35,13 @@ TEST_F(MmixTest, IndirectCall)
 // its slots; a narrow one extended to 64 bits, an unsigned one with zeros.
 TEST_F(MmixTest, StackArguments)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "long g(long, long, long, long, long, long, long, long, long, long, long, long, "
         "long, long, long, long, int, unsigned);\n"
         "long f(int x, unsigned y) { return g(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, x, y); }"));
-    EXPECT_NE(std::string::npos, code.find("ldt $1,$254,16\nsto $1,$254,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldtu $1,$254,20\nsto $1,$254,8\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldt $248,$254,16\nsto $248,$254,0\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldtu $248,$254,20\nsto $248,$254,8\n")) << code;
     EXPECT_NE(std::string::npos, code.find("setl $17,#f\npushj $1,g\n")) << code;
 }
 
@@ -46,6 +49,7 @@ TEST_F(MmixTest, StackArguments)
 // the parameter's type: zero-extended, which GCC's callee trusts.
 TEST_F(MmixTest, ArgumentInParameterType)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(
         "unsigned long g(unsigned); unsigned long f(int i) { return g((unsigned)i); }"));
     EXPECT_NE(std::string::npos, code.find("ldtu $2,")) << code;
@@ -54,6 +58,7 @@ TEST_F(MmixTest, ArgumentInParameterType)
 // A float argument goes as its binary32 bits.
 TEST_F(MmixTest, FloatArgument)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix("float g(float); float f(float x) { return g(x); }"));
     EXPECT_NE(std::string::npos, code.find("ldt $2,$254,0\npushj $1,g\nsttu $1,")) << code;
 }

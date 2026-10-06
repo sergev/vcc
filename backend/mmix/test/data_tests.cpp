@@ -50,27 +50,29 @@ TEST_F(MmixTest, DataSections)
 // A global is reached by name: the assembler and linker supply a base register.
 TEST_F(MmixTest, GlobalAccess)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         long g;
         int h;
         long f(void) { g = g + 1; return h; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldo $1,g\naddu $1,$1,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("sto $1,g\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldt $1,h\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldo $248,g\naddu $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sto $248,g\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldt $248,h\n")) << code;
 }
 
 // An address: lda for data, geta for a function (as GCC takes it) and for .rodata.
 TEST_F(MmixTest, Addresses)
 {
+    NaiveSelection();
     std::string code = Code(CompileToMmix(R"(
         long g;
         long h(void);
         long *f1(void) { return &g; }
         long (*f2(void))(void) { return h; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("lda $1,g\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("geta $1,h\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("lda $248,g\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("geta $248,h\n")) << code;
 }
 
 // A block-scope static is emitted after its function, under its name$N when another
