@@ -76,6 +76,10 @@ for Knuth: `A`, `R`, `B`, `V`, `X`, `M` and `T` are taken.
 | Memory | Text from 0x100, data from `Data_Segment` 0x2000000000000000, heap above `_end`, the memory stack from `__Stack_start` 0x6000000000000000 down, the register stack's backing store (rS) from there up | The default `ld` script and the simulator's sparse memory. No link script of our own and no size limits, unlike AVR and MSP430 |
 | Backend IR | A small hand-written `Mmix_Instr` list, as in `avr_ir.h`. Every instruction is 4 bytes | `mmix.asdl` stays the reference spec. The IR covers only what we emit. Branch relaxation is the assembler's and linker's job (`-x`), so there is no relax pass |
 | Executable | `genmmix` (`backend/mmix/`), library `mmix`; installed as `vgenmmix` | Mirrors `genmsp430`/`vgenmsp430` |
+| Signed division | `div` and a fix-up: when the remainder is nonzero and the operands' signs differ, the quotient one more and the remainder one divisor less; six instructions either way | GCC's absolute-value sequence takes nine; `LONG_MIN / -1` gives `LONG_MIN` and 0 in both |
+| Integer to `float` | `sflot`/`sflotu`, then `stsf` | They round once to binary32 (checked: 2^62 + 2^38 + 1 gives 2^62 + 2^39), where `flot` and `stsf` would round twice |
+| Constants in an operation | In the type of the operation that uses them (`load_val_as`); a same-width variable of the other signedness too, and an argument in its parameter's type | A cast between `int` and `unsigned` emits no TAC, so copy propagation leaves the other kind in place; GCC's callee trusts the caller's extension |
+| A constant stored to a member | In the type of the scalar member at its offset (`scalar_at`) | A partial initializer zero-fills a pointer with an `int` 0 |
 
 Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
 
@@ -212,357 +216,10 @@ are no pairs and no FP class.
 
 **Width invariant:** a register holding a narrower integer is always extended to 64 bits:
 sign-extended if signed, zero-extended if unsigned. A `float` value in a register is held
-as its exact binary64 value (see K13), never as binary32 bits, except at the ABI
+as its exact binary64 value (`ldsf` loads it, `stsf` rounds it), never as binary32 bits, except at the ABI
 boundary.
 
 `make run` stays green after every K-step.
-
-## Phase 2 — instruction selection, book order
-
-Naive and correct first:
-- Every TAC variable lives in a frame slot.
-- An operation loads its operands into scratch locals, operates, and stores the result.
-- Calls follow the register-stack protocol with a fixed small `X`.
-
-Each step is done when its book chapters pass and a few golden tests pin the selected
-instructions.
-
-- **K8. Frame.** *Done.* Slots come from typed TAC and `ALLOCATE_LOCAL`, each aligned to its type,
-  and the frame size is a multiple of 8.
-  - **The memory stack:**
-    - the prologue is `subu $254,$254,N` and the epilogue `addu $254,$254,N`, then `pop`;
-    - a non-leaf function saves `rJ` with `get` and restores it with `put` before the
-      `pop`.
-  - **No frame pointer:** every slot is `k($254)`. **The offset field is 8 bits
-    unsigned,** so a slot at 256 or above takes `setl $255,k` and the register form
-    `ldo $x,$254,$255`. The same holds for `N` itself.
-  - **Outgoing stack arguments** (the 17th and later) go in a preallocated area at the
-    bottom of the frame, `0($254)` up. SP stays constant in the body.
-  - **Incoming stack arguments** are at `N + 8i` above the callee's SP.
-  - **Incoming register parameters** arrive in `$0`… and are stored to their slots in the
-    prologue.
-
-  *Done.*
-  - **`frame.c`:** types, constants, the frame, and memory access through `mem_op`: a
-    slot at `k($254)`, a global at `sym+off`, a read-only object through `geta $255`.
-  - **Naive registers:**
-    - A non-leaf function keeps `rJ` in `$0` (stored after the parameters), so every
-      call will be `pushj $1`, with the arguments in `$2`…`$17`.
-    - A leaf returns straight in `$0`; a non-leaf in `$1`, which the epilogue moves
-      after `put rJ`.
-    - `$1`–`$3` are scratch.
-  - **Memory:** a slot holds a value in its own width, so a store (`stbu`/`stwu`/`sttu`/
-    `sto`, unsigned, so no overflow event) truncates and a load (`ldb`…`ldo` by
-    signedness) extends. A `float` slot holds binary32 (`stsf`/`ldsf`); a `float`
-    parameter or result is its binary32 bits (`sttu`/`ldt`).
-  - **Constants:** `mmix_const_steps` already picks the shortest sequence (K9's
-    generator).
-  - **The epilogue label** is printed only when something jumps to it.
-  - **`frame_tests.cpp`:** parameters of each width, alignment, the 17th and 18th
-    parameters above the frame (an `int` at +4), a 328-byte frame through `$255`, and a
-    run with a frame over 255 bytes. Runs with calls follow at K11.
-- **K9. Integer ops** (ch. 2–4, 11, 12). *Done, but for chapters 11 and 12.*
-  - **Arithmetic:**
-    - `addu`, `subu`, `mulu`, `negu`, and `and`/`or`/`xor`;
-    - `nor`/`nand`/`nxor`, and `orn`/`andn` for `~`, as fits;
-    - `slu`, `sr`, `sru`.
-    - The signed `add`/`sub`/`mul`/`sl` are never used: they only set overflow bits in
-      `rA`.
-  - **Narrow results** keep the width invariant:
-    - after any operation that can carry out of its type, an `int` result is
-      re-extended with `slu 32; sr 32`, and an `unsigned` one with `slu 32; sru 32`;
-    - likewise for `short` and `char` at 48 and 56.
-    - This wraps the way every other backend's code does, which is the safest base for
-      the differential tests.
-    - GCC instead skips the extension after a signed `int` `+` (overflow is undefined).
-      Whether to do the same is decided at K23, with measurements.
-  - **Divide and remainder:**
-    - unsigned: `divu` and `get $x,rR`;
-    - signed: decide between GCC's absolute-value sequence and `div` with a fix-up (when
-      the remainder is non-zero and its sign differs from the dividend's, add 1 to the
-      quotient and subtract the divisor from the remainder). Test every sign combination,
-      `LONG_MIN / -1` and the 32-bit cases. Record the choice here.
-  - **Constants:**
-    - 0–255 as the Z immediate;
-    - −1…−255 as `negu $x,0,k`;
-    - otherwise the shortest wyde sequence of `setl`/`setml`/`setmh`/`seth`,
-      `incml`/`incmh`/`inch` and `orml`/`ormh`/`orh`. A generator chooses it, and a test
-      covers its table.
-  - **Comparisons:**
-    - `cmp`/`cmpu` give −1/0/1;
-    - a 0/1 result is `zsn`/`zsz`/`zsp`/`zsnn`/`zsnz`/`zsnp` of the comparison, with
-      value 1;
-    - a comparison with zero needs no `cmp`.
-  - **Width conversions:**
-    - sign extension is `slu`+`sr`, zero extension `slu`+`sru` or `and` with a mask;
-    - truncation is the extension to the narrower type, by the invariant.
-
-  *Done.*
-  - **Signed division: `div` with a fix-up (decided).** Six instructions for either
-    result:
-    - **quotient:** `div q,a,b; get r,rR; xor t,a,b; zsn t,t,1; csz t,r,0;
-      addu q,q,t`;
-    - **remainder:** the same up to the `xor`, then `zsn t,t,b; csz t,r,0;
-      subu r,r,t`.
-
-    GCC's absolute-value sequence takes nine. `LONG_MIN / -1` gives `LONG_MIN`
-    remainder 0, as GCC's does.
-  - **Constants in the operation's type.** A cast between `int` and `unsigned` emits no
-    TAC, so copy propagation can leave a `uint` constant in an `int` comparison (`i !=
-    (int)0x89abcdef`). Zero-extended, it compares wrongly with the sign-extended
-    variable. `load_val_as`/`val_operand` therefore give a constant the width and
-    signedness of the operation's type (the variable operand's), and a return value
-    those of the function's result type; arguments follow at K11. This is how TAC is,
-    not a frontend defect: RISC-V sidesteps it by keeping every 32-bit value
-    sign-extended, which MMIX's `divu` and `sru` cannot use.
-  - **In naive selection** every result is stored in its own width, so the width
-    invariant holds without re-extension; it matters again at K21.
-  - **Jumps and labels are in already,** since chapter 4's `&&` and `||` need them
-    (K10 tests them).
-  - **`int_tests.cpp`:** the constant generator's table (and every value it builds),
-    golden sequences, and two run tables against the host: 244 division and remainder
-    cases of every sign at 64 and 32 bits, signed and unsigned, with `LONG_MIN / -1`;
-    and wrapping, shifts, bitwise operations, comparisons and conversions at every
-    width.
-  - **Book chapters 1–4 pass** against GCC. Chapters 11 and 12 use calls and globals,
-    and a fatal error stops the whole test binary, so they wait for K11 and K12.
-- **K10. Control flow** (ch. 5–8). *Done.*
-  - **Branches** test one register against zero: `bz`, `bnz`, `bn`, `bnn`, `bp`, `bnp`,
-    after a `cmp`/`cmpu` when the operands are not already a value and zero.
-  - **Labels** are `L:n`, unique per TU.
-  - **Range:** a branch reaches ±256 KB (16-bit word offset) and `jmp` ±64 MB. Selection
-    emits the short forms, and `as -x` with the linker expands what is out of range, so
-    there is no relaxation pass. A run test with a branch over a body larger than 256 KB
-    checks that the expansion happens and is correct.
-
-  *Done.* Book chapters 1–8 pass against GCC: 270 tests.
-  - **`flow_tests.cpp`:** a branch on the value, labels unique in the unit, loops with
-    `break`/`continue` and the short-circuit operators.
-  - **`RunBranchesBeyondRange`:** a forward `bz`, a forward `jmp` and a backward `pbnz`
-    each cross 256 KB. `as -x` and `ld` turn an out-of-range branch into an inverted
-    short branch around `setl`…`inch $255` and `go $255,$255,0`; a `jmp` reaches
-    64 MB and stays.
-  - **The filler is `.skip`, not C.** A C body that large (3400 statements, 85 K
-    instructions) also ran correctly through the same expansion, but takes the frontend
-    and optimizer over 6 s to compile, too long for a unit test.
-- **K11. Calls, scalar ABI** (ch. 9). *Done.*
-  - **The register-stack protocol:**
-    - `X` is above every value that must survive the call;
-    - arguments go in `$(X+1)`… (16 at most), the rest in the outgoing area;
-    - `pushj $X,f`, and the result is read from `$X`.
-  - **Indirect calls:** `pushgo $X,$p,0`. `FUN_CALL_NORETURN` is a plain `pushj`.
-  - **Narrow values** are extended by the sender and re-extended by the receiver, results
-    included.
-  - **Parallel moves** fill the argument registers, ordered so that no source is
-    clobbered before it is read, with `$255` to break a cycle.
-  - **A register-stack test:** values in `$0`…`$(X−1)` survive a call to a function that
-    writes all 32 locals, and also deep recursion, which spills the register ring.
-    `mmix -r` shows the ring when one fails.
-
-  *Done.* Book chapters 1–9 pass against GCC: 306 tests.
-  - **The naive call is `pushj $1`:** `rJ` in `$0` is the one value kept. The stack
-    arguments go first, through `$1`; then the register arguments straight into `$2`…;
-    an indirect call is `ldo $255` and `pushgo $1,$255,0`.
-  - **No parallel moves yet:** every argument comes from memory, so no source can be
-    clobbered. They come back with register allocation (K21).
-  - **Arguments take the parameter's type.** Copy propagation can leave an `int` variable
-    or constant where the callee declares `unsigned`, and GCC's callee trusts a
-    zero-extended register. `load_val_as` gives a variable of the same width the
-    operation's signedness too, in operations as in arguments.
-  - **`call_tests.cpp`:**
-    - golden calls: direct, indirect, stack arguments, an argument in the parameter's
-      type, a `float`'s bits;
-    - an assembly callee writing all 32 locals;
-    - recursion 100000 deep;
-    - eighteen arguments of every width, ours both ways and with GCC both ways;
-    - GCC's unextended narrow results.
-  - **Not in yet:** `float` arithmetic in those runs (K13), and chapters 11 and 12, which
-    need globals (K12).
-- **K12. Globals and static data** (ch. 10). *Done.* Every `geta` target is 4-aligned
-  (see Addresses above).
-  - **Data:**
-    - `.data`, `.bss` and `.rodata`, with every `Tac_StaticInit` kind emitted as
-      `.byte`, `.short`, `.long` or `.quad`. The assembler is big-endian, so the
-      directives carry the byte order.
-    - A `double` is a `.quad` of its bits, a `float` a `.long`.
-  - **Code:**
-    - **accesses** are `ldo $x,g+k` and `sto $x,g+k`, through the linker-allocated base
-      registers;
-    - **an address** is `lda $x,g+k`;
-    - **an indexed global** is `lda`, then the register form;
-    - **function addresses:** choose `geta` or `lda` by what GCC emits (check).
-  - **Static locals:** their `name$N` assembles as it is (checked).
-  - **The base-register budget:** a test with many separate data objects measures how
-    many base registers the linker allocates, against the `$32`–`$250` it has. Record the
-    limit and what happens past it.
-
-  *Done.* Book chapters 1–12 pass against GCC: 397 tests (chapters 11 and 12 from K9
-  included).
-  - **`data.c`:** `.data`, `.bss` (all zeros), `.section .rodata` 4-aligned for `geta`;
-    `.byte`/`.short`/`.long`/`.quad`, a `float` as `.long` and a `double` as `.quad` of
-    its bits, a pointer as `.quad sym+off`, a string as `.ascii` and `.byte 0`.
-  - **Code:**
-    - a global is `ldo $x,g` and the like;
-    - a data address is `lda`;
-    - a function's address is `geta`, as GCC takes it;
-    - a `.rodata` object is `geta $255` and the register form.
-  - **Static locals** follow their function; `n$1` assembles as it is.
-  - **The base-register budget, measured:** `.MMIX.reg_contents` holds at most 223
-    global registers (`$32`–`$254`). With `crt0`'s eight reserved, code can reach 215
-    separate 256-byte windows of data. A 216th fails the link, "too many global
-    registers: 224, max 223", never silently. GCC has the same limit.
-  - **`data_tests.cpp`:** every initializer kind with padding, the sections, global
-    access and addresses, static locals, a run of data of every width (big-endian) with
-    static locals and pointers, and 200 separate windows.
-- **K13. Floating point** (ch. 13), in hardware. *Done.*
-  - **Arithmetic:** `fadd`, `fsub`, `fmul`, `fdiv` and `fsqrt` (`hw_sqrt`).
-  - **Comparisons:**
-    - `<` and `>` are `fcmp` with `bn`/`bp`;
-    - `==` and `!=` are `feql`;
-    - `<=` and `>=` are `fcmp` plus `feql`, as GCC does, or `fun` for the unordered
-      case. All are right for NaN.
-  - **Conversions:**
-    - `fix $x,1,$y` and `fixu` toward zero;
-    - `flot`/`flotu` from 64 bits, after the usual extension of narrower ones.
-  - **Constants:** a wyde sequence of the bits, or a `.rodata` octa when that is shorter.
-  - **Negation** is `xor` with the sign bit, built by `seth $255,#8000`. `fabs` is `andnh
-    $x,#8000`. Both are exact for −0 and NaN.
-  - **A truth test** is `slu $255,$x,1` and `bnz`: any bit but the sign. NaN is true and
-    −0 false.
-  - **`float`** is held in a register as its exact binary64 value:
-    - a load is `ldsf` and a store is `stsf`;
-    - arithmetic is binary64, followed by a rounding to binary32;
-    - MMIX has no register-to-register rounding to single, so the rounding is `stsf`
-      and `ldsf` through a scratch slot in the frame, as GCC does;
-    - + − × ÷ and √ of two `float`s computed in binary64 and rounded once more are
-      correctly rounded (53 ≥ 2·24+2), so the result is exact.
-    - At the ABI boundary the value becomes binary32 bits in a register (`stsf`+`ldt`)
-      and back (`sttu`+`ldsf`).
-  - **Integer to `float`:**
-    - a 64-bit integer converted through binary64 would round twice;
-    - so check whether `sflot`/`sflotu` round directly to single precision, as their
-      definition suggests, and use them;
-    - otherwise use a sticky-bit sequence;
-    - pin it with cases just above a binary32 halfway point.
-  - **`long double`** is `double`: its conversions emit nothing.
-  - **Tests:** the arithmetic, comparisons and conversions against the host's binary64
-    and binary32 over a table of cases, NaN and the halfway and subnormal edges included.
-
-  *Done.* Book chapter 13 passes against GCC, but for its two programs that call the C
-  library, skipped until `libc.a` is built (K14).
-  - **`fp.c`:**
-    - `fadd`/`fsub`/`fmul`/`fdiv`, `fsqrt $x,0,$y` (rA's rounding mode);
-    - `feql` for `==`, then `zsz` for `!=`;
-    - `fcmp` with `zsn`/`zsp` for `<`/`>`, and `fcmp`, `fun`, `zsnp`/`zsnn` and
-      `csnz` for `<=`/`>=`;
-    - the sign flipped with `seth $255,#8000; xor`;
-    - the truth test `slu $x,$x,1`.
-  - **Conversions:**
-    - `fix`/`fixu` with mode 1 (toward zero);
-    - `flot`/`flotu`;
-    - between the FP types only the load and the store (`ldsf` widens exactly, `stsf`
-      rounds).
-  - **`sflot`/`sflotu` round once to binary32 (checked).** 2^62 + 2^38 + 1 becomes
-    2^62 + 2^39, where `flot` and then `stsf` would round twice, to 2^62. So integer to
-    `float` is `sflot` and `stsf`.
-  - **No scratch slot for rounding:** in naive selection every `float` result is stored
-    with `stsf`, which rounds it, so it needs none. Register allocation (K21) will need
-    the `stsf`/`ldsf` pair through one.
-  - **`fp_tests.cpp`:** golden sequences, and a run of 720 cases against the host:
-    binary64 + − × ÷ and the comparisons over 9×9 operands (subnormals, −0, 1e300); the
-    same for binary32 over 7×7, overflow to infinity included; NaN unordered; −0 false;
-    `sqrt`; and the conversions, the double-rounding case and `1e19` to `unsigned long`
-    included.
-- **K14. Pointers, arrays, chars, strings** (ch. 14–16). *Done.*
-  - **Loads and stores:**
-    - `ldb`/`ldbu`/`ldw`/`ldwu`/`ldt`/`ldtu`/`ldo` and `stb`/`stw`/`stt`/`sto`;
-    - the address is base plus an 8-bit immediate, or base plus a register;
-    - the load follows the type's signedness, so the width invariant holds without
-      another instruction.
-  - **`ADD_PTR`** uses `2addu`/`4addu`/`8addu`/`16addu` for scales 2–16 (`8addu
-    $x,$i,$p` = `8i + p`) and `mulu` otherwise.
-  - **Pointer comparisons** are `cmpu`.
-  - **Misalignment is silent:** an octa, tetra or wyde access ignores the low address
-    bits, as an MSP430 word access ignores bit 0. Layout keeps everything aligned, and
-    the tests cast `char *` buffers only at aligned offsets.
-  - **The C library** (`libc/common`, plus `libc/mmix` C sources) is built with `genmmix`
-    into `libc.a` from here, as AVR did at M15.
-
-  *Done.* Book chapters 1–16 pass against GCC: 556 tests, two skipped.
-  - **Loads and stores:**
-    - a load takes the destination's width at the address, by its signedness, so a row
-      of a 2-D array reads its leading bytes, which big-endian puts first;
-    - a store takes the pointee's width;
-    - an aggregate goes by `copy_bytes`.
-  - **Pointer arithmetic:**
-    - `ADD_PTR` is `2addu`…`16addu`, `mulu` for another scale, an offset for a
-      constant index;
-    - `PTR_DIFF` is `subu`.
-  - **`COPY_*_OFFSET`** is a member read or written by name.
-  - **Pointer comparisons:** `long *` pointers compare with `cmpu`; the frontend compares
-    two `char *` through their difference.
-  - **`libc.a`** now holds the shared C library without its variadic part (K16):
-    `atoi`, `fabs`, `fma`, `fmax`, `fmin`, the `mem*` and `str*` families, `puts` and
-    `putchar`, and `frexp`/`ldexp`/`modf` from `libc/lp64`, all compiled by `genmmix`.
-    Chapter 13's two library programs now run.
-  - **Skipped book programs:** chapter 16's `StaticInitializers` (it expects an unsigned
-    plain `char`) and `AccessThroughCharPointer` (it reads an `int`'s bytes
-    little-endian). GCC's build gives what ours gives on both; K18 adds big-endian,
-    signed-`char` versions.
-  - **`ptr_tests.cpp`:** loads and stores by width and signedness, `ADD_PTR` forms,
-    `cmpu`, a run of arrays, a 2-D array, pointer differences and the byte order through
-    `char *` and `int *`, and a run of the string functions from `libc.a`.
-- **K15. Structures** (ch. 17–18). *Done.* Member access is through `COPY_*_OFFSET`.
-  - **Copies** go by octas for an 8-aligned structure and by the alignment's width
-    otherwise. They are unrolled up to a threshold, then a counted loop.
-  - **Arguments of 8 bytes or less** are loaded into a register right-justified:
-    - one `ldo`/`ldt`/`ldw`/`ldb` when the size is a power of two and the structure is
-      aligned for it;
-    - otherwise the bytes are assembled with shifts and `or`;
-    - the callee stores the register back to its slot the same way.
-  - **Larger arguments:**
-    - the caller copies the object into a temporary in its frame and passes the address;
-    - the callee's parameter *is* that object, with no slot and no copy, read and written
-      through the pointer.
-  - **Results of every size:**
-    - the caller points `$251` at the destination, or at a temporary, before `pushj`;
-    - the callee copies `$251` into a local on entry, since any call it makes may
-      overwrite the global, and stores the result through it;
-    - the callee returns with `pop 0,0`.
-
-  *Done.* Book chapters 1–18 pass against GCC: 655 tests, 10 skipped.
-  - **Small structures:** one of 8 bytes or less is loaded into a register from pieces
-    of its alignment's width (`ldtu`, then `slu` and `or`); the callee stores it back
-    last piece first.
-  - **Large structures:**
-    - one over 8 bytes is copied into a scratch area of the caller's frame (sized for
-      the call that needs most) and passed by its address;
-    - the callee's slot holds that address (`Slot.byref`), and `mem_op`/`address_of`
-      read and write through it, with no copy.
-  - **Results:** `$251` points at the destination, or at the scratch area when the
-    result is ignored. The callee saves `$251` in `%.sret` on entry, copies the result
-    there, and pops 0.
-  - **Found: a constant stored to a member takes the member's type.** A partial
-    initializer zero-fills a pointer member with an `int` 0 constant, which a 4-byte
-    store left half-written. `gen_copy_to_offset` looks up the scalar at the offset
-    (`scalar_at`, as RISC-V does).
-  - **Found: an offset over 255 added to `$255` went through `$255`.** It is now added
-    in place with `incl`…`inch` (`add_in_place`), for a `.rodata` object and a
-    by-reference structure alike.
-  - **`malloc`/`calloc`/`realloc`/`free`:** `libc/mmix/malloc.c`, a bump allocator from
-    `_end` up to the pool segment at `0x4000000000000000`; the stack is a segment of its
-    own. Chapter 18 needs them, so they come before K20.
-  - **Skipped book programs** (GCC's build gives what ours gives): chapter 18's
-    `ClassifyParams` and `UnionInits` (an unsigned plain `char`), and six that read a
-    union's bytes little-endian (`CopyThruPointer`, `NestedUnionAccess`,
-    `StaticUnionAccess`, `StaticUnionInits`, `UnionTempLifetime`,
-    `UnionsInConditionals`). K18 adds big-endian versions.
-  - **`struct_tests.cpp`:**
-    - goldens of the piece loads and stores, and of `$251`;
-    - a run of every size among scalars, results of 1, 3 and 24 bytes, and a large
-      parameter written by the callee;
-    - the same with GCC both ways: sizes 1, 2, 3, 4, 5, 8, 9, 16 and 24 and a union, as
-      arguments and as results.
 
 ## Phase 3 — ABI conformance
 
@@ -609,6 +266,13 @@ instructions.
     BESM-6 has in `book_besm6_tests.cpp`. This covers programs that read an `int`'s bytes
     through a `char *` or pun through a union. GCC's agreement on them is part of the
     check.
+  - **Skipped so far** (`book_test.h`; GCC's build gives what ours gives on each):
+    - an unsigned plain `char` expected: chapter 16's `StaticInitializers`, chapter 18's
+      `ClassifyParams` and `UnionInits` (x86-64 has signed-`char` versions of the
+      three in `book_x86_tests.cpp`);
+    - a little-endian byte order expected: chapter 16's `AccessThroughCharPointer`, and
+      chapter 18's `CopyThruPointer`, `NestedUnionAccess`, `StaticUnionAccess`,
+      `StaticUnionInits`, `UnionTempLifetime` and `UnionsInConditionals`.
 
 ## Phase 4 — library and headers
 
@@ -642,8 +306,8 @@ instructions.
     - `longjmp(env, 0)` returning 1.
 
     The earlier `~/Project/Mmixware/setjmp-mmix/` project is not used.
-  - **`malloc`** is a C allocator above `_end`, growing upward in the data segment. Memory
-    is plentiful, so reuse the simplest existing design.
+  - **`malloc`** is done: `libc/mmix/malloc.c`, a bump allocator from `_end` up to the pool
+    segment, written when chapter 18 needed it.
   - **`frexp`/`ldexp`/`modf`** come from the shared binary64 sources. `sqrt` is `fsqrt`.
   - **`doprnt.c`:** check `%z`/`%t` and the `FBUFSIZE` sizing for LP64 with an 8-byte
     `long double`. `%Lf` takes a `double`-sized argument.
@@ -658,6 +322,13 @@ instructions.
 ## Phase 5 — code quality
 
 - **K21. Register allocation** on `backend/common/regalloc.c`.
+  - **What it replaces:** the naive selection keeps every variable in memory and `rJ` in
+    `$0`, so every call is `pushj $1` with the arguments loaded from memory into `$2`…
+    and nothing else live. With values in registers:
+    - the width invariant matters again: a narrow result in a register is re-extended;
+    - the arguments need parallel moves;
+    - a `float` result needs its rounding (`stsf`/`ldsf` through a scratch slot), which
+      the naive store gave for free.
   - **Class:** every scalar is `REGALLOC_INT`, and `REGALLOC_FP` is unused (empty FP
     pool). There are no pairs.
   - **Numbering:** registers are numbered from 1 on the allocator's side, since `$0` is
@@ -769,7 +440,7 @@ instructions.
 - **The register-stack protocol.** A wrong `X`, a hole that clobbers a live value, a
   compaction that maps one register onto another, or an `rJ` saved above `X` silently
   corrupts the caller's locals, far from the cause.
-  - Mitigation: K11's survival tests; K17's tests against GCC both ways and deep
+  - Mitigation: the survival tests of `call_tests.cpp`; K17's tests against GCC both ways and deep
     recursion that spills the register ring; `mmix -r` to watch the ring. The compaction
     is one function with a unit test of its mapping.
 - **The first big-endian byte-addressed target.** Hidden little-endian assumptions in
@@ -781,24 +452,26 @@ instructions.
     tests that check output, not only status.
 - **Silent misaligned access.** An octa, tetra or wyde access drops the low address bits,
   so a layout or pointer bug reads the wrong data without a fault.
-  - Mitigation: the layout tests against GCC (`TranslateTestMmix`); alignment kept through `ALLOCATE_LOCAL`
-    and the outgoing area; the structure tests at every size.
+  - Mitigation: the layout tests against GCC (`TranslateTestMmix`); alignment kept
+    through `ALLOCATE_LOCAL` and the outgoing area; the structure tests at every size.
 - **Signed division floors.** Using `div` as if it truncated gives wrong quotients and
   remainders for negative operands only.
-  - Mitigation: K9's table of every sign combination, `LONG_MIN / -1` and 32-bit cases,
-    checked against the host.
+  - Mitigation: `int_tests.cpp`'s table of every sign combination, `LONG_MIN / -1` and
+    32-bit cases, checked against the host.
 - **The width invariant.** A narrow value left unextended in a 64-bit register compares,
   divides or converts wrongly, usually only for negative or wrapped values.
   - Mitigation: one rule in selection, a test per operation at each width with
     overflowing operands, and the peephole's extension tracking checked by the same tests.
 - **`float` rounding.** A `float` result not rounded to binary32, or an integer rounded
   twice on the way to `float`, gives a last-bit difference.
-  - Mitigation: K13's halfway-case tests against the host, and the folder agreeing with
-    the target.
+  - Mitigation: `fp_tests.cpp`'s halfway cases against the host, and the folder agreeing
+    with the target.
 - **Linker-allocated base registers run out.** Each distinct 256-byte window of data that
-  code addresses takes one global register, out of roughly 220.
-  - Mitigation: K12 measures the limit. Past it, fall back to `lda` of a nearby base, or
-    to an address built by a wyde sequence with relocations, if `as` supports one.
+  code addresses takes one global register: 215 with `crt0`'s eight reserved (measured).
+  - Past it the link fails, "too many global registers: 224, max 223", never silently;
+    GCC has the same limit.
+  - Mitigation, if a real program reaches it: `lda` of a nearby base, or an address
+    built by a wyde sequence with relocations, if `as` supports one.
 - **8-bit offsets and immediates.** A large frame or structure takes a register operand
   everywhere, and an off-by-one at 255/256 is a wrong address.
   - Mitigation: golden and run tests with slots at 248, 256 and 4096, and constants at
