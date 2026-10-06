@@ -59,6 +59,19 @@ add_test(
             ${LP64_INCLUDE_DIR}
             ${LIBC_COMMON_INCLUDE_DIR})
 
+# All the headers, MMIX's own, the LP64 model's and the shared ones, go into one
+# directory.  MMIX's float.h, limits.h, stddef.h and stdint.h stand in for the LP64
+# model's, as they do on the search path.
+file(GLOB MMIX_TARGET_HEADERS ${MMIX_INCLUDE_DIR}/*.h)
+file(GLOB MMIX_MODEL_HEADERS ${LP64_INCLUDE_DIR}/*.h)
+foreach(header ${MMIX_TARGET_HEADERS})
+    get_filename_component(name ${header} NAME)
+    list(REMOVE_ITEM MMIX_MODEL_HEADERS ${LP64_INCLUDE_DIR}/${name})
+endforeach()
+file(GLOB MMIX_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+install(FILES ${MMIX_TARGET_HEADERS} ${MMIX_MODEL_HEADERS} ${MMIX_COMMON_HEADERS}
+    DESTINATION share/vcc/mmix/include)
+
 if(NOT MMIX_TOOLS_FOUND)
     return()
 endif()
@@ -125,3 +138,5 @@ add_custom_command(OUTPUT ${out}/libc.a
     DEPENDS ${MMIX_LIBC_OBJS})
 add_custom_target(mmix-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
+
+install(FILES ${out}/crt0.o ${out}/libc.a DESTINATION share/vcc/mmix/lib)

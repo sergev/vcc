@@ -86,3 +86,5 @@ add_executable(genmmix
     mmix/main.c
 )
 target_link_libraries(genmmix mmix backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genmmix> DESTINATION bin RENAME vgenmmix)
