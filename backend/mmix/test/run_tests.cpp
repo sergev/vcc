@@ -94,3 +94,118 @@ TEST_F(MmixTest, RuntimePutbyte)
                                   "\tpop\t1,0\n"));
     EXPECT_EQ(42, exit_status);
 }
+
+// setjmp/longjmp from libc.a (newlib's): a jump out of nested frames, longjmp(env, 0)
+// arriving as 1, and a second setjmp on the same buffer.
+static const char setjmp_program[] = R"(
+#include <setjmp.h>
+static jmp_buf env;
+static int depth;
+__attribute__((noinline)) static void dive(int n, int val)
+{
+    depth = n;
+    if (n == 5)
+        longjmp(env, val);
+    dive(n + 1, val);
+}
+int main(void)
+{
+    volatile int round = 0;
+    int r = setjmp(env);
+    round++;
+    if (round == 1) {
+        if (r != 0)
+            return 1;
+        dive(0, 7);
+    }
+    if (round == 2) {
+        if (r != 7 || depth != 5)
+            return 2;
+        dive(0, 0);
+    }
+    if (round == 3 && r != 1)
+        return 3;
+    return round == 3 ? 42 : 4;
+}
+)";
+
+TEST_F(MmixTest, RunSetjmpLongjmp)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string src = setjmp_program;
+    src.replace(src.find("__attribute__((noinline)) "), 26, "");
+    EXPECT_EQ("", CompileAndRunMmix(src));
+    EXPECT_EQ(42, exit_status);
+}
+
+// The same from GCC's code, which keeps values in registers, with our <setjmp.h>.
+TEST_F(MmixTest, RunSetjmpLongjmpGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string src = setjmp_program;
+    EXPECT_EQ("", Run("", "crt0.o", &src,
+                      { "-O2", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR,
+                        "-I", TEST_COMMON_INCLUDE_DIR },
+                      ".gcc"));
+    EXPECT_EQ(42, exit_status);
+}
+
+// Across both: recursion 5000 deep alternating between our code and GCC's, which spills
+// the register ring, unwound by a longjmp to a setjmp of either side; values live in the
+// setjmp caller's registers (GCC's) or frame (ours) survive.
+TEST_F(MmixTest, RunSetjmpLongjmpAcrossGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string gcc = R"(
+#include <setjmp.h>
+extern jmp_buf env;
+long our_dive(long n, int val);
+long gcc_dive(long n, int val)
+{
+    if (n == 0)
+        longjmp(env, val);
+    return our_dive(n - 1, val) + n;
+}
+int gcc_catch(long n, int val)
+{
+    long keep = n * 3 + val;
+    int r = setjmp(env);
+    if (r == 0) {
+        our_dive(n, val);
+        return -1;
+    }
+    return keep == n * 3 + val ? r : -2;
+}
+)";
+    std::string ours = CompileToMmix(R"(
+#include <setjmp.h>
+jmp_buf env;
+long gcc_dive(long n, int val);
+int gcc_catch(long n, int val);
+long our_dive(long n, int val)
+{
+    if (n == 0)
+        longjmp(env, val);
+    return gcc_dive(n - 1, val) + 1;
+}
+int main(void)
+{
+    long keep = 12345;
+    int r = setjmp(env);
+    if (r == 0)
+        gcc_dive(5000, 9);
+    if (r != 9 || keep != 12345)
+        return 1;
+    if (gcc_catch(5000, 0) != 1)
+        return 2;
+    if (gcc_catch(3, 77) != 77)
+        return 3;
+    return 42;
+}
+)");
+    EXPECT_EQ("", Run(ours, "crt0.o", &gcc,
+                      { "-O2", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR,
+                        "-I", TEST_COMMON_INCLUDE_DIR },
+                      ".gcc"));
+    EXPECT_EQ(42, exit_status);
+}
