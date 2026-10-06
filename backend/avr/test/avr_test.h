@@ -3,6 +3,7 @@
 // (qemu_test.h), main's result coming back on the second serial port.
 #pragma once
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -92,7 +93,7 @@ protected:
             line      = line.substr(4);
             size_t sp = line.find(' ');
             if (sp != std::string::npos)
-                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+                line.erase(sp + 1, line.find_first_not_of(' ', sp) - (sp + 1));
             out += line + "\n";
         }
         return out;
@@ -107,10 +108,9 @@ protected:
             "sbci r29, ", "in r0, __SREG__", "cli", "out __SP_", "out __SREG__", "ret", "rcall .",
         };
         auto is_frame = [](const std::string &line) {
-            for (const char *f : frame)
-                if (line.compare(0, strlen(f), f) == 0)
-                    return true;
-            return false;
+            return std::any_of(std::begin(frame), std::end(frame), [&line](const char *f) {
+                return line.compare(0, strlen(f), f) == 0;
+            });
         };
         std::string code = Code(asm_text);
         std::vector<std::string> lines;

@@ -1031,11 +1031,10 @@ bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction
     Tac_BinaryOperator op = in->u.binary.op;
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     const Tac_Type *t = operand_type(g, a, b);
-    Msp_Op jump;
     Cond cond;
     bool swap;
     if (msp_is_fp(t)) {
-        jump = gen_fp_compare(g, in);
+        Msp_Op jump = gen_fp_compare(g, in);
         if (jump == MSP_NUM_OPS) {
             xfree(l);
             return false; // nothing emitted

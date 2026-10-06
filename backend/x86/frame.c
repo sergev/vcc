@@ -603,7 +603,7 @@ typedef struct {
 
 // A frame offset is from where rbp would point, 8 bytes below the return address:
 // that is rbp, rsp + size - 8, or rsp - 8 in the red zone.
-static void resolve_frame(Gen *g, const Frame *fr)
+static void resolve_frame(const Gen *g, const Frame *fr)
 {
     for (X86_Block *b = g->fn->blocks; b; b = b->next) {
         for (X86_Instr *in = b->head; in; in = in->next) {

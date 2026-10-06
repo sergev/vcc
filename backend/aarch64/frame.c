@@ -796,13 +796,13 @@ static int64_t fp_offset(const A64_Instr *in, int i)
 
 // Address the body's frame from sp, as `fr` says, when every use of x29 can be
 // rebased; else change nothing.
-static bool rebase_to_sp(Gen *g, const Frame *fr)
+static bool rebase_to_sp(const Gen *g, const Frame *fr)
 {
     for (int pass = 0; pass < 2; pass++) {
         for (A64_Block *b = g->fn->blocks; b; b = b->next) {
             for (A64_Instr *in = b->head; in; in = in->next) {
                 for (int i = 0; i < A64_MAX_OPERANDS; i++) {
-                    A64_Operand *o = &in->opnd[i];
+                    const A64_Operand *o = &in->opnd[i];
                     if (o->reg != A64_FP || (o->kind != A64_OPND_REG && o->kind != A64_OPND_MEM &&
                                              o->kind != A64_OPND_SHIFT && o->kind != A64_OPND_EXT))
                         continue;

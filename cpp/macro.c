@@ -284,6 +284,7 @@ char *do_define(char *p)
                     // operand is a literal comma and the right operand is the
                     // variadic formal, drop the comma here; expand_macro re-emits
                     // it only when the variadic actual is non-empty.
+                    // cppcheck-suppress knownConditionTrueFalse ; va_num is set for a variadic macro
                     if (paste_now && num == va_num && // num != 0 here, so va_num != 0
                         psav > body_start && psav[-1] == ',') {
                         --psav;

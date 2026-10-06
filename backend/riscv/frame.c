@@ -774,7 +774,7 @@ static void epilogue(const Gen *g, const Frame *fr, Rv_Block *b)
 }
 
 // Replace each epilogue marker by the frame teardown.
-static void expand_epilogues(Gen *g, const Frame *fr)
+static void expand_epilogues(const Gen *g, const Frame *fr)
 {
     for (Rv_Block *b = g->fn->blocks; b; b = b->next) {
         for (Rv_Instr **link = &b->head; *link;) {
@@ -833,7 +833,7 @@ static bool is_leaf(const Gen *g)
 
 // Address the body's frame from sp, as `fr` says, when every use of s0 is a memory
 // operand or an addi and the offsets still fit; else change nothing.
-static bool rebase_to_sp(Gen *g, const Frame *fr)
+static bool rebase_to_sp(const Gen *g, const Frame *fr)
 {
     for (int pass = 0; pass < 2; pass++) {
         for (Rv_Block *b = g->fn->blocks; b; b = b->next) {

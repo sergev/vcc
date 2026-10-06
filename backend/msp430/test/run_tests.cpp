@@ -201,7 +201,7 @@ int main(void)
             if (y != 0)
                 expected += std::to_string((uint16_t)x / (uint16_t)y) + " " +
                             std::to_string((uint16_t)x % (uint16_t)y) + " ";
-            expected += std::to_string((int16_t)(uint16_t)((uint16_t)x * (uint16_t)y)) + " ";
+            expected += std::to_string((int16_t)(uint16_t)((uint32_t)(uint16_t)x * (uint16_t)y)) + " ";
             int32_t p = ops32[i], q = ops32[j];
             if (q != 0 && !(p == INT32_MIN && q == -1))
                 expected += std::to_string(p / q) + " " + std::to_string(p % q) + " ";
@@ -268,6 +268,7 @@ int main(void)
     for (int32_t x : v)
         for (int n = 0; n < 32; n++)
             expected += std::to_string((uint32_t)x << n) + " " +
+                        // cppcheck-suppress shiftTooManyBitsSigned ; arithmetic shift expected
                         std::to_string((uint32_t)x >> n) + " " + std::to_string(x >> n) + "\n";
     EXPECT_EQ(expected, GccRun(src));
 }
@@ -364,6 +365,7 @@ TEST_F(Msp430Test, RunSetjmpLongjmpGccClang)
                                        TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR };
     EXPECT_EQ("", Run("", "crt0.o", &src, flags, ".gcc"));
     EXPECT_EQ(42, exit_status);
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
     if (!msp430_clang_available())
         return;
     EXPECT_EQ("", Run(msp430_clang_config(), "", "crt0.o", &src, flags, ".clang"));

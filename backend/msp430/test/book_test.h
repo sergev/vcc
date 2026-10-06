@@ -81,6 +81,7 @@ protected:
 
     // Run a book program, and check that GCC -O0 with newlib gives the same, and clang
     // -O0 on our runtime too where present.
+    // cppcheck-suppress duplInheritedMember ; deliberately wraps Msp430Test's version
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = Msp430Test::CompileAndRunBook(src);
@@ -88,6 +89,7 @@ protected:
         EXPECT_NE("ERROR", ours) << "did not run";
         EXPECT_EQ(GccRunBook(src), ours) << "differs from GCC";
         EXPECT_EQ(exit_status, status) << "exit status differs from GCC";
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
         if (msp430_clang_available() && !ClangDiffers()) {
             std::string clang = ClangRunBook(src);
             EXPECT_EQ(clang, ours) << "differs from clang";

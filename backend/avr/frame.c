@@ -390,7 +390,7 @@ static void address_slot(Gen *g, int ptr, int q)
         emit2(g, AVR_ADIW, avr_reg(ptr), avr_imm(q));
     } else {
         emit2(g, AVR_SUBI, avr_reg(ptr), avr_imm(-q & 0xff));
-        emit2(g, AVR_SBCI, avr_reg(ptr + 1), avr_imm((-q >> 8) & 0xff));
+        emit2(g, AVR_SBCI, avr_reg(ptr + 1), avr_imm(((unsigned)-q >> 8) & 0xff));
     }
 }
 
@@ -682,6 +682,7 @@ void load_vals(Gen *g, const Load *l, int n)
             s[m++] = vr.r[i];
         }
     }
+    // cppcheck-suppress uninitvar ; only the first m entries are read, all set above
     parallel_move(g, d, s, m);
 
     // From memory, then constants.
@@ -758,6 +759,7 @@ void store_regs(Gen *g, const Tac_Val *v, const int *regs, int n)
         int src[8];
         for (int i = 0; i < size; i++)
             src[i] = i < m ? regs[i] : AVR_ZERO;
+        // cppcheck-suppress uninitvar ; src[0..size) is set by the loop above
         parallel_move(g, vr.r, src, size);
         return;
     }

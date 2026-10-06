@@ -506,7 +506,7 @@ void gen_return(Gen *g, const Tac_Val *v)
             name_addr(g, v->u.var_name, T3, &base, &off);
             gen_memcopy(g, T4, 0, base, off, a64_size(t), a64_align(t));
         } else if (a64_is_aggregate(t)) {
-            int regs[2] = { A64_X0, A64_X(1) };
+            const int regs[2] = { A64_X0, A64_X(1) };
             load_pieces(g, v->u.var_name, t, regs, (a64_size(t) + 7) / 8);
         } else if (a64_is_fp(t)) {
             load_val(g, A64_V0, v);

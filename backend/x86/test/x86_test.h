@@ -108,7 +108,7 @@ protected:
             line      = line.substr(4);
             size_t sp = line.find(' ');
             if (sp != std::string::npos)
-                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+                line.erase(sp + 1, line.find_first_not_of(' ', sp) - (sp + 1));
             out += line + "\n";
         }
         return out;

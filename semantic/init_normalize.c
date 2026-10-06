@@ -25,7 +25,7 @@
 #include "typecheck.h"
 #include "xalloc.h"
 
-static Initializer *normalize_compound(Type *t, Initializer *init, InitMode mode);
+static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode);
 
 static bool is_aggregate(const Type *t)
 {
@@ -100,7 +100,7 @@ static void set_slot(Initializer **slot, Initializer *init)
     *slot = init;
 }
 
-static void place(Type *t, Initializer **slot, InitItem **cur, InitMode mode);
+static void place(const Type *t, Initializer **slot, InitItem **cur, InitMode mode);
 
 // The slot of array element d names, growing an unsized array up to it.
 static InitItem **designate_index(const Type *t, Initializer *node, Designator *d)
@@ -184,6 +184,8 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                  InitMode mode)
 {
     InitItem **slot       = &node->u.items;
+    // The member of the slot at hand; NULL for an array.  A struct's canonical node has
+    // one slot per member, so the member never runs out before the slots do.
     const FieldDef *field = t->kind == TYPE_ARRAY ? NULL : structtab_find(t->u.struct_t.name)->members;
     bool unsized          = t->kind == TYPE_ARRAY && !t->u.array.size;
 
@@ -208,7 +210,7 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                     *sub_init = new_canonical(sub);
                 fill(sub, *sub_init, cur, false, true, mode);
                 slot = &(*slot)->next;
-                if (field)
+                if (t->kind != TYPE_ARRAY)
                     field = field->next;
                 continue;
             }
@@ -225,16 +227,16 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
             (*slot)->designators = NULL;
             set_slot(&(*slot)->init, NULL);
         }
-        Type *sub = t->kind == TYPE_ARRAY ? t->u.array.element : field->type;
+        const Type *sub = t->kind == TYPE_ARRAY ? t->u.array.element : field->type;
         place(sub, &(*slot)->init, cur, mode);
         slot = &(*slot)->next;
-        if (field)
+        if (t->kind != TYPE_ARRAY)
             field = field->next;
     }
 }
 
 // Initialize the subobject of type t, whose canonical slot is *slot, from the item at *cur.
-static void place(Type *t, Initializer **slot, InitItem **cur, InitMode mode)
+static void place(const Type *t, Initializer **slot, InitItem **cur, InitMode mode)
 {
     const Type *ut    = unalias(t);
     Initializer *init = (*cur)->init;
@@ -270,7 +272,7 @@ static void place(Type *t, Initializer **slot, InitItem **cur, InitMode mode)
 }
 
 // Normalize a brace-enclosed initializer for type t; consumes init.
-static Initializer *normalize_compound(Type *t, Initializer *init, InitMode mode)
+static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode)
 {
     const Type *ut = unalias(t);
     InitItem *items = init->u.items;
@@ -302,7 +304,7 @@ Initializer *normalize_init(Type *type, Initializer *init, InitMode mode)
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
     }
-    Type *t = (Type *)unalias(type);
+    const Type *t = unalias(type);
 
     if (init->kind == INITIALIZER_SINGLE) {
         // A string for an array is checked by the consumer; it is never decayed here.
@@ -310,13 +312,15 @@ Initializer *normalize_init(Type *type, Initializer *init, InitMode mode)
             return init;
         return check_leaf(init, mode);
     }
-    bool unsized = t->kind == TYPE_ARRAY && !t->u.array.size;
+    // An unsized array gets its size from the initializer, in place: in type itself, never
+    // in the typedef it may name, which other declarations share.
+    bool unsized = type->kind == TYPE_ARRAY && !type->u.array.size;
     init         = normalize_compound(t, init, mode);
     if (unsized && init->kind == INITIALIZER_COMPOUND) {
         size_t n = 0;
         for (const InitItem *item = init->u.items; item; item = item->next)
             n++;
-        set_array_size(t, n);
+        set_array_size(type, n);
     }
     return init;
 }

@@ -64,6 +64,7 @@ protected:
 
     // Run a book program, and check that clang -O0 gives the same; -O1 for the few
     // where clang -O0 runs out of registers.
+    // cppcheck-suppress duplInheritedMember ; deliberately wraps AvrTest::CompileAndRunBook
     std::string CompileAndRunBook(const std::string &src)
     {
         static const char *const clang_o1[] = {

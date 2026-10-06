@@ -253,7 +253,7 @@ static void cfg_build(Cfg *c, Msp_Func *fn, unsigned result)
     c->fn     = fn;
     c->result = result;
     c->n      = 0;
-    for (Msp_Block *b = fn->blocks; b; b = b->next)
+    for (const Msp_Block *b = fn->blocks; b; b = b->next)
         c->n++;
     c->blk = xalloc((c->n + 1) * sizeof(Blk), __func__, __FILE__, __LINE__);
     map_init(&c->labels);
@@ -262,7 +262,7 @@ static void cfg_build(Cfg *c, Msp_Func *fn, unsigned result)
         Blk *k = &c->blk[i];
         k->b   = b;
         k->n   = 0;
-        for (Msp_Instr *in = b->head; in; in = in->next)
+        for (const Msp_Instr *in = b->head; in; in = in->next)
             k->n++;
         k->in = xalloc((k->n + 1) * sizeof(Msp_Instr *), __func__, __FILE__, __LINE__);
         int j = 0;
@@ -1083,13 +1083,13 @@ static bool backward(Cfg *c)
             // @p+, y (into a register only: clang's assembler).
             if (in->op == MSP_MOV && is_reg(&in->opnd[1]) &&
                 (in->opnd[0].kind == MSP_OPND_IND || msp_zero_indexed(&in->opnd[0]))) {
-                int p = in->opnd[0].reg, step = in->byte ? 1 : 2, n = 1;
+                int p = in->opnd[0].reg, stride = in->byte ? 1 : 2, n = 1;
                 while (i + n < k->n) {
                     const Msp_Instr *m = k->in[i + n];
                     if (!m || m->vol || m->op != MSP_MOV || m->byte != in->byte ||
                         !is_reg(&m->opnd[1]) || m->opnd[1].reg == p ||
                         m->opnd[0].kind != MSP_OPND_INDEXED || m->opnd[0].reg != p ||
-                        m->opnd[0].sym || m->opnd[0].incoming || m->opnd[0].imm != step * n)
+                        m->opnd[0].sym || m->opnd[0].incoming || m->opnd[0].imm != stride * n)
                         break;
                     n++;
                 }
@@ -1369,9 +1369,9 @@ static bool dead_slot_stores(Cfg *c, int out)
         Blk *k     = &c->blk[bi];
         Bytes live = bi + 1 < c->n ? in[bi + 1] : 0;
         for (int i = k->n - 1; i >= 0; i--) {
-            Msp_Instr *x = k->in[i];
-            live         = slots_across(c, in, bi, i, live);
-            Bytes w      = stored_slot(x);
+            const Msp_Instr *x = k->in[i];
+            live               = slots_across(c, in, bi, i, live);
+            Bytes w            = stored_slot(x);
             if (w && !(w & live)) {
                 drop(k, i);
                 dropped = true;

@@ -97,7 +97,7 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 }
 
 // The type stored through pointer value `ptr`, or NULL when not known.
-static const Tac_Type *pointee(Gen *g, const Tac_Val *ptr)
+static const Tac_Type *pointee(const Gen *g, const Tac_Val *ptr)
 {
     const Tac_Type *t = val_type(g, ptr);
     return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;

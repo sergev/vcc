@@ -23,7 +23,7 @@ protected:
         DisableOptimization();
         std::string src;
         int n = 0;
-        for (auto &o : ops) {
+        for (const auto &o : ops) {
             std::string t = o.first;
             src += t + " f" + std::to_string(n++) + "(void) { " + t + " a = 7; " + t +
                    " b = 2; return a " + o.second + " b; }\n";

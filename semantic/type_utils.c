@@ -14,7 +14,9 @@
 // entry is purged on block exit and a surviving reference would dangle. A *global*
 // (file-scope) typedef name is left untouched: its typetab entry lives for the whole
 // compilation, so downstream code resolves it on demand (via unalias / the type
-// predicates) — this avoids deep-cloning the resolved type at every use.
+// predicates) — this avoids deep-cloning the resolved type at every use.  But for one
+// that names an array of unspecified size: an initializer completes the array type of
+// its own object (C11 §6.7.9p22), in place, so each object needs a copy of its own.
 // Returns the (potentially new) root pointer; caller must use the return value.
 Type *resolve_typedef_names(Type *t)
 {
@@ -22,7 +24,8 @@ Type *resolve_typedef_names(Type *t)
         return NULL;
     if (t->kind == TYPE_TYPEDEF_NAME) {
         const TypeDef *def = typetab_find(t->u.typedef_name.name);
-        if (def->level == 0)
+        const Type *ut     = unalias(def->type);
+        if (def->level == 0 && !(ut->kind == TYPE_ARRAY && !ut->u.array.size))
             return t; // global typedef: keep the reference, no clone
         Type *cloned = clone_type(def->type, __func__, __FILE__, __LINE__);
         free_type(t);

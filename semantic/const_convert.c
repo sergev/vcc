@@ -292,25 +292,25 @@ void type_int_literal(Literal *lit)
     }
 }
 
-Tac_StaticInit *new_static_init_int(size_t size, bool is_signed, uint64_t bits)
+Tac_StaticInit *new_static_init_int(size_t size, bool sign, uint64_t bits)
 {
     Tac_StaticInit *result;
     if (size == 2) {
         // int, unsigned int and pointers on AVR
-        result = tac_new_static_init(is_signed ? TAC_STATIC_INIT_I16 : TAC_STATIC_INIT_U16);
-        if (is_signed)
+        result = tac_new_static_init(sign ? TAC_STATIC_INIT_I16 : TAC_STATIC_INIT_U16);
+        if (sign)
             result->u.short_val = (int16_t)bits;
         else
             result->u.ushort_val = (uint16_t)bits;
     } else if (size == 4) {
-        result = tac_new_static_init(is_signed ? TAC_STATIC_INIT_I32 : TAC_STATIC_INIT_U32);
-        if (is_signed)
+        result = tac_new_static_init(sign ? TAC_STATIC_INIT_I32 : TAC_STATIC_INIT_U32);
+        if (sign)
             result->u.int_val = (int32_t)bits;
         else
             result->u.uint_val = (uint32_t)bits;
     } else {
-        result = tac_new_static_init(is_signed ? TAC_STATIC_INIT_I64 : TAC_STATIC_INIT_U64);
-        if (is_signed)
+        result = tac_new_static_init(sign ? TAC_STATIC_INIT_I64 : TAC_STATIC_INIT_U64);
+        if (sign)
             result->u.long_val = (int64_t)bits;
         else
             result->u.ulong_val = bits;

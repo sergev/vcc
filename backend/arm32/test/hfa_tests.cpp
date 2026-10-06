@@ -79,8 +79,8 @@ TEST(TacAbi, Aapcs32Class)
     EXPECT_EQ(8 * 8 + 1, tac_aapcs32_class(&ld));
     EXPECT_EQ(TAC_AAPCS32_CORE, tac_aapcs32_class(&i));
     // { double; long double } is homogeneous here, as AAPCS counts long double a double.
-    Tac_Member m2 = { .name = (char *)"b", .offset = 8, .type = &ld };
-    Tac_Member m1 = { .next = &m2, .name = (char *)"a", .offset = 0, .type = &d };
+    Tac_Member m2 = { .name = const_cast<char *>("b"), .offset = 8, .type = &ld };
+    Tac_Member m1 = { .next = &m2, .name = const_cast<char *>("a"), .offset = 0, .type = &d };
     Tac_Type s    = { .kind = TAC_TYPE_STRUCTURE };
     s.u.structure.members = &m1;
     s.u.structure.size    = 16;

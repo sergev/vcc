@@ -39,6 +39,10 @@ protected:
     {
         rv_peephole(fn);
         FILE *f = tmpfile();
+        if (!f) {
+            ADD_FAILURE() << "tmpfile failed";
+            return "";
+        }
         rv_emit_func(f, fn);
         long len = ftell(f);
         rewind(f);
@@ -56,7 +60,7 @@ protected:
             line      = line.substr(line.find_first_not_of(' '));
             size_t sp = line.find(' ');
             if (sp != std::string::npos)
-                line = line.substr(0, sp + 1) + line.substr(line.find_first_not_of(' ', sp));
+                line.erase(sp + 1, line.find_first_not_of(' ', sp) - sp - 1);
             out += line + "\n";
         }
         return out;

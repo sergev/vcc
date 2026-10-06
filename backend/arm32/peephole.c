@@ -246,7 +246,7 @@ static void free_liveness(void)
 static void compute_liveness(A32_Func *fn)
 {
     free_liveness();
-    for (A32_Block *b = fn->blocks; b; b = b->next)
+    for (const A32_Block *b = fn->blocks; b; b = b->next)
         live_info.n++;
     size_t n           = live_info.n ? live_info.n : 1;
     live_info.blocks   = xalloc(n * sizeof(A32_Block *), __func__, __FILE__, __LINE__);
@@ -407,8 +407,8 @@ static bool forward_move(A32_Instr **link)
     if ((tb & ~SCRATCH) || t == r || r == A32_SP || r == A32_PC)
         return false;
     bool clobbered = false;
-    A32_Instr *end = NULL;
-    for (A32_Instr *n = mv->next; n; n = n->next) {
+    const A32_Instr *end = NULL;
+    for (const A32_Instr *n = mv->next; n; n = n->next) {
         if ((uses(n) & tb) && (clobbered || !can_substitute(n, t, w)))
             return false;
         Regs d = defs(n);
@@ -452,7 +452,7 @@ static bool compute_in_place(A32_Instr *in)
             n->opnd[0].reg != A32_SP && n->opnd[0].reg != A32_PC && dead_after(n, tb)) {
             int d   = n->opnd[0].reg;
             Regs db = reg_set(d, w);
-            for (A32_Instr *m = in->next; m != n; m = m->next)
+            for (const A32_Instr *m = in->next; m != n; m = m->next)
                 if ((uses(m) & db) || (defs(m) & db) || !can_substitute(m, t, w))
                     return false;
             for (A32_Instr *m = in->next; m != n; m = m->next)
@@ -474,7 +474,7 @@ static bool delete_move_back(A32_Instr *mv)
     A32_Width w = mv->opnd[0].width;
     Regs both   = reg_set(x, w) | reg_set(y, w);
     for (A32_Instr **link = &mv->next; *link; link = &(*link)->next) {
-        A32_Instr *n = *link;
+        const A32_Instr *n = *link;
         if (is_move(n) && n->op == mv->op && n->opnd[0].reg == y && n->opnd[1].reg == x) {
             delete_at(link);
             return true;
@@ -818,7 +818,7 @@ static A32_Instr **last_link(A32_Block *b, int back)
 {
     A32_Instr **link = &b->head;
     int n            = 0;
-    for (A32_Instr *in = b->head; in; in = in->next)
+    for (const A32_Instr *in = b->head; in; in = in->next)
         n++;
     if (n <= back)
         return NULL;
@@ -930,7 +930,7 @@ static bool walk_arm(const A32_Func *fn, A32_Block *b, A32_Instr **link, const c
 // A conditional branch around a few instructions to its label (a triangle), or with a
 // jump at their end past a few more (a diamond): the branch and jump go, and the
 // instructions run under the conditions, when no other branch goes to the label.
-static bool predicate(A32_Func *fn, A32_Block *b)
+static bool predicate(const A32_Func *fn, A32_Block *b)
 {
     A32_Instr **bl = NULL;
     for (A32_Instr **link = &b->head; *link; link = &(*link)->next)

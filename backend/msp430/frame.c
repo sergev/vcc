@@ -587,7 +587,7 @@ void parallel_moves(Gen *g, Move *m, int n)
         }
         // A cycle: swap the first destination with its source; the moves that read the
         // destination now read the source.
-        Msp_Operand *a = &m[0].dst, *b = &m[0].src;
+        const Msp_Operand *a = &m[0].dst, *b = &m[0].src;
         bool byte      = m[0].byte && (a->kind != MSP_OPND_REG || b->kind != MSP_OPND_REG);
         emit2(g, MSP_XOR, msp_copy(b), msp_copy(a))->byte = byte;
         emit2(g, MSP_XOR, msp_copy(a), msp_copy(b))->byte = byte;
@@ -726,7 +726,7 @@ static unsigned saved_regs(const Gen *g)
 
 // Complete every offset into the incoming arguments: they lie above the frame, the
 // saved registers and the return address.
-static void complete_incoming(Gen *g, int base)
+static void complete_incoming(const Gen *g, int base)
 {
     for (Msp_Block *b = g->fn->blocks; b; b = b->next)
         for (Msp_Instr *in = b->head; in; in = in->next)

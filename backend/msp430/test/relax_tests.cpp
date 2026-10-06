@@ -28,6 +28,7 @@ std::string RelaxedAsm(Msp_Op op, int before, int after, bool backward)
     msp_append(fn, MSP_RET);
     msp_relax(fn);
     FILE *f = tmpfile();
+    EXPECT_NE(nullptr, f);
     msp_emit_func(f, fn);
     msp_free_func(fn);
     long len = ftell(f);
@@ -60,6 +61,7 @@ protected:
     std::string Relaxed(Msp_Op op, int before, int after, bool backward)
     {
         std::string s = RelaxedAsm(op, before, after, backward);
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
         if (msp430_tools_available()) {
             const auto *info = ::testing::UnitTest::GetInstance()->current_test_info();
             std::string base = std::string(TEST_DIR "/") + info->test_suite_name() + "." +
@@ -72,6 +74,7 @@ protected:
                                    base + ".s" },
                                  base + ".log"))
                 << ReadFile(base + ".log");
+            // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
             if (msp430_clang_available())
                 EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o",
                                        base + ".clang.o", base + ".s" },

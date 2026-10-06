@@ -661,6 +661,39 @@ TEST_F(TranslateTest, TypedefLocalVar)
 )");
 }
 
+// A file-scope typedef of an array of unspecified size: each initializer completes the
+// array type of its own object (C11 §6.7.9p22), not the typedef the others share.
+TEST_F(TranslateTest, TypedefUnsizedArray)
+{
+    std::string yaml = CompileToYaml(R"(
+        typedef int A[];
+        A x = {1, 2};
+        int f(void)
+        {
+            A y = {1, 2, 3};
+            return sizeof x + sizeof y;
+        }
+    )");
+    // x has two elements.
+    EXPECT_NE(yaml.find(R"(  name: x
+  global: true
+  type:
+    kind: array
+    elem_type:
+      kind: int
+    size: 2
+)"),
+              std::string::npos)
+        << yaml;
+    // y has three: sizeof x + sizeof y is 2 + 3 words of 6 bytes.
+    EXPECT_NE(yaml.find(R"(
+          kind: ulong
+          value: 30
+)"),
+              std::string::npos)
+        << yaml;
+}
+
 // ---------------------------------------------------------------------------
 // Compound local-variable initializers — task #2
 // ---------------------------------------------------------------------------

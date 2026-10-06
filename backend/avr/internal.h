@@ -236,8 +236,8 @@ void gen_return(Gen *g, const Tac_Val *v, bool last);
 void gen_call(Gen *g, const Tac_Instruction *in);
 // Register allocation hints: the registers the parameters arrive in, and those of a
 // call's arguments and result.
-void param_hints(Gen *g, StringMap *hints, StringMap *hints_hi);
-void call_hints(Gen *g, const Flow *f, const Tac_Instruction *in, int *hint);
+void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);
+void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint);
 // The type of `v` in function `f` (before the frame is laid out).
 const Tac_Type *flow_val_type(const Gen *g, const Flow *f, const Tac_Val *v);
 

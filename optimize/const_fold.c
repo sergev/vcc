@@ -416,6 +416,7 @@ static double round_float(double d)
 {
     if (!target_config || target_config->float_size < target_config->double_size ||
         target_double_is_single())
+        // cppcheck-suppress suspiciousFloatingPointCast ; rounding to float is the point
         return (float)d;
     return d;
 }

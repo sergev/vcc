@@ -4,7 +4,7 @@
  * divide, square root, the comparisons and the conversions between float and 32-bit
  * integers.  Correctly rounded to nearest-even, with subnormals, infinities and NaNs, so
  * it agrees with compiler-rt and with the constant folder bit for bit.  Written with
- * integer operations only; a float's bits are reached through a pointer.
+ * integer operations only; a float's bits are reached through a union.
  *
  * Inside, a finite value is a sign, a biased exponent e and a significand `sig` with
  * its leading one at bit 26: sig * 2^(e - 127 - 26).  The three bits below the 24 of
@@ -22,12 +22,16 @@
 
 static uint32_t bits(float f)
 {
-    return *(uint32_t *)&f;
+    union { float f; uint32_t u; } v;
+    v.f = f;
+    return v.u;
 }
 
 static float from_bits(uint32_t u)
 {
-    return *(float *)&u;
+    union { float f; uint32_t u; } v;
+    v.u = u;
+    return v.f;
 }
 
 static int is_nan(uint32_t a)
