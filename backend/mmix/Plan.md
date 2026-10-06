@@ -81,6 +81,9 @@ for Knuth: `A`, `R`, `B`, `V`, `X`, `M` and `T` are taken.
 | Constants in an operation | In the type of the operation that uses them (`load_val_as`); a same-width variable of the other signedness too, and an argument in its parameter's type | A cast between `int` and `unsigned` emits no TAC, so copy propagation leaves the other kind in place; GCC's callee trusts the caller's extension |
 | A constant stored to a member | In the type of the scalar member at its offset (`scalar_at`) | A partial initializer zero-fills a pointer with an `int` 0 |
 | `va_start` | `__va_start(&ap)` expanded in place, not a call, so a variadic leaf stays a leaf; `va_arg` in `<stdarg.h>` alone, no `__builtin_va_class` | A variable argument is one 8-byte slot in a contiguous run, whatever its type |
+| `setjmp`/`longjmp` | newlib's `libc/sys/mmixware/setjmp.S`, ported to `libc/mmix/setjmp.s` (lowercase, the MMIXware-ABI branch only, its notice kept); `jmp_buf` five `unsigned long`s | The layout of GCC's built-in. `longjmp` pops register-stack frames until `rO` is back to the saved one, so it unwinds through GCC's frames too |
+| `malloc` | A bump allocator from `_end` (`libc/mmix/malloc.c`), blocks 16-aligned like newlib's | `max_align_t` needs only 8; the shared `malloc` test expects 16 |
+| `printf` | The shared `doprnt`; `%f` of a huge value gets its first 17 digits right, the rest print as 0 | The libc run tests run against newlib too, but for its missing C99 formats (`j`, `z`, `t`, `hh`, `%F`) and `strerror`'s messages |
 | Test machine load | `mmix` runs get 25 s each, a ctest 60 s | A book program runs 88 M instructions (7 s, GCC's build as long), which `ctest -j8` stretches past 10 s |
 
 Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
@@ -226,51 +229,6 @@ boundary.
 
 `make run` stays green after every K-step.
 
-## Phase 4 — library and headers
-
-- **K19. Headers.**
-  - **`setjmp.h`:** newlib's MMIX `jmp_buf`, five `unsigned long`s (`_JBLEN` 5): fp, `rJ`,
-    sp, `rO` before the call, and the value handed from `longjmp`. GCC's built-in uses the
-    same layout.
-  - **`math.h`:** lists what `libc.a` has.
-  - **Checked against GCC:** `HeadersAgreeWithGcc` compares our headers' sizes, limits,
-    type identities and `float.h` values with GCC's.
-- **K20. Libc and run tests.**
-  - **`setjmp`/`longjmp`: newlib's (decided).** `libc/mmix/setjmp.s` is newlib's
-    `libc/sys/mmixware/setjmp.S`, Hans-Peter Nilsson's, with its permission notice kept
-    as its license requires. The port:
-    - lowercase mnemonics;
-    - only the MMIXware-ABI branch of its `#ifdef`, so a plain `.s` with no
-      preprocessor.
-
-    **How it works:**
-    - **`setjmp`** stores `$253`, `rJ` and `$254`. It then pops back into itself (`put rJ`
-      to a local label, `pop 1,0`) to read `rO` as it was *before* the call.
-    - **`longjmp`** pops one register-stack frame at a time (`pop 0,0` until `rO` is
-      back to the saved value). It then restores `$253`/`$254` and `go`es to the saved
-      `rJ`, with the value in the caller's result register.
-    - It uses `$251`, `$252` and `$255` as scratch, which is safe: none holds anything
-      live across a call to either function.
-
-    **Tests:**
-    - from our code, from GCC's, and across both;
-    - a `longjmp` out of deep recursion, which has spilled the register ring;
-    - `longjmp(env, 0)` returning 1.
-
-    The earlier `~/Project/Mmixware/setjmp-mmix/` project is not used.
-  - **`malloc`** is done: `libc/mmix/malloc.c`, a bump allocator from `_end` up to the pool
-    segment, written when chapter 18 needed it.
-  - **`frexp`/`ldexp`/`modf`** come from the shared binary64 sources. `sqrt` is `fsqrt`.
-  - **`doprnt.c`:** check `%z`/`%t` and the `FBUFSIZE` sizing for LP64 with an 8-byte
-    `long double`. `%Lf` takes a `double`-sized argument.
-  - **Run tests:** port the `printf`/`str`/`mem`/`math` run tests from x86-64, the other
-    LP64 target with a signed `char`, with the host's output as the expectation.
-    - **Byte order:** wherever a case's output depends on it, take GCC's output instead.
-    - **Against newlib:** run the `str`/`mem` cases and the integer `printf` cases
-      against newlib too.
-  - **Costs against GCC:** measure with `mmix -s` (instructions, υ and μ) for
-    `printf("%d")`, `printf("%g")` and a few kernels, and record them here.
-
 ## Phase 5 — code quality
 
 - **K21. Register allocation** on `backend/common/regalloc.c`.
@@ -337,8 +295,8 @@ boundary.
   - **Tail calls:** decide whether `jmp f` after moving the arguments to `$0`… and
     restoring `rJ` is sound under the register stack, and measure it.
   - **Measured** against GCC `-O2`, in `mmix -s` instructions, υ and μ, and in code size,
-    on the C library, the book programs and the Phase 4 benchmarks, and recorded here.
-  - **The baseline,** naive selection (K20, `scripts/bench_mmix.sh`: instructions, υ and
+    on the C library, the book programs and `bench/mmix`, and recorded here.
+  - **The baseline,** naive selection (`scripts/bench_mmix.sh`: instructions, υ and
     μ less an empty `main`'s; GCC's kernels on our runtime, its `printf` newlib's):
 
     | Bench | Ours | GCC `-O2` | Ratio (instr) |
