@@ -84,6 +84,8 @@ for Knuth: `A`, `R`, `B`, `V`, `X`, `M` and `T` are taken.
 | `setjmp`/`longjmp` | newlib's `libc/sys/mmixware/setjmp.S`, ported to `libc/mmix/setjmp.s` (lowercase, the MMIXware-ABI branch only, its notice kept); `jmp_buf` five `unsigned long`s | The layout of GCC's built-in. `longjmp` pops register-stack frames until `rO` is back to the saved one, so it unwinds through GCC's frames too |
 | `malloc` | A bump allocator from `_end` (`libc/mmix/malloc.c`), blocks 16-aligned like newlib's | `max_align_t` needs only 8; the shared `malloc` test expects 16 |
 | `printf` | The shared `doprnt`; `%f` of a huge value gets its first 17 digits right, the rest print as 0 | The libc run tests run against newlib too, but for its missing C99 formats (`j`, `z`, `t`, `hh`, `%F`) and `strerror`'s messages |
+| Code quality (K21–K23) | Allocation in GCC's fixed model; in selection, a comparison or `!x` only a branch reads is a branch (on `cmp`'s sign, or the value against zero), a pointer sum only a load or store reads is its address (`ld $x,$p,$i`, `ld $x,$p,k`), a commutative operation's constant goes second, a constant of −1..−255 added is subtracted; a call whose result is returned is a tail call; a peephole pass over the IR with register liveness | See **Costs against GCC** |
+| Tail calls | `jmp f` after `put rJ` and the arguments in `$0`…, when the function has no frame, every argument fits a register and the result types match | Sound under the register stack: `f` runs in our register frame, and its `pop` returns to our caller. 23% fewer instructions and 6% fewer υ on a `gcd` and countdown benchmark. With no `pushj` left, `rJ` is neither saved nor restored |
 | Test machine load | `mmix` runs get 25 s each, a ctest 60 s | A book program runs 88 M instructions (7 s, GCC's build as long), which `ctest -j8` stretches past 10 s |
 
 Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
@@ -118,6 +120,36 @@ Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
   - **No instruction limit:** the wall-clock timeout is the only timeout.
   - **Options:** `-f` feeds stdin from a file; `-t`, `-r` and `-i` trace, show the
     register stack, and run interactively.
+
+### Costs against GCC
+
+`scripts/bench_mmix.sh` (`bench/mmix/*.c`): instructions / υ / μ under `mmix -s`, less
+those of an empty `main`; GCC's kernels on our runtime, its `printf` newlib's.
+
+| Bench | Naive | Allocated (K21) | Now (K23) | GCC `-O2` |
+|---|---|---|---|---|
+| `fib` | 1404179 / 1576117 / 716413 | 544480 / 716418 / 0 | 458507 / 630447 / 0 | 363764 / 405294 / 83325 |
+| `sum` | 2280157 / 2500153 / 1730103 | 680083 / 900079 / 110000 | 550050 / 550074 / 110000 | 580082 / 580106 / 110000 |
+| `sort` | 1646247 / 1801939 / 1186197 | 780145 / 935837 / 136500 | 505651 / 571053 / 136500 | 594305 / 656409 / 226201 |
+| `dot` | 1605181 / 2045177 / 1205126 | 520096 / 960092 / 110000 | 455063 / 785087 / 110000 | 415084 / 745108 / 110000 |
+| `copy` | 3180061 / 3989976 / 2520026 | 1250014 / 2059929 / 209999 | 760020 / 1349985 / 209999 | 700044 / 1290011 / 209991 |
+| `printf("%d")` | 1733 / 2755 / 818 | 707 / 1729 / 117 | 588 / 1588 / 117 | newlib's: 2103 / 2913 / 372 |
+| `printf("%g")` | 2777 / 3244 / 1260 | 1213 / 1680 / 143 | 1005 / 1452 / 143 | newlib's: 3123 / 3812 / 577 |
+
+- Ours now runs fewer instructions than GCC's on `sum` and `sort`, and within 10% on
+  `copy` and `dot`. On `fib` GCC unrolls the recursion.
+- Left over:
+  - `copy` spends most of its difference on `i % 26`, which GCC multiplies by a magic
+    constant;
+  - `dot` sets two constants in its loop, which needs loop-invariant code motion;
+  - `fib` saves `rJ` before its base case, which needs shrink-wrapping.
+- **Code size** (`.text`): our C library (the shared sources and `malloc`) and the
+  benchmarks are 10304 bytes, GCC `-O2`'s 18444: `doprnt` 6708 against 13964, as GCC
+  inlines and unrolls more; `atoi` (456 against 236) and the `str*` functions are
+  larger in ours.
+- Not done: tracking which registers are extended already (the selection rarely emits a
+  redundant extension now), and forwarding stores to reloads (with registers allocated,
+  little stays in memory).
 
 ### The MMIXware ABI, as GCC implements it
 
@@ -206,7 +238,7 @@ All of it was observed in GCC's `-O2` output and is pinned against GCC, both way
 | `rJ` save (non-leaf only) | `$P` |
 | The hole: `pushj` operand and call result | `$X` = `$(P+1)` (or `$P` in a leaf, which makes no call) |
 | Arguments and values not live across a call | `$(X+1)` … `$31` |
-| Selection scratch | `$255`, never allocated |
+| Selection scratch | `$248`–`$250` for operands in memory and constants, and `$255` for addresses and offsets: globals GCC treats as call-clobbered and `crt0` reserves, so never allocated and never live across a call |
 | Fixed globals | `$254` SP, `$253` FP (unused), `$252` (unused), `$251` struct result; `$247`–`$254` reserved by `crt0.S` in `.MMIX.reg_contents`, as GCC's `crtn.o` does, so the linker allocates its base registers from `$246` down (it would take `$254` first) |
 
 The allocator works in GCC's fixed model:
@@ -217,7 +249,24 @@ The allocator works in GCC's fixed model:
 
 After allocation, a **compaction** renumbers `$14`, `$15` and `$16`… down to just above
 the highest preserved register in use. That mapping is one uniform shift of the upper
-range, so it is valid across the whole function.
+range, so it is valid across the whole function (`phys_reg`; a leaf has no `rJ`, so its
+shift starts at `$15`). The allocator runs before selection, so the selection emits
+the final registers directly.
+
+The allocation is `regalloc.c` on `backend/common/regalloc.c` (K21):
+- every scalar is `REGALLOC_INT`; the pool is `$16`–`$31`, then the hole `$15` (17 that
+  a call clobbers), then `$0`–`$13` (14 that a call keeps, for values live across one);
+- the shared allocator assumes no cost for a callee-saved register, so it needed no hook:
+  preserving one costs nothing here, there is no prologue push;
+- hints: a parameter its incoming `$i`, call argument `i` `$(16+i)`, a call's result the
+  hole, a returned value `$0`;
+- parameters move to their registers by a parallel move in the prologue, arguments to
+  theirs before a call; a move may also re-extend (to a parameter's type) or convert a
+  `float` between binary64 and binary32 bits, through the slot `%.fround`.
+
+`--no-regalloc` keeps every variable in memory, and `--no-peephole` skips the fusions
+and the peephole pass; the tests' `NaiveSelection()` sets both, for the selection
+goldens.
 
 **Every scalar is one register:** `char` up to `long`, pointers, `float` and `double`. There
 are no pairs and no FP class.
@@ -225,93 +274,13 @@ are no pairs and no FP class.
 **Width invariant:** a register holding a narrower integer is always extended to 64 bits:
 sign-extended if signed, zero-extended if unsigned. A `float` value in a register is held
 as its exact binary64 value (`ldsf` loads it, `stsf` rounds it), never as binary32 bits, except at the ABI
-boundary.
+boundary. The one exception, with the peephole optimizations on: a signed `int` `+`, `-`
+or `*` that overflows is undefined, and like GCC's, its result is left unextended (K23,
+decided: 2 instructions saved per `int` loop step, and the book programs agree with
+GCC's). A `char` or `short` result is still extended, being a conversion back from
+`int`.
 
 `make run` stays green after every K-step.
-
-## Phase 5 — code quality
-
-- **K21. Register allocation** on `backend/common/regalloc.c`.
-  - **What it replaces:** the naive selection keeps every variable in memory and `rJ` in
-    `$0`, so every call is `pushj $1` with the arguments loaded from memory into `$2`…
-    and nothing else live. With values in registers:
-    - the width invariant matters again: a narrow result in a register is re-extended;
-    - the arguments need parallel moves;
-    - a `float` result needs its rounding (`stsf`/`ldsf` through a scratch slot), which
-      the naive store gave for free.
-  - **Class:** every scalar is `REGALLOC_INT`, and `REGALLOC_FP` is unused (empty FP
-    pool). There are no pairs.
-  - **Numbering:** registers are numbered from 1 on the allocator's side, since `$0` is
-    register 0, as ARM32 does.
-  - **Pools, in GCC's fixed model:**
-    - `$16`–`$31` are the "argument" registers, for values not live across a call;
-    - `$0`–`$13` are the "callee-saved" ones, for values live across a call;
-    - preserving a register costs nothing on MMIX, so there is no prologue push.
-  - **Hints:**
-    - a parameter prefers its incoming `$i`;
-    - call argument `i` prefers `$16+i`, through `call_hints`;
-    - a call result prefers the hole `$15`;
-    - a returned value prefers `$0` (`ret_int`).
-  - **Compaction:** after allocation, `$14` (the `rJ` save), `$15` and `$16`… shift down
-    to just above the highest preserved register in use. This is GCC's
-    `pushj $3` / arguments `$4`, `$5` shape.
-  - **Pressure:** more than 16 values not live across a call, or more than 14 live
-    across one, spill to frame slots.
-  - **Shared code:** check whether `regalloc.c` assumes that a callee-saved register
-    costs a save. If it does, add a hook rather than a special case.
-  - The ch. 20 tests pass, and the register-stack tests of `interop_tests.cpp` (the
-    `regcheck` harness, recursion 3000 deep through GCC's code) pass under allocation.
-- **K22. Frameless functions.** A function with no slots, no outgoing stack arguments and
-  no calls touches neither `$254` nor `rJ`:
-  - `add` is `addu $0,$0,$1; pop 1,0`, as GCC's;
-  - early returns are a `pop` in place.
-- **K23. Selection and peephole.**
-  - **Compare and branch:**
-    - a comparison only a conditional branch reads is a `cmp` and a branch on its sign,
-      or no `cmp` at all against zero;
-    - `!x` and a truth test branch on the value itself.
-  - **Conditional sets:**
-    - `zs*` for 0/1 results;
-    - `cs*` for a `?:` or `if` that only selects between two values, with no branch.
-  - **Immediates:**
-    - the Z immediate for 0–255;
-    - `negu` for small negatives;
-    - `subu`/`addu` turned around for a negative constant;
-    - the wyde-sequence generator's shortest form.
-  - **Addressing:**
-    - `2addu`…`16addu` for scaled indices;
-    - the register form `ldo $x,$p,$i` instead of an `addu` and a load;
-    - offsets folded into the 8-bit field.
-  - **The width invariant:**
-    - track which registers are already extended and drop redundant `slu`/`sr` pairs;
-    - decide here, with measurements, whether a signed `int` `+`/`−`/`*` skips the
-      re-extension as GCC's does. That is legal (overflow is undefined) but changes what
-      overflowing programs print, so the book comparisons must agree.
-  - **Memory:** forward stores to reloads, and drop dead stores to frame slots.
-  - **Branches:**
-    - `pb*` (probable) for loop back-edges;
-    - a branch over a jump inverted;
-    - a jump to the next line deleted.
-  - **Tail calls:** decide whether `jmp f` after moving the arguments to `$0`… and
-    restoring `rJ` is sound under the register stack, and measure it.
-  - **Measured** against GCC `-O2`, in `mmix -s` instructions, υ and μ, and in code size,
-    on the C library, the book programs and `bench/mmix`, and recorded here.
-  - **The baseline,** naive selection (`scripts/bench_mmix.sh`: instructions, υ and
-    μ less an empty `main`'s; GCC's kernels on our runtime, its `printf` newlib's):
-
-    | Bench | Ours | GCC `-O2` | Ratio (instr) |
-    |---|---|---|---|
-    | `fib` (fib(22), recursive) | 1404179 / 1576117 / 716413 | 363764 / 405294 / 83325 | 3.9 |
-    | `sum` (an `int` array, 100 k) | 2280157 / 2500153 / 1730103 | 580082 / 580106 / 110000 | 3.9 |
-    | `sort` (bubble sort, 300) | 1646247 / 1801939 / 1186197 | 594305 / 656409 / 226201 | 2.8 |
-    | `dot` (`double`, 50 k) | 1605181 / 2045177 / 1205126 | 415084 / 745108 / 110000 | 3.9 |
-    | `copy` (`char` loop, 100 k) | 3180061 / 3989976 / 2520026 | 700044 / 1290011 / 209991 | 4.5 |
-    | `printf("%d")` | 1733 / 2755 / 818 | newlib's: 2103 / 2913 / 372 | 0.8 |
-    | `printf("%g")` | 2777 / 3244 / 1260 | newlib's: 3123 / 3812 / 577 | 0.9 |
-
-    Every variable in memory shows in μ: 6 to 12 times GCC's on the kernels. Our
-    `printf` (the shared `doprnt`, compiled naively) runs fewer instructions than
-    newlib's but twice its memory accesses.
 
 ## Phase 6 — finishing
 
@@ -369,8 +338,8 @@ boundary.
   corrupts the caller's locals, far from the cause.
   - Mitigation: the survival tests of `call_tests.cpp`; `interop_tests.cpp` against GCC
     both ways, with the `regcheck` harness and recursion that spills the register ring;
-    `mmix -r` to watch the ring. The compaction is one function with a unit test of its
-    mapping.
+    `mmix -r` to watch the ring. The compaction is one function (`phys_reg`), pinned by
+    the `Regalloc*` goldens.
 - **The first big-endian byte-addressed target.** Hidden little-endian assumptions in
   shared code, the libc, the test fixtures and the book expectations.
   - Mitigation: the frontend audit (done); every book program compared with GCC;
@@ -389,8 +358,8 @@ boundary.
     32-bit cases, checked against the host.
 - **The width invariant.** A narrow value left unextended in a 64-bit register compares,
   divides or converts wrongly, usually only for negative or wrapped values.
-  - Mitigation: one rule in selection, a test per operation at each width with
-    overflowing operands, and the peephole's extension tracking checked by the same tests.
+  - Mitigation: one rule in selection (`def_done`), a test per operation at each width
+    with overflowing operands, run with registers allocated (`RunRegallocWidths`).
 - **`float` rounding.** A `float` result not rounded to binary32, or an integer rounded
   twice on the way to `float`, gives a last-bit difference.
   - Mitigation: `fp_tests.cpp`'s halfway cases against the host, and the folder agreeing
