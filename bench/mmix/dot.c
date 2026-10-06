@@ -1,5 +1,6 @@
 static double x[5000], y[5000];
-int main(void)
+
+int main()
 {
     for (int i = 0; i < 5000; i++) {
         x[i] = i * 0.5;
