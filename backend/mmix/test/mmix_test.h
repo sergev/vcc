@@ -30,9 +30,10 @@ inline bool mmix_tools_available()
             GTEST_SKIP() << "mmix-knuth-mmixware-as/ld/gcc or mmix not found; skipping"; \
     } while (0)
 
-// The wall-clock limit of a run, mmix's only one: about 140 M instructions at the 14 M
-// per second measured here.
-#define MMIX_TIMEOUT 10
+// The wall-clock limit of a run, mmix's only one: about 350 M instructions at the 14 M
+// per second measured here.  Chapter 13's DoubleAndIntParamsRecursive runs 88 M (7 s,
+// GCC's build as long), which a loaded machine stretches past 10 s.
+#define MMIX_TIMEOUT 25
 
 // The run configuration: GNU as with the flags GCC passes it assembles our output, GCC
 // compiles the C parts, and ld links from 0x100 (MMIX_LD_FLAGS of

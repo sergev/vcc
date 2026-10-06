@@ -80,6 +80,8 @@ for Knuth: `A`, `R`, `B`, `V`, `X`, `M` and `T` are taken.
 | Integer to `float` | `sflot`/`sflotu`, then `stsf` | They round once to binary32 (checked: 2^62 + 2^38 + 1 gives 2^62 + 2^39), where `flot` and `stsf` would round twice |
 | Constants in an operation | In the type of the operation that uses them (`load_val_as`); a same-width variable of the other signedness too, and an argument in its parameter's type | A cast between `int` and `unsigned` emits no TAC, so copy propagation leaves the other kind in place; GCC's callee trusts the caller's extension |
 | A constant stored to a member | In the type of the scalar member at its offset (`scalar_at`) | A partial initializer zero-fills a pointer with an `int` 0 |
+| `va_start` | `__va_start(&ap)` expanded in place, not a call, so a variadic leaf stays a leaf; `va_arg` in `<stdarg.h>` alone, no `__builtin_va_class` | A variable argument is one 8-byte slot in a contiguous run, whatever its type |
+| Test machine load | `mmix` runs get 25 s each, a ctest 60 s | A book program runs 88 M instructions (7 s, GCC's build as long), which `ctest -j8` stretches past 10 s |
 
 Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
 
@@ -116,8 +118,8 @@ Verified 2026-10-05 on this machine, with scratch programs (not in the tree):
 
 ### The MMIXware ABI, as GCC implements it
 
-All of it was observed in GCC's `-O2` output and is to be pinned against GCC, both ways, by
-the interop tests (K17).
+All of it was observed in GCC's `-O2` output and is pinned against GCC, both ways, by
+`interop_tests.cpp` (a table of signatures), `stdarg_tests.cpp` and the book suite.
 
 - **Fixed registers** (`gcc/config/mmix/mmix.h`):
   - `$254`: stack pointer;
@@ -224,59 +226,6 @@ boundary.
 
 `make run` stays green after every K-step.
 
-## Phase 3 — ABI conformance
-
-- **K16. Variadic functions and `<stdarg.h>`.**
-  - **Calls** need nothing special: variable arguments go exactly like named ones. An
-    unprototyped callee is called the same way.
-  - **The variadic callee** stores `$n`…`$15` into a save area at the top of its frame,
-    directly below the incoming stack arguments. `__va_start(ap)` (intercepted by the
-    backend, as on the other targets) points `ap` at the first variable slot.
-  - **`va_list`** is `char *`.
-  - **`va_arg(ap, T)`** needs no argument classes:
-    - a `T` larger than 8 bytes is read through the pointer in the slot;
-    - otherwise it is read at `slot + 8 − sizeof(T)`, the right-justified bytes;
-    - `ap` advances by 8.
-    - So `__builtin_va_class` stays unused and `va_class` is `NULL`. `float` arrives
-      promoted to `double`.
-  - **Gate:** `printf` in `libc.a` works.
-- **K17. Interop tests with GCC,** in both directions, over a table of signatures, built
-  before the code they test:
-  - **Register assignment:**
-    - 16 register arguments, then 17 and 18 on the stack;
-    - mixed `int`/`long`/pointer/`double`/`float`;
-    - `float` as binary32 bits, both ways;
-    - narrow types (`char`, `signed char`, `unsigned char`, `short`) as arguments and as
-      results, both unextended from GCC and extended by us.
-  - **Aggregates:**
-    - structures of 1, 2, 3, 4, 5, 8, 9, 16 and 24 bytes and a union, as arguments mixed
-      with scalars and as results through `$251`;
-    - a callee writing to a large structure parameter, with the caller's original
-      unchanged;
-    - a 1-byte structure result.
-  - **Function pointers both ways.**
-  - **The register stack:** our values survive GCC's calls and GCC's survive ours, deep
-    recursion through both, and `rJ`, `$254` and `rD` unchanged.
-  - **Variadics both ways,** a `va_list` handed across, and GCC's `printf` from newlib
-    called by our code.
-  - **GCC's code on our runtime,** linked with our `crt0.o` and `libc.a`, then
-    `libgcc.a`. **Our code under newlib,** linked by `mmix-knuth-mmixware-gcc` with
-    GCC's `crti.o`/`crtn.o`: newlib's `printf`, `strtod` and `qsort` with our callback.
-- **K18. Differential book tests.**
-  - Every book program is also compiled by GCC with newlib, run under `mmix`, and the
-    outputs and statuses compared, as for MSP430.
-  - **Byte-order-dependent programs** get big-endian versions in `book_mmix_tests.cpp`, as
-    BESM-6 has in `book_besm6_tests.cpp`. This covers programs that read an `int`'s bytes
-    through a `char *` or pun through a union. GCC's agreement on them is part of the
-    check.
-  - **Skipped so far** (`book_test.h`; GCC's build gives what ours gives on each):
-    - an unsigned plain `char` expected: chapter 16's `StaticInitializers`, chapter 18's
-      `ClassifyParams` and `UnionInits` (x86-64 has signed-`char` versions of the
-      three in `book_x86_tests.cpp`);
-    - a little-endian byte order expected: chapter 16's `AccessThroughCharPointer`, and
-      chapter 18's `CopyThruPointer`, `NestedUnionAccess`, `StaticUnionAccess`,
-      `StaticUnionInits`, `UnionTempLifetime` and `UnionsInConditionals`.
-
 ## Phase 4 — library and headers
 
 - **K19. Headers.**
@@ -352,7 +301,8 @@ boundary.
     across one, spill to frame slots.
   - **Shared code:** check whether `regalloc.c` assumes that a callee-saved register
     costs a save. If it does, add a hook rather than a special case.
-  - The ch. 20 tests pass, and K17's register-stack tests pass under allocation.
+  - The ch. 20 tests pass, and the register-stack tests of `interop_tests.cpp` (the
+    `regcheck` harness, recursion 3000 deep through GCC's code) pass under allocation.
 - **K22. Frameless functions.** A function with no slots, no outgoing stack arguments and
   no calls touches neither `$254` nor `rJ`:
   - `add` is `addu $0,$0,$1; pop 1,0`, as GCC's;
@@ -443,13 +393,15 @@ boundary.
 - **The register-stack protocol.** A wrong `X`, a hole that clobbers a live value, a
   compaction that maps one register onto another, or an `rJ` saved above `X` silently
   corrupts the caller's locals, far from the cause.
-  - Mitigation: the survival tests of `call_tests.cpp`; K17's tests against GCC both ways and deep
-    recursion that spills the register ring; `mmix -r` to watch the ring. The compaction
-    is one function with a unit test of its mapping.
+  - Mitigation: the survival tests of `call_tests.cpp`; `interop_tests.cpp` against GCC
+    both ways, with the `regcheck` harness and recursion that spills the register ring;
+    `mmix -r` to watch the ring. The compaction is one function with a unit test of its
+    mapping.
 - **The first big-endian byte-addressed target.** Hidden little-endian assumptions in
   shared code, the libc, the test fixtures and the book expectations.
-  - Mitigation: the frontend audit (done); every book program compared with GCC (K18); big-endian
-    versions of the byte-order programs, as BESM-6 has.
+  - Mitigation: the frontend audit (done); every book program compared with GCC;
+    big-endian versions of the byte-order programs in `book_mmix_tests.cpp`, as BESM-6
+    has, and signed-`char` versions shared with x86-64.
 - **A halt in zeroed memory looks like `exit(0)`.** `trap 0,0,0` is the all-zero word.
   - Mitigation: the `[exit N]` trailer that the fixture requires of our runtime, and
     tests that check output, not only status.

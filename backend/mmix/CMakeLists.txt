@@ -60,4 +60,4 @@ target_compile_definitions(mmix-tests PRIVATE
     MMIX_LIB_DIR="${MMIX_LIB_DIR}")
 target_include_directories(mmix-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(mmix-tests)
-gtest_discover_tests(mmix-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)
+gtest_discover_tests(mmix-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 60)
