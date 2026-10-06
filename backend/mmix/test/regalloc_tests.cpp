@@ -37,11 +37,17 @@ TEST_F(MmixTest, RegallocNothingKept)
               Code(CompileToMmix("long g(void); long f(void) { return g(); }")));
 }
 
-// An int result that may overflow is extended again in its register.
+// An unsigned int result that wraps is extended again in its register; a signed one,
+// whose overflow is undefined, is not, as GCC's is not.
 TEST_F(MmixTest, RegallocReextend)
 {
-    EXPECT_EQ("addu $0,$0,1\nslu $0,$0,32\nsr $0,$0,32\npop 1,0\n",
-              Code(CompileToMmix("int inc(int a) { return a + 1; }")));
+    EXPECT_EQ("addu $0,$0,1\nslu $0,$0,32\nsru $0,$0,32\npop 1,0\n",
+              Code(CompileToMmix("unsigned inc(unsigned a) { return a + 1; }")));
+}
+
+TEST_F(MmixTest, RegallocSignedNotReextended)
+{
+    EXPECT_EQ("addu $0,$0,1\npop 1,0\n", Code(CompileToMmix("int inc(int a) { return a + 1; }")));
 }
 
 // Run: arithmetic wraps in its type in a register as it does in memory; a narrow result
@@ -50,7 +56,7 @@ TEST_F(MmixTest, RunRegallocWidths)
 {
     SKIP_IF_NO_MMIX_TOOLS();
     EXPECT_EQ("", CompileAndRunMmix(R"(
-        int inc(int a) { return a + 1; }
+        int inc(int a) { return (int)((unsigned)a + 1); }
         unsigned uinc(unsigned a) { return a + 1; }
         signed char sc(int a) { return (signed char)(a * 3); }
         unsigned short us(int a) { return (unsigned short)-a; }

@@ -49,6 +49,7 @@
 #ifndef MMIX_INTERNAL_H
 #define MMIX_INTERNAL_H
 
+#include "codegen.h"
 #include "mmix_ir.h"
 #include "string_map.h"
 #include "tac.h"

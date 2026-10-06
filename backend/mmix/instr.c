@@ -230,15 +230,27 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Mmix_Op mop;
     bool canonical = false; // may overflow the type
     switch (op) {
+    // A signed int or long result that overflows is undefined: like GCC's, ours is left
+    // as the 64-bit sum, unextended (with the peephole optimizations on).  A narrower
+    // one is a conversion back from int, which wraps.
     case TAC_BINARY_ADD:
+        mop       = MMIX_ADDU;
+        canonical = mmix_peephole_on;
+        break;
     case TAC_BINARY_ADD_UNSIGNED:
         mop = MMIX_ADDU;
         break;
     case TAC_BINARY_SUBTRACT:
+        mop       = MMIX_SUBU;
+        canonical = mmix_peephole_on;
+        break;
     case TAC_BINARY_SUBTRACT_UNSIGNED:
         mop = MMIX_SUBU;
         break;
     case TAC_BINARY_MULTIPLY:
+        mop       = MMIX_MULU;
+        canonical = mmix_peephole_on;
+        break;
     case TAC_BINARY_MULTIPLY_UNSIGNED:
         mop = MMIX_MULU;
         break;
@@ -289,7 +301,10 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     emit3(g, mop, mmix_reg(d), mmix_reg(a), z);
     if (op == TAC_BINARY_REMAINDER_UNSIGNED)
         emit2(g, MMIX_GET, mmix_reg(d), mmix_special(MMIX_rR));
-    def_done(g, d, in->u.binary.dst, canonical || mmix_type_size(val_type(g, in->u.binary.dst)) == 8);
+    int size = mmix_type_size(val_type(g, in->u.binary.dst));
+    if (size < 4 && (op == TAC_BINARY_ADD || op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_MULTIPLY))
+        canonical = false;
+    def_done(g, d, in->u.binary.dst, canonical || size == 8);
 }
 
 // Branch to TAC label `target` when `cond` is zero (or nonzero).

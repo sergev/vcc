@@ -253,9 +253,8 @@ TEST_F(MmixTest, RunWidths)
     std::ostringstream src;
     src << "int main(void)\n{\n";
     int n = 0;
-    Case<int>(src, n, "int", "+", INT_MAX, 1, (int)((unsigned)INT_MAX + 1));
-    Case<int>(src, n, "int", "*", 65536, 65536, 0);
-    Case<int>(src, n, "int", "-", INT_MIN, 1, (int)((unsigned)INT_MIN - 1));
+    // Not a signed int that overflows: that is undefined, and like GCC's, our sum is
+    // left unextended (RegallocSignedNotReextended).
     Case<unsigned>(src, n, "unsigned", "+", UINT_MAX, 1, 0);
     Case<unsigned>(src, n, "unsigned", "-", 0, 1, UINT_MAX);
     Case<short>(src, n, "short", "+", 32767, 1, (short)-32768);
