@@ -259,12 +259,11 @@ aggregate layout from its input rather than recomputing it.
 
 ## 6. Target Comparison
 
-`semantic/target.c` defines nine target descriptors. Eight of them have a code
-generator: `riscv64` and `riscv32` (`genriscv`), `x86_64` (`genx86`), `aarch64`
-(`genaarch64`), `arm32` (`genarm32`), `avr` (`genavr`), `msp430` (`genmsp430`) and
-`besm6` (`genbesm`). The other one, `mmix`, describes a real ABI so that the front end
-and the TAC can be produced for it, for example to compare layouts; `x86_64` is the
-default when a program using the libraries sets no target.
+`semantic/target.c` defines nine target descriptors, each with a code generator:
+`riscv64` and `riscv32` (`genriscv`), `x86_64` (`genx86`), `aarch64` (`genaarch64`),
+`arm32` (`genarm32`), `avr` (`genavr`), `msp430` (`genmsp430`), `mmix` (`genmmix`) and
+`besm6` (`genbesm`). `x86_64` is the default when a program using the libraries sets no
+target.
 
 Sizes, in bytes (`sizeof` units):
 
@@ -316,7 +315,9 @@ Notes on the individual targets:
 - **aarch64** (AAPCS64): the same sizes as riscv64, including binary128 `long double`.
 - **arm32** (ARM EABI): `long double` is the same 64-bit format as `double`.
 - **mmix** (Knuth's MMIX, big-endian): LP64 integers, but `long double` is the same
-  8-byte format as `double` (the GCC MMIX port's choice; the FPU has no wider format).
+  8-byte format as `double` (the GCC MMIX port's choice; the FPU has no wider format);
+  plain `char` is signed; `wchar_t` is `int`. Compiled by `genmmix`; see
+  [Mmix_Backend.md](Mmix_Backend.md).
 - **msp430** (the classic MSP430, the EABI as msp430-elf-gcc has it): everything 2 bytes
   or wider is aligned to 2, so a `long` of size 4 has alignment 2; plain `char` is
   unsigned; `double` and `long double` are the same binary64, in software; `size_t` is

@@ -1,5 +1,5 @@
 #
-# MMIX runtime and headers (see backend/mmix/Plan.md).  Built with the GNU MMIX
+# MMIX runtime and headers (see docs/Mmix_Backend.md).  Built with the GNU MMIX
 # toolchain: mmix-knuth-mmixware-as assembles (with -x -no-predefined-syms, the flags GCC
 # passes it), -ld links into Knuth's .mmo, -ar archives, and -gcc with newlib is the tests'
 # second compiler.  Knuth's simulator mmix runs the programs.

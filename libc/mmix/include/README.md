@@ -24,4 +24,6 @@ checks the sizes, limits, type identities and `float.h` values against GCC's own
 `limits.h` is MMIX's own rather than the LP64 one keyed off `__CHAR_UNSIGNED__`: the
 build and the test fixtures preprocess with the host's `cc -E`, which defines that macro
 by the host's own `char`.  It is the same as x86-64's, the other LP64 target with a
-signed `char`.  See [backend/mmix/Plan.md](../../../backend/mmix/Plan.md).
+signed `char`.  `make install` puts all three directories' headers, MMIX's in place of
+the LP64 ones of the same name, into `share/vcc/mmix/include`.  See
+[docs/Mmix_Backend.md](../../../docs/Mmix_Backend.md).

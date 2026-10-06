@@ -17,13 +17,13 @@ optimizer stay as they are.
 | x86-64        | complete | System V psABI (`-t x86_64`), x87 `long double`; links with clang's objects |
 | AVR           | complete | 8-bit ATmega1280, avr-gcc ABI (`-t avr`), 16-bit `int`, binary32 `double`; links with clang's objects |
 | MSP430        | complete | 16-bit classic MSP430, MSP430 EABI as GCC has it (`-t msp430`), soft binary64 `double`; links with GCC's objects |
+| MMIX          | complete | Knuth's 64-bit big-endian RISC, MMIXware ABI as GCC has it (`-t mmix`), register stack; links with GCC's objects |
 | BESM-6        | complete | 48-bit word-addressed mainframe; three assembler dialects               |
-| others        | design notes | sketches under [backend/](backend/)                                 |
 
 The working targets could hardly be further apart — modern byte-addressed RISC machines,
 a two-operand CISC with an 80-bit `long double`, an 8-bit microcontroller with a 16-bit
-`int`, a 16-bit memory-to-memory microcontroller with a software `double`, and a
-word-addressed machine with its own floating-point format and character set —
+`int`, a 16-bit memory-to-memory microcontroller with a software `double`, a big-endian
+machine whose calls rename a stack of registers, and a word-addressed machine with its own floating-point format and character set —
 which keeps the front end honest: nothing in it may assume one particular kind of
 machine. Each target is described in its own documents (see [Documentation](#documentation)).
 
@@ -72,6 +72,7 @@ The compiler is not one binary but several, run one after another:
 | `genx86`   | TAC           | x86-64 assembly             |
 | `genavr`   | TAC           | AVR assembly                |
 | `genmsp430` | TAC          | MSP430 assembly             |
+| `genmmix`  | TAC           | MMIX assembly               |
 | `genbesm`  | TAC           | BESM-6 assembly             |
 
 `cpp` and `lower` take the target with `-t` (for example `-t riscv64`): `cpp` for the
@@ -91,7 +92,7 @@ Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
 chain: `vcc -o hello.elf hello.c` preprocesses, compiles, assembles with clang and links
 with `ld.lld` for RISC-V, ARM, x86-64 and AVR (`-t msp430`: the GNU `msp430-elf-as`/`-ld`;
-`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
+`-t mmix`: the GNU `mmix-knuth-mmixware-as`/`-ld`; `-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
 `-o`, `-D`, `-I`, `-L` and `-l`.
 
 ## Getting started
@@ -100,7 +101,7 @@ with `ld.lld` for RISC-V, ARM, x86-64 and AVR (`-t msp430`: the GNU `msp430-elf-
 compiler and, the first time you configure, network access so CMake can download
 GoogleTest. The RISC-V, ARM, x86-64 and AVR runtimes and run tests need a clang with those
 targets, `ld.lld`, and `qemu-system-riscv64`, `qemu-system-riscv32`,
-`qemu-system-aarch64`, `qemu-system-arm`, `qemu-system-x86_64` and `qemu-system-avr` (on macOS: Homebrew `llvm`, `lld` and `qemu`). The MSP430 runtime and run tests need the GNU MSP430 toolchain (`msp430-elf-gcc`, binutils and newlib) and the [mspsim](https://github.com/sergev/mspsim) simulator. Without these tools those tests are skipped, as are the tests of any other target whose
+`qemu-system-aarch64`, `qemu-system-arm`, `qemu-system-x86_64` and `qemu-system-avr` (on macOS: Homebrew `llvm`, `lld` and `qemu`). The MSP430 runtime and run tests need the GNU MSP430 toolchain (`msp430-elf-gcc`, binutils and newlib) and the [mspsim](https://github.com/sergev/mspsim) simulator. The MMIX runtime and run tests need the GNU MMIX toolchain (`mmix-knuth-mmixware-gcc`, binutils and newlib) and Knuth's `mmix` simulator from [MMIXware](https://www-cs-faculty.stanford.edu/~knuth/mmix.html). Without these tools those tests are skipped, as are the tests of any other target whose
 tools are missing.
 
 ```bash
@@ -200,6 +201,17 @@ mspsim hello-msp430.elf
 mspsim exits with `main`'s result. By hand, it is `cpp -t msp430` with
 `libc/msp430/include` (then `libc/ip16/include` and `libc/common/include`),
 `lower -t msp430` and `genmsp430`; see [docs/Msp430_Backend.md](docs/Msp430_Backend.md).
+
+For MMIX, add `-t mmix` and run it under Knuth's simulator:
+
+```bash
+vcc -t mmix -o hello.mmo hello.c
+mmix hello.mmo
+```
+
+mmix exits with `main`'s result. By hand, it is `cpp -t mmix` with `libc/mmix/include`
+(then `libc/lp64/include` and `libc/common/include`), `lower -t mmix` and `genmmix`; see
+[docs/Mmix_Backend.md](docs/Mmix_Backend.md).
 BESM-6 works the same way with `-t besm6` and its own code generator.
 
 To read what happened at any stage, ask for YAML instead:
@@ -235,12 +247,14 @@ libraries and headers go into their own directory under `share/vcc/`.
 | `bin/vgenx86`                  | the x86-64 code generator                       |
 | `bin/vgenavr`                  | the AVR code generator                          |
 | `bin/vgenmsp430`               | the MSP430 code generator                       |
+| `bin/vgenmmix`                 | the MMIX code generator                         |
 | `bin/vgenbesm6`                | the BESM-6 code generator                       |
 | `share/vcc/<target>/include/`  | the target's C headers                          |
 | `share/vcc/<target>/lib/`      | the target's runtime and C library              |
 
 For RISC-V, ARM, x86-64, AVR and MSP430, `lib/` holds `crt0.o`, `libc.a` and the linker script
-for qemu (for mspsim on MSP430), and `include/` every C header. For BESM-6, which has its own operating system with its own C library
+for qemu (for mspsim on MSP430), and `include/` every C header. MMIX has the same, but for
+the linker script: the linker's own suits `mmix`. For BESM-6, which has its own operating system with its own C library
 (the [v7besm](https://github.com/besm6/v7besm) Unix port), only what describes the
 compiler itself is installed: the freestanding C11 headers, the intrinsics header and the
 helper routines the generated code calls.
@@ -258,13 +272,15 @@ floating point in the runtime (the routines clang's code calls too); on ARM32,
 and there is `setjmp`/`longjmp`. On AVR, `int` is 16 bits, `float` and `double` are both
 binary32, computed in software, and there is `setjmp`/`longjmp` too. On MSP430, `int` is
 16 bits, `float` is binary32 and `double` binary64, both computed in software, with
+`setjmp`/`longjmp`. On MMIX, `float` and `double` are computed in hardware, as binary64,
+and so are 64-bit multiply and divide, so the runtime has no helper routines; there is
 `setjmp`/`longjmp`. The portable part of
 the library lives in [libc/common/](libc/common/) and is shared by every target, and
 [libc/lp64/](libc/lp64/) holds what the 64-bit targets share, [libc/ilp32/](libc/ilp32/)
 what the 32-bit targets share; each target has its own
 directory for the rest ([libc/riscv64/](libc/riscv64/), [libc/riscv32/](libc/riscv32/),
 [libc/aarch64/](libc/aarch64/), [libc/arm32/](libc/arm32/), [libc/x86/](libc/x86/),
-[libc/avr/](libc/avr/), [libc/msp430/](libc/msp430/)).
+[libc/avr/](libc/avr/), [libc/msp430/](libc/msp430/), [libc/mmix/](libc/mmix/)).
 
 ## Documentation
 
@@ -321,6 +337,12 @@ source tree.
 | Document                                         | What it covers                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------------------------- |
 | [docs/Msp430_Backend.md](docs/Msp430_Backend.md) | The code generator, memory-to-memory selection, frames, branch relaxation, GCC's calls with structures by reference, the soft binary64 and the helper contracts, and running under mspsim |
+
+### MMIX target
+
+| Document                                     | What it covers                                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| [docs/Mmix_Backend.md](docs/Mmix_Backend.md) | The code generator, the register stack and GCC's fixed register model, frames, GCC's calls, structures and variadics, big-endian notes, signed division, and running under `mmix` |
 
 ## License
 

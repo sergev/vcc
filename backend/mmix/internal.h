@@ -1,6 +1,6 @@
 //
 // MMIX code generator internals (the MMIXware ABI as GCC implements it; see
-// backend/mmix/Plan.md).
+// docs/Mmix_Backend.md).
 //
 // Registers: a call is pushj $X,f, which renames the register file: the callee's $0 is
 // the caller's $(X+1), the arguments arrive in $0..., and the caller's $0..$(X-1) come
