@@ -17,6 +17,7 @@
 extern int current_token;
 extern const char *current_lexeme;
 extern int scope_level;
+extern const char *current_function_name;
 
 void advance_token(void);
 bool current_token_is_not(int token);

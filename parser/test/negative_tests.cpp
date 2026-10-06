@@ -191,3 +191,8 @@ TEST_F(ParserTest, CommaInsideSizeofIsConstant)
     Declaration *decl = GetDeclaration("_Static_assert(sizeof(1, 2) > 0, \"msg\");");
     EXPECT_EQ(DECL_STATIC_ASSERT, decl->kind);
 }
+
+TEST_F(ParserTest, FuncNameOutsideFunction_negative)
+{
+    EXPECT_DEATH(parse(CreateTempFile("const char *p = __func__;")), "");
+}

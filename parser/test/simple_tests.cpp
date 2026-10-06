@@ -247,6 +247,21 @@ TEST_F(ParserTest, ParseFunctionDefinition)
     EXPECT_EQ(0, body->u.compound->u.stmt->u.expr->u.literal->u.int_val);
 }
 
+// __func__ is the enclosing function's name as a string literal (C11 §6.4.2.2)
+TEST_F(ParserTest, FuncName)
+{
+    program = parse(CreateTempFile("const char *foo(void) { return __func__; }"));
+    ASSERT_NE(nullptr, program);
+
+    Stmt *body = program->decls->u.function.body;
+    ASSERT_NE(nullptr, body->u.compound);
+    Expr *expr = body->u.compound->u.stmt->u.expr;
+    ASSERT_NE(nullptr, expr);
+    EXPECT_EQ(EXPR_LITERAL, expr->kind);
+    EXPECT_EQ(LITERAL_STRING, expr->u.literal->kind);
+    EXPECT_STREQ("\"foo\"", expr->u.literal->u.string_val);
+}
+
 // Test translation unit: int x; void f() {}
 TEST_F(ParserTest, ParseTranslationUnit)
 {

@@ -10,6 +10,17 @@ TEST_F(RiscvTest, RunReturn2)
     EXPECT_EQ(2, exit_status);
 }
 
+// __func__ names the enclosing function; sizeof counts the NUL.
+TEST_F(RiscvTest, RunFuncName)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("compute 8\n", CompileAndRunRiscv(R"(
+#include <stdio.h>
+int compute(void) { printf("%s %d\n", __func__, (int)sizeof __func__); return 0; }
+int main(void) { return compute(); }
+)"));
+}
+
 TEST_F(RiscvTest, RunBookStatus)
 {
     SKIP_IF_NO_RISCV_TOOLS();

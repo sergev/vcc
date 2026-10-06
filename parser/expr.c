@@ -157,6 +157,7 @@ static bool is_constant_expression(const Expr *expression)
 //     : IDENTIFIER
 //     | constant
 //     | string
+//     | FUNC_NAME
 //     | '(' expression ')'
 //     | generic_selection
 //     ;
@@ -179,9 +180,24 @@ Expr *parse_primary_expression()
         expr = parse_constant();
         break;
     case TOKEN_STRING_LITERAL:
-    case TOKEN_FUNC_NAME:
         expr = parse_string();
         break;
+    case TOKEN_FUNC_NAME: {
+        // C11 §6.4.2.2: the function's name as a string; not concatenated, it is no literal.
+        if (!current_function_name)
+            fatal_error("__func__ used outside a function");
+        size_t len                    = strlen(current_function_name);
+        char *quoted                  = xalloc(len + 3, __func__, __FILE__, __LINE__);
+        quoted[0]                     = '"';
+        memcpy(quoted + 1, current_function_name, len);
+        quoted[len + 1]               = '"';
+        quoted[len + 2]               = '\0';
+        expr                          = new_expression(EXPR_LITERAL);
+        expr->u.literal               = new_literal(LITERAL_STRING);
+        expr->u.literal->u.string_val = quoted;
+        advance_token();
+        break;
+    }
     case TOKEN_LPAREN:
         advance_token();
         expr = parse_expression();
@@ -403,7 +419,6 @@ Expr *parse_constant()
 //
 // string
 //     : STRING_LITERAL
-//     | FUNC_NAME
 //     ;
 //
 Expr *parse_string()

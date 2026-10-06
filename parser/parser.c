@@ -15,6 +15,9 @@ static int peek_token;
 const char *current_lexeme;
 static char lexeme_buffer[1024]; // Buffer for current lexeme
 
+// Name of the function being defined, for __func__; NULL outside a function body.
+const char *current_function_name;
+
 // Enable debug output
 int parser_debug;
 
@@ -220,7 +223,9 @@ ExternalDecl *parse_external_declaration()
     ed->u.function.type =
         type_apply_suffixes(type_apply_pointers(base_type, decl->pointers), decl->suffixes);
     ed->u.function.param_decls = decl_list;
+    current_function_name      = ed->u.function.name;
     ed->u.function.body        = parse_compound_statement();
+    current_function_name      = NULL;
     free_declarator(decl);
     return ed;
 }
@@ -251,6 +256,7 @@ Program *parse(FILE *input)
     }
     init_scanner(input);
     reset_anon_tag_counter(); // synthetic anonymous tags are numbered per translation unit
+    current_function_name = NULL;
     advance_token();
     Program *program = parse_translation_unit();
     if (current_token != TOKEN_EOF) {
