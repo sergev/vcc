@@ -141,3 +141,46 @@ TEST_F(MmixTest, RunFusedComparisons)
     )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A branch over one value is a conditional set on the inverse condition.
+EXPECT_OPT(ConditionalSetMax,
+           "cmp $248,$0,$1\n"
+           "csnp $0,$248,$1\n"
+           "pop 1,0\n",
+           "long f(long a, long b) { return a > b ? a : b; }")
+
+// A choice of two values: the first set, the second a conditional set over it.
+EXPECT_OPT(ConditionalSetChoice,
+           "setl $2,#7\n"
+           "csz $2,$0,0\n"
+           "set $0,$2\n"
+           "pop 1,0\n",
+           "long f(long c) { return c ? 7 : 0; }")
+
+// A constant of -1..-255 added is subtracted, as an immediate.
+EXPECT_OPT(NegativeConstant, "subu $0,$0,5\npop 1,0\n", "long f(long a) { return a + -5; }")
+
+// Run: choices by conditional sets, against the plain answers.
+TEST_F(MmixTest, RunConditionalSets)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", CompileAndRunMmix(R"(
+        long mx(long a, long b) { return a > b ? a : b; }
+        long mn(long a, long b) { return a < b ? a : b; }
+        long sel(long c) { return c ? 7 : 0; }
+        long sel2(long c, long x, long y) { long r; if (c >= 0) r = x; else r = y; return r; }
+        long dec(long a) { return a + -200; }
+        unsigned udec(unsigned a) { return a - -3; }
+        int main(void)
+        {
+            if (mx(3, 9) != 9 || mx(9, 3) != 9 || mx(-1, -2) != -1) return 1;
+            if (mn(3, 9) != 3 || mn(9, 3) != 3) return 2;
+            if (sel(5) != 7 || sel(0) != 0) return 3;
+            if (sel2(1, 10, 20) != 10 || sel2(-1, 10, 20) != 20) return 4;
+            if (dec(5) != -195) return 5;
+            if (udec(4294967294u) != 1) return 6;
+            return 0;
+        }
+    )"));
+    EXPECT_EQ(0, exit_status);
+}

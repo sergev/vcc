@@ -227,12 +227,18 @@ static Mmix_Op inverse(Mmix_Op op)
     }
 }
 
-static const Mmix_Instr *before_tail(const Mmix_Block *b)
+// The instruction before `in` in `b`, or NULL.
+static const Mmix_Instr *before_tail_of(const Mmix_Block *b, const Mmix_Instr *in)
 {
     const Mmix_Instr *p = NULL;
-    for (const Mmix_Instr *i = b->head; i && i != b->tail; i = i->next)
+    for (const Mmix_Instr *i = b->head; i && i != in; i = i->next)
         p = i;
     return p;
+}
+
+static const Mmix_Instr *before_tail(const Mmix_Block *b)
+{
+    return before_tail_of(b, b->tail);
 }
 
 static bool same_label(const Mmix_Operand *o, const Mmix_Block *b)
@@ -269,6 +275,95 @@ static bool rewrite_jumps(Mmix_Func *fn)
         }
     }
     return changed;
+}
+
+// How many instructions of `fn` name label `label`.
+static int label_refs(const Mmix_Func *fn, const char *label)
+{
+    int n = 0;
+    for (const Mmix_Block *b = fn->blocks; b; b = b->next)
+        for (const Mmix_Instr *in = b->head; in; in = in->next)
+            for (int i = 0; i < MMIX_MAX_OPERANDS; i++)
+                n += in->opnd[i].kind == MMIX_OPND_LABEL && strcmp(in->opnd[i].sym, label) == 0;
+    return n;
+}
+
+// The value a set or setl of a byte gives, as an operand; false for anything else.
+static bool small_value(const Mmix_Instr *in, Mmix_Operand *z)
+{
+    if (in->op == MMIX_SET) {
+        *z = mmix_reg(in->opnd[1].reg);
+        return true;
+    }
+    if (in->op == MMIX_SETL && in->opnd[1].imm <= 255) {
+        *z = mmix_imm(in->opnd[1].imm);
+        return true;
+    }
+    return false;
+}
+
+// A choice between two values with no branch: b<cc> $y,L1; I1; jmp L2; L1: $x = z; L2:
+// (I1 setting $x, z a register or a byte) is I1; cs<cc> $x,$y,z; or zs<cc> $x,$y,z when
+// I1 sets 0.
+static bool conditional_set(Mmix_Func *fn)
+{
+    for (Mmix_Block *b = fn->blocks; b; b = b->next) {
+        Mmix_Block *n = b->next;
+        Mmix_Instr *jmp = b->tail;
+        if (!n || !n->label || !n->next || !n->next->label || !n->head || n->head != n->tail ||
+            !jmp || jmp->op != MMIX_JMP || !same_label(&jmp->opnd[0], n->next))
+            continue;
+        Mmix_Instr *set = (Mmix_Instr *)before_tail(b);
+        Mmix_Instr *br  = set ? (Mmix_Instr *)before_tail_of(b, set) : NULL;
+        Mmix_Operand z;
+        if (!br || !is_branch(br->op) || br->op >= MMIX_PBN || !same_label(&br->opnd[1], n) ||
+            !pure(set) || !writes_x(n->head) || n->head->opnd[0].reg != set->opnd[0].reg ||
+            !small_value(n->head, &z) || is_reg(&br->opnd[0], set->opnd[0].reg) ||
+            label_refs(fn, n->label) != 1)
+            continue;
+        int x = set->opnd[0].reg, y = br->opnd[0].reg;
+        Mmix_Op cs = (Mmix_Op)(br->op - MMIX_BN + MMIX_CSN);
+        bool zero  = set->op == MMIX_SETL && set->opnd[1].imm == 0;
+        // b: ... br set jmp  ->  ... [set] cs
+        Mmix_Instr *before = (Mmix_Instr *)before_tail_of(b, br);
+        remove_after(b, before); // the branch
+        jmp->op = zero ? (Mmix_Op)(cs - MMIX_CSN + MMIX_ZSN) : cs;
+        xfree(jmp->opnd[0].sym);
+        jmp->opnd[0] = mmix_reg(x);
+        jmp->opnd[1] = mmix_reg(y);
+        jmp->opnd[2] = z;
+        if (zero)
+            remove_after(b, before); // the set of 0
+        remove_after(n, NULL);
+        return true;
+    }
+    return false;
+}
+
+// A branch over one value: b<cc> $y,L; $x = z; L: (z a register or a byte, in a block of
+// its own that nothing else enters) is cs<inverse cc> $x,$y,z.
+static bool branch_over_set(Mmix_Func *fn)
+{
+    for (Mmix_Block *b = fn->blocks; b; b = b->next) {
+        Mmix_Block *n = b->next;
+        Mmix_Instr *br = b->tail;
+        Mmix_Operand z;
+        if (!br || !is_branch(br->op) || br->op >= MMIX_PBN || !n || !n->head ||
+            n->head != n->tail || !n->next || !same_label(&br->opnd[1], n->next) ||
+            !small_value(n->head, &z) || is_reg(&br->opnd[0], n->head->opnd[0].reg) ||
+            (n->label && label_refs(fn, n->label) != 0))
+            continue;
+        Mmix_Op cs = (Mmix_Op)(inverse(br->op) - MMIX_BN + MMIX_CSN);
+        int x = n->head->opnd[0].reg, y = br->opnd[0].reg;
+        br->op = cs;
+        xfree(br->opnd[1].sym);
+        br->opnd[0] = mmix_reg(x);
+        br->opnd[1] = mmix_reg(y);
+        br->opnd[2] = z;
+        remove_after(n, NULL);
+        return true;
+    }
+    return false;
 }
 
 // A branch to a block at or before its own: probable, as a loop's back edge is.
@@ -535,6 +630,7 @@ void mmix_peephole(Mmix_Func *fn, int fround_off)
         for (Mmix_Block *b = fn->blocks; b; b = b->next)
             changed |= rewrite_block(b, fround_off);
         changed |= rewrite_jumps(fn);
+        changed |= conditional_set(fn) || branch_over_set(fn);
         if (changed)
             continue;
         Liveness lv;

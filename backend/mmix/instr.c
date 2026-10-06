@@ -295,6 +295,18 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         b     = a_val;
         a_val = in->u.binary.src2;
     }
+    // A constant of -1..-255 added is 1..255 subtracted, and the other way round.
+    if ((mop == MMIX_ADDU || mop == MMIX_SUBU) && b->kind == TAC_VAL_CONSTANT) {
+        int64_t k = (int64_t)const_as(b->u.constant, t);
+        if (k < 0 && k >= -255) {
+            int x = use_val(g, a_val, REG_A, t), d = def_reg(g, in->u.binary.dst, REG_A);
+            emit3(g, mop == MMIX_ADDU ? MMIX_SUBU : MMIX_ADDU, mmix_reg(d), mmix_reg(x),
+                  mmix_imm(-k));
+            int size = mmix_type_size(val_type(g, in->u.binary.dst));
+            def_done(g, d, in->u.binary.dst, size == 8 || (canonical && size >= 4));
+            return;
+        }
+    }
     int a = use_val(g, a_val, REG_A, t);
     Mmix_Operand z   = val_operand(g, b, REG_B, shift ? val_type(g, b) : t);
     int d            = def_reg(g, in->u.binary.dst, REG_A);
