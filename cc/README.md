@@ -33,6 +33,7 @@ linker       link          .o   -> a.out
 | x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `clang --target=x86_64-none-elf -c` | `ld.lld -T link.ld` |
 | AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `clang --target=avr -mmcu=atmega1280 -c` | `ld.lld -T link.ld` |
 | MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
+| MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
@@ -51,7 +52,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430` or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6` |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -87,8 +88,9 @@ takes everything relative to it:
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
 clang and `ld.lld` found when the build was configured (the GNU `msp430-elf-as` and
-`msp430-elf-ld` for the MSP430; nothing for the BESM-6), or else whatever
-`clang`/`ld.lld`/`msp430-elf-as`/`msp430-elf-ld`/`b6as`/`b6ld` is on `PATH`.
+`msp430-elf-ld` for the MSP430, `mmix-knuth-mmixware-as` and `-ld` for MMIX; nothing for
+the BESM-6), or else whatever `clang`/`ld.lld`/`msp430-elf-as`/`msp430-elf-ld`/
+`mmix-knuth-mmixware-as`/`mmix-knuth-mmixware-ld`/`b6as`/`b6ld` is on `PATH`.
 
 Each tool can be overridden with an environment variable. This is how the tests run the
 driver against the build tree:
@@ -152,6 +154,32 @@ VCC_AS="clang --target=msp430 -c" VCC_LD="ld.lld -n" vcc -t msp430 hello.c
 `-n` keeps `ld.lld` from placing the ELF headers in a loaded segment, where they would
 land on the peripheral area. clang warns that it does not use `-mcpu=msp430`.
 
+MMIX:
+
+```text
+mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100 -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc [libgcc.a]
+```
+
+These are the flags GCC passes: the assembler's `-x` lets the assembler and the linker
+expand a branch, `geta`, `pushj` or `jmp` that is out of range and allocate the base
+registers; the linker uses its own script and puts the text at 0x100, where the loader
+expects it. GCC's `libgcc.a` comes last when it was found at configure time
+(`mmix-knuth-mmixware-gcc -print-libgcc-file-name`), for objects compiled by GCC
+(`__clzdi2` for `__builtin_clzl`); our own code calls no helper.
+
+The output is Knuth's `.mmo` object format, which his simulator runs directly:
+`mmix a.out` prints the program's output and exits with `main`'s result, which our
+`exit` also reports as `[exit N]` on the standard error (`-q` drops the simulator's own
+messages, `-s` prints the instruction, oop and mem counts, `-t` traces, `-i` starts in
+the interactive mode). `objdump` cannot read a `.mmo`; to
+disassemble, link the same objects once more with `--oformat elf64-mmix`:
+
+```sh
+vcc -t mmix -v -o a.out hello.c        # shows the link line
+mmix-knuth-mmixware-ld --oformat elf64-mmix --defsym=__.MMIX.start..text=0x100 -o a.elf ...
+mmix-knuth-mmixware-objdump -d a.elf
+```
+
 BESM-6:
 
 ```text
@@ -166,7 +194,8 @@ order of the two archives is a contract: `b6ld` scans an archive once, where it 
 libc calls the helpers, never the reverse.
 
 `-nostdlib` drops `-L<lib>`, `crt0.o` and the implicit `-l`s, but keeps the linker
-script, since it is the machine's memory map and not a library. Use `-T` to replace it.
+script, since it is the machine's memory map and not a library. Use `-T` to replace it
+(or, for MMIX, to give one where the linker's own is used).
 
 ## Testing
 
@@ -178,13 +207,13 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
 - the usage errors
 - `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR, and under
   mspsim for the MSP430 (its Intel HEX as well, and with clang and `ld.lld` through
-  `VCC_AS`/`VCC_LD`)
+  `VCC_AS`/`VCC_LD`), and under Knuth's `mmix` for MMIX
 - the BESM-6 link line, checked with a stand-in linker
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the
 passes, `share/vcc/<target>/`) and run it with no overrides. That is what tests the
-relocatable lookup. Cases that need clang, `ld.lld`, qemu, the GNU MSP430 binutils,
-mspsim or `b6as` skip when they are missing.
+relocatable lookup. Cases that need clang, `ld.lld`, qemu, the GNU MSP430 or MMIX
+binutils, mspsim, `mmix` or `b6as` skip when they are missing.
 
 ```sh
 ./build/cc/test/cc-tests

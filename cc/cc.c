@@ -8,11 +8,11 @@
 //     vparse     parse           .i   -> .ast
 //     vlower     lower + opt     .ast -> .tac
 //     vgen<T>    code gen        .tac -> .s
-//     as         assemble        .s   -> .o     (b6as | clang | msp430-elf-as)
-//     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld)
+//     as         assemble        .s   -> .o     (b6as | clang | msp430-elf-as | mmix-...-as)
+//     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld | mmix-...-ld)
 //
 // The target is chosen with -t (riscv64 by default, like vcpp and vlower; or riscv32,
-// aarch64, arm32, x86_64, avr, msp430, besm6).
+// aarch64, arm32, x86_64, avr, msp430, mmix, besm6).
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
 // straight to the linker, as is a .a archive.
@@ -63,6 +63,15 @@
 #ifndef MSP430_LIBGCC
 #define MSP430_LIBGCC ""
 #endif
+#ifndef MMIX_AS
+#define MMIX_AS ""
+#endif
+#ifndef MMIX_LD
+#define MMIX_LD ""
+#endif
+#ifndef MMIX_LIBGCC
+#define MMIX_LIBGCC ""
+#endif
 
 static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 
@@ -76,7 +85,10 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // MSP430 is assembled and linked by the GNU MSP430 binutils, for mspsim, and its
 // link drops the sections nothing reaches (vgenmsp430 gives every function and
 // variable one) and ends with GCC's libgcc.a when it was found, so that objects
-// compiled by GCC link too.
+// compiled by GCC link too.  MMIX is the same with the GNU MMIX binutils, for Knuth's
+// mmix: as GCC runs them, the assembler with -x (it expands an out-of-range branch and
+// allocates the base registers) and the linker with no script, text from 0x100, its
+// output Knuth's .mmo.
 //
 enum arch { ARCH_BESM6, ARCH_LLVM, ARCH_GNU };
 
@@ -92,6 +104,7 @@ struct target {
     const char *ld_name;      // linker on PATH
     const char *ld_flag;      // extra linker flag, or NULL
     const char *libgcc;       // configure-time libgcc.a, linked last when present, or NULL
+    bool no_script;           // the linker's default script, unless -T names one
 };
 
 static const struct target targets[] = {
@@ -110,6 +123,9 @@ static const struct target targets[] = {
       "ld.lld" },
     { "msp430", ARCH_GNU, NULL, "-mcpu=msp430", NULL, "vgenmsp430", MSP430_AS, "msp430-elf-as",
       MSP430_LD, "msp430-elf-ld", "--gc-sections", MSP430_LIBGCC },
+    { "mmix", ARCH_GNU, NULL, "-x", "-no-predefined-syms", "vgenmmix", MMIX_AS,
+      "mmix-knuth-mmixware-as", MMIX_LD, "mmix-knuth-mmixware-ld",
+      "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC, true },
 };
 
 static const struct target *target = &targets[1]; // riscv64
@@ -591,6 +607,7 @@ static int run_codegen(const char *in, const char *out)
 //     x86_64:  clang --target=x86_64-none-elf -c -o out in
 //     avr:     clang --target=avr -mmcu=atmega1280 -c -o out in
 //     msp430:  msp430-elf-as -mcpu=msp430 -o out in
+//     mmix:    mmix-knuth-mmixware-as -x -no-predefined-syms -o out in
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
@@ -612,6 +629,8 @@ static int run_as(const char *in, const char *out)
         break;
     case ARCH_GNU:
         vec_push(&av, (char *)target->march);
+        if (target->mabi)
+            vec_push(&av, (char *)target->mabi);
         break;
     }
     vec_push(&av, "-o");
@@ -725,10 +744,12 @@ static int compile_one(const char *src)
 //     besm6:   b6ld -X -e _start -o out -L<lib> <lib>/crt0.o objs ldflags -lc -lruntime
 //     msp430:  msp430-elf-ld --gc-sections -T <script> -o out -L<lib> <lib>/crt0.o objs
 //              ldflags -lc [libgcc.a]
+//     mmix:    mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100 -o out -L<lib>
+//              <lib>/crt0.o objs ldflags -lc [libgcc.a]
 //     others: ld.lld -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc
 // where <lib> is <share>/lib.  -nostdlib drops the -L, crt0.o and the implicit
 // archives; the linker script (the qemu `virt` memory map) stays, unless
-// -T names another.  A missing crt0.o is a fatal error.  See README.md,
+// -T names another.  MMIX takes the linker's default script.  A missing crt0.o is a fatal error.  See README.md,
 // "Linking".  Returns 0 on success.
 //
 static int link_objects(void)
@@ -747,6 +768,8 @@ static int link_objects(void)
     case ARCH_GNU: {
         if (target->ld_flag)
             vec_push(&av, (char *)target->ld_flag);
+        if (target->no_script && !linkscript)
+            break;
         char *script = linkscript ? linkscript : concat(libdir, "/link.ld");
         if (access(script, R_OK) != 0) {
             error("linker script %s not found; use -T", script);
@@ -787,7 +810,7 @@ static int link_objects(void)
     // libruntime.a is LAST, and the order is not cosmetic: b6ld scans an archive
     // once, in order, and libc calls the b$* helpers while no helper calls back
     // into libc.
-    // On the MSP430, GCC's libgcc.a follows our libc.a for the helpers only GCC's
+    // On the MSP430 and MMIX, GCC's libgcc.a follows our libc.a for the helpers only GCC's
     // code calls; without it, objects of our own compiler still link.
     if (!opt_nostdlib) {
         vec_push(&av, "-lc");
@@ -829,7 +852,7 @@ static void usage(void)
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
     printf("    -t, --target NAME  Target: riscv64 (default), riscv32, aarch64, arm32, x86_64,\n");
-    printf("                       avr, msp430 or besm6\n");
+    printf("                       avr, msp430, mmix or besm6\n");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");

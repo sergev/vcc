@@ -112,6 +112,13 @@ bool HaveMsp430Run()
            HaveTool(MSPSIM) && access((std::string(MSP430_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The GNU MMIX binutils, Knuth's mmix and the build's MMIX runtime.
+bool HaveMmixRun()
+{
+    return MMIX_TOOLS_FOUND && HaveTool(MMIX_AS) && HaveTool(MMIX_LD) && HaveTool(MMIX_SIM) &&
+           access((std::string(MMIX_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
 // `stderr_file` when they are given (which is how the -v echo is captured).  With a
@@ -217,7 +224,7 @@ protected:
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
         bool besm6 = false, aarch64 = false, arm32 = false, x86 = false, avr = false,
-             msp430 = false;
+             msp430 = false, mmix = false;
         for (size_t i = 0; i + 1 < args.size(); i++) {
             if (args[i] == "-t" && args[i + 1] == "besm6")
                 besm6 = true;
@@ -231,6 +238,8 @@ protected:
                 avr = true;
             if (args[i] == "-t" && args[i + 1] == "msp430")
                 msp430 = true;
+            if (args[i] == "-t" && args[i + 1] == "mmix")
+                mmix = true;
         }
         setenv("VCC_GEN",
                besm6     ? VCC_GENBESM_PATH
@@ -239,6 +248,7 @@ protected:
                : x86     ? VCC_GENX86_PATH
                : avr     ? VCC_GENAVR_PATH
                : msp430  ? VCC_GENMSP430_PATH
+               : mmix    ? VCC_GENMMIX_PATH
                          : VCC_GENRISCV_PATH,
                1);
 
@@ -250,6 +260,7 @@ protected:
                               : x86     ? X86_INCLUDE_DIR
                               : avr     ? AVR_INCLUDE_DIR
                               : msp430  ? MSP430_INCLUDE_DIR
+                              : mmix    ? MMIX_INCLUDE_DIR
                                         : RISCV_INCLUDE_DIR;
             argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
             if (!besm6)
@@ -292,6 +303,7 @@ protected:
         fs::create_symlink(VCC_GENX86_PATH, prefix + "/bin/vgenx86");
         fs::create_symlink(VCC_GENAVR_PATH, prefix + "/bin/vgenavr");
         fs::create_symlink(VCC_GENMSP430_PATH, prefix + "/bin/vgenmsp430");
+        fs::create_symlink(VCC_GENMMIX_PATH, prefix + "/bin/vgenmmix");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
@@ -303,9 +315,11 @@ protected:
                                  : target == "x86_64"  ? X86_INCLUDE_DIR
                                  : target == "avr"     ? AVR_INCLUDE_DIR
                                  : target == "msp430"  ? MSP430_INCLUDE_DIR
+                                 : target == "mmix"    ? MMIX_INCLUDE_DIR
                                                        : RISCV_INCLUDE_DIR;
         const char *model_inc =
-            target == "riscv64" || target == "aarch64" || target == "x86_64" ? LP64_INCLUDE_DIR
+            target == "riscv64" || target == "aarch64" || target == "x86_64" || target == "mmix"
+                ? LP64_INCLUDE_DIR
             : target == "riscv32" || target == "arm32"                         ? ILP32_INCLUDE_DIR
             : target == "avr" || target == "msp430"                            ? IP16_INCLUDE_DIR
                                                                                : target_inc;
@@ -400,6 +414,14 @@ protected:
         std::string out = Path("mspsim.out");
         *status = RunProcess({ MSPSIM, "-q", "-n", "100000000", firmware }, out,
                              Path("mspsim.err"), 10);
+        return ReadFile(out);
+    }
+
+    // Run an MMIX .mmo under Knuth's mmix; returns its output, main's result in *status.
+    std::string RunMmix(const std::string &mmo, int *status)
+    {
+        std::string out = Path("mmix.out");
+        *status = RunProcess({ MMIX_SIM, "-q", mmo }, out, Path("mmix.err"), 10);
         return ReadFile(out);
     }
 };
@@ -700,6 +722,50 @@ TEST_F(CcDriver, LinkAndRunMsp430Clang)
         << echo;
     EXPECT_NE(echo.find(std::string(RISCV_LD) + " -n --gc-sections -T "), std::string::npos)
         << echo;
+}
+
+TEST_F(CcDriver, CompileToAssemblyMmix)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "mmix", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find("main:"), std::string::npos) << text;
+    EXPECT_NE(text.find("pushj"), std::string::npos) << text;
+    EXPECT_NE(text.find(",printf"), std::string::npos) << text;
+}
+
+// Separate compilation for MMIX, a .S among the sources, and the link of the build's
+// runtime by hand: the .mmo runs on mmix, whose status is main's result.
+TEST_F(CcDriver, LinkAndRunMmix)
+{
+    // cppcheck-suppress knownConditionTrueFalse ; MMIX_TOOLS_FOUND is per configuration
+    if (!HaveMmixRun())
+        GTEST_SKIP() << "mmix-knuth-mmixware-as/ld or mmix not found";
+    WriteSource("main.c", "#include <stdio.h>\n"
+                          "long twice(long);\n"
+                          "int main(void) { printf(\"%ld\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S", R"(#ifdef __MMIX__
+        .text
+        .global twice
+twice   SLU     $0,$0,1
+        POP     1,0
+#endif
+)");
+    ASSERT_EQ(Vcc({ "-t", "mmix", "-c", "main.c", "twice.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    std::string lib = MMIX_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "mmix", "-v", "-nostdlib", "-o", "t.mmo", lib + "/crt0.o", "main.o",
+                    "twice.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunMmix(Path("t.mmo"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find("mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100 -o t.mmo "),
+              std::string::npos)
+        << echo;
+    EXPECT_EQ(echo.find(" -T "), std::string::npos) << echo;
 }
 
 TEST_F(CcDriver, CompileToAssemblyBesm6)
@@ -1091,6 +1157,53 @@ int main(void)
         << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" lz.o -lc " + std::string(MSP430_LIBGCC) + " \n"), std::string::npos)
+        << echo;
+}
+
+// The same for MMIX: its own headers ahead of the LP64 model's, the GNU MMIX binutils,
+// the link with the linker's own script, and GCC's libgcc.a last, so that an object GCC
+// compiled links too (__builtin_clzl is __clzdi2, which only libgcc has).
+TEST_F(CcDriver, StagedPrefixMmix)
+{
+    // cppcheck-suppress knownConditionTrueFalse ; MMIX_TOOLS_FOUND is per configuration
+    if (!HaveMmixRun() || !HaveTool(MMIX_GCC) || access(MMIX_LIBGCC, R_OK) != 0)
+        GTEST_SKIP() << "mmix-knuth-mmixware-gcc/as/ld, libgcc.a or mmix not found";
+    std::string prefix = StagePrefix("mmix");
+    std::string lib = prefix + "/share/vcc/mmix/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(MMIX_LIB_DIR) + "/" + name, lib + "/" + name);
+
+    WriteSource("lz.c", "int lz(unsigned long x) { return __builtin_clzl(x); }\n");
+    ASSERT_EQ(RunProcess({ MMIX_GCC, "-O2", "-c", "-o", Path("lz.o"), Path("lz.c") }), 0);
+    WriteSource("t.c", R"(#include <stdio.h>
+#include <limits.h>
+#include <float.h>
+#include <stddef.h>
+int lz(unsigned long);
+int main(void)
+{
+    union { long l; char c[8]; } u = { 1 };
+    printf("%d %d %d %g %d\n", (int)sizeof(long), (int)sizeof(wchar_t), u.c[7], 2.5, lz(0x100));
+    return LONG_MAX == 9223372036854775807L && DBL_MANT_DIG == 53 && CHAR_MIN < 0 ? 7 : 1;
+}
+)");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "mmix", "-v", "-o", "t.mmo", "t.c", "lz.o" }), 0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunMmix(Path("t.mmo"), &status), "8 4 1 2.5 55\n");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t mmix -nostdinc -I" + prefix +
+                        "/share/vcc/mmix/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t mmix "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenmmix "), std::string::npos) << echo;
+    EXPECT_NE(echo.find("mmix-knuth-mmixware-as -x -no-predefined-syms -o "), std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" lz.o -lc " + std::string(MMIX_LIBGCC) + " \n"), std::string::npos)
         << echo;
 }
 
