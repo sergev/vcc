@@ -16,6 +16,9 @@ void mmix_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out
 
 // Allocate registers (default), or keep every variable in memory (--no-regalloc).
 extern bool mmix_regalloc;
+// Fuse instructions in selection and run the peephole pass (default), or not
+// (--no-peephole).
+extern bool mmix_peephole_on;
 
 #ifdef __cplusplus
 }

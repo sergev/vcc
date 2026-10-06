@@ -11,6 +11,7 @@ add_library(mmix STATIC
     fp.c
     codegen.c
     regalloc.c
+    peephole.c
 )
 target_include_directories(mmix PUBLIC .)
 target_link_libraries(mmix backend_common tac libutil)

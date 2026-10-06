@@ -7,6 +7,7 @@
 //
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -272,10 +273,17 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     default:
         fatal_error("mmix: %s: binary operator %d is not implemented", gen_name(g), op);
     }
-    // A shift count has a type of its own.
+    // A shift count has a type of its own.  A constant first operand of a commutative
+    // operation goes second, where a byte is the immediate.
     bool shift       = mop == MMIX_SLU || mop == MMIX_SR || mop == MMIX_SRU;
-    const Tac_Val *b = in->u.binary.src2;
-    int a            = use_val(g, in->u.binary.src1, REG_A, t);
+    const Tac_Val *a_val = in->u.binary.src1, *b = in->u.binary.src2;
+    bool commutes = mop == MMIX_ADDU || mop == MMIX_MULU || mop == MMIX_AND || mop == MMIX_OR ||
+                    mop == MMIX_XOR;
+    if (commutes && a_val->kind == TAC_VAL_CONSTANT && b->kind == TAC_VAL_VAR) {
+        b     = a_val;
+        a_val = in->u.binary.src2;
+    }
+    int a = use_val(g, a_val, REG_A, t);
     Mmix_Operand z   = val_operand(g, b, REG_B, shift ? val_type(g, b) : t);
     int d            = def_reg(g, in->u.binary.dst, REG_A);
     emit3(g, mop, mmix_reg(d), mmix_reg(a), z);
@@ -468,6 +476,189 @@ static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac
     int d = def_reg(g, dst, REG_A);
     mem_op(g, byte ? load_op_ext(1, !mmix_is_unsigned(t)) : load_op(t), d, name, offset);
     def_done(g, d, dst, true);
+}
+
+// Whether `dst` is read once only (by the instruction after its definition), and is not
+// in memory: the two may be fused, with no `dst` at all.
+static bool read_once(const Gen *g, const Tac_Val *dst)
+{
+    if (!g->uses || !dst || dst->kind != TAC_VAL_VAR)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    return v >= 0 && g->uses[v] == 1 && !flow_has(g->flow->in_memory, v);
+}
+
+// Whether `in` is a conditional jump on variable `v`.
+static bool jumps_on(const Tac_Instruction *in, const Tac_Val *v)
+{
+    if (!in || (in->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && in->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *c = in->u.jump_if_zero.condition;
+    return c->kind == TAC_VAL_VAR && strcmp(c->u.var_name, v->u.var_name) == 0;
+}
+
+static Mmix_Op invert_branch(Mmix_Op op)
+{
+    switch (op) {
+    case MMIX_BZ:
+        return MMIX_BNZ;
+    case MMIX_BNZ:
+        return MMIX_BZ;
+    case MMIX_BN:
+        return MMIX_BNN;
+    case MMIX_BNN:
+        return MMIX_BN;
+    case MMIX_BP:
+        return MMIX_BNP;
+    default:
+        return MMIX_BP; // bnp
+    }
+}
+
+static void branch_to(Gen *g, Mmix_Op op, int reg, const char *target)
+{
+    char *l = label_name(target);
+    emit2(g, op, mmix_reg(reg), mmix_label(l));
+    xfree(l);
+}
+
+// The branch on a comparison's -1/0/1 that is taken when `op` holds.
+static Mmix_Op compare_branch_op(Tac_BinaryOperator op)
+{
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+        return MMIX_BZ;
+    case TAC_BINARY_NOT_EQUAL:
+        return MMIX_BNZ;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        return MMIX_BN;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+        return MMIX_BNP;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        return MMIX_BP;
+    default:
+        return MMIX_BNN; // >=
+    }
+}
+
+// A comparison only the next conditional jump reads, as a branch: on cmp's or cmpu's
+// sign, or on the value itself against zero.  A floating < or > branches on fcmp's
+// sign, where an unordered pair gives 0 (false, and its inverse true), and == or != on
+// feql; <= and >= also need fun, and are left to gen_compare.
+static bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (in->kind != TAC_INSTRUCTION_BINARY || !jumps_on(next, in->u.binary.dst) ||
+        !read_once(g, in->u.binary.dst))
+        return false;
+    Tac_BinaryOperator op = in->u.binary.op;
+    Mmix_Op zs;
+    bool is_unsigned;
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
+    const Tac_Type *t = operand_type(g, a, b);
+    bool fp           = mmix_is_fp(t);
+    if (fp ? !(op == TAC_BINARY_EQUAL || op == TAC_BINARY_NOT_EQUAL || op == TAC_BINARY_LESS_THAN ||
+               op == TAC_BINARY_LESS_THAN_DOUBLE || op == TAC_BINARY_GREATER_THAN ||
+               op == TAC_BINARY_GREATER_THAN_DOUBLE)
+           : !compare_set(op, &zs, &is_unsigned))
+        return false;
+    Mmix_Op br = compare_branch_op(op);
+    int reg;
+    if (fp) {
+        int x = use_val(g, a, REG_A, NULL), y = use_val(g, b, REG_B, NULL);
+        bool eq = op == TAC_BINARY_EQUAL || op == TAC_BINARY_NOT_EQUAL;
+        emit3(g, eq ? MMIX_FEQL : MMIX_FCMP, mmix_reg(REG_C), mmix_reg(x), mmix_reg(y));
+        if (eq) // feql gives 1 when equal
+            br = op == TAC_BINARY_EQUAL ? MMIX_BNZ : MMIX_BZ;
+        reg = REG_C;
+    } else {
+        is_unsigned |= t->kind == TAC_TYPE_POINTER;
+        reg = use_val(g, a, REG_A, t);
+        if (!is_zero(b) || (is_unsigned && br != MMIX_BZ && br != MMIX_BNZ)) {
+            Mmix_Operand z = val_operand(g, b, REG_B, t);
+            emit3(g, is_unsigned ? MMIX_CMPU : MMIX_CMP, mmix_reg(REG_A), mmix_reg(reg), z);
+            reg = REG_A;
+        }
+    }
+    if (next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO)
+        br = invert_branch(br);
+    branch_to(g, br, reg, next->u.jump_if_zero.target);
+    return true;
+}
+
+// !x only the next conditional jump reads: a branch on x itself, the other way round.
+static bool gen_not_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (in->kind != TAC_INSTRUCTION_UNARY || in->u.unary.op != TAC_UNARY_NOT ||
+        !jumps_on(next, in->u.unary.dst) || !read_once(g, in->u.unary.dst))
+        return false;
+    const Tac_Val *src = in->u.unary.src;
+    int r = mmix_is_fp(val_type(g, src)) ? gen_fp_test(g, src, REG_A) : use_val(g, src, REG_A, NULL);
+    branch_to(g, next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ? MMIX_BNZ : MMIX_BZ, r,
+              next->u.jump_if_zero.target);
+    return true;
+}
+
+// A pointer sum only the next load or store reads, folded into its address: ptr plus
+// a constant offset of 0..255, or plus an index at scale 1.
+static bool gen_indexed_access(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (in->kind != TAC_INSTRUCTION_ADD_PTR || !next || !read_once(g, in->u.add_ptr.dst))
+        return false;
+    const Tac_Val *dst = in->u.add_ptr.dst, *index = in->u.add_ptr.index;
+    const Tac_Val *ptr = NULL, *val = NULL;
+    bool load = next->kind == TAC_INSTRUCTION_LOAD || next->kind == TAC_INSTRUCTION_LOAD_BYTE;
+    bool byte = next->kind == TAC_INSTRUCTION_LOAD_BYTE || next->kind == TAC_INSTRUCTION_STORE_BYTE;
+    if (load) {
+        ptr = next->u.load.src_ptr;
+        val = next->u.load.dst;
+    } else if (next->kind == TAC_INSTRUCTION_STORE || next->kind == TAC_INSTRUCTION_STORE_BYTE) {
+        ptr = next->u.store.dst_ptr;
+        val = next->u.store.src;
+    } else {
+        return false;
+    }
+    if (ptr->kind != TAC_VAL_VAR || strcmp(ptr->u.var_name, dst->u.var_name) != 0 ||
+        (val->kind == TAC_VAL_VAR && strcmp(val->u.var_name, dst->u.var_name) == 0) ||
+        !mmix_is_scalar(val_type(g, val)))
+        return false;
+    int64_t off = 0;
+    if (index->kind == TAC_VAL_CONSTANT) {
+        off = (int64_t)const_bits(index->u.constant) * in->u.add_ptr.scale;
+        if (off < 0 || off > 255)
+            return false;
+    } else if (in->u.add_ptr.scale != 1) {
+        return false;
+    }
+    int p          = use_val(g, in->u.add_ptr.ptr, REG_B, NULL);
+    Mmix_Operand z = index->kind == TAC_VAL_CONSTANT ? mmix_imm(off)
+                                                     : mmix_reg(use_val(g, index, REG_C, NULL));
+    if (load) {
+        const Tac_Type *t = val_type(g, val);
+        int d             = def_reg(g, val, REG_A);
+        Mmix_Op op        = byte ? load_op_ext(1, !mmix_is_unsigned(t)) : load_op(t);
+        emit3(g, op, mmix_reg(d), mmix_reg(p), z);
+        def_done(g, d, val, true);
+    } else {
+        const Tac_Type *st = val_type(g, val), *t = access_type(g, ptr, val);
+        if (mmix_is_fp(t) != mmix_is_fp(st))
+            t = st;
+        int v = use_val(g, val, REG_A, t);
+        emit3(g, byte ? MMIX_STBU : store_op(t), mmix_reg(v), mmix_reg(p), z);
+    }
+    return true;
+}
+
+bool gen_fused(Gen *g, const Tac_Instruction *in)
+{
+    if (!g->uses)
+        return false;
+    return gen_compare_branch(g, in, in->next) || gen_not_branch(g, in, in->next) ||
+           gen_indexed_access(g, in, in->next);
 }
 
 int instr_out_size(const Gen *g, const Tac_Instruction *in)

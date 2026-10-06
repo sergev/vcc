@@ -87,6 +87,8 @@ typedef struct {
     StringMap regs;    // name → its register in the allocator's numbering + 1
     StringMap dead;    // allocated parameters dead on entry
     int P;             // the compaction: $0..$(P-1) hold values live across a call
+    struct Flow *flow; // with the peephole optimizations: the body's variables,
+    int *uses;         // and how many times each is read
     char exit[32];     // the label of the epilogue
 } Gen;
 
@@ -233,6 +235,10 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in, bool last);
+// `in` and the instruction after it as one, when the second alone reads the first's
+// result: a comparison or a !x and a conditional jump on it, a pointer sum and a load or
+// store through it.  Returns whether it did.
+bool gen_fused(Gen *g, const Tac_Instruction *in);
 // The outgoing stack bytes instruction `in` needs: a call's stack arguments.
 int instr_out_size(const Gen *g, const Tac_Instruction *in);
 
@@ -240,6 +246,11 @@ int instr_out_size(const Gen *g, const Tac_Instruction *in);
 // Register allocation (regalloc.c)
 //
 void gen_regalloc(Gen *g);
+
+//
+// Peephole optimization of the function's code (peephole.c)
+//
+void mmix_peephole(Mmix_Func *fn, int fround_off);
 
 //
 // Floating point, in hardware (fp.c)

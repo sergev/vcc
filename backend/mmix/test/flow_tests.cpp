@@ -17,6 +17,7 @@ TEST_F(MmixTest, BranchOnValue)
 // A loop jumps back to its top; every label is L: and defined once in the unit.
 TEST_F(MmixTest, LabelsUniqueInUnit)
 {
+    NaiveSelection();
     std::string s = CompileToMmix(R"(
         long f(long n) { long s = 0; while (n > 0) { s = s + n; n = n - 1; } return s; }
         long g(long n) { long s = 0; for (long i = 0; i < n; i = i + 1) { if (i == 3) continue; s = s + i; } return s; }

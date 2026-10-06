@@ -8,13 +8,16 @@
 
 static const BackendFlag flags[] = {
     { "no-regalloc", "keep every variable in memory" },
+    { "no-peephole", "skip the peephole optimizations" },
     { NULL, NULL },
 };
 
 static void flag(int index)
 {
-    (void)index;
-    mmix_regalloc = false;
+    if (index == 0)
+        mmix_regalloc = false;
+    else
+        mmix_peephole_on = false;
 }
 
 static const char *output_ext(void)

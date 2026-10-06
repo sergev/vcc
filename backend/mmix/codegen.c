@@ -5,7 +5,16 @@
 
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
+#include "xalloc.h"
+
+bool mmix_peephole_on = true;
+
+static void count_use(int var, void *arg)
+{
+    ((int *)arg)[var]++;
+}
 
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
@@ -14,10 +23,31 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     if (mmix_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);
+    if (mmix_peephole_on) {
+        g.flow = flow_build(tl);
+        g.uses = xalloc((g.flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+        memset(g.uses, 0, (g.flow->nvars + 1) * sizeof(int));
+        for (int i = 0; i < g.flow->ninstrs; i++)
+            flow_uses(g.flow, g.flow->instrs[i], count_use, g.uses);
+    }
     copy_byref_params(&g);
-    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
-        gen_instr(&g, in, in->next == NULL);
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
+        if (gen_fused(&g, in))
+            in = in->next;
+        else
+            gen_instr(&g, in, in->next == NULL);
+    }
+    if (g.flow) {
+        flow_free(g.flow);
+        xfree(g.uses);
+        g.flow = NULL;
+        g.uses = NULL;
+    }
     gen_frame(&g);
+    if (mmix_peephole_on) {
+        const Slot *f = find_slot(&g, FROUND_SLOT);
+        mmix_peephole(g.fn, f ? f->off : -1);
+    }
     mmix_emit_func(out, g.fn);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)

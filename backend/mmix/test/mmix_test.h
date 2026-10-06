@@ -63,13 +63,16 @@ class MmixTest : public QemuTest {
 protected:
     MmixTest() : QemuTest("mmix", mmix_config())
     {
-        mmix_regalloc = true; // the default; a test may change it
+        // The defaults; a test may change them.
+        mmix_regalloc    = true;
+        mmix_peephole_on = true;
     }
 
-    // Pin instruction selection itself: every variable in its slot.
+    // Pin instruction selection itself: every variable in its slot, no peephole pass.
     static void NaiveSelection()
     {
-        mmix_regalloc = false;
+        mmix_regalloc    = false;
+        mmix_peephole_on = false;
     }
 
     // Assembly of every toplevel of the translation unit.  When GNU as is installed, it
