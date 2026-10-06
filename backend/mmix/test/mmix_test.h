@@ -184,6 +184,19 @@ protected:
         return ReadFile(out_path);
     }
 
+    // Run a program on our libc.a, and once more built by GCC (-O1 -fno-builtin) with
+    // newlib: the two outputs and results must agree.  Returns ours, with main's result in
+    // exit_status.
+    std::string RunAgainstNewlib(const std::string &src)
+    {
+        std::string ours = CompileAndRunMmix(src);
+        int status       = exit_status;
+        EXPECT_EQ(ours, NewlibRun(src, { "-O1", "-fno-builtin", "-w" })) << "newlib disagrees";
+        EXPECT_EQ(status, exit_status) << "newlib's result disagrees";
+        exit_status = status;
+        return ours;
+    }
+
     // Run C compiled by GCC on our runtime: our crt0.o and libc.a, then GCC's libgcc.a.
     // `asm_text`, ours, is linked in too unless empty.
     std::string GccOnOurRuntime(const std::string &gcc_src, const std::string &asm_text = "",

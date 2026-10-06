@@ -338,6 +338,22 @@ boundary.
     restoring `rJ` is sound under the register stack, and measure it.
   - **Measured** against GCC `-O2`, in `mmix -s` instructions, υ and μ, and in code size,
     on the C library, the book programs and the Phase 4 benchmarks, and recorded here.
+  - **The baseline,** naive selection (K20, `scripts/bench_mmix.sh`: instructions, υ and
+    μ less an empty `main`'s; GCC's kernels on our runtime, its `printf` newlib's):
+
+    | Bench | Ours | GCC `-O2` | Ratio (instr) |
+    |---|---|---|---|
+    | `fib` (fib(22), recursive) | 1404179 / 1576117 / 716413 | 363764 / 405294 / 83325 | 3.9 |
+    | `sum` (an `int` array, 100 k) | 2280157 / 2500153 / 1730103 | 580082 / 580106 / 110000 | 3.9 |
+    | `sort` (bubble sort, 300) | 1646247 / 1801939 / 1186197 | 594305 / 656409 / 226201 | 2.8 |
+    | `dot` (`double`, 50 k) | 1605181 / 2045177 / 1205126 | 415084 / 745108 / 110000 | 3.9 |
+    | `copy` (`char` loop, 100 k) | 3180061 / 3989976 / 2520026 | 700044 / 1290011 / 209991 | 4.5 |
+    | `printf("%d")` | 1733 / 2755 / 818 | newlib's: 2103 / 2913 / 372 | 0.8 |
+    | `printf("%g")` | 2777 / 3244 / 1260 | newlib's: 3123 / 3812 / 577 | 0.9 |
+
+    Every variable in memory shows in μ: 6 to 12 times GCC's on the kernels. Our
+    `printf` (the shared `doprnt`, compiled naively) runs fewer instructions than
+    newlib's but twice its memory accesses.
 
 ## Phase 6 — finishing
 

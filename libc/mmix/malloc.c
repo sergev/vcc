@@ -3,8 +3,9 @@
  * The memory stack is a segment of its own (0x6000000000000000 down), so the heap never
  * meets it; the data segment ends where the pool segment begins, at
  * 0x4000000000000000.  mmix simulates the memory sparsely, so the pages come into being
- * as they are touched.  Each block is 8-aligned and preceded by an 8-byte header holding
- * the requested size, so realloc knows how much to copy.  The same design as MSP430's.
+ * as they are touched.  Each block is 16-aligned, as newlib's are (max_align_t needs
+ * only 8), and preceded by an 8-byte header holding the requested size, so realloc knows
+ * how much to copy.  The same design as MSP430's.
  */
 #include <stddef.h>
 #include <string.h>
@@ -17,14 +18,12 @@ static char *brk = _end;
 
 void *malloc(size_t n)
 {
-    size_t start = ((size_t)brk + 7) & ~(size_t)7;
-    size_t room  = start < HEAP_END ? HEAP_END - start : 0;
-    if (room < 8 || n > room - 8)
+    size_t block = ((size_t)brk + 8 + 15) & ~(size_t)15;
+    if (block >= HEAP_END || n > HEAP_END - block)
         return NULL;
-    size_t *header = (size_t *)start;
-    *header        = n;
-    brk            = (char *)(start + 8 + ((n + 7) & ~(size_t)7));
-    return header + 1;
+    ((size_t *)block)[-1] = n;
+    brk                   = (char *)(block + n);
+    return (void *)block;
 }
 
 void *calloc(size_t n, size_t size)

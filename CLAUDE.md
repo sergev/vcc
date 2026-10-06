@@ -22,7 +22,8 @@ reference; bare-metal `mspsim`, link-compatible with `msp430-elf-gcc -mcpu=msp43
 `libgcc.a` and newlib — see [docs/Msp430_Backend.md](docs/Msp430_Backend.md)).
 Run the tests with `ctest -j8` (or `make run`): it is much faster than the binaries.
 `scripts/bench_msp430.sh` prints mspsim cycles and code size of `bench/msp430/*.c`, ours
-against `msp430-elf-gcc -O2`.
+against `msp430-elf-gcc -O2`; `scripts/bench_mmix.sh` prints `mmix -s` instructions, oops
+and mems of `bench/mmix/*.c`, ours against `mmix-knuth-mmixware-gcc -O2`.
 The other ISA directory under `backend/` (`mmix/`) holds design notes only. A shared-code
 change must keep every backend's tests green, and must not change BESM-6 output except
 to fix a bug.
