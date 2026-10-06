@@ -25,16 +25,15 @@ TEST_F(MmixTest, RegallocCompaction)
               Code(CompileToMmix("long g(long); long f(long a, long b) { return g(a) + b; }")));
 }
 
-// With nothing kept across the call, rJ goes in $0 and the call is pushj $1; the result
-// comes back in the hole, which the epilogue moves to $0 after rJ.
+// With nothing kept across the call, rJ goes in $0 and the call is pushj $1; the second
+// call, whose result is returned, is a tail call: rJ restored, then jmp.
 TEST_F(MmixTest, RegallocNothingKept)
 {
     EXPECT_EQ("get $0,rJ\n"
               "pushj $1,g\n"
               "put rJ,$0\n"
-              "set $0,$1\n"
-              "pop 1,0\n",
-              Code(CompileToMmix("long g(void); long f(void) { return g(); }")));
+              "jmp g\n",
+              Code(CompileToMmix("void g(void); void f(void) { g(); g(); }")));
 }
 
 // An unsigned int result that wraps is extended again in its register; a signed one,

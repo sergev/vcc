@@ -274,6 +274,11 @@ void copy_byref_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Call `in` as a tail call, when the return of its result follows: rJ restored, the
+// arguments in $0.. (registers alone), and jmp, so that the callee runs in this
+// function's register frame and its pop returns to our caller.  Only with no frame (an
+// argument may point into none) and the same result type; false when not.
+bool gen_tail_call(Gen *g, const Tac_Instruction *in);
 // The stack bytes of the arguments of call `in`.
 int call_stack_size(const Gen *g, const Tac_Instruction *in);
 // Whether the function makes a call (__va_start is none: it is expanded in place).

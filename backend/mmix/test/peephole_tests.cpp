@@ -184,3 +184,50 @@ TEST_F(MmixTest, RunConditionalSets)
     )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A call whose result is returned is a jmp, the arguments in $0..: with no call left, rJ
+// is neither saved nor restored.
+EXPECT_OPT(TailCall,
+           "addu $5,$0,1\n"
+           "set $0,$1\n"
+           "set $1,$5\n"
+           "jmp g\n",
+           "long g(long, long); long f(long a, long b) { return g(b, a + 1); }")
+
+// Not when the result types differ: an int result widened to long needs extending.
+EXPECT_OPT(NoTailCallWidening,
+           "get $1,rJ\n"
+           "pushj $2,narrow\n"
+           "slu $2,$2,32\n"
+           "sr $2,$2,32\n"
+           "set $0,$2\n"
+           "put rJ,$1\n"
+           "pop 1,0\n",
+           "int narrow(void); long f(void) { return narrow(); }")
+
+// Run: tail calls, self-recursive and to GCC's code and back, a million deep, which
+// the register stack would otherwise hold a frame for each.
+TEST_F(MmixTest, RunTailCalls)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string gcc = R"(
+long down_ours(long n, long acc);
+long down_gcc(long n, long acc) { if (n == 0) return acc; return down_ours(n - 1, acc + 2); }
+)";
+    std::string ours = CompileToMmix(R"(
+        long down_gcc(long n, long acc);
+        long gcd(long a, long b) { if (b == 0) return a; return gcd(b, a % b); }
+        long down_ours(long n, long acc) { if (n == 0) return acc; return down_gcc(n - 1, acc + 1); }
+        long (*fp)(long, long) = gcd;
+        long indirect(long a, long b) { return fp(a, b); }
+        int main(void)
+        {
+            if (gcd(1071, 462) != 21) return 1;
+            if (indirect(48, 18) != 6) return 2;
+            if (down_ours(1000000, 0) != 1500000) return 3;
+            return 0;
+        }
+    )");
+    EXPECT_EQ("", Run(ours, "crt0.o", &gcc, { "-O2" }, ".gcc"));
+    EXPECT_EQ(0, exit_status);
+}

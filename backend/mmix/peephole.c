@@ -258,6 +258,13 @@ static bool rewrite_jumps(Mmix_Func *fn)
         Mmix_Instr *t = b->tail;
         if (!t || !n)
             continue;
+        // A block nothing jumps to, after one that does not fall through, never runs.
+        if (is_terminal(t) && !b->next->label && b->next->head) {
+            while (b->next->head)
+                remove_after(b->next, NULL);
+            changed = true;
+            continue;
+        }
         if (t->op == MMIX_JMP && same_label(&t->opnd[0], n)) {
             remove_after(b, (Mmix_Instr *)before_tail(b));
             changed = true;
@@ -622,8 +629,33 @@ static bool rewrite_live(const Liveness *lv, Mmix_Block *b, Regs out)
     return false;
 }
 
+// With no call left (each a tail call now), rJ never changes: no get and put of it.
+static void drop_rj(Mmix_Func *fn)
+{
+    for (const Mmix_Block *b = fn->blocks; b; b = b->next)
+        for (const Mmix_Instr *in = b->head; in; in = in->next)
+            if (is_call(in->op))
+                return;
+    for (Mmix_Block *b = fn->blocks; b; b = b->next) {
+        for (Mmix_Instr *prev = NULL, *in = b->head; in;) {
+            bool rj = (in->op == MMIX_GET && in->opnd[1].kind == MMIX_OPND_SPECIAL &&
+                       in->opnd[1].reg == MMIX_rJ) ||
+                      (in->op == MMIX_PUT && in->opnd[0].kind == MMIX_OPND_SPECIAL &&
+                       in->opnd[0].reg == MMIX_rJ);
+            if (rj) {
+                remove_after(b, prev);
+                in = prev ? prev->next : b->head;
+            } else {
+                prev = in;
+                in   = in->next;
+            }
+        }
+    }
+}
+
 void mmix_peephole(Mmix_Func *fn, int fround_off)
 {
+    drop_rj(fn);
     bool changed = true;
     while (changed) {
         changed = false;

@@ -357,3 +357,50 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     if (dst && !sret)
         take_result(g, hole, dst);
 }
+
+// The size and kind of a result, as the ABI hands it back: the same for two types when
+// a tail call may hand back the callee's result as ours.
+static bool same_result(const Tac_Type *a, const Tac_Type *b)
+{
+    if (!a || !b)
+        return !a && !b;
+    if (!mmix_is_scalar(a) || !mmix_is_scalar(b))
+        return false;
+    if (mmix_is_fp(a) || mmix_is_fp(b))
+        return mmix_is_float(a) == mmix_is_float(b) && mmix_is_fp(a) && mmix_is_fp(b);
+    return a->kind == b->kind || (mmix_type_size(a) == 8 && mmix_type_size(b) == 8);
+}
+
+bool gen_tail_call(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *ft = in->u.fun_call.fun_type, *ours = g->tl->u.function.type;
+    if (is_va_start(in) || g->leaf || g->frame_size != 0 || !ft || ft->kind != TAC_TYPE_FUN_TYPE ||
+        !ours || ours->kind != TAC_TYPE_FUN_TYPE ||
+        !same_result(ft->u.fun_type.ret_type, ours->u.fun_type.ret_type))
+        return false;
+    int n = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, n++)
+        if (n >= MAX_REG_ARGS || !mmix_is_scalar(val_type(g, a)))
+            return false;
+    if (in->u.fun_call.indirect)
+        load_val(g, &(Tac_Val){ .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name },
+                 REG_B);
+    emit2(g, MMIX_PUT, mmix_special(MMIX_rJ), mmix_reg(rj_reg(g)));
+    Move m[MAX_REG_ARGS];
+    int k = 0, i = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
+        int r = val_reg(g, a);
+        if (r >= 0)
+            m[k++] = abi_move(g, i, r, a, param_type(ft, i));
+    }
+    parallel_move(g, m, k);
+    i = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++)
+        if (val_reg(g, a) < 0)
+            load_abi(g, a, i, param_type(ft, i));
+    if (in->u.fun_call.indirect)
+        emit3(g, MMIX_GO, mmix_reg(MMIX_TMP), mmix_reg(REG_B), mmix_imm(0));
+    else
+        emit1(g, MMIX_JMP, mmix_sym(in->u.fun_call.fun_name, 0));
+    return true;
+}

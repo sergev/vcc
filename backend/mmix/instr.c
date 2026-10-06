@@ -680,12 +680,26 @@ static bool gen_indexed_access(Gen *g, const Tac_Instruction *in, const Tac_Inst
     return true;
 }
 
+// A call whose result (or nothing) the next instruction returns: a tail call.
+static bool gen_tail(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (in->kind != TAC_INSTRUCTION_FUN_CALL || (next && next->kind != TAC_INSTRUCTION_RETURN))
+        return false;
+    // The last instruction of a function that falls off its end returns nothing.
+    const Tac_Val *dst = in->u.fun_call.dst, *ret = next ? next->u.return_.src : NULL;
+    if (dst ? !ret || ret->kind != TAC_VAL_VAR || strcmp(ret->u.var_name, dst->u.var_name) != 0 ||
+                  !read_once(g, dst)
+            : ret != NULL)
+        return false;
+    return gen_tail_call(g, in);
+}
+
 bool gen_fused(Gen *g, const Tac_Instruction *in)
 {
     if (!g->uses)
         return false;
     return gen_compare_branch(g, in, in->next) || gen_not_branch(g, in, in->next) ||
-           gen_indexed_access(g, in, in->next);
+           gen_indexed_access(g, in, in->next) || gen_tail(g, in, in->next);
 }
 
 int instr_out_size(const Gen *g, const Tac_Instruction *in)

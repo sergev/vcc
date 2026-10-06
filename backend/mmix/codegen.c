@@ -32,9 +32,11 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     }
     copy_byref_params(&g);
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
-        if (gen_fused(&g, in))
+        if (gen_fused(&g, in)) {
+            if (!in->next)
+                break; // a tail call that ends the function
             in = in->next;
-        else
+        } else
             gen_instr(&g, in, in->next == NULL);
     }
     if (g.flow) {
