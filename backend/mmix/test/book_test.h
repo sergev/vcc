@@ -32,6 +32,7 @@ protected:
     }
 
     // Run a book program, and check that GCC -O0 with newlib gives the same.
+    // cppcheck-suppress duplInheritedMember ; deliberately wraps MmixTest's version
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = MmixTest::CompileAndRunBook(src);

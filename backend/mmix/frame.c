@@ -157,6 +157,7 @@ uint64_t const_bits(const Tac_Const *c)
     case TAC_CONST_ULONG_LONG:
         return c->u.ulong_long_val;
     case TAC_CONST_FLOAT: {
+        // cppcheck-suppress suspiciousFloatingPointCast ; rounding to float is the point
         double d = (float)c->u.float_val; // its exact binary64 value
         uint64_t bits;
         memcpy(&bits, &d, 8);

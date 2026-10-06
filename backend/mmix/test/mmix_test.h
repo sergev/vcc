@@ -146,7 +146,6 @@ protected:
         exit_status          = -1;
         std::string base     = QemuScratchPath(tag);
         std::string c_path   = base + ".c";
-        std::string x_path   = base + "-extra.c";
         std::string exe_path = base + ".mmo";
         std::string out_path = base + ".out";
         std::string log_path = base + ".log";
@@ -163,6 +162,7 @@ protected:
         cc.insert(cc.end(), flags.begin(), flags.end());
         cc.insert(cc.end(), { "-o", exe_path, c_path });
         if (!extra_src.empty()) {
+            std::string x_path = base + "-extra.c";
             std::ofstream x(x_path);
             x << extra_src;
             cc.push_back(x_path);
