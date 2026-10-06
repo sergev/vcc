@@ -17,6 +17,14 @@ protected:
         static const SkippedTest skipped[] = {
             { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
             { "Chapter16_AccessThroughCharPointer", "reads an int's bytes little-endian" },
+            { "Chapter18_ClassifyParams", "expects an unsigned plain char" },
+            { "Chapter18_UnionInits", "expects an unsigned plain char" },
+            { "Chapter18_CopyThruPointer", "reads a union's bytes little-endian" },
+            { "Chapter18_NestedUnionAccess", "reads a union's bytes little-endian" },
+            { "Chapter18_StaticUnionAccess", "reads a union's bytes little-endian" },
+            { "Chapter18_StaticUnionInits", "reads a union's bytes little-endian" },
+            { "Chapter18_UnionTempLifetime", "reads a union's bytes little-endian" },
+            { "Chapter18_UnionsInConditionals", "reads a union's bytes little-endian" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

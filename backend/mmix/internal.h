@@ -21,8 +21,17 @@
 //
 // Frame (SP is constant in the body; every offset is from it):
 //   frame + 8*i ...     incoming stack arguments, the 17th and later
-//   out ... frame - 1   slots: each aligned to its type; frame is a multiple of 8
+//   copy ... frame - 1  a call's copies of its large structure arguments and its
+//                       ignored structure result, for the call that needs most
+//   out ... copy - 1    slots: each aligned to its type; frame is a multiple of 8
 //   0 ... out - 1       outgoing stack arguments, for the call that needs most
+//
+// Structures: one of 8 bytes or less goes in a register, right-justified (the
+// big-endian integer of its bytes); a larger one by reference, to a copy the caller
+// makes, and the callee reads and writes it through that address (its slot holds it:
+// Slot.byref).  A structure result of any size goes through the address the caller
+// puts in $251; the callee saves it in the slot %.sret on entry.
+#define SRET_SLOT "%.sret"
 //
 #ifndef MMIX_INTERNAL_H
 #define MMIX_INTERNAL_H
@@ -42,7 +51,8 @@ enum {
 
 typedef struct {
     const Tac_Type *type;
-    int off; // from SP
+    int off;    // from SP
+    bool byref; // a structure parameter over 8 bytes: the slot holds its address
 } Slot;
 
 typedef struct {
@@ -54,6 +64,8 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     StringMap consts;  // the names of read-only objects in .rodata, reached by geta
     int out_size;      // bytes of outgoing stack arguments
+    int copy_off;      // the scratch area of a call: copies of its structure arguments
+    int copy_size;     // over 8 bytes, and its structure result when it has no destination
     int frame_size;    // bytes of the outgoing area and the slots, a multiple of 8
     bool leaf;         // makes no call: rJ stays where it is
     char exit[32];     // the label of the epilogue
@@ -114,6 +126,8 @@ uint64_t const_bits(const Tac_Const *c);
 uint64_t const_mem_bits(const Tac_Const *c);
 // `reg` = `value`, by the shortest sequence.
 void gen_const(Gen *g, int reg, uint64_t value);
+// `reg` += `off`, in place, a wyde at a time: no register besides.
+void add_in_place(Gen *g, int reg, int64_t off);
 // `reg` = `base` + `off`, through $255 when the offset is not a byte.
 void add_offset(Gen *g, int reg, int base, int64_t off);
 // A load or store of `reg` at byte `off` of named object `name`: k($254) for a slot,
@@ -140,6 +154,14 @@ uint64_t const_as(const Tac_Const *c, const Tac_Type *t);
 Mmix_Operand val_operand(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t);
 // Store `reg` into variable `v`, in its own width.
 void store_val(Gen *g, int reg, const Tac_Val *v);
+// Whether a structure goes in a register (8 bytes or less) rather than by reference.
+bool struct_in_reg(const Tac_Type *t);
+// Whether the function returns a structure, through $251.
+bool returns_struct(const Gen *g);
+// Load structure `name` (`size` bytes, aligned to `align`) into `reg` right-justified,
+// the big-endian integer of its bytes, with `tmp` for the pieces; and the reverse.
+void load_small_struct(Gen *g, const char *name, const Tac_Type *t, int reg, int tmp);
+void store_small_struct(Gen *g, int reg, const char *name, const Tac_Type *t);
 // Copy `size` bytes from the address in $2 to the address in $3, `align` bytes at a
 // time where both allow; both registers are changed, and $1 and $255.
 void copy_bytes(Gen *g, int size, int align);

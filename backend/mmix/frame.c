@@ -272,12 +272,60 @@ int ret_reg(const Gen *g)
     return g->leaf ? 0 : REG_A;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int off)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int off, bool byref)
 {
-    Slot *s = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
-    s->type = type;
-    s->off  = off;
+    Slot *s  = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
+    s->type  = type;
+    s->off   = off;
+    s->byref = byref;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
+}
+
+bool struct_in_reg(const Tac_Type *t)
+{
+    return mmix_type_size(t) <= 8;
+}
+
+// A structure parameter over 8 bytes: its slot holds the address of the caller's copy.
+static bool param_byref(const Tac_Type *t)
+{
+    return !mmix_is_scalar(t) && !struct_in_reg(t);
+}
+
+// The structure result type of function type `ft`, or NULL.
+static const Tac_Type *struct_result(const Tac_Type *ft)
+{
+    if (!ft || ft->kind != TAC_TYPE_FUN_TYPE || !ft->u.fun_type.ret_type)
+        return NULL;
+    const Tac_Type *r = ft->u.fun_type.ret_type;
+    return mmix_is_scalar(r) ? NULL : r;
+}
+
+// The scratch bytes call `in` needs: copies of its structure arguments over 8 bytes, and
+// its structure result when it has no destination.
+static int call_copy_size(const Gen *g, const Tac_Instruction *in)
+{
+    int need = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next) {
+        const Tac_Type *t = val_type(g, a);
+        if (!mmix_is_scalar(t) && !struct_in_reg(t))
+            need += (mmix_type_size(t) + 7) & ~7;
+    }
+    const Tac_Type *r = struct_result(in->u.fun_call.fun_type);
+    if (r && !in->u.fun_call.dst)
+        need += (mmix_type_size(r) + 7) & ~7;
+    return need;
+}
+
+bool returns_struct(const Gen *g)
+{
+    if (struct_result(g->tl->u.function.type))
+        return true;
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_RETURN && in->u.return_.src &&
+            !mmix_is_scalar(val_type(g, in->u.return_.src)))
+            return true;
+    return false;
 }
 
 static void free_nothing(intptr_t p)
@@ -290,7 +338,7 @@ static void add_slot(Gen *g, const char *name, const Tac_Type *type, int size, i
 {
     if (align > 1)
         g->frame_size = (g->frame_size + align - 1) & ~(align - 1);
-    insert_slot(g, name, type, g->frame_size);
+    insert_slot(g, name, type, g->frame_size, false);
     g->frame_size += size;
 }
 
@@ -298,13 +346,19 @@ void layout_frame(Gen *g)
 {
     StringMap allocs;
     map_init(&allocs);
-    g->out_size = 0;
+    g->out_size  = 0;
+    g->copy_size = 0;
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
         if (in->kind == TAC_INSTRUCTION_ALLOCATE_LOCAL)
             map_insert(&allocs, in->u.allocate_local.name, (intptr_t)in, 0);
         int out = instr_out_size(g, in);
         if (out > g->out_size)
             g->out_size = out;
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
+            int need = call_copy_size(g, in);
+            if (need > g->copy_size)
+                g->copy_size = need;
+        }
     }
     g->frame_size = g->out_size;
 
@@ -312,9 +366,18 @@ void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, nparam++) {
         if (!p->type)
             fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
-        if (nparam < MAX_REG_ARGS)
+        if (nparam >= MAX_REG_ARGS)
+            continue;
+        if (param_byref(p->type)) {
+            g->frame_size = (g->frame_size + 7) & ~7;
+            insert_slot(g, p->name, p->type, g->frame_size, true);
+            g->frame_size += 8;
+        } else {
             add_slot(g, p->name, p->type, mmix_type_size(p->type), mmix_type_align(p->type));
+        }
     }
+    if (returns_struct(g))
+        add_slot(g, SRET_SLOT, NULL, 8, 8);
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
             fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
@@ -333,16 +396,20 @@ void layout_frame(Gen *g)
     }
     map_destroy_free(&allocs, free_nothing);
     g->frame_size = (g->frame_size + 7) & ~7;
+    g->copy_off   = g->frame_size;
+    g->frame_size += g->copy_size;
 
     // The 17th parameter and later stay where they came in, an 8-byte slot each above
-    // the frame, a narrow value in its low-order (last) bytes.
+    // the frame, a narrow value (or a small structure) in its low-order (last) bytes, a
+    // large structure as its address.
     int i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
         if (i < MAX_REG_ARGS)
             continue;
-        int size = mmix_type_size(p->type);
-        int off  = g->frame_size + 8 * (i - MAX_REG_ARGS) + (size < 8 ? 8 - size : 0);
-        insert_slot(g, p->name, p->type, off);
+        int size   = mmix_type_size(p->type);
+        bool byref = param_byref(p->type);
+        int off    = g->frame_size + 8 * (i - MAX_REG_ARGS) + (!byref && size < 8 ? 8 - size : 0);
+        insert_slot(g, p->name, p->type, off, byref);
     }
 }
 
@@ -417,6 +484,25 @@ Mmix_Instr *emit3(Gen *g, Mmix_Op op, Mmix_Operand a, Mmix_Operand b, Mmix_Opera
     return in;
 }
 
+void add_in_place(Gen *g, int reg, int64_t off)
+{
+    static const Mmix_Op inc[4] = { MMIX_INCL, MMIX_INCML, MMIX_INCMH, MMIX_INCH };
+    if (off > 0 && off <= 255) {
+        emit3(g, MMIX_ADDU, mmix_reg(reg), mmix_reg(reg), mmix_imm(off));
+        return;
+    }
+    if (off < 0 && off >= -255) {
+        emit3(g, MMIX_SUBU, mmix_reg(reg), mmix_reg(reg), mmix_imm(-off));
+        return;
+    }
+    // Wydes added in turn sum to the offset, modulo 2^64.
+    for (int i = 0; i < 4; i++) {
+        unsigned w = ((uint64_t)off >> (16 * i)) & 0xffff;
+        if (w)
+            emit2(g, inc[i], mmix_reg(reg), mmix_wyde(w));
+    }
+}
+
 void add_offset(Gen *g, int reg, int base, int64_t off)
 {
     if (off >= 0 && off <= 255) {
@@ -445,9 +531,25 @@ static bool is_const_object(const Gen *g, const char *name)
     return map_get(&g->consts, name, &v);
 }
 
+// op reg at `off` from the address in $255.
+static void op_via_tmp(Gen *g, Mmix_Op op, int reg, int64_t off)
+{
+    if (off >= 0 && off <= 255) {
+        emit3(g, op, mmix_reg(reg), mmix_reg(MMIX_TMP), mmix_imm(off));
+    } else {
+        add_in_place(g, MMIX_TMP, off);
+        emit3(g, op, mmix_reg(reg), mmix_reg(MMIX_TMP), mmix_imm(0));
+    }
+}
+
 void mem_op(Gen *g, Mmix_Op op, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->byref) {
+        mem_op_at(g, MMIX_LDO, MMIX_TMP, MMIX_SP, s->off);
+        op_via_tmp(g, op, reg, off);
+        return;
+    }
     if (s) {
         mem_op_at(g, op, reg, MMIX_SP, s->off + off);
         return;
@@ -457,12 +559,7 @@ void mem_op(Gen *g, Mmix_Op op, int reg, const char *name, int64_t off)
     if (is_const_object(g, name)) {
         // .rodata is in the text segment, which geta reaches without a base register.
         emit2(g, MMIX_GETA, mmix_reg(MMIX_TMP), mmix_sym(name, 0));
-        if (off >= 0 && off <= 255) {
-            emit3(g, op, mmix_reg(reg), mmix_reg(MMIX_TMP), mmix_imm(off));
-        } else {
-            add_offset(g, MMIX_TMP, MMIX_TMP, off);
-            emit3(g, op, mmix_reg(reg), mmix_reg(MMIX_TMP), mmix_imm(0));
-        }
+        op_via_tmp(g, op, reg, off);
         return;
     }
     emit2(g, op, mmix_reg(reg), mmix_sym(name, off));
@@ -515,6 +612,12 @@ static bool is_function(const Gen *g, const char *name)
 void address_of(Gen *g, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
+    if (s && s->byref) {
+        mem_op_at(g, MMIX_LDO, reg, MMIX_SP, s->off);
+        if (off)
+            add_in_place(g, reg, off);
+        return;
+    }
     if (s) {
         add_offset(g, reg, MMIX_SP, s->off + off);
         return;
@@ -524,7 +627,7 @@ void address_of(Gen *g, int reg, const char *name, int64_t off)
     if (is_const_object(g, name) || is_function(g, name)) {
         emit2(g, MMIX_GETA, mmix_reg(reg), mmix_sym(name, 0));
         if (off)
-            add_offset(g, reg, reg, off);
+            add_in_place(g, reg, off);
         return;
     }
     emit2(g, MMIX_LDA, mmix_reg(reg), mmix_sym(name, off));
@@ -656,6 +759,27 @@ void copy_named(Gen *g, const char *dst, int64_t doff, const char *src, int64_t 
     }
 }
 
+void load_small_struct(Gen *g, const char *name, const Tac_Type *t, int reg, int tmp)
+{
+    int size = mmix_type_size(t), unit = copy_unit(size, mmix_type_align(t));
+    mem_op(g, unit_load(unit), reg, name, 0);
+    for (int k = unit; k < size; k += unit) {
+        mem_op(g, unit_load(unit), tmp, name, k);
+        emit3(g, MMIX_SLU, mmix_reg(reg), mmix_reg(reg), mmix_imm(8 * unit));
+        emit3(g, MMIX_OR, mmix_reg(reg), mmix_reg(reg), mmix_reg(tmp));
+    }
+}
+
+void store_small_struct(Gen *g, int reg, const char *name, const Tac_Type *t)
+{
+    int size = mmix_type_size(t), unit = copy_unit(size, mmix_type_align(t));
+    for (int k = size - unit; k >= 0; k -= unit) {
+        mem_op(g, unit_store(unit), reg, name, k);
+        if (k)
+            emit3(g, MMIX_SRU, mmix_reg(reg), mmix_reg(reg), mmix_imm(8 * unit));
+    }
+}
+
 void gen_label_block(Gen *g, const char *label)
 {
     mmix_new_block(g->fn, label);
@@ -708,6 +832,8 @@ void gen_frame(Gen *g)
     Mmix_Block *body = switch_block(g, g->prologue);
     if (g->frame_size)
         adjust_sp(g, MMIX_SUBU);
+    if (find_slot(g, SRET_SLOT)) // any call this function makes may overwrite $251
+        mem_op(g, MMIX_STO, MMIX_SRET, SRET_SLOT, 0);
     store_params(g);
     if (!g->leaf)
         emit2(g, MMIX_GET, mmix_reg(REG_RJ), mmix_special(MMIX_rJ));

@@ -512,7 +512,7 @@ instructions.
   - **`ptr_tests.cpp`:** loads and stores by width and signedness, `ADD_PTR` forms,
     `cmpu`, a run of arrays, a 2-D array, pointer differences and the byte order through
     `char *` and `int *`, and a run of the string functions from `libc.a`.
-- **K15. Structures** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
+- **K15. Structures** (ch. 17–18). *Done.* Member access is through `COPY_*_OFFSET`.
   - **Copies** go by octas for an 8-aligned structure and by the alignment's width
     otherwise. They are unrolled up to a threshold, then a counted loop.
   - **Arguments of 8 bytes or less** are loaded into a register right-justified:
@@ -529,6 +529,40 @@ instructions.
     - the callee copies `$251` into a local on entry, since any call it makes may
       overwrite the global, and stores the result through it;
     - the callee returns with `pop 0,0`.
+
+  *Done.* Book chapters 1–18 pass against GCC: 655 tests, 10 skipped.
+  - **Small structures:** one of 8 bytes or less is loaded into a register from pieces
+    of its alignment's width (`ldtu`, then `slu` and `or`); the callee stores it back
+    last piece first.
+  - **Large structures:**
+    - one over 8 bytes is copied into a scratch area of the caller's frame (sized for
+      the call that needs most) and passed by its address;
+    - the callee's slot holds that address (`Slot.byref`), and `mem_op`/`address_of`
+      read and write through it, with no copy.
+  - **Results:** `$251` points at the destination, or at the scratch area when the
+    result is ignored. The callee saves `$251` in `%.sret` on entry, copies the result
+    there, and pops 0.
+  - **Found: a constant stored to a member takes the member's type.** A partial
+    initializer zero-fills a pointer member with an `int` 0 constant, which a 4-byte
+    store left half-written. `gen_copy_to_offset` looks up the scalar at the offset
+    (`scalar_at`, as RISC-V does).
+  - **Found: an offset over 255 added to `$255` went through `$255`.** It is now added
+    in place with `incl`…`inch` (`add_in_place`), for a `.rodata` object and a
+    by-reference structure alike.
+  - **`malloc`/`calloc`/`realloc`/`free`:** `libc/mmix/malloc.c`, a bump allocator from
+    `_end` up to the pool segment at `0x4000000000000000`; the stack is a segment of its
+    own. Chapter 18 needs them, so they come before K20.
+  - **Skipped book programs** (GCC's build gives what ours gives): chapter 18's
+    `ClassifyParams` and `UnionInits` (an unsigned plain `char`), and six that read a
+    union's bytes little-endian (`CopyThruPointer`, `NestedUnionAccess`,
+    `StaticUnionAccess`, `StaticUnionInits`, `UnionTempLifetime`,
+    `UnionsInConditionals`). K18 adds big-endian versions.
+  - **`struct_tests.cpp`:**
+    - goldens of the piece loads and stores, and of `$251`;
+    - a run of every size among scalars, results of 1, 3 and 24 bytes, and a large
+      parameter written by the callee;
+    - the same with GCC both ways: sizes 1, 2, 3, 4, 5, 8, 9, 16 and 24 and a union, as
+      arguments and as results.
 
 ## Phase 3 — ABI conformance
 

@@ -368,7 +368,34 @@ static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
     store_val(g, REG_A, in->u.ptr_diff.dst);
 }
 
+// The scalar type at byte `offset` of aggregate type `t`, or NULL.  Of several union
+// members there, one of `size` bytes is preferred, else the first.
+static const Tac_Type *scalar_at(const Tac_Type *t, int offset, int size)
+{
+    if (!t)
+        return NULL;
+    if (t->kind == TAC_TYPE_ARRAY) {
+        int esize = mmix_type_size(t->u.array.elem_type);
+        return esize > 0 ? scalar_at(t->u.array.elem_type, offset % esize, size) : NULL;
+    }
+    if (t->kind != TAC_TYPE_STRUCTURE)
+        return offset == 0 ? t : NULL;
+    const Tac_Type *first = NULL;
+    for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+        if (offset < m->offset || offset >= m->offset + mmix_type_size(m->type))
+            continue;
+        const Tac_Type *s = scalar_at(m->type, offset - m->offset, size);
+        if (s && mmix_type_size(s) == size)
+            return s;
+        if (!first)
+            first = s;
+    }
+    return first;
+}
+
 // Member `offset` of aggregate `name` = src, in src's width (a byte for the BYTE form).
+// A constant takes the type of the member there: a zero filling a pointer member may
+// come as an int.
 static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset,
                                bool byte)
 {
@@ -377,7 +404,12 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int
         copy_named(g, name, offset, src->u.var_name, 0, mmix_type_size(t), mmix_type_align(t));
         return;
     }
-    load_val(g, src, REG_A);
+    if (src->kind == TAC_VAL_CONSTANT && !byte) {
+        const Tac_Type *m = scalar_at(name_type(g, name), offset, mmix_type_size(t));
+        if (m && mmix_is_scalar(m) && m->kind != TAC_TYPE_VOID && mmix_is_fp(m) == mmix_is_fp(t))
+            t = m;
+    }
+    load_val_as(g, src, REG_A, t);
     mem_op(g, byte ? MMIX_STBU : store_op(t), REG_A, name, offset);
 }
 

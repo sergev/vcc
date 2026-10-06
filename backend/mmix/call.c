@@ -44,9 +44,12 @@ void store_params(Gen *g)
 {
     int i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p && i < MAX_REG_ARGS; p = p->next, i++) {
-        if (!mmix_is_scalar(p->type))
-            fatal_error("mmix: %s: a structure parameter is not implemented yet", gen_name(g));
-        store_abi(g, i, p->name, p->type);
+        if (mmix_is_scalar(p->type))
+            store_abi(g, i, p->name, p->type);
+        else if (struct_in_reg(p->type))
+            store_small_struct(g, i, p->name, p->type);
+        else // the address of the caller's copy, which the body reads and writes
+            mem_op_at(g, MMIX_STO, i, MMIX_SP, find_slot(g, p->name)->off);
     }
 }
 
@@ -54,10 +57,15 @@ void gen_return(Gen *g, const Tac_Val *v, bool last)
 {
     if (v) {
         const Tac_Type *t = val_type(g, v);
-        if (!mmix_is_scalar(t))
-            fatal_error("mmix: %s: a structure result is not implemented yet", gen_name(g));
-        const Tac_Type *ft = g->tl->u.function.type;
-        load_abi(g, v, ret_reg(g), ft ? ft->u.fun_type.ret_type : NULL);
+        if (mmix_is_scalar(t)) {
+            const Tac_Type *ft = g->tl->u.function.type;
+            load_abi(g, v, ret_reg(g), ft ? ft->u.fun_type.ret_type : NULL);
+        } else {
+            // A structure goes to the address the caller put in $251.
+            mem_op(g, MMIX_LDO, REG_C, SRET_SLOT, 0);
+            address_of(g, REG_B, v->u.var_name, 0);
+            copy_bytes(g, mmix_type_size(t), mmix_type_align(t));
+        }
     }
     if (!last)
         emit1(g, MMIX_JMP, mmix_label(g->exit));
@@ -83,24 +91,66 @@ static const Tac_Type *param_type(const Tac_Type *ft, int i)
     return p;
 }
 
+enum { MAX_ARGS = 256 };
+
+// Argument `a` into register `reg` as the ABI passes it: a scalar extended, a small
+// structure right-justified (`tmp` for its pieces), a large one as the address of its
+// copy at `copy` in the frame.
+static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type *pt, int copy)
+{
+    const Tac_Type *t = val_type(g, a);
+    if (mmix_is_scalar(t))
+        load_abi(g, a, reg, pt);
+    else if (struct_in_reg(t))
+        load_small_struct(g, a->u.var_name, t, reg, tmp);
+    else
+        add_offset(g, reg, MMIX_SP, copy);
+}
+
 // pushj $1: rJ is in $0, which the call keeps; the arguments go in $2..$17 and on the
-// stack at 0($254) up, the result comes back in $1.  The stack arguments go first, through
-// $1, while no argument register holds anything yet.
+// stack at 0($254) up, the result comes back in $1.  First the copies of the large
+// structure arguments, through $1-$3; then the stack arguments, through $1 and $2; then
+// the register arguments, while no argument register holds anything yet.  A structure
+// result goes where $251 points: the destination, or a scratch copy when there is none.
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type;
-    int i              = 0;
+    int copy[MAX_ARGS];
+    int cursor = g->copy_off, i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
-        if (!mmix_is_scalar(val_type(g, a)))
-            fatal_error("mmix: %s: a structure argument is not implemented yet", gen_name(g));
+        if (i >= MAX_ARGS)
+            fatal_error("mmix: %s: more than %d arguments", gen_name(g), MAX_ARGS);
+        const Tac_Type *t = val_type(g, a);
+        copy[i]           = 0;
+        if (mmix_is_scalar(t) || struct_in_reg(t))
+            continue;
+        copy[i] = cursor;
+        address_of(g, REG_B, a->u.var_name, 0);
+        add_offset(g, REG_C, MMIX_SP, cursor);
+        copy_bytes(g, mmix_type_size(t), mmix_type_align(t));
+        cursor += (mmix_type_size(t) + 7) & ~7;
+    }
+    i = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         if (i < MAX_REG_ARGS)
             continue;
-        load_abi(g, a, REG_A, param_type(ft, i));
+        load_arg(g, a, REG_A, REG_B, param_type(ft, i), copy[i]);
         mem_op_at(g, MMIX_STO, REG_A, MMIX_SP, 8 * (i - MAX_REG_ARGS));
     }
     i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a && i < MAX_REG_ARGS; a = a->next, i++)
-        load_abi(g, a, REG_ARG0 + i, param_type(ft, i));
+        load_arg(g, a, REG_ARG0 + i, REG_A, param_type(ft, i), copy[i]);
+
+    const Tac_Val *dst = in->u.fun_call.dst;
+    bool sret          = dst ? !mmix_is_scalar(val_type(g, dst))
+                             : ft && ft->kind == TAC_TYPE_FUN_TYPE && ft->u.fun_type.ret_type &&
+                          !mmix_is_scalar(ft->u.fun_type.ret_type);
+    if (sret) {
+        if (dst)
+            address_of(g, MMIX_SRET, dst->u.var_name, 0);
+        else
+            add_offset(g, MMIX_SRET, MMIX_SP, cursor);
+    }
 
     if (in->u.fun_call.indirect) {
         mem_op(g, MMIX_LDO, MMIX_TMP, in->u.fun_call.fun_name, 0);
@@ -109,11 +159,6 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         emit2(g, MMIX_PUSHJ, mmix_reg(REG_A), mmix_sym(in->u.fun_call.fun_name, 0));
     }
 
-    const Tac_Val *dst = in->u.fun_call.dst;
-    if (dst) {
-        const Tac_Type *t = val_type(g, dst);
-        if (!mmix_is_scalar(t))
-            fatal_error("mmix: %s: a structure result is not implemented yet", gen_name(g));
-        store_abi(g, REG_A, dst->u.var_name, t);
-    }
+    if (dst && !sret)
+        store_abi(g, REG_A, dst->u.var_name, val_type(g, dst));
 }
