@@ -25,8 +25,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # the like keywords.
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-# GCC 16 takes an unbraced `if` around a GoogleTest EXPECT_* for a dangling else.
-set(CMAKE_CXX_FLAGS "-Wall -Werror -Wshadow -Wno-dangling-else")
+# GCC 16 takes an unbraced `if` around a GoogleTest EXPECT_* for a dangling else, and
+# the destructor of a vector<string> inlined into a constant-false branch (ClangRunBook,
+# with no clang for the target) for a bad free.
+set(CMAKE_CXX_FLAGS "-Wall -Werror -Wshadow -Wno-dangling-else -Wno-free-nonheap-object")
 set(CMAKE_C_FLAGS   "-Wall -Werror -Wshadow")
 
 #

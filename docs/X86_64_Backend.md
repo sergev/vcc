@@ -3,7 +3,8 @@
 `genx86` turns the compiler's intermediate code (TAC) into assembly for x86-64. The code
 follows the System V AMD64 calling rules (the psABI), so it can call, and be called by,
 code compiled with clang for `x86_64-none-elf`. Programs run under the `qemu` emulator,
-with no operating system.
+with no operating system, or under Linux, linked against glibc (the `x86_64-linux`
+target, see [Hosted Linux](#hosted-linux)).
 
 ## The target
 
@@ -174,6 +175,36 @@ In `libc/x86/`:
   `char`), `setjmp.h`, `stdarg.h`, `stddef.h` and `stdint.h`. `libc/lp64/include` has
   the headers shared with riscv64 and aarch64, and `libc/common/include` the
   target-neutral ones.
+
+## Hosted Linux
+
+The `x86_64-linux` target, `vcc`'s default on an x86-64 Linux machine, builds an ordinary
+Linux executable. The code is the bare-metal target's: the same data model (the
+`x86_64` descriptor, which `lower -t x86_64-linux` aliases), the same calling rules, which
+are glibc's too. `genx86 --linux` adds one thing, a `.note.GNU-stack` section in each
+unit, without which GNU `ld` makes the stack executable.
+
+- **Linking:** by the system's C compiler, `cc -no-pie … -lvcc`, which brings glibc's
+  startup files, `-lc` and libgcc. Our `crt0`, `link.ld` and `libc.a` play no part.
+  `libvcc.a` holds only `__va_arg`, which `<stdarg.h>` calls and glibc does not have.
+- **Not position independent:** a call to a function in `libc.so` goes through the PLT
+  the linker makes for a plain `call`, and data is reached through copy relocations,
+  but taking a function's address with `lea f(%rip)` cannot point into a shared library
+  from a PIE. `-no-pie` makes the linker give the function a canonical PLT address.
+- **Headers:** ours (`libc/linux/include`, `libc/linux/x86_64/include`, ahead of the
+  bare-metal ones), since `vparse` cannot read glibc's. They agree with glibc on every
+  layout and value a program hands to the C library: `errno` is `*__errno_location()`
+  with the kernel's numbers, `jmp_buf` is glibc's 200 bytes with `setjmp` its `_setjmp`,
+  `struct tm` has `tm_gmtoff` and `tm_zone`, `struct lconv`, `fenv_t` and the `FE_*`,
+  the `LC_*`, `<stdio.h>` constants, `MB_LEN_MAX` 16, `assert` calls glibc's
+  four-argument `__assert_fail`, and the `<math.h>` classification macros glibc's
+  `__fpclassify`, `__isnan`, `__signbit` and the rest. `cc-tests` checks this with a probe
+  built both by `vcc` and by the system's compiler. `va_list` needed no change: ours is
+  already the psABI's `__va_list_tag[1]`, so `vprintf(fmt, ap)` works.
+
+```sh
+vcc -v hello.c -lm && ./a.out
+```
 
 ## Running a program by hand
 

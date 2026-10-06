@@ -11,8 +11,10 @@
 //     as         assemble        .s   -> .o     (b6as | clang | msp430-elf-as | mmix-...-as)
 //     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld | mmix-...-ld)
 //
-// The target is chosen with -t (riscv64 by default, like vcpp and vlower; or riscv32,
-// aarch64, arm32, x86_64, avr, msp430, mmix, besm6).
+// The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
+// system C compiler against glibc; riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430,
+// mmix and besm6 are bare metal.  By default it is the host, where that is one of the
+// hosted targets, else riscv64.
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
 // straight to the linker, as is a .a archive.
@@ -126,6 +128,22 @@
 #ifndef MMIX_LIBGCC
 #define MMIX_LIBGCC ""
 #endif
+#ifndef X86_64_LINUX_CC
+#define X86_64_LINUX_CC ""
+#endif
+#ifndef AARCH64_LINUX_CC
+#define AARCH64_LINUX_CC ""
+#endif
+
+// The hosted target of the machine vcc runs on, if there is one: the default target,
+// and the one whose C compiler is plain `cc`.
+#if defined(__linux__) && defined(__x86_64__)
+#define HOST_TARGET "x86_64-linux"
+#elif defined(__linux__) && defined(__aarch64__)
+#define HOST_TARGET "aarch64-linux"
+#else
+#define HOST_TARGET ""
+#endif
 
 static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 
@@ -144,7 +162,11 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // with -x (it expands an out-of-range branch and allocates the base registers) and
 // the linker with no script, text from 0x100, its output Knuth's .mmo.
 //
-enum arch { ARCH_BESM6, ARCH_CROSS };
+// A hosted target (ARCH_HOSTED) both assembles and links with a C compiler: the one
+// found when vcc was configured, else <prefix>-gcc, else `cc` on the host itself, else
+// clang.  It supplies the startup files and the C library; we add libvcc.a.
+//
+enum arch { ARCH_BESM6, ARCH_CROSS, ARCH_HOSTED };
 
 struct target {
     const char *name;
@@ -162,6 +184,7 @@ struct target {
     const char *ld_flag;          // linker flag for either linker, or NULL
     const char *libgcc;           // configure-time libgcc.a, linked last when present, or NULL
     bool no_script;               // the linker's default script, unless -T names one
+    const char *gen_flag;         // code generator flag, or NULL
 };
 
 #define RISCV_PREFIXES "riscv64-unknown-elf riscv64-elf riscv64-linux-gnu"
@@ -187,9 +210,15 @@ static const struct target targets[] = {
     { "mmix", ARCH_CROSS, "vgenmmix", MMIX_AS, MMIX_LD, MMIX_LDFLAGS, "mmix-knuth-mmixware",
       "-x -no-predefined-syms", NULL, NULL, NULL, "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC,
       true },
+    { .name = "x86_64-linux", .arch = ARCH_HOSTED, .codegen = "vgenx86",
+      .as_default = X86_64_LINUX_CC, .ld_default = X86_64_LINUX_CC,
+      .prefixes = "x86_64-linux-gnu", .triple = "x86_64-linux-gnu", .gen_flag = "--linux" },
+    { .name = "aarch64-linux", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
+      .as_default = AARCH64_LINUX_CC, .ld_default = AARCH64_LINUX_CC,
+      .prefixes = "aarch64-linux-gnu", .triple = "aarch64-linux-gnu", .gen_flag = "--linux" },
 };
 
-static const struct target *target = &targets[1]; // riscv64
+static const struct target *target; // set by -t, else the default
 
 //
 // A growable vector of C strings, used for argument lists and file lists.
@@ -573,6 +602,20 @@ static bool push_tool(struct vec *av, const char *envvar, const char *configured
         vec_push(av, strcmp(tool, "as") == 0 ? "b6as" : "b6ld");
         return false;
     }
+    if (target->arch == ARCH_HOSTED) {
+        // One C compiler does both: <prefix>-gcc, the host's own, else clang.
+        char *gcc = concat(target->prefixes, "-gcc");
+        if (on_path(gcc)) {
+            vec_push(av, gcc);
+            return false;
+        }
+        if (strcmp(target->name, HOST_TARGET) == 0 && on_path("cc")) {
+            vec_push(av, "cc");
+            return false;
+        }
+        vec_push(av, "clang");
+        return true;
+    }
     char *prefixes = own(strdup(target->prefixes)), *save;
     char *first    = NULL;
     for (const char *p = strtok_r(prefixes, " ", &save); p; p = strtok_r(NULL, " ", &save)) {
@@ -718,6 +761,8 @@ static int run_codegen(const char *in, const char *out)
     vec_push(&av, tool);
     if (codegen_dialect)
         vec_push(&av, codegen_dialect);
+    if (target->gen_flag)
+        vec_push(&av, (char *)target->gen_flag);
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -740,6 +785,8 @@ static int run_codegen(const char *in, const char *out)
 // or with clang: clang --target=<triple> [flags] -c -o out in, e.g.
 //     riscv64: clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c -o out in
 // (a clang given by VCC_AS for a target with no triple carries its own flags).
+// A hosted target assembles with its C compiler:
+//     x86_64-linux: cc -c -o out in
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
@@ -749,6 +796,10 @@ static int run_as(const char *in, const char *out)
     bool llvm = push_tool(&av, "VCC_AS", target->as_default, "as", NULL);
     if (target->arch == ARCH_BESM6) {
         vec_push(&av, "-X");
+    } else if (target->arch == ARCH_HOSTED) {
+        if (llvm)
+            vec_push(&av, concat("--target=", target->triple));
+        vec_push(&av, "-c");
     } else if (!llvm) {
         push_words(&av, target->as_flags);
     } else if (target->triple) {
@@ -877,9 +928,53 @@ static int compile_one(const char *src)
 // -T names another.  MMIX takes the linker's default script.  A missing crt0.o is a fatal error.  See README.md,
 // "Linking".  Returns 0 on success.
 //
+//
+// Link for a hosted target, with its C compiler:
+//     cc [--target=<triple>] -no-pie -o out objs ldflags -L<lib> -lvcc
+// The compiler adds the startup files, the C library and libgcc.  Not position
+// independent: our code takes a function's address PC-relative, which a PIE cannot do
+// for one in a shared library.  -nostdlib is passed on, and drops libvcc.a.
+//
+static int link_hosted(const char *libdir)
+{
+    struct vec av = { 0 };
+    if (push_tool(&av, "VCC_LD", target->ld_default, "ld", NULL))
+        vec_push(&av, concat("--target=", target->triple));
+    vec_push(&av, "-no-pie");
+    if (opt_nostdlib)
+        vec_push(&av, "-nostdlib");
+    if (linkscript) {
+        vec_push(&av, "-T");
+        vec_push(&av, linkscript);
+    }
+    vec_push(&av, "-o");
+    vec_push(&av, outfile ? outfile : (char *)"a.out");
+    for (size_t i = 0; i < objects.len; i++)
+        vec_push(&av, objects.data[i]);
+    for (size_t i = 0; i < ldflags.len; i++)
+        vec_push(&av, ldflags.data[i]);
+    if (!opt_nostdlib) {
+        char *lib = concat(libdir, "/libvcc.a");
+        if (access(lib, R_OK) != 0) {
+            error("%s not found; or use -nostdlib", lib);
+            vec_free(&av);
+            return 1;
+        }
+        vec_push(&av, concat("-L", libdir));
+        vec_push(&av, "-lvcc");
+    }
+    vec_push(&av, NULL);
+
+    int rc = run(av.data[0], av.data);
+    vec_free(&av);
+    return rc;
+}
+
 static int link_objects(void)
 {
     char *libdir = concat(share_dir, "/lib");
+    if (target->arch == ARCH_HOSTED)
+        return link_hosted(libdir);
 
     struct vec av = { 0 };
     bool configured;
@@ -907,6 +1002,8 @@ static int link_objects(void)
         vec_push(&av, script);
         break;
     }
+    case ARCH_HOSTED:
+        break; // link_hosted
     }
     vec_push(&av, "-o");
     vec_push(&av, outfile ? outfile : (char *)"a.out");
@@ -957,14 +1054,19 @@ static int link_objects(void)
 // Select the target by name; an unknown one is a usage error listing the valid
 // names.
 //
+static const struct target *find_target(const char *name)
+{
+    for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++)
+        if (strcmp(name, targets[i].name) == 0)
+            return &targets[i];
+    return NULL;
+}
+
 static void select_target(const char *name)
 {
-    for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++) {
-        if (strcmp(name, targets[i].name) == 0) {
-            target = &targets[i];
-            return;
-        }
-    }
+    target = find_target(name);
+    if (target)
+        return;
     error("unknown target %s", name);
     fprintf(stderr, "Known targets:");
     for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++)
@@ -978,8 +1080,10 @@ static void usage(void)
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
-    printf("    -t, --target NAME  Target: riscv64 (default), riscv32, aarch64, arm32, x86_64,\n");
-    printf("                       avr, msp430, mmix or besm6\n");
+    printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux (hosted), riscv64,\n");
+    printf("                       riscv32, aarch64, arm32, x86_64, avr, msp430, mmix or\n");
+    printf("                       besm6 (bare metal); default %s\n",
+           *HOST_TARGET ? HOST_TARGET : "riscv64");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");
@@ -1011,6 +1115,7 @@ int main(int argc, char *argv[])
     }
 
     atexit(cleanup);
+    target = find_target(*HOST_TARGET ? HOST_TARGET : "riscv64");
 
     for (int i = 1; i < argc; i++) {
         char *arg = argv[i];

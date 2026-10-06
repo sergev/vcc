@@ -294,7 +294,8 @@ limits, calls, structures, variadic functions, the libc, `setjmp`, register allo
 and each peephole rule. It links our code with clang's in both directions over a table
 of signatures, checks that `r2`–`r17` and `Y` survive our calls through a hand-written
 caller, runs clang's code on our runtime, checks the headers against clang's own, and
-compares every book program's output and exit status with clang's; programs that cannot
+compares every book program's output and exit status with avr-gcc's (`-O0`, on our runtime
+and then its `libgcc.a`), or clang's where there is no avr-gcc; programs that cannot
 run on AVR (undefined behavior with a 16-bit `int`, too big for 8 KB of SRAM, or too
 slow under qemu) are skipped with the reason in `test/book_test.h`. The
 instruction-selection goldens run with `--no-regalloc --no-peephole`. Tests that need

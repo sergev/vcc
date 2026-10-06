@@ -185,8 +185,23 @@ TEST_F(Predefined, X86_64Target) {
     EXPECT_TRUE(TokensAre("#if __x86_64__ && __x86_64 && __amd64__ && __LP64__ && _LP64 && "
                           "__SSE2__ && __SSE2_MATH__ && __code_model_small__ && __ELF__ && "
                           "!defined(__CHAR_UNSIGNED__) && !defined(__aarch64__) && "
-                          "!defined(__riscv)\n"
+                          "!defined(__riscv) && !defined(__linux__)\n"
                           "TARGET\n#endif\n", "TARGET", {"-t", "x86_64"}));
+}
+
+// The hosted targets: the architecture's macros, and GCC's Linux ones in C11 mode
+// (no bare `linux` or `unix`, which a program may use as names).
+TEST_F(Predefined, X86_64LinuxTarget) {
+    EXPECT_TRUE(TokensAre("#if __x86_64__ && __LP64__ && __ELF__ && __linux__ && __linux && "
+                          "__gnu_linux__ && __unix__ && __unix && !defined(__CHAR_UNSIGNED__)\n"
+                          "TARGET linux unix\n#endif\n", "TARGET linux unix",
+                          {"-t", "x86_64-linux"}));
+}
+
+TEST_F(Predefined, Aarch64LinuxTarget) {
+    EXPECT_TRUE(TokensAre("#if __aarch64__ && __LP64__ && __CHAR_UNSIGNED__ && __linux__ && "
+                          "__gnu_linux__ && __unix__\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64-linux"}));
 }
 
 // The ATmega1280 (avr51): signed plain char, no __CHAR_UNSIGNED__.

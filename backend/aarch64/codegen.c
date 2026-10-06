@@ -12,6 +12,7 @@
 bool aarch64_regalloc      = true;
 bool aarch64_peephole      = true;
 bool aarch64_frame_pointer = false;
+bool aarch64_linux         = false;
 
 // Save slots for the callee-saved registers in use, a pair in 16 bytes; then a
 // register or a slot for every parameter and local.  An ALLOCATE_LOCAL may ask for
@@ -116,6 +117,10 @@ static int declared_alignment(const Tac_TopLevel *program, const char *name)
 
 void aarch64_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
+    // For Linux, a new unit marks the stack non-executable; everything after names
+    // its own section.
+    if (tl == program && aarch64_linux)
+        fprintf(out, "    .section .note.GNU-stack,\"\",@progbits\n");
     switch (tl->kind) {
     case TAC_TOPLEVEL_FUNCTION:
         gen_function(program, tl, out);

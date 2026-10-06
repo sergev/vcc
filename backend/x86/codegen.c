@@ -12,6 +12,7 @@
 bool x86_regalloc      = true;
 bool x86_frame_pointer = false;
 bool x86_peephole      = true;
+bool x86_linux         = false;
 
 // The first slots for the callee-saved registers in use, where the prologue pushes
 // them (without a frame pointer the first goes where rbp would); then a register or a
@@ -113,6 +114,9 @@ void x86_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     if (tl == program) { // a new translation unit
         x86_emit_header(out);
+        // For Linux, the stack is not executable; everything after names its section.
+        if (x86_linux)
+            fprintf(out, "    .section .note.GNU-stack,\"\",@progbits\n");
         gen_unit_begin();
     }
     switch (tl->kind) {

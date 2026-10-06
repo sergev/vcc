@@ -5,10 +5,10 @@ The C compiler driver of VCC, built as `build/cc/cc` and installed as `bin/vcc`.
 `cc(1)` always has, so that
 
 ```sh
-vcc -o hello.elf hello.c
+vcc hello.c && ./a.out
 ```
 
-does what otherwise takes six commands. It is ported from the
+does what otherwise takes six commands, and builds a program for the machine it runs on. It is ported from the
 [v7besm](https://github.com/besm6/v7besm) project's `b6cc` (`cmd/cc/`), a C11 rewrite of the
 v7 driver, and made target-aware. The native BESM-6 build of that driver and its
 documentation stay in v7besm.
@@ -26,7 +26,9 @@ linker       link          .o   -> a.out
 
 | Target | `-t` | Code generator | Assembler | Linker |
 | --- | --- | --- | --- | --- |
-| RISC-V RV64IMFD/LP64D | `riscv64` (default) | `vgenriscv64` | `riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d` | `riscv64-unknown-elf-ld -T link.ld` |
+| Linux on x86-64, against glibc | `x86_64-linux` | `vgenx86 --linux` | `cc -c` | `cc -no-pie … -lvcc` |
+| Linux on AArch64, against glibc | `aarch64-linux` | `vgenaarch64 --linux` | `cc -c` | `cc -no-pie … -lvcc` |
+| RISC-V RV64IMFD/LP64D | `riscv64` | `vgenriscv64` | `riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d` | `riscv64-unknown-elf-ld -T link.ld` |
 | RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `riscv64-unknown-elf-as -march=rv32imfd -mabi=ilp32d` | `riscv64-unknown-elf-ld -m elf32lriscv -T link.ld` |
 | AArch64 (ARMv8-A, AAPCS64) | `aarch64` | `vgenaarch64` | `aarch64-none-elf-as` | `aarch64-none-elf-ld -T link.ld` |
 | ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `arm-none-eabi-as -mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard` | `arm-none-eabi-ld -T link.ld` |
@@ -36,7 +38,17 @@ linker       link          .o   -> a.out
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
-The binutils prefix is the first one found of several: `riscv64-unknown-elf`, `riscv64-elf`
+The first two are **hosted**: the program runs under Linux, linked against glibc, which
+supplies the startup files and the C library. The rest are bare metal, run on qemu or a
+simulator. **The default target is the host**: `x86_64-linux` on x86-64 Linux,
+`aarch64-linux` on AArch64 Linux, and `riscv64` on any other machine. It is decided when
+`vcc` is compiled.
+
+A hosted target assembles and links with a C compiler: the one that built `vcc`, when
+the host is that target; else `x86_64-linux-gnu-gcc` or `aarch64-linux-gnu-gcc` on `PATH`;
+else the host's `cc`; else `clang --target=x86_64-linux-gnu` (or `aarch64-linux-gnu`).
+
+For the bare-metal targets, the binutils prefix is the first one found of several: `riscv64-unknown-elf`, `riscv64-elf`
 or `riscv64-linux-gnu`; `aarch64-none-elf`, `aarch64-elf` or `aarch64-linux-gnu`;
 `x86_64-elf`, `x86_64-linux-gnu` or the host's own `as`/`ld` on x86-64 Linux; `msp430-elf`
 or `msp430-unknown-elf`. Where there are no binutils, the targets but MSP430 and MMIX
@@ -67,7 +79,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `riscv64` (default), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6` |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6`; by default the host (see above) |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -76,9 +88,9 @@ and removed on exit.
 | `-v` | Echo each sub-command before running it |
 | `-Dname[=v]`, `-Uname`, `-Ipath` | Passed to the preprocessor (`-D name` is folded into `-Dname`) |
 | `-Lpath`, `-lname` | Passed to the linker, after the objects |
-| `-T file` | Linker script instead of the standard `link.ld` (not `besm6`) |
+| `-T file` | Linker script instead of the standard `link.ld` (not `besm6`); passed on for a hosted target |
 | `-nostdinc` | Do not add the target's standard include directory |
-| `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries |
+| `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries; a hosted target passes it to its C compiler and drops `libvcc.a` |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
 
 The last stage is chosen by `-E`, `-S` or `-c`. With none of them, the objects are linked.
@@ -98,7 +110,7 @@ takes everything relative to it:
 | --- | --- |
 | `vcpp`, `vparse`, `vlower`, `vgen<T>` | the directory `vcc` is in |
 | standard headers | `../share/vcc/<target>/include` |
-| `crt0.o`, libraries, `link.ld` | `../share/vcc/<target>/lib` |
+| `crt0.o`, libraries, `link.ld` (hosted: `libvcc.a` alone) | `../share/vcc/<target>/lib` |
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
@@ -117,6 +129,21 @@ driver against the build tree:
 | `VCC_AS`, `VCC_LD` | the assembler and linker; split into words at blanks, so they may carry arguments |
 
 ## Linking
+
+The hosted targets, `x86_64-linux` and `aarch64-linux`:
+
+```text
+cc -no-pie -o a.out objects... -L/-l flags... -L<lib> -lvcc
+```
+
+The C compiler adds glibc's startup files, `-lc` and libgcc; `libvcc.a` holds the few
+helpers our code generator calls and glibc lacks (`__va_arg`). The math library is not
+implicit, as with GCC: add `-lm`. The executable is not position independent, because our
+code takes the address of a function PC-relative, which a PIE cannot do for one in a
+shared library. The headers are ours, not glibc's (which `vparse` cannot read), and agree
+with glibc's on every layout and value a program hands to the C library: `errno`,
+`jmp_buf`, `struct tm`, `struct lconv`, `fenv_t`, the `LC_*`, `E*`, `FE_*` and `<stdio.h>`
+constants, `MB_LEN_MAX` (see `libc/linux/`). The run is plain `./a.out`.
 
 RISC-V, AArch64, ARM32, x86-64 and AVR:
 
@@ -219,9 +246,13 @@ script, since it is the machine's memory map and not a library. Use `-T` to repl
 `cc-tests` ([test/cc_test.cpp](test/cc_test.cpp)) runs the built driver on small sources
 in a temporary directory, with the in-tree passes chosen through the `VCC_*` variables:
 
-- preprocessing and target selection
+- preprocessing and target selection, the default target included
 - `-S` for every target and both BESM-6 dialects
 - the usage errors
+- for the host's hosted target, a staged installation that builds a program and runs it
+  natively, and a probe of the header layouts and values built both by `vcc` and by the
+  system's compiler, whose outputs must agree; the hosted link line, with a stand-in
+  linker
 - `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR, and under
   mspsim for the MSP430 (its Intel HEX as well, and with clang and `ld.lld` through
   `VCC_AS`/`VCC_LD`), and under Knuth's `mmix` for MMIX

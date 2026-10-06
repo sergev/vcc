@@ -38,6 +38,13 @@ target_compile_definitions(cc-tests PRIVATE
     ILP32_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     IP16_INCLUDE_DIR="${IP16_INCLUDE_DIR}"
     COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
+    LINUX_INCLUDE_DIR="${LINUX_INCLUDE_DIR}"
+    LINUX_X86_64_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/libc/linux/x86_64/include"
+    LINUX_AARCH64_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/libc/linux/aarch64/include"
+    X86_64_LINUX_CC="${X86_64_LINUX_CC}"
+    X86_64_LINUX_LIB_DIR="${X86_64_LINUX_LIB_DIR}"
+    AARCH64_LINUX_CC="${AARCH64_LINUX_CC}"
+    AARCH64_LINUX_LIB_DIR="${AARCH64_LINUX_LIB_DIR}"
     RISCV_TOOLS_FOUND=$<BOOL:${RISCV_TOOLS_FOUND}>
     RISCV_ASSEMBLER="${RISCV_ASSEMBLER}"
     RISCV_LD="${RISCV_LD}"
@@ -119,4 +126,9 @@ endif()
 if(MMIX_TOOLS_FOUND)
     add_dependencies(cc-tests mmix-libc)
 endif()
+foreach(t x86_64-linux aarch64-linux)
+    if(TARGET ${t}-libc)
+        add_dependencies(cc-tests ${t}-libc)
+    endif()
+endforeach()
 gtest_discover_tests(cc-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

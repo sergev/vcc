@@ -84,10 +84,12 @@ Linking with `crt0.o`, `libc.a` and `link.ld` and running under qemu is describe
 ### `cc` (driver)
 
 Runs `vcpp` → `vparse` → `vlower` → `vgen<T>` → assembler → linker for the target given
-with `-t riscv64|besm6` (default `riscv64`), stopping early with `-E`, `-S` or `-c`.
-Our passes are taken from the directory `vcc` is in, and headers and libraries from
-`../share/vcc/<target>/`, so an installation can be moved. The RISC-V assembler and
-linker are clang and `ld.lld`, the BESM-6 ones v7besm's `b6as` and `b6ld`. Each tool can be
+with `-t`, stopping early with `-E`, `-S` or `-c`. The default is the host: `x86_64-linux`
+or `aarch64-linux`, assembled and linked by the system's C compiler against glibc, else
+`riscv64`. Our passes are taken from the directory `vcc` is in, and headers and libraries from
+`../share/vcc/<target>/`, so an installation can be moved. The bare-metal targets'
+assemblers and linkers are their GNU binutils, else clang and `ld.lld`, the BESM-6 ones
+v7besm's `b6as` and `b6ld`. Each tool can be
 overridden with `VCC_CPP`, `VCC_PARSE`, `VCC_LOWER`, `VCC_GEN`, `VCC_AS` or `VCC_LD`. See
 [cc/README.md](../cc/README.md).
 

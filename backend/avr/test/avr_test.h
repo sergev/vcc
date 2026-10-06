@@ -43,25 +43,37 @@ inline bool avr_clang_available()
             GTEST_SKIP() << "AVR clang not found; skipping clang test"; \
     } while (0)
 
+// avr-gcc, the book tests' oracle when present.
+inline bool avr_gcc_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return avr_tools_available() && AVR_GCC_FOUND && tool_available(AVR_GCC);
+}
+
+// The run configuration, C compiled by `cc` with `target_flags`.  The target flags are
+// AVR_TARGET_FLAGS of libc/avr/CMakeLists.txt.  qemu has no way to exit on AVR: main's
+// result goes out on USART1, and the run ends with it.
+inline QemuConfig avr_config(const char *cc, std::vector<std::string> target_flags)
+{
+    return cross_tools({ "avr-tests",
+                         cc,
+                         std::move(target_flags),
+                         { "-ffreestanding", "-fno-builtin" },
+                         AVR_LLD,
+                         AVR_LINK_SCRIPT,
+                         AVR_LIB_DIR,
+                         { AVR_QEMU, "-M", "arduino-mega", "-display", "none", "-monitor",
+                           "none", "-serial", "stdio" },
+                         "",
+                         false,
+                         "-bios",
+                         true },
+                       AVR_ASSEMBLER, AVR_LINK_FLAGS);
+}
+
 class AvrTest : public QemuTest {
 protected:
-    // The target flags are AVR_TARGET_FLAGS of libc/avr/CMakeLists.txt.  qemu has no
-    // way to exit on AVR: main's result goes out on USART1, and the run ends with it.
-    AvrTest()
-        : QemuTest("avr", cross_tools({ "avr-tests",
-                                        AVR_CLANG,
-                                        { "--target=avr", "-mmcu=atmega1280" },
-                                        { "-ffreestanding", "-fno-builtin" },
-                                        AVR_LLD,
-                                        AVR_LINK_SCRIPT,
-                                        AVR_LIB_DIR,
-                                        { AVR_QEMU, "-M", "arduino-mega", "-display", "none",
-                                          "-monitor", "none", "-serial", "stdio" },
-                                        "",
-                                        false,
-                                        "-bios",
-                                        true },
-                                      AVR_ASSEMBLER, AVR_LINK_FLAGS))
+    AvrTest() : QemuTest("avr", avr_config(AVR_CLANG, { "--target=avr", "-mmcu=atmega1280" }))
     {
         // The defaults; a test may change them.
         avr_regalloc = true;
@@ -181,6 +193,18 @@ protected:
                    { opt, "-w", "-Wno-parentheses", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
                      TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR },
                    ".clang");
+    }
+
+    // The same compiled by avr-gcc -O0, on our runtime and then its libgcc.a.
+    std::string GccRunBook(const std::string &src)
+    {
+        QemuConfig cfg = avr_config(AVR_GCC, { "-mmcu=atmega1280" });
+        if (*AVR_LIBGCC)
+            cfg.extra_libs = { AVR_LIBGCC };
+        const std::vector<std::string> flags = { "-O0", "-w", "-nostdinc", "-I", TEST_INCLUDE_DIR,
+                                                 "-I", TEST_MODEL_INCLUDE_DIR, "-I",
+                                                 TEST_COMMON_INCLUDE_DIR };
+        return Run(cfg, "", "crt0-status.o", &src, flags, ".gcc");
     }
 };
 

@@ -16,6 +16,8 @@ extern bool x86_regalloc;
 extern bool x86_frame_pointer;
 // Run the peephole pass, and fuse a comparison with the branch on its result.
 extern bool x86_peephole;
+// Hosted Linux: each unit marks the stack non-executable (.note.GNU-stack).
+extern bool x86_linux;
 
 // Translate one TAC toplevel to x86-64 assembly on `out`.  `program` heads the whole
 // translation unit, lowered with -t x86_64; the module header goes out with it.

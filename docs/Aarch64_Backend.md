@@ -3,7 +3,8 @@
 `genaarch64` turns the compiler's intermediate code (TAC) into assembly for 64-bit ARM.
 The code follows the standard ARM calling rules (AAPCS64), so it can call, and be called
 by, code compiled with clang for `aarch64-none-elf`. Programs run under the `qemu`
-emulator, with no operating system.
+emulator, with no operating system, or under Linux, linked against glibc (the
+`aarch64-linux` target, see [Hosted Linux](#hosted-linux)).
 
 ## The target
 
@@ -126,6 +127,22 @@ In `libc/aarch64/`:
 - Headers: `libc/aarch64/include` holds `stdarg.h`, `stddef.h`, `stdint.h` and
   `setjmp.h`. `libc/lp64/include` has the headers shared with riscv64, and
   `libc/common/include` the target-neutral ones.
+
+## Hosted Linux
+
+The `aarch64-linux` target, `vcc`'s default on an AArch64 Linux machine, builds an
+ordinary Linux executable with the bare-metal target's code: the `aarch64` descriptor
+(which `lower -t aarch64-linux` aliases) is glibc's data model, binary128 `long double`
+and unsigned `char` included, and the AAPCS64 `va_list` is glibc's. `genaarch64 --linux`
+adds a `.note.GNU-stack` section in each unit.
+
+It links with the system's C compiler (`aarch64-linux-gnu-gcc` when cross compiling),
+`cc -no-pie … -lvcc`: glibc brings the startup files and the C library, libgcc the
+binary128 arithmetic (`__addtf3`, …), and `libvcc.a` only `__va_arg`. The headers are
+`libc/linux/aarch64/include` and `libc/linux/include` ahead of the bare-metal ones, as for
+[x86-64](X86_64_Backend.md#hosted-linux), with glibc's 312-byte `jmp_buf` and AArch64's
+`fenv.h`. It is built and tested where such a compiler exists; without one, only its
+headers are installed and checked.
 
 ## Running a program by hand
 

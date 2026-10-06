@@ -38,3 +38,5 @@ add_subdirectory(avr)
 # msp430 too.
 add_subdirectory(msp430)
 add_subdirectory(mmix)
+# The hosted Linux targets, linked against glibc.
+add_subdirectory(linux)

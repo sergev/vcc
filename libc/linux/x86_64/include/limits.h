@@ -1,0 +1,35 @@
+/*
+ * <limits.h> — sizes of integer types (C11 §7.10), hosted Linux on x86-64.
+ *
+ * char is 8 bits and signed, short 16, int 32, long and long long 64 bits.  A
+ * multibyte character is up to 16 bytes, as glibc has it.
+ */
+#ifndef _LIMITS_H
+#define _LIMITS_H
+
+#define CHAR_BIT   8
+#define MB_LEN_MAX 16
+
+#define SCHAR_MIN (-128)
+#define SCHAR_MAX 127
+#define UCHAR_MAX 255
+#define CHAR_MIN  (-128)
+#define CHAR_MAX  127
+
+#define SHRT_MIN  (-32768)
+#define SHRT_MAX  32767
+#define USHRT_MAX 65535
+
+#define INT_MIN  (-INT_MAX - 1)
+#define INT_MAX  2147483647
+#define UINT_MAX 4294967295U
+
+#define LONG_MIN  (-LONG_MAX - 1L)
+#define LONG_MAX  9223372036854775807L
+#define ULONG_MAX 18446744073709551615UL
+
+#define LLONG_MIN  (-LLONG_MAX - 1LL)
+#define LLONG_MAX  9223372036854775807LL
+#define ULLONG_MAX 18446744073709551615ULL
+
+#endif /* _LIMITS_H */

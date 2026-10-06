@@ -254,8 +254,19 @@ static const Target targets[] = {
 
 const Target *target_config = &targets[DEFAULT_TARGET_INDEX];
 
+// Hosted targets whose data model is that of a bare-metal one.
+static const struct {
+    const char *name, *model;
+} aliases[] = {
+    { "x86_64-linux", "x86_64" },
+    { "aarch64-linux", "aarch64" },
+};
+
 const Target *target_lookup(const char *name)
 {
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
+        if (strcmp(aliases[i].name, name) == 0)
+            name = aliases[i].model;
     for (int i = 0; i < NUM_TARGETS; i++) {
         if (strcmp(targets[i].name, name) == 0) {
             return &targets[i];
@@ -269,6 +280,8 @@ void target_list(void)
     for (int i = 0; i < NUM_TARGETS; i++) {
         fprintf(stderr, "  %s\n", targets[i].name);
     }
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
+        fprintf(stderr, "  %s\n", aliases[i].name);
 }
 
 int target_word_addressed(void)

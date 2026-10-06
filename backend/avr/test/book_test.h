@@ -1,8 +1,8 @@
 // The AVR fixture for the shared "Writing a C Compiler" suite
 // (backend/common/test/book/): programs run on bare-metal qemu, each also compiled by
-// clang and the two outputs compared.  The book's expected values assume a 32-bit int
-// and a 64-bit long, clang's AVR output does not: clang is the oracle here, and the
-// book's own expectation is set aside (its failures are intercepted and dropped).
+// avr-gcc (else clang) and the two outputs compared.  The book's expected values assume a
+// 32-bit int and a 64-bit long, the AVR's do not: that compiler is the oracle here, and
+// the book's own expectation is set aside (its failures are intercepted and dropped).
 // The chapters are enabled in CMakeLists.txt as the code generator reaches them.
 #pragma once
 
@@ -24,7 +24,6 @@ protected:
         static const SkippedTest skipped[] = {
             { "Chapter3_BitwiseShiftPrecedence", "shifts a 16-bit int by 16: undefined" },
             { "Chapter3_BitwiseShiftrNegative", "shifts a 16-bit int by 30: undefined" },
-            { "Chapter11_LargeConstants", "clang -O0 miscompiles a long long compare" },
             { "Chapter11_SwitchLong", "case values collide in a 32-bit long" },
             { "Chapter12_UnsignedTypeSpecifiers", "loops forever with a 16-bit unsigned" },
             { "Chapter13_DoubleAndIntParamsRecursive", "two minutes under qemu, clang's too" },
@@ -42,6 +41,11 @@ protected:
         };
         SkipIfListed(skipped);
         SKIP_IF_NO_AVR_TOOLS();
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+        if (!avr_gcc_available() &&
+            strcmp(::testing::UnitTest::GetInstance()->current_test_info()->name(),
+                   "Chapter11_LargeConstants") == 0)
+            GTEST_SKIP() << "clang -O0 miscompiles a long long compare";
         intercept.reset(new ::testing::ScopedFakeTestPartResultReporter(
             ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
             &results));
@@ -62,8 +66,8 @@ protected:
         AvrTest::TearDown();
     }
 
-    // Run a book program, and check that clang -O0 gives the same, when present; -O1
-    // for the few where clang -O0 runs out of registers.
+    // Run a book program, and check that avr-gcc -O0 gives the same, when present; else
+    // clang -O0, or -O1 for the few where clang -O0 runs out of registers.
     // cppcheck-suppress duplInheritedMember ; deliberately wraps AvrTest::CompileAndRunBook
     std::string CompileAndRunBook(const std::string &src)
     {
@@ -86,7 +90,11 @@ protected:
         int status       = exit_status;
         EXPECT_NE("ERROR", ours) << "did not run";
         // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
-        if (avr_clang_available()) {
+        if (avr_gcc_available()) {
+            EXPECT_EQ(GccRunBook(src), ours) << "differs from GCC";
+            EXPECT_EQ(exit_status, status) << "exit status differs from GCC";
+            exit_status = status;
+        } else if (avr_clang_available()) {
             EXPECT_EQ(ClangRunBook(src, opt), ours) << "differs from clang";
             EXPECT_EQ(exit_status, status) << "exit status differs from clang";
             exit_status = status;

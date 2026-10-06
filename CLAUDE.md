@@ -24,6 +24,14 @@ Knuth's 64-bit big-endian RISC with the MMIXware ABI as GCC implements it (`genm
 signed `char`, the register stack, binary64 in hardware with `float` only in memory; Knuth's
 `mmix` simulator, link-compatible with `mmix-knuth-mmixware-gcc`, its `libgcc.a` and newlib —
 see [docs/Mmix_Backend.md](docs/Mmix_Backend.md)).
+Two **hosted** targets reuse the x86-64 and AArch64 code generators: `x86_64-linux` and
+`aarch64-linux` (`vgenx86`/`vgenaarch64 --linux`, which adds `.note.GNU-stack`; `lower`
+aliases them to the bare-metal descriptors), assembled and linked by the system C compiler
+(`cc -no-pie … -lvcc`) against glibc, with our glibc-compatible headers from `libc/linux/`
+(our parser cannot read glibc's) and `libvcc.a` holding only `__va_arg`. **`vcc`'s default
+target is the host** (`HOST_TARGET` in `cc/cc.c`: one of those two, else `riscv64`); `cpp`
+and `lower` keep `riscv64` as theirs. `cc-tests` `HostedHeadersAgreeWithSystem` compares
+header layouts and constants with the system compiler's.
 Run the tests with `ctest -j8` (or `make run`): it is much faster than the binaries.
 `scripts/bench_msp430.sh` prints mspsim cycles and code size of `bench/msp430/*.c`, ours
 against `msp430-elf-gcc -O2`; `scripts/bench_mmix.sh` prints `mmix -s` instructions, oops
@@ -83,6 +91,11 @@ for the `stddef.h`/`stdint.h` MSP430 has its own) and shared headers →
 runtime (`crt0.o` and `libc.a`; no linker script, the linker's own serves) →
 `share/vcc/mmix/lib/` (when the GNU MMIX toolchain was found) and the MMIX, `lp64` (but for the
 `float.h`/`limits.h` MMIX has its own) and shared headers → `share/vcc/mmix/include/`.
+And for the hosted targets (`libc/linux/CMakeLists.txt`): `share/vcc/x86_64-linux/` and
+`share/vcc/aarch64-linux/`, `lib/libvcc.a` (built only where a C compiler for that Linux
+exists: the build's own on a matching host, else `<triple>-gcc`) and `include/` merged from
+`libc/linux/<arch>/include`, `libc/linux/include`, the architecture's, LP64 and shared
+headers, the first of a name winning.
 The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
 `CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via

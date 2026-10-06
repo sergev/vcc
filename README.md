@@ -90,7 +90,9 @@ tree, point it at the source headers:
 Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too.)
 
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
-chain: `vcc -o hello.elf hello.c` preprocesses, compiles, then assembles and links with
+chain: `vcc hello.c` preprocesses, compiles, assembles and links a program for the
+machine it runs on (`-t x86_64-linux` or `-t aarch64-linux`, linked against glibc by the
+system's C compiler), or with `-t` for a bare-metal target, links with
 the target's GNU binutils (`riscv64-unknown-elf-as`/`-ld`, `aarch64-none-elf-`,
 `arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`, `msp430-elf-`,
 `mmix-knuth-mmixware-`), or with clang and `ld.lld` where there are no binutils for the
@@ -174,10 +176,19 @@ Compile a small program by hand and look at each stage:
 ./build/backend/genriscv hello.tac hello.s      # TAC      -> RISC-V assembly
 ```
 
-After `make install`, the driver does all of that, and the assembling and linking too:
+After `make install`, the driver does all of that, and the assembling and linking too.
+By default it builds for the machine it runs on: on x86-64 or AArch64 Linux, an
+executable linked against glibc (on another host the default is `riscv64`):
 
 ```bash
-vcc -o hello.elf hello.c
+vcc hello.c -lm
+./a.out
+```
+
+For RISC-V, add `-t riscv64` and run it under qemu:
+
+```bash
+vcc -t riscv64 -o hello.elf hello.c
 qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
     -kernel hello.elf
 ```

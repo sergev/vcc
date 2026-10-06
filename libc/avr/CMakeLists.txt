@@ -12,6 +12,19 @@ vcc_find_cross(AVR
     CLANG_TARGET "[\n] *avr +- "
     CLANG_FLAGS --target=avr -mmcu=atmega1280)
 set(AVR_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
+# avr-gcc, when present, is the book tests' oracle in place of clang, its libgcc.a
+# following our libc.a for the helpers GCC's code calls beyond ours.
+find_program(AVR_GCC_EXE NAMES avr-gcc HINTS ${VCC_CROSS_HINTS})
+set(AVR_GCC_FOUND OFF)
+set(AVR_LIBGCC "")
+if(AVR_GCC_EXE)
+    set(AVR_GCC_FOUND ON)
+    execute_process(COMMAND ${AVR_GCC_EXE} -mmcu=atmega1280 -print-libgcc-file-name
+        OUTPUT_VARIABLE AVR_LIBGCC OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
+set(AVR_GCC_FOUND ${AVR_GCC_FOUND} CACHE INTERNAL "")
+set(AVR_GCC "${AVR_GCC_EXE}" CACHE INTERNAL "")
+set(AVR_LIBGCC "${AVR_LIBGCC}" CACHE INTERNAL "")
 set(AVR_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
 # The ATmega1280: avr51, 128 KB of flash, a 2-byte PC.
 

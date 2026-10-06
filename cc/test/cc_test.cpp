@@ -131,6 +131,39 @@ bool HaveMmixRun()
            access((std::string(MMIX_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The hosted target of this machine, as the driver decides it; "" where there is none,
+// and the driver's default is riscv64.
+#if defined(__linux__) && defined(__x86_64__)
+#define HOST_TARGET "x86_64-linux"
+#elif defined(__linux__) && defined(__aarch64__)
+#define HOST_TARGET "aarch64-linux"
+#else
+#define HOST_TARGET ""
+#endif
+
+std::string DefaultTarget()
+{
+    return *HOST_TARGET ? HOST_TARGET : "riscv64";
+}
+
+// The C compiler that assembles and links for the host target, and the build's libvcc.a.
+std::string HostCc()
+{
+    return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_CC : X86_64_LINUX_CC;
+}
+
+std::string HostLibDir()
+{
+    return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_LIB_DIR
+                                                       : X86_64_LINUX_LIB_DIR;
+}
+
+bool HaveHostedRun()
+{
+    return *HOST_TARGET && HaveTool(HostCc()) &&
+           access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0;
+}
+
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
 // timeout.  The child's stdout goes to `stdout_file` and its stderr to
 // `stderr_file` when they are given (which is how the -v echo is captured).  With a
@@ -230,56 +263,57 @@ protected:
 
     std::string Path(const std::string &name) const { return dir + "/" + name; }
 
+    // The header directories of `target`, searched in this order.
+    static std::vector<std::string> IncludeDirs(const std::string &target)
+    {
+        if (target == "besm6")
+            return { BESM6_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+        if (target == "x86_64-linux")
+            return { LINUX_X86_64_INCLUDE_DIR, LINUX_INCLUDE_DIR, X86_INCLUDE_DIR,
+                     LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+        if (target == "aarch64-linux")
+            return { LINUX_AARCH64_INCLUDE_DIR, LINUX_INCLUDE_DIR, AARCH64_INCLUDE_DIR,
+                     LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+        const char *inc   = target == "riscv32"   ? RISCV32_INCLUDE_DIR
+                            : target == "aarch64" ? AARCH64_INCLUDE_DIR
+                            : target == "arm32"   ? ARM32_INCLUDE_DIR
+                            : target == "x86_64"  ? X86_INCLUDE_DIR
+                            : target == "avr"     ? AVR_INCLUDE_DIR
+                            : target == "msp430"  ? MSP430_INCLUDE_DIR
+                            : target == "mmix"    ? MMIX_INCLUDE_DIR
+                                                  : RISCV_INCLUDE_DIR;
+        const char *model = target == "avr" || target == "msp430"      ? IP16_INCLUDE_DIR
+                            : target == "riscv32" || target == "arm32" ? ILP32_INCLUDE_DIR
+                                                                       : LP64_INCLUDE_DIR;
+        return { inc, model, COMMON_INCLUDE_DIR };
+    }
+
     // Run the driver from `dir` with `args`, for the target named by a "-t"
-    // among them (riscv64 otherwise), with the in-tree headers on the search
-    // path.  stdout lands in out.log, stderr in err.log.
+    // among them (the driver's default otherwise), with the in-tree headers on the
+    // search path.  stdout lands in out.log, stderr in err.log.
     int Vcc(std::vector<std::string> args, bool std_headers = true)
     {
-        bool besm6 = false, aarch64 = false, arm32 = false, x86 = false, avr = false,
-             msp430 = false, mmix = false;
-        for (size_t i = 0; i + 1 < args.size(); i++) {
-            if (args[i] == "-t" && args[i + 1] == "besm6")
-                besm6 = true;
-            if (args[i] == "-t" && args[i + 1] == "aarch64")
-                aarch64 = true;
-            if (args[i] == "-t" && args[i + 1] == "arm32")
-                arm32 = true;
-            if (args[i] == "-t" && args[i + 1] == "x86_64")
-                x86 = true;
-            if (args[i] == "-t" && args[i + 1] == "avr")
-                avr = true;
-            if (args[i] == "-t" && args[i + 1] == "msp430")
-                msp430 = true;
-            if (args[i] == "-t" && args[i + 1] == "mmix")
-                mmix = true;
-        }
+        std::string target = DefaultTarget();
+        for (size_t i = 0; i + 1 < args.size(); i++)
+            if (args[i] == "-t")
+                target = args[i + 1];
         setenv("VCC_GEN",
-               besm6     ? VCC_GENBESM_PATH
-               : aarch64 ? VCC_GENAARCH64_PATH
-               : arm32   ? VCC_GENARM32_PATH
-               : x86     ? VCC_GENX86_PATH
-               : avr     ? VCC_GENAVR_PATH
-               : msp430  ? VCC_GENMSP430_PATH
-               : mmix    ? VCC_GENMMIX_PATH
-                         : VCC_GENRISCV_PATH,
+               target == "besm6"                                    ? VCC_GENBESM_PATH
+               : target == "aarch64" || target == "aarch64-linux"   ? VCC_GENAARCH64_PATH
+               : target == "arm32"                                  ? VCC_GENARM32_PATH
+               : target == "x86_64" || target == "x86_64-linux"     ? VCC_GENX86_PATH
+               : target == "avr"                                    ? VCC_GENAVR_PATH
+               : target == "msp430"                                 ? VCC_GENMSP430_PATH
+               : target == "mmix"                                   ? VCC_GENMMIX_PATH
+                                                                    : VCC_GENRISCV_PATH,
                1);
 
         std::vector<std::string> argv = { VCC_COMMAND };
         if (std_headers) {
-            const char *inc = besm6     ? BESM6_INCLUDE_DIR
-                              : aarch64 ? AARCH64_INCLUDE_DIR
-                              : arm32   ? ARM32_INCLUDE_DIR
-                              : x86     ? X86_INCLUDE_DIR
-                              : avr     ? AVR_INCLUDE_DIR
-                              : msp430  ? MSP430_INCLUDE_DIR
-                              : mmix    ? MMIX_INCLUDE_DIR
-                                        : RISCV_INCLUDE_DIR;
-            argv.insert(argv.end(), { "-nostdinc", std::string("-I") + inc });
-            if (!besm6)
-                argv.push_back(std::string("-I") + (avr || msp430 ? IP16_INCLUDE_DIR
-                                                    : arm32       ? ILP32_INCLUDE_DIR
-                                                                  : LP64_INCLUDE_DIR));
-            argv.push_back(std::string("-I") + COMMON_INCLUDE_DIR);
+            argv.push_back("-nostdinc");
+            for (const std::string &inc : IncludeDirs(target))
+                // cppcheck-suppress useStlAlgorithm
+                argv.push_back("-I" + inc);
         }
         argv.insert(argv.end(), args.begin(), args.end());
 
@@ -320,22 +354,7 @@ protected:
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
         fs::create_directories(share + "/lib");
-        const char *target_inc = target == "besm6"     ? BESM6_INCLUDE_DIR
-                                 : target == "riscv32" ? RISCV32_INCLUDE_DIR
-                                 : target == "aarch64" ? AARCH64_INCLUDE_DIR
-                                 : target == "arm32"   ? ARM32_INCLUDE_DIR
-                                 : target == "x86_64"  ? X86_INCLUDE_DIR
-                                 : target == "avr"     ? AVR_INCLUDE_DIR
-                                 : target == "msp430"  ? MSP430_INCLUDE_DIR
-                                 : target == "mmix"    ? MMIX_INCLUDE_DIR
-                                                       : RISCV_INCLUDE_DIR;
-        const char *model_inc =
-            target == "riscv64" || target == "aarch64" || target == "x86_64" || target == "mmix"
-                ? LP64_INCLUDE_DIR
-            : target == "riscv32" || target == "arm32"                         ? ILP32_INCLUDE_DIR
-            : target == "avr" || target == "msp430"                            ? IP16_INCLUDE_DIR
-                                                                               : target_inc;
-        for (const char *inc : { target_inc, model_inc, COMMON_INCLUDE_DIR }) {
+        for (const std::string &inc : IncludeDirs(target)) {
             for (const auto &entry : fs::directory_iterator(inc)) {
                 fs::path to = share + "/include/" + entry.path().filename().string();
                 if (!fs::exists(to))
@@ -450,18 +469,54 @@ const char kTargetProbe[] = "#ifdef __riscv\n"
                             "#endif\n"
                             "#ifdef besm6\n"
                             "BESM6\n"
+                            "#endif\n"
+                            "#ifdef __x86_64__\n"
+                            "X86_64\n"
+                            "#endif\n"
+                            "#ifdef __aarch64__\n"
+                            "AARCH64\n"
+                            "#endif\n"
+                            "#ifdef __linux__\n"
+                            "LINUX\n"
                             "#endif\n";
 
 //
 // Preprocessing and target selection.
 //
-TEST_F(CcDriver, PreprocessDefaultTargetIsRiscv64)
+// The default is the host, where it is one of the hosted targets, else riscv64.
+TEST_F(CcDriver, PreprocessDefaultTarget)
 {
     WriteSource("t.c", kTargetProbe);
     ASSERT_EQ(Vcc({ "-E", "t.c" }), 0) << Stderr();
     std::string text = ReadFile(Path("t.i"));
-    EXPECT_NE(text.find("RISCV 64"), std::string::npos) << text;
+    std::string host = HOST_TARGET;
     EXPECT_EQ(text.find("BESM6"), std::string::npos) << text;
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the host
+    if (host.empty()) {
+        EXPECT_NE(text.find("RISCV 64"), std::string::npos) << text;
+        EXPECT_EQ(text.find("LINUX"), std::string::npos) << text;
+    } else {
+        EXPECT_NE(text.find(host == "x86_64-linux" ? "X86_64" : "AARCH64"), std::string::npos)
+            << text;
+        EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
+        EXPECT_EQ(text.find("RISCV"), std::string::npos) << text;
+    }
+}
+
+// The bare-metal x86_64 is not Linux; x86_64-linux is.
+TEST_F(CcDriver, PreprocessHostedTargets)
+{
+    WriteSource("t.c", kTargetProbe);
+    ASSERT_EQ(Vcc({ "-t", "x86_64", "-E", "-o", "bare.i", "t.c" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("bare.i")).find("LINUX"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "x86_64-linux", "-E", "-o", "x.i", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("x.i"));
+    EXPECT_NE(text.find("X86_64"), std::string::npos) << text;
+    EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
+    ASSERT_EQ(Vcc({ "-t", "aarch64-linux", "-E", "-o", "a.i", "t.c" }), 0) << Stderr();
+    text = ReadFile(Path("a.i"));
+    EXPECT_NE(text.find("AARCH64"), std::string::npos) << text;
+    EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
 }
 
 TEST_F(CcDriver, PreprocessBesm6)
@@ -519,7 +574,7 @@ TEST_F(CcDriver, UnknownTargetFails)
 TEST_F(CcDriver, CompileToAssemblyRiscv64)
 {
     WriteSource("t.c", kHello);
-    ASSERT_EQ(Vcc({ "-S", "t.c" }), 0) << Stderr();
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0) << Stderr();
     std::string text = ReadFile(Path("t.s"));
     EXPECT_NE(text.find("main:"), std::string::npos) << text;
     EXPECT_NE(text.find("printf"), std::string::npos) << text;
@@ -830,7 +885,7 @@ TEST_F(CcDriver, RejectsUnknownDialect)
 TEST_F(CcDriver, RejectsDialectForRiscv64)
 {
     WriteSource("t.c", "int x;\n");
-    EXPECT_NE(Vcc({ "-Smadlen", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-Smadlen", "t.c" }), 0);
     EXPECT_NE(Stderr().find("-Smadlen needs -t besm6"), std::string::npos) << Stderr();
 }
 
@@ -873,7 +928,7 @@ TEST_F(CcDriver, CompileObjectRiscv64)
                        "        .globl  u\n"
                        "u:      ret\n"
                        "#endif\n");
-    ASSERT_EQ(Vcc({ "-c", "t.c", "u.S" }), 0) << Stderr();
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-c", "t.c", "u.S" }), 0) << Stderr();
     EXPECT_EQ(ReadFile(Path("t.o")).substr(0, 4), "\x7f" "ELF");
     EXPECT_EQ(ReadFile(Path("u.o")).substr(0, 4), "\x7f" "ELF");
 }
@@ -886,8 +941,8 @@ TEST_F(CcDriver, LinkAndRunRiscv64)
         GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
     WriteSource("t.c", kHello);
     std::string lib = RISCV_LIB_DIR;
-    ASSERT_EQ(Vcc({ "-nostdlib", "-T", RISCV_LINK_SCRIPT, "-o", "t.elf", lib + "/crt0.o", "t.c",
-                    lib + "/libc.a" }),
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-nostdlib", "-T", RISCV_LINK_SCRIPT, "-o", "t.elf",
+                    lib + "/crt0.o", "t.c", lib + "/libc.a" }),
               0)
         << Stderr();
     EXPECT_EQ(RunQemu(Path("t.elf")), "hello 42\n");
@@ -902,10 +957,10 @@ TEST_F(CcDriver, SeparateCompilationRiscv64)
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 0; }\n");
     WriteSource("twice.c", "int twice(int x) { return 2 * x; }\n");
-    ASSERT_EQ(Vcc({ "-c", "main.c", "twice.c" }), 0) << Stderr();
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-c", "main.c", "twice.c" }), 0) << Stderr();
     std::string lib = RISCV_LIB_DIR;
-    ASSERT_EQ(Vcc({ "-nostdlib", "-T", RISCV_LINK_SCRIPT, lib + "/crt0.o", "main.o", "twice.o",
-                    lib + "/libc.a" }),
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-nostdlib", "-T", RISCV_LINK_SCRIPT, lib + "/crt0.o",
+                    "main.o", "twice.o", lib + "/libc.a" }),
               0)
         << Stderr();
     EXPECT_EQ(RunQemu(Path("a.out")), "42\n");
@@ -924,7 +979,7 @@ TEST_F(CcDriver, StagedPrefixRiscv64)
     fs::create_symlink(RISCV_LINK_SCRIPT, lib + "/link.ld");
 
     WriteSource("t.c", kHello);
-    ASSERT_EQ(StagedVcc(prefix, { "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "riscv64", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
     EXPECT_EQ(RunQemu(Path("t.elf")), "hello 42\n");
 
     // Every stage came from the staged tree.
@@ -1222,9 +1277,190 @@ TEST_F(CcDriver, StagedPrefixMissingPass)
     std::string prefix = StagePrefix("riscv64");
     fs::remove(prefix + "/bin/vparse");
     WriteSource("t.c", "int x;\n");
-    EXPECT_NE(StagedVcc(prefix, { "-S", "t.c" }), 0);
+    EXPECT_NE(StagedVcc(prefix, { "-t", "riscv64", "-S", "t.c" }), 0);
     EXPECT_NE(Stderr().find("cannot find " + prefix + "/bin/vparse"), std::string::npos)
         << Stderr();
+}
+
+//
+// Hosted targets: assembled and linked by the system C compiler against glibc.
+//
+// The code generator marks the stack non-executable for Linux, and only there.
+TEST_F(CcDriver, CompileToAssemblyHosted)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "x86_64-linux", "-S", "-o", "x.s", "t.c" }), 0) << Stderr();
+    EXPECT_NE(ReadFile(Path("x.s")).find(".note.GNU-stack"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "aarch64-linux", "-S", "-o", "a.s", "t.c" }), 0) << Stderr();
+    EXPECT_NE(ReadFile(Path("a.s")).find(".note.GNU-stack"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "x86_64", "-S", "-o", "bare.s", "t.c" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("bare.s")).find(".note.GNU-stack"), std::string::npos);
+}
+
+// The link line, with a stand-in linker: the C compiler gets no startup file, no
+// script and no -lc, only libvcc.a after the user's libraries.
+TEST_F(CcDriver, HostedLinkLine)
+{
+    std::string prefix = StagePrefix("x86_64-linux");
+    std::string lib    = prefix + "/share/vcc/x86_64-linux/lib";
+    WriteSource(lib.substr(dir.size() + 1) + "/libvcc.a", "");
+    WriteSource("t.o", "");
+    setenv("VCC_LD", "true", 1);
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "x86_64-linux", "-v", "-o", "t", "t.o", "-lm" }), 0)
+        << Stderr();
+    EXPECT_EQ(Stdout(), "true -no-pie -o t t.o -lm -L" + lib + " -lvcc \n");
+
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "x86_64-linux", "-v", "-nostdlib", "t.o" }), 0)
+        << Stderr();
+    EXPECT_EQ(Stdout(), "true -no-pie -nostdlib -o a.out t.o \n");
+}
+
+TEST_F(CcDriver, HostedLinkWithoutLibvcc)
+{
+    std::string prefix = StagePrefix("x86_64-linux");
+    WriteSource("t.o", "");
+    setenv("VCC_LD", "true", 1);
+    EXPECT_NE(StagedVcc(prefix, { "-t", "x86_64-linux", "t.o" }), 0);
+    EXPECT_NE(Stderr().find("libvcc.a not found"), std::string::npos) << Stderr();
+}
+
+// A staged installation for the host, with no -t: a program built by the default
+// target runs natively, calling glibc through every corner of the ABI.
+TEST_F(CcDriver, StagedPrefixHost)
+{
+    if (!HaveHostedRun())
+        GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
+    std::string target = HOST_TARGET;
+    std::string prefix = StagePrefix(target);
+    std::string lib    = prefix + "/share/vcc/" + target + "/lib";
+    fs::create_symlink(HostLibDir() + "/libvcc.a", lib + "/libvcc.a");
+
+    WriteSource("main.c", "#include <errno.h>\n"
+                          "#include <math.h>\n"
+                          "#include <setjmp.h>\n"
+                          "#include <stdarg.h>\n"
+                          "#include <stdio.h>\n"
+                          "#include <stdlib.h>\n"
+                          "#include <string.h>\n"
+                          "int twice(int);\n"
+                          "static void say(const char *fmt, ...)\n"
+                          "{\n"
+                          "    va_list ap;\n"
+                          "    va_start(ap, fmt);\n"
+                          "    vprintf(fmt, ap);\n"
+                          "    va_end(ap);\n"
+                          "}\n"
+                          "static int cmp(const void *a, const void *b)\n"
+                          "{\n"
+                          "    return *(const int *)a - *(const int *)b;\n"
+                          "}\n"
+                          "static jmp_buf env;\n"
+                          "int main(void)\n"
+                          "{\n"
+                          "    say(\"%d %s %.2f %ld\\n\", twice(21), \"str\", 2.5, 1L << 40);\n"
+                          "    errno = 0;\n"
+                          "    strtol(\"99999999999999999999\", NULL, 10);\n"
+                          "    printf(\"%d\\n\", errno == ERANGE);\n"
+                          "    int r = setjmp(env);\n"
+                          "    if (r == 0)\n"
+                          "        longjmp(env, 7);\n"
+                          "    int a[] = { 3, 1, 2 };\n"
+                          "    qsort(a, 3, sizeof a[0], cmp);\n"
+                          "    printf(\"%d %d%d%d\\n\", r, a[0], a[1], a[2]);\n"
+                          "    int (*p)(const char *) = puts;\n"
+                          "    p(\"puts\");\n"
+                          "    ldiv_t d = ldiv(-17L, 5L);\n"
+                          "    printf(\"%ld %ld %.4Lf %.4f\\n\", d.quot, d.rem, 1.0L / 3, sqrt(2.0));\n"
+                          "    return 3;\n"
+                          "}\n");
+    WriteSource("twice.c", "int twice(int x) { return 2 * x; }\n");
+    ASSERT_EQ(StagedVcc(prefix, { "-c", "twice.c" }), 0) << Stderr();
+    ASSERT_EQ(StagedVcc(prefix, { "-v", "-o", "t", "main.c", "twice.o", "-lm" }), 0) << Stderr();
+    EXPECT_EQ(RunProcess({ Path("t") }, Path("t.out"), Path("t.err")), 3);
+    EXPECT_EQ(ReadFile(Path("t.out")), "42 str 2.50 1099511627776\n"
+                                       "1\n"
+                                       "7 123\n"
+                                       "puts\n"
+                                       "-3 -2 0.3333 1.4142\n");
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t " + target + " -nostdinc -I" + prefix +
+                        "/share/vcc/" + target + "/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(" --linux "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -no-pie -o t "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
+}
+
+// The hosted headers agree with the system's on what the ABI fixes: the layouts and the
+// values a program hands to glibc.  The same probe is built by vcc and by the system
+// compiler, and run.
+TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
+{
+    if (!HaveHostedRun())
+        GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
+    std::string target = HOST_TARGET;
+    std::string prefix = StagePrefix(target);
+    fs::create_symlink(HostLibDir() + "/libvcc.a",
+                       prefix + "/share/vcc/" + target + "/lib/libvcc.a");
+    WriteSource("probe.c",
+                "#include <errno.h>\n"
+                "#include <fenv.h>\n"
+                "#include <float.h>\n"
+                "#include <limits.h>\n"
+                "#include <locale.h>\n"
+                "#include <math.h>\n"
+                "#include <setjmp.h>\n"
+                "#include <signal.h>\n"
+                "#include <stddef.h>\n"
+                "#include <stdint.h>\n"
+                "#include <stdio.h>\n"
+                "#include <stdlib.h>\n"
+                "#include <time.h>\n"
+                "#include <wchar.h>\n"
+                "#define P(x) printf(#x \" %ld\\n\", (long)(x))\n"
+                "int main(void)\n"
+                "{\n"
+                "    P(sizeof(jmp_buf)); P(sizeof(struct tm)); P(sizeof(struct timespec));\n"
+                "    P(offsetof(struct tm, tm_isdst)); P(sizeof(struct lconv));\n"
+                "    P(offsetof(struct lconv, int_frac_digits));\n"
+                "    P(offsetof(struct lconv, int_n_sign_posn));\n"
+                "    P(sizeof(fpos_t)); P(sizeof(fenv_t)); P(sizeof(fexcept_t));\n"
+                "    P(sizeof(mbstate_t)); P(sizeof(wchar_t)); P(sizeof(wint_t));\n"
+                "    P(sizeof(div_t)); P(sizeof(ldiv_t)); P(sizeof(lldiv_t));\n"
+                "    P(sizeof(max_align_t)); P(_Alignof(max_align_t));\n"
+                "    P(sizeof(long double)); P(LDBL_MANT_DIG); P(sizeof(time_t));\n"
+                "    P(sizeof(clock_t)); P(sizeof(sig_atomic_t));\n"
+                "    P(EDOM); P(ERANGE); P(EILSEQ); P(EINVAL); P(ENOMEM); P(ENOENT);\n"
+                "    P(EAGAIN); P(EINTR);\n"
+                "    P(LC_ALL); P(LC_CTYPE); P(LC_NUMERIC); P(LC_TIME); P(LC_COLLATE);\n"
+                "    P(LC_MONETARY);\n"
+                "    P(EOF); P(BUFSIZ); P(FOPEN_MAX); P(FILENAME_MAX); P(L_tmpnam);\n"
+                "    P(TMP_MAX); P(SEEK_SET); P(SEEK_CUR); P(SEEK_END); P(_IOFBF);\n"
+                "    P(_IOLBF); P(_IONBF);\n"
+                "    P(RAND_MAX); P(EXIT_FAILURE); P(MB_CUR_MAX); P(CLOCKS_PER_SEC);\n"
+                "    P(TIME_UTC);\n"
+                "    P(SIGINT); P(SIGILL); P(SIGABRT); P(SIGFPE); P(SIGSEGV); P(SIGTERM);\n"
+                "    P(FE_INVALID); P(FE_DIVBYZERO); P(FE_OVERFLOW); P(FE_UNDERFLOW);\n"
+                "    P(FE_INEXACT); P(FE_ALL_EXCEPT); P(FE_TONEAREST); P(FE_DOWNWARD);\n"
+                "    P(FE_UPWARD); P(FE_TOWARDZERO);\n"
+                "    P(FP_NAN); P(FP_INFINITE); P(FP_ZERO); P(FP_SUBNORMAL); P(FP_NORMAL);\n"
+                "    P(math_errhandling); P(fpclassify(1.0)); P(fpclassify(0.0f));\n"
+                "    P(isnan(NAN)); P(isinf(-INFINITY)); P(!!signbit(-0.0)); P(isfinite(1.0L));\n"
+                "    P(CHAR_MIN); P(WCHAR_MIN); P(WCHAR_MAX); P(MB_LEN_MAX);\n"
+                "    return 0;\n"
+                "}\n");
+    ASSERT_EQ(StagedVcc(prefix, { "-o", "ours", "probe.c", "-lm" }), 0) << Stderr();
+    ASSERT_EQ(RunProcess({ HostCc(), "-std=c11", "-o", Path("theirs"), Path("probe.c"), "-lm" },
+                         Path("cc.out"), Path("cc.err")),
+              0)
+        << ReadFile(Path("cc.err"));
+    ASSERT_EQ(RunProcess({ Path("ours") }, Path("ours.out")), 0);
+    ASSERT_EQ(RunProcess({ Path("theirs") }, Path("theirs.out")), 0);
+    std::string ours = ReadFile(Path("ours.out"));
+    EXPECT_FALSE(ours.empty());
+    EXPECT_EQ(ours, ReadFile(Path("theirs.out")));
 }
 
 //

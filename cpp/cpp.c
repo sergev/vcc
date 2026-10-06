@@ -49,8 +49,11 @@ struct symtab *paint_stack[SYMSIZ];
 //
 struct target {
     const char *name;
-    const char *macros[16];
+    const char *macros[24];
 };
+
+// What GCC predefines on Linux in C11 mode, after the architecture's own macros.
+#define LINUX_MACROS "__linux__", "__linux", "__gnu_linux__", "__unix__", "__unix"
 
 static const struct target targets[] = {
     { "besm6",   { "besm6", "__besm6__" } },
@@ -67,7 +70,12 @@ static const struct target targets[] = {
     { "x86_64",  { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
                    "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
                    "__code_model_small__", "__ELF__" } },
-    { "avr",     { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__",
+    { "x86_64-linux", { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
+                   "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
+                   "__code_model_small__", "__ELF__", LINUX_MACROS } },
+    { "aarch64-linux", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
+                   "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS } },
+    { "avr",    { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__",
                    "__AVR_HAVE_MUL__", "__AVR_HAVE_MOVW__", "__AVR_HAVE_LPMX__",
                    "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__", "__AVR_HAVE_JMP_CALL__",
                    "__AVR_2_BYTE_PC__", "__ELF__" } },
@@ -343,7 +351,7 @@ static void register_builtins(void)
     // The target's macros (-t).  Ordinary and #undef'able (§6.10.8.4 applies to
     // none of them); the BESM-6 sources of v7besm, this one included, tune
     // themselves on `besm6'.
-    for (i = 0; i < 16 && target->macros[i]; i++)
+    for (i = 0; i < sizeof(target->macros) / sizeof(target->macros[0]) && target->macros[i]; i++)
         define_symbol(target->macros[i]);
     cpp.sym_line_macro = define_symbol("__LINE__");
     cpp.sym_file_macro = define_symbol("__FILE__");

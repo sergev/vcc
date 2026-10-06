@@ -28,6 +28,12 @@ if(MMIX_TOOLS_FOUND)
     target_compile_definitions(cc PRIVATE MMIX_AS="${MMIX_AS}" MMIX_LD="${MMIX_LD}"
         MMIX_LIBGCC="${MMIX_LIBGCC}")
 endif()
+# The C compilers that assemble and link for the hosted targets (libc/linux).
+foreach(var X86_64 AARCH64)
+    if(${var}_LINUX_CC)
+        target_compile_definitions(cc PRIVATE ${var}_LINUX_CC="${${var}_LINUX_CC}")
+    endif()
+endforeach()
 install(PROGRAMS $<TARGET_FILE:cc> DESTINATION bin RENAME vcc)
 
 add_subdirectory(test)

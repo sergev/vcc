@@ -23,7 +23,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6`. Selects the predefined macros and the standard include directory. |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `besm6`, or the hosted `x86_64-linux` and `aarch64-linux` (the architecture's macros plus `__linux__`, `__linux`, `__gnu_linux__`, `__unix__` and `__unix`). Selects the predefined macros and the standard include directory. |
 | `-Ipath` | Add a directory to the header search list (up to 8). |
 | `-nostdinc` | Do not search the target's standard include directory. |
 | `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |
