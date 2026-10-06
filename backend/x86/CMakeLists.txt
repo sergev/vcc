@@ -36,7 +36,7 @@ add_executable(x86-tests
     test/struct_tests.cpp
     test/stdarg_tests.cpp
     test/interop_tests.cpp
-    test/book_x86_tests.cpp
+    ../common/test/book/signed_char_tests.cpp
     test/printf_tests.cpp
     test/str_tests.cpp
     test/mem_tests.cpp

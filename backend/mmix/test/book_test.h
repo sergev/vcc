@@ -13,7 +13,8 @@ protected:
     {
         MmixTest::SetUp();
         // GCC's build gives the same as ours on each; the book's expectation does not
-        // hold here.  Big-endian, signed-char versions follow in K18.
+        // hold here.  Signed-char versions run in signed_char_tests.cpp (shared with
+        // x86-64), big-endian ones in book_mmix_tests.cpp.
         static const SkippedTest skipped[] = {
             { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
             { "Chapter16_AccessThroughCharPointer", "reads an int's bytes little-endian" },

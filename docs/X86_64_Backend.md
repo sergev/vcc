@@ -245,7 +245,8 @@ class, variadic functions, the libc, `setjmp`, register allocation, frames and t
 peephole pass. It also links our code with clang's code in both directions over tables
 of signatures, structs and variadics, checks the headers against clang's own, and
 compares every book program's output and exit status with clang's (three that assume an
-unsigned plain `char` run as signed-char versions in `book_x86_tests.cpp`). The
+unsigned plain `char` run as signed-char versions in
+`backend/common/test/book/signed_char_tests.cpp`, shared with MMIX). The
 instruction-selection goldens run with `--no-regalloc --frame-pointer --no-peephole`.
 When GNU `as` is installed, every output is assembled by it too. Tests that need qemu
 or clang are skipped when the tools are missing; the `x86_64-headers` CTests check

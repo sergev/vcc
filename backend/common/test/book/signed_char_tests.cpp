@@ -1,8 +1,8 @@
 //
-// The x86-64 versions of the "Writing a C Compiler" programs that read a plain char
-// back as unsigned, as on the other byte-addressed targets; plain char is signed here,
-// as clang has it.  The shared suite (backend/common/test/book/) holds their generic
-// versions, which x86-64 skips.  Each is compared with clang, as the suite is.
+// The signed-char versions of the "Writing a C Compiler" programs that read a plain
+// char back as unsigned, for the targets where plain char is signed: x86-64 (as clang
+// has it) and MMIX (as GCC has it).  The suite's own versions, in this directory, are
+// skipped there.  Each is compared with clang or GCC, as the suite is.
 //
 #include "book_test.h"
 

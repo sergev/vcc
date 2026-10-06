@@ -11,7 +11,7 @@ protected:
     {
         X86Test::SetUp();
         // Plain char is signed here, as clang has it; the other byte-addressed targets
-        // have it unsigned.  book_x86_tests.cpp runs signed-char versions of these.
+        // have it unsigned.  signed_char_tests.cpp runs signed-char versions of these.
         static const SkippedTest skipped[] = {
             { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
             { "Chapter18_ClassifyParams", "expects an unsigned plain char" },
