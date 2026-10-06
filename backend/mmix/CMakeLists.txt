@@ -37,6 +37,7 @@ add_executable(mmix-tests
     test/struct_tests.cpp
     test/stdarg_tests.cpp
     test/regalloc_tests.cpp
+    test/peephole_tests.cpp
     test/interop_tests.cpp
     test/math_tests.cpp
     test/mem_tests.cpp
