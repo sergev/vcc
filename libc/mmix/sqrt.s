@@ -5,22 +5,22 @@
 % the root of a binary32 value in binary64 rounds to the correct binary32 (53 >= 2*24+2).
 % The result's bits come back sign-extended (ldt), as GCC returns them.
 
-	.text
+    .text
 
-	.global	sqrt
-	.p2align 2
+    .global sqrt
+    .p2align 2
 sqrt:
-	fsqrt	$0,0,$0
-	pop	1,0
+    fsqrt   $0, 0, $0
+    pop     1, 0
 
-	.global	sqrtf
-	.p2align 2
+    .global sqrtf
+    .p2align 2
 sqrtf:
-	subu	$254,$254,8
-	sttu	$0,$254,0
-	ldsf	$0,$254,0
-	fsqrt	$0,0,$0
-	stsf	$0,$254,0
-	ldt	$0,$254,0
-	addu	$254,$254,8
-	pop	1,0
+    subu    $254, $254, 8
+    sttu    $0, $254, 0
+    ldsf    $0, $254, 0
+    fsqrt   $0, 0, $0
+    stsf    $0, $254, 0
+    ldt     $0, $254, 0
+    addu    $254, $254, 8
+    pop     1, 0
