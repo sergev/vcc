@@ -730,8 +730,8 @@ TEST_F(CcDriver, CompileToAssemblyMmix)
     ASSERT_EQ(Vcc({ "-t", "mmix", "-S", "t.c" }), 0) << Stderr();
     std::string text = ReadFile(Path("t.s"));
     EXPECT_NE(text.find("main:"), std::string::npos) << text;
-    EXPECT_NE(text.find("pushj"), std::string::npos) << text;
-    EXPECT_NE(text.find(",printf"), std::string::npos) << text;
+    EXPECT_NE(text.find(", printf\n"), std::string::npos) << text;
+    EXPECT_NE(text.find("pushj   $"), std::string::npos) << text;
 }
 
 // Separate compilation for MMIX, a .S among the sources, and the link of the build's

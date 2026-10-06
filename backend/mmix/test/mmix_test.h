@@ -110,8 +110,8 @@ protected:
             << ReadFile(base + ".log");
     }
 
-    // Instruction lines of `asm_text`, without the leading tab and with one space after
-    // the mnemonic, so a test can look for a sequence: Code(s).find("setl $0,#c8\n").
+    // Instruction lines of `asm_text` without the indent and with one space after the
+    // mnemonic, so a test can look for a sequence: Code(s).find("setl $0, #c8\n").
     static std::string Code(const std::string &asm_text)
     {
         std::string out;
@@ -120,12 +120,12 @@ protected:
             size_t nl        = asm_text.find('\n', pos);
             std::string line = asm_text.substr(pos, nl - pos);
             pos              = nl == std::string::npos ? asm_text.size() : nl + 1;
-            if (line.size() < 2 || line[0] != '\t' || line[1] == '.')
+            if (line.size() < 5 || line.compare(0, 4, "    ") != 0 || line[4] == '.')
                 continue;
-            line      = line.substr(1);
-            size_t tab = line.find('\t');
-            if (tab != std::string::npos)
-                line[tab] = ' ';
+            line       = line.substr(4);
+            size_t end = line.find(' ');
+            if (end != std::string::npos)
+                line.replace(end, line.find_first_not_of(' ', end) - end, " ");
             out += line + "\n";
         }
         return out;

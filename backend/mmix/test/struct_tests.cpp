@@ -17,15 +17,19 @@ TEST_F(MmixTest, SmallStructArgument)
         long f1(struct c3 *p) { return g3(*p); }
         long f2(struct i2 *p) { return g8(*p); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldbu $2,$254,8\n"
-                                           "ldbu $248,$254,9\n"
-                                           "slu $2,$2,8\n"
-                                           "or $2,$2,$248\n"
-                                           "ldbu $248,$254,10\n"
-                                           "slu $2,$2,8\n"
-                                           "or $2,$2,$248\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(ldbu $2, $254, 8
+ldbu $248, $254, 9
+slu $2, $2, 8
+or $2, $2, $248
+ldbu $248, $254, 10
+slu $2, $2, 8
+or $2, $2, $248
+)"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("ldtu $2,$254,8\nldtu $248,$254,12\nslu $2,$2,32\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(ldtu $2, $254, 8
+ldtu $248, $254, 12
+slu $2, $2, 32
+)"))
         << code;
 }
 
@@ -34,9 +38,12 @@ TEST_F(MmixTest, SmallStructParameter)
 {
     std::string code =
         Code(CompileToMmix("struct c3 { char a, b, c; }; char f(struct c3 s) { return s.b; }"));
-    EXPECT_NE(std::string::npos, code.find("stbu $0,$254,2\nsru $0,$0,8\n"
-                                           "stbu $0,$254,1\nsru $0,$0,8\n"
-                                           "stbu $0,$254,0\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(stbu $0, $254, 2
+sru $0, $0, 8
+stbu $0, $254, 1
+sru $0, $0, 8
+stbu $0, $254, 0
+)"))
         << code;
 }
 
@@ -49,9 +56,9 @@ TEST_F(MmixTest, StructResult)
         struct p make(long x) { struct p r = { x, x + 1 }; return r; }
         long use(void) { struct p q = make(5); return q.y; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("sto $251,$254,")) << code;
-    EXPECT_NE(std::string::npos, code.find("pop 0,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("addu $251,$254,")) << code;
+    EXPECT_NE(std::string::npos, code.find("sto $251, $254, ")) << code;
+    EXPECT_NE(std::string::npos, code.find("pop 0, 0\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("addu $251, $254, ")) << code;
 }
 
 // Run: structures of every size as arguments and results, among scalars, ours both

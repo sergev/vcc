@@ -21,9 +21,9 @@ TEST_F(MmixTest, VariadicSavesRegisters)
             return x;
         }
     )"));
-    EXPECT_NE(std::string::npos, code.find("sto $1,$254,"));
-    EXPECT_NE(std::string::npos, code.find("sto $15,$254,")) << code;
-    EXPECT_EQ(std::string::npos, code.find("sto $16,")) << code;
+    EXPECT_NE(std::string::npos, code.find("sto $1, $254, "));
+    EXPECT_NE(std::string::npos, code.find("sto $15, $254, ")) << code;
+    EXPECT_EQ(std::string::npos, code.find("sto $16, ")) << code;
     EXPECT_EQ(std::string::npos, code.find("rJ")) << code;
     EXPECT_EQ(std::string::npos, code.find("pushj")) << code;
 }
@@ -40,12 +40,13 @@ TEST_F(MmixTest, VariadicSaveAreaOffsets)
             return n;
         }
     )"));
-    size_t sub = code.find("subu $254,$254,");
+    const std::string alloc = "subu $254, $254, ";
+    size_t sub              = code.find(alloc);
     ASSERT_NE(std::string::npos, sub) << code;
-    int frame = std::stoi(code.substr(sub + 15));
-    EXPECT_NE(std::string::npos, code.find("sto $1,$254," + std::to_string(frame - 120) + "\n"))
+    int frame = std::stoi(code.substr(sub + alloc.size()));
+    EXPECT_NE(std::string::npos, code.find("sto $1, $254, " + std::to_string(frame - 120) + "\n"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("sto $15,$254," + std::to_string(frame - 8) + "\n"))
+    EXPECT_NE(std::string::npos, code.find("sto $15, $254, " + std::to_string(frame - 8) + "\n"))
         << code;
 }
 

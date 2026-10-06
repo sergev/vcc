@@ -8,7 +8,9 @@
 // A leaf with its parameters where they arrive and its result in $0: no frame, no rJ.
 TEST_F(MmixTest, RegallocLeaf)
 {
-    EXPECT_EQ("addu $0,$0,$1\npop 1,0\n",
+    EXPECT_EQ(R"(addu $0, $0, $1
+pop 1, 0
+)",
               Code(CompileToMmix("long add(long a, long b) { return a + b; }")));
 }
 
@@ -16,12 +18,13 @@ TEST_F(MmixTest, RegallocLeaf)
 // $2, the hole in $3, the arguments from $4.
 TEST_F(MmixTest, RegallocCompaction)
 {
-    EXPECT_EQ("get $2,rJ\n"
-              "set $4,$0\n"
-              "pushj $3,g\n"
-              "addu $0,$3,$1\n"
-              "put rJ,$2\n"
-              "pop 1,0\n",
+    EXPECT_EQ(R"(get $2, rJ
+set $4, $0
+pushj $3, g
+addu $0, $3, $1
+put rJ, $2
+pop 1, 0
+)",
               Code(CompileToMmix("long g(long); long f(long a, long b) { return g(a) + b; }")));
 }
 
@@ -29,10 +32,11 @@ TEST_F(MmixTest, RegallocCompaction)
 // call, whose result is returned, is a tail call: rJ restored, then jmp.
 TEST_F(MmixTest, RegallocNothingKept)
 {
-    EXPECT_EQ("get $0,rJ\n"
-              "pushj $1,g\n"
-              "put rJ,$0\n"
-              "jmp g\n",
+    EXPECT_EQ(R"(get $0, rJ
+pushj $1, g
+put rJ, $0
+jmp g
+)",
               Code(CompileToMmix("void g(void); void f(void) { g(); g(); }")));
 }
 
@@ -40,13 +44,19 @@ TEST_F(MmixTest, RegallocNothingKept)
 // whose overflow is undefined, is not, as GCC's is not.
 TEST_F(MmixTest, RegallocReextend)
 {
-    EXPECT_EQ("addu $0,$0,1\nslu $0,$0,32\nsru $0,$0,32\npop 1,0\n",
+    EXPECT_EQ(R"(addu $0, $0, 1
+slu $0, $0, 32
+sru $0, $0, 32
+pop 1, 0
+)",
               Code(CompileToMmix("unsigned inc(unsigned a) { return a + 1; }")));
 }
 
 TEST_F(MmixTest, RegallocSignedNotReextended)
 {
-    EXPECT_EQ("addu $0,$0,1\npop 1,0\n", Code(CompileToMmix("int inc(int a) { return a + 1; }")));
+    EXPECT_EQ(R"(addu $0, $0, 1
+pop 1, 0
+)", Code(CompileToMmix("int inc(int a) { return a + 1; }")));
 }
 
 // Run: arithmetic wraps in its type in a register as it does in memory; a narrow result
@@ -121,21 +131,30 @@ TEST_F(MmixTest, RunRegallocPressure)
         want += (i * 7 + 1L) * (i + 1);
     for (int i = 0; i < 20; i++)
         wwant += (5L * (i + 3) + 2) * (5L * ((i + 7) % 20 + 3) + 2);
-    EXPECT_EQ("", CompileAndRunMmix("long id(long x) { return x; }\n"
-                                    "long across(void)\n{\n" +
+    EXPECT_EQ("", CompileAndRunMmix(R"(long id(long x) { return x; }
+long across(void)
+{
+)" +
                                     decl + "    return 0" + use +
-                                    ";\n}\n"
-                                    "long leaf(long a, long b)\n{\n" +
+                                    R"(;
+}
+long leaf(long a, long b)
+{
+)" +
                                     mix + "    return 0" + wsum +
-                                    ";\n}\n"
-                                    "int main(void)\n{\n"
-                                    "    if (across() != " +
+                                    R"(;
+}
+int main(void)
+{
+    if (across() != )" +
                                     std::to_string(want) +
-                                    "L) return 1;\n"
-                                    "    if (leaf(5, 2) != " +
+                                    R"(L) return 1;
+    if (leaf(5, 2) != )" +
                                     std::to_string(wwant) +
-                                    "L) return 2;\n"
-                                    "    return 0;\n}\n"));
+                                    R"(L) return 2;
+    return 0;
+}
+)"));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -181,9 +200,9 @@ TEST_F(MmixTest, FramelessEarlyReturn)
     EXPECT_EQ(std::string::npos, code.find("jmp")) << code;
     EXPECT_EQ(std::string::npos, code.find("$254")) << code;
     EXPECT_EQ(std::string::npos, code.find("rJ")) << code;
-    size_t first = code.find("pop 1,0\n");
+    size_t first = code.find("pop 1, 0\n");
     ASSERT_NE(std::string::npos, first) << code;
-    EXPECT_NE(std::string::npos, code.find("pop 1,0\n", first + 1)) << code;
+    EXPECT_NE(std::string::npos, code.find("pop 1, 0\n", first + 1)) << code;
 }
 
 // Run: early returns in place, of a value and of none.

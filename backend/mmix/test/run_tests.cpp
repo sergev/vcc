@@ -62,11 +62,12 @@ TEST_F(MmixTest, RunHaltWithoutReportFails)
         ::testing::ScopedFakeTestPartResultReporter intercept(
             ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
             &results);
-        out = RunAssembly("\t.text\n"
-                          "\t.global\tmain\n"
-                          "main:\n"
-                          "\tsetl\t$255,0\n"
-                          "\ttrap\t0,0,0\n");
+        out = RunAssembly(R"(    .text
+    .global main
+main:
+    setl    $255, 0
+    trap    0, 0, 0
+)");
     }
     EXPECT_EQ("ERROR", out);
     ASSERT_EQ(1, results.size());
@@ -79,19 +80,20 @@ TEST_F(MmixTest, RunHaltWithoutReportFails)
 TEST_F(MmixTest, RuntimePutbyte)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("Hi\n", RunAssembly("\t.text\n"
-                                  "\t.global\tmain\n"
-                                  "main:\n"
-                                  "\tget\t$0,rJ\n"
-                                  "\tsetl\t$2,72\n"
-                                  "\tpushj\t$1,putbyte\n"
-                                  "\tsetl\t$2,105\n"
-                                  "\tpushj\t$1,putbyte\n"
-                                  "\tsetl\t$2,10\n"
-                                  "\tpushj\t$1,putbyte\n"
-                                  "\tput\trJ,$0\n"
-                                  "\tsetl\t$0,42\n"
-                                  "\tpop\t1,0\n"));
+    EXPECT_EQ("Hi\n", RunAssembly(R"(    .text
+    .global main
+main:
+    get     $0, rJ
+    setl    $2, 72
+    pushj   $1, putbyte
+    setl    $2, 105
+    pushj   $1, putbyte
+    setl    $2, 10
+    pushj   $1, putbyte
+    put     rJ, $0
+    setl    $0, 42
+    pop     1, 0
+)"));
     EXPECT_EQ(42, exit_status);
 }
 

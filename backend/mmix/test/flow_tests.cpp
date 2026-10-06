@@ -11,7 +11,8 @@ TEST_F(MmixTest, BranchOnValue)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long a) { if (a) return 1; return 2; }"));
-    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nbz $248,L:")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $248, $254, 0
+bz $248, L:)")) << code;
 }
 
 // A loop jumps back to its top; every label is L: and defined once in the unit.
@@ -24,7 +25,8 @@ TEST_F(MmixTest, LabelsUniqueInUnit)
     )");
     std::set<std::string> labels;
     size_t pos = 0;
-    while ((pos = s.find("\nL:", pos)) != std::string::npos) {
+    while ((pos = s.find(R"(
+L:)", pos)) != std::string::npos) {
         size_t end        = s.find(":\n", pos + 3);
         std::string label = s.substr(pos + 1, end - pos - 1);
         EXPECT_TRUE(labels.insert(label).second) << "defined twice: " << label << "\n" << s;
@@ -68,23 +70,24 @@ TEST_F(MmixTest, RunLoops)
 TEST_F(MmixTest, RunBranchesBeyondRange)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("", RunAssembly("\t.text\n"
-                              "\t.global\tmain\n"
-                              "\t.p2align 2\n"
-                              "main:\n"
-                              "\tsetl\t$1,0\n"
-                              "\tsetl\t$2,3\n"
-                              "L:1:\n"
-                              "\tbz\t$2,L:4\n"
-                              "\tsubu\t$2,$2,1\n"
-                              "\tjmp\tL:2\n"
-                              "\t.skip\t262200\n"
-                              "L:2:\n"
-                              "\taddu\t$1,$1,10\n"
-                              "\tpbnz\t$1,L:1\n"
-                              "\t.skip\t262200\n"
-                              "L:4:\n"
-                              "\tset\t$0,$1\n"
-                              "\tpop\t1,0\n"));
+    EXPECT_EQ("", RunAssembly(R"(    .text
+    .global main
+    .p2align 2
+main:
+    setl    $1, 0
+    setl    $2, 3
+L:1:
+    bz      $2, L:4
+    subu    $2, $2, 1
+    jmp     L:2
+    .skip   262200
+L:2:
+    addu    $1, $1, 10
+    pbnz    $1, L:1
+    .skip   262200
+L:4:
+    set     $0, $1
+    pop     1, 0
+)"));
     EXPECT_EQ(30, exit_status);
 }

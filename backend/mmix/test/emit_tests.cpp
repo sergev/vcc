@@ -91,54 +91,54 @@ static Mmix_Operand I(int64_t n)
 
 TEST_F(EmitTest, Arithmetic)
 {
-    EXPECT_EQ(Line(MMIX_ADDU, { R(0), R(0), R(1) }), "\taddu\t$0,$0,$1\n");
-    EXPECT_EQ(Line(MMIX_SUBU, { R(254), R(254), I(16) }), "\tsubu\t$254,$254,16\n");
-    EXPECT_EQ(Line(MMIX_NEGU, { R(3), I(0), R(2) }), "\tnegu\t$3,0,$2\n");
-    EXPECT_EQ(Line(MMIX_NEGU, { R(3), I(0), I(255) }), "\tnegu\t$3,0,255\n");
-    EXPECT_EQ(Line(MMIX_ADDU8, { R(1), R(2), R(3) }), "\t8addu\t$1,$2,$3\n");
-    EXPECT_EQ(Line(MMIX_SLU, { R(1), R(1), I(32) }), "\tslu\t$1,$1,32\n");
-    EXPECT_EQ(Line(MMIX_ZSN, { R(1), R(2), I(1) }), "\tzsn\t$1,$2,1\n");
-    EXPECT_EQ(Line(MMIX_FIX, { R(1), I(1), R(2) }), "\tfix\t$1,1,$2\n");
-    EXPECT_EQ(Line(MMIX_FLOT, { R(1), R(2) }), "\tflot\t$1,$2\n");
-    EXPECT_EQ(Line(MMIX_SET, { R(5), R(1) }), "\tset\t$5,$1\n");
-    EXPECT_EQ(Line(MMIX_ADD, { R(MMIX_VREG + 3), R(0), R(1) }), "\tadd\tv3,$0,$1\n");
+    EXPECT_EQ(Line(MMIX_ADDU, { R(0), R(0), R(1) }), "    addu    $0, $0, $1\n");
+    EXPECT_EQ(Line(MMIX_SUBU, { R(254), R(254), I(16) }), "    subu    $254, $254, 16\n");
+    EXPECT_EQ(Line(MMIX_NEGU, { R(3), I(0), R(2) }), "    negu    $3, 0, $2\n");
+    EXPECT_EQ(Line(MMIX_NEGU, { R(3), I(0), I(255) }), "    negu    $3, 0, 255\n");
+    EXPECT_EQ(Line(MMIX_ADDU8, { R(1), R(2), R(3) }), "    8addu   $1, $2, $3\n");
+    EXPECT_EQ(Line(MMIX_SLU, { R(1), R(1), I(32) }), "    slu     $1, $1, 32\n");
+    EXPECT_EQ(Line(MMIX_ZSN, { R(1), R(2), I(1) }), "    zsn     $1, $2, 1\n");
+    EXPECT_EQ(Line(MMIX_FIX, { R(1), I(1), R(2) }), "    fix     $1, 1, $2\n");
+    EXPECT_EQ(Line(MMIX_FLOT, { R(1), R(2) }), "    flot    $1, $2\n");
+    EXPECT_EQ(Line(MMIX_SET, { R(5), R(1) }), "    set     $5, $1\n");
+    EXPECT_EQ(Line(MMIX_ADD, { R(MMIX_VREG + 3), R(0), R(1) }), "    add     v3, $0, $1\n");
 }
 
 // A wyde prints in hex, as the assembler reads #.
 TEST_F(EmitTest, Wydes)
 {
-    EXPECT_EQ(Line(MMIX_SETL, { R(0), mmix_wyde(200) }), "\tsetl\t$0,#c8\n");
-    EXPECT_EQ(Line(MMIX_SETH, { R(4), mmix_wyde(0x4004) }), "\tseth\t$4,#4004\n");
-    EXPECT_EQ(Line(MMIX_INCML, { R(2), mmix_wyde(0xffff) }), "\tincml\t$2,#ffff\n");
-    EXPECT_EQ(Line(MMIX_ANDNL, { R(2), mmix_wyde(0x7ff) }), "\tandnl\t$2,#7ff\n");
+    EXPECT_EQ(Line(MMIX_SETL, { R(0), mmix_wyde(200) }), "    setl    $0, #c8\n");
+    EXPECT_EQ(Line(MMIX_SETH, { R(4), mmix_wyde(0x4004) }), "    seth    $4, #4004\n");
+    EXPECT_EQ(Line(MMIX_INCML, { R(2), mmix_wyde(0xffff) }), "    incml   $2, #ffff\n");
+    EXPECT_EQ(Line(MMIX_ANDNL, { R(2), mmix_wyde(0x7ff) }), "    andnl   $2, #7ff\n");
 }
 
 TEST_F(EmitTest, Memory)
 {
-    EXPECT_EQ(Line(MMIX_LDO, { R(1), R(254), I(8) }), "\tldo\t$1,$254,8\n");
-    EXPECT_EQ(Line(MMIX_LDO, { R(1), R(254), R(255) }), "\tldo\t$1,$254,$255\n");
-    EXPECT_EQ(Line(MMIX_STB, { R(1), R(2), I(0) }), "\tstb\t$1,$2,0\n");
-    EXPECT_EQ(Line(MMIX_LDT, { R(5), mmix_sym("g", 0) }), "\tldt\t$5,g\n");
-    EXPECT_EQ(Line(MMIX_STO, { R(0), mmix_sym("cnt$1", 8) }), "\tsto\t$0,cnt$1+8\n");
-    EXPECT_EQ(Line(MMIX_LDSF, { R(0), mmix_sym("f", -4) }), "\tldsf\t$0,f-4\n");
+    EXPECT_EQ(Line(MMIX_LDO, { R(1), R(254), I(8) }), "    ldo     $1, $254, 8\n");
+    EXPECT_EQ(Line(MMIX_LDO, { R(1), R(254), R(255) }), "    ldo     $1, $254, $255\n");
+    EXPECT_EQ(Line(MMIX_STB, { R(1), R(2), I(0) }), "    stb     $1, $2, 0\n");
+    EXPECT_EQ(Line(MMIX_LDT, { R(5), mmix_sym("g", 0) }), "    ldt     $5, g\n");
+    EXPECT_EQ(Line(MMIX_STO, { R(0), mmix_sym("cnt$1", 8) }), "    sto     $0, cnt$1+8\n");
+    EXPECT_EQ(Line(MMIX_LDSF, { R(0), mmix_sym("f", -4) }), "    ldsf    $0, f-4\n");
 }
 
 TEST_F(EmitTest, Control)
 {
-    EXPECT_EQ(Line(MMIX_BNZ, { R(1), mmix_label("L:3") }), "\tbnz\t$1,L:3\n");
-    EXPECT_EQ(Line(MMIX_PBN, { R(1), mmix_label("L:12") }), "\tpbn\t$1,L:12\n");
-    EXPECT_EQ(Line(MMIX_JMP, { mmix_label("L:1") }), "\tjmp\tL:1\n");
-    EXPECT_EQ(Line(MMIX_JMP, { mmix_sym("f", 0) }), "\tjmp\tf\n");
-    EXPECT_EQ(Line(MMIX_PUSHJ, { R(3), mmix_sym("ext", 0) }), "\tpushj\t$3,ext\n");
-    EXPECT_EQ(Line(MMIX_PUSHGO, { R(3), R(4), I(0) }), "\tpushgo\t$3,$4,0\n");
-    EXPECT_EQ(Line(MMIX_POP, { I(1), I(0) }), "\tpop\t1,0\n");
-    EXPECT_EQ(Line(MMIX_LDA, { R(1), mmix_sym("arr", 16) }), "\tlda\t$1,arr+16\n");
-    EXPECT_EQ(Line(MMIX_GETA, { R(2), mmix_label("LC:0") }), "\tgeta\t$2,LC:0\n");
-    EXPECT_EQ(Line(MMIX_GET, { R(2), mmix_special(MMIX_rJ) }), "\tget\t$2,rJ\n");
-    EXPECT_EQ(Line(MMIX_PUT, { mmix_special(MMIX_rJ), R(2) }), "\tput\trJ,$2\n");
-    EXPECT_EQ(Line(MMIX_GET, { R(2), mmix_special(MMIX_rR) }), "\tget\t$2,rR\n");
-    EXPECT_EQ(Line(MMIX_TRAP, { I(0), I(6), I(1) }), "\ttrap\t0,6,1\n");
-    EXPECT_EQ(Line(MMIX_SWYM, {}), "\tswym\n");
+    EXPECT_EQ(Line(MMIX_BNZ, { R(1), mmix_label("L:3") }), "    bnz     $1, L:3\n");
+    EXPECT_EQ(Line(MMIX_PBN, { R(1), mmix_label("L:12") }), "    pbn     $1, L:12\n");
+    EXPECT_EQ(Line(MMIX_JMP, { mmix_label("L:1") }), "    jmp     L:1\n");
+    EXPECT_EQ(Line(MMIX_JMP, { mmix_sym("f", 0) }), "    jmp     f\n");
+    EXPECT_EQ(Line(MMIX_PUSHJ, { R(3), mmix_sym("ext", 0) }), "    pushj   $3, ext\n");
+    EXPECT_EQ(Line(MMIX_PUSHGO, { R(3), R(4), I(0) }), "    pushgo  $3, $4, 0\n");
+    EXPECT_EQ(Line(MMIX_POP, { I(1), I(0) }), "    pop     1, 0\n");
+    EXPECT_EQ(Line(MMIX_LDA, { R(1), mmix_sym("arr", 16) }), "    lda     $1, arr+16\n");
+    EXPECT_EQ(Line(MMIX_GETA, { R(2), mmix_label("LC:0") }), "    geta    $2, LC:0\n");
+    EXPECT_EQ(Line(MMIX_GET, { R(2), mmix_special(MMIX_rJ) }), "    get     $2, rJ\n");
+    EXPECT_EQ(Line(MMIX_PUT, { mmix_special(MMIX_rJ), R(2) }), "    put     rJ, $2\n");
+    EXPECT_EQ(Line(MMIX_GET, { R(2), mmix_special(MMIX_rR) }), "    get     $2, rR\n");
+    EXPECT_EQ(Line(MMIX_TRAP, { I(0), I(6), I(1) }), "    trap    0, 6, 1\n");
+    EXPECT_EQ(Line(MMIX_SWYM, {}), "    swym\n");
 }
 
 // Operands that do not fit the form, an immediate out of its field above all, are a
@@ -170,13 +170,14 @@ TEST_F(EmitTest, Function)
     in->opnd[1] = I(0);
     std::string s = Capture([&](FILE *f) { mmix_emit_func(f, fn); });
     mmix_free_func(fn);
-    EXPECT_EQ(s, "\t.text\n"
-                 "\t.global\tmain\n"
-                 "\t.p2align 2\n"
-                 "main:\n"
-                 "\tsetl\t$0,#c8\n"
-                 "L:1:\n"
-                 "\tpop\t1,0\n");
+    EXPECT_EQ(s, R"(    .text
+    .global main
+    .p2align 2
+main:
+    setl    $0, #c8
+L:1:
+    pop     1, 0
+)");
 }
 
 // One instance of every opcode, in its form.
@@ -266,10 +267,12 @@ TEST_F(EmitTest, AssemblerAcceptsEveryForm)
     std::string log_path = TEST_DIR "/EmitTest.AllForms.log";
     {
         std::ofstream s(s_path);
-        s << "\t.text\nL:1:\n";
+        s << R"(    .text
+L:1:
+)";
         for (const std::string &l : lines)
             s << l;
-        s << "\t.data\ndata:\t.octa 0,0,0\n";
+        s << "    .data\ndata:   .octa 0, 0, 0\n";
     }
     ASSERT_EQ(0, RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", o_path, s_path },
                          log_path))

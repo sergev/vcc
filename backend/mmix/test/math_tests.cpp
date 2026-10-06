@@ -114,7 +114,10 @@ int main(void) {
 TEST_F(MmixTest, FrexpLdexpRoundTrip)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("M=0.750000 E=4\nBACK=12.000000\nBACK=100.000000\n", CompileAndRunMmix(R"PROG(
+    EXPECT_EQ(R"(M=0.750000 E=4
+BACK=12.000000
+BACK=100.000000
+)", CompileAndRunMmix(R"PROG(
 #include <stdio.h>
 #include <math.h>
 static void body(void) {
@@ -172,7 +175,7 @@ TEST_F(MmixTest, SqrtInstruction)
 #include <math.h>
 double f(double x) { return sqrt(x); }
 )"));
-    EXPECT_NE(std::string::npos, code.find("fsqrt $248,0,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fsqrt $248, 0, $248\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("pushj")) << code;
 }
 
@@ -182,7 +185,21 @@ double f(double x) { return sqrt(x); }
 TEST_F(MmixTest, SqrtRun)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("0000000000000000\n8000000000000000\n3ff0000000000000\n3ff6a09e667f3bcd\n3ffbb67ae8584caa\n3fe0000000000000\n1fc1297872d9cbae\n5fefffffffffffff\n5f138d352e5096af\n1e60000000000000\n7ff0000000000000\n3ffbb67ae8584caa\n1 1 1\n4.5\n",
+    EXPECT_EQ(R"(0000000000000000
+8000000000000000
+3ff0000000000000
+3ff6a09e667f3bcd
+3ffbb67ae8584caa
+3fe0000000000000
+1fc1297872d9cbae
+5fefffffffffffff
+5f138d352e5096af
+1e60000000000000
+7ff0000000000000
+3ffbb67ae8584caa
+1 1 1
+4.5
+)",
               CompileAndRunMmix(R"(
 #include <stdio.h>
 #include <string.h>
@@ -223,7 +240,14 @@ float sqrtf(float);
 double croot(double x) { return sqrt(x); }
 float crootf(float x) { return sqrtf(x); }
 )";
-    EXPECT_EQ("3ff6a09e667f3bcd\n3ffbb67ae8584caa\n3fb504f3\n3f3504f3\n3fddb3d7\n80000000\n1\n",
+    EXPECT_EQ(R"(3ff6a09e667f3bcd
+3ffbb67ae8584caa
+3fb504f3
+3f3504f3
+3fddb3d7
+80000000
+1
+)",
               Run(CompileToMmix(R"(
 #include <stdio.h>
 #include <string.h>

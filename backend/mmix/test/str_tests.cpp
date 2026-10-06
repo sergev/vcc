@@ -364,7 +364,10 @@ int main(void) {
 TEST_F(MmixTest, StrtokMultiToken)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("AB\nCD\nEF\n", RunAgainstNewlib(R"PROG(
+    EXPECT_EQ(R"(AB
+CD
+EF
+)", RunAgainstNewlib(R"PROG(
 #include <stdio.h>
 #include <string.h>
 static void body(void) {
@@ -386,7 +389,9 @@ int main(void) {
 TEST_F(MmixTest, StrtokLeadingDelims)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("AB\nCD\n", RunAgainstNewlib(R"PROG(
+    EXPECT_EQ(R"(AB
+CD
+)", RunAgainstNewlib(R"PROG(
 #include <stdio.h>
 #include <string.h>
 static void body(void) {
@@ -445,7 +450,11 @@ int main(void) {
 TEST_F(MmixTest, StrSignedChar)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("-23 1 233\n1 1 1\n1 1 3\n1 4\n", RunAgainstNewlib(R"PROG(
+    EXPECT_EQ(R"(-23 1 233
+1 1 1
+1 1 3
+1 4
+)", RunAgainstNewlib(R"PROG(
 #include <stdio.h>
 #include <string.h>
 int main(void) {

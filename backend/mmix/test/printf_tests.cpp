@@ -444,14 +444,15 @@ int main(void) {
 TEST_F(MmixTest, PrintfInfNan)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("[inf] [INF] [inf] [INF] [inf] [INF]\n"
-              "[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]\n"
-              "[nan] [NAN] [nan] [NAN] [nan] [NAN]\n"
-              "[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]\n"
-              "[     nan] [NAN     ] [     nan] [nan]\n"
-              "[-inf] [      -inf] [-INF      ] [-INF]\n"
-              "[inf] [nan]\n"
-              "-inf|NAN|inf\n",
+    EXPECT_EQ(R"([inf] [INF] [inf] [INF] [inf] [INF]
+[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]
+[nan] [NAN] [nan] [NAN] [nan] [NAN]
+[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]
+[     nan] [NAN     ] [     nan] [nan]
+[-inf] [      -inf] [-INF      ] [-INF]
+[inf] [nan]
+-inf|NAN|inf
+)",
               CompileAndRunMmix(R"PROG(
 #include <math.h>
 #include <stdio.h>
@@ -478,10 +479,11 @@ int main(void) {
 TEST_F(MmixTest, PrintfRoundHalfEven)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("0 2 2 4 -2\n"
-              "0.2 0.8 1.12 0.35\n"
-              "2e+01 4e+01 1.2e+00 1.12e+00\n"
-              "2 0.12 0.5 1e-05\n",
+    EXPECT_EQ(R"(0 2 2 4 -2
+0.2 0.8 1.12 0.35
+2e+01 4e+01 1.2e+00 1.12e+00
+2 0.12 0.5 1e-05
+)",
               RunAgainstNewlib(R"PROG(
 #include <stdio.h>
 int main(void) {
@@ -502,11 +504,11 @@ int main(void) {
 TEST_F(MmixTest, PrintfLongDouble)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("2.500000 1.234e+03 0.0001 1.250000\n"
-              "1 2.500000 3 0.3333333333 x 1.000000 2.000000 3.000000 4.000000 5.000000 "
-              "6.000000 -0.125000\n"
-              "[      3.14|-2.3    ]\n"
-              "316 179769313486 .000000\n",
+    EXPECT_EQ(R"(2.500000 1.234e+03 0.0001 1.250000
+1 2.500000 3 0.3333333333 x 1.000000 2.000000 3.000000 4.000000 5.000000 6.000000 -0.125000
+[      3.14|-2.3    ]
+316 179769313486 .000000
+)",
               RunAgainstNewlib(R"PROG(
 #include <stdio.h>
 int main(void) {

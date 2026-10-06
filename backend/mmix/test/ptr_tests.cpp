@@ -16,10 +16,18 @@ TEST_F(MmixTest, LoadsAndStores)
         void f3(int *p, int v) { *p = v; }
         float f4(float *p) { return *p; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nldb $248,$249,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nldwu $248,$249,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nsttu $248,$249,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nldsf $248,$249,0\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
+ldb $248, $249, 0
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
+ldwu $248, $249, 0
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
+sttu $248, $249, 0
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
+ldsf $248, $249, 0
+)")) << code;
 }
 
 // An index scaled by 2..16 is one 2addu..16addu (8addu $x,$i,$p = 8i + p); another scale
@@ -34,10 +42,12 @@ TEST_F(MmixTest, AddPtr)
         struct T *f3(struct T *p, long i) { return p + i; }
         int *f4(int *p) { return p + 3; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("8addu $248,$249,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("2addu $248,$249,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mulu $249,$249,24\naddu $248,$248,$249\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("addu $248,$248,12\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("8addu $248, $249, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("2addu $248, $249, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(mulu $249, $249, 24
+addu $248, $248, $249
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("addu $248, $248, 12\n")) << code;
 }
 
 // Pointer comparisons are unsigned.  (The frontend compares two char pointers through
@@ -46,7 +56,9 @@ TEST_F(MmixTest, PointerCompare)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix("int f(long *a, long *b) { return a < b; }"));
-    EXPECT_NE(std::string::npos, code.find("cmpu $248,$248,$249\nzsn $248,$248,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(cmpu $248, $248, $249
+zsn $248, $248, 1
+)")) << code;
 }
 
 // Run: arrays and pointers, 2-D arrays, pointer differences, and the byte order: an

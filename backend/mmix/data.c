@@ -11,7 +11,7 @@
 
 static void emit_ascii(FILE *out, const char *s, size_t len)
 {
-    fputs("\t.ascii\t\"", out);
+    fputs("    .ascii  \"", out);
     for (size_t i = 0; i < len; i++) {
         unsigned char c = (unsigned char)s[i];
         if (c == '"' || c == '\\')
@@ -28,7 +28,7 @@ static void emit_double(FILE *out, double d)
 {
     uint64_t bits;
     memcpy(&bits, &d, 8);
-    fprintf(out, "\t.quad\t0x%016llx\n", (unsigned long long)bits);
+    fprintf(out, "    .quad   0x%016llx\n", (unsigned long long)bits);
 }
 
 // Emit one initializer item; returns its size in bytes.
@@ -36,34 +36,34 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
 {
     switch (it->kind) {
     case TAC_STATIC_INIT_I8:
-        fprintf(out, "\t.byte\t%d\n", it->u.char_val);
+        fprintf(out, "    .byte   %d\n", it->u.char_val);
         return 1;
     case TAC_STATIC_INIT_U8:
-        fprintf(out, "\t.byte\t%u\n", it->u.uchar_val);
+        fprintf(out, "    .byte   %u\n", it->u.uchar_val);
         return 1;
     case TAC_STATIC_INIT_I16:
-        fprintf(out, "\t.short\t%d\n", it->u.short_val);
+        fprintf(out, "    .short  %d\n", it->u.short_val);
         return 2;
     case TAC_STATIC_INIT_U16:
-        fprintf(out, "\t.short\t%u\n", it->u.ushort_val);
+        fprintf(out, "    .short  %u\n", it->u.ushort_val);
         return 2;
     case TAC_STATIC_INIT_I32:
-        fprintf(out, "\t.long\t%d\n", it->u.int_val);
+        fprintf(out, "    .long   %d\n", it->u.int_val);
         return 4;
     case TAC_STATIC_INIT_U32:
-        fprintf(out, "\t.long\t%u\n", it->u.uint_val);
+        fprintf(out, "    .long   %u\n", it->u.uint_val);
         return 4;
     case TAC_STATIC_INIT_I64:
-        fprintf(out, "\t.quad\t%lld\n", (long long)it->u.long_val);
+        fprintf(out, "    .quad   %lld\n", (long long)it->u.long_val);
         return 8;
     case TAC_STATIC_INIT_U64:
-        fprintf(out, "\t.quad\t%llu\n", (unsigned long long)it->u.ulong_val);
+        fprintf(out, "    .quad   %llu\n", (unsigned long long)it->u.ulong_val);
         return 8;
     case TAC_STATIC_INIT_FLOAT: {
         float f = (float)it->u.float_val;
         uint32_t bits;
         memcpy(&bits, &f, 4);
-        fprintf(out, "\t.long\t0x%08x\n", bits);
+        fprintf(out, "    .long   0x%08x\n", bits);
         return 4;
     }
     case TAC_STATIC_INIT_DOUBLE:
@@ -74,14 +74,14 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
         return 8;
     case TAC_STATIC_INIT_ZERO:
         if (it->u.zero_bytes > 0)
-            fprintf(out, "\t.zero\t%d\n", it->u.zero_bytes);
+            fprintf(out, "    .zero   %d\n", it->u.zero_bytes);
         return it->u.zero_bytes;
     case TAC_STATIC_INIT_STRING: {
         size_t len = it->u.string.val ? it->u.string.len : 0;
         if (len)
             emit_ascii(out, it->u.string.val, len);
         if (it->u.string.null_terminated) {
-            fputs("\t.byte\t0\n", out);
+            fputs("    .byte   0\n", out);
             len++;
         }
         return (int)len;
@@ -90,9 +90,9 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
     case TAC_STATIC_INIT_FAT_POINTER:
         // A function's address too: one address space, byte addresses.
         if (it->u.pointer.byte_offset)
-            fprintf(out, "\t.quad\t%s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
+            fprintf(out, "    .quad   %s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
         else
-            fprintf(out, "\t.quad\t%s\n", it->u.pointer.name);
+            fprintf(out, "    .quad   %s\n", it->u.pointer.name);
         return 8;
     }
     return 0;
@@ -119,23 +119,23 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
     while ((1 << log2) < align)
         log2++;
     bool bss = !readonly && all_zero(init);
-    fprintf(out, "\t%s\n", readonly ? ".section .rodata" : bss ? ".bss" : ".data");
+    fprintf(out, "    %s\n", readonly ? ".section .rodata" : bss ? ".bss" : ".data");
     if (global)
-        fprintf(out, "\t.global\t%s\n", name);
+        fprintf(out, "    .global %s\n", name);
     if (log2)
-        fprintf(out, "\t.p2align %d\n", log2);
+        fprintf(out, "    .p2align %d\n", log2);
     fprintf(out, "%s:\n", name);
     int n = 0;
     if (bss) {
         n = size;
         if (size > 0)
-            fprintf(out, "\t.zero\t%d\n", size);
+            fprintf(out, "    .zero   %d\n", size);
     } else {
         for (const Tac_StaticInit *it = init; it; it = it->next)
             n += emit_init(out, it);
     }
     if (n < size)
-        fprintf(out, "\t.zero\t%d\n", size - n);
+        fprintf(out, "    .zero   %d\n", size - n);
     else if (n == 0)
-        fprintf(out, "\t.zero\t1\n"); // an empty object still gets an address
+        fprintf(out, "    .zero   1\n"); // an empty object still gets an address
 }

@@ -7,18 +7,19 @@
 // A non-leaf function saves rJ in $0 after storing its parameters, calls with pushj $1,
 // and moves the result from $1 to $0 after restoring rJ.
 EXPECT_CODE(CallSequence,
-            "subu $254,$254,16\n"
-            "sto $0,$254,0\n"
-            "get $0,rJ\n"
-            "ldo $2,$254,0\n"
-            "setl $3,#2\n"
-            "pushj $1,g\n"
-            "sto $1,$254,8\n"
-            "ldo $1,$254,8\n"
-            "put rJ,$0\n"
-            "set $0,$1\n"
-            "addu $254,$254,16\n"
-            "pop 1,0\n",
+            R"(subu $254, $254, 16
+sto $0, $254, 0
+get $0, rJ
+ldo $2, $254, 0
+setl $3, #2
+pushj $1, g
+sto $1, $254, 8
+ldo $1, $254, 8
+put rJ, $0
+set $0, $1
+addu $254, $254, 16
+pop 1, 0
+)",
             "long g(long, long); long f(long a) { return g(a, 2); }")
 
 // A call through a pointer: pushgo to the address in $249, loaded before the arguments,
@@ -27,7 +28,10 @@ TEST_F(MmixTest, IndirectCall)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long (*p)(long)) { return p(3); }"));
-    EXPECT_NE(std::string::npos, code.find("ldo $249,$254,0\nsetl $2,#3\npushgo $1,$249,0\n"))
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
+setl $2, #3
+pushgo $1, $249, 0
+)"))
         << code;
 }
 
@@ -37,12 +41,17 @@ TEST_F(MmixTest, StackArguments)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix(
-        "long g(long, long, long, long, long, long, long, long, long, long, long, long, "
-        "long, long, long, long, int, unsigned);\n"
-        "long f(int x, unsigned y) { return g(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, x, y); }"));
-    EXPECT_NE(std::string::npos, code.find("ldt $248,$254,16\nsto $248,$254,0\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldtu $248,$254,20\nsto $248,$254,8\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("setl $17,#f\npushj $1,g\n")) << code;
+        R"(long g(long, long, long, long, long, long, long, long, long, long, long, long, long, long, long, long, int, unsigned);
+long f(int x, unsigned y) { return g(0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15, x, y); })"));
+    EXPECT_NE(std::string::npos, code.find(R"(ldt $248, $254, 16
+sto $248, $254, 0
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldtu $248, $254, 20
+sto $248, $254, 8
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(setl $17, #f
+pushj $1, g
+)")) << code;
 }
 
 // An int variable passed for an unsigned parameter (a cast that emits no TAC) goes as
@@ -52,7 +61,7 @@ TEST_F(MmixTest, ArgumentInParameterType)
     NaiveSelection();
     std::string code = Code(CompileToMmix(
         "unsigned long g(unsigned); unsigned long f(int i) { return g((unsigned)i); }"));
-    EXPECT_NE(std::string::npos, code.find("ldtu $2,")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldtu $2, ")) << code;
 }
 
 // A float argument goes as its binary32 bits.
@@ -60,7 +69,9 @@ TEST_F(MmixTest, FloatArgument)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix("float g(float); float f(float x) { return g(x); }"));
-    EXPECT_NE(std::string::npos, code.find("ldt $2,$254,0\npushj $1,g\nsttu $1,")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldt $2, $254, 0
+pushj $1, g
+sttu $1, )")) << code;
 }
 
 // Run: a caller's values survive a callee that writes all 32 local registers: the
@@ -68,10 +79,14 @@ TEST_F(MmixTest, FloatArgument)
 TEST_F(MmixTest, RunRegistersSurviveCall)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string clobber = "\t.text\n\t.global\tclobber\n\t.p2align 2\nclobber:\n";
+    std::string clobber = R"(    .text
+    .global clobber
+    .p2align 2
+clobber:
+)";
     for (int r = 0; r < 32; r++)
-        clobber += "\tnegu\t$" + std::to_string(r) + ",0," + std::to_string(r + 1) + "\n";
-    clobber += "\tpop\t1,0\n";
+        clobber += "    negu    $" + std::to_string(r) + ", 0, " + std::to_string(r + 1) + "\n";
+    clobber += "    pop     1, 0\n";
     std::string ours = CompileToMmix(R"(
         long clobber(long a);
         long twice(long x) { long y = clobber(x); return x + x + (y == -1 ? 0 : 1000); }
@@ -131,7 +146,9 @@ TEST_F(MmixTest, RunEighteenArgumentsWithGcc)
                       "long of(" + eighteen_params + ");\n" +
                       "long gcall(void) { return of" + eighteen_args + "; }\n";
     std::string ours = CompileToMmix(
-        (std::string("long gf(") + eighteen_params + ");\nlong gcall(void);\n" + "long of(" +
+        (std::string("long gf(") + eighteen_params + R"();
+long gcall(void);
+)" + "long of(" +
          eighteen_params + ")\n" + eighteen_body + "int main(void) { if (gf" + eighteen_args +
          " != " + expected + ") return 1; if (gcall() != " + expected + ") return 2; return 0; }\n")
             .c_str());

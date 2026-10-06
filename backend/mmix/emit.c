@@ -122,14 +122,19 @@ static bool operands_ok(const Mmix_Instr *in)
     return false;
 }
 
-// An instruction: a tab, the mnemonic, a tab, the operands separated by commas.
+// An instruction: four spaces, the mnemonic padded to eight columns, the operands
+// separated by ", ".
 void mmix_emit_instr(FILE *out, const Mmix_Instr *in)
 {
     if (!operands_ok(in))
         fatal_error("mmix: wrong operands for %s", mmix_mnemonic[in->op]);
-    fprintf(out, "\t%s", mmix_mnemonic[in->op]);
+    if (in->opnd[0].kind == MMIX_OPND_NONE) {
+        fprintf(out, "    %s\n", mmix_mnemonic[in->op]);
+        return;
+    }
+    fprintf(out, "    %-7s", mmix_mnemonic[in->op]);
     for (int i = 0; i < MMIX_MAX_OPERANDS && in->opnd[i].kind != MMIX_OPND_NONE; i++) {
-        fputc(i == 0 ? '\t' : ',', out);
+        fputs(i == 0 ? " " : ", ", out);
         emit_operand(out, &in->opnd[i]);
     }
     fputc('\n', out);
@@ -137,10 +142,10 @@ void mmix_emit_instr(FILE *out, const Mmix_Instr *in)
 
 void mmix_emit_func(FILE *out, const Mmix_Func *fn)
 {
-    fprintf(out, "\t.text\n");
+    fprintf(out, "    .text\n");
     if (fn->global)
-        fprintf(out, "\t.global\t%s\n", fn->name);
-    fprintf(out, "\t.p2align 2\n");
+        fprintf(out, "    .global %s\n", fn->name);
+    fprintf(out, "    .p2align 2\n");
     fprintf(out, "%s:\n", fn->name);
     for (const Mmix_Block *b = fn->blocks; b; b = b->next) {
         if (b->label)

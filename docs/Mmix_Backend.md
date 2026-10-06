@@ -33,7 +33,7 @@ simulator, `mmix`, from MMIXware.
     above `_end`, the stack from 0x6000000000000000 down. The linker's default script
     lays it out; there is no script of ours and no size limit.
   - **Output:** stdout through the simulator's `Fwrite` call; stdin through `Fread`.
-  - **Exit:** `exit` puts `main`'s result in `$255` and halts with `trap 0,Halt,0`; `mmix`
+  - **Exit:** `exit` puts `main`'s result in `$255` and halts with `trap 0, Halt, 0`; `mmix`
     exits with it as its status.
 
 Not supported: GCC's `-mabi=gnu` (arguments in global registers), privileged MMIX,
@@ -62,7 +62,7 @@ selected on its own.
 
 ### The register stack
 
-`pushj $X,f` renames the register file. The callee's `$0` is the caller's `$(X+1)`; the
+`pushj $X, f` renames the register file. The callee's `$0` is the caller's `$(X+1)`; the
 caller's `$0`…`$(X−1)` are hidden and come back intact after `pop`; `$X` receives the
 result. So there are no callee-saved registers to save: a value survives a call by
 living **below** the call's `$X`, at no cost (the hardware spills the register ring to
@@ -70,12 +70,12 @@ memory only when it fills).
 
 ```
 f:                          ; long f(long a, long b) { return g(a) + b; }
-    get     $2,rJ           ; the return address, saved in a local
-    set     $4,$0           ; a: the first argument, just above the hole
-    pushj   $3,g            ; $3 is the hole; b stays in $1, below it
-    addu    $0,$3,$1        ; g's result came back in $3
-    put     rJ,$2
-    pop     1,0             ; return $0
+    get     $2, rJ          ; the return address, saved in a local
+    set     $4, $0          ; a: the first argument, just above the hole
+    pushj   $3, g           ; $3 is the hole; b stays in $1, below it
+    addu    $0, $3, $1      ; g's result came back in $3
+    put     rJ, $2
+    pop     1, 0            ; return $0
 ```
 
 ### The fixed model and the compaction
@@ -122,8 +122,8 @@ it as it is. The exception, with the peephole optimizations on: a signed `int` o
 - **Compare and branch.** A comparison (or `!x`) whose only use is the next conditional
   branch becomes a `cmp` and a branch on its sign, or a branch on the value against zero,
   with no 0/1 in between. A backward branch is the predicted-taken `pb*` form.
-- **Addresses.** A pointer sum only a load or store reads becomes its address: `ldo
-  $x,$p,$i`, or `ldo $x,$p,k` for an offset of 0 to 255. Scaling by 2, 4, 8 or 16 is
+- **Addresses.** A pointer sum only a load or store reads becomes its address:
+  `ldo $x, $p, $i`, or `ldo $x, $p, k` for an offset of 0 to 255. Scaling by 2, 4, 8 or 16 is
   `2addu`…`16addu`.
 - **Conditional sets.** `x = c ? a : 0` and the like become `zs*` and `cs*`.
 - **Tail calls.** A call whose result is returned is `put rJ` and `jmp f`, when the
@@ -133,18 +133,18 @@ it as it is. The exception, with the peephole optimizations on: a signed `int` o
 
 ```
 sum:                        ; for (i = 0; i < n; i++) s += p[i];
-    setl    $4,#0
-    8addu   $5,$1,$0        ; the end pointer
-    bnp     $1,L:L0
+    setl    $4, #0
+    8addu   $5, $1, $0      ; the end pointer
+    bnp     $1, L:L0
 L:5:
-    ldo     $3,$0,0
-    addu    $4,$4,$3
-    addu    $0,$0,8
-    cmpu    $248,$0,$5
-    pbn     $248,L:5
+    ldo     $3, $0, 0
+    addu    $4, $4, $3
+    addu    $0, $0, 8
+    cmpu    $248, $0, $5
+    pbn     $248, L:5
 L:L0:
-    set     $0,$4
-    pop     1,0
+    set     $0, $4
+    pop     1, 0
 ```
 
 The pointer stepped through the array and the end pointer come from the TAC
@@ -159,13 +159,13 @@ either way:
 
 ```
 q:                          ; long q(long a, long b) { return a / b; }
-    div     $250,$0,$1
-    get     $255,rR         ; the remainder
-    xor     $248,$0,$1
-    zsn     $248,$248,1     ; 1 if the signs differ ...
-    csz     $248,$255,0     ; ... and the remainder is not 0
-    addu    $0,$250,$248
-    pop     1,0
+    div     $250, $0, $1
+    get     $255, rR        ; the remainder
+    xor     $248, $0, $1
+    zsn     $248, $248, 1   ; 1 if the signs differ ...
+    csz     $248, $255, 0   ; ... and the remainder is not 0
+    addu    $0, $250, $248
+    pop     1, 0
 ```
 
 GCC divides absolute values with `divu` and fixes the signs, in nine. `LONG_MIN / -1`
@@ -190,20 +190,20 @@ register, so the callee converts it on entry (`sttu`, `ldsf`) and its result on 
 
 ```
 avg:                        ; float avg(float a, float b) { return (a + b) / 2; }
-    subu    $254,$254,8
-    sttu    $0,$254,0
-    ldsf    $0,$254,0
-    sttu    $1,$254,0
-    ldsf    $1,$254,0
-    fadd    $3,$0,$1
-    stsf    $3,$254,0       ; round a + b to float
-    ldsf    $3,$254,0
-    seth    $249,#4000      ; 2.0
-    fdiv    $0,$3,$249
-    stsf    $0,$254,0
-    ldt     $0,$254,0       ; the binary32 bits, sign-extended
-    addu    $254,$254,8
-    pop     1,0
+    subu    $254, $254, 8
+    sttu    $0, $254, 0
+    ldsf    $0, $254, 0
+    sttu    $1, $254, 0
+    ldsf    $1, $254, 0
+    fadd    $3, $0, $1
+    stsf    $3, $254, 0     ; round a + b to float
+    ldsf    $3, $254, 0
+    seth    $249, #4000     ; 2.0
+    fdiv    $0, $3, $249
+    stsf    $0, $254, 0
+    ldt     $0, $254, 0     ; the binary32 bits, sign-extended
+    addu    $254, $254, 8
+    pop     1, 0
 ```
 
 The peephole pass drops a store and load through `%.fround` that rounds a value already
@@ -212,8 +212,8 @@ checks `feql`, since `fcmp` gives 0 for an unordered pair.
 
 ### Linker-allocated base registers
 
-A global is addressed by name: `ldo $x,g`, `lda $x,g`, `sto $x,g`. The assembler turns
-this into `ldo $x,$b,k` with an `R_MMIX_BASE_PLUS_OFFSET` relocation, and the linker
+A global is addressed by name: `ldo $x, g`, `lda $x, g`, `sto $x, g`. The assembler turns
+this into `ldo $x, $b, k` with an `R_MMIX_BASE_PLUS_OFFSET` relocation, and the linker
 allocates the global register `$b` that holds a base near `g`, placing its value in
 `.MMIX.reg_contents`. `crt0` reserves `$247`–`$254` in that section, as GCC's `crtn.o`
 does, so the bases come from `$246` down. Each distinct 256-byte window of data that
@@ -232,8 +232,8 @@ It runs over the function's MMIX IR to a fixed point.
 - **Liveness,** over `$0`–`$31` and the scratch registers, with a branch target's
   live-in added at the branch:
   - a pure instruction whose result is dead goes;
-  - a read of `t` after `set t,x` reads `x`;
-  - `set t,p; addu p,p,k` and a load or store through `t` becomes the access through `p`
+  - a read of `t` after `set t, x` reads `x`;
+  - `set t, p; addu p, p, k` and a load or store through `t` becomes the access through `p`
     and then the `addu`.
 - **Overwritten results.** An instruction whose result is overwritten unread goes.
 - **`float`.** A redundant `stsf`/`ldsf` pair through `%.fround` goes.
@@ -256,15 +256,15 @@ $254 + out ...              slots, each aligned to its type, %.fround among them
 $254 + 0 ...                outgoing stack arguments of the calls
 ```
 
-The prologue is `subu $254,$254,frame` (through `$255` when the frame is over 255
+The prologue is `subu $254, $254, frame` (through `$255` when the frame is over 255
 bytes), then `get rJ` in a function that makes calls; the epilogue undoes both and pops.
 A slot whose offset is over 255 is reached through `$255`. A function with **no slots**
 touches neither `$254` nor memory, and its early returns are `pop` in place:
 
 ```
 add:
-    addu    $0,$0,$1
-    pop     1,0
+    addu    $0, $0, $1
+    pop     1, 0
 ```
 
 ## Function calls
@@ -275,9 +275,9 @@ The MMIXware ABI as GCC implements it, checked against GCC's output and by
 - **Fixed registers:** `$254` the stack pointer; `$253` GCC's frame pointer and `$252`
   its static chain (both unused here); `$251` the structure-result address; `$255`
   scratch. `crt0` sets `rG` to 32, so `$32`–`$255` are global and locals end at `$31`.
-- **Calls:** `pushj $X,f`, or `pushgo $X,$249,0` through a pointer. The result comes back
+- **Calls:** `pushj $X, f`, or `pushgo $X, $249, 0` through a pointer. The result comes back
   in `$X`; `$0`…`$(X−1)` are preserved and everything above `$X` is lost.
-- **Return:** `pop 1,0` returns `$0`, `pop 0,0` nothing.
+- **Return:** `pop 1, 0` returns `$0`, `pop 0, 0` nothing.
 - **Arguments:** up to **16** in `$(X+1)`…, each scalar in one register, arriving as the
   callee's `$0`, `$1`, …. Arguments 17 and up go on the stack at `0($254)`, `8($254)`, …
   of the caller, 8 bytes each, a narrow value in its low-order (last) bytes.
@@ -297,7 +297,7 @@ The MMIXware ABI as GCC implements it, checked against GCC's output and by
   passes the address of a copy, which keeps an argument apart from the result in `x =
   f(x)`.
 - **Results of every size,** even 1 byte, go through the address the caller puts in the
-  global `$251` before the `pushj`. The callee pops no value (`pop 0,0`).
+  global `$251` before the `pushj`. The callee pops no value (`pop 0, 0`).
 
 ### Variadic functions
 
@@ -337,9 +337,9 @@ In `libc/mmix/`:
   It reserves `$247`–`$254` in `.MMIX.reg_contents`. Built with `-DPRINT_STATUS` (as
   `crt0-status.o`), it prints `main`'s result first, for the book tests.
 - `console.s` — `putbyte` buffers stdout, 1 KB at a time, and `flush` writes it with
-  `trap 0,Fwrite,StdOut`; `getch` reads with `Fread` from StdIn. `exit` flushes,
+  `trap 0, Fwrite, StdOut`; `getch` reads with `Fread` from StdIn. `exit` flushes,
   reports `[exit N]` on stderr and halts with `$255` = N. The report tells a real exit
-  from a jump into zeroed memory, which executes `trap 0,0,0` too and so looks like
+  from a jump into zeroed memory, which executes `trap 0, 0, 0` too and so looks like
   `exit(0)`.
 - `setjmp.s` — `setjmp`/`longjmp`, newlib's `libc/sys/mmixware/setjmp.S` (its notice
   kept). `jmp_buf` is five `unsigned long`s, the layout of GCC's built-in. `longjmp` pops
@@ -448,7 +448,7 @@ library in `build/libc/mmix/`.
   pseudo-op; local labels are `L:1`.
 - **A C global named like a special register** (`rJ`, `rA`) is an ordinary symbol, thanks
   to `-no-predefined-syms`.
-- **A halt in zeroed memory looks like `exit(0)`,** since `trap 0,0,0` is the all-zero
+- **A halt in zeroed memory looks like `exit(0)`,** since `trap 0, 0, 0` is the all-zero
   word. Hence the `[exit N]` report, which the tests require of our runtime.
 - **Signed `char` and big-endian programs of the book** needed versions of their own, as
   above.

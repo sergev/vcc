@@ -14,92 +14,106 @@
     }
 
 EXPECT_OPT(CompareBranch,
-           "cmp $248,$0,$1\n"
-           "bnn $248,L:1\n"
-           "setl $0,#1\n"
-           "pop 1,0\n"
-           "setl $0,#2\n"
-           "pop 1,0\n",
+           R"(cmp $248, $0, $1
+bnn $248, L:1
+setl $0, #1
+pop 1, 0
+setl $0, #2
+pop 1, 0
+)",
            "long f(long a, long b) { if (a < b) return 1; return 2; }")
 
 EXPECT_OPT(CompareZeroBranch,
-           "bnp $0,L:2\n"
-           "setl $0,#1\n"
-           "pop 1,0\n"
-           "setl $0,#2\n"
-           "pop 1,0\n",
+           R"(bnp $0, L:2
+setl $0, #1
+pop 1, 0
+setl $0, #2
+pop 1, 0
+)",
            "long f(long a) { if (a > 0) return 1; return 2; }")
 
 EXPECT_OPT(UnsignedCompareBranch,
-           "cmpu $248,$0,$1\n"
-           "bnn $248,L:1\n"
-           "setl $0,#1\n"
-           "pop 1,0\n"
-           "setl $0,#2\n"
-           "pop 1,0\n",
+           R"(cmpu $248, $0, $1
+bnn $248, L:1
+setl $0, #1
+pop 1, 0
+setl $0, #2
+pop 1, 0
+)",
            "long f(unsigned long a, unsigned long b) { if (a < b) return 1; return 2; }")
 
 // An unordered pair gives 0: a < b false, so the branch past it is taken.
 EXPECT_OPT(FloatCompareBranch,
-           "fcmp $250,$0,$1\n"
-           "bnn $250,L:1\n"
-           "setl $0,#1\n"
-           "pop 1,0\n"
-           "setl $0,#2\n"
-           "pop 1,0\n",
+           R"(fcmp $250, $0, $1
+bnn $250, L:1
+setl $0, #1
+pop 1, 0
+setl $0, #2
+pop 1, 0
+)",
            "long f(double a, double b) { if (a < b) return 1; return 2; }")
 
 EXPECT_OPT(NotBranch,
-           "bnz $0,L:1\n"
-           "setl $0,#1\n"
-           "pop 1,0\n"
-           "setl $0,#2\n"
-           "pop 1,0\n",
+           R"(bnz $0, L:1
+setl $0, #1
+pop 1, 0
+setl $0, #2
+pop 1, 0
+)",
            "long f(long a) { if (!a) return 1; return 2; }")
 
-EXPECT_OPT(IndexedLoad, "ldb $0,$0,$1\npop 1,0\n", "char f(char *p, long i) { return p[i]; }")
+EXPECT_OPT(IndexedLoad, R"(ldb $0, $0, $1
+pop 1, 0
+)", "char f(char *p, long i) { return p[i]; }")
 
-EXPECT_OPT(OffsetLoad, "ldo $0,$0,24\npop 1,0\n", "long f(long *p) { return p[3]; }")
+EXPECT_OPT(OffsetLoad, R"(ldo $0, $0, 24
+pop 1, 0
+)", "long f(long *p) { return p[3]; }")
 
-EXPECT_OPT(ConstantFirstOperand, "addu $0,$0,5\npop 1,0\n", "long f(long a) { return 5 + a; }")
+EXPECT_OPT(ConstantFirstOperand, R"(addu $0, $0, 5
+pop 1, 0
+)", "long f(long a) { return 5 + a; }")
 
 // *d++ = *s++: each pointer read, then stepped; the loop rotated, its back edge pbnz.
 EXPECT_OPT(PostIncrement,
-           "ldb $4,$1,0\n"
-           "addu $1,$1,1\n"
-           "stbu $4,$0,0\n"
-           "addu $0,$0,1\n"
-           "bz $4,L:L0\n"
-           "ldb $4,$1,0\n"
-           "addu $1,$1,1\n"
-           "stbu $4,$0,0\n"
-           "addu $0,$0,1\n"
-           "pbnz $4,L:7\n"
-           "pop 1,0\n",
+           R"(ldb $4, $1, 0
+addu $1, $1, 1
+stbu $4, $0, 0
+addu $0, $0, 1
+bz $4, L:L0
+ldb $4, $1, 0
+addu $1, $1, 1
+stbu $4, $0, 0
+addu $0, $0, 1
+pbnz $4, L:7
+pop 1, 0
+)",
            "char *f(char *d, const char *s) { while ((*d++ = *s++)); return d; }")
 
 EXPECT_OPT(LoopBackEdgeProbable,
-           "setl $3,#0\n"
-           "bnp $0,L:L0\n"
-           "addu $3,$3,$0\n"
-           "subu $0,$0,1\n"
-           "pbp $0,L:5\n"
-           "set $0,$3\n"
-           "pop 1,0\n",
+           R"(setl $3, #0
+bnp $0, L:L0
+addu $3, $3, $0
+subu $0, $0, 1
+pbp $0, L:5
+set $0, $3
+pop 1, 0
+)",
            "long f(long n) { long s = 0; while (n > 0) { s += n; n--; } return s; }")
 
 // The product rounded once, by the stsf that also takes its bits for the result.
 EXPECT_OPT(FloatRoundedOnce,
-           "subu $254,$254,8\n"
-           "sttu $0,$254,0\n"
-           "ldsf $0,$254,0\n"
-           "sttu $1,$254,0\n"
-           "ldsf $1,$254,0\n"
-           "fmul $0,$0,$1\n"
-           "stsf $0,$254,0\n"
-           "ldt $0,$254,0\n"
-           "addu $254,$254,8\n"
-           "pop 1,0\n",
+           R"(subu $254, $254, 8
+sttu $0, $254, 0
+ldsf $0, $254, 0
+sttu $1, $254, 0
+ldsf $1, $254, 0
+fmul $0, $0, $1
+stsf $0, $254, 0
+ldt $0, $254, 0
+addu $254, $254, 8
+pop 1, 0
+)",
            "float f(float x, float y) { return x * y; }")
 
 // Run: every fused comparison both ways, against the host's answers, NaN included.
@@ -144,21 +158,25 @@ TEST_F(MmixTest, RunFusedComparisons)
 
 // A branch over one value is a conditional set on the inverse condition.
 EXPECT_OPT(ConditionalSetMax,
-           "cmp $248,$0,$1\n"
-           "csnp $0,$248,$1\n"
-           "pop 1,0\n",
+           R"(cmp $248, $0, $1
+csnp $0, $248, $1
+pop 1, 0
+)",
            "long f(long a, long b) { return a > b ? a : b; }")
 
 // A choice of two values: the first set, the second a conditional set over it.
 EXPECT_OPT(ConditionalSetChoice,
-           "setl $2,#7\n"
-           "csz $2,$0,0\n"
-           "set $0,$2\n"
-           "pop 1,0\n",
+           R"(setl $2, #7
+csz $2, $0, 0
+set $0, $2
+pop 1, 0
+)",
            "long f(long c) { return c ? 7 : 0; }")
 
 // A constant of -1..-255 added is subtracted, as an immediate.
-EXPECT_OPT(NegativeConstant, "subu $0,$0,5\npop 1,0\n", "long f(long a) { return a + -5; }")
+EXPECT_OPT(NegativeConstant, R"(subu $0, $0, 5
+pop 1, 0
+)", "long f(long a) { return a + -5; }")
 
 // Run: choices by conditional sets, against the plain answers.
 TEST_F(MmixTest, RunConditionalSets)
@@ -188,21 +206,23 @@ TEST_F(MmixTest, RunConditionalSets)
 // A call whose result is returned is a jmp, the arguments in $0..: with no call left, rJ
 // is neither saved nor restored.
 EXPECT_OPT(TailCall,
-           "addu $5,$0,1\n"
-           "set $0,$1\n"
-           "set $1,$5\n"
-           "jmp g\n",
+           R"(addu $5, $0, 1
+set $0, $1
+set $1, $5
+jmp g
+)",
            "long g(long, long); long f(long a, long b) { return g(b, a + 1); }")
 
 // Not when the result types differ: an int result widened to long needs extending.
 EXPECT_OPT(NoTailCallWidening,
-           "get $1,rJ\n"
-           "pushj $2,narrow\n"
-           "slu $2,$2,32\n"
-           "sr $2,$2,32\n"
-           "set $0,$2\n"
-           "put rJ,$1\n"
-           "pop 1,0\n",
+           R"(get $1, rJ
+pushj $2, narrow
+slu $2, $2, 32
+sr $2, $2, 32
+set $0, $2
+put rJ, $1
+pop 1, 0
+)",
            "int narrow(void); long f(void) { return narrow(); }")
 
 // Run: tail calls, self-recursive and to GCC's code and back, a million deep, which

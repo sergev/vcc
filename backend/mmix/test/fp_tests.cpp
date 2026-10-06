@@ -19,10 +19,15 @@ TEST_F(MmixTest, DoubleArithmetic)
         double sqrt(double);
         double f4(double a) { return sqrt(a); }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nldo $249,$254,8\nfadd $250,$248,$249\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fdiv $250,$248,$249\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("seth $255,#8000\nxor $248,$248,$255\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fsqrt $248,0,$248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $248, $254, 0
+ldo $249, $254, 8
+fadd $250, $248, $249
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("fdiv $250, $248, $249\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(seth $255, #8000
+xor $248, $248, $255
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("fsqrt $248, 0, $248\n")) << code;
 }
 
 // A float is loaded with ldsf, computed in binary64, and rounded by stsf on its store.
@@ -31,7 +36,10 @@ TEST_F(MmixTest, FloatArithmetic)
     NaiveSelection();
     std::string code =
         Code(CompileToMmix("float f(float a, float b) { return a * b; }"));
-    EXPECT_NE(std::string::npos, code.find("ldsf $248,$254,0\nldsf $249,$254,4\nfmul $250,$248,$249\nstsf $250,"))
+    EXPECT_NE(std::string::npos, code.find(R"(ldsf $248, $254, 0
+ldsf $249, $254, 4
+fmul $250, $248, $249
+stsf $250, )"))
         << code;
 }
 
@@ -45,12 +53,21 @@ TEST_F(MmixTest, DoubleComparisons)
         int f3(double a, double b) { return a == b; }
         int f4(double a, double b) { return a != b; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("fcmp $250,$248,$249\nzsn $250,$250,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(fcmp $250, $248, $249
+zsn $250, $250, 1
+)")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("fcmp $250,$248,$249\nfun $255,$248,$249\nzsnp $250,$250,1\ncsnz $250,$255,0\n"))
+              code.find(R"(fcmp $250, $248, $249
+fun $255, $248, $249
+zsnp $250, $250, 1
+csnz $250, $255, 0
+)"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("feql $250,$248,$249\nsttu $250,")) << code;
-    EXPECT_NE(std::string::npos, code.find("feql $250,$248,$249\nzsz $250,$250,1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(feql $250, $248, $249
+sttu $250, )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(feql $250, $248, $249
+zsz $250, $250, 1
+)")) << code;
 }
 
 TEST_F(MmixTest, FpConversions)
@@ -64,12 +81,14 @@ TEST_F(MmixTest, FpConversions)
         float f5(long l) { return l; }
         float f6(unsigned l) { return l; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("fix $248,1,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("fixu $248,1,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("flot $248,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("flotu $248,$248\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("sflot $248,$248\nstsf $248,")) << code;
-    EXPECT_NE(std::string::npos, code.find("sflotu $248,$248\nstsf $248,")) << code;
+    EXPECT_NE(std::string::npos, code.find("fix $248, 1, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("fixu $248, 1, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("flot $248, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("flotu $248, $248\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(sflot $248, $248
+stsf $248, )")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(sflotu $248, $248
+stsf $248, )")) << code;
 }
 
 // A truth test is any bit but the sign.
@@ -77,7 +96,9 @@ TEST_F(MmixTest, FpTruthTest)
 {
     NaiveSelection();
     std::string code = Code(CompileToMmix("int f(double d) { if (d) return 1; return 2; }"));
-    EXPECT_NE(std::string::npos, code.find("ldo $248,$254,0\nslu $248,$248,1\nbz $248,")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $248, $254, 0
+slu $248, $248, 1
+bz $248, )")) << code;
 }
 
 // A double constant as an exact C expression.
@@ -116,9 +137,11 @@ TEST_F(MmixTest, RunFpTable)
 {
     SKIP_IF_NO_MMIX_TOOLS();
     std::ostringstream src;
-    src << "double sqrt(double);\n"
-           "int main(void)\n{\n"
-           "    volatile double zero = 0.0;\n";
+    src << R"(double sqrt(double);
+int main(void)
+{
+    volatile double zero = 0.0;
+)";
     int n            = 0;
     const double v[] = { 1.0, -2.5, 0.1, 3.0, 1e300, 1e-300, 4.9e-324, -0.0, 1.0 / 3.0 };
     for (double a : v)
@@ -144,31 +167,34 @@ TEST_F(MmixTest, RunFpTable)
             src << "    }\n";
         }
     // NaN: unordered, so every comparison but != is false; a NaN is true, -0 false.
-    src << "    { volatile double q = zero / zero, one = 1.0;\n"
-           "      if (q < one || q <= one || q > one || q >= one || q == q) return 900;\n"
-           "      if (!(q != q)) return 901;\n"
-           "      if (!q) return 902;\n"
-           "      if (-zero) return 903;\n"
-           "      if (sqrt(2.0 * one) != "
+    src << R"(    { volatile double q = zero / zero, one = 1.0;
+      if (q < one || q <= one || q > one || q >= one || q == q) return 900;
+      if (!(q != q)) return 901;
+      if (!q) return 902;
+      if (-zero) return 903;
+      if (sqrt(2.0 * one) != )"
         << D(std::sqrt(2.0)) << ") return 904; }\n";
     // Conversions.  Through a double, 2^62 + 2^38 + 1 would round twice, to 2^62; once,
     // to binary32, it is 2^62 + 2^39.
-    src << "    { volatile double d = -2.7, big = 1e19; volatile long l = (1L << 62) + (1L << 38) + 1;\n"
-           "      volatile unsigned long ul = 18446744073709551615UL; volatile unsigned u = 4294967295u;\n"
-           "      volatile float h = 16777217.0f;\n"
-           "      if ((long)d != -2) return 910;\n"
-           "      if ((int)d != -2) return 911;\n"
-           "      if ((unsigned long)big != 10000000000000000000UL) return 912;\n"
-           "      if ((float)l != 4611686568183201792.0f) return 913;\n"
-           "      if ((double)ul != 18446744073709551616.0) return 914;\n"
-           "      if ((float)u != 4294967296.0f) return 915;\n"
-           "      if ((double)l != 4611686293305294848.0) return 916;\n"
-           "      if (h != 16777216.0f) return 917;\n"
-           "      if ((double)(float)0.1 != "
+    src << R"(    { volatile double d = -2.7, big = 1e19; volatile long l = (1L << 62) + (1L << 38) + 1;
+      volatile unsigned long ul = 18446744073709551615UL; volatile unsigned u = 4294967295u;
+      volatile float h = 16777217.0f;
+      if ((long)d != -2) return 910;
+      if ((int)d != -2) return 911;
+      if ((unsigned long)big != 10000000000000000000UL) return 912;
+      if ((float)l != 4611686568183201792.0f) return 913;
+      if ((double)ul != 18446744073709551616.0) return 914;
+      if ((float)u != 4294967296.0f) return 915;
+      if ((double)l != 4611686293305294848.0) return 916;
+      if (h != 16777216.0f) return 917;
+      if ((double)(float)0.1 != )"
         << D((double)0.1f)
-        << ") return 918;\n"
-           "      if ((unsigned)(double)u != 4294967295u) return 919; }\n";
-    src << "    return 0;\n}\n";
+        << R"() return 918;
+      if ((unsigned)(double)u != 4294967295u) return 919; }
+)";
+    src << R"(    return 0;
+}
+)";
     EXPECT_EQ("", CompileAndRunMmix(src.str()));
     EXPECT_EQ(0, exit_status) << "case " << exit_status << " of\n" << src.str();
 }

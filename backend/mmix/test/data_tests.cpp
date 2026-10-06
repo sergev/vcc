@@ -16,21 +16,26 @@ TEST_F(MmixTest, DataDirectives)
         int *pk = &k[1];
         long f(void) { return 0; }
     )");
-    EXPECT_NE(std::string::npos, s.find("\t.data\n"
-                                        "\t.global\tm\n"
-                                        "\t.p2align 3\n"
-                                        "m:\n"
-                                        "\t.byte\t1\n"
-                                        "\t.zero\t1\n"
-                                        "\t.short\t-2\n"
-                                        "\t.long\t3\n"
-                                        "\t.quad\t-4\n"
-                                        "\t.long\t0x3fc00000\n"
-                                        "\t.zero\t4\n"
-                                        "\t.quad\t0x4004000000000000\n"))
+    EXPECT_NE(std::string::npos, s.find(R"(    .data
+    .global m
+    .p2align 3
+m:
+    .byte   1
+    .zero   1
+    .short  -2
+    .long   3
+    .quad   -4
+    .long   0x3fc00000
+    .zero   4
+    .quad   0x4004000000000000
+)"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("fp:\n\t.quad\tf\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("pk:\n\t.quad\tk+4\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(fp:
+    .quad   f
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(pk:
+    .quad   k+4
+)")) << s;
 }
 
 // Zeros go to .bss; a string literal to .rodata, 4-aligned for geta.
@@ -41,10 +46,22 @@ TEST_F(MmixTest, DataSections)
         static char buf[10];
         const char *f(void) { return "hi"; }
     )");
-    EXPECT_NE(std::string::npos, s.find("\t.bss\n\t.global\tz\n\t.p2align 3\nz:\n\t.zero\t8\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("\t.bss\nbuf:\n\t.zero\t10\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("\t.section .rodata\n\t.p2align 2\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("\t.ascii\t\"hi\"\n\t.byte\t0\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .bss
+    .global z
+    .p2align 3
+z:
+    .zero   8
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .bss
+buf:
+    .zero   10
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .section .rodata
+    .p2align 2
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .ascii  "hi"
+    .byte   0
+)")) << s;
 }
 
 // A global is reached by name: the assembler and linker supply a base register.
@@ -56,9 +73,11 @@ TEST_F(MmixTest, GlobalAccess)
         int h;
         long f(void) { g = g + 1; return h; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("ldo $248,g\naddu $248,$248,1\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("sto $248,g\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldt $248,h\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldo $248, g
+addu $248, $248, 1
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("sto $248, g\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldt $248, h\n")) << code;
 }
 
 // An address: lda for data, geta for a function (as GCC takes it) and for .rodata.
@@ -71,8 +90,8 @@ TEST_F(MmixTest, Addresses)
         long *f1(void) { return &g; }
         long (*f2(void))(void) { return h; }
     )"));
-    EXPECT_NE(std::string::npos, code.find("lda $248,g\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("geta $248,h\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("lda $248, g\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("geta $248, h\n")) << code;
 }
 
 // A block-scope static is emitted after its function, under its name$N when another
@@ -83,8 +102,16 @@ TEST_F(MmixTest, StaticLocals)
         long f(void) { static long n = 5; n = n + 1; return n; }
         long g(void) { static long n; n = n + 2; return n; }
     )");
-    EXPECT_NE(std::string::npos, s.find("\t.data\n\t.p2align 3\nn:\n\t.quad\t5\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("\t.bss\n\t.p2align 3\nn$1:\n\t.zero\t8\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .data
+    .p2align 3
+n:
+    .quad   5
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(    .bss
+    .p2align 3
+n$1:
+    .zero   8
+)")) << s;
 }
 
 // Run: initialized data of every width read back, the byte order big-endian; static
