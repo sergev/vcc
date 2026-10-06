@@ -1,18 +1,19 @@
 # How to build GCC for MMIX from source
 
-This guide builds a C cross-compiler for Donald Knuth's MMIX on a Mac (Apple
-Silicon, macOS). You end up with:
+This guide builds a C cross-compiler for Donald Knuth's MMIX on Debian or
+Ubuntu Linux. You end up with:
 - `mmix-knuth-mmixware-gcc`, the assembler, the linker and newlib's C library, all
   installed in `~/.local`;
-- Knuth's own simulator `mmix`, from Homebrew.
+- Knuth's own simulator `mmix`, also built from source into `~/.local/bin`.
 
-It was tested in October 2026 with binutils 2.47, GCC 16.2.0, newlib 4.6.0,
-MMIXware 20160804 and macOS 27. Expect about 15–20 minutes of build time on an
-8-core machine. The unpacked sources take about 2 GB and the build trees 1 GB.
+It was tested in October 2026 on Debian forky/sid (x86-64) with binutils 2.47,
+GCC 16.2.0, newlib 4.6.0 and MMIXware as of June 2025. Ubuntu has the same
+package names. Each step takes a few minutes on a 16-core machine. The unpacked
+sources take about 2 GB and the build trees 2.5 GB.
 
-## 1. What you are building, and why there are three steps
+## 1. What you are building, and why there are four steps
 
-A *cross-compiler* runs on your Mac but produces code for another CPU, here
+A *cross-compiler* runs on your PC but produces code for another CPU, here
 MMIX. The GNU target name is **`mmix-knuth-mmixware`**, and every tool gets it
 as a prefix: `mmix-knuth-mmixware-gcc`, `mmix-knuth-mmixware-ld` and so on.
 (`--target=mmix` is accepted too and means the same.)
@@ -24,7 +25,10 @@ A working toolchain has four parts:
 | Assembler, linker, binary tools | **binutils** | `mmix-knuth-mmixware-as`, `-ld`, `-objdump`, `-nm`, … |
 | Compiler | **GCC** | `mmix-knuth-mmixware-gcc`, plus `libgcc` and the startup files `crti.o`/`crtn.o` |
 | C library | **newlib** | `printf`, `strcpy`, `malloc`, `sqrt`, and the simulator system calls |
-| Simulator | **MMIXware** (Homebrew) | `mmix`, which runs the programs; also `mmixal`, Knuth's assembler |
+| Simulator | **MMIXware** | `mmix`, which runs the programs; also `mmixal`, Knuth's assembler |
+
+Debian and Ubuntu package none of them for MMIX, so you build all four from
+source.
 
 GCC needs a C library, and the C library must be compiled by GCC. For MMIX the
 circle is easy to break, because GCC's MMIX support needs nothing from the C
@@ -33,35 +37,34 @@ library to build its own runtime:
 1. **binutils**
 2. **GCC**: the compiler and `libgcc`, configured `--with-newlib --without-headers`
 3. **newlib**, compiled by that GCC
+4. **MMIXware**, the simulator; it is an ordinary host program and does not
+   depend on the other three
 
 No second GCC build is needed: the compiler from step 2 finds newlib's headers
 and libraries in the same prefix as soon as step 3 installs them. (The MSP430
-guide needs a fourth step; MMIX does not.)
+guide builds GCC twice; MMIX does not.)
 
 All steps install into the same place (the *prefix*). Each later step finds the
 earlier ones there.
 
 ## 2. Prepare
 
-### Tools and libraries
-
-You need the Xcode command-line tools (they provide `clang` and the macOS SDK)
-and Homebrew:
+### Packages
 
 ```sh
-xcode-select --install       # skip if already installed
-brew install gmp mpfr libmpc zstd make mmix
+sudo apt install build-essential flex bison texinfo curl xz-utils \
+    libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev libzstd-dev \
+    texlive-binaries
 ```
 
 - **GMP, MPFR and MPC:** maths libraries that GCC itself uses at compile time.
-- **`zstd`:** compresses GCC's LTO data.
-- **`make`:** GNU make 4, installed as `gmake`. Apple's `make` is 3.81, which mostly works,
-  but `gmake` is safer for GCC.
-- **`mmix`:** the MMIXware simulator and `mmixal`.
-
-**Optional:** `brew install texinfo`. It provides `makeinfo`, which builds the
-manuals. Without it, newlib's build fails unless you pass `MAKEINFO=true` as
-shown below, which skips the manuals.
+- **`libzstd-dev`:** compresses GCC's LTO data.
+- **`texinfo`:** provides `makeinfo`, which builds the manuals. Without it,
+  newlib's build fails unless you pass `MAKEINFO=true` to its `make` commands,
+  which skips the manuals.
+- **`texlive-binaries`:** provides `ctangle`, which turns Knuth's CWEB sources
+  (`.w`) into C. MMIXware ships only CWEB sources. Debian has no separate
+  `cweb` package.
 
 ISL is not needed. Without it GCC has no Graphite loop optimizations, which
 ordinary `-O2`/`-O3` code does not use.
@@ -80,20 +83,32 @@ mkdir -p $WORK/src $WORK/build
 ```
 
 The tools land in `$PREFIX/bin`. Make sure that directory is in your `PATH`
-permanently too (add the `export PATH` line to `~/.zshrc` or `~/.bash_profile`).
+permanently too. Ubuntu's and Debian's default `~/.profile` adds
+`~/.local/bin` once it exists; otherwise add the `export PATH` line to
+`~/.bashrc`.
 
 ## 3. Download the sources
 
 ```sh
 cd $WORK/src
-curl -LO https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz
-curl -LO https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz
+curl -LO https://sourceware.org/pub/binutils/releases/binutils-2.47.tar.xz
+curl -LO https://sourceware.org/pub/gcc/releases/gcc-16.2.0/gcc-16.2.0.tar.xz
 curl -LO https://sourceware.org/pub/newlib/newlib-4.6.0.20260123.tar.gz
-for f in *.tar.*; do tar xf $f; done
+curl -LO https://www-cs-faculty.stanford.edu/~knuth/programs/mmix.tar.gz
+for f in *.tar.xz newlib-*.tar.gz; do tar xf $f; done
+mkdir mmixware && tar xf mmix.tar.gz -C mmixware
 ```
 
+The MMIXware archive has no top-level directory, so it gets one of its own.
+Knuth updates it in place under the same name, without a version number; the
+newest dates in it tell you which version you have.
+
+binutils and GCC are also at <https://ftp.gnu.org/gnu/>, but that server can
+be slow or unreachable. sourceware.org has the same files.
+
 To use newer versions, look at the directory listings at
-<https://ftp.gnu.org/gnu/binutils/>, <https://ftp.gnu.org/gnu/gcc/> and
+<https://sourceware.org/pub/binutils/releases/>,
+<https://sourceware.org/pub/gcc/releases/> and
 <https://sourceware.org/pub/newlib/>, then adjust the names everywhere below.
 Before you do, check that the new GCC still has `gcc/config/mmix/` and lists
 `mmix-knuth-mmixware` in `gcc/config.gcc`; MMIX is a little-used port.
@@ -104,8 +119,8 @@ Before you do, check that the new GCC still has `gcc/config/mmix/` and lists
 mkdir -p $WORK/build/binutils && cd $WORK/build/binutils
 ../../src/binutils-2.47/configure --target=mmix-knuth-mmixware --prefix=$PREFIX \
     --disable-nls --disable-werror --disable-gdb --disable-gprofng --with-system-zlib
-gmake -j8
-gmake install
+make -j$(nproc)
+make install
 ```
 
 | Option | Meaning |
@@ -115,10 +130,9 @@ gmake install
 | `--disable-nls` | No translated messages; English only, faster build |
 | `--disable-werror` | Do not stop on compiler warnings (new compilers warn more) |
 | `--disable-gdb --disable-gprofng` | Skip the debugger and profiler, which are not needed |
-| `--with-system-zlib` | Use macOS's zlib rather than the bundled copy |
+| `--with-system-zlib` | Use the system zlib (`zlib1g-dev`) rather than the bundled copy |
 
-`-j8` runs 8 compile jobs in parallel. Use your number of CPU cores
-(`sysctl -n hw.ncpu`).
+`-j$(nproc)` runs as many compile jobs in parallel as you have CPU cores.
 
 Check it: `mmix-knuth-mmixware-as --version` should print the version.
 
@@ -130,12 +144,11 @@ mkdir -p $WORK/build/gcc && cd $WORK/build/gcc
     --enable-languages=c --with-newlib --without-headers \
     --disable-nls --disable-shared --disable-threads \
     --disable-libssp --disable-libquadmath --disable-libgomp --disable-libatomic \
-    --disable-decimal-float \
-    --with-gmp=/opt/homebrew --with-zstd=/opt/homebrew
-gmake -j8 all-gcc
-gmake install-gcc
-gmake -j8 all-target-libgcc
-gmake install-target-libgcc
+    --disable-decimal-float
+make -j$(nproc) all-gcc
+make install-gcc
+make -j$(nproc) all-target-libgcc
+make install-target-libgcc
 ```
 
 | Option | Meaning |
@@ -146,19 +159,16 @@ gmake install-target-libgcc
 | `--disable-shared --disable-threads` | The simulator has no shared libraries and no threads |
 | `--disable-libssp/-libquadmath/-libgomp/-libatomic` | Skip runtime libraries that are not needed here |
 | `--disable-decimal-float` | No `_Decimal64` support, a smaller `libgcc` |
-| `--with-gmp=/opt/homebrew` | Where Homebrew put GMP. MPFR and MPC are found in the same place, since Homebrew links all three into `/opt/homebrew` |
-| `--with-zstd=/opt/homebrew` | Where Homebrew put zstd |
+
+GMP, MPFR, MPC and zstd are found in the system directories where `apt` put
+them, so no `--with-gmp` or `--with-zstd` is needed.
 
 `all-gcc` builds only the compiler and `all-target-libgcc` its helper
-library. A plain `gmake` would also try the rest of the target libraries, which
+library. A plain `make` would also try the rest of the target libraries, which
 are disabled or need a C library.
 
 `libgcc` is built twice, once per *multilib* (see §8). Both land in
 `$PREFIX/lib/gcc/mmix-knuth-mmixware/16.2.0/`, the second one under `gnuabi/`.
-
-During the build you may see `clang++: warning: argument unused during
-compilation: '-pie'` and `ld: warning: ignoring duplicate libraries`. Both are
-harmless.
 
 Check it: `mmix-knuth-mmixware-gcc --version`.
 
@@ -167,8 +177,8 @@ Check it: `mmix-knuth-mmixware-gcc --version`.
 ```sh
 mkdir -p $WORK/build/newlib && cd $WORK/build/newlib
 ../../src/newlib-4.6.0.20260123/configure --target=mmix-knuth-mmixware --prefix=$PREFIX
-gmake -j8 MAKEINFO=true
-gmake install MAKEINFO=true
+make -j$(nproc)
+make install
 ```
 
 No options beyond the target are needed. Unlike a microcontroller, the MMIX
@@ -180,10 +190,36 @@ The system calls (`write`, `read`, `open`, `exit`, …) are newlib's
 `Fopen`, `Fread`, `Fwrite`, `Halt` and so on. So no board support package is
 needed.
 
-`MAKEINFO=true` matters here: without `makeinfo`, newlib's `libgloss` fails
-on its porting manual (see §9).
+## 7. Step 4: the MMIXware simulator
 
-## 7. Test it
+```sh
+cd $WORK/src/mmixware
+make mmix mmixal mmotype CFLAGS="-O2 -std=gnu17 -fpermissive"
+install -m 755 mmix mmixal mmotype $PREFIX/bin/
+mkdir -p $PREFIX/share/man/man1
+install -m 644 mmix.1 $PREFIX/share/man/man1/
+```
+
+The `Makefile` runs `ctangle` on each `.w` file and compiles the resulting C.
+It builds in the source directory and has no install target, hence the
+`install` commands.
+
+| Program | What it is |
+|---|---|
+| `mmix` | The simulator that runs `.mmo` programs |
+| `mmixal` | Knuth's assembler |
+| `mmotype` | Prints the contents of a `.mmo` file, for debugging |
+
+The `CFLAGS` replace the `Makefile`'s own `-g -fPIE`. MMIXware is old-style C
+that recent compilers reject (see §10):
+- **`-std=gnu17`:** GCC 15 and later default to C23, where `bool`, `true` and
+  `false` are keywords, and MMIXware defines them itself.
+- **`-fpermissive`:** turns `abstime.w`'s implicit `int` back into a warning;
+  GCC 14 and later make it an error.
+
+Check it: `mmix` with no arguments prints its usage.
+
+## 8. Test it
 
 Write a small program, `hello.c`:
 
@@ -241,7 +277,7 @@ mmix -i hello                                # interactive simulator
 
 Both run under `mmix`. Use the same `-mabi` for every compile and link command.
 
-## 8. Notes on the generated code
+## 9. Notes on the generated code
 
 - **Data model:** LP64, a signed `char`, big-endian, and `long double` the same
   binary64 as `double`.
@@ -255,11 +291,25 @@ Both run under `mmix`. Use the same `-mabi` for every compile and link command.
   ordinary GNU syntax (`name:` labels, lowercase mnemonics, `.quad`). Knuth's
   `mmixal` cannot link separate objects, so it is no use with GCC's output.
 
-## 9. Problems you may hit
+## 10. Problems you may hit
 
 **`makeinfo is missing` / `porting.info Error 127`** while building newlib.
-Add `MAKEINFO=true` to both `gmake` commands, or `brew install texinfo`. The
-build can be resumed: just re-run `gmake` with the option.
+Install `texinfo`, or add `MAKEINFO=true` to both `make` commands. The build
+can be resumed: just re-run `make` with the option.
+
+**`ctangle: not found`** while building MMIXware. Install `texlive-binaries`.
+
+**`cannot use keyword 'false' as enumeration constant`** in `mmix-arith.w`.
+Your compiler defaults to C23. Pass `-std=gnu17` in `CFLAGS`, as in §7.
+
+**`return type defaults to 'int' [-Wimplicit-int]`** in `abstime.w`. Pass
+`-fpermissive` in `CFLAGS`, as in §7.
+
+**`curl: (28) Failed to connect to ftp.gnu.org`.** Download from
+sourceware.org, as in §3.
+
+**A 404 for `mmix-20160804.tar.gz`** or another dated MMIXware archive. Knuth
+keeps only the current one, `programs/mmix.tar.gz`.
 
 **`configure: WARNING: unrecognized options`.** You mistyped an option;
 `configure` warns and carries on without it. Check the first lines of the
@@ -274,12 +324,13 @@ Trace it with `mmix -t1000` or `mmix -i`.
 
 **A step failed halfway.** Fix the cause, delete that step's build directory
 (`rm -rf $WORK/build/…`) and start the step again from `configure`. For a
-failure in the docs only (`MAKEINFO`), simply re-running `gmake` with the
-missing option is enough.
+failure in the docs only (`MAKEINFO`), simply re-running `make` with the
+missing option is enough. MMIXware builds in its source directory; there,
+`make clean` starts afresh.
 
-## 10. Clean up
+## 11. Clean up
 
-Once newlib is installed, the build trees are no longer needed:
+Once everything is installed, the sources and build trees are no longer needed:
 
 ```sh
 rm -rf $WORK/build $WORK/src
@@ -293,4 +344,5 @@ The installed toolchain lives in:
 - `$PREFIX/lib/gcc/mmix-knuth-mmixware/` and
   `$PREFIX/libexec/gcc/mmix-knuth-mmixware/`: compiler internals, `libgcc.a`,
   `crti.o`/`crtn.o`
-- `/opt/homebrew/bin/mmix`, `mmixal`: the simulator and Knuth's assembler
+- `$PREFIX/bin/mmix`, `mmixal`, `mmotype`: the simulator, Knuth's assembler and
+  the object-file dumper; `$PREFIX/share/man/man1/mmix.1`, the manual page
