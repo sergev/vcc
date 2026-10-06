@@ -263,6 +263,8 @@ Mmix_Func *mmix_new_func(const char *name, bool global);
 Mmix_Block *mmix_new_block(Mmix_Func *fn, const char *label);
 // Append an instruction to the current (last) block.
 Mmix_Instr *mmix_append(Mmix_Func *fn, Mmix_Op op);
+// Append an instruction to block `b`.
+Mmix_Instr *mmix_append_to(Mmix_Block *b, Mmix_Op op);
 void mmix_free_func(Mmix_Func *fn);
 
 Mmix_Operand mmix_reg(int reg);

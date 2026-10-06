@@ -265,6 +265,26 @@ static bool rewrite_jumps(Mmix_Func *fn)
             changed = true;
             continue;
         }
+        // A jmp to an epilogue of a pop alone (set $0 and pop, or pop): the epilogue.
+        if (t->op == MMIX_JMP && t->opnd[0].kind == MMIX_OPND_LABEL) {
+            const Mmix_Block *e = fn->blocks;
+            while (e && !same_label(&t->opnd[0], e))
+                e = e->next;
+            if (e && e->head && e->tail->op == MMIX_POP &&
+                (e->head == e->tail || (e->head->next == e->tail && e->head->op == MMIX_SET))) {
+                remove_after(b, (Mmix_Instr *)before_tail(b));
+                for (const Mmix_Instr *i = e->head; i; i = i->next) {
+                    Mmix_Instr *c = mmix_append_to(b, i->op);
+                    for (int k = 0; k < MMIX_MAX_OPERANDS; k++) {
+                        c->opnd[k] = i->opnd[k];
+                        if (i->opnd[k].sym)
+                            c->opnd[k].sym = xstrdup(i->opnd[k].sym);
+                    }
+                }
+                changed = true;
+                continue;
+            }
+        }
         if (t->op == MMIX_JMP && same_label(&t->opnd[0], n)) {
             remove_after(b, (Mmix_Instr *)before_tail(b));
             changed = true;

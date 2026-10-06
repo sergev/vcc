@@ -46,7 +46,11 @@ Mmix_Block *mmix_new_block(Mmix_Func *fn, const char *label)
 
 Mmix_Instr *mmix_append(Mmix_Func *fn, Mmix_Op op)
 {
-    Mmix_Block *b  = fn->tail;
+    return mmix_append_to(fn->tail, op);
+}
+
+Mmix_Instr *mmix_append_to(Mmix_Block *b, Mmix_Op op)
+{
     Mmix_Instr *in = xalloc(sizeof(Mmix_Instr), __func__, __FILE__, __LINE__);
     in->op         = op;
     if (b->tail)
