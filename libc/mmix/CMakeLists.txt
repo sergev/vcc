@@ -75,7 +75,7 @@ add_custom_command(OUTPUT ${out}/crt0-status.o
     DEPENDS ${src}/crt0.S)
 # Assembly leaves.  No arithmetic helpers: multiply, divide and binary64 are instructions.
 set(MMIX_LIBC_OBJS "")
-foreach(name console)
+foreach(name console sqrt)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${MMIX_AS} ${MMIX_AS_FLAGS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)

@@ -1,7 +1,7 @@
 # MMIX standard library headers
 
-The C11 headers that depend on MMIX's data model: `float.h`, `limits.h`, `stdarg.h`,
-`stddef.h` and `stdint.h` (`setjmp.h` follows with the runtime).  `inttypes.h` and
+The C11 headers that depend on MMIX's data model: `float.h`, `limits.h`, `setjmp.h`,
+`stdarg.h`, `stddef.h` and `stdint.h`.  `inttypes.h` and
 `math.h` describe the LP64 data model, in [libc/lp64/include](../../lp64/include),
 searched second; the target-neutral ones are in
 [libc/common/include](../../common/include), searched last:
@@ -16,7 +16,10 @@ plain `char` is signed: the types are mmix-knuth-mmixware-gcc's, which the backe
 follows.  Every type is aligned to its size.  `float` is IEEE binary32, `double` and
 `long double` binary64, in hardware.  A variadic function stores its argument registers
 below the incoming stack arguments, so every variable argument is one 8-byte slot, its
-value right-justified: `va_list` is a `char *`, as GCC's is.
+value right-justified: `va_list` is a `char *`, as GCC's is.  `jmp_buf` is newlib's
+five `unsigned long`s, the layout of GCC's built-in, and `setjmp`/`longjmp` are newlib's
+(`libc/mmix/setjmp.s`).  `HeadersAgreeWithGcc` (`backend/mmix/test/interop_tests.cpp`)
+checks the sizes, limits, type identities and `float.h` values against GCC's own.
 
 `limits.h` is MMIX's own rather than the LP64 one keyed off `__CHAR_UNSIGNED__`: the
 build and the test fixtures preprocess with the host's `cc -E`, which defines that macro

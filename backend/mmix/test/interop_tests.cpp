@@ -379,3 +379,105 @@ int main(void)
     EXPECT_EQ("-7 -7 0 3 42 1000000000000 -2500 xyz 8  3.14|ab  |z\n", NewlibRunOurs(ours));
     EXPECT_EQ(3, exit_status);
 }
+
+namespace {
+
+// The values our headers give, as NAME(i, f) fills them: sizes, limits, the signedness
+// of the types (a type's identity, where two of one size differ), float.h, jmp_buf and
+// math.h's constants.
+const char header_values[] = R"(
+#include <float.h>
+#include <limits.h>
+#include <math.h>
+#include <setjmp.h>
+#include <stddef.h>
+#include <stdint.h>
+enum { NI = 38, NF = 12 };
+void NAME(long long *i, double *f)
+{
+    long long iv[NI] = { sizeof(wchar_t), (wchar_t)-1 > 0, WCHAR_MIN, WCHAR_MAX,
+                         WINT_MIN, WINT_MAX, SIG_ATOMIC_MAX, SIG_ATOMIC_MIN,
+                         sizeof(int_fast8_t) * 10 + sizeof(uint_fast8_t),
+                         sizeof(max_align_t), _Alignof(max_align_t),
+                         SIZE_MAX, PTRDIFF_MIN, PTRDIFF_MAX, INTPTR_MIN, UINTPTR_MAX,
+                         INT64_MIN, UINT32_MAX, CHAR_MIN, CHAR_MAX, LONG_MAX, INT_MIN,
+                         UINT_MAX, sizeof(size_t) * 10 + sizeof(ptrdiff_t),
+                         sizeof(int_fast16_t) * 10 + sizeof(int_least32_t),
+                         sizeof(int_fast32_t), sizeof(intmax_t),
+                         LDBL_MANT_DIG * 10000 + LDBL_MAX_EXP, DECIMAL_DIG + LDBL_DIG * 100,
+                         sizeof(long double) * 10 + sizeof(double),
+                         (size_t)-1 > 0, (ptrdiff_t)-1 < 0, (int_fast16_t)-1 < 0,
+                         (uint_fast32_t)-1 > 0, sizeof(jmp_buf), _Alignof(jmp_buf),
+                         FLT_EVAL_METHOD, FLT_RADIX };
+    double fv[NF] = { LDBL_EPSILON, LDBL_MIN, LDBL_MAX, LDBL_TRUE_MIN, DBL_EPSILON,
+                      DBL_MAX, FLT_EPSILON, FLT_TRUE_MIN, FLT_MIN_10_EXP + FLT_MAX_10_EXP,
+                      HUGE_VAL, HUGE_VALF, INFINITY };
+    for (int k = 0; k < NI; k++)
+        i[k] = iv[k];
+    for (int k = 0; k < NF; k++)
+        f[k] = fv[k];
+}
+)";
+
+} // namespace
+
+// Our headers against GCC's own (and newlib's setjmp.h and math.h): the same constants,
+// types and layouts.
+TEST_F(MmixTest, HeadersAgreeWithGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string ours = header_values, theirs = header_values;
+    ours.replace(ours.find("NAME"), 4, "our_values");
+    theirs.replace(theirs.find("NAME"), 4, "their_values");
+    ours += R"(
+void their_values(long long *i, double *f);
+int main(void)
+{
+    long long oi[NI], ti[NI];
+    double of[NF], tf[NF];
+    our_values(oi, of);
+    their_values(ti, tf);
+    for (int k = 0; k < NI; k++)
+        if (oi[k] != ti[k])
+            return 1 + k;
+    for (int k = 0; k < NF; k++)
+        if (of[k] != tf[k])
+            return 100 + k;
+    return 0;
+})";
+    EXPECT_EQ("", Run(CompileToMmix(ours.c_str()), "crt0.o", &theirs, { "-O2" }, ".gcc"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// sqrt and sqrtf from libc.a: through a pointer from our code, and called by GCC's (which
+// takes them for library calls with -fno-builtin), against the host's roots.
+TEST_F(MmixTest, RunSqrtWithGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    std::string gcc = R"(
+#include <math.h>
+int gcc_check(void)
+{
+    volatile double d = 2.0;
+    volatile float f = 2.0f;
+    return (sqrt(d) == 1.4142135623730951) + (sqrtf(f) == 1.41421354f) * 2 +
+           (sqrtf(0.25f) == 0.5f) * 4;
+}
+)";
+    std::string ours = CompileToMmix(R"(
+#include <math.h>
+int gcc_check(void);
+int main(void)
+{
+    double (*sq)(double) = sqrt;
+    float (*sqf)(float) = sqrtf;
+    if (sq(2.0) != 1.4142135623730951 || sqrt(0.25) != 0.5) return 1;
+    if (sqf(2.0f) != 1.41421354f || sqf(3.0f) != 1.73205078f) return 2;
+    if (!(sqf(-1.0f) != sqf(-1.0f))) return 3; // NaN
+    if (gcc_check() != 7) return 4;
+    return 0;
+}
+)");
+    EXPECT_EQ("", Run(ours, "crt0.o", &gcc, { "-O2" }, ".gcc"));
+    EXPECT_EQ(0, exit_status);
+}

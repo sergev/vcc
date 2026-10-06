@@ -1,5 +1,5 @@
 /*
- * <math.h> — mathematics (C11 §7.12), LP64 targets (RISC-V, AArch64, x86-64).
+ * <math.h> — mathematics (C11 §7.12), LP64 targets (RISC-V, AArch64, x86-64, MMIX).
  *
  * Status: modf(), frexp(), ldexp(), fabs(), fmin(), fmax(), fma(), sqrt() and
  * sqrtf() are implemented in libc.a; the rest are declared for future implementation
