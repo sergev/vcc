@@ -54,9 +54,9 @@ static Mmix_Instr Make(Mmix_Op op, std::initializer_list<Mmix_Operand> opnds)
     return in;
 }
 
-static void Free(Mmix_Instr &in)
+static void Free(const Mmix_Instr &in)
 {
-    for (auto &o : in.opnd)
+    for (const auto &o : in.opnd)
         xfree(o.sym);
 }
 
@@ -256,7 +256,7 @@ static std::vector<Mmix_Instr> AllOps()
 TEST_F(EmitTest, AssemblerAcceptsEveryForm)
 {
     std::vector<std::string> lines;
-    for (Mmix_Instr &in : AllOps()) {
+    for (const Mmix_Instr &in : AllOps()) {
         lines.push_back(Capture([&](FILE *f) { mmix_emit_instr(f, &in); }));
         Free(in);
     }

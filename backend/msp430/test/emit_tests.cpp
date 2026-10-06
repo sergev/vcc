@@ -54,9 +54,9 @@ static Msp_Instr Make(Msp_Op op, std::initializer_list<Msp_Operand> opnds, bool 
     return in;
 }
 
-static void Free(Msp_Instr &in)
+static void Free(const Msp_Instr &in)
 {
-    for (auto &o : in.opnd)
+    for (const auto &o : in.opnd)
         xfree(o.sym);
 }
 
@@ -227,7 +227,7 @@ static void CheckSizesWith(const std::vector<std::string> &as, const std::string
 {
     std::vector<std::string> lines;
     std::vector<int> model;
-    for (Msp_Instr &in : SizeCases()) {
+    for (const Msp_Instr &in : SizeCases()) {
         lines.push_back(Capture([&](FILE *f) { msp_emit_instr(f, &in); }));
         model.push_back(msp_instr_size(&in));
         Free(in);

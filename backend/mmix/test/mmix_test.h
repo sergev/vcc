@@ -91,6 +91,7 @@ protected:
         if (len > 0)
             EXPECT_EQ(1u, fread(&s[0], static_cast<size_t>(len), 1, f));
         fclose(f);
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
         if (mmix_tools_available())
             Assemble(s);
         return s;

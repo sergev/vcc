@@ -1320,8 +1320,9 @@ static bool step_pointer(Ivsr *s, const LoopDefs *d, Tac_Instruction *c, int cb,
             if (nt && apply)
                 for (int k = 0; k < n; k++)
                     if (is_name(*slot[k], t)) {
-                        tac_free_val(*slot[k]);
-                        *slot[k] = new_var(q);
+                        Tac_Val **at = slot[k];
+                        tac_free_val(*at);
+                        *at = new_var(q);
                     }
         }
         // An exit taken with q stepped: nothing after it may read q.
