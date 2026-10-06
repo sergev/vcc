@@ -12,9 +12,11 @@ protected:
     void SetUp() override
     {
         MmixTest::SetUp();
+        // GCC's build gives the same as ours on each; the book's expectation does not
+        // hold here.  Big-endian, signed-char versions follow in K18.
         static const SkippedTest skipped[] = {
-            { "Chapter13_StandardLibraryCall", "needs the C library (K14)" },
-            { "Chapter13_DoubleParamsAndResultLibrary", "needs the C library (K14)" },
+            { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
+            { "Chapter16_AccessThroughCharPointer", "reads an int's bytes little-endian" },
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

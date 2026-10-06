@@ -253,6 +253,147 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     xfree(l);
 }
 
+// The type `ptr` points to, or NULL when unknown.
+static const Tac_Type *pointee(const Gen *g, const Tac_Val *ptr)
+{
+    const Tac_Type *t = val_type(g, ptr);
+    return t->kind == TAC_TYPE_POINTER ? t->u.pointer.target_type : NULL;
+}
+
+// The type a load or store through `ptr` of value `v` accesses: the pointee's when it is
+// a known scalar, else the value's.
+static const Tac_Type *access_type(const Gen *g, const Tac_Val *ptr, const Tac_Val *v)
+{
+    const Tac_Type *t = pointee(g, ptr);
+    if (!t || !mmix_is_scalar(t) || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE)
+        return val_type(g, v);
+    return t;
+}
+
+// The bytes a load or store through `ptr` of aggregate `v` moves.
+static int access_size(const Gen *g, const Tac_Val *ptr, const Tac_Val *v)
+{
+    const Tac_Type *t = pointee(g, ptr);
+    if (!t || t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE ||
+        (t->kind == TAC_TYPE_STRUCTURE && t->u.structure.size == 0))
+        t = val_type(g, v);
+    return mmix_type_size(t);
+}
+
+// dst = *ptr.  A scalar takes the destination's width from the address: the pointee may
+// be wider (a row of a 2-D array), and big-endian puts the leading bytes first.  An
+// aggregate is copied from $2 to $3.
+static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, bool byte)
+{
+    const Tac_Type *t = val_type(g, dst);
+    if (!mmix_is_scalar(t)) {
+        load_val(g, ptr, REG_B);
+        address_of(g, REG_C, dst->u.var_name, 0);
+        copy_bytes(g, access_size(g, ptr, dst), mmix_type_align(t));
+        return;
+    }
+    load_val(g, ptr, REG_B);
+    Mmix_Op op = byte ? load_op_ext(1, !mmix_is_unsigned(t)) : load_op(t);
+    emit3(g, op, mmix_reg(REG_A), mmix_reg(REG_B), mmix_imm(0));
+    store_val(g, REG_A, dst);
+}
+
+// *ptr = src, in the pointee's width; an aggregate copied from $2 to $3.
+static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, bool byte)
+{
+    const Tac_Type *st = val_type(g, src);
+    if (src->kind == TAC_VAL_VAR && !mmix_is_scalar(st)) {
+        address_of(g, REG_B, src->u.var_name, 0);
+        load_val(g, ptr, REG_C);
+        copy_bytes(g, access_size(g, ptr, src), mmix_type_align(st));
+        return;
+    }
+    const Tac_Type *t = access_type(g, ptr, src);
+    if (mmix_is_fp(t) != mmix_is_fp(st))
+        t = st;
+    load_val_as(g, src, REG_A, t);
+    load_val(g, ptr, REG_B);
+    emit3(g, byte ? MMIX_STBU : store_op(t), mmix_reg(REG_A), mmix_reg(REG_B), mmix_imm(0));
+}
+
+// dst = ptr + index * scale: 2addu..16addu for a scale of 2 to 16, mulu otherwise.
+static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Val *index = in->u.add_ptr.index;
+    int scale            = in->u.add_ptr.scale;
+    load_val(g, in->u.add_ptr.ptr, REG_A);
+    if (index->kind == TAC_VAL_CONSTANT) {
+        int64_t off = (int64_t)const_bits(index->u.constant) * scale;
+        if (off)
+            add_offset(g, REG_A, REG_A, off);
+    } else {
+        load_val(g, index, REG_B);
+        Mmix_Operand a = mmix_reg(REG_A), b = mmix_reg(REG_B);
+        switch (scale) {
+        case 1:
+            emit3(g, MMIX_ADDU, a, a, b);
+            break;
+        case 2:
+            emit3(g, MMIX_ADDU2, a, b, a);
+            break;
+        case 4:
+            emit3(g, MMIX_ADDU4, a, b, a);
+            break;
+        case 8:
+            emit3(g, MMIX_ADDU8, a, b, a);
+            break;
+        case 16:
+            emit3(g, MMIX_ADDU16, a, b, a);
+            break;
+        default:
+            if (scale <= 255) {
+                emit3(g, MMIX_MULU, b, b, mmix_imm(scale));
+            } else {
+                gen_const(g, REG_C, (uint64_t)scale);
+                emit3(g, MMIX_MULU, b, b, mmix_reg(REG_C));
+            }
+            emit3(g, MMIX_ADDU, a, a, b);
+            break;
+        }
+    }
+    store_val(g, REG_A, in->u.add_ptr.dst);
+}
+
+// dst = a - b, two byte pointers.
+static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
+{
+    load_val(g, in->u.ptr_diff.ptr_a, REG_A);
+    load_val(g, in->u.ptr_diff.ptr_b, REG_B);
+    emit3(g, MMIX_SUBU, mmix_reg(REG_A), mmix_reg(REG_A), mmix_reg(REG_B));
+    store_val(g, REG_A, in->u.ptr_diff.dst);
+}
+
+// Member `offset` of aggregate `name` = src, in src's width (a byte for the BYTE form).
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset,
+                               bool byte)
+{
+    const Tac_Type *t = val_type(g, src);
+    if (src->kind == TAC_VAL_VAR && !mmix_is_scalar(t)) {
+        copy_named(g, name, offset, src->u.var_name, 0, mmix_type_size(t), mmix_type_align(t));
+        return;
+    }
+    load_val(g, src, REG_A);
+    mem_op(g, byte ? MMIX_STBU : store_op(t), REG_A, name, offset);
+}
+
+// dst = member `offset` of aggregate `name`, in dst's width (a byte for the BYTE form).
+static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst,
+                                 bool byte)
+{
+    const Tac_Type *t = val_type(g, dst);
+    if (!mmix_is_scalar(t)) {
+        copy_named(g, dst->u.var_name, 0, name, offset, mmix_type_size(t), mmix_type_align(t));
+        return;
+    }
+    mem_op(g, byte ? load_op_ext(1, !mmix_is_unsigned(t)) : load_op(t), REG_A, name, offset);
+    store_val(g, REG_A, dst);
+}
+
 int instr_out_size(const Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
@@ -334,6 +475,33 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
             fatal_error("mmix: %s: the address of a constant", gen_name(g));
         address_of(g, REG_A, in->u.get_address.src->u.var_name, 0);
         store_val(g, REG_A, in->u.get_address.dst);
+        break;
+    case TAC_INSTRUCTION_LOAD:
+    case TAC_INSTRUCTION_LOAD_BYTE:
+        gen_load(g, in->u.load.src_ptr, in->u.load.dst, in->kind == TAC_INSTRUCTION_LOAD_BYTE);
+        break;
+    case TAC_INSTRUCTION_STORE:
+    case TAC_INSTRUCTION_STORE_BYTE:
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr,
+                  in->kind == TAC_INSTRUCTION_STORE_BYTE);
+        break;
+    case TAC_INSTRUCTION_ADD_PTR:
+        gen_add_ptr(g, in);
+        break;
+    case TAC_INSTRUCTION_PTR_DIFF:
+        gen_ptr_diff(g, in);
+        break;
+    case TAC_INSTRUCTION_COPY_TO_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
+        gen_copy_to_offset(g, in->u.copy_to_offset.src, in->u.copy_to_offset.dst,
+                           in->u.copy_to_offset.offset,
+                           in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET);
+        break;
+    case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+    case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
+        gen_copy_from_offset(g, in->u.copy_from_offset.src, in->u.copy_from_offset.offset,
+                             in->u.copy_from_offset.dst,
+                             in->kind == TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET);
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

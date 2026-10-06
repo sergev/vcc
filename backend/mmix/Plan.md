@@ -468,12 +468,12 @@ instructions.
   - **No scratch slot for rounding:** in naive selection every `float` result is stored
     with `stsf`, which rounds it, so it needs none. Register allocation (K21) will need
     the `stsf`/`ldsf` pair through one.
-  - **`fp_tests.cpp`:** golden sequences, and a run of 561 cases against the host:
+  - **`fp_tests.cpp`:** golden sequences, and a run of 720 cases against the host:
     binary64 + − × ÷ and the comparisons over 9×9 operands (subnormals, −0, 1e300); the
     same for binary32 over 7×7, overflow to infinity included; NaN unordered; −0 false;
     `sqrt`; and the conversions, the double-rounding case and `1e19` to `unsigned long`
     included.
-- **K14. Pointers, arrays, chars, strings** (ch. 14–16).
+- **K14. Pointers, arrays, chars, strings** (ch. 14–16). *Done.*
   - **Loads and stores:**
     - `ldb`/`ldbu`/`ldw`/`ldwu`/`ldt`/`ldtu`/`ldo` and `stb`/`stw`/`stt`/`sto`;
     - the address is base plus an 8-bit immediate, or base plus a register;
@@ -487,6 +487,31 @@ instructions.
     the tests cast `char *` buffers only at aligned offsets.
   - **The C library** (`libc/common`, plus `libc/mmix` C sources) is built with `genmmix`
     into `libc.a` from here, as AVR did at M15.
+
+  *Done.* Book chapters 1–16 pass against GCC: 556 tests, two skipped.
+  - **Loads and stores:**
+    - a load takes the destination's width at the address, by its signedness, so a row
+      of a 2-D array reads its leading bytes, which big-endian puts first;
+    - a store takes the pointee's width;
+    - an aggregate goes by `copy_bytes`.
+  - **Pointer arithmetic:**
+    - `ADD_PTR` is `2addu`…`16addu`, `mulu` for another scale, an offset for a
+      constant index;
+    - `PTR_DIFF` is `subu`.
+  - **`COPY_*_OFFSET`** is a member read or written by name.
+  - **Pointer comparisons:** `long *` pointers compare with `cmpu`; the frontend compares
+    two `char *` through their difference.
+  - **`libc.a`** now holds the shared C library without its variadic part (K16):
+    `atoi`, `fabs`, `fma`, `fmax`, `fmin`, the `mem*` and `str*` families, `puts` and
+    `putchar`, and `frexp`/`ldexp`/`modf` from `libc/lp64`, all compiled by `genmmix`.
+    Chapter 13's two library programs now run.
+  - **Skipped book programs:** chapter 16's `StaticInitializers` (it expects an unsigned
+    plain `char`) and `AccessThroughCharPointer` (it reads an `int`'s bytes
+    little-endian). GCC's build gives what ours gives on both; K18 adds big-endian,
+    signed-`char` versions.
+  - **`ptr_tests.cpp`:** loads and stores by width and signedness, `ADD_PTR` forms,
+    `cmpu`, a run of arrays, a 2-D array, pointer differences and the byte order through
+    `char *` and `int *`, and a run of the string functions from `libc.a`.
 - **K15. Structures** (ch. 17–18). Member access is through `COPY_*_OFFSET`.
   - **Copies** go by octas for an 8-aligned structure and by the alignment's width
     otherwise. They are unrolled up to a threshold, then a counted loop.

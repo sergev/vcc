@@ -77,15 +77,44 @@ foreach(name console)
     list(APPEND MMIX_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
+# The runtime on its own: console I/O, the exit report and the status.
+add_test(
+    NAME mmix-runtime
+    COMMAND ${src}/test/console_test.sh ${MMIX_AS} ${MMIX_LD} ${MMIX_SIM} ${out} ${src}/test
+            ${out}/runtime-test)
+
+# C sources, through cpp -> parse -> lower -> genmmix -> GNU as, with the MMIX headers,
+# then the LP64 model's, then the shared ones.
+set(MMIX_LIBC_INCLUDES -I${MMIX_INCLUDE_DIR} -I${LP64_INCLUDE_DIR} -I${LIBC_COMMON_INCLUDE_DIR})
+file(GLOB MMIX_LIBC_HEADERS ${MMIX_INCLUDE_DIR}/*.h ${LP64_INCLUDE_DIR}/*.h
+    ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+macro(mmix_compile_libc_c name srcdir)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc ${MMIX_LIBC_INCLUDES}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t mmix ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genmmix ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${MMIX_AS} ${MMIX_AS_FLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${srcdir}/${name}.c ${MMIX_LIBC_HEADERS} parse lower genmmix
+        COMMENT "Compiling ${name}.c -> ${name}.o (MMIX)")
+    list(APPEND MMIX_LIBC_OBJS ${out}/${name}.o)
+endmacro()
+
+# The shared C library but the variadic part (K16); from libc/lp64 the binary64
+# frexp/ldexp/modf.  No integer or soft-float helpers: they are instructions here.
+foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar
+        strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
+        strtok)
+    mmix_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+foreach(name ${LIBC_C_LP64})
+    mmix_compile_libc_c(${name} ${LIBC_LP64_DIR})
+endforeach()
+
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
     COMMAND ${MMIX_AR} rcs ${out}/libc.a ${MMIX_LIBC_OBJS}
     DEPENDS ${MMIX_LIBC_OBJS})
 add_custom_target(mmix-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)
-
-# The runtime on its own: console I/O, the exit report and the status.
-add_test(
-    NAME mmix-runtime
-    COMMAND ${src}/test/console_test.sh ${MMIX_AS} ${MMIX_LD} ${MMIX_SIM} ${out} ${src}/test
-            ${out}/runtime-test)
