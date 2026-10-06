@@ -273,12 +273,11 @@ int ret_reg(const Gen *g)
     return g->leaf ? 0 : REG_A;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int off, bool byref)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int off)
 {
-    Slot *s  = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
-    s->type  = type;
-    s->off   = off;
-    s->byref = byref;
+    Slot *s = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
+    s->type = type;
+    s->off  = off;
     map_insert_free(&g->frame, name, (intptr_t)s, 0, free_slot);
 }
 
@@ -287,8 +286,7 @@ bool struct_in_reg(const Tac_Type *t)
     return mmix_type_size(t) <= 8;
 }
 
-// A structure parameter over 8 bytes: its slot holds the address of the caller's copy.
-static bool param_byref(const Tac_Type *t)
+bool param_byref(const Tac_Type *t)
 {
     return !mmix_is_scalar(t) && !struct_in_reg(t);
 }
@@ -339,7 +337,7 @@ static void add_slot(Gen *g, const char *name, const Tac_Type *type, int size, i
 {
     if (align > 1)
         g->frame_size = (g->frame_size + align - 1) & ~(align - 1);
-    insert_slot(g, name, type, g->frame_size, false);
+    insert_slot(g, name, type, g->frame_size);
     g->frame_size += size;
 }
 
@@ -367,15 +365,10 @@ void layout_frame(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, nparam++) {
         if (!p->type)
             fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
-        if (nparam >= MAX_REG_ARGS)
-            continue;
-        if (param_byref(p->type)) {
-            g->frame_size = (g->frame_size + 7) & ~7;
-            insert_slot(g, p->name, p->type, g->frame_size, true);
-            g->frame_size += 8;
-        } else {
+        if (param_byref(p->type)) // the callee's copy, 8-aligned for the address it holds first
+            add_slot(g, p->name, p->type, mmix_type_size(p->type), 8);
+        else if (nparam < MAX_REG_ARGS)
             add_slot(g, p->name, p->type, mmix_type_size(p->type), mmix_type_align(p->type));
-        }
     }
     if (returns_struct(g))
         add_slot(g, SRET_SLOT, NULL, 8, 8);
@@ -410,17 +403,19 @@ void layout_frame(Gen *g)
     }
 
     // The 17th parameter and later stay where they came in, an 8-byte slot each above
-    // the frame, a narrow value (or a small structure) in its low-order (last) bytes, a
-    // large structure as its address.
+    // the frame, a narrow value (or a small structure) in its low-order (last) bytes.
     int i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
-        if (i < MAX_REG_ARGS)
+        if (i < MAX_REG_ARGS || param_byref(p->type))
             continue;
-        int size   = mmix_type_size(p->type);
-        bool byref = param_byref(p->type);
-        int off    = g->frame_size + 8 * (i - MAX_REG_ARGS) + (!byref && size < 8 ? 8 - size : 0);
-        insert_slot(g, p->name, p->type, off, byref);
+        int size = mmix_type_size(p->type);
+        insert_slot(g, p->name, p->type, stack_param_off(g, i) + (size < 8 ? 8 - size : 0));
     }
+}
+
+int stack_param_off(const Gen *g, int i)
+{
+    return g->frame_size + 8 * (i - MAX_REG_ARGS);
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
@@ -555,11 +550,6 @@ static void op_via_tmp(Gen *g, Mmix_Op op, int reg, int64_t off)
 void mem_op(Gen *g, Mmix_Op op, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
-    if (s && s->byref) {
-        mem_op_at(g, MMIX_LDO, MMIX_TMP, MMIX_SP, s->off);
-        op_via_tmp(g, op, reg, off);
-        return;
-    }
     if (s) {
         mem_op_at(g, op, reg, MMIX_SP, s->off + off);
         return;
@@ -622,12 +612,6 @@ static bool is_function(const Gen *g, const char *name)
 void address_of(Gen *g, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
-    if (s && s->byref) {
-        mem_op_at(g, MMIX_LDO, reg, MMIX_SP, s->off);
-        if (off)
-            add_in_place(g, reg, off);
-        return;
-    }
     if (s) {
         add_offset(g, reg, MMIX_SP, s->off + off);
         return;

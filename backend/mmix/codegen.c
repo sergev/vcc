@@ -12,6 +12,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     Gen g;
     gen_init(&g, program, tl);
     layout_frame(&g);
+    copy_byref_params(&g);
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
         gen_instr(&g, in, in->next == NULL);
     gen_frame(&g);

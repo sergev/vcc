@@ -34,6 +34,7 @@ add_executable(mmix-tests
     test/ptr_tests.cpp
     test/struct_tests.cpp
     test/stdarg_tests.cpp
+    test/interop_tests.cpp
     test/run_tests.cpp
     ${MMIX_BOOK_SOURCES}
 )
@@ -53,6 +54,7 @@ target_compile_definitions(mmix-tests PRIVATE
     MMIX_LD="${MMIX_LD}"
     MMIX_GCC="${MMIX_GCC}"
     MMIX_SIM="${MMIX_SIM}"
+    MMIX_LIBGCC="${MMIX_LIBGCC}"
     MMIX_LIB_DIR="${MMIX_LIB_DIR}")
 target_include_directories(mmix-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(mmix-tests)

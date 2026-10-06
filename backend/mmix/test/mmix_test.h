@@ -183,6 +183,33 @@ protected:
         return ReadFile(out_path);
     }
 
+    // Run C compiled by GCC on our runtime: our crt0.o and libc.a, then GCC's libgcc.a.
+    // `asm_text`, ours, is linked in too unless empty.
+    std::string GccOnOurRuntime(const std::string &gcc_src, const std::string &asm_text = "",
+                                const std::vector<std::string> &flags = { "-O2" })
+    {
+        QemuConfig cfg = mmix_config();
+        cfg.extra_libs = { MMIX_LIBGCC };
+        return Run(cfg, asm_text, "crt0.o", &gcc_src, flags, ".gcc");
+    }
+
+    // Run our code under newlib: `asm_text` assembled, then linked by
+    // mmix-knuth-mmixware-gcc with newlib, its startup and `gcc_src`.
+    std::string NewlibRunOurs(const std::string &asm_text, const std::string &gcc_src = "")
+    {
+        std::string base = QemuScratchPath(".ours");
+        {
+            std::ofstream f(base + ".s");
+            f << asm_text;
+        }
+        int rc = RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", base + ".o", base + ".s" },
+                         base + ".log");
+        EXPECT_EQ(0, rc) << "GNU as rejects the output:\n" << ReadFile(base + ".log");
+        if (rc != 0)
+            return "ERROR";
+        return NewlibRun(gcc_src, { "-O2", base + ".o" });
+    }
+
     // Run a book program built by GCC (-O0) with newlib, its result printed as "%d\n" as
     // crt0-status does for ours: --wrap=main sends newlib's startup to a wrapper, which
     // calls the program's own main (so its implicit "return 0" holds).  An exit() call

@@ -151,9 +151,12 @@ the interop tests (K17).
   - **8 bytes or less:** in one register, **right-justified**, as the big-endian integer of
     its bytes. `struct {char a,b,c;}` = {1,2,3} is `0x010203`, and `struct {int a,b;}` =
     {1,2} is `0x00000001_00000002`.
-  - **More than 8 bytes:** **by reference.** The caller copies the object into its own
-    frame and passes the copy's address as an ordinary argument, so the callee may read
-    and write through it freely. This is the opposite of MSP430, where the callee copies.
+  - **More than 8 bytes:** **by reference, and the callee copies,** as on MSP430. GCC's
+    caller passes the address of its own object as an ordinary argument, with no copy,
+    and GCC's callee copies the object into its frame before writing it. (Corrected in
+    K17: the interop table caught our callee writing through to GCC's original.) Our
+    callee copies every such parameter at the start of its body. Our caller still passes
+    a copy, which keeps an argument apart from the `$251` destination in `x = f(x)`.
   - **Results of every size**, even 1 byte, go through the address the caller puts in the
     global **`$251`** before `pushj`. The callee may return that address in `$0` but pops
     0 values (`pop 0,0`), so a caller must not rely on it.

@@ -29,10 +29,12 @@
 //   0 ... out - 1       outgoing stack arguments, for the call that needs most
 //
 // Structures: one of 8 bytes or less goes in a register, right-justified (the
-// big-endian integer of its bytes); a larger one by reference, to a copy the caller
-// makes, and the callee reads and writes it through that address (its slot holds it:
-// Slot.byref).  A structure result of any size goes through the address the caller
-// puts in $251; the callee saves it in the slot %.sret on entry.
+// big-endian integer of its bytes); a larger one by reference.  GCC's caller passes the
+// address of its own object and its callee copies the object before writing it, so ours
+// copies every one into its slot on entry; our caller passes a copy as well, which keeps
+// an argument apart from the result's destination.  A structure result of any size
+// goes through the address the caller puts in $251; the callee saves it in the slot
+// %.sret on entry.
 #define SRET_SLOT "%.sret"
 //
 #ifndef MMIX_INTERNAL_H
@@ -53,8 +55,7 @@ enum {
 
 typedef struct {
     const Tac_Type *type;
-    int off;    // from SP
-    bool byref; // a structure parameter over 8 bytes: the slot holds its address
+    int off; // from SP
 } Slot;
 
 typedef struct {
@@ -112,6 +113,10 @@ const char *gen_name(const Gen *g);
 // parameters above the frame.
 void layout_frame(Gen *g);
 const Slot *find_slot(const Gen *g, const char *name);
+// The offset from SP of the incoming stack slot of parameter `i` (16 or more).
+int stack_param_off(const Gen *g, int i);
+// Whether a parameter of type `t` comes by reference: a structure over 8 bytes.
+bool param_byref(const Tac_Type *t);
 const Tac_Type *name_type(const Gen *g, const char *name);
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v);
 Mmix_Instr *emit0(Gen *g, Mmix_Op op);
@@ -204,6 +209,9 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
 //
 // Store the register parameters into their slots.
 void store_params(Gen *g);
+// Copy each structure parameter over 8 bytes from the caller's object into its slot: at
+// the start of the body, since a long copy is a loop, which the prologue cannot hold.
+void copy_byref_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);

@@ -54,6 +54,8 @@ static void load_abi(Gen *g, const Tac_Val *v, int reg, const Tac_Type *t)
         mem_op(g, MMIX_LDT, reg, v->u.var_name, 0);
 }
 
+// The register parameters into their slots: of a structure over 8 bytes, the address of
+// the caller's object, in the first octa of the slot that copy_byref_params fills.
 void store_params(Gen *g)
 {
     int i = 0;
@@ -62,14 +64,29 @@ void store_params(Gen *g)
             store_abi(g, i, p->name, p->type);
         else if (struct_in_reg(p->type))
             store_small_struct(g, i, p->name, p->type);
-        else // the address of the caller's copy, which the body reads and writes
-            mem_op_at(g, MMIX_STO, i, MMIX_SP, find_slot(g, p->name)->off);
+        else
+            mem_op(g, MMIX_STO, i, p->name, 0);
     }
     // A variadic function's save area: every argument register after the named ones,
     // whether the caller passed it or not (a register above rL reads as 0).
     if (g->tl->u.function.variadic)
         for (int r = param_count(g); r < MAX_REG_ARGS; r++)
             mem_op_at(g, MMIX_STO, r, MMIX_SP, g->va_off + 8 * (r - param_count(g)));
+}
+
+void copy_byref_params(Gen *g)
+{
+    int i = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, i++) {
+        if (!param_byref(p->type))
+            continue;
+        if (i < MAX_REG_ARGS)
+            mem_op(g, MMIX_LDO, REG_B, p->name, 0);
+        else
+            mem_op_at(g, MMIX_LDO, REG_B, MMIX_SP, stack_param_off(g, i));
+        address_of(g, REG_C, p->name, 0);
+        copy_bytes(g, mmix_type_size(p->type), mmix_type_align(p->type));
+    }
 }
 
 void gen_return(Gen *g, const Tac_Val *v, bool last)
@@ -128,7 +145,8 @@ static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type 
 
 // pushj $1: rJ is in $0, which the call keeps; the arguments go in $2..$17 and on the
 // stack at 0($254) up, the result comes back in $1.  First the copies of the large
-// structure arguments, through $1-$3; then the stack arguments, through $1 and $2; then
+// structure arguments, through $1-$3 (the callee copies too, as GCC's does, but ours keep
+// an argument apart from the result's destination in x = f(x)); then the stack arguments, through $1 and $2; then
 // the register arguments, while no argument register holds anything yet.  A structure
 // result goes where $251 points: the destination, or a scratch copy when there is none.
 // va_start(ap), a call of __va_start(&ap): ap = the first variable argument's slot.

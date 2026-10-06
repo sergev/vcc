@@ -11,8 +11,12 @@ foreach(tool gcc as ld ar)
 endforeach()
 
 set(MMIX_TOOLS_FOUND OFF)
+set(MMIX_LIBGCC "")
 if(MMIX_GCC_EXE AND MMIX_AS_EXE AND MMIX_LD_EXE AND MMIX_AR_EXE AND MMIX_SIM_EXE)
     set(MMIX_TOOLS_FOUND ON)
+    # GCC's libgcc: the helpers GCC's code may call, linked after our libc.a.
+    execute_process(COMMAND ${MMIX_GCC_EXE} -print-libgcc-file-name
+        OUTPUT_VARIABLE MMIX_LIBGCC OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 else()
     message(STATUS "No mmix-knuth-mmixware-gcc/as/ld/ar or mmix: the MMIX runtime is not built")
 endif()
@@ -23,6 +27,7 @@ set(MMIX_AS ${MMIX_AS_EXE} CACHE INTERNAL "")
 set(MMIX_LD ${MMIX_LD_EXE} CACHE INTERNAL "")
 set(MMIX_AR ${MMIX_AR_EXE} CACHE INTERNAL "")
 set(MMIX_SIM ${MMIX_SIM_EXE} CACHE INTERNAL "")
+set(MMIX_LIBGCC ${MMIX_LIBGCC} CACHE INTERNAL "")
 set(MMIX_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 # The assembler's flags, as GCC passes them: -x lets the assembler and the linker expand
 # an out-of-range branch, geta, pushj or jmp and allocate the base registers.

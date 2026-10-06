@@ -1,6 +1,6 @@
 //
 // MMIX structures: copies by the alignment's width, a structure of 8 bytes or less in a
-// register right-justified, a larger one by reference to the caller's copy, and every
+// register right-justified, a larger one by reference (the callee copies it), and every
 // structure result through the address in $251; with GCC both ways.
 //
 #include "mmix_test.h"
@@ -150,7 +150,7 @@ static const char gcc_side[] = R"(
 )";
 
 // Run: structures of every size between our code and GCC's, both ways: right-justified
-// in a register up to 8 bytes, by reference to the caller's copy beyond, and every result
+// in a register up to 8 bytes, by reference beyond (the callee copies), and every result
 // through $251.
 TEST_F(MmixTest, RunStructsWithGcc)
 {
