@@ -50,15 +50,15 @@ to fix a bug.
 ## Build & Test
 
 ```sh
-make              # configure + build the compiler & runtime (RelWithDebInfo) into ./build/
-make test         # build all unit tests (incl. textbook chapter tests), do not run
-make run          # build + run all unit tests via ctest
+make              # configure + build the compiler & runtime (RelWithDebInfo) into ./build/, no tests
+make test         # build the compiler, runtime and all unit tests (incl. textbook chapter tests)
+make run          # make test, then ctest --progress
 make install      # build + install the compiler & runtime (see below)
 make debug        # build with Debug flags
 make clean        # remove ./build/
 ```
 
-**`make install`** builds everything, then installs the artifacts via `cmake --install`
+**`make install`** builds the compiler and runtime (not the tests), then installs the artifacts via `cmake --install`
 to `~/.local`: `cc` → `bin/vcc` (the compiler driver, `cc/`), `cpp` → `bin/vcpp` (the C preprocessor, `cpp/`), `parse` → `bin/vparse`, `lower` → `bin/vlower`, `genbesm` →
 `bin/vgenbesm6`, and the three runtime libraries
 `libc.bin` / `libbem.bin` / `libruntime.a` → `share/vcc/besm6/lib/`, plus the ten
@@ -113,11 +113,14 @@ binaries are renamed (`v` prefix) only at install time via
 `vcc` is relocatable: it runs the passes from its own directory and takes headers and
 libraries from `../share/vcc/<target>/` (see [cc/README.md](cc/README.md)).
 
-**Tests are built by the default build.** A plain `make`/`make all` builds the compiler and
-runtime (`parse`, `lower`, `genbesm`, and `libc.bin`) *and* every per-module test executable.
-`make test` also builds `all` (so the compiler, runtime, and all nine test executables) but
-does not run them; `make run` depends on `make test` and then runs `ctest --test-dir build`
-over everything.
+**Tests are not part of `all`.** A plain `make`/`make all` builds only the compiler and
+runtime (the passes, the driver and every target's libraries), which is all `make install`
+needs. The top-level `CMakeLists.txt` walks every directory at the end and marks each
+`*-tests` target `EXCLUDE_FROM_ALL`, making it a dependency of the custom target `tests`
+(not `test`, which CMake reserves for ctest); GoogleTest itself is fetched
+`EXCLUDE_FROM_ALL`, so it is built only for them. `make test` builds `all tests`; `make run`
+depends on `make test` and then runs `ctest --test-dir build --progress`. A new test
+executable needs nothing more than a name ending in `-tests`.
 
 **The "Writing a C Compiler" chapter tests are compiled into the regular test binaries.**
 The chapter sources (`*/test/chapter*_tests.cpp`, and the backend run programs in
@@ -362,7 +365,7 @@ GNU binutils first, by a list of prefixes (`riscv64-unknown-elf`, `aarch64-none-
 ld.lld + llvm-ar (`-DVCC_CROSS_TOOLS=gnu|llvm` forces one). It sets `<T>_AS` (command with flags),
 `<T>_LD`/`<T>_LDFLAGS`, `<T>_AR`, `<T>_TOOLS_FOUND`, and separately `<T>_CLANG_FOUND`: clang is only
 the tests' optional *reference compiler* (interop, the book comparison, `HeadersAgreeWithClang`),
-guarded by `SKIP_IF_NO_<T>_CLANG()`; `msp430-elf-gcc` likewise by `SKIP_IF_NO_MSP430_GCC()`. The test
+guarded by `SKIP_IF_NO_<T>_CLANG()` (for the AVR book programs `avr-gcc` takes its place when found); `msp430-elf-gcc` likewise by `SKIP_IF_NO_MSP430_GCC()`. The test
 fixtures take the assembler as `<T>_ASSEMBLER` (one blank-separated string, `cross_tools()` in
 `qemu_test.h`), and `vcc`'s target table must use the same flags (`cc-tests` checks the `-v` echo).
 
@@ -494,7 +497,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/arm32/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `llong_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `arm32_test.h` also runs programs on bare-metal `qemu-system-arm`, skipped without the tools), `interop_tests.cpp` (a signature table, variadics and the RTABI helpers linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang) → `arm32-tests`
 - `backend/aarch64/test/darwin_tests.cpp` (Mach-O and Apple ABI goldens, native runs), with `interop_tests.cpp`, the libc run tests and the book suite (plus `signed_char_tests.cpp`) built against `test/darwin_test.h` (`AARCH64_DARWIN`: compiled with `--darwin`, linked by the system `cc`, run natively, the system clang as the other side; `test/darwin_status.c` prints a book program's result and supplies `putch`) → `aarch64-darwin-tests` (ctest names prefixed `darwin.`; the runs skip off a Mac with Apple silicon)
 - `backend/x86/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `x87_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`, every output also assembled by GNU `as` when that is the assembler; `x86_test.h` also runs programs on bare-metal `qemu-system-x86_64 -M microvm`, skipped without the tools), `interop_tests.cpp` (scalars, structs of every class and variadics linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang; `backend/common/test/book/signed_char_tests.cpp` has signed-char versions of three programs, shared with MMIX) → `x86-tests`
-- `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with clang) → `avr-tests`
+- `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with avr-gcc, else clang) → `avr-tests`
 - `backend/msp430/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `fp_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `msp430_test.h` assembles and links with the GNU MSP430 toolchain and runs programs on `mspsim`, skipped without the tools), `float32_tests.cpp`/`float64_tests.cpp` (the soft-float runtime against the host bit for bit), `interop_tests.cpp` (a signature table linked with GCC both ways and with clang but for structures, the call-saved registers, GCC's and clang's code on our runtime, our helpers against libgcc's, our code under newlib, the headers checked against GCC's and clang's), `regalloc_tests.cpp`, the libc run tests ported from AVR (also run against newlib), and the book suite (compared with GCC's build and clang's) → `msp430-tests`
 - `backend/mmix/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `mmix_test.h` assembles and links with the GNU MMIX toolchain and runs programs on Knuth's `mmix`, skipped without the tools), `interop_tests.cpp` (a signature table linked with GCC both ways, the `regcheck` harness for the registers a call keeps, GCC's code on our runtime, our code under newlib, the headers checked against GCC's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64 (also run against newlib), `book_mmix_tests.cpp` (big-endian versions of the byte-order book programs) with `backend/common/test/book/signed_char_tests.cpp`, and the book suite (compared with GCC's build) → `mmix-tests`
 - `backend/common/test/flow_tests.cpp` (CFG and liveness over TAC, `backend/common/flow.c`) → `backend-tests`

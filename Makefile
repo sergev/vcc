@@ -1,10 +1,10 @@
 #
 # make
-# make all   -- build everything
+# make all   -- build the compiler and the runtime libraries (no tests)
 #
-# make test  -- build all unit tests, do not run
+# make test  -- build the compiler and all unit tests, do not run
 #
-# make run   -- run all unit tests (including the textbook chapter tests)
+# make run   -- build and run all unit tests (including the textbook chapter tests)
 #
 # make install -- install vcc, vcpp, vparse, vlower, vgenbesm6 with libc.bin, libbem.bin,
 #                 libruntime.a and the compiler-owned headers (the C11 freestanding
@@ -20,7 +20,7 @@ all:    build
 	$(MAKE) -Cbuild $@
 
 test:   build
-	$(MAKE) -Cbuild all
+	$(MAKE) -Cbuild all tests
 
 run:    test
 	ctest --test-dir build --progress

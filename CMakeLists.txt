@@ -155,3 +155,23 @@ target_link_libraries(lower optimize translator)
 #
 install(PROGRAMS $<TARGET_FILE:parse> DESTINATION bin RENAME vparse)
 install(PROGRAMS $<TARGET_FILE:lower> DESTINATION bin RENAME vlower)
+
+#
+# The test executables (every `*-tests` target) are left out of `all`, so a plain build
+# and `make install` make only the compiler and its runtime; the `tests` target builds them.
+#
+add_custom_target(tests)
+function(exclude_tests_from_all dir)
+    get_property(targets DIRECTORY ${dir} PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(t IN LISTS targets)
+        if(t MATCHES "-tests$")
+            set_target_properties(${t} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+            add_dependencies(tests ${t})
+        endif()
+    endforeach()
+    get_property(subdirs DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+    foreach(d IN LISTS subdirs)
+        exclude_tests_from_all(${d})
+    endforeach()
+endfunction()
+exclude_tests_from_all(${CMAKE_SOURCE_DIR})
