@@ -137,9 +137,17 @@ bool HaveMmixRun()
 #define HOST_TARGET "x86_64-linux"
 #elif defined(__linux__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-linux"
+#elif defined(__APPLE__) && defined(__aarch64__)
+#define HOST_TARGET "aarch64-darwin"
 #else
 #define HOST_TARGET ""
 #endif
+
+// macOS: no libvcc.a, a position-independent executable.
+bool HostIsDarwin()
+{
+    return std::string(HOST_TARGET) == "aarch64-darwin";
+}
 
 std::string DefaultTarget()
 {
@@ -149,6 +157,8 @@ std::string DefaultTarget()
 // The C compiler that assembles and links for the host target, and the build's libvcc.a.
 std::string HostCc()
 {
+    if (HostIsDarwin())
+        return AARCH64_DARWIN_CC;
     return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_CC : X86_64_LINUX_CC;
 }
 
@@ -161,7 +171,15 @@ std::string HostLibDir()
 bool HaveHostedRun()
 {
     return *HOST_TARGET && HaveTool(HostCc()) &&
-           access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0;
+           (HostIsDarwin() || access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0);
+}
+
+// Link the build's libvcc.a into a staged installation for the host, where it has one.
+void StageLibvcc(const std::string &prefix)
+{
+    if (!HostIsDarwin())
+        fs::create_symlink(HostLibDir() + "/libvcc.a",
+                           prefix + "/share/vcc/" + HOST_TARGET + "/lib/libvcc.a");
 }
 
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
@@ -274,6 +292,9 @@ protected:
         if (target == "aarch64-linux")
             return { LINUX_AARCH64_INCLUDE_DIR, LINUX_INCLUDE_DIR, AARCH64_INCLUDE_DIR,
                      LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+        if (target == "aarch64-darwin")
+            return { DARWIN_INCLUDE_DIR, AARCH64_INCLUDE_DIR, LP64_INCLUDE_DIR,
+                     COMMON_INCLUDE_DIR };
         const char *inc   = target == "riscv32"   ? RISCV32_INCLUDE_DIR
                             : target == "aarch64" ? AARCH64_INCLUDE_DIR
                             : target == "arm32"   ? ARM32_INCLUDE_DIR
@@ -299,7 +320,8 @@ protected:
                 target = args[i + 1];
         setenv("VCC_GEN",
                target == "besm6"                                    ? VCC_GENBESM_PATH
-               : target == "aarch64" || target == "aarch64-linux"   ? VCC_GENAARCH64_PATH
+               : target == "aarch64" || target == "aarch64-linux" ||
+                       target == "aarch64-darwin"                   ? VCC_GENAARCH64_PATH
                : target == "arm32"                                  ? VCC_GENARM32_PATH
                : target == "x86_64" || target == "x86_64-linux"     ? VCC_GENX86_PATH
                : target == "avr"                                    ? VCC_GENAVR_PATH
@@ -478,6 +500,9 @@ const char kTargetProbe[] = "#ifdef __riscv\n"
                             "#endif\n"
                             "#ifdef __linux__\n"
                             "LINUX\n"
+                            "#endif\n"
+                            "#ifdef __APPLE__\n"
+                            "APPLE\n"
                             "#endif\n";
 
 //
@@ -498,7 +523,9 @@ TEST_F(CcDriver, PreprocessDefaultTarget)
     } else {
         EXPECT_NE(text.find(host == "x86_64-linux" ? "X86_64" : "AARCH64"), std::string::npos)
             << text;
-        EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
+        bool darwin = HostIsDarwin();
+        EXPECT_NE(text.find(darwin ? "APPLE" : "LINUX"), std::string::npos) << text;
+        EXPECT_EQ(text.find(darwin ? "LINUX" : "APPLE"), std::string::npos) << text;
         EXPECT_EQ(text.find("RISCV"), std::string::npos) << text;
     }
 }
@@ -517,6 +544,11 @@ TEST_F(CcDriver, PreprocessHostedTargets)
     text = ReadFile(Path("a.i"));
     EXPECT_NE(text.find("AARCH64"), std::string::npos) << text;
     EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
+    ASSERT_EQ(Vcc({ "-t", "aarch64-darwin", "-E", "-o", "d.i", "t.c" }), 0) << Stderr();
+    text = ReadFile(Path("d.i"));
+    EXPECT_NE(text.find("AARCH64"), std::string::npos) << text;
+    EXPECT_NE(text.find("APPLE"), std::string::npos) << text;
+    EXPECT_EQ(text.find("LINUX"), std::string::npos) << text;
 }
 
 TEST_F(CcDriver, PreprocessBesm6)
@@ -1297,6 +1329,19 @@ TEST_F(CcDriver, CompileToAssemblyHosted)
     EXPECT_EQ(ReadFile(Path("bare.s")).find(".note.GNU-stack"), std::string::npos);
 }
 
+// macOS: Mach-O, its C names with a `_`, no ELF directives.
+TEST_F(CcDriver, CompileToAssemblyDarwin)
+{
+    WriteSource("t.c", kHello);
+    ASSERT_EQ(Vcc({ "-t", "aarch64-darwin", "-S", "-o", "d.s", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("d.s"));
+    EXPECT_NE(text.find("\n_main:\n"), std::string::npos) << text;
+    EXPECT_NE(text.find(" _printf\n"), std::string::npos) << text;
+    EXPECT_NE(text.find("@PAGEOFF"), std::string::npos) << text;
+    EXPECT_EQ(text.find(".note.GNU-stack"), std::string::npos) << text;
+    EXPECT_EQ(text.find(".type"), std::string::npos) << text;
+}
+
 // The link line, with a stand-in linker: the C compiler gets no startup file, no
 // script and no -lc, only libvcc.a after the user's libraries.
 TEST_F(CcDriver, HostedLinkLine)
@@ -1313,6 +1358,21 @@ TEST_F(CcDriver, HostedLinkLine)
     ASSERT_EQ(StagedVcc(prefix, { "-t", "x86_64-linux", "-v", "-nostdlib", "t.o" }), 0)
         << Stderr();
     EXPECT_EQ(Stdout(), "true -no-pie -nostdlib -o a.out t.o \n");
+}
+
+// macOS: a position-independent executable, and no libvcc.a.
+TEST_F(CcDriver, DarwinLinkLine)
+{
+    std::string prefix = StagePrefix("aarch64-darwin");
+    WriteSource("t.o", "");
+    setenv("VCC_LD", "true", 1);
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64-darwin", "-v", "-o", "t", "t.o", "-lm" }), 0)
+        << Stderr();
+    EXPECT_EQ(Stdout(), "true -o t t.o -lm \n");
+
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64-darwin", "-v", "-nostdlib", "t.o" }), 0)
+        << Stderr();
+    EXPECT_EQ(Stdout(), "true -nostdlib -o a.out t.o \n");
 }
 
 TEST_F(CcDriver, HostedLinkWithoutLibvcc)
@@ -1333,7 +1393,7 @@ TEST_F(CcDriver, StagedPrefixHost)
     std::string target = HOST_TARGET;
     std::string prefix = StagePrefix(target);
     std::string lib    = prefix + "/share/vcc/" + target + "/lib";
-    fs::create_symlink(HostLibDir() + "/libvcc.a", lib + "/libvcc.a");
+    StageLibvcc(prefix);
 
     WriteSource("main.c", "#include <errno.h>\n"
                           "#include <math.h>\n"
@@ -1388,9 +1448,15 @@ TEST_F(CcDriver, StagedPrefixHost)
                         "/share/vcc/" + target + "/include "),
               std::string::npos)
         << echo;
-    EXPECT_NE(echo.find(" --linux "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" -no-pie -o t "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
+    if (HostIsDarwin()) {
+        EXPECT_NE(echo.find(" --darwin "), std::string::npos) << echo;
+        EXPECT_EQ(echo.find(" -no-pie "), std::string::npos) << echo;
+        EXPECT_NE(echo.find(" twice.o -lm \n"), std::string::npos) << echo;
+    } else {
+        EXPECT_NE(echo.find(" --linux "), std::string::npos) << echo;
+        EXPECT_NE(echo.find(" -no-pie -o t "), std::string::npos) << echo;
+        EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
+    }
 }
 
 // The hosted headers agree with the system's on what the ABI fixes: the layouts and the
@@ -1402,8 +1468,7 @@ TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
         GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
     std::string target = HOST_TARGET;
     std::string prefix = StagePrefix(target);
-    fs::create_symlink(HostLibDir() + "/libvcc.a",
-                       prefix + "/share/vcc/" + target + "/lib/libvcc.a");
+    StageLibvcc(prefix);
     WriteSource("probe.c",
                 "#include <errno.h>\n"
                 "#include <fenv.h>\n"

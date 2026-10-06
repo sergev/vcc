@@ -75,6 +75,8 @@ static const struct target targets[] = {
                    "__code_model_small__", "__ELF__", LINUX_MACROS } },
     { "aarch64-linux", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
                    "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS } },
+    { "aarch64-darwin", { "__aarch64__", "__arm64__", "__arm64", "__ARM_ARCH=8",
+                   "__ARM_64BIT_STATE", "__LP64__", "_LP64", "__APPLE__", "__MACH__" } },
     { "avr",    { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__",
                    "__AVR_HAVE_MUL__", "__AVR_HAVE_MOVW__", "__AVR_HAVE_LPMX__",
                    "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__", "__AVR_HAVE_JMP_CALL__",

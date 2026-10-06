@@ -198,10 +198,10 @@ int main(void)
                                 1.7976931348623157e308, 1e300, 5e-324 };
     for (int i = 0; i < 10; i++)
         bits(root(v[i]));
-    double inf = v[7] * 2, nan = inf - inf;
+    double inf = v[7] * 2, qnan = inf - inf;
     bits(root(inf));
     bits(rootp(&v[4]));
-    double r1 = root(-1.0), r2 = root(nan), r3 = root(-inf);
+    double r1 = root(-1.0), r2 = root(qnan), r3 = root(-inf);
     printf("%d %d %d\n", r1 != r1, r2 != r2, r3 != r3);
     printf("%g\n", sqrt(16.0) + sqrt(0.25));
     return 0;

@@ -4,7 +4,9 @@
 The code follows the standard ARM calling rules (AAPCS64), so it can call, and be called
 by, code compiled with clang for `aarch64-none-elf`. Programs run under the `qemu`
 emulator, with no operating system, or under Linux, linked against glibc (the
-`aarch64-linux` target, see [Hosted Linux](#hosted-linux)).
+`aarch64-linux` target, see [Hosted Linux](#hosted-linux)), or under macOS on Apple
+silicon, linked against libSystem (the `aarch64-darwin` target, see
+[Hosted macOS](#hosted-macos)).
 
 ## The target
 
@@ -143,6 +145,73 @@ binary128 arithmetic (`__addtf3`, …), and `libvcc.a` only `__va_arg`. The head
 [x86-64](X86_64_Backend.md#hosted-linux), with glibc's 312-byte `jmp_buf` and AArch64's
 `fenv.h`. It is built and tested where such a compiler exists; without one, only its
 headers are installed and checked.
+
+## Hosted macOS
+
+The `aarch64-darwin` target, `vcc`'s default on a Mac with Apple silicon, builds an
+ordinary macOS executable. It differs from Linux in the object format and in the calling
+convention, so it has a descriptor of its own (`semantic/target.c`): Apple's arm64 ABI has
+a signed plain `char` and a `long double` that is `double`. `genaarch64 --darwin` sets
+`aarch64_darwin` (`codegen.c`) and with it `a64_macho` (`emit.c`), which change the
+following.
+
+**Mach-O.** Every C name is spelled with a leading `_` (`a64_emit_name`), and a local
+label starts with `L` instead of `.L` (`a64_local_prefix`). A branch target is a
+`label` operand, so it gets no `_`. There is no `.type` or `.size`. Read-only data goes in
+`.const`, but read-only data holding an address goes in `__DATA,__const`, because ld64
+allows no relocation in `__TEXT`. Zeroed data goes in `__DATA,__bss`. Relocations are
+spelled `sym@PAGE`/`sym@PAGEOFF` in place of `sym`/`:lo12:sym` (the `A64_Reloc` of a
+symbol operand).
+
+**The GOT.** A macOS arm64 executable is always position independent, and ld64 makes no
+copy relocations. So `name_addr` (`frame.c`), where every address of a global is formed,
+reaches a name the unit does not define (`Gen.defined`) through its GOT entry:
+`adrp x, sym@GOTPAGE` and `ldr x, [x, sym@GOTPAGEOFF]` (the `A64_MEM_GOT` memory operand,
+which no peephole rewrite touches). This covers both extern data and the address of a
+library function. A call stays a direct `bl`, because ld64 makes the stub.
+
+**Calls** (`call.c`). There are three differences from AAPCS64:
+
+- A named argument on the stack, a scalar or an HFA, takes its own size and alignment,
+  not an 8-byte slot (`on_stack_named`). Another aggregate is still rounded up to
+  8 bytes.
+- An argument that matches the `...` goes on the stack, whatever registers are free.
+  `variadic_arg` tells it from a named one by the length of the call's declared
+  parameter list. It takes 8-byte slots, and its alignment when that is 16.
+  `tac_apple64_class` (`tac/tac_abi.c`) decides how it travels: an aggregate over 16 bytes
+  that is no HFA goes by reference, and anything else goes inline, a 32-byte HFA
+  included. That same function is `__builtin_va_class` on this target, so the backend and
+  `va_arg` cannot disagree.
+- `va_list` is a `char *`. A variadic function saves no registers. `va_start` stores
+  `x29 + 16 +` the named stack bytes rounded up to 8. `va_arg` (`libc/darwin/include/stdarg.h`)
+  is a pointer walk in the header, with no `__va_arg`.
+
+The caller extends a narrow argument to 32 bits, which a value in its canonical form
+already is.
+
+**`long double` is `double`.** `a64_size` is 8, `a64_is_fp` and `a64_is_double` count it,
+and `a64_is_ld` does not. A conversion to or from it becomes the `double` one, or a copy
+(`gen_ld_as_double`). Constants are rounded to binary64. HFAs use `tac_apple64_hfa`, under
+which a `long double` member is a `double` one.
+
+It links with the system's C compiler: `cc -o a.out objects…`. There is no `-no-pie` and no
+`libvcc.a`, since this target needs no runtime of ours. The headers are
+`libc/darwin/include` ahead of the bare-metal ones. They agree with libSystem's on what a
+program hands to it:
+- `errno` is `(*__error())`;
+- `stdin` and its siblings are `__stdinp` and so on;
+- `jmp_buf` is `int[48]`;
+- the 128-byte `mbstate_t`;
+- the `LC_*`, `E*` and `FP_*` numbers.
+
+`aarch64-darwin-tests` (on a Mac; elsewhere only its goldens run) has:
+- the goldens of `test/darwin_tests.cpp`;
+- the run, interop and libc tests of the bare-metal suite, built against
+  `test/darwin_test.h`, the same fixture interface run natively, with the system clang
+  as the other side and the oracle;
+- the book suite, each program's result printed by `test/darwin_status.c`.
+
+The build sets `AARCH64_DARWIN_CC` only on a Mac with Apple silicon.
 
 ## Running a program by hand
 

@@ -373,6 +373,7 @@ int main(void) {
 TEST_F(Aarch64Test, ReallocShrinkAndNull)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_HOSTED(); // our libc's own behavior, not libSystem's
     EXPECT_EQ("1 ABC 1\n", CompileAndRunAarch64(R"PROG(
 #include <stdio.h>
 #include <stdlib.h>

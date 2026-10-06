@@ -244,6 +244,29 @@ static const Target targets[] = {
       0,    // hw_sqrt
       0,    // double_mant_dig
       1 },  // no_loop_opt
+
+    // AArch64 on macOS: Apple's arm64 ABI.  As AArch64 but for a signed plain char and a
+    // long double that is double; va_arg walks the stack, where every variadic argument is.
+    { "aarch64-darwin",
+      1, 1,   // _Bool
+      2, 2,   // short
+      4, 4,   // int
+      8, 8,   // long (LP64)
+      8, 8,   // long long
+      4, 4,   // float
+      8, 8,   // double
+      8, 8,   // long double (double)
+      8, 8,   // pointer
+      16, 32, 64, 64, // signed bits
+      1,   // plain char signed (Apple)
+      0,   // signed >> arithmetic
+      1,   // aggregate_align (1)
+      SIZE_MAX, // struct_return_max: the backend returns a large result through x8
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      tac_apple64_class, // va_class: by reference or in 8-byte stack slots
+      0,        // ldouble_mant_dig: long double is double, binary64
+      1 },      // hw_sqrt: fsqrt
 };
 // clang-format on
 

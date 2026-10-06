@@ -62,6 +62,7 @@ typedef struct {
     A64_Block *prologue;
     StringMap frame;   // name → Slot *
     StringMap globals; // name → const Tac_Type *
+    StringMap defined; // the names the unit defines (else reached through the GOT on macOS)
     int locals_size;   // bytes of slots below the frame record
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
@@ -73,7 +74,8 @@ typedef struct {
     int nsaved;        // callee-saved registers in use
     int saved_reg[32];
     int saved_off[32]; // their save slots
-    // A variadic function: what va_start puts in a va_list (offsets from x29).
+    // A variadic function: what va_start puts in a va_list (offsets from x29); under
+    // Apple's ABI only `stack`.
     struct {
         int stack;            // the first variadic argument on the stack
         int gr_top, vr_top;   // the ends of the save areas of x0-x7 and q0-q7

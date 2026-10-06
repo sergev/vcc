@@ -351,11 +351,11 @@ TEST_F(Aarch64Test, MutatedParameterInLoop)
 #include <stdio.h>
 void countdown(int n) {
     while (n > 0) {
-        putbyte('0' + n);
+        putchar('0' + n);
         --n;
     }
 }
-static void body(void) { countdown(3); putbyte('\n'); }
+static void body(void) { countdown(3); putchar('\n'); }
 int main(void) {
     body();
     return 0;
@@ -373,10 +373,10 @@ static void body(void) {
     b[0] = 'C'; b[1] = 'B'; b[2] = 'A'; b[3] = 0;
     char *p = b + 2;
     while (p >= b) {
-        putbyte(*p);
+        putchar(*p);
         --p;
     }
-    putbyte('\n');
+    putchar('\n');
 }
 int main(void) {
     body();

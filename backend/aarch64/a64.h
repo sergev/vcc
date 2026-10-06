@@ -47,8 +47,9 @@ typedef enum {
     A64_OPND_NONE,
     A64_OPND_REG,   // reg at width
     A64_OPND_IMM,   // #imm
-    A64_OPND_SYM,   // sym + imm, or :lo12:sym + imm
-    A64_OPND_MEM,   // [reg, #imm], [reg, #imm]!, [reg], #imm, or [reg, index...]
+    A64_OPND_SYM,   // sym + imm, under relocation `reloc`
+    A64_OPND_MEM,   // [reg, #imm], [reg, #imm]!, [reg], #imm, [reg, index...], or
+                    // [reg, <sym's GOT entry, low bits>]
     A64_OPND_SHIFT, // reg at width, shifted: lsl/lsr/asr #amount
     A64_OPND_EXT,   // reg at width, extended: uxtw/sxtw/... #amount
     A64_OPND_LSL,   // a bare "lsl #imm" (movz, movk)
@@ -70,8 +71,14 @@ typedef enum {
 } A64_Extend;
 
 // A64_MEM_INDEX: [reg, index], the index an X register shifted left by imm (lsl), or a
-// W register extended (`ext`, sxtw or uxtw) and shifted by imm.
-typedef enum { A64_MEM_OFFSET, A64_MEM_PRE, A64_MEM_POST, A64_MEM_INDEX } A64_MemMode;
+// W register extended (`ext`, sxtw or uxtw) and shifted by imm.  A64_MEM_GOT: the low
+// bits of the address of symbol `sym`'s GOT entry, whose page is in reg.
+typedef enum { A64_MEM_OFFSET, A64_MEM_PRE, A64_MEM_POST, A64_MEM_INDEX, A64_MEM_GOT } A64_MemMode;
+
+// How a symbol operand is relocated: as itself (a branch target, a call), the page of
+// its address (adrp) and the low 12 bits (ELF :lo12:, Mach-O @PAGEOFF), or the page of
+// its GOT entry (ELF :got:, Mach-O @GOTPAGE).
+typedef enum { A64_RELOC_NONE, A64_RELOC_PAGE, A64_RELOC_LO12, A64_RELOC_GOTPAGE } A64_Reloc;
 
 typedef enum {
     A64_EQ,
@@ -96,8 +103,9 @@ typedef struct {
     A64_Width width;
     int64_t imm; // immediate, offset, or shift/extend amount
     int sub;     // A64_Shift, A64_Extend, A64_MemMode or A64_Cond, by kind
-    bool lo12;   // a symbol's :lo12: relocation
-    char *sym;   // owned
+    A64_Reloc reloc; // A64_OPND_SYM: how it is relocated
+    bool label;      // A64_OPND_SYM: a local code label, not a C name
+    char *sym;       // owned
     int index;   // A64_MEM_INDEX: the index register, at index_width
     A64_Width index_width;
     int ext; // A64_MEM_INDEX with a W index: A64_Extend
@@ -171,7 +179,11 @@ void a64_free_func(A64_Func *fn);
 A64_Operand a64_reg(int reg, A64_Width width);
 A64_Operand a64_imm(int64_t imm);
 A64_Operand a64_sym(const char *sym, int64_t offset);
-A64_Operand a64_lo12(const char *sym, int64_t offset);
+A64_Operand a64_label(const char *label);                // a local code label
+A64_Operand a64_page(const char *sym);                   // adrp: sym's page
+A64_Operand a64_lo12(const char *sym, int64_t offset);   // add: the low 12 bits
+A64_Operand a64_gotpage(const char *sym);                // adrp: the page of sym's GOT entry
+A64_Operand a64_mem_got(int base, const char *sym);      // ldr: sym's GOT entry
 A64_Operand a64_mem(int base, int64_t offset);
 A64_Operand a64_mem_pre(int base, int64_t offset);
 A64_Operand a64_mem_post(int base, int64_t offset);
@@ -186,8 +198,16 @@ A64_Operand a64_fzero(void);
 const char *a64_reg_name(int reg, A64_Width width);
 bool a64_is_fpreg(int reg); // v0-v31
 
+// Object format: Mach-O (macOS) instead of ELF.  C names get a `_` prefix, local labels
+// an `L` one, and relocations the @PAGE spellings.
+extern bool a64_macho;
+
 // GNU assembler output.
 void a64_emit_func(FILE *out, const A64_Func *fn);
+// C name `name` as the object format spells it.
+void a64_emit_name(FILE *out, const char *name);
+// The prefix of a local label: `.L` (ELF), `L` (Mach-O).
+const char *a64_local_prefix(void);
 // One instruction, as a line of a64_emit_func.
 void a64_emit_instr(FILE *out, const A64_Instr *in);
 

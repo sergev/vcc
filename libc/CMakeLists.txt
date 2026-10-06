@@ -38,5 +38,6 @@ add_subdirectory(avr)
 # msp430 too.
 add_subdirectory(msp430)
 add_subdirectory(mmix)
-# The hosted Linux targets, linked against glibc.
+# The hosted targets, linked against glibc and against macOS's libSystem.
 add_subdirectory(linux)
+add_subdirectory(darwin)

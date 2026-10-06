@@ -64,6 +64,13 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
     }
     case TAC_STATIC_INIT_LONG_DOUBLE: {
         Float128 q = it->u.long_double_val;
+        if (aarch64_darwin) { // long double is double
+            double d = f128_to_double(q);
+            uint64_t bits;
+            memcpy(&bits, &d, 8);
+            fprintf(out, "    .xword  0x%016llx\n", (unsigned long long)bits);
+            return 8;
+        }
         fprintf(out, "    .xword  0x%016llx\n    .xword  0x%016llx\n", (unsigned long long)q.lo,
                 (unsigned long long)q.hi);
         return 16;
@@ -84,10 +91,11 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
     }
     case TAC_STATIC_INIT_POINTER:
     case TAC_STATIC_INIT_FAT_POINTER:
+        fputs("    .xword  ", out);
+        a64_emit_name(out, it->u.pointer.name);
         if (it->u.pointer.byte_offset)
-            fprintf(out, "    .xword  %s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
-        else
-            fprintf(out, "    .xword  %s\n", it->u.pointer.name);
+            fprintf(out, "%+d", it->u.pointer.byte_offset);
+        fputc('\n', out);
         return 8;
     }
     return 0;
@@ -101,6 +109,26 @@ static bool all_zero(const Tac_StaticInit *init)
     return true;
 }
 
+// Whether the initializer holds an address, which the dynamic linker may rebase.
+static bool has_address(const Tac_StaticInit *init)
+{
+    for (const Tac_StaticInit *it = init; it; it = it->next)
+        if (it->kind == TAC_STATIC_INIT_POINTER || it->kind == TAC_STATIC_INIT_FAT_POINTER)
+            return true;
+    return false;
+}
+
+// The section of a variable: ELF .rodata, .bss or .data; Mach-O __TEXT,__const, but
+// __DATA,__const for one holding an address (ld64 allows no relocation in __TEXT).
+static const char *section(bool readonly, bool bss, const Tac_StaticInit *init)
+{
+    if (!a64_macho)
+        return readonly ? ".section .rodata" : bss ? ".bss" : ".data";
+    if (readonly)
+        return has_address(init) ? ".section __DATA,__const" : ".const";
+    return bss ? ".section __DATA,__bss" : ".data";
+}
+
 void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
                           const Tac_StaticInit *init, bool readonly, int alignment)
 {
@@ -110,13 +138,19 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
     while ((1 << log2) < align)
         log2++;
     bool bss = all_zero(init);
-    fprintf(out, "    %s\n", readonly ? ".section .rodata" : bss ? ".bss" : ".data");
-    if (global)
-        fprintf(out, "    .globl  %s\n", name);
+    fprintf(out, "    %s\n", section(readonly, bss, init));
+    if (global) {
+        fputs("    .globl  ", out);
+        a64_emit_name(out, name);
+        fputc('\n', out);
+    }
     fprintf(out, "    .p2align %d\n", log2);
-    fprintf(out, "    .type   %s, @object\n", name);
-    fprintf(out, "    .size   %s, %d\n", name, size);
-    fprintf(out, "%s:\n", name);
+    if (!a64_macho) {
+        fprintf(out, "    .type   %s, @object\n", name);
+        fprintf(out, "    .size   %s, %d\n", name, size);
+    }
+    a64_emit_name(out, name);
+    fputs(":\n", out);
     int n = 0;
     if (bss) {
         n = size;

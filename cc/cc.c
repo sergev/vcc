@@ -12,7 +12,7 @@
 //     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld | mmix-...-ld)
 //
 // The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
-// system C compiler against glibc; riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430,
+// system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430,
 // mmix and besm6 are bare metal.  By default it is the host, where that is one of the
 // hosted targets, else riscv64.
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
@@ -134,6 +134,9 @@
 #ifndef AARCH64_LINUX_CC
 #define AARCH64_LINUX_CC ""
 #endif
+#ifndef AARCH64_DARWIN_CC
+#define AARCH64_DARWIN_CC ""
+#endif
 
 // The hosted target of the machine vcc runs on, if there is one: the default target,
 // and the one whose C compiler is plain `cc`.
@@ -141,6 +144,8 @@
 #define HOST_TARGET "x86_64-linux"
 #elif defined(__linux__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-linux"
+#elif defined(__APPLE__) && defined(__aarch64__)
+#define HOST_TARGET "aarch64-darwin"
 #else
 #define HOST_TARGET ""
 #endif
@@ -164,7 +169,8 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 //
 // A hosted target (ARCH_HOSTED) both assembles and links with a C compiler: the one
 // found when vcc was configured, else <prefix>-gcc, else `cc` on the host itself, else
-// clang.  It supplies the startup files and the C library; we add libvcc.a.
+// clang.  It supplies the startup files and the C library; we add libvcc.a, but on
+// macOS, which needs no runtime of ours, and links position independent.
 //
 enum arch { ARCH_BESM6, ARCH_CROSS, ARCH_HOSTED };
 
@@ -185,6 +191,8 @@ struct target {
     const char *libgcc;           // configure-time libgcc.a, linked last when present, or NULL
     bool no_script;               // the linker's default script, unless -T names one
     const char *gen_flag;         // code generator flag, or NULL
+    bool pie;                     // hosted: a position-independent executable, no -no-pie
+    bool no_runtime;              // hosted: no libvcc.a
 };
 
 #define RISCV_PREFIXES "riscv64-unknown-elf riscv64-elf riscv64-linux-gnu"
@@ -216,6 +224,10 @@ static const struct target targets[] = {
     { .name = "aarch64-linux", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
       .as_default = AARCH64_LINUX_CC, .ld_default = AARCH64_LINUX_CC,
       .prefixes = "aarch64-linux-gnu", .triple = "aarch64-linux-gnu", .gen_flag = "--linux" },
+    { .name = "aarch64-darwin", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
+      .as_default = AARCH64_DARWIN_CC, .ld_default = AARCH64_DARWIN_CC,
+      .prefixes = "aarch64-apple-darwin", .triple = "arm64-apple-macos", .gen_flag = "--darwin",
+      .pie = true, .no_runtime = true },
 };
 
 static const struct target *target; // set by -t, else the default
@@ -932,15 +944,18 @@ static int compile_one(const char *src)
 // Link for a hosted target, with its C compiler:
 //     cc [--target=<triple>] -no-pie -o out objs ldflags -L<lib> -lvcc
 // The compiler adds the startup files, the C library and libgcc.  Not position
-// independent: our code takes a function's address PC-relative, which a PIE cannot do
-// for one in a shared library.  -nostdlib is passed on, and drops libvcc.a.
+// independent on Linux: our code takes a function's address PC-relative, which a PIE
+// cannot do for one in a shared library.  -nostdlib is passed on, and drops libvcc.a.
+// On macOS, where every arm64 executable is a PIE, the code reaches what it does not
+// define through the GOT, and there is no libvcc.a.
 //
 static int link_hosted(const char *libdir)
 {
     struct vec av = { 0 };
     if (push_tool(&av, "VCC_LD", target->ld_default, "ld", NULL))
         vec_push(&av, concat("--target=", target->triple));
-    vec_push(&av, "-no-pie");
+    if (!target->pie)
+        vec_push(&av, "-no-pie");
     if (opt_nostdlib)
         vec_push(&av, "-nostdlib");
     if (linkscript) {
@@ -953,7 +968,7 @@ static int link_hosted(const char *libdir)
         vec_push(&av, objects.data[i]);
     for (size_t i = 0; i < ldflags.len; i++)
         vec_push(&av, ldflags.data[i]);
-    if (!opt_nostdlib) {
+    if (!opt_nostdlib && !target->no_runtime) {
         char *lib = concat(libdir, "/libvcc.a");
         if (access(lib, R_OK) != 0) {
             error("%s not found; or use -nostdlib", lib);
@@ -1080,9 +1095,9 @@ static void usage(void)
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
-    printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux (hosted), riscv64,\n");
-    printf("                       riscv32, aarch64, arm32, x86_64, avr, msp430, mmix or\n");
-    printf("                       besm6 (bare metal); default %s\n",
+    printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux, aarch64-darwin\n");
+    printf("                       (hosted), riscv64, riscv32, aarch64, arm32, x86_64, avr,\n");
+    printf("                       msp430, mmix or besm6 (bare metal); default %s\n",
            *HOST_TARGET ? HOST_TARGET : "riscv64");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");

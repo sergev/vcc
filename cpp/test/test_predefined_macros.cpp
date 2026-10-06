@@ -204,6 +204,14 @@ TEST_F(Predefined, Aarch64LinuxTarget) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "aarch64-linux"}));
 }
 
+// macOS on Apple silicon: Apple's signed plain char, no ELF and no Linux.
+TEST_F(Predefined, Aarch64DarwinTarget) {
+    EXPECT_TRUE(TokensAre("#if __aarch64__ && __arm64__ && __LP64__ && __APPLE__ && __MACH__ && "
+                          "!defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
+                          "!defined(__linux__)\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64-darwin"}));
+}
+
 // The ATmega1280 (avr51): signed plain char, no __CHAR_UNSIGNED__.
 TEST_F(Predefined, AvrTarget) {
     EXPECT_TRUE(TokensAre("#if __AVR && __AVR__ && __AVR_ARCH__ == 51 && __AVR_ATmega1280__ && "

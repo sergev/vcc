@@ -12,6 +12,13 @@ protected:
     {
         Aarch64Test::SetUp();
         static const SkippedTest skipped[] = {
+#ifdef AARCH64_DARWIN
+            // Plain char is signed on macOS.  signed_char_tests.cpp runs signed-char
+            // versions of these.
+            { "Chapter16_StaticInitializers", "expects an unsigned plain char" },
+            { "Chapter18_ClassifyParams", "expects an unsigned plain char" },
+            { "Chapter18_UnionInits", "expects an unsigned plain char" },
+#endif
             { nullptr, nullptr },
         };
         SkipIfListed(skipped);

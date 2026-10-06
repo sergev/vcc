@@ -9,12 +9,12 @@
 #include "internal.h"
 #include "xalloc.h"
 
-// Local label for TAC label `%N`: `.LN`.
+// Local label for TAC label `%N`: `.LN` (ELF), `LN` (Mach-O).
 static char *label_name(const char *tac)
 {
     size_t len = strlen(tac);
     char *s    = xalloc(len + 3, __func__, __FILE__, __LINE__);
-    strcpy(s, ".L");
+    strcpy(s, a64_local_prefix());
     strcat(s, tac[0] == '%' ? tac + 1 : tac);
     return s;
 }
@@ -29,7 +29,7 @@ static void gen_label(Gen *g, const char *tac)
 static void gen_jump(Gen *g, const char *tac)
 {
     char *l = label_name(tac);
-    emit1(g, A64_B, a64_sym(l, 0));
+    emit1(g, A64_B, a64_label(l));
     xfree(l);
 }
 
@@ -58,14 +58,14 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
     char *l           = label_name(target);
     if (a64_is_ld(t)) {
         ld_nonzero(g, T0, cond);
-        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, A64_X), a64_sym(l, 0));
+        emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(T0, A64_X), a64_label(l));
     } else if (a64_is_fp(t)) {
         // A NaN is not zero: unordered leaves Z clear.
         emit2(g, A64_FCMP, a64_reg(use_val(g, F0, cond), a64_width(t)), a64_fzero());
-        emit2(g, A64_BCOND, a64_cond(if_zero ? A64_EQ : A64_NE), a64_sym(l, 0));
+        emit2(g, A64_BCOND, a64_cond(if_zero ? A64_EQ : A64_NE), a64_label(l));
     } else {
         emit2(g, if_zero ? A64_CBZ : A64_CBNZ, a64_reg(use_val(g, T0, cond), a64_width(t)),
-              a64_sym(l, 0));
+              a64_label(l));
     }
     xfree(l);
 }
@@ -702,6 +702,25 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     store_val(g, d, dst);
 }
 
+// Under Apple's ABI, where long double is double: a conversion to or from it as the
+// conversion to or from double, or a copy between the two.
+static void gen_ld_as_double(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+{
+    switch (kind) {
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+        gen_copy(g, src, dst);
+        return;
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+        kind = TAC_INSTRUCTION_UINT_TO_DOUBLE;
+        break;
+    default:
+        kind = TAC_INSTRUCTION_INT_TO_DOUBLE; // only the unsigned source matters
+        break;
+    }
+    gen_fp_convert(g, src, dst, kind);
+}
+
 bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
                   const Tac_Val **dst)
 {
@@ -715,7 +734,7 @@ bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
     case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
         *dst = in->u.long_double_to_int.dst;
-        return true;
+        return !aarch64_darwin;
     case TAC_INSTRUCTION_BINARY: {
         *dst              = in->u.binary.dst;
         const Tac_Type *t = type_of(arg, in->u.binary.src1);
@@ -762,7 +781,7 @@ bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction
     if (next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO)
         cond ^= 1;
     char *l = label_name(next->u.jump_if_zero.target);
-    emit2(g, A64_BCOND, a64_cond(cond), a64_sym(l, 0));
+    emit2(g, A64_BCOND, a64_cond(cond), a64_label(l));
     xfree(l);
     return true;
 }
@@ -812,7 +831,12 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
     case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
-        gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst, in->kind);
+        if (aarch64_darwin)
+            gen_ld_as_double(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst,
+                             in->kind);
+        else
+            gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst,
+                           in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

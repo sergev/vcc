@@ -17,6 +17,15 @@
 // HFA in v0-v3, up to 16 bytes in x0/x1; a larger one is written through the address
 // the caller passes in x8.
 //
+// Apple's arm64 ABI (aarch64_darwin) differs in three ways.  Long double is double.  A
+// named argument on the stack takes its own size and alignment, a scalar or an HFA,
+// not an 8-byte slot (another aggregate is still rounded up to 8 bytes).  A variadic
+// argument always goes on the stack, in 8-byte slots, as a named one would once the
+// registers ran out, but an HFA as any other aggregate, and inline at any size
+// (tac_apple64_class); so va_list is a plain pointer over the stack, and a variadic
+// function saves no registers.  The caller extends a
+// narrow argument to 32 bits, which a value in its canonical form already is.
+//
 #include <string.h>
 
 #include "codegen.h"
@@ -49,12 +58,41 @@ static void on_stack(ArgState *s, ArgLoc *a, int size, int align)
     s->stack += round_up(size, 8);
 }
 
-static ArgLoc classify(ArgState *s, const Tac_Type *t)
+// A named argument on the stack: in an 8-byte slot, or under Apple's ABI at its own
+// size and alignment.
+static void on_stack_named(ArgState *s, ArgLoc *a, int size, int align)
+{
+    if (!aarch64_darwin) {
+        on_stack(s, a, size, align);
+        return;
+    }
+    s->stack = round_up(s->stack, align);
+    a->stack = s->stack;
+    s->stack += size;
+}
+
+// The HFA count of `t` under the ABI in use (tac_aapcs64_hfa).
+static int hfa_of(const Tac_Type *t, int *esize)
+{
+    return aarch64_darwin ? tac_apple64_hfa(t, esize) : tac_aapcs64_hfa(t, esize);
+}
+
+// Where an argument of type `t` goes; `variadic` for one matching the `...` (which
+// only Apple's ABI tells from a named one).
+static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
 {
     ArgLoc a = { 0 };
     int size = a64_size(t);
     int esize;
-    int n = tac_aapcs64_hfa(t, &esize);
+    if (aarch64_darwin && variadic) {
+        a.by_ref = tac_apple64_class(t) == TAC_AAPCS64_BY_REF;
+        if (a.by_ref)
+            on_stack(s, &a, 8, 8);
+        else
+            on_stack(s, &a, size, a64_align(t));
+        return a;
+    }
+    int n = hfa_of(t, &esize);
     if (n) {
         if (s->next_fp + n <= 8) {
             a.nregs = n;
@@ -63,7 +101,7 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t)
                 a.reg[i] = A64_V(s->next_fp++);
         } else {
             s->next_fp = 8;
-            on_stack(s, &a, size, a64_align(t));
+            on_stack_named(s, &a, size, a64_align(t));
         }
         return a;
     }
@@ -85,10 +123,24 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t)
     if (s->next_int < 8) {
         a.nregs  = 1;
         a.reg[0] = A64_X(s->next_int++);
-    } else {
+    } else if (a.by_ref) {
         on_stack(s, &a, 8, 8);
+    } else {
+        on_stack_named(s, &a, size, a64_align(t));
     }
     return a;
+}
+
+// Whether argument `index` (from 0) of a call through function type `ft` is variadic,
+// as far as the ABI tells: only Apple's does.
+static bool variadic_arg(const Tac_Type *ft, int index)
+{
+    if (!aarch64_darwin || !ft || ft->kind != TAC_TYPE_FUN_TYPE || !ft->u.fun_type.variadic)
+        return false;
+    int named = 0;
+    for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
+        named++;
+    return index >= named;
 }
 
 static const Tac_Type *ret_type(const Tac_Type *fun_type)
@@ -99,7 +151,8 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
 // Whether a result of type `t` is written through the address in x8.
 static bool indirect_result(const Tac_Type *t)
 {
-    return t && tac_aapcs64_class(t) == TAC_AAPCS64_BY_REF;
+    int esize;
+    return t && a64_is_aggregate(t) && a64_size(t) > 16 && !hfa_of(t, &esize);
 }
 
 // The register view of an FP element of `esize` bytes.
@@ -145,7 +198,8 @@ static void save_varargs(Gen *g, const ArgState *s)
 }
 
 // va_start(ap), a call of __va_start(&ap): fill the va_list
-// { __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }.
+// { __stack, __gr_top, __vr_top, __gr_offs, __vr_offs }; under Apple's ABI the va_list
+// is the address of the first variadic argument on the stack.
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
     if (!g->tl->u.function.variadic)
@@ -153,6 +207,11 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
         fatal_error("aarch64: %s: __va_start takes one argument", gen_name(g));
     load_val(g, T0, in->u.fun_call.args);
+    if (aarch64_darwin) {
+        gen_addr(g, T1, A64_FP, g->va.stack);
+        emit2(g, A64_STR, a64_reg(T1, A64_X), a64_mem(T0, 0));
+        return;
+    }
     const int field[3] = { g->va.stack, g->va.gr_top, g->va.vr_top };
     for (int i = 0; i < 3; i++) {
         gen_addr(g, T1, A64_FP, field[i]);
@@ -211,7 +270,7 @@ void param_hints(const Gen *g, StringMap *hints)
 {
     ArgState s = { 0 };
     for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
-        ArgLoc a = classify(&s, p->type);
+        ArgLoc a = classify(&s, p->type, false);
         if (a.nregs == 1 && !a.by_ref && !a64_is_aggregate(p->type) && !a64_is_ld(p->type))
             map_insert(hints, p->name, a.reg[0], 0);
     }
@@ -235,7 +294,7 @@ void gen_params(Gen *g)
         const Tac_Type *t = p->type;
         if (!t)
             fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
-        ArgLoc a = classify(&s, t);
+        ArgLoc a = classify(&s, t, false);
         int preg = assigned_reg(g, p->name);
         if (preg) {
             place_reg(g, p->name, t, preg);
@@ -265,13 +324,17 @@ void gen_params(Gen *g)
             store_mem(g, a.reg[0], t, A64_FP, off);
         }
     }
-    if (g->tl->u.function.variadic)
-        save_varargs(g, &s);
+    if (g->tl->u.function.variadic) {
+        if (aarch64_darwin)
+            g->va.stack = 16 + round_up(s.stack, 8);
+        else
+            save_varargs(g, &s);
+    }
     parallel_move(g, moves, nmoves);
 
     s = (ArgState){ 0 };
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
-        ArgLoc a = classify(&s, p->type);
+        ArgLoc a = classify(&s, p->type, false);
         int preg = assigned_reg(g, p->name);
         if (preg && !a.nregs && !map_get(&g->dead, p->name, NULL))
             load_mem(g, preg, p->type, A64_FP, 16 + a.stack);
@@ -398,7 +461,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
                           !a64_is_ld(want) && !a64_is_aggregate(want)
                       ? want
                       : a->type;
-        a->loc  = classify(&s, a->type);
+        // Placed by its declared type, which a constant may differ from.
+        a->loc  = classify(&s, a->as, variadic_arg(ft, i));
         a->copy = 0;
         if (want)
             want = want->next;
@@ -440,7 +504,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         return;
     const Tac_Type *t = val_type(g, dst);
     int esize;
-    int n = tac_aapcs64_hfa(t, &esize);
+    int n = hfa_of(t, &esize);
     if (n && a64_is_aggregate(t)) {
         static const int vregs[4] = { A64_V(0), A64_V(1), A64_V(2), A64_V(3) };
         int base;
@@ -467,12 +531,13 @@ void gen_call(Gen *g, const Tac_Instruction *in)
 void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
 {
     ArgState s = { 0 };
-    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
+    int i      = 0;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
         int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
         const Tac_Type *t = var >= 0 ? f->types[var] : val_type(g, v);
         if (!t)
             return;
-        ArgLoc a = classify(&s, t);
+        ArgLoc a = classify(&s, t, variadic_arg(in->u.fun_call.fun_type, i));
         if (var >= 0 && !hint[var] && a.nregs == 1 && !a.by_ref && !a64_is_aggregate(t) &&
             !a64_is_ld(t))
             hint[var] = a.reg[0];
@@ -490,7 +555,7 @@ void gen_return(Gen *g, const Tac_Val *v)
         const Tac_Type *t  = val_type(g, v);
         const Tac_Type *rt = ret_type(g->tl->u.function.type);
         int esize;
-        int n = tac_aapcs64_hfa(t, &esize);
+        int n = hfa_of(t, &esize);
         if (n && a64_is_aggregate(t)) {
             static const int vregs[4] = { A64_V(0), A64_V(1), A64_V(2), A64_V(3) };
             int base;

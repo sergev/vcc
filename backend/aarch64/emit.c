@@ -1,5 +1,6 @@
 //
-// AArch64 IR → GNU assembler syntax (ELF, as clang and binutils accept it).
+// AArch64 IR → GNU assembler syntax: ELF, as clang and binutils accept it, or Mach-O,
+// as Apple's clang does.
 //
 #include <inttypes.h>
 #include <string.h>
@@ -27,6 +28,38 @@ const char *a64_reg_name(int reg, A64_Width width)
             return NULL; // a register used at a width of the other file
     }
     return name;
+}
+
+bool a64_macho = false;
+
+void a64_emit_name(FILE *out, const char *name)
+{
+    if (a64_macho)
+        fputc('_', out);
+    fputs(name, out);
+}
+
+const char *a64_local_prefix(void)
+{
+    return a64_macho ? "L" : ".L";
+}
+
+// Symbol operand `o`: ELF `:lo12:sym+8`, Mach-O `_sym@PAGEOFF+8`.
+static void emit_sym(FILE *out, const A64_Operand *o)
+{
+    static const char *const elf[]   = { "", "", ":lo12:", ":got:" };
+    static const char *const macho[] = { "", "@PAGE", "@PAGEOFF", "@GOTPAGE" };
+    if (o->label) {
+        fputs(o->sym, out);
+    } else {
+        if (!a64_macho)
+            fputs(elf[o->reloc], out);
+        a64_emit_name(out, o->sym);
+        if (a64_macho)
+            fputs(macho[o->reloc], out);
+    }
+    if (o->imm)
+        fprintf(out, "%+" PRId64, o->imm);
 }
 
 static const char *const conds[] = { "eq", "ne", "hs", "lo", "mi", "pl", "vs",
@@ -58,9 +91,7 @@ static void emit_operand(FILE *out, const A64_Operand *o)
         fprintf(out, "#%" PRId64, o->imm);
         break;
     case A64_OPND_SYM:
-        fprintf(out, "%s%s", o->lo12 ? ":lo12:" : "", o->sym);
-        if (o->imm)
-            fprintf(out, "%+" PRId64, o->imm);
+        emit_sym(out, o);
         break;
     case A64_OPND_MEM:
         fputc('[', out);
@@ -75,6 +106,10 @@ static void emit_operand(FILE *out, const A64_Operand *o)
             if (o->imm)
                 fprintf(out, " #%" PRId64, o->imm);
             fputc(']', out);
+        } else if (o->sub == A64_MEM_GOT) {
+            fputs(a64_macho ? ", " : ", :got_lo12:", out);
+            a64_emit_name(out, o->sym);
+            fputs(a64_macho ? "@GOTPAGEOFF]" : "]", out);
         } else if (o->sub == A64_MEM_POST)
             fprintf(out, "], #%" PRId64, o->imm);
         else if (o->imm || o->sub == A64_MEM_PRE)
@@ -131,16 +166,22 @@ void a64_emit_instr(FILE *out, const A64_Instr *in)
 void a64_emit_func(FILE *out, const A64_Func *fn)
 {
     fprintf(out, "    .text\n");
-    if (fn->global)
-        fprintf(out, "    %-7s %s\n", ".globl", fn->name);
+    if (fn->global) {
+        fprintf(out, "    %-7s ", ".globl");
+        a64_emit_name(out, fn->name);
+        fputc('\n', out);
+    }
     fprintf(out, "    .p2align 2\n");
-    fprintf(out, "    %-7s %s, @function\n", ".type", fn->name);
-    fprintf(out, "%s:\n", fn->name);
+    if (!a64_macho)
+        fprintf(out, "    %-7s %s, @function\n", ".type", fn->name);
+    a64_emit_name(out, fn->name);
+    fputs(":\n", out);
     for (const A64_Block *b = fn->blocks; b; b = b->next) {
         if (b->label)
             fprintf(out, "%s:\n", b->label);
         for (const A64_Instr *in = b->head; in; in = in->next)
             a64_emit_instr(out, in);
     }
-    fprintf(out, "    %-7s %s, .-%s\n", ".size", fn->name, fn->name);
+    if (!a64_macho)
+        fprintf(out, "    %-7s %s, .-%s\n", ".size", fn->name, fn->name);
 }

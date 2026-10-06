@@ -1,11 +1,18 @@
 // AArch64 fixture: compile C source to assembly in-process, and run it on bare-metal
-// qemu `virt` at EL1 (qemu_test.h), its exit status through semihosting.
+// qemu `virt` at EL1 (qemu_test.h), its exit status through semihosting.  Built with
+// AARCH64_DARWIN (aarch64-darwin-tests) it is the macOS one instead: compiled with
+// --darwin, assembled and linked by the system C compiler, and run natively; clang is
+// that compiler.
 #pragma once
 
 #include <string>
 
 #include "codegen.h"
 #include "qemu_test.h"
+
+#ifdef AARCH64_DARWIN
+#include "darwin_test.h"
+#else
 
 // The AArch64 tools, from CMake; a missing one names a path that does not exist.
 inline bool aarch64_tools_available()
@@ -19,6 +26,11 @@ inline bool aarch64_tools_available()
     do {                                                                                  \
         if (!aarch64_tools_available())                                                   \
             GTEST_SKIP() << "AArch64 assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// A test of our own runtime's behavior, beyond what C fixes, runs on bare metal only.
+#define SKIP_IF_HOSTED() \
+    do {                 \
     } while (0)
 
 // clang, the reference compiler, when it has the target.
@@ -138,3 +150,5 @@ protected:
                    ".clang");
     }
 };
+
+#endif // AARCH64_DARWIN

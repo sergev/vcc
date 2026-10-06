@@ -11,6 +11,7 @@ static const BackendFlag flags[] = {
     { "no-peephole", "skip the peephole pass" },
     { "frame-pointer", "keep a frame record and x29 in every function" },
     { "linux", "hosted Linux: mark the stack non-executable" },
+    { "darwin", "hosted macOS: Mach-O, the GOT and Apple's calling convention" },
     { NULL, NULL },
 };
 
@@ -22,8 +23,10 @@ static void flag(int index)
         aarch64_peephole = false;
     else if (index == 2)
         aarch64_frame_pointer = true;
-    else
+    else if (index == 3)
         aarch64_linux = true;
+    else
+        aarch64_darwin = true;
 }
 
 static const char *output_ext(void)

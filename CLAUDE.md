@@ -28,9 +28,16 @@ Two **hosted** targets reuse the x86-64 and AArch64 code generators: `x86_64-lin
 `aarch64-linux` (`vgenx86`/`vgenaarch64 --linux`, which adds `.note.GNU-stack`; `lower`
 aliases them to the bare-metal descriptors), assembled and linked by the system C compiler
 (`cc -no-pie … -lvcc`) against glibc, with our glibc-compatible headers from `libc/linux/`
-(our parser cannot read glibc's) and `libvcc.a` holding only `__va_arg`. **`vcc`'s default
-target is the host** (`HOST_TARGET` in `cc/cc.c`: one of those two, else `riscv64`); `cpp`
-and `lower` keep `riscv64` as theirs. `cc-tests` `HostedHeadersAgreeWithSystem` compares
+(our parser cannot read glibc's) and `libvcc.a` holding only `__va_arg`. A third hosted
+target, `aarch64-darwin` (macOS on Apple silicon), has a descriptor of its own (signed
+`char`, `long double` = `double`, `__builtin_va_class` = `tac_apple64_class`) and
+`vgenaarch64 --darwin`: Mach-O (`_` names, `L` labels, `@PAGE`/`@PAGEOFF`), the GOT for
+every name the unit does not define, and Apple's arm64 calls (named stack arguments at
+their natural size, every variadic one on the stack, `va_list` a `char *`); it links with
+`cc` (a PIE, no `libvcc.a`) against libSystem, with the headers of `libc/darwin/` (see
+[docs/Aarch64_Backend.md](docs/Aarch64_Backend.md#hosted-macos)).
+**`vcc`'s default target is the host** (`HOST_TARGET` in `cc/cc.c`: one of those three,
+else `riscv64`); `cpp` and `lower` keep `riscv64` as theirs. `cc-tests` `HostedHeadersAgreeWithSystem` compares
 header layouts and constants with the system compiler's.
 Run the tests with `ctest -j8` (or `make run`): it is much faster than the binaries.
 `scripts/bench_msp430.sh` prints mspsim cycles and code size of `bench/msp430/*.c`, ours
@@ -95,7 +102,9 @@ And for the hosted targets (`libc/linux/CMakeLists.txt`): `share/vcc/x86_64-linu
 `share/vcc/aarch64-linux/`, `lib/libvcc.a` (built only where a C compiler for that Linux
 exists: the build's own on a matching host, else `<triple>-gcc`) and `include/` merged from
 `libc/linux/<arch>/include`, `libc/linux/include`, the architecture's, LP64 and shared
-headers, the first of a name winning.
+headers, the first of a name winning; and `share/vcc/aarch64-darwin/include` alone
+(`libc/darwin/CMakeLists.txt`) from `libc/darwin/include`, AArch64's, LP64 and shared
+headers, with no library.
 The default prefix `~/.local` is set in the top-level `CMakeLists.txt` (unless
 `CMAKE_INSTALL_PREFIX` is given; `cmake --install build --prefix DIR` also overrides it); the
 binaries are renamed (`v` prefix) only at install time via
@@ -483,6 +492,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/riscv/test/rv32_tests.cpp`, `llong_tests.cpp` (`long long` in register pairs, against the host's results), `interop32_tests.cpp` (ILP32D with clang: pairs, split a7/stack, `long double` by reference, hidden result pointer) and the shared `interop_tests.cpp` (RV32/ILP32D: `genriscv --rv32` run on `qemu-system-riscv32`; the same `riscv_test.h` built with `RISCV_TEST_XLEN=32`, the `libc/riscv32` headers and runtime; ctest names prefixed `rv32.`) → `riscv32-tests`
 - `backend/aarch64/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `aarch64_test.h` also runs programs on bare-metal `qemu-system-aarch64`, skipped without the tools), `interop_tests.cpp` (a signature table and variadics linked with clang both ways), `regalloc_tests.cpp`, `peephole_tests.cpp`, `float128_tests.cpp`, the libc run tests ported from RISC-V, and the book suite (compared with clang) → `aarch64-tests`
 - `backend/arm32/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `llong_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `arm32_test.h` also runs programs on bare-metal `qemu-system-arm`, skipped without the tools), `interop_tests.cpp` (a signature table, variadics and the RTABI helpers linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang) → `arm32-tests`
+- `backend/aarch64/test/darwin_tests.cpp` (Mach-O and Apple ABI goldens, native runs), with `interop_tests.cpp`, the libc run tests and the book suite (plus `signed_char_tests.cpp`) built against `test/darwin_test.h` (`AARCH64_DARWIN`: compiled with `--darwin`, linked by the system `cc`, run natively, the system clang as the other side; `test/darwin_status.c` prints a book program's result and supplies `putch`) → `aarch64-darwin-tests` (ctest names prefixed `darwin.`; the runs skip off a Mac with Apple silicon)
 - `backend/x86/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `x87_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`, every output also assembled by GNU `as` when that is the assembler; `x86_test.h` also runs programs on bare-metal `qemu-system-x86_64 -M microvm`, skipped without the tools), `interop_tests.cpp` (scalars, structs of every class and variadics linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang; `backend/common/test/book/signed_char_tests.cpp` has signed-char versions of three programs, shared with MMIX) → `x86-tests`
 - `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with clang) → `avr-tests`
 - `backend/msp430/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `fp_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `msp430_test.h` assembles and links with the GNU MSP430 toolchain and runs programs on `mspsim`, skipped without the tools), `float32_tests.cpp`/`float64_tests.cpp` (the soft-float runtime against the host bit for bit), `interop_tests.cpp` (a signature table linked with GCC both ways and with clang but for structures, the call-saved registers, GCC's and clang's code on our runtime, our helpers against libgcc's, our code under newlib, the headers checked against GCC's and clang's), `regalloc_tests.cpp`, the libc run tests ported from AVR (also run against newlib), and the book suite (compared with GCC's build and clang's) → `msp430-tests`

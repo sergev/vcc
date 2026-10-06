@@ -406,6 +406,7 @@ int main(void) {
 TEST_F(Aarch64Test, StrerrorKnown)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_HOSTED(); // our libc's own behavior, not libSystem's
     EXPECT_EQ("OUT OF MEMORY\n", CompileAndRunAarch64(R"PROG(
 #include <stdio.h>
 #include <string.h>
@@ -422,6 +423,7 @@ int main(void) {
 TEST_F(Aarch64Test, StrerrorUnknown)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_HOSTED(); // our libc's own behavior, not libSystem's
     EXPECT_EQ("UNKNOWN ERROR\n", CompileAndRunAarch64(R"PROG(
 #include <stdio.h>
 #include <string.h>

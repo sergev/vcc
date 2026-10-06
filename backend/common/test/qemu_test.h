@@ -55,6 +55,9 @@ struct QemuConfig {
     // The run's wall-clock limit, in seconds: the only limit on mmix, which counts no
     // instructions.
     int timeout = 5;
+    // A hosted program (macOS): linked by the C compiler, `ld`, with no libc.a and only
+    // a crt0 that is named, and run directly (`qemu` and `image_option` empty).
+    bool native = false;
 };
 
 // `cfg` with the assembler and the linker flags CMake found (scripts/CrossTools.cmake),
@@ -157,9 +160,12 @@ protected:
         link.insert(link.end(), cfg.link_flags.begin(), cfg.link_flags.end());
         if (*cfg.link_script)
             link.insert(link.end(), { "-T", cfg.link_script });
-        link.insert(link.end(), { "-o", exe_path, lib + "/" + crt0 });
+        link.insert(link.end(), { "-o", exe_path });
+        if (!cfg.native || *crt0)
+            link.push_back(lib + "/" + crt0);
         link.insert(link.end(), objs.begin(), objs.end());
-        link.push_back(lib + "/libc.a");
+        if (!cfg.native)
+            link.push_back(lib + "/libc.a");
         link.insert(link.end(), cfg.extra_libs.begin(), cfg.extra_libs.end());
         rc = RunTool(link, log_path);
         EXPECT_EQ(0, rc) << "the link failed on " << exe_path << ":\n" << ReadFile(log_path);

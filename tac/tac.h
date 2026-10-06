@@ -644,6 +644,13 @@ int tac_aapcs64_class(const Tac_Type *t);
 // The element count of `t` as a homogeneous float aggregate (a lone FP scalar is one),
 // with the element size in *esize; 0 when it is none.
 int tac_aapcs64_hfa(const Tac_Type *t, int *esize);
+// The same under Apple's arm64 ABI, where long double is double.
+int tac_apple64_hfa(const Tac_Type *t, int *esize);
+// How a variadic argument goes under Apple's arm64 ABI: TAC_AAPCS64_BY_REF for an
+// aggregate over 16 bytes that is no homogeneous float aggregate, else
+// TAC_AAPCS64_GENERAL, in 8-byte stack slots (an HFA too).  The value of
+// __builtin_va_class on aarch64-darwin.
+int tac_apple64_class(const Tac_Type *t);
 //
 // AAPCS-VFP (32-bit) argument classes (tac_abi.c): in core registers and the stack, or
 // in VFP registers as `count` (1-4) elements of `esize` (4 or 8) bytes, encoded

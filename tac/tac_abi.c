@@ -2,7 +2,8 @@
 // AAPCS64 argument classification over TAC types.  One function serves the AArch64
 // backend (where a call puts each argument) and the semantic pass (the value of
 // __builtin_va_class, which va_arg hands to the runtime), so the two cannot disagree.
-// AAPCS (32-bit) has the same homogeneous aggregates, with long double a double.  The
+// AAPCS (32-bit) has the same homogeneous aggregates, with long double a double, and so
+// has Apple's arm64 ABI.  The
 // System V AMD64 classes serve the x86-64 backend the same way.
 //
 #include "tac.h"
@@ -102,6 +103,20 @@ static int hfa(const Tac_Type *t, bool aapcs32, int *esize)
 int tac_aapcs64_hfa(const Tac_Type *t, int *esize)
 {
     return hfa(t, false, esize);
+}
+
+int tac_apple64_hfa(const Tac_Type *t, int *esize)
+{
+    return hfa(t, true, esize); // long double is double, as under AAPCS
+}
+
+int tac_apple64_class(const Tac_Type *t)
+{
+    int esize;
+    if ((t->kind == TAC_TYPE_ARRAY || t->kind == TAC_TYPE_STRUCTURE) && size_of(t, true) > 16 &&
+        !hfa(t, true, &esize))
+        return TAC_AAPCS64_BY_REF;
+    return TAC_AAPCS64_GENERAL;
 }
 
 int tac_aapcs64_class(const Tac_Type *t)

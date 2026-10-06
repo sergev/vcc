@@ -92,7 +92,8 @@ Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
 chain: `vcc hello.c` preprocesses, compiles, assembles and links a program for the
 machine it runs on (`-t x86_64-linux` or `-t aarch64-linux`, linked against glibc by the
-system's C compiler), or with `-t` for a bare-metal target, links with
+system's C compiler, or `-t aarch64-darwin` on a Mac with Apple silicon, against
+libSystem), or with `-t` for a bare-metal target, links with
 the target's GNU binutils (`riscv64-unknown-elf-as`/`-ld`, `aarch64-none-elf-`,
 `arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`, `msp430-elf-`,
 `mmix-knuth-mmixware-`), or with clang and `ld.lld` where there are no binutils for the

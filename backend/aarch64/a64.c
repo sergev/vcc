@@ -92,9 +92,33 @@ A64_Operand a64_sym(const char *sym, int64_t offset)
     return (A64_Operand){ .kind = A64_OPND_SYM, .sym = xstrdup(sym), .imm = offset };
 }
 
+A64_Operand a64_label(const char *label)
+{
+    return (A64_Operand){ .kind = A64_OPND_SYM, .sym = xstrdup(label), .label = true };
+}
+
+A64_Operand a64_page(const char *sym)
+{
+    return (A64_Operand){ .kind = A64_OPND_SYM, .sym = xstrdup(sym), .reloc = A64_RELOC_PAGE };
+}
+
 A64_Operand a64_lo12(const char *sym, int64_t offset)
 {
-    return (A64_Operand){ .kind = A64_OPND_SYM, .sym = xstrdup(sym), .imm = offset, .lo12 = true };
+    return (A64_Operand){
+        .kind = A64_OPND_SYM, .sym = xstrdup(sym), .imm = offset, .reloc = A64_RELOC_LO12
+    };
+}
+
+A64_Operand a64_gotpage(const char *sym)
+{
+    return (A64_Operand){ .kind = A64_OPND_SYM, .sym = xstrdup(sym), .reloc = A64_RELOC_GOTPAGE };
+}
+
+A64_Operand a64_mem_got(int base, const char *sym)
+{
+    return (A64_Operand){
+        .kind = A64_OPND_MEM, .reg = base, .width = A64_X, .sub = A64_MEM_GOT, .sym = xstrdup(sym)
+    };
 }
 
 static A64_Operand mem(int base, int64_t offset, A64_MemMode mode)

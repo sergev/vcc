@@ -30,7 +30,7 @@ int a64_size(const Tac_Type *t)
     case TAC_TYPE_DOUBLE:
         return 8;
     case TAC_TYPE_LONG_DOUBLE:
-        return 16;
+        return aarch64_darwin ? 8 : 16; // Apple: long double is double
     case TAC_TYPE_ARRAY:
         return t->u.array.size * a64_size(t->u.array.elem_type);
     case TAC_TYPE_STRUCTURE:
@@ -51,19 +51,20 @@ int a64_align(const Tac_Type *t)
     }
 }
 
+// Under Apple's ABI long double is double: an FP type, never a binary128 one.
 bool a64_is_fp(const Tac_Type *t)
 {
-    return t->kind == TAC_TYPE_FLOAT || t->kind == TAC_TYPE_DOUBLE;
+    return t->kind == TAC_TYPE_FLOAT || a64_is_double(t);
 }
 
 bool a64_is_double(const Tac_Type *t)
 {
-    return t->kind == TAC_TYPE_DOUBLE;
+    return t->kind == TAC_TYPE_DOUBLE || (aarch64_darwin && t->kind == TAC_TYPE_LONG_DOUBLE);
 }
 
 bool a64_is_ld(const Tac_Type *t)
 {
-    return t->kind == TAC_TYPE_LONG_DOUBLE;
+    return t->kind == TAC_TYPE_LONG_DOUBLE && !aarch64_darwin;
 }
 
 bool a64_is_unsigned(const Tac_Type *t)
@@ -113,18 +114,24 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->globals);
     map_init(&g->regs);
     map_init(&g->dead);
+    map_init(&g->defined);
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         switch (t->kind) {
         case TAC_TOPLEVEL_FUNCTION:
             add_global(g, t->u.function.name, t->u.function.type);
-            for (const Tac_StaticLocal *s = t->u.function.static_locals; s; s = s->next)
+            map_insert(&g->defined, t->u.function.name, 1, 0);
+            for (const Tac_StaticLocal *s = t->u.function.static_locals; s; s = s->next) {
                 add_global(g, s->name, s->type);
+                map_insert(&g->defined, s->name, 1, 0);
+            }
             break;
         case TAC_TOPLEVEL_STATIC_VARIABLE:
             add_global(g, t->u.static_variable.name, t->u.static_variable.type);
+            map_insert(&g->defined, t->u.static_variable.name, 1, 0);
             break;
         case TAC_TOPLEVEL_STATIC_CONSTANT:
             add_global(g, t->u.static_constant.name, t->u.static_constant.type);
+            map_insert(&g->defined, t->u.static_constant.name, 1, 0);
             break;
         case TAC_TOPLEVEL_EXTERN:
             add_global(g, t->u.extern_.name, t->u.extern_.type);
@@ -144,6 +151,7 @@ void gen_done(Gen *g)
     map_destroy(&g->globals);
     map_destroy(&g->regs);
     map_destroy(&g->dead);
+    map_destroy(&g->defined);
     a64_free_func(g->fn);
 }
 
@@ -345,8 +353,14 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
     }
     if (name[0] == '%')
         fatal_error("aarch64: %s: no slot for %s", gen_name(g), name);
-    emit2(g, A64_ADRP, a64_reg(scratch, A64_X), a64_sym(name, 0));
-    emit3(g, A64_ADD, a64_reg(scratch, A64_X), a64_reg(scratch, A64_X), a64_lo12(name, 0));
+    if (aarch64_darwin && !map_get(&g->defined, name, NULL)) {
+        // Defined elsewhere, maybe in a shared library: its address from the GOT.
+        emit2(g, A64_ADRP, a64_reg(scratch, A64_X), a64_gotpage(name));
+        emit2(g, A64_LDR, a64_reg(scratch, A64_X), a64_mem_got(scratch, name));
+    } else {
+        emit2(g, A64_ADRP, a64_reg(scratch, A64_X), a64_page(name));
+        emit3(g, A64_ADD, a64_reg(scratch, A64_X), a64_reg(scratch, A64_X), a64_lo12(name, 0));
+    }
     *base = scratch;
     *off  = 0;
 }
@@ -433,6 +447,9 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
         uint64_t bits;
         memcpy(&bits, &c->u.double_val, 8);
         gen_li(g, IP1, A64_X, (int64_t)bits);
+        emit2(g, A64_FMOV, a64_reg(reg, A64_D), a64_reg(IP1, A64_X));
+    } else if (c->kind == TAC_CONST_LONG_DOUBLE && aarch64_darwin) {
+        gen_li(g, IP1, A64_X, (int64_t)f128_to_double_bits(c->u.long_double_val));
         emit2(g, A64_FMOV, a64_reg(reg, A64_D), a64_reg(IP1, A64_X));
     } else if (c->kind == TAC_CONST_LONG_DOUBLE) {
         // Its two doublewords through a slot.
