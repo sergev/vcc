@@ -8,7 +8,7 @@
 
 const char *a32_reg_name(int reg, A32_Width width)
 {
-    static char names[3][A32_VREG][4];
+    static char names[3][A32_VREG][12]; // room for any int
     static const char *const special[] = { "sp", "lr", "pc" };
     if (reg < 0 || reg >= A32_VREG)
         return NULL;
@@ -17,11 +17,11 @@ const char *a32_reg_name(int reg, A32_Width width)
         if (width == A32_CORE && reg >= A32_SP && reg <= A32_PC)
             strcpy(name, special[reg - A32_SP]);
         else if (width == A32_CORE && reg < A32_SP)
-            snprintf(name, 4, "r%d", reg);
+            snprintf(name, sizeof names[0][0], "r%d", reg);
         else if (width == A32_S && a32_is_vfp(reg))
-            snprintf(name, 4, "s%d", reg - A32_S0);
+            snprintf(name, sizeof names[0][0], "s%d", reg - A32_S0);
         else if (width == A32_D && a32_is_vfp(reg) && (reg - A32_S0) % 2 == 0)
-            snprintf(name, 4, "d%d", (reg - A32_S0) / 2);
+            snprintf(name, sizeof names[0][0], "d%d", (reg - A32_S0) / 2);
         else
             return NULL; // the other file, or an odd single at double width
     }

@@ -2,21 +2,18 @@
 # RISC-V RV32 runtime for bare-metal qemu `virt`, like libc/riscv64: crt0.o,
 # crt0-status.o and libc.a, with the 32-bit crt0 and malloc, the console and linker
 # script of riscv64, and the C sources compiled by our own toolchain for riscv32.
-# Uses the clang and llvm-ar libc/riscv64 found; skipped when they cannot target
-# riscv32.
+# Uses the RISC-V binutils (or clang, ld.lld and llvm-ar); skipped when they are
+# absent.
 #
 find_program(RISCV32_QEMU NAMES qemu-system-riscv32)
 
-set(RISCV32_TOOLS_FOUND OFF)
-if(RISCV_CLANG AND RISCV_AR)
-    execute_process(COMMAND ${RISCV_CLANG} --print-targets OUTPUT_VARIABLE targets
-        ERROR_QUIET)
-    if(targets MATCHES "riscv32")
-        set(RISCV32_TOOLS_FOUND ON)
-    endif()
-endif()
-# For the backend tests.
-set(RISCV32_TOOLS_FOUND ${RISCV32_TOOLS_FOUND} CACHE INTERNAL "")
+vcc_find_cross(RISCV32
+    PREFIXES ${RISCV_PREFIXES}
+    GNU_ASFLAGS -march=rv32imfd -mabi=ilp32d
+    GNU_LDFLAGS -m elf32lriscv
+    CLANG_TARGET "riscv32"
+    CLANG_FLAGS --target=riscv32 -march=rv32imfd -mabi=ilp32d
+    RWX_IMAGE)
 set(RISCV32_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(RISCV32_LINK_SCRIPT ${RISCV64_DIR}/link.ld CACHE INTERNAL "")
 
@@ -50,31 +47,25 @@ add_test(
             ${LIBC_COMMON_INCLUDE_DIR})
 
 if(NOT RISCV32_TOOLS_FOUND)
-    message(STATUS "No riscv32 clang/llvm-ar: the RISC-V RV32 runtime is not built")
+    message(STATUS "No riscv32 binutils or clang: the RISC-V RV32 runtime is not built")
     return()
 endif()
 
-set(RISCV32_ASFLAGS --target=riscv32 -march=rv32imfd -mabi=ilp32d -c)
 set(src ${CMAKE_CURRENT_SOURCE_DIR})
 set(out ${CMAKE_CURRENT_BINARY_DIR})
 
-add_custom_command(OUTPUT ${out}/crt0.o
-    COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -o ${out}/crt0.o ${src}/crt0.S
-    DEPENDS ${src}/crt0.S)
-add_custom_command(OUTPUT ${out}/crt0-status.o
-    COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -DPRINT_STATUS -o ${out}/crt0-status.o ${src}/crt0.S
-    DEPENDS ${src}/crt0.S)
+vcc_assemble_crt0(RISCV32 ${src} ${out})
 # Assembly leaves: the console and sqrt are the same for both widths.
 set(RISCV32_LIBC_OBJS "")
 foreach(asm ${RISCV64_DIR}/console.s ${RISCV64_DIR}/sqrt.s ${src}/malloc.s)
     get_filename_component(name ${asm} NAME_WE)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -o ${out}/${name}.o ${asm}
+        COMMAND ${RISCV32_AS} -o ${out}/${name}.o ${asm}
         DEPENDS ${asm})
     list(APPEND RISCV32_LIBC_OBJS ${out}/${name}.o)
 endforeach()
 
-# C sources, through cpp -> parse -> lower -> genriscv --rv32 -> clang.
+# C sources, through cpp -> parse -> lower -> genriscv --rv32 -> as.
 set(RISCV32_LIBC_EXTRA_DEPS ${CMAKE_SOURCE_DIR}/libutil/float128.c ${CMAKE_SOURCE_DIR}/libutil/float128.h)
 file(GLOB RISCV32_LIBC_HEADERS ${RISCV32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
      ${LIBC_COMMON_INCLUDE_DIR}/*.h)
@@ -86,7 +77,7 @@ macro(riscv32_compile_libc_c name srcdir)
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
         COMMAND lower -t riscv32 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genriscv --rv32 ${out}/${name}.tac ${out}/${name}.s
-        COMMAND ${RISCV_CLANG} ${RISCV32_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        COMMAND ${RISCV32_AS} -o ${out}/${name}.o ${out}/${name}.s
         DEPENDS ${srcdir}/${name}.c ${RISCV32_LIBC_HEADERS} ${RISCV32_LIBC_EXTRA_DEPS} parse lower
                 genriscv
         COMMENT "Compiling ${name}.c -> ${name}.o (RISC-V RV32)")
@@ -106,7 +97,7 @@ endforeach()
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a
-    COMMAND ${RISCV_AR} rcs ${out}/libc.a ${RISCV32_LIBC_OBJS}
+    COMMAND ${RISCV32_AR} rcs ${out}/libc.a ${RISCV32_LIBC_OBJS}
     DEPENDS ${RISCV32_LIBC_OBJS})
 add_custom_target(riscv32-libc ALL
     DEPENDS ${out}/crt0.o ${out}/crt0-status.o ${out}/libc.a)

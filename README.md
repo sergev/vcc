@@ -90,19 +90,73 @@ tree, point it at the source headers:
 Installed, `vcpp -t riscv64` finds them by itself. (The system `cc -E` works too.)
 
 The driver ([cc/README.md](cc/README.md)), ported from v7besm's `b6cc`, runs the whole
-chain: `vcc -o hello.elf hello.c` preprocesses, compiles, assembles with clang and links
-with `ld.lld` for RISC-V, ARM, x86-64 and AVR (`-t msp430`: the GNU `msp430-elf-as`/`-ld`;
-`-t mmix`: the GNU `mmix-knuth-mmixware-as`/`-ld`; `-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`,
-`-o`, `-D`, `-I`, `-L` and `-l`.
+chain: `vcc -o hello.elf hello.c` preprocesses, compiles, then assembles and links with
+the target's GNU binutils (`riscv64-unknown-elf-as`/`-ld`, `aarch64-none-elf-`,
+`arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`, `msp430-elf-`,
+`mmix-knuth-mmixware-`), or with clang and `ld.lld` where there are no binutils for the
+target (`-t besm6`: `b6as`/`b6ld`). It accepts the usual `-c`, `-S`, `-E`, `-o`, `-D`,
+`-I`, `-L` and `-l`.
 
 ## Getting started
 
-**You need** CMake 3.10 or newer and a C11 compiler. Building the tests also needs a C++17
-compiler and, the first time you configure, network access so CMake can download
-GoogleTest. The RISC-V, ARM, x86-64 and AVR runtimes and run tests need a clang with those
-targets, `ld.lld`, and `qemu-system-riscv64`, `qemu-system-riscv32`,
-`qemu-system-aarch64`, `qemu-system-arm`, `qemu-system-x86_64` and `qemu-system-avr` (on macOS: Homebrew `llvm`, `lld` and `qemu`). The MSP430 runtime and run tests need the GNU MSP430 toolchain (`msp430-elf-gcc`, binutils and newlib) and the [mspsim](https://github.com/sergev/mspsim) simulator. The MMIX runtime and run tests need the GNU MMIX toolchain (`mmix-knuth-mmixware-gcc`, binutils and newlib) and Knuth's `mmix` simulator from [MMIXware](https://www-cs-faculty.stanford.edu/~knuth/mmix.html). Without these tools those tests are skipped, as are the tests of any other target whose
-tools are missing.
+### Prerequisites
+
+The compiler itself needs only CMake 3.10 or newer and a C11 compiler. The tests also need
+a C++17 compiler and, the first time you configure, network access, since CMake downloads
+GoogleTest. Each target's runtime library and run tests need more tools, listed below;
+without them the runtime of that target is not built and its run tests are skipped.
+
+| Target | Assembler and linker | Simulator | Optional reference compiler |
+|---|---|---|---|
+| RISC-V 64 and 32 | `riscv64-unknown-elf-` (or `riscv64-elf-`, `riscv64-linux-gnu-`) binutils | `qemu-system-riscv64`, `qemu-system-riscv32` | clang |
+| AArch64 | `aarch64-none-elf-` (or `aarch64-elf-`, `aarch64-linux-gnu-`) binutils | `qemu-system-aarch64` | clang |
+| ARM32 | `arm-none-eabi-` binutils | `qemu-system-arm` | clang |
+| x86-64 | `x86_64-elf-` binutils, or the host's own on x86-64 Linux | `qemu-system-x86_64` | clang |
+| AVR | `avr-` binutils | `qemu-system-avr` | clang |
+| MSP430 | `msp430-elf-` (or `msp430-unknown-elf-`) binutils | [mspsim](https://github.com/sergev/mspsim) | `msp430-elf-gcc` with newlib; clang |
+| MMIX | `mmix-knuth-mmixware-` binutils, GCC and newlib | Knuth's `mmix` from [MMIXware](https://www-cs-faculty.stanford.edu/~knuth/mmix.html) | |
+| BESM-6 | `b6as`, `b6ld` from [v7besm](https://github.com/besm6/v7besm) | `b6sim` from v7besm; `dubna` (with `besmc` for Bemsh) | |
+
+Where no binutils are found, a clang with the target, `ld.lld` and `llvm-ar` assemble,
+link and archive instead (`cmake -DVCC_CROSS_TOOLS=gnu|llvm` forces one or the other).
+The *reference compiler* builds the other half of the interoperability tests and, for the
+"Writing a C Compiler" programs, a second build whose output must match ours; without it
+those comparisons are skipped. `cppcheck`, when installed, checks every source during
+the build.
+
+**Debian and Ubuntu:**
+
+```bash
+sudo apt install build-essential cmake git cppcheck \
+    binutils-riscv64-unknown-elf binutils-aarch64-none-elf binutils-arm-none-eabi \
+    binutils-avr binutils-msp430-unknown-elf \
+    qemu-system-misc qemu-system-arm qemu-system-x86
+sudo apt install qemu-system-riscv        # Debian 13 and later: RISC-V is split out
+sudo apt install clang lld llvm           # optional: the reference compiler
+```
+
+x86-64 uses the host's binutils on an x86-64 machine (`binutils-x86-64-linux-gnu`
+elsewhere). Where a distribution lacks the `-none-elf` packages,
+`binutils-riscv64-linux-gnu` and `binutils-aarch64-linux-gnu` serve as well. The MSP430
+GCC and newlib, and the whole MMIX toolchain, are built from source:
+see [docs/Howto_build_MSP430_GCC.md](docs/Howto_build_MSP430_GCC.md) and
+[docs/Howto_build_MMIXware.md](docs/Howto_build_MMIXware.md). Build mspsim from
+[its repository](https://github.com/sergev/mspsim). Install all three into `~/.local`:
+CMake looks in `~/.local/bin`.
+
+**macOS (Homebrew):**
+
+```bash
+brew install cmake cppcheck qemu \
+    riscv64-elf-binutils aarch64-elf-binutils arm-none-eabi-binutils x86_64-elf-binutils
+brew tap osx-cross/avr && brew install avr-binutils
+brew install llvm lld                     # optional: the reference compiler
+```
+
+There is no Homebrew formula for the MSP430 and MMIX toolchains: build them from source
+as above.
+
+### Building and testing
 
 ```bash
 make            # build the compiler and the runtime libraries

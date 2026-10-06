@@ -122,6 +122,7 @@ int main(void) {
 TEST_F(X86Test, RunFloatingPointWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     CompileAndRunWithClang(R"(
 double theirs(double a, double b, double c, double d, double e, double k, double g,
               double h, double i, float j, long n);

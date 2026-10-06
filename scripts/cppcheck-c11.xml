@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!-- cppcheck 2.21 ignores C11 _Noreturn (it honours the GNU attribute), so after a
+     fatal_error() it reports null dereferences and out-of-bounds indices. -->
+<def version="2">
+  <define name="_Noreturn" value="__attribute__((noreturn))"/>
+</def>

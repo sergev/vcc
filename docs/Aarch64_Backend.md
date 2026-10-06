@@ -12,8 +12,8 @@ emulator, with no operating system.
 - **Calling rules:** AAPCS64, the `aarch64` descriptor in `semantic/target.c`. `int` is
   32 bits; `long` and pointers are 64; plain `char` is unsigned; `wchar_t` is
   `unsigned int`.
-- **Output:** a `.s` file in GNU/LLVM syntax that clang assembles
-  (`clang --target=aarch64-none-elf -c`); `ld.lld` links.
+- **Output:** a `.s` file in GNU syntax that `aarch64-none-elf-as` assembles and
+  `aarch64-none-elf-ld` links (or clang, `--target=aarch64-none-elf`, and `ld.lld`).
 - **`long double`:** 128 bits (IEEE binary128), passed in a `q` register, computed in
   software by the same routines as on RISC-V.
 - **Machine:** qemu `virt`, bare metal at EL1. Output goes to the PL011 UART at
@@ -129,8 +129,9 @@ In `libc/aarch64/`:
 
 ## Running a program by hand
 
-You need clang with AArch64 support, `ld.lld` and `qemu-system-aarch64`. On macOS:
-`brew install llvm lld qemu`.
+You need the AArch64 binutils (`aarch64-none-elf-as` and `-ld`; or clang and `ld.lld`)
+and `qemu-system-aarch64`. On Debian and Ubuntu: `apt install binutils-aarch64-none-elf
+qemu-system-arm`; on macOS: `brew install aarch64-elf-binutils qemu`.
 
 After `make install`, which installs into `~/.local`, the driver does it all:
 
@@ -148,8 +149,8 @@ vcpp -t aarch64 -nostdinc -I$P/share/vcc/aarch64/include hello.c hello.i   # pre
 vparse hello.i hello.ast                                         # parse
 vlower -t aarch64 hello.ast hello.tac                            # check and lower
 vgenaarch64 hello.tac hello.s                                    # generate assembly
-clang --target=aarch64-none-elf -c hello.s -o hello.o
-ld.lld -T $P/share/vcc/aarch64/lib/link.ld -o hello.elf \
+aarch64-none-elf-as -o hello.o hello.s
+aarch64-none-elf-ld -T $P/share/vcc/aarch64/lib/link.ld -o hello.elf \
     $P/share/vcc/aarch64/lib/crt0.o hello.o $P/share/vcc/aarch64/lib/libc.a
 qemu-system-aarch64 -M virt -cpu cortex-a57 -display none -serial stdio -monitor none \
     -semihosting -kernel hello.elf

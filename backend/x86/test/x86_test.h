@@ -15,34 +15,50 @@ extern "C" {
 // The x86-64 tools, from CMake; a missing one names a path that does not exist.
 inline bool x86_tools_available()
 {
-    return X86_TOOLS_FOUND && tool_available(X86_CLANG) && tool_available(X86_LD) &&
+    return X86_TOOLS_FOUND && command_available(X86_ASSEMBLER) && tool_available(X86_LD) &&
            tool_available(X86_QEMU);
 }
 
 // Skip a run test when the x86-64 toolchain or qemu is absent.
-#define SKIP_IF_NO_X86_TOOLS()                                                       \
-    do {                                                                             \
-        if (!x86_tools_available())                                                  \
-            GTEST_SKIP() << "x86-64 clang/ld.lld/qemu not found; skipping run test"; \
+#define SKIP_IF_NO_X86_TOOLS()                                                           \
+    do {                                                                                 \
+        if (!x86_tools_available())                                                      \
+            GTEST_SKIP() << "x86-64 assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// clang, the reference compiler, when it has the target.
+inline bool x86_clang_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return x86_tools_available() && X86_CLANG_FOUND && tool_available(X86_CLANG);
+}
+
+// Skip a test that compiles C with clang.
+#define SKIP_IF_NO_X86_CLANG()                                             \
+    do {                                                                   \
+        if (!x86_clang_available())                                        \
+            GTEST_SKIP() << "x86-64 clang not found; skipping clang test"; \
     } while (0)
 
 class X86Test : public QemuTest {
 protected:
     // The target flags are X86_TARGET_FLAGS of libc/x86/CMakeLists.txt.
     X86Test()
-        : QemuTest("x86_64", { "x86-tests",
-                               X86_CLANG,
-                               { "--target=x86_64-none-elf" },
-                               { "-ffreestanding", "-fno-builtin",
-                                 "-fno-asynchronous-unwind-tables" },
-                               X86_LD,
-                               X86_LINK_SCRIPT,
-                               X86_LIB_DIR,
-                               { X86_QEMU, "-M", "microvm", "-display", "none", "-serial",
-                                 "stdio", "-monitor", "none", "-device",
-                                 "isa-debug-exit,iobase=0xf4,iosize=0x04" },
-                               "",
-                               true })
+        : QemuTest(
+              "x86_64",
+              cross_tools(
+                  { "x86-tests",
+                    X86_CLANG,
+                    { "--target=x86_64-none-elf" },
+                    { "-ffreestanding", "-fno-builtin", "-fno-asynchronous-unwind-tables" },
+                    X86_LD,
+                    X86_LINK_SCRIPT,
+                    X86_LIB_DIR,
+                    { X86_QEMU, "-M", "microvm", "-display", "none", "-serial", "stdio", "-monitor",
+                      "none", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04" },
+                    "",
+                    true },
+                  X86_ASSEMBLER, X86_LINK_FLAGS))
     {
         // The defaults; a test may change them.
         x86_regalloc      = true;
@@ -59,9 +75,8 @@ protected:
         x86_peephole      = false;
     }
 
-    // Assembly of every toplevel of the translation unit.  When GNU as is installed,
-    // it must accept the output too, so that nothing comes to depend on clang's
-    // assembler.
+    // Assembly of every toplevel of the translation unit.  When GNU as is the
+    // assembler, it must accept the output even of a test that does not run it.
     std::string CompileToX86(const char *src)
     {
         Tac_TopLevel *all = CompileToTac(src);
@@ -80,16 +95,20 @@ protected:
         return s;
     }
 
+    // GNU as, when it is the assembler CMake found, must accept every output, the golden
+    // ones included.
     void CheckGnuAs(const std::string &asm_text)
     {
-        if (!tool_available(X86_GNU_AS))
+        if (!X86_GNU || !command_available(X86_ASSEMBLER))
             return;
         std::string s_path = QemuScratchPath(".gas.s"), log_path = QemuScratchPath(".gas.log");
         FILE *f            = fopen(s_path.c_str(), "w");
         ASSERT_NE(nullptr, f);
         fputs(asm_text.c_str(), f);
         fclose(f);
-        int rc = RunTool({ X86_GNU_AS, "--64", "-o", "/dev/null", s_path }, log_path);
+        std::vector<std::string> as = split_words(X86_ASSEMBLER);
+        as.insert(as.end(), { "-o", "/dev/null", s_path });
+        int rc = RunTool(as, log_path);
         EXPECT_EQ(0, rc) << "GNU as rejects the output:\n" << ReadFile(log_path);
     }
 

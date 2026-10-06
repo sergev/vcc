@@ -147,6 +147,7 @@ long PFX_check(void)
 TEST_F(AvrTest, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string ours = BothSides(sig_types, sig_decls, sig_defs, "our", "their") + R"(
 void putbyte(int c);
 static void hex(long v)
@@ -171,6 +172,7 @@ int main(void)
 TEST_F(AvrTest, RunPreservedRegisters)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string ours = CompileToAvr(R"(
 int work(int a, int b)
 {
@@ -223,6 +225,7 @@ int main(void)
 TEST_F(AvrTest, RunClangOnOurRuntime)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     volatile float x = 1.75f, y = -0.3f;
     auto bits = [](float f) {
         uint32_t u;
@@ -259,6 +262,7 @@ int main(void)
 TEST_F(AvrTest, HeadersAgreeWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string values = R"(
 #include <float.h>
 #include <limits.h>

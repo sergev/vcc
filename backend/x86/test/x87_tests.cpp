@@ -106,6 +106,7 @@ int main(void) {
 TEST_F(X86Test, RunLongDoubleWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     CompileAndRunWithClang(R"(
 long double theirs(int a, long double x, double d, long double y, long b, long c, long e,
                    long k, long m, long n, long double z);

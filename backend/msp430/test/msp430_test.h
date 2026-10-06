@@ -19,8 +19,15 @@ extern "C" {
 // The MSP430 tools, from CMake; a missing one names a path that does not exist.
 inline bool msp430_tools_available()
 {
-    return MSP430_TOOLS_FOUND && tool_available(MSP430_GCC) && tool_available(MSP430_LD) &&
-           tool_available(MSPSIM);
+    return MSP430_TOOLS_FOUND && command_available(MSP430_ASSEMBLER) &&
+           tool_available(MSP430_LD) && tool_available(MSPSIM);
+}
+
+// msp430-elf-gcc, the second compiler, with its libgcc.a and newlib.
+inline bool msp430_gcc_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return msp430_tools_available() && MSP430_GCC_FOUND && tool_available(MSP430_GCC);
 }
 
 inline bool msp430_clang_available()
@@ -30,11 +37,18 @@ inline bool msp430_clang_available()
            tool_available(MSP430_LLD);
 }
 
-// Skip a run test when the GNU MSP430 toolchain or mspsim is absent.
+// Skip a run test when the MSP430 binutils or mspsim is absent.
 #define SKIP_IF_NO_MSP430_TOOLS()                                                        \
     do {                                                                                 \
         if (!msp430_tools_available())                                                   \
-            GTEST_SKIP() << "msp430-elf-gcc/ld or mspsim not found; skipping run test"; \
+            GTEST_SKIP() << "MSP430 assembler/linker or mspsim not found; skipping run test"; \
+    } while (0)
+
+// Skip a test that needs msp430-elf-gcc as well.
+#define SKIP_IF_NO_MSP430_GCC()                                              \
+    do {                                                                     \
+        if (!msp430_gcc_available())                                         \
+            GTEST_SKIP() << "msp430-elf-gcc not found; skipping GCC test"; \
     } while (0)
 
 // Skip a test that needs clang's MSP430 target and ld.lld as well.
@@ -48,30 +62,33 @@ inline bool msp430_clang_available()
 // five-second wall-clock backstop.
 #define MSP430_CYCLE_LIMIT "200000000"
 
-// The run configurations.  The target flags are MSP430_TARGET_FLAGS of
-// libc/msp430/CMakeLists.txt.  mspsim exits with main's result, which its
+// The run configurations.  mspsim exits with main's result, which its
 // "[Exit code N ...]" line confirms.
 //
-// GCC: msp430-elf-gcc assembles our output and compiles the C parts, msp430-elf-ld links,
-// and libgcc.a follows our libc.a for the helpers only GCC's code calls.  Both links
-// drop the sections nothing reaches: genmsp430 gives every function and variable one.
+// GNU: msp430-elf-as assembles our output, msp430-elf-gcc (when present) compiles the C
+// parts, msp430-elf-ld links, and libgcc.a follows our libc.a for the helpers only GCC's
+// code calls.  Both links drop the sections nothing reaches: genmsp430 gives every
+// function and variable one.
 inline QemuConfig msp430_gcc_config()
 {
-    return { "msp430-tests",
-             MSP430_GCC,
-             { "-mcpu=msp430" },
-             { "-ffreestanding", "-fno-builtin" },
-             MSP430_LD,
-             MSP430_LINK_SCRIPT,
-             MSP430_LIB_DIR,
-             { MSPSIM, "-n", MSP430_CYCLE_LIMIT },
-             "",
-             false,
-             "",
-             false,
-             { "--gc-sections" },
-             "[Exit code ",
-             { MSP430_LIBGCC } };
+    QemuConfig c = cross_tools({ "msp430-tests",
+                                 MSP430_GCC,
+                                 { "-mcpu=msp430" },
+                                 { "-ffreestanding", "-fno-builtin" },
+                                 MSP430_LD,
+                                 MSP430_LINK_SCRIPT,
+                                 MSP430_LIB_DIR,
+                                 { MSPSIM, "-n", MSP430_CYCLE_LIMIT },
+                                 "",
+                                 false,
+                                 "",
+                                 false,
+                                 { "--gc-sections" },
+                                 "[Exit code " },
+                               MSP430_ASSEMBLER, MSP430_LINK_FLAGS);
+    if (*MSP430_LIBGCC)
+        c.extra_libs = { MSP430_LIBGCC };
+    return c;
 }
 
 // clang: its assembler and ld.lld, whose -n keeps the ELF header out of the peripheral
@@ -255,12 +272,15 @@ protected:
     }
 
     // Run a program on our libc.a, and once more built by GCC (-O1 -fno-builtin) with
-    // newlib: the two outputs and results must agree.  Returns ours, with main's result in
+    // newlib, when msp430-elf-gcc is present: the two outputs and results must agree.  Returns ours, with main's result in
     // exit_status.
     std::string RunAgainstNewlib(const std::string &src)
     {
         std::string ours = CompileAndRunMsp430(src);
         int status       = exit_status;
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+        if (!msp430_gcc_available())
+            return ours;
         EXPECT_EQ(ours, NewlibRun(src, { "-O1", "-fno-builtin", "-w" })) << "newlib disagrees";
         EXPECT_EQ(status, exit_status) << "newlib's result disagrees";
         exit_status = status;
@@ -271,6 +291,8 @@ protected:
     // crt0-status does for ours: --wrap=main sends newlib's startup to a wrapper, which
     // calls the program's own main (so its implicit "return 0" holds).  An exit() call
     // prints nothing, as in ours.  putch is ours, not newlib's: a weak one stands in.
+    // stdout is unbuffered, so that putchar and printf keep their order, and a lite
+    // exit (TI's --enable-lite-exit newlib) loses nothing.
     std::string GccRunBook(const std::string &src)
     {
         static const char wrapper[] = R"(#include <stdio.h>
@@ -281,6 +303,7 @@ __attribute__((weak)) int putch(int c)
 }
 int __wrap_main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0);
     int status = __real_main();
     printf("%d\n", status);
     return status;

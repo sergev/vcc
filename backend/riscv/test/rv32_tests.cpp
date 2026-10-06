@@ -375,6 +375,7 @@ int main(void)
 TEST_F(Rv32Test, BookStatus)
 {
     SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
     std::string src = "int main(void) { return -17; }";
     EXPECT_EQ("-17\n", CompileAndRunBook(src));
     EXPECT_EQ(ClangRunBook(src), "-17\n");

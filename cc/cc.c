@@ -48,11 +48,41 @@
 #include <mach-o/dyld.h>
 #endif
 
-#ifndef RISCV_CLANG
-#define RISCV_CLANG ""
+#ifndef RISCV64_AS
+#define RISCV64_AS ""
 #endif
-#ifndef RISCV_LD
-#define RISCV_LD ""
+#ifndef RISCV64_LD
+#define RISCV64_LD ""
+#endif
+#ifndef RISCV32_AS
+#define RISCV32_AS ""
+#endif
+#ifndef RISCV32_LD
+#define RISCV32_LD ""
+#endif
+#ifndef AARCH64_AS
+#define AARCH64_AS ""
+#endif
+#ifndef AARCH64_LD
+#define AARCH64_LD ""
+#endif
+#ifndef ARM32_AS
+#define ARM32_AS ""
+#endif
+#ifndef ARM32_LD
+#define ARM32_LD ""
+#endif
+#ifndef X86_64_AS
+#define X86_64_AS ""
+#endif
+#ifndef X86_64_LD
+#define X86_64_LD ""
+#endif
+#ifndef AVR_AS
+#define AVR_AS ""
+#endif
+#ifndef AVR_LD
+#define AVR_LD ""
 #endif
 #ifndef MSP430_AS
 #define MSP430_AS ""
@@ -60,14 +90,38 @@
 #ifndef MSP430_LD
 #define MSP430_LD ""
 #endif
-#ifndef MSP430_LIBGCC
-#define MSP430_LIBGCC ""
-#endif
 #ifndef MMIX_AS
 #define MMIX_AS ""
 #endif
 #ifndef MMIX_LD
 #define MMIX_LD ""
+#endif
+#ifndef RISCV64_LDFLAGS
+#define RISCV64_LDFLAGS ""
+#endif
+#ifndef RISCV32_LDFLAGS
+#define RISCV32_LDFLAGS ""
+#endif
+#ifndef AARCH64_LDFLAGS
+#define AARCH64_LDFLAGS ""
+#endif
+#ifndef ARM32_LDFLAGS
+#define ARM32_LDFLAGS ""
+#endif
+#ifndef X86_64_LDFLAGS
+#define X86_64_LDFLAGS ""
+#endif
+#ifndef AVR_LDFLAGS
+#define AVR_LDFLAGS ""
+#endif
+#ifndef MSP430_LDFLAGS
+#define MSP430_LDFLAGS ""
+#endif
+#ifndef MMIX_LDFLAGS
+#define MMIX_LDFLAGS ""
+#endif
+#ifndef MSP430_LIBGCC
+#define MSP430_LIBGCC ""
 #endif
 #ifndef MMIX_LIBGCC
 #define MMIX_LIBGCC ""
@@ -78,54 +132,61 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 //
 // A target: its code generator, and how to assemble and link for it.  The
 // assembler and linker are given as an environment override, the path found when
-// vcc was configured (may be empty), and the bare name to look up on PATH.  The
-// targets other than the BESM-6 and the MSP430 are assembled by clang and linked by
-// ld.lld with a linker script for qemu `virt` (`microvm` for x86-64, `arduino-mega`
-// for AVR); the clang configured for RISC-V serves the other targets too.  The
-// MSP430 is assembled and linked by the GNU MSP430 binutils, for mspsim, and its
-// link drops the sections nothing reaches (vgenmsp430 gives every function and
-// variable one) and ends with GCC's libgcc.a when it was found, so that objects
-// compiled by GCC link too.  MMIX is the same with the GNU MMIX binutils, for Knuth's
-// mmix: as GCC runs them, the assembler with -x (it expands an out-of-range branch and
-// allocates the base registers) and the linker with no script, text from 0x100, its
-// output Knuth's .mmo.
+// vcc was configured (may be empty), and the names to look up on PATH: GNU
+// binutils by each prefix in turn, then clang and ld.lld where the target has a
+// clang triple.  Which of the two a tool is decides its flags (is_llvm).  The
+// targets other than the BESM-6, the MSP430 and MMIX are linked with a linker
+// script for qemu `virt` (`microvm` for x86-64, `arduino-mega` for AVR).  The
+// MSP430 is linked for mspsim, and its link drops the sections nothing reaches
+// (vgenmsp430 gives every function and variable one) and ends with GCC's libgcc.a
+// when it was found, so that objects compiled by GCC link too.  MMIX is the same
+// with the GNU MMIX binutils, for Knuth's mmix: as GCC runs them, the assembler
+// with -x (it expands an out-of-range branch and allocates the base registers) and
+// the linker with no script, text from 0x100, its output Knuth's .mmo.
 //
-enum arch { ARCH_BESM6, ARCH_LLVM, ARCH_GNU };
+enum arch { ARCH_BESM6, ARCH_CROSS };
 
 struct target {
     const char *name;
     enum arch arch;
-    const char *triple;       // clang --target
-    const char *march, *mabi; // extra assembler flags (-march/-mabi, -mcpu/-mfpu), or NULL
-    const char *codegen;      // our code generator, next to vcc
-    const char *as_default;   // configure-time assembler path, or ""
-    const char *as_name;      // assembler on PATH
-    const char *ld_default;   // configure-time linker path, or ""
-    const char *ld_name;      // linker on PATH
-    const char *ld_flag;      // extra linker flag, or NULL
-    const char *libgcc;       // configure-time libgcc.a, linked last when present, or NULL
-    bool no_script;           // the linker's default script, unless -T names one
+    const char *codegen;          // our code generator, next to vcc
+    const char *as_default;       // configure-time assembler path, or ""
+    const char *ld_default;       // configure-time linker path, or ""
+    const char *ld_default_flags; // its flags, when it is GNU ld: those of ld_flags, and
+                                  // --no-warn-rwx-segments where it has the option
+    const char *prefixes;         // GNU binutils prefixes, blank-separated (BESM-6: b6as, b6ld)
+    const char *as_flags;         // GNU as flags, blank-separated, or NULL
+    const char *ld_flags;         // GNU ld flags, blank-separated, or NULL
+    const char *triple;           // clang --target, or NULL: no clang
+    const char *clang_flags;      // more clang flags, blank-separated, or NULL
+    const char *ld_flag;          // linker flag for either linker, or NULL
+    const char *libgcc;           // configure-time libgcc.a, linked last when present, or NULL
+    bool no_script;               // the linker's default script, unless -T names one
 };
 
+#define RISCV_PREFIXES "riscv64-unknown-elf riscv64-elf riscv64-linux-gnu"
+
 static const struct target targets[] = {
-    { "besm6", ARCH_BESM6, NULL, NULL, NULL, "vgenbesm6", "", "b6as", "", "b6ld" },
-    { "riscv64", ARCH_LLVM, "riscv64", "-march=rv64imfd", "-mabi=lp64d", "vgenriscv64", RISCV_CLANG,
-      "clang", RISCV_LD, "ld.lld" },
-    { "riscv32", ARCH_LLVM, "riscv32", "-march=rv32imfd", "-mabi=ilp32d", "vgenriscv32", RISCV_CLANG,
-      "clang", RISCV_LD, "ld.lld" },
-    { "aarch64", ARCH_LLVM, "aarch64-none-elf", NULL, NULL, "vgenaarch64", RISCV_CLANG, "clang",
-      RISCV_LD, "ld.lld" },
-    { "arm32", ARCH_LLVM, "armv7a-none-eabihf", "-mcpu=cortex-a15", "-mfpu=vfpv3-d16", "vgenarm32",
-      RISCV_CLANG, "clang", RISCV_LD, "ld.lld" },
-    { "x86_64", ARCH_LLVM, "x86_64-none-elf", NULL, NULL, "vgenx86", RISCV_CLANG, "clang", RISCV_LD,
-      "ld.lld" },
-    { "avr", ARCH_LLVM, "avr", "-mmcu=atmega1280", NULL, "vgenavr", RISCV_CLANG, "clang", RISCV_LD,
-      "ld.lld" },
-    { "msp430", ARCH_GNU, NULL, "-mcpu=msp430", NULL, "vgenmsp430", MSP430_AS, "msp430-elf-as",
-      MSP430_LD, "msp430-elf-ld", "--gc-sections", MSP430_LIBGCC },
-    { "mmix", ARCH_GNU, NULL, "-x", "-no-predefined-syms", "vgenmmix", MMIX_AS,
-      "mmix-knuth-mmixware-as", MMIX_LD, "mmix-knuth-mmixware-ld",
-      "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC, true },
+    { "besm6", ARCH_BESM6, "vgenbesm6", "", "", "" },
+    { "riscv64", ARCH_CROSS, "vgenriscv64", RISCV64_AS, RISCV64_LD, RISCV64_LDFLAGS, RISCV_PREFIXES,
+      "-march=rv64imfd -mabi=lp64d", NULL, "riscv64", "-march=rv64imfd -mabi=lp64d" },
+    { "riscv32", ARCH_CROSS, "vgenriscv32", RISCV32_AS, RISCV32_LD, RISCV32_LDFLAGS, RISCV_PREFIXES,
+      "-march=rv32imfd -mabi=ilp32d", "-m elf32lriscv", "riscv32", "-march=rv32imfd -mabi=ilp32d" },
+    { "aarch64", ARCH_CROSS, "vgenaarch64", AARCH64_AS, AARCH64_LD, AARCH64_LDFLAGS,
+      "aarch64-none-elf aarch64-elf aarch64-linux-gnu", NULL, NULL, "aarch64-none-elf", NULL },
+    { "arm32", ARCH_CROSS, "vgenarm32", ARM32_AS, ARM32_LD, ARM32_LDFLAGS, "arm-none-eabi",
+      "-mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard", NULL, "armv7a-none-eabihf",
+      "-mcpu=cortex-a15 -mfpu=vfpv3-d16" },
+    { "x86_64", ARCH_CROSS, "vgenx86", X86_64_AS, X86_64_LD, X86_64_LDFLAGS,
+      "x86_64-elf x86_64-linux-gnu", "--64", NULL, "x86_64-none-elf", NULL },
+    { "avr", ARCH_CROSS, "vgenavr", AVR_AS, AVR_LD, AVR_LDFLAGS, "avr", "-mmcu=atmega1280",
+      "-m avr51", "avr", "-mmcu=atmega1280" },
+    { "msp430", ARCH_CROSS, "vgenmsp430", MSP430_AS, MSP430_LD, MSP430_LDFLAGS,
+      "msp430-elf msp430-unknown-elf", "-mcpu=msp430", NULL, NULL, NULL, "--gc-sections",
+      MSP430_LIBGCC },
+    { "mmix", ARCH_CROSS, "vgenmmix", MMIX_AS, MMIX_LD, MMIX_LDFLAGS, "mmix-knuth-mmixware",
+      "-x -no-predefined-syms", NULL, NULL, NULL, "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC,
+      true },
 };
 
 static const struct target *target = &targets[1]; // riscv64
@@ -441,26 +502,94 @@ static char *find_pass(const char *envvar, const char *name)
 }
 
 //
-// Locate a tool from another project (assembler, linker) and push it onto the
+// Push the blank-separated words of `words` (if any) onto `av`.
+//
+static void push_words(struct vec *av, const char *words)
+{
+    if (!words)
+        return;
+    char *copy = own(strdup(words)), *save;
+    for (char *w = strtok_r(copy, " \t", &save); w; w = strtok_r(NULL, " \t", &save))
+        vec_push(av, w);
+}
+
+//
+// True if an executable `name` is found on PATH.
+//
+static bool on_path(const char *name)
+{
+    const char *path = getenv("PATH");
+    if (!path)
+        return false;
+    char *dirs = own(strdup(path)), *save;
+    for (const char *d = strtok_r(dirs, ":", &save); d; d = strtok_r(NULL, ":", &save)) {
+        char *file = concat(concat(d, "/"), name);
+        if (access(file, X_OK) == 0)
+            return true;
+    }
+    return false;
+}
+
+//
+// True if the tool `path` is clang or ld.lld rather than GNU binutils.
+//
+static bool is_llvm(const char *path)
+{
+    const char *base = strrchr(path, '/');
+    base             = base ? base + 1 : path;
+    return strncmp(base, "clang", 5) == 0 || strstr(base, "lld") != NULL;
+}
+
+//
+// Locate a tool from another project, `tool` "as" or "ld", and push it onto the
 // argument vector `av`.  Resolution order:
 //   1. the environment override, if set (VCC_AS, VCC_LD), split into words at
 //      blanks, so that it may carry arguments ("ld.lld -n");
 //   2. the path found when vcc was configured, if any;
-//   3. the bare name, which run() looks up on PATH.
+//   3. the GNU binutils <prefix>-<tool> on PATH, by each prefix in turn;
+//   4. clang or ld.lld, where the target has a clang triple;
+//   5. the first prefix's name, which run() then reports missing.
+// Returns true if the tool is clang or ld.lld; sets *chosen_configured when it is the
+// configured one (if `chosen_configured` is not NULL).
 //
-static void push_external(struct vec *av, const char *envvar, const char *configured,
-                          const char *name)
+static bool push_tool(struct vec *av, const char *envvar, const char *configured,
+                      const char *tool, bool *chosen_configured)
 {
+    if (chosen_configured)
+        *chosen_configured = false;
     const char *override = getenv(envvar);
     if (override && strspn(override, " \t") < strlen(override)) {
-        char *words = own(strdup(override));
-        for (char *w = strtok(words, " \t"); w; w = strtok(NULL, " \t"))
-            vec_push(av, w);
-    } else if (configured && *configured) {
-        vec_push(av, (char *)configured);
-    } else {
-        vec_push(av, (char *)name);
+        size_t first = av->len;
+        push_words(av, override);
+        return is_llvm(av->data[first]);
     }
+    if (configured && *configured) {
+        vec_push(av, (char *)configured);
+        if (chosen_configured)
+            *chosen_configured = true;
+        return is_llvm(configured);
+    }
+    if (target->arch == ARCH_BESM6) {
+        vec_push(av, strcmp(tool, "as") == 0 ? "b6as" : "b6ld");
+        return false;
+    }
+    char *prefixes = own(strdup(target->prefixes)), *save;
+    char *first    = NULL;
+    for (const char *p = strtok_r(prefixes, " ", &save); p; p = strtok_r(NULL, " ", &save)) {
+        char *name = concat(concat(p, "-"), tool);
+        if (!first)
+            first = name;
+        if (on_path(name)) {
+            vec_push(av, name);
+            return false;
+        }
+    }
+    if (target->triple) {
+        vec_push(av, strcmp(tool, "as") == 0 ? "clang" : "ld.lld");
+        return true;
+    }
+    vec_push(av, first);
+    return false;
 }
 
 //
@@ -600,38 +729,32 @@ static int run_codegen(const char *in, const char *out)
 //
 // Run the assembler, in -> out:
 //     besm6:   b6as -X -o out in
-//     riscv64: clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c -o out in
-//     riscv32: clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c -o out in
-//     aarch64: clang --target=aarch64-none-elf -c -o out in
-//     arm32:   clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c -o out in
-//     x86_64:  clang --target=x86_64-none-elf -c -o out in
-//     avr:     clang --target=avr -mmcu=atmega1280 -c -o out in
+//     riscv64: riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d -o out in
+//     riscv32: riscv64-unknown-elf-as -march=rv32imfd -mabi=ilp32d -o out in
+//     aarch64: aarch64-none-elf-as -o out in
+//     arm32:   arm-none-eabi-as -mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard -o out in
+//     x86_64:  x86_64-elf-as --64 -o out in
+//     avr:     avr-as -mmcu=atmega1280 -o out in
 //     msp430:  msp430-elf-as -mcpu=msp430 -o out in
 //     mmix:    mmix-knuth-mmixware-as -x -no-predefined-syms -o out in
+// or with clang: clang --target=<triple> [flags] -c -o out in, e.g.
+//     riscv64: clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c -o out in
+// (a clang given by VCC_AS for a target with no triple carries its own flags).
 // Returns 0 on success.
 //
 static int run_as(const char *in, const char *out)
 {
     struct vec av = { 0 };
 
-    push_external(&av, "VCC_AS", target->as_default, target->as_name);
-    switch (target->arch) {
-    case ARCH_BESM6:
+    bool llvm = push_tool(&av, "VCC_AS", target->as_default, "as", NULL);
+    if (target->arch == ARCH_BESM6) {
         vec_push(&av, "-X");
-        break;
-    case ARCH_LLVM:
+    } else if (!llvm) {
+        push_words(&av, target->as_flags);
+    } else if (target->triple) {
         vec_push(&av, concat("--target=", target->triple));
-        if (target->march)
-            vec_push(&av, (char *)target->march);
-        if (target->mabi)
-            vec_push(&av, (char *)target->mabi);
+        push_words(&av, target->clang_flags);
         vec_push(&av, "-c");
-        break;
-    case ARCH_GNU:
-        vec_push(&av, (char *)target->march);
-        if (target->mabi)
-            vec_push(&av, (char *)target->mabi);
-        break;
     }
     vec_push(&av, "-o");
     vec_push(&av, (char *)out);
@@ -746,7 +869,9 @@ static int compile_one(const char *src)
 //              ldflags -lc [libgcc.a]
 //     mmix:    mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100 -o out -L<lib>
 //              <lib>/crt0.o objs ldflags -lc [libgcc.a]
-//     others: ld.lld -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc
+//     others:  <prefix>-ld [flags] -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc,
+//              e.g. riscv64-unknown-elf-ld -m elf32lriscv for riscv32, avr-ld -m avr51;
+//              or ld.lld with no flags
 // where <lib> is <share>/lib.  -nostdlib drops the -L, crt0.o and the implicit
 // archives; the linker script (the qemu `virt` memory map) stays, unless
 // -T names another.  MMIX takes the linker's default script.  A missing crt0.o is a fatal error.  See README.md,
@@ -757,15 +882,17 @@ static int link_objects(void)
     char *libdir = concat(share_dir, "/lib");
 
     struct vec av = { 0 };
-    push_external(&av, "VCC_LD", target->ld_default, target->ld_name);
+    bool configured;
+    bool llvm = push_tool(&av, "VCC_LD", target->ld_default, "ld", &configured);
     switch (target->arch) {
     case ARCH_BESM6:
         vec_push(&av, "-X");
         vec_push(&av, "-e");
         vec_push(&av, "_start");
         break;
-    case ARCH_LLVM:
-    case ARCH_GNU: {
+    case ARCH_CROSS: {
+        if (!llvm)
+            push_words(&av, configured ? target->ld_default_flags : target->ld_flags);
         if (target->ld_flag)
             vec_push(&av, (char *)target->ld_flag);
         if (target->no_script && !linkscript)

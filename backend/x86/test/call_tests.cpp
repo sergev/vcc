@@ -92,6 +92,7 @@ int main(void) {
 TEST_F(X86Test, RunCallsWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     CompileAndRunWithClang(R"(
 long theirs8(long a, long b, long c, long d, long e, long k, long x, signed char y);
 short theirs_narrow(void);

@@ -70,10 +70,9 @@ protected:
                 std::ofstream f(base + ".s");
                 f << s;
             }
-            EXPECT_EQ(0, RunTool({ MSP430_GCC, "-mcpu=msp430", "-c", "-o", base + ".o",
-                                   base + ".s" },
-                                 base + ".log"))
-                << ReadFile(base + ".log");
+            std::vector<std::string> as = split_words(MSP430_ASSEMBLER);
+            as.insert(as.end(), { "-o", base + ".o", base + ".s" });
+            EXPECT_EQ(0, RunTool(as, base + ".log")) << ReadFile(base + ".log");
             // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
             if (msp430_clang_available())
                 EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o",

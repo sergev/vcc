@@ -60,9 +60,12 @@ target_compile_definitions(x86-tests PRIVATE
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     X86_TOOLS_FOUND=$<BOOL:${X86_TOOLS_FOUND}>
     X86_CLANG="${X86_CLANG}"
+    X86_CLANG_FOUND=$<BOOL:${X86_CLANG_FOUND}>
+    X86_ASSEMBLER="${X86_ASSEMBLER}"
     X86_LD="${X86_LD}"
+    X86_LINK_FLAGS="${X86_LINK_FLAGS}"
     X86_QEMU="${X86_QEMU}"
-    X86_GNU_AS="${X86_GNU_AS}"
+    X86_GNU=$<BOOL:${X86_GNU}>
     X86_LIB_DIR="${X86_LIB_DIR}"
     X86_LINK_SCRIPT="${X86_LINK_SCRIPT}")
 target_include_directories(x86-tests PRIVATE test) # book_test.h for the shared suite

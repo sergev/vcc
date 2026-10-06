@@ -827,7 +827,8 @@ static int byte_of(Gen *g, const Tac_Val *v, int i, int tmp, uint32_t busy)
 static void arith_const(Gen *g, Tac_BinaryOperator op, const Regs *w, uint64_t k)
 {
     AVR_Op first, rest;
-    arith_ops(op, &first, &rest);
+    if (!arith_ops(op, &first, &rest))
+        fatal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
     int tmp = free_upper(w);
     if (first == AVR_ADD || first == AVR_SUB) {
         bool sub   = first == AVR_SUB;
@@ -876,7 +877,8 @@ static void clean_arith(Gen *g, Tac_BinaryOperator op, const Tac_Val *s1, const 
                         const Tac_Val *dst, int n)
 {
     AVR_Op first, rest;
-    arith_ops(op, &first, &rest);
+    if (!arith_ops(op, &first, &rest))
+        fatal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
     bool comm = first != AVR_SUB;
     if (comm && s1->kind == TAC_VAL_CONSTANT && s2->kind == TAC_VAL_VAR) {
         const Tac_Val *t = s1;

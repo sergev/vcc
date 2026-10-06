@@ -4,10 +4,10 @@
 # the VCC_* environment overrides, and check what each stage produced.  The
 # StagedPrefix cases instead build a miniature installation (bin/ and
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
-# what checks the relocatable lookup.  Cases that assemble, link or run need
-# clang, ld.lld and qemu-system-riscv64, -aarch64, -arm, -x86_64 or -avr (or b6as/b6ld
-# for the BESM-6, the GNU MSP430 binutils and mspsim for the MSP430, the GNU MMIX
-# binutils and mmix for MMIX) and are skipped without them.
+# what checks the relocatable lookup.  Cases that assemble, link or run need the
+# target's GNU binutils (or clang and ld.lld) and qemu-system-riscv64, -aarch64, -arm,
+# -x86_64 or -avr (or b6as/b6ld for the BESM-6, mspsim for the MSP430, mmix for MMIX)
+# and are skipped without them.
 #
 add_executable(cc-tests cc_test.cpp)
 target_link_libraries(cc-tests PRIVATE GTest::gtest_main)
@@ -39,34 +39,50 @@ target_compile_definitions(cc-tests PRIVATE
     IP16_INCLUDE_DIR="${IP16_INCLUDE_DIR}"
     COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
     RISCV_TOOLS_FOUND=$<BOOL:${RISCV_TOOLS_FOUND}>
-    RISCV_CLANG="${RISCV_CLANG}"
+    RISCV_ASSEMBLER="${RISCV_ASSEMBLER}"
     RISCV_LD="${RISCV_LD}"
     RISCV_QEMU="${RISCV_QEMU}"
     RISCV_LIB_DIR="${RISCV_LIB_DIR}"
     RISCV_LINK_SCRIPT="${RISCV_LINK_SCRIPT}"
+    RISCV32_TOOLS_FOUND=$<BOOL:${RISCV32_TOOLS_FOUND}>
+    RISCV32_ASSEMBLER="${RISCV32_ASSEMBLER}"
+    RISCV32_LD="${RISCV32_LD}"
     RISCV32_QEMU="${RISCV32_QEMU}"
     RISCV32_LIB_DIR="${RISCV32_LIB_DIR}"
     AARCH64_TOOLS_FOUND=$<BOOL:${AARCH64_TOOLS_FOUND}>
+    AARCH64_ASSEMBLER="${AARCH64_ASSEMBLER}"
+    AARCH64_LD="${AARCH64_LD}"
     AARCH64_QEMU="${AARCH64_QEMU}"
     AARCH64_LIB_DIR="${AARCH64_LIB_DIR}"
     AARCH64_LINK_SCRIPT="${AARCH64_LINK_SCRIPT}"
     ARM32_TOOLS_FOUND=$<BOOL:${ARM32_TOOLS_FOUND}>
+    ARM32_ASSEMBLER="${ARM32_ASSEMBLER}"
+    ARM32_LD="${ARM32_LD}"
     ARM32_QEMU="${ARM32_QEMU}"
     ARM32_LIB_DIR="${ARM32_LIB_DIR}"
     ARM32_LINK_SCRIPT="${ARM32_LINK_SCRIPT}"
     X86_TOOLS_FOUND=$<BOOL:${X86_TOOLS_FOUND}>
+    X86_ASSEMBLER="${X86_ASSEMBLER}"
+    X86_LD="${X86_LD}"
     X86_QEMU="${X86_QEMU}"
     X86_LIB_DIR="${X86_LIB_DIR}"
     X86_LINK_SCRIPT="${X86_LINK_SCRIPT}"
     AVR_TOOLS_FOUND=$<BOOL:${AVR_TOOLS_FOUND}>
+    AVR_ASSEMBLER="${AVR_ASSEMBLER}"
+    AVR_LD="${AVR_LD}"
     AVR_QEMU="${AVR_QEMU}"
     AVR_LIB_DIR="${AVR_LIB_DIR}"
     AVR_LINK_SCRIPT="${AVR_LINK_SCRIPT}"
     MSP430_TOOLS_FOUND=$<BOOL:${MSP430_TOOLS_FOUND}>
+    MSP430_GNU=$<BOOL:${MSP430_GNU}>
+    MSP430_ASSEMBLER="${MSP430_ASSEMBLER}"
+    MSP430_LD="${MSP430_LD}"
     MSP430_GCC="${MSP430_GCC}"
     MSP430_OBJCOPY="${MSP430_OBJCOPY}"
     MSP430_LIBGCC="${MSP430_LIBGCC}"
     MSP430_CLANG_FOUND=$<BOOL:${MSP430_CLANG_FOUND}>
+    MSP430_CLANG="${MSP430_CLANG}"
+    MSP430_LLD="${MSP430_LLD}"
     MSPSIM="${MSPSIM}"
     MSP430_LIB_DIR="${MSP430_LIB_DIR}"
     MSP430_LINK_SCRIPT="${MSP430_LINK_SCRIPT}"

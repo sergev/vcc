@@ -82,6 +82,7 @@ int main(void) { putchar('H'); putchar('i'); putchar(10); return 0; }
 TEST_F(Aarch64Test, RunInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(R"(
 long theirs(signed char a, int b, long c, unsigned char d, short e, long f, int g, long h,
             int i, long j);

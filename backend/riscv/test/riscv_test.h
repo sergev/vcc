@@ -26,31 +26,47 @@
 // The RISC-V tools, from CMake; a missing one names a path that does not exist.
 inline bool riscv_tools_available()
 {
-    return RISCV_TOOLS_FOUND && tool_available(RISCV_CLANG) && tool_available(RISCV_LD) &&
+    return RISCV_TOOLS_FOUND && command_available(RISCV_ASSEMBLER) && tool_available(RISCV_LD) &&
            tool_available(RISCV_QEMU);
 }
 
 // Skip a run test when the RISC-V toolchain or qemu is absent.
-#define SKIP_IF_NO_RISCV_TOOLS()                                                     \
-    do {                                                                             \
-        if (!riscv_tools_available())                                                \
-            GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found; skipping run test"; \
+#define SKIP_IF_NO_RISCV_TOOLS()                                                         \
+    do {                                                                                 \
+        if (!riscv_tools_available())                                                    \
+            GTEST_SKIP() << "RISC-V assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// clang, the reference compiler, when it has the target.
+inline bool riscv_clang_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return riscv_tools_available() && RISCV_CLANG_FOUND && tool_available(RISCV_CLANG);
+}
+
+// Skip a test that compiles C with clang.
+#define SKIP_IF_NO_RISCV_CLANG()                                           \
+    do {                                                                   \
+        if (!riscv_clang_available())                                      \
+            GTEST_SKIP() << "RISC-V clang not found; skipping clang test"; \
     } while (0)
 
 class RiscvTest : public QemuTest {
 protected:
     RiscvTest()
-        : QemuTest(RISCV_TEST_TARGET,
-                   { "riscv-tests",
-                     RISCV_CLANG,
-                     { "--target=" RISCV_TEST_TARGET, RISCV_TEST_MARCH, RISCV_TEST_MABI },
-                     { "-mcmodel=medany", "-ffreestanding", "-fno-builtin" },
-                     RISCV_LD,
-                     RISCV_LINK_SCRIPT,
-                     RISCV_LIB_DIR,
-                     { RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none", "-serial",
-                       "stdio", "-monitor", "none" },
-                     RISCV_TEST_XLEN == 32 ? "-rv32" : "" })
+        : QemuTest(
+              RISCV_TEST_TARGET,
+              cross_tools({ "riscv-tests",
+                            RISCV_CLANG,
+                            { "--target=" RISCV_TEST_TARGET, RISCV_TEST_MARCH, RISCV_TEST_MABI },
+                            { "-mcmodel=medany", "-ffreestanding", "-fno-builtin" },
+                            RISCV_LD,
+                            RISCV_LINK_SCRIPT,
+                            RISCV_LIB_DIR,
+                            { RISCV_QEMU, "-M", "virt", "-bios", "none", "-display", "none",
+                              "-serial", "stdio", "-monitor", "none" },
+                            RISCV_TEST_XLEN == 32 ? "-rv32" : "" },
+                          RISCV_ASSEMBLER, RISCV_LINK_FLAGS))
     {
         riscv_regalloc      = true;
         riscv_peephole      = true;

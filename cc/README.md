@@ -26,15 +26,30 @@ linker       link          .o   -> a.out
 
 | Target | `-t` | Code generator | Assembler | Linker |
 | --- | --- | --- | --- | --- |
-| RISC-V RV64IMFD/LP64D | `riscv64` (default) | `vgenriscv64` | `clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c` | `ld.lld -T link.ld` |
-| RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c` | `ld.lld -T link.ld` |
-| AArch64 (ARMv8-A, AAPCS64) | `aarch64` | `vgenaarch64` | `clang --target=aarch64-none-elf -c` | `ld.lld -T link.ld` |
-| ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` | `ld.lld -T link.ld` |
-| x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `clang --target=x86_64-none-elf -c` | `ld.lld -T link.ld` |
-| AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `clang --target=avr -mmcu=atmega1280 -c` | `ld.lld -T link.ld` |
+| RISC-V RV64IMFD/LP64D | `riscv64` (default) | `vgenriscv64` | `riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d` | `riscv64-unknown-elf-ld -T link.ld` |
+| RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `riscv64-unknown-elf-as -march=rv32imfd -mabi=ilp32d` | `riscv64-unknown-elf-ld -m elf32lriscv -T link.ld` |
+| AArch64 (ARMv8-A, AAPCS64) | `aarch64` | `vgenaarch64` | `aarch64-none-elf-as` | `aarch64-none-elf-ld -T link.ld` |
+| ARM32 (ARMv7-A, AAPCS-VFP) | `arm32` | `vgenarm32` | `arm-none-eabi-as -mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard` | `arm-none-eabi-ld -T link.ld` |
+| x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `x86_64-elf-as --64` | `x86_64-elf-ld -T link.ld` |
+| AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `avr-as -mmcu=atmega1280` | `avr-ld -m avr51 -T link.ld` |
 | MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
+
+The binutils prefix is the first one found of several: `riscv64-unknown-elf`, `riscv64-elf`
+or `riscv64-linux-gnu`; `aarch64-none-elf`, `aarch64-elf` or `aarch64-linux-gnu`;
+`x86_64-elf`, `x86_64-linux-gnu` or the host's own `as`/`ld` on x86-64 Linux; `msp430-elf`
+or `msp430-unknown-elf`. Where there are no binutils, the targets but MSP430 and MMIX
+are assembled by clang and linked by `ld.lld`, with no linker flags:
+
+| `-t` | clang |
+| --- | --- |
+| `riscv64` | `clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c` |
+| `riscv32` | `clang --target=riscv32 -march=rv32imfd -mabi=ilp32d -c` |
+| `aarch64` | `clang --target=aarch64-none-elf -c` |
+| `arm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` |
+| `x86_64` | `clang --target=x86_64-none-elf -c` |
+| `avr` | `clang --target=avr -mmcu=atmega1280 -c` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
 and removed on exit.
@@ -87,10 +102,10 @@ takes everything relative to it:
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
-clang and `ld.lld` found when the build was configured (the GNU `msp430-elf-as` and
-`msp430-elf-ld` for the MSP430, `mmix-knuth-mmixware-as` and `-ld` for MMIX; nothing for
-the BESM-6), or else whatever `clang`/`ld.lld`/`msp430-elf-as`/`msp430-elf-ld`/
-`mmix-knuth-mmixware-as`/`mmix-knuth-mmixware-ld`/`b6as`/`b6ld` is on `PATH`.
+ones found when the build was configured (`scripts/CrossTools.cmake`: GNU binutils, else
+clang and `ld.lld`; nothing for the BESM-6), or else the first binutils on `PATH` by the
+prefixes above, then `clang`/`ld.lld` (`b6as`/`b6ld` for the BESM-6). Which of the two a
+tool is, by its name, decides its flags.
 
 Each tool can be overridden with an environment variable. This is how the tests run the
 driver against the build tree:
@@ -106,8 +121,10 @@ driver against the build tree:
 RISC-V, AArch64, ARM32, x86-64 and AVR:
 
 ```text
-ld.lld -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc
+<prefix>-ld [flags] -T <lib>/link.ld -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc
 ```
+
+with the flags of the table above (or `ld.lld` with none).
 
 The result is an ELF for the qemu `virt` machine (`microvm` for x86-64, `arduino-mega` for AVR). It runs with
 `qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none -kernel a.out`
@@ -152,7 +169,7 @@ VCC_AS="clang --target=msp430 -c" VCC_LD="ld.lld -n" vcc -t msp430 hello.c
 ```
 
 `-n` keeps `ld.lld` from placing the ELF headers in a loaded segment, where they would
-land on the peripheral area. clang warns that it does not use `-mcpu=msp430`.
+land on the peripheral area. A clang given this way takes no flags of vcc's.
 
 MMIX:
 
@@ -212,8 +229,9 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the
 passes, `share/vcc/<target>/`) and run it with no overrides. That is what tests the
-relocatable lookup. Cases that need clang, `ld.lld`, qemu, the GNU MSP430 or MMIX
-binutils, mspsim, `mmix` or `b6as` skip when they are missing.
+relocatable lookup. They expect in the `-v` echo the assembler command CMake found, so
+vcc's flags must agree with `scripts/CrossTools.cmake`'s. Cases that need the binutils
+(or clang and `ld.lld`), qemu, mspsim, `mmix` or `b6as` skip when they are missing.
 
 ```sh
 ./build/cc/test/cc-tests

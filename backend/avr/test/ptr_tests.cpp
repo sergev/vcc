@@ -169,6 +169,7 @@ int main(void)
 TEST_F(AvrTest, RunStringLibraryFromClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", ClangRun(R"(
 void putbyte(int c);
 typedef unsigned int size_t;

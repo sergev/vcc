@@ -1,10 +1,10 @@
-// A bump allocator over the heap of link.ld: free does nothing.
-// Each block is preceded by a 16-byte header whose first word holds the
-// requested size, so realloc knows how much to copy.
+# A bump allocator over the heap of link.ld: free does nothing.
+# Each block is preceded by a 16-byte header whose first word holds the
+# requested size, so realloc knows how much to copy.
 
     .text
 
-// void *malloc(size_t n): 16-byte aligned, NULL when the heap is exhausted.
+# void *malloc(size_t n): 16-byte aligned, NULL when the heap is exhausted.
     .globl  malloc
     .p2align 4
     .type   malloc, @function
@@ -17,21 +17,21 @@ malloc:
     andq    $-16, %rax
     movq    %rdi, %rcx
     addq    $16, %rcx
-    jc      2f                      // n + 16 overflowed
+    jc      2f                      # n + 16 overflowed
     addq    %rax, %rcx
-    jc      2f                      // wrapped around
+    jc      2f                      # wrapped around
     leaq    __heap_end(%rip), %rdx
     cmpq    %rdx, %rcx
     ja      2f
     movq    %rcx, heap_next(%rip)
-    movq    %rdi, (%rax)            // header: the block's size
+    movq    %rdi, (%rax)            # header: the block's size
     addq    $16, %rax
     ret
 2:  xorl    %eax, %eax
     ret
     .size   malloc, .-malloc
 
-// void *calloc(size_t n, size_t size): zeroed; NULL when n * size overflows.
+# void *calloc(size_t n, size_t size): zeroed; NULL when n * size overflows.
     .globl  calloc
     .p2align 4
     .type   calloc, @function
@@ -48,16 +48,16 @@ calloc:
     movq    %rax, %rdi
     xorl    %esi, %esi
     movq    %rbx, %rdx
-    call    memset                  // returns the block
+    call    memset                  # returns the block
     jmp     2f
 1:  xorl    %eax, %eax
 2:  popq    %rbx
     ret
     .size   calloc, .-calloc
 
-// void *realloc(void *p, size_t n): NULL p is malloc(n); a block already big
-// enough is returned as is; otherwise a new block gets a copy of the old
-// contents.  NULL on exhaustion, with p left intact.
+# void *realloc(void *p, size_t n): NULL p is malloc(n); a block already big
+# enough is returned as is; otherwise a new block gets a copy of the old
+# contents.  NULL on exhaustion, with p left intact.
     .globl  realloc
     .p2align 4
     .type   realloc, @function
@@ -66,7 +66,7 @@ realloc:
     jnz     1f
     movq    %rsi, %rdi
     jmp     malloc
-1:  movq    -16(%rdi), %rcx         // the old size
+1:  movq    -16(%rdi), %rcx         # the old size
     cmpq    %rcx, %rsi
     jbe     3f
     pushq   %rbx
@@ -81,7 +81,7 @@ realloc:
     movq    %rax, %rdi
     movq    %rbx, %rsi
     movq    %r12, %rdx
-    call    memcpy                  // returns the new block
+    call    memcpy                  # returns the new block
 2:  addq    $8, %rsp
     popq    %r12
     popq    %rbx
@@ -90,7 +90,7 @@ realloc:
     ret
     .size   realloc, .-realloc
 
-// void free(void *p)
+# void free(void *p)
     .globl  free
     .p2align 4
     .type   free, @function

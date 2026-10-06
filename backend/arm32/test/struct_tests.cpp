@@ -91,6 +91,7 @@ int main(void) {
 TEST_F(Arm32Test, RunStructInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     const char *decls = R"(
 struct s3 { char a, b, c; };
 struct s6 { short a, b, c; };

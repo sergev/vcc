@@ -107,6 +107,7 @@ int main(void) {
 TEST_F(Aarch64Test, RunFloatingPointInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(R"(
 double theirs(float a, double b, int c, double d, double e, double f, double g, double h,
               double i, float j, double k);

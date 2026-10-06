@@ -241,6 +241,7 @@ TEST_F(Msp430Test, RunMalloc)
 TEST_F(Msp430Test, RunStructsWithGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string ours = CompileToMsp430(R"(
         struct S3 { char c[3]; };
         struct S4 { int a, b; };

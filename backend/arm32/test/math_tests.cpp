@@ -214,6 +214,7 @@ int main(void)
 TEST_F(Arm32Test, SqrtLibrary)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     EXPECT_EQ("3ff6a09e667f3bcd\n3ffbb67ae8584caa\n3fb504f3\n3f3504f3\n3fddb3d7\n80000000\n1\n",
               CompileAndRunWithClang(R"(
 #include <stdio.h>

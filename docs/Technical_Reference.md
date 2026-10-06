@@ -168,12 +168,12 @@ file `input.s`.
 per-toplevel loop are the shared `backend_main()` (`backend/common/driver.c`); a backend
 supplies only its flags, output extension and a per-toplevel `codegen` callback.
 
-`genaarch64` (TAC lowered with `-t aarch64`, assembled by `clang --target=aarch64-none-elf`)
+`genaarch64` (TAC lowered with `-t aarch64`, assembled by `aarch64-none-elf-as`)
 takes the same three flags (`--frame-pointer` keeps a frame record in every function), as
 does `genarm32` (TAC lowered with `-t arm32`, assembled by
-`clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16`) and `genx86` (TAC
-lowered with `-t x86_64`, assembled by `clang --target=x86_64-none-elf`). `genavr` (TAC
-lowered with `-t avr`, assembled by `clang --target=avr -mmcu=atmega1280`) takes
+`arm-none-eabi-as -mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard`) and `genx86` (TAC
+lowered with `-t x86_64`, assembled by `x86_64-elf-as --64`). `genavr` (TAC
+lowered with `-t avr`, assembled by `avr-as -mmcu=atmega1280`) takes
 `--no-regalloc` and `--no-peephole`, as does `genmsp430` (TAC lowered with `-t msp430`,
 assembled by `msp430-elf-as -mcpu=msp430`) and `genmmix` (TAC lowered with `-t mmix`,
 assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms`), and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
@@ -923,10 +923,10 @@ converted to `int` (C11 §6.4.4.4p10): −1 where plain `char` is signed (x86-64
 
 - **CMake** minimum 3.10; root project name: `c-scanner`.
 - **C** standard: C11; **C++** for tests: C++17.
-- **Compiler flags:** `-Wall -Werror -Wshadow` for C and C++ (see root `CMakeLists.txt`).
+- **Compiler flags:** `-Wall -Werror -Wshadow` for C and C++, and `-Wno-dangling-else` for C++ (GCC 16 flags an unbraced `if` around a GoogleTest `EXPECT_*`; see root `CMakeLists.txt`).
 - **GoogleTest:** FetchContent, tag `v1.15.2`, `BUILD_GMOCK=OFF`.
-- **cppcheck:** If `cppcheck` is found, it is attached to C and C++ targets with project-specific suppressions and `scripts/googletest.xml` for tests.
-- **RISC-V tools:** `libc/riscv64/CMakeLists.txt` looks for a `clang` that lists `riscv64` among its targets (Homebrew's LLVM first), `llvm-ar`, `ld.lld` and `qemu-system-riscv64`. clang and `llvm-ar` are needed to build the runtime; `ld.lld` and qemu to run programs. On macOS: `brew install llvm lld qemu`.
+- **cppcheck:** If `cppcheck` is found, it is attached to C and C++ targets with project-specific suppressions, `scripts/googletest.xml` for tests and `scripts/cppcheck-c11.xml` for C (cppcheck 2.21 ignores `_Noreturn`, so it is mapped to GCC's attribute).
+- **Cross tools:** `scripts/CrossTools.cmake` (`vcc_find_cross`, called by each `libc/<target>/CMakeLists.txt`) looks for the target's GNU binutils by a list of prefixes (`riscv64-unknown-elf`, `aarch64-none-elf`, `arm-none-eabi`, `x86_64-elf` or the host's, `avr`, `msp430-elf`, …) in `PATH`, `~/.local/bin` and Homebrew's directories, and else for a `clang` (also `clang-NN`) that lists the target, `ld.lld` and `llvm-ar`; `-DVCC_CROSS_TOOLS=gnu|llvm` forces one. It sets `<T>_AS` (the assembler command with its flags), `<T>_LD`, `<T>_LDFLAGS`, `<T>_AR` and `<T>_TOOLS_FOUND`, and separately `<T>_CLANG_FOUND`, the tests' reference compiler. `vcc_assemble_crt0` preprocesses `crt0.S` with the C compiler and assembles it. qemu is looked up per target.
 - **Makefile:** Creates `build/`, runs `cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo`, delegates `all` to `$(MAKE) -C build`. Targets: `make` (compiler, runtimes, and all test executables), `make test` (builds `all`, but does not run the tests), `make run` (builds `all`, then runs every test via `ctest --test-dir build` — including the textbook chapter tests), `make install` (see [Installation](#installation)), `make clean`, `make debug` (cmake Debug build into `build`).
 
 Common build types: `Debug`, `RelWithDebInfo`, `Release`.
@@ -978,7 +978,9 @@ Besides the GoogleTest cases, ctest runs the `riscv-headers`, `aarch64-headers`,
 
 `riscv-tests` runs programs on bare-metal `qemu-system-riscv64`, links VCC code with
 clang-compiled code in both directions, and compares every book program's output with
-clang's. Tests that need qemu or clang skip themselves when the tools are missing.
+clang's. Tests that need qemu skip themselves when the tools are missing, and those that
+compile C with clang when there is no clang with the target; the book programs then
+still run and are checked against the book's own results.
 
 Run a single binary (each one `chdir()`s into its own build directory, so it can be
 started from anywhere):

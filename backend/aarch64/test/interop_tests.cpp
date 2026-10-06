@@ -32,6 +32,7 @@ std::string BothSides(const char *types, const char *decls, const char *defs, co
 TEST_F(Aarch64Test, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     const char *types = R"(
 struct s3 { char a, b, c; };
 struct s12 { int a, b, c; };
@@ -103,6 +104,7 @@ long ld_val(long double x) { return (long)(x * 10); }
 TEST_F(Aarch64Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     const char *types = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };

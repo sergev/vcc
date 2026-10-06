@@ -120,6 +120,7 @@ TEST_F(AvrTest, RunVariadic)
 TEST_F(AvrTest, RunVariadicCalledByClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(std::string(va_decls) + va_defs,
                                            std::string(va_decls) + va_main));
     EXPECT_EQ(0, exit_status);
@@ -129,6 +130,7 @@ TEST_F(AvrTest, RunVariadicCalledByClang)
 TEST_F(AvrTest, RunVariadicCallClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(std::string(va_decls) + va_main,
                                            std::string(va_decls) + va_defs));
     EXPECT_EQ(0, exit_status);
@@ -138,6 +140,7 @@ TEST_F(AvrTest, RunVariadicCallClang)
 TEST_F(AvrTest, RunVaListAcross)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string decls = std::string(va_decls) + R"(long cwrap(int n, ...);
 long clist(int n, va_list ap);
 )";

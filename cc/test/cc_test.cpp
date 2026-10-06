@@ -10,8 +10,10 @@
 // share/vcc/<target>/{include,lib} -- and run it with no overrides at all, which
 // is what tests the lookup relative to the driver's own directory.
 //
-// Cases that assemble, link or run need the external tools (clang, ld.lld and
-// qemu-system-riscv64; b6as for the BESM-6) and skip without them.
+// Cases that assemble, link or run need the external tools (the target's GNU
+// binutils or clang and ld.lld, and its simulator; b6as for the BESM-6) and skip
+// without them.  The assembler commands they expect in the -v echo are those CMake
+// found (scripts/CrossTools.cmake), so the driver's flags must agree with CMake's.
 //
 #include <gtest/gtest.h>
 
@@ -64,10 +66,16 @@ bool HaveTool(const std::string &name)
     return false;
 }
 
+// The assembler, a command with its flags, names an available tool.
+bool HaveAssembler(const std::string &cmd)
+{
+    return HaveTool(cmd.substr(0, cmd.find(' ')));
+}
+
 // The RISC-V toolchain and the build's runtime are all present.
 bool HaveRiscvLink()
 {
-    return RISCV_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) &&
+    return RISCV_TOOLS_FOUND && HaveAssembler(RISCV_ASSEMBLER) && HaveTool(RISCV_LD) &&
            access((std::string(RISCV_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
@@ -76,10 +84,10 @@ bool HaveRiscvRun()
     return HaveRiscvLink() && HaveTool(RISCV_QEMU);
 }
 
-// The same clang and ld.lld, with an AArch64 target, the AArch64 runtime and qemu.
+// The same for AArch64: its tools, runtime and qemu.
 bool HaveAarch64Run()
 {
-    return AARCH64_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) &&
+    return AARCH64_TOOLS_FOUND && HaveAssembler(AARCH64_ASSEMBLER) && HaveTool(AARCH64_LD) &&
            HaveTool(AARCH64_QEMU) &&
            access((std::string(AARCH64_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
@@ -87,28 +95,32 @@ bool HaveAarch64Run()
 // The same for ARM32.
 bool HaveArm32Run()
 {
-    return ARM32_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) && HaveTool(ARM32_QEMU) &&
+    return ARM32_TOOLS_FOUND && HaveAssembler(ARM32_ASSEMBLER) && HaveTool(ARM32_LD) &&
+           HaveTool(ARM32_QEMU) &&
            access((std::string(ARM32_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The same for x86-64, run on qemu `microvm`.
 bool HaveX86Run()
 {
-    return X86_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) && HaveTool(X86_QEMU) &&
+    return X86_TOOLS_FOUND && HaveAssembler(X86_ASSEMBLER) && HaveTool(X86_LD) &&
+           HaveTool(X86_QEMU) &&
            access((std::string(X86_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The same for AVR, run on qemu `arduino-mega`.
 bool HaveAvrRun()
 {
-    return AVR_TOOLS_FOUND && HaveTool(RISCV_CLANG) && HaveTool(RISCV_LD) && HaveTool(AVR_QEMU) &&
+    return AVR_TOOLS_FOUND && HaveAssembler(AVR_ASSEMBLER) && HaveTool(AVR_LD) &&
+           HaveTool(AVR_QEMU) &&
            access((std::string(AVR_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The GNU MSP430 binutils, mspsim and the build's MSP430 runtime.
 bool HaveMsp430Run()
 {
-    return MSP430_TOOLS_FOUND && HaveTool("msp430-elf-as") && HaveTool("msp430-elf-ld") &&
+    return MSP430_TOOLS_FOUND && MSP430_GNU && HaveAssembler(MSP430_ASSEMBLER) &&
+           HaveTool(MSP430_LD) &&
            HaveTool(MSPSIM) && access((std::string(MSP430_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
@@ -529,7 +541,7 @@ TEST_F(CcDriver, CompileToAssemblyAarch64)
 TEST_F(CcDriver, LinkAndRunAarch64)
 {
     if (!HaveAarch64Run())
-        GTEST_SKIP() << "AArch64 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "AArch64 assembler/linker/qemu not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
@@ -565,7 +577,7 @@ TEST_F(CcDriver, CompileToAssemblyArm32)
 TEST_F(CcDriver, LinkAndRunArm32)
 {
     if (!HaveArm32Run())
-        GTEST_SKIP() << "ARM32 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "ARM32 assembler/linker/qemu not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
@@ -600,7 +612,7 @@ TEST_F(CcDriver, CompileToAssemblyX86)
 TEST_F(CcDriver, LinkAndRunX86)
 {
     if (!HaveX86Run())
-        GTEST_SKIP() << "x86-64 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "x86-64 assembler/linker/qemu not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
@@ -635,7 +647,7 @@ TEST_F(CcDriver, CompileToAssemblyAvr)
 TEST_F(CcDriver, LinkAndRunAvr)
 {
     if (!HaveAvrRun())
-        GTEST_SKIP() << "AVR clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "AVR assembler/linker/qemu not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
@@ -673,7 +685,7 @@ TEST_F(CcDriver, LinkAndRunMsp430)
 {
     // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run())
-        GTEST_SKIP() << "msp430-elf-as/ld or mspsim not found";
+        GTEST_SKIP() << "MSP430 binutils or mspsim not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
@@ -703,11 +715,12 @@ twice:  rla     r12
 TEST_F(CcDriver, LinkAndRunMsp430Clang)
 {
     // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
-    if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(RISCV_CLANG) || !HaveTool(RISCV_LD))
+    if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(MSP430_CLANG) ||
+        !HaveTool(MSP430_LLD))
         GTEST_SKIP() << "MSP430 clang/ld.lld or mspsim not found";
     WriteSource("t.c", kHello);
-    setenv("VCC_AS", (std::string(RISCV_CLANG) + " --target=msp430 -c").c_str(), 1);
-    setenv("VCC_LD", (std::string(RISCV_LD) + " -n").c_str(), 1);
+    setenv("VCC_AS", (std::string(MSP430_CLANG) + " --target=msp430 -c").c_str(), 1);
+    setenv("VCC_LD", (std::string(MSP430_LLD) + " -n").c_str(), 1);
     std::string lib = MSP430_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "msp430", "-v", "-nostdlib", "-T", MSP430_LINK_SCRIPT, "-o", "t.elf",
                     lib + "/crt0.o", "t.c", lib + "/libc.a" }),
@@ -717,10 +730,9 @@ TEST_F(CcDriver, LinkAndRunMsp430Clang)
     EXPECT_EQ(RunMspsim(Path("t.elf"), &status), "hello 42\n");
     EXPECT_EQ(status, 0);
     std::string echo = Stdout();
-    EXPECT_NE(echo.find(std::string(RISCV_CLANG) + " --target=msp430 -c -mcpu=msp430 -o "),
-              std::string::npos)
+    EXPECT_NE(echo.find(std::string(MSP430_CLANG) + " --target=msp430 -c -o "), std::string::npos)
         << echo;
-    EXPECT_NE(echo.find(std::string(RISCV_LD) + " -n --gc-sections -T "), std::string::npos)
+    EXPECT_NE(echo.find(std::string(MSP430_LLD) + " -n --gc-sections -T "), std::string::npos)
         << echo;
 }
 
@@ -855,7 +867,7 @@ TEST_F(CcDriver, RejectsUnknownSuffix)
 TEST_F(CcDriver, CompileObjectRiscv64)
 {
     if (!HaveRiscvLink())
-        GTEST_SKIP() << "RISC-V clang/ld.lld not found";
+        GTEST_SKIP() << "RISC-V assembler/linker not found";
     WriteSource("t.c", kHello);
     WriteSource("u.S", "#ifdef __riscv\n"
                        "        .globl  u\n"
@@ -871,7 +883,7 @@ TEST_F(CcDriver, CompileObjectRiscv64)
 TEST_F(CcDriver, LinkAndRunRiscv64)
 {
     if (!HaveRiscvRun())
-        GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
     WriteSource("t.c", kHello);
     std::string lib = RISCV_LIB_DIR;
     ASSERT_EQ(Vcc({ "-nostdlib", "-T", RISCV_LINK_SCRIPT, "-o", "t.elf", lib + "/crt0.o", "t.c",
@@ -885,7 +897,7 @@ TEST_F(CcDriver, LinkAndRunRiscv64)
 TEST_F(CcDriver, SeparateCompilationRiscv64)
 {
     if (!HaveRiscvRun())
-        GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
     WriteSource("main.c", "#include <stdio.h>\n"
                           "int twice(int);\n"
                           "int main(void) { printf(\"%d\\n\", twice(21)); return 0; }\n");
@@ -904,7 +916,7 @@ TEST_F(CcDriver, SeparateCompilationRiscv64)
 TEST_F(CcDriver, StagedPrefixRiscv64)
 {
     if (!HaveRiscvRun())
-        GTEST_SKIP() << "RISC-V clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
     std::string prefix = StagePrefix("riscv64");
     std::string lib = prefix + "/share/vcc/riscv64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -929,9 +941,10 @@ TEST_F(CcDriver, StagedPrefixRiscv64)
 // The same for riscv32: vgenriscv32 is the one code generator under another name.
 TEST_F(CcDriver, StagedPrefixRiscv32)
 {
-    if (!HaveRiscvLink() || !HaveTool(RISCV32_QEMU) ||
+    if (!RISCV32_TOOLS_FOUND || !HaveAssembler(RISCV32_ASSEMBLER) || !HaveTool(RISCV32_LD) ||
+        !HaveTool(RISCV32_QEMU) ||
         access((std::string(RISCV32_LIB_DIR) + "/libc.a").c_str(), R_OK) != 0)
-        GTEST_SKIP() << "RISC-V clang/ld.lld/qemu-system-riscv32 not found";
+        GTEST_SKIP() << "RISC-V assembler/linker/qemu-system-riscv32 not found";
     std::string prefix = StagePrefix("riscv32");
     std::string lib = prefix + "/share/vcc/riscv32/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -954,16 +967,14 @@ TEST_F(CcDriver, StagedPrefixRiscv32)
               std::string::npos)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenriscv32 "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" --target=riscv32 -march=rv32imfd -mabi=ilp32d "), std::string::npos)
-        << echo;
+    EXPECT_NE(echo.find(std::string(RISCV32_ASSEMBLER) + " -o "), std::string::npos) << echo;
 }
 
-// The same for aarch64: clang without -march/-mabi, and the exit status through
-// semihosting.
+// The same for aarch64, with the exit status through semihosting.
 TEST_F(CcDriver, StagedPrefixAarch64)
 {
     if (!HaveAarch64Run())
-        GTEST_SKIP() << "AArch64 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "AArch64 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("aarch64");
     std::string lib = prefix + "/share/vcc/aarch64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -990,15 +1001,15 @@ TEST_F(CcDriver, StagedPrefixAarch64)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t aarch64 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenaarch64 "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" --target=aarch64-none-elf -c "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(AARCH64_ASSEMBLER) + " -o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
 }
 
-// The same for arm32: -mcpu/-mfpu for clang, and the ILP32 headers with ARM's own.
+// The same for arm32, with the ILP32 headers after ARM's own.
 TEST_F(CcDriver, StagedPrefixArm32)
 {
     if (!HaveArm32Run())
-        GTEST_SKIP() << "ARM32 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "ARM32 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("arm32");
     std::string lib = prefix + "/share/vcc/arm32/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -1027,9 +1038,7 @@ int main(void)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t arm32 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenarm32 "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c "),
-              std::string::npos)
-        << echo;
+    EXPECT_NE(echo.find(std::string(ARM32_ASSEMBLER) + " -o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
@@ -1038,7 +1047,7 @@ int main(void)
 TEST_F(CcDriver, StagedPrefixX86)
 {
     if (!HaveX86Run())
-        GTEST_SKIP() << "x86-64 clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "x86-64 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("x86_64");
     std::string lib = prefix + "/share/vcc/x86_64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -1067,7 +1076,7 @@ int main(void)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t x86_64 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenx86 "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" --target=x86_64-none-elf -c "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(X86_ASSEMBLER) + " -o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
@@ -1076,7 +1085,7 @@ int main(void)
 TEST_F(CcDriver, StagedPrefixAvr)
 {
     if (!HaveAvrRun())
-        GTEST_SKIP() << "AVR clang/ld.lld/qemu not found";
+        GTEST_SKIP() << "AVR assembler/linker/qemu not found";
     std::string prefix = StagePrefix("avr");
     std::string lib = prefix + "/share/vcc/avr/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -1105,7 +1114,7 @@ int main(void)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t avr "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenavr "), std::string::npos) << echo;
-    EXPECT_NE(echo.find(" --target=avr -mmcu=atmega1280 -c "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(AVR_ASSEMBLER) + " -o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
@@ -1117,7 +1126,7 @@ TEST_F(CcDriver, StagedPrefixMsp430)
 {
     // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run() || !HaveTool(MSP430_GCC) || access(MSP430_LIBGCC, R_OK) != 0)
-        GTEST_SKIP() << "msp430-elf-gcc/as/ld, libgcc.a or mspsim not found";
+        GTEST_SKIP() << "MSP430 binutils, libgcc.a or mspsim not found";
     std::string prefix = StagePrefix("msp430");
     std::string lib = prefix + "/share/vcc/msp430/lib";
     for (const char *name : { "crt0.o", "libc.a" })
@@ -1152,8 +1161,9 @@ int main(void)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t msp430 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenmsp430 "), std::string::npos) << echo;
-    EXPECT_NE(echo.find("msp430-elf-as -mcpu=msp430 -o "), std::string::npos) << echo;
-    EXPECT_NE(echo.find("msp430-elf-ld --gc-sections -T " + lib + "/link.ld "), std::string::npos)
+    EXPECT_NE(echo.find(std::string(MSP430_ASSEMBLER) + " -o "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(MSP430_LD) + " --gc-sections -T " + lib + "/link.ld "),
+              std::string::npos)
         << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" lz.o -lc " + std::string(MSP430_LIBGCC) + " \n"), std::string::npos)

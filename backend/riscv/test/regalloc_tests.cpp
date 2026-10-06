@@ -157,6 +157,7 @@ TEST_F(RiscvTest, RegallocSpill)
 TEST_F(RiscvTest, RegallocAcrossCalls)
 {
     SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(R"(
 long sq(long x);
 double half(double d);

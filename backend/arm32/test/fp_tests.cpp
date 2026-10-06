@@ -164,6 +164,7 @@ int main(void) {
 TEST_F(Arm32Test, RunFloatingPointInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(R"(
 double theirs(float a, double b, int c, double d, double e, double f, double g, double h,
               double i, float j, double k);

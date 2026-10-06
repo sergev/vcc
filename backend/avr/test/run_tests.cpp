@@ -72,6 +72,7 @@ static void puti(long v)
 TEST_F(AvrTest, RuntimeDataAndBss)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = std::string(print_c) + R"(
 int data[3] = { 1000, -2, 3 };
 const char text[] = "flash";
@@ -101,6 +102,7 @@ static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7
 TEST_F(AvrTest, RuntimeDivisionAndMultiplication)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = std::string(print_c) + R"(
 volatile int a16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
 volatile long a32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7,
@@ -157,6 +159,7 @@ int main(void)
 TEST_F(AvrTest, RuntimeDivision8Exhaustive)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = std::string(print_c) + R"(
 unsigned qdiv(signed char a, signed char b);
 unsigned uqdiv(unsigned char a, unsigned char b);
@@ -200,6 +203,7 @@ uqdiv:
 TEST_F(AvrTest, RuntimeMalloc)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = std::string(print_c) + R"(
 void *malloc(unsigned n);
 void *calloc(unsigned n, unsigned size);
@@ -230,6 +234,7 @@ int main(void)
 TEST_F(AvrTest, RuntimeStackOverflowReported)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = R"(
 extern char __stack_canary[2];
 int main(void)
@@ -289,6 +294,7 @@ TEST_F(AvrTest, RunSetjmpLongjmp)
 TEST_F(AvrTest, RunSetjmpLongjmpClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string src = setjmp_program;
     EXPECT_EQ("", Run("", "crt0.o", &src,
                       { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR, "-I",

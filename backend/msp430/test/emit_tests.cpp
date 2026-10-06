@@ -250,7 +250,7 @@ static void CheckSizesWith(const std::vector<std::string> &as, const std::string
             s << "    .byte .Ls" << i + 1 << " - .Ls" << i << "\n";
     }
     std::vector<std::string> cmd = as;
-    cmd.insert(cmd.end(), { "-c", "-o", o_path, s_path });
+    cmd.insert(cmd.end(), { "-o", o_path, s_path });
     ASSERT_EQ(0, RunTool(cmd, log_path)) << ReadFile(log_path);
     if (!ld.empty()) {
         ASSERT_EQ(0, RunTool({ ld, "--no-relax", "-T", MSP430_LINK_SCRIPT, "-e", "0", "-o", exe_path, o_path },
@@ -275,9 +275,9 @@ static void CheckSizesWith(const std::vector<std::string> &as, const std::string
 // GNU as, the assembler of the toolchain.
 TEST_F(EmitTest, SizesAgreeWithAssembler)
 {
-    if (!MSP430_TOOLS_FOUND || !tool_available(MSP430_GCC))
-        GTEST_SKIP() << "msp430-elf-gcc not found";
-    CheckSizesWith({ MSP430_GCC, "-mcpu=msp430" }, MSP430_LD, MSP430_OBJCOPY, "gnu");
+    if (!MSP430_TOOLS_FOUND || !command_available(MSP430_ASSEMBLER) || !*MSP430_OBJCOPY)
+        GTEST_SKIP() << "MSP430 binutils not found";
+    CheckSizesWith(split_words(MSP430_ASSEMBLER), MSP430_LD, MSP430_OBJCOPY, "gnu");
 }
 
 // clang's assembler encodes every case the same way.
@@ -288,5 +288,5 @@ TEST_F(EmitTest, SizesAgreeWithClangAssembler)
     std::string clang = MSP430_CLANG;
     std::string objcopy =
         clang.substr(0, clang.find_last_of('/') + 1) + "llvm-objcopy"; // beside clang
-    CheckSizesWith({ clang, "--target=msp430" }, "", objcopy, "clang");
+    CheckSizesWith({ clang, "--target=msp430", "-c" }, "", objcopy, "clang");
 }

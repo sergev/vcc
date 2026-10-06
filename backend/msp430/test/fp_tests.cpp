@@ -179,14 +179,14 @@ int main(void)
     return 0;
 }
 )";
+    // inf - inf, 0 * inf, 0/0 and inf/inf: the host's default NaN (negative on x86);
+    // ours is the positive quiet NaN.
+    auto nan_bits = [](double x) { return std::isnan(x) ? 0x7ff8000000000000ULL : Bits(x); };
     std::string e;
     for (double a : dops) {
-        for (double b : dops) {
-            e += Hex(Bits(a + b), 16) + Hex(Bits(a - b), 16) + Hex(Bits(a * b), 16);
-            double q = a / b;
-            // 0/0 and inf/inf: the host's default NaN; ours is the positive quiet NaN.
-            e += Hex(std::isnan(q) ? 0x7ff8000000000000ULL : Bits(q), 16);
-        }
+        for (double b : dops)
+            e += Hex(nan_bits(a + b), 16) + Hex(nan_bits(a - b), 16) +
+                 Hex(nan_bits(a * b), 16) + Hex(nan_bits(a / b), 16);
         e += Hex(Bits(std::sqrt(a < 0 ? -a : a)), 16) + "\n";
     }
     EXPECT_EQ(e, CompileAndRunMsp430(src));

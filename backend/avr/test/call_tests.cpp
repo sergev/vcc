@@ -92,6 +92,7 @@ pop r0
 TEST_F(AvrTest, RunCallClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(R"(
 void putbyte(int c);
 long g(signed char a, int b, long c, long long d, unsigned char e, int f);
@@ -124,6 +125,7 @@ long h(long long a, long long b, long c, int d)
 TEST_F(AvrTest, RunCalledByClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(R"(
 long g(signed char a, int b, long c, long long d, unsigned char e, int f)
 {

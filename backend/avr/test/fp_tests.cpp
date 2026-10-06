@@ -102,6 +102,7 @@ static std::string ArithExpected(size_t from, size_t to)
 TEST_F(AvrTest, RunFloatRuntimeFromClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ(ArithExpected(0, 16), ClangRun(ArithProgram(0, 16)));
 }
 
@@ -350,5 +351,6 @@ TEST_F(AvrTest, RunLongLongConversions)
 TEST_F(AvrTest, RunLongLongConversionsFromClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ(LongLongExpected(), ClangRun(LongLongProgram()));
 }

@@ -22,15 +22,18 @@ protected:
         SKIP_IF_NO_X86_TOOLS();
     }
 
-    // Run a book program, and check that clang -O0 gives the same.
+    // Run a book program, and check that clang -O0 gives the same, when present.
     // cppcheck-suppress duplInheritedMember ; deliberately wraps X86Test::CompileAndRunBook
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = X86Test::CompileAndRunBook(src);
         int status       = exit_status;
-        EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
-        EXPECT_EQ(exit_status, status) << "exit status differs from clang";
-        exit_status = status;
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+        if (x86_clang_available()) {
+            EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
+            EXPECT_EQ(exit_status, status) << "exit status differs from clang";
+            exit_status = status;
+        }
         return ours;
     }
 };

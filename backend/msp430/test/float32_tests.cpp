@@ -3,9 +3,9 @@
 // sqrtf is checked against the host's over every one of the 2^32 inputs, bit for bit,
 // any NaN matching any NaN.  The work is split among threads, and still takes about half
 // a minute, so the test is DISABLED_: not part of the suite, run by hand after a change
-// to float32.c's sqrtf:
+// to float32.c's sqrtf, with these options:
 //
-//   ./build/backend/msp430/msp430-tests --gtest_also_run_disabled_tests \
+//   ./build/backend/msp430/msp430-tests --gtest_also_run_disabled_tests
 //       --gtest_filter=Float32Host.DISABLED_SqrtfEveryInput
 //
 #include <gtest/gtest.h>

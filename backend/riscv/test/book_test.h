@@ -110,15 +110,18 @@ protected:
         SKIP_IF_NO_RISCV_TOOLS();
     }
 
-    // Run a book program, and check that clang -O0 gives the same.
+    // Run a book program, and check that clang -O0 gives the same, when present.
     // cppcheck-suppress duplInheritedMember ; hides the base version on purpose, and calls it
     std::string CompileAndRunBook(const std::string &src)
     {
         std::string ours = RiscvTest::CompileAndRunBook(src);
         int status       = exit_status;
-        EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
-        EXPECT_EQ(exit_status, status) << "exit status differs from clang";
-        exit_status = status;
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+        if (riscv_clang_available()) {
+            EXPECT_EQ(ClangRunBook(src), ours) << "differs from clang";
+            EXPECT_EQ(exit_status, status) << "exit status differs from clang";
+            exit_status = status;
+        }
         return ours;
     }
 };

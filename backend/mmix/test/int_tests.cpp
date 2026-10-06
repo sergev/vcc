@@ -3,6 +3,7 @@
 // against the host's arithmetic.
 //
 #include <climits>
+#include <initializer_list>
 #include <cstdint>
 #include <sstream>
 #include <type_traits>
@@ -73,9 +74,10 @@ inch $1, #ffff
 )",
               Steps((uint64_t)(int64_t)INT32_MIN));
     // Every value the generator emits is the value asked for.
-    for (uint64_t v : { 0ull, 1ull, 255ull, 256ull, 0x10001ull, 0xffff0000ffffull,
-                        0xfffffffffffeull, 0x8000000000000001ull, 0x7fffffff00000000ull,
-                        (uint64_t)-2, (uint64_t)-70000, (uint64_t)INT64_MIN }) {
+    for (uint64_t v : std::initializer_list<uint64_t>{
+             0ull, 1ull, 255ull, 256ull, 0x10001ull, 0xffff0000ffffull, 0xfffffffffffeull,
+             0x8000000000000001ull, 0x7fffffff00000000ull, (uint64_t)-2, (uint64_t)-70000,
+             (uint64_t)INT64_MIN }) {
         ConstStep steps[4];
         int n     = mmix_const_steps(v, steps);
         uint64_t r = 0;

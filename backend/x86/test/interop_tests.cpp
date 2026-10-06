@@ -33,6 +33,7 @@ std::string BothSides(const char *types, const char *decls, const char *defs, co
 TEST_F(X86Test, RunScalarTableWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     const char *types = "";
     const char *decls = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e);
@@ -89,6 +90,7 @@ int main(void) { return our_check() + 32 * (their_check() == 31); }
 TEST_F(X86Test, RunStructTableWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     const char *types = R"(
 struct ld { long l; double d; };
 struct dl { double d; long l; };
@@ -190,6 +192,7 @@ int main(void) { return our_check() + 64 * (their_check() == 63); }
 TEST_F(X86Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     const char *types = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };
@@ -282,6 +285,7 @@ int main(void) { return (int)our_check() + 4 * (int)their_check(); }
 TEST_F(X86Test, HeadersAgreeWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     std::string values = R"(
 #include <float.h>
 #include <limits.h>

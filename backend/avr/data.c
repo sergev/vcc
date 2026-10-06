@@ -94,12 +94,17 @@ static int emit_init(FILE *out, const Tac_TopLevel *program, const Tac_StaticIni
     }
     case TAC_STATIC_INIT_POINTER:
     case TAC_STATIC_INIT_FAT_POINTER:
-        if (names_function(program, it->u.pointer.name))
-            fprintf(out, "    .short  pm(%s)\n", it->u.pointer.name);
-        else if (it->u.pointer.byte_offset)
-            fprintf(out, "    .short  %s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
-        else
-            fprintf(out, "    .short  %s\n", it->u.pointer.name);
+        fputs("    .short  ", out);
+        if (names_function(program, it->u.pointer.name)) {
+            fputs("pm(", out);
+            avr_put_sym(out, it->u.pointer.name);
+            fputs(")\n", out);
+        } else {
+            avr_put_sym(out, it->u.pointer.name);
+            if (it->u.pointer.byte_offset)
+                fprintf(out, "%+d", it->u.pointer.byte_offset);
+            fputc('\n', out);
+        }
         return 2;
     }
     return 0;
@@ -123,13 +128,20 @@ void emit_static_variable(FILE *out, const Tac_TopLevel *program, const char *na
         log2++;
     bool bss = all_zero(init);
     fprintf(out, "    %s\n", readonly ? ".section .rodata" : bss ? ".bss" : ".data");
-    if (global)
-        fprintf(out, "    .globl  %s\n", name);
+    if (global) {
+        fputs("    .globl  ", out);
+        avr_put_sym(out, name);
+        fputc('\n', out);
+    }
     if (log2)
         fprintf(out, "    .p2align %d\n", log2);
-    fprintf(out, "    .type   %s, @object\n", name);
-    fprintf(out, "    .size   %s, %d\n", name, size);
-    fprintf(out, "%s:\n", name);
+    fputs("    .type   ", out);
+    avr_put_sym(out, name);
+    fputs(", @object\n    .size   ", out);
+    avr_put_sym(out, name);
+    fprintf(out, ", %d\n", size);
+    avr_put_sym(out, name);
+    fputs(":\n", out);
     int n = 0;
     if (bss) {
         n = size;

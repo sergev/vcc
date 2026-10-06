@@ -149,6 +149,7 @@ int six(void)
 TEST_F(X86Test, RunRspFrameAlignment)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     std::string ours = R"(
 int misalign(void);
 int g(int x) { return x; }

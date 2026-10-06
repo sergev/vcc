@@ -221,3 +221,24 @@ inline bool tool_available(const std::string &name)
     }
     return false;
 }
+
+// The words of `s`, split at blanks: a command with its flags, as CMake passes one
+// (e.g. "riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d").
+inline std::vector<std::string> split_words(const std::string &s)
+{
+    std::vector<std::string> words;
+    size_t pos = 0;
+    while ((pos = s.find_first_not_of(" \t", pos)) != std::string::npos) {
+        size_t end = s.find_first_of(" \t", pos);
+        words.push_back(s.substr(pos, end - pos));
+        pos = end;
+    }
+    return words;
+}
+
+// True if the command `cmd` (split_words) names an available tool.
+inline bool command_available(const std::string &cmd)
+{
+    std::vector<std::string> words = split_words(cmd);
+    return !words.empty() && tool_available(words[0]);
+}

@@ -234,6 +234,7 @@ int main(void) {
 TEST_F(X86Test, RunStructsWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
     const char *decls = R"(
 struct m { double d; long l; };
 struct n { long l; double d; };

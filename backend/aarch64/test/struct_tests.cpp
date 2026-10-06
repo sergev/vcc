@@ -66,6 +66,7 @@ int main(void) {
 TEST_F(Aarch64Test, RunStructInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     const char *decls  = R"(
 struct s3 { char a, b, c; };
 struct s12 { int a, b, c; };

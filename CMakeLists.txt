@@ -21,7 +21,12 @@ endif()
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "-Wall -Werror -Wshadow")
+# The sources are C11: a newer compiler's default (C23 in GCC 15) makes `alignas` and
+# the like keywords.
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+# GCC 16 takes an unbraced `if` around a GoogleTest EXPECT_* for a dangling else.
+set(CMAKE_CXX_FLAGS "-Wall -Werror -Wshadow -Wno-dangling-else")
 set(CMAKE_C_FLAGS   "-Wall -Werror -Wshadow")
 
 #
@@ -49,6 +54,7 @@ if(NOT (Cppcheck MATCHES "NOTFOUND"))
         "--error-exitcode=1" # Fail on any issues
         "--inline-suppr" # Enable inline control like // cppcheck-suppress "id"
         "--quiet" # No progress report messages
+        "--library=${CMAKE_SOURCE_DIR}/scripts/cppcheck-c11.xml" # _Noreturn as GCC's noreturn
     )
 endif()
 
@@ -118,9 +124,10 @@ add_subdirectory(optimize)
 # exists when backend/besm6's besm-tests declares add_dependencies(besm-tests besm-libc-dubna).
 # libc's compile commands DEPENDS on parse/lower/genbesm resolve at generate time, so
 # referencing backend-defined `genbesm` from here is fine even though backend follows.
+include(scripts/CrossTools.cmake)
 add_subdirectory(libc)
 add_subdirectory(backend)
-# The driver uses the RISC-V tool paths libc/riscv64 found.
+# The driver uses the cross tools each libc/<target> found.
 add_subdirectory(cc)
 
 #

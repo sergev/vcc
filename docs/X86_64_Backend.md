@@ -17,10 +17,10 @@ with no operating system.
   computed values agree.
 - **Code model:** small, static, not position-independent. Every symbol is addressed
   as `sym(%rip)`, so the program must lie below 2 GiB; there is no GOT or PLT.
-- **Output:** a `.s` file in AT&T syntax, assembled by clang
-  (`clang --target=x86_64-none-elf -c`) and linked by `ld.lld`. GNU `as`
-  (`x86_64-elf-as`) accepts the same output, and the tests check that when it is
-  installed.
+- **Output:** a `.s` file in AT&T syntax, assembled by GNU `as --64` (`x86_64-elf-as`,
+  or the host's own on x86-64 Linux) and linked by its `ld`, or by clang
+  (`--target=x86_64-none-elf`) and `ld.lld`. With GNU `as`, the tests assemble the
+  output of the golden tests too.
 - **Machine:** qemu `microvm`, booted through the PVH ELF note. Output goes to the
   16550 UART COM1 at I/O port `0x3f8`. The exit status goes out as a byte on the debug
   console (port `0xe9`), then a write to the `isa-debug-exit` device at port `0xf4`
@@ -177,8 +177,10 @@ In `libc/x86/`:
 
 ## Running a program by hand
 
-You need clang with x86 support, `ld.lld` and `qemu-system-x86_64`. On macOS:
-`brew install llvm lld qemu`. Nothing depends on the host being x86: qemu emulates it.
+You need x86-64 binutils (`x86_64-elf-as` and `-ld`, or the host's own `as` and `ld` on
+x86-64 Linux; or clang and `ld.lld`) and `qemu-system-x86_64`. On Debian and Ubuntu:
+`apt install qemu-system-x86`; on macOS: `brew install x86_64-elf-binutils qemu`. Nothing
+depends on the host being x86: qemu emulates it.
 
 After `make install`, which installs into `~/.local`, the driver does it all:
 
@@ -200,8 +202,8 @@ vcpp -t x86_64 -nostdinc -I$P/share/vcc/x86_64/include hello.c hello.i  # prepro
 vparse hello.i hello.ast                                     # parse
 vlower -t x86_64 hello.ast hello.tac                         # check and lower
 vgenx86 hello.tac hello.s                                    # generate assembly
-clang --target=x86_64-none-elf -c hello.s -o hello.o
-ld.lld -T $P/share/vcc/x86_64/lib/link.ld -o hello.elf \
+x86_64-elf-as --64 -o hello.o hello.s
+x86_64-elf-ld -T $P/share/vcc/x86_64/lib/link.ld -o hello.elf \
     $P/share/vcc/x86_64/lib/crt0.o hello.o $P/share/vcc/x86_64/lib/libc.a
 qemu-system-x86_64 -M microvm -display none -serial stdio -monitor none \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 -kernel hello.elf

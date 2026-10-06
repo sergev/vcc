@@ -63,21 +63,21 @@ hosted headers and `libc0.a` still build and are used in-tree (test fixtures, th
 For RISC-V it installs `genriscv` → `bin/vgenriscv64`, the runtime `crt0.o`, `libc.a`
 and the qemu `virt` linker script `link.ld` → `share/vcc/riscv64/lib/`, and *all* the RISC-V and
 shared headers, hosted ones included, → `share/vcc/riscv64/include/` (no other project supplies a
-RISC-V libc); the runtime only when the RISC-V clang/llvm-ar were found. The same for riscv32:
+RISC-V libc); the runtime only when the RISC-V binutils (or a clang with ld.lld/llvm-ar) were found. The same for riscv32:
 `genriscv` again as `bin/vgenriscv32` (the `32` in its name selects RV32, as `--rv32` does),
 the `libc/riscv32` runtime and headers → `share/vcc/riscv32/`. And for AArch64: `genaarch64` →
 `bin/vgenaarch64`, the `libc/aarch64` runtime → `share/vcc/aarch64/lib/` (when the AArch64
-clang was found) and the AArch64, LP64 and shared headers → `share/vcc/aarch64/include/`.
+binutils or clang were found) and the AArch64, LP64 and shared headers → `share/vcc/aarch64/include/`.
 The same for ARM32: `genarm32` → `bin/vgenarm32`, the `libc/arm32` runtime →
-`share/vcc/arm32/lib/` (when the clang has an ARM target) and the ARM32, ILP32 and shared
+`share/vcc/arm32/lib/` (when the ARM binutils or clang were found) and the ARM32, ILP32 and shared
 headers → `share/vcc/arm32/include/`. And for x86-64: `genx86` → `bin/vgenx86`, the
-`libc/x86` runtime → `share/vcc/x86_64/lib/` (when the clang has an x86-64 target) and the
+`libc/x86` runtime → `share/vcc/x86_64/lib/` (when x86-64 binutils or clang were found) and the
 x86-64, LP64 and shared headers → `share/vcc/x86_64/include/` (x86-64's own `float.h` and
 `limits.h` in place of the LP64 ones). And for AVR: `genavr` → `bin/vgenavr`, the
-`libc/avr` runtime → `share/vcc/avr/lib/` (when the clang has an AVR target) and the AVR
+`libc/avr` runtime → `share/vcc/avr/lib/` (when the AVR binutils or clang were found) and the AVR
 and shared headers → `share/vcc/avr/include/`. And for MSP430: `genmsp430` → `bin/vgenmsp430`,
 the `libc/msp430` runtime (`crt0.o`, `libc.a` and the mspsim `link.ld`) →
-`share/vcc/msp430/lib/` (when the GNU MSP430 toolchain was found) and the MSP430, `ip16` (but
+`share/vcc/msp430/lib/` (when the MSP430 binutils were found) and the MSP430, `ip16` (but
 for the `stddef.h`/`stdint.h` MSP430 has its own) and shared headers →
 `share/vcc/msp430/include/`. And for MMIX: `genmmix` → `bin/vgenmmix`, the `libc/mmix`
 runtime (`crt0.o` and `libc.a`; no linker script, the linker's own serves) →
@@ -302,6 +302,8 @@ over the stack, where a variadic callee takes every argument).
 Static analysis: when `cppcheck` is installed, CMake attaches it to every C and C++ target
 (`CMAKE_C_CPPCHECK`/`CMAKE_CXX_CPPCHECK` in the top-level `CMakeLists.txt`), so it runs as
 part of the build and any finding fails the build. There is no separate ctest for it.
+For C it loads `scripts/cppcheck-c11.xml`, which maps `_Noreturn` to GCC's attribute: cppcheck
+2.21 ignores `_Noreturn`, and reports false null dereferences after a `fatal_error()`.
 
 Try the compiler tools:
 ```sh
@@ -328,14 +330,26 @@ Try the compiler tools:
 ./build/backend/genbesm /tmp/input.tac out.s        # explicit output filename
 ```
 
-Compiler flags in use: `-Wall -Werror -Wshadow` — all warnings are errors.
+Compiler flags in use: `-Wall -Werror -Wshadow` — all warnings are errors (plus
+`-Wno-dangling-else` for C++: GCC 16 flags an unbraced `if` around a GoogleTest `EXPECT_*`).
+C is compiled as C11 (`CMAKE_C_STANDARD 11`): GCC 15's default C23 makes `alignas` a keyword.
+
+**Cross tools** (`scripts/CrossTools.cmake`, `vcc_find_cross`, called by each `libc/<target>/CMakeLists.txt`):
+GNU binutils first, by a list of prefixes (`riscv64-unknown-elf`, `aarch64-none-elf`, `arm-none-eabi`,
+`x86_64-elf`/`x86_64-linux-gnu`/the host's, `avr`, `msp430-elf`/`msp430-unknown-elf`); else clang +
+ld.lld + llvm-ar (`-DVCC_CROSS_TOOLS=gnu|llvm` forces one). It sets `<T>_AS` (command with flags),
+`<T>_LD`/`<T>_LDFLAGS`, `<T>_AR`, `<T>_TOOLS_FOUND`, and separately `<T>_CLANG_FOUND`: clang is only
+the tests' optional *reference compiler* (interop, the book comparison, `HeadersAgreeWithClang`),
+guarded by `SKIP_IF_NO_<T>_CLANG()`; `msp430-elf-gcc` likewise by `SKIP_IF_NO_MSP430_GCC()`. The test
+fixtures take the assembler as `<T>_ASSEMBLER` (one blank-separated string, `cross_tools()` in
+`qemu_test.h`), and `vcc`'s target table must use the same flags (`cc-tests` checks the `-v` echo).
 
 ## Architecture
 
 This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6, RISC-V, AArch64, ARM32, x86-64, AVR, MSP430 and MMIX. The pipeline:
 
 ```
-[vcc] drives the whole chain, then the assembler and linker (clang + ld.lld | msp430-elf-as + -ld | mmix-knuth-mmixware-as + -ld | b6as + b6ld):
+[vcc] drives the whole chain, then the assembler and linker (<target>-as + <target>-ld GNU binutils, else clang + ld.lld | b6as + b6ld):
 
 Source (.c)
   → [cpp]        Macro expansion, #include, #if → preprocessed C (`-t` target macros)
@@ -370,7 +384,7 @@ Source (.c)
 
 | Phase | Location | Status |
 |---|---|---|
-| Compiler driver | `cc/` | Complete (ported from v7besm `cmd/cc` (b6cc); `-t riscv64|riscv32|aarch64|arm32|x86_64|avr|msp430|mmix|besm6`, `-E/-S/-c`, `-Smadlen/-Sbemsh`, links with ld.lld, msp430-elf-ld (`--gc-sections`, then GCC's `libgcc.a` when found), mmix-knuth-mmixware-ld (text at 0x100, the linker's own script, a `.mmo`, then GCC's `libgcc.a` when found) or b6ld; finds the passes beside itself and `../share/vcc/<target>`; tool overrides `VCC_CPP`/`VCC_PARSE`/`VCC_LOWER`/`VCC_GEN`/`VCC_AS`/`VCC_LD` (the last two split at blanks, so `VCC_AS="clang --target=msp430 -c"` works); the BESM-6 `crt0.o`/`libc.a` are v7besm's, not installed here; see [cc/README.md](cc/README.md)) |
+| Compiler driver | `cc/` | Complete (ported from v7besm `cmd/cc` (b6cc); `-t riscv64|riscv32|aarch64|arm32|x86_64|avr|msp430|mmix|besm6`, `-E/-S/-c`, `-Smadlen/-Sbemsh`, assembles and links with the target's GNU binutils (`riscv64-unknown-elf-`, `aarch64-none-elf-`, `arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`; else clang and ld.lld), msp430-elf-ld (`--gc-sections`, then GCC's `libgcc.a` when found), mmix-knuth-mmixware-ld (text at 0x100, the linker's own script, a `.mmo`, then GCC's `libgcc.a` when found) or b6ld; finds the passes beside itself and `../share/vcc/<target>`; tool overrides `VCC_CPP`/`VCC_PARSE`/`VCC_LOWER`/`VCC_GEN`/`VCC_AS`/`VCC_LD` (the last two split at blanks, so `VCC_AS="clang --target=msp430 -c"` works); the BESM-6 `crt0.o`/`libc.a` are v7besm's, not installed here; see [cc/README.md](cc/README.md)) |
 | Preprocessor | `cpp/` | Complete (Reiser v7 cpp modernized to C11, ported from v7besm `cmd/cpp` (b6cpp); adds `-t`/`--target` and `-nostdinc`; the `#ifdef besm6` size profile in `defs.h` is kept for diffability with v7besm, where it builds natively; see [cpp/README.md](cpp/README.md)) |
 | Lexer | `scanner/` | Complete |
 | Parser | `parser/` | Complete |
@@ -456,7 +470,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/riscv/test/rv32_tests.cpp`, `llong_tests.cpp` (`long long` in register pairs, against the host's results), `interop32_tests.cpp` (ILP32D with clang: pairs, split a7/stack, `long double` by reference, hidden result pointer) and the shared `interop_tests.cpp` (RV32/ILP32D: `genriscv --rv32` run on `qemu-system-riscv32`; the same `riscv_test.h` built with `RISCV_TEST_XLEN=32`, the `libc/riscv32` headers and runtime; ctest names prefixed `rv32.`) → `riscv32-tests`
 - `backend/aarch64/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `aarch64_test.h` also runs programs on bare-metal `qemu-system-aarch64`, skipped without the tools), `interop_tests.cpp` (a signature table and variadics linked with clang both ways), `regalloc_tests.cpp`, `peephole_tests.cpp`, `float128_tests.cpp`, the libc run tests ported from RISC-V, and the book suite (compared with clang) → `aarch64-tests`
 - `backend/arm32/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `llong_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `hfa_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `arm32_test.h` also runs programs on bare-metal `qemu-system-arm`, skipped without the tools), `interop_tests.cpp` (a signature table, variadics and the RTABI helpers linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang) → `arm32-tests`
-- `backend/x86/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `x87_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`, every output also assembled by GNU `as` when installed; `x86_test.h` also runs programs on bare-metal `qemu-system-x86_64 -M microvm`, skipped without the tools), `interop_tests.cpp` (scalars, structs of every class and variadics linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang; `backend/common/test/book/signed_char_tests.cpp` has signed-char versions of three programs, shared with MMIX) → `x86-tests`
+- `backend/x86/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `fp_tests.cpp`, `x87_tests.cpp`, `ptr_tests.cpp`, `data_tests.cpp`, `call_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`, every output also assembled by GNU `as` when that is the assembler; `x86_test.h` also runs programs on bare-metal `qemu-system-x86_64 -M microvm`, skipped without the tools), `interop_tests.cpp` (scalars, structs of every class and variadics linked with clang both ways; the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from AArch64, and the book suite (compared with clang; `backend/common/test/book/signed_char_tests.cpp` has signed-char versions of three programs, shared with MMIX) → `x86-tests`
 - `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with clang) → `avr-tests`
 - `backend/msp430/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `fp_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `msp430_test.h` assembles and links with the GNU MSP430 toolchain and runs programs on `mspsim`, skipped without the tools), `float32_tests.cpp`/`float64_tests.cpp` (the soft-float runtime against the host bit for bit), `interop_tests.cpp` (a signature table linked with GCC both ways and with clang but for structures, the call-saved registers, GCC's and clang's code on our runtime, our helpers against libgcc's, our code under newlib, the headers checked against GCC's and clang's), `regalloc_tests.cpp`, the libc run tests ported from AVR (also run against newlib), and the book suite (compared with GCC's build and clang's) → `msp430-tests`
 - `backend/mmix/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `mmix_test.h` assembles and links with the GNU MMIX toolchain and runs programs on Knuth's `mmix`, skipped without the tools), `interop_tests.cpp` (a signature table linked with GCC both ways, the `regcheck` harness for the registers a call keeps, GCC's code on our runtime, our code under newlib, the headers checked against GCC's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64 (also run against newlib), `book_mmix_tests.cpp` (big-endian versions of the byte-order book programs) with `backend/common/test/book/signed_char_tests.cpp`, and the book suite (compared with GCC's build) → `mmix-tests`

@@ -119,6 +119,7 @@ int main(void) {
 TEST_F(Arm32Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     const char *decls = R"(
 #include <stdarg.h>
 struct f2 { float a, b; };

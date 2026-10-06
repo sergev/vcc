@@ -10,7 +10,8 @@ operating system.
 - **CPU:** RV64IMFD — 64-bit integers, multiply/divide, `float` and `double` in hardware.
 - **Calling rules:** the standard LP64D convention. `int` is 32 bits; `long` and
   pointers are 64.
-- **Output:** a `.s` file that clang assembles.
+- **Output:** a `.s` file that the GNU RISC-V binutils (`riscv64-unknown-elf-as`) or clang
+  assemble.
 - **`long double`:** 128 bits, computed in software.
 
 ## 32-bit RISC-V
@@ -101,8 +102,10 @@ In `libc/riscv64/`:
 
 ## Running a program by hand
 
-You need clang with RISC-V support, `ld.lld` and `qemu-system-riscv64`. On macOS:
-`brew install llvm lld qemu`.
+You need the RISC-V binutils (`riscv64-unknown-elf-as` and `-ld`; or clang and `ld.lld`)
+and `qemu-system-riscv64`. On Debian and Ubuntu: `apt install binutils-riscv64-unknown-elf
+qemu-system-misc` (`qemu-system-riscv` on Debian 13 and later); on macOS:
+`brew install riscv64-elf-binutils qemu`.
 
 After `make install`, which installs into `~/.local`, the driver does it all:
 
@@ -120,8 +123,8 @@ cc -E -nostdinc -I$P/share/vcc/riscv64/include hello.c -o hello.i    # preproces
 vparse hello.i hello.ast                                         # parse
 vlower -t riscv64 hello.ast hello.tac                            # check and lower
 vgenriscv64 hello.tac hello.s                                    # generate assembly
-clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c hello.s -o hello.o
-ld.lld -T $P/share/vcc/riscv64/lib/link.ld -o hello.elf \
+riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d -o hello.o hello.s
+riscv64-unknown-elf-ld -T $P/share/vcc/riscv64/lib/link.ld -o hello.elf \
     $P/share/vcc/riscv64/lib/crt0.o hello.o $P/share/vcc/riscv64/lib/libc.a
 qemu-system-riscv64 -M virt -bios none -display none -serial stdio -monitor none \
     -kernel hello.elf
@@ -135,7 +138,7 @@ To read the intermediate code, run `lower` with `--yaml`.
 
 For 32 bits, add `-t riscv32` to `vcc` and run `qemu-system-riscv32`; by hand, the
 headers and library are under `share/vcc/riscv32`, `vgenriscv32` is the code generator,
-and clang takes `--target=riscv32 -march=rv32imfd -mabi=ilp32d`.
+the assembler takes `-march=rv32imfd -mabi=ilp32d` and the linker `-m elf32lriscv`.
 
 ## Tests
 
@@ -145,4 +148,5 @@ book program's output with clang's. `riscv32-tests` does the same on
 `qemu-system-riscv32` (ctest names start with `rv32.`): the run, libc, `long double`,
 interop and book tests built again for 32 bits, plus its own `long long` and ILP32D
 tests; book programs that expect a 64-bit `long` are skipped. Tests that need qemu or
-clang are skipped when the tools are missing.
+clang are skipped when the tools are missing; without clang, a book program's output is
+still checked against the book's.

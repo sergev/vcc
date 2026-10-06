@@ -13,10 +13,11 @@ The code follows the standard ARM calling rules with floating point in VFP regis
 - **Calling rules:** AAPCS with the VFP variant, the `arm32` descriptor in
   `semantic/target.c`. `int`, `long` and pointers are 32 bits, `long long` 64; plain
   `char` is unsigned; `wchar_t` is `unsigned int`; an `enum` is 4 bytes.
-- **Output:** a `.s` file in unified syntax that clang assembles
-  (`clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c`); `ld.lld`
-  links. Each file starts with the `.eabi_attribute`s clang itself writes, so the
-  objects agree on the ABI.
+- **Output:** a `.s` file in unified syntax that `arm-none-eabi-as -mcpu=cortex-a15
+  -mfpu=vfpv3-d16 -mfloat-abi=hard` assembles and `arm-none-eabi-ld` links (or clang,
+  `--target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16`, and `ld.lld`). Each
+  file starts with the `.eabi_attribute`s clang itself writes, so the objects agree on
+  the ABI.
 - **`long double`:** the same as `double`.
 - **Constants and addresses:** `mov`/`mvn` of a modified immediate, else `movw`/`movt`
   (`#:lower16:sym`, `#:upper16:sym`). There are no literal pools; a `double` constant
@@ -156,8 +157,9 @@ In `libc/arm32/`:
 
 ## Running a program by hand
 
-You need clang with ARM support, `ld.lld` and `qemu-system-arm`. On macOS:
-`brew install llvm lld qemu`.
+You need the ARM binutils (`arm-none-eabi-as` and `-ld`; or clang and `ld.lld`) and
+`qemu-system-arm`. On Debian and Ubuntu: `apt install binutils-arm-none-eabi
+qemu-system-arm`; on macOS: `brew install arm-none-eabi-binutils qemu`.
 
 After `make install`, which installs into `~/.local`, the driver does it all:
 
@@ -175,8 +177,8 @@ vcpp -t arm32 -nostdinc -I$P/share/vcc/arm32/include hello.c hello.i   # preproc
 vparse hello.i hello.ast                                     # parse
 vlower -t arm32 hello.ast hello.tac                          # check and lower
 vgenarm32 hello.tac hello.s                                  # generate assembly
-clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c hello.s -o hello.o
-ld.lld -T $P/share/vcc/arm32/lib/link.ld -o hello.elf \
+arm-none-eabi-as -mcpu=cortex-a15 -mfpu=vfpv3-d16 -mfloat-abi=hard -o hello.o hello.s
+arm-none-eabi-ld -T $P/share/vcc/arm32/lib/link.ld -o hello.elf \
     $P/share/vcc/arm32/lib/crt0.o hello.o $P/share/vcc/arm32/lib/libc.a
 qemu-system-arm -M virt -cpu cortex-a15 -display none -serial stdio -monitor none \
     -semihosting -kernel hello.elf

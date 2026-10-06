@@ -198,6 +198,7 @@ int main(void)
 TEST_F(Msp430Test, RunSignatureTableWithGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string ours =
         BothSides(true, sig_types, sig_decls, sig_defs, "our", "their") + sig_main;
     std::string theirs = BothSides(true, sig_types, sig_decls, sig_defs, "their", "our");
@@ -219,6 +220,7 @@ TEST_F(Msp430Test, RunSignatureTableWithClang)
 TEST_F(Msp430Test, RunPreservedRegisters)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string ours = CompileToMsp430(R"(
 int work(int a, int b)
 {
@@ -410,6 +412,7 @@ std::string RuntimeExpected(bool nan_order)
 TEST_F(Msp430Test, RunGccOnOurRuntime)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string expected = RuntimeExpected(true);
     EXPECT_EQ(expected, GccRun(RuntimeProgram(true)));
     EXPECT_EQ(0, exit_status);
@@ -479,6 +482,7 @@ w\name:
 TEST_F(Msp430Test, RunHelpersAgreeWithLibgcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string libgcc = MSP430_LIBGCC;
     std::string libmul = libgcc.substr(0, libgcc.find_last_of('/') + 1) + "libmul_none.a";
     std::string pgcc   = TEST_DIR "/HelpersAgree.libgcc.a";
@@ -815,6 +819,7 @@ int main(void)
 TEST_F(Msp430Test, RunOurCodeWithNewlib)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string ours = CompileToMsp430(R"(
 #include <stdio.h>
 #include <stdlib.h>
@@ -931,6 +936,7 @@ std::string TheirHeaderValues()
 TEST_F(Msp430Test, HeadersAgreeWithGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     EXPECT_EQ("", GccRun(TheirHeaderValues(), CompileToMsp430(OurHeaderValues("0").c_str())));
     EXPECT_EQ(0, exit_status);
 }

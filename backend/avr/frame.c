@@ -672,7 +672,7 @@ void load_vals(Gen *g, const Load *l, int n)
             dsts |= 1u << l[k].to.r[i];
 
     // Register to register, all at once.
-    int d[64], s[64], m = 0;
+    int d[64] = { 0 }, s[64] = { 0 }, m = 0;
     for (int k = 0; k < n; k++) {
         Regs vr;
         if (!val_regs(g, l[k].v, &vr))
@@ -682,7 +682,6 @@ void load_vals(Gen *g, const Load *l, int n)
             s[m++] = vr.r[i];
         }
     }
-    // cppcheck-suppress uninitvar ; only the first m entries are read, all set above
     parallel_move(g, d, s, m);
 
     // From memory, then constants.

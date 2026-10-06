@@ -10,32 +10,48 @@
 // The ARM32 tools, from CMake; a missing one names a path that does not exist.
 inline bool arm32_tools_available()
 {
-    return ARM32_TOOLS_FOUND && tool_available(ARM32_CLANG) && tool_available(ARM32_LD) &&
+    return ARM32_TOOLS_FOUND && command_available(ARM32_ASSEMBLER) && tool_available(ARM32_LD) &&
            tool_available(ARM32_QEMU);
 }
 
 // Skip a run test when the ARM32 toolchain or qemu is absent.
-#define SKIP_IF_NO_ARM32_TOOLS()                                                    \
-    do {                                                                            \
-        if (!arm32_tools_available())                                               \
-            GTEST_SKIP() << "ARM32 clang/ld.lld/qemu not found; skipping run test"; \
+#define SKIP_IF_NO_ARM32_TOOLS()                                                        \
+    do {                                                                                \
+        if (!arm32_tools_available())                                                   \
+            GTEST_SKIP() << "ARM32 assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// clang, the reference compiler, when it has the target.
+inline bool arm32_clang_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return arm32_tools_available() && ARM32_CLANG_FOUND && tool_available(ARM32_CLANG);
+}
+
+// Skip a test that compiles C with clang.
+#define SKIP_IF_NO_ARM32_CLANG()                                          \
+    do {                                                                  \
+        if (!arm32_clang_available())                                     \
+            GTEST_SKIP() << "ARM32 clang not found; skipping clang test"; \
     } while (0)
 
 class Arm32Test : public QemuTest {
 protected:
     // The target flags are ARM32_TARGET_FLAGS of libc/arm32/CMakeLists.txt.
     Arm32Test()
-        : QemuTest("arm32", { "arm32-tests",
-                              ARM32_CLANG,
-                              { "--target=armv7a-none-eabihf", "-mcpu=cortex-a15",
-                                "-mfpu=vfpv3-d16" },
-                              { "-ffreestanding", "-fno-builtin" },
-                              ARM32_LD,
-                              ARM32_LINK_SCRIPT,
-                              ARM32_LIB_DIR,
-                              { ARM32_QEMU, "-M", "virt", "-cpu", "cortex-a15", "-display", "none",
-                                "-serial", "stdio", "-monitor", "none", "-semihosting" },
-                              "" })
+        : QemuTest("arm32",
+                   cross_tools(
+                       { "arm32-tests",
+                         ARM32_CLANG,
+                         { "--target=armv7a-none-eabihf", "-mcpu=cortex-a15", "-mfpu=vfpv3-d16" },
+                         { "-ffreestanding", "-fno-builtin" },
+                         ARM32_LD,
+                         ARM32_LINK_SCRIPT,
+                         ARM32_LIB_DIR,
+                         { ARM32_QEMU, "-M", "virt", "-cpu", "cortex-a15", "-display", "none",
+                           "-serial", "stdio", "-monitor", "none", "-semihosting" },
+                         "" },
+                       ARM32_ASSEMBLER, ARM32_LINK_FLAGS))
     {
         // The defaults; a test may change them.
         arm32_regalloc      = true;

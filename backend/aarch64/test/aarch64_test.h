@@ -10,30 +10,46 @@
 // The AArch64 tools, from CMake; a missing one names a path that does not exist.
 inline bool aarch64_tools_available()
 {
-    return AARCH64_TOOLS_FOUND && tool_available(AARCH64_CLANG) && tool_available(AARCH64_LD) &&
-           tool_available(AARCH64_QEMU);
+    return AARCH64_TOOLS_FOUND && command_available(AARCH64_ASSEMBLER) &&
+           tool_available(AARCH64_LD) && tool_available(AARCH64_QEMU);
 }
 
 // Skip a run test when the AArch64 toolchain or qemu is absent.
-#define SKIP_IF_NO_AARCH64_TOOLS()                                                    \
-    do {                                                                              \
-        if (!aarch64_tools_available())                                               \
-            GTEST_SKIP() << "AArch64 clang/ld.lld/qemu not found; skipping run test"; \
+#define SKIP_IF_NO_AARCH64_TOOLS()                                                        \
+    do {                                                                                  \
+        if (!aarch64_tools_available())                                                   \
+            GTEST_SKIP() << "AArch64 assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// clang, the reference compiler, when it has the target.
+inline bool aarch64_clang_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return aarch64_tools_available() && AARCH64_CLANG_FOUND && tool_available(AARCH64_CLANG);
+}
+
+// Skip a test that compiles C with clang.
+#define SKIP_IF_NO_AARCH64_CLANG()                                          \
+    do {                                                                    \
+        if (!aarch64_clang_available())                                     \
+            GTEST_SKIP() << "AArch64 clang not found; skipping clang test"; \
     } while (0)
 
 class Aarch64Test : public QemuTest {
 protected:
     Aarch64Test()
-        : QemuTest("aarch64", { "aarch64-tests",
-                                AARCH64_CLANG,
-                                { "--target=aarch64-none-elf" },
-                                { "-ffreestanding", "-fno-builtin" },
-                                AARCH64_LD,
-                                AARCH64_LINK_SCRIPT,
-                                AARCH64_LIB_DIR,
-                                { AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display",
-                                  "none", "-serial", "stdio", "-monitor", "none", "-semihosting" },
-                                "" })
+        : QemuTest("aarch64",
+                   cross_tools({ "aarch64-tests",
+                                 AARCH64_CLANG,
+                                 { "--target=aarch64-none-elf" },
+                                 { "-ffreestanding", "-fno-builtin" },
+                                 AARCH64_LD,
+                                 AARCH64_LINK_SCRIPT,
+                                 AARCH64_LIB_DIR,
+                                 { AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display",
+                                   "none", "-serial", "stdio", "-monitor", "none", "-semihosting" },
+                                 "" },
+                               AARCH64_ASSEMBLER, AARCH64_LINK_FLAGS))
     {
         // The defaults; a test may change them.
         aarch64_regalloc      = true;

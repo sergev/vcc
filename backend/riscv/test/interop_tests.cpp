@@ -218,6 +218,7 @@ int main(void)
 TEST_F(RiscvTest, InteropWeCallClang)
 {
     SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kCaller, kCallee));
     EXPECT_EQ(0, exit_status);
 }
@@ -225,6 +226,7 @@ TEST_F(RiscvTest, InteropWeCallClang)
 TEST_F(RiscvTest, InteropClangCallsUs)
 {
     SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kCallee, kCaller));
     EXPECT_EQ(0, exit_status);
 }

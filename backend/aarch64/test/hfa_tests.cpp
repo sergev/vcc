@@ -39,6 +39,7 @@ long double g(long double y) { return f(y); }
 TEST_F(Aarch64Test, RunHfaInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     const char *common = R"(
 struct f3 { float a, b, c; };
 struct d4 { double a[2]; double b, c; };

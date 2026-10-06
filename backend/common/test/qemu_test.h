@@ -1,7 +1,7 @@
-// Fixture for a backend whose programs run on bare-metal qemu: assemble our output and
-// compile any clang part, link with ld.lld against the target's crt0 and libc.a, run
-// qemu under a timeout, and return the UART output with main's result (the qemu exit
-// status) in exit_status.  A backend fixture derives from it with a QemuConfig.  The
+// Fixture for a backend whose programs run on bare-metal qemu: assemble our output (GNU
+// as, or clang) and compile any clang part, link (GNU ld, or ld.lld) against the
+// target's crt0 and libc.a, run qemu under a timeout, and return the UART output with
+// main's result (the qemu exit status) in exit_status.  A backend fixture derives from it with a QemuConfig.  The
 // runner need not be qemu: MSP430 runs on the mspsim simulator, MMIX on Knuth's mmix,
 // through the same steps.
 #pragma once
@@ -15,10 +15,11 @@
 
 struct QemuConfig {
     const char *suite;                     // for diagnostics, e.g. "riscv-tests"
-    const char *clang;                     // assembles, and compiles the clang parts
+    const char *clang;                     // compiles the clang parts (and assembles,
+                                           // when `assembler` is empty)
     std::vector<std::string> target_flags; // --target=… and the ABI, for both
     std::vector<std::string> c_flags;      // more for C, e.g. -ffreestanding
-    const char *ld;                        // ld.lld
+    const char *ld;                        // GNU ld or ld.lld
     const char *link_script;               // empty: the linker's default (MMIX)
     const char *lib_dir;           // crt0 objects and libc.a
     std::vector<std::string> qemu; // the command up to -kernel <exe> (or image_option)
@@ -48,13 +49,23 @@ struct QemuConfig {
     // calls beyond ours.
     std::vector<std::string> extra_libs = {};
     // The command that assembles our output, before "-o <obj> <src>"; empty: clang (or
-    // GCC) with the target flags and -c.  MMIX runs GNU as itself, with the flags GCC
-    // passes it.
+    // GCC) with the target flags and -c.  The cross tools CMake found (cross_tools), or
+    // for MMIX GNU as itself, with the flags GCC passes it.
     std::vector<std::string> assembler = {};
     // The run's wall-clock limit, in seconds: the only limit on mmix, which counts no
     // instructions.
     int timeout = 5;
 };
+
+// `cfg` with the assembler and the linker flags CMake found (scripts/CrossTools.cmake),
+// each a blank-separated command: GNU as and ld, or clang -c and ld.lld.
+inline QemuConfig cross_tools(QemuConfig cfg, const char *assembler, const char *link_flags)
+{
+    cfg.assembler                       = split_words(assembler);
+    std::vector<std::string> more_flags = split_words(link_flags);
+    cfg.link_flags.insert(cfg.link_flags.begin(), more_flags.begin(), more_flags.end());
+    return cfg;
+}
 
 class QemuTest : public BackendTest {
     QemuConfig config;

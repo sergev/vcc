@@ -25,6 +25,7 @@ ldi r19, 0
 TEST_F(AvrTest, RunStructSplitWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     std::string decls = R"(void putbyte(int c);
 struct s5 { char a; int b; int c; };
 long g6(long long a, long long b, struct s5 s, int k);
@@ -153,6 +154,7 @@ int main(void)
 TEST_F(AvrTest, RunStructsToClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(std::string(struct_decls) + struct_caller,
                                            std::string(struct_decls) + struct_callee));
     EXPECT_EQ(0, exit_status);
@@ -161,6 +163,7 @@ TEST_F(AvrTest, RunStructsToClang)
 TEST_F(AvrTest, RunStructsFromClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(std::string(struct_decls) + struct_callee,
                                            std::string(struct_decls) + struct_caller));
     EXPECT_EQ(0, exit_status);

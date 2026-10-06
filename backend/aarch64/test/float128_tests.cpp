@@ -221,6 +221,7 @@ int main(void)
 TEST_F(Float128Test, InteropWeCallClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kLdCaller, kLdCallee));
     EXPECT_EQ(0, exit_status);
 }
@@ -228,6 +229,7 @@ TEST_F(Float128Test, InteropWeCallClang)
 TEST_F(Float128Test, InteropClangCallsUs)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kLdCallee, kLdCaller));
     EXPECT_EQ(0, exit_status);
 }
@@ -324,6 +326,7 @@ int main(void)
 TEST_F(Float128Test, ConstantsWeCallClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kConstCall, kConstCheck));
     EXPECT_EQ(0, exit_status);
 }
@@ -331,6 +334,7 @@ TEST_F(Float128Test, ConstantsWeCallClang)
 TEST_F(Float128Test, ConstantsClangCallsUs)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kConstCheck, kConstCall));
     EXPECT_EQ(0, exit_status);
 }

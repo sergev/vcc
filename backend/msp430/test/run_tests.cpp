@@ -129,6 +129,7 @@ static void puti(long v)
 TEST_F(Msp430Test, RuntimeDataAndBss)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string src = std::string(print_c) + R"(
 int data[3] = { 1000, -2, 3 };
 char odd[3] = "ab";
@@ -161,6 +162,7 @@ static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7
 TEST_F(Msp430Test, RuntimeDivisionAndMultiplication)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string src = std::string(print_c) + R"(
 volatile int a16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
 volatile long a32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7,
@@ -219,6 +221,7 @@ int main(void)
 TEST_F(Msp430Test, RuntimeDivisionCorners)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string src = std::string(print_c) + R"(
 unsigned __mspabi_divu(unsigned, unsigned);
 unsigned __mspabi_remu(unsigned, unsigned);
@@ -249,6 +252,7 @@ int main(void)
 TEST_F(Msp430Test, RuntimeLongShifts)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string src = std::string(print_c) + R"(
 volatile long v[] = { -2023406815L, 0x12345678L, 1, -1 };
 int main(void)
@@ -277,6 +281,7 @@ int main(void)
 TEST_F(Msp430Test, RuntimeStackOverflowReported)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string src = R"(
 extern char __stack_canary[2];
 int main(void)

@@ -222,6 +222,7 @@ int main(void)
 TEST_F(Msp430Test, SqrtLibrary)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string ours = CompileToMsp430(R"(
 #include <stdio.h>
 #include <string.h>

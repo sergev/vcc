@@ -62,8 +62,8 @@ protected:
         AvrTest::TearDown();
     }
 
-    // Run a book program, and check that clang -O0 gives the same; -O1 for the few
-    // where clang -O0 runs out of registers.
+    // Run a book program, and check that clang -O0 gives the same, when present; -O1
+    // for the few where clang -O0 runs out of registers.
     // cppcheck-suppress duplInheritedMember ; deliberately wraps AvrTest::CompileAndRunBook
     std::string CompileAndRunBook(const std::string &src)
     {
@@ -85,9 +85,12 @@ protected:
         std::string ours = AvrTest::CompileAndRunBook(src);
         int status       = exit_status;
         EXPECT_NE("ERROR", ours) << "did not run";
-        EXPECT_EQ(ClangRunBook(src, opt), ours) << "differs from clang";
-        EXPECT_EQ(exit_status, status) << "exit status differs from clang";
-        exit_status = status;
+        // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+        if (avr_clang_available()) {
+            EXPECT_EQ(ClangRunBook(src, opt), ours) << "differs from clang";
+            EXPECT_EQ(exit_status, status) << "exit status differs from clang";
+            exit_status = status;
+        }
         return ours;
     }
 };

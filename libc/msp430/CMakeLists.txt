@@ -1,47 +1,43 @@
 #
 # MSP430 runtime for the mspsim simulator (the classic MSP430; see docs/Msp430_Backend.md).
-# Built with the GNU MSP430 toolchain: msp430-elf-gcc drives GNU as for the assembly (and
-# is the tests' second compiler), msp430-elf-ld links, msp430-elf-ar archives.  clang's
-# MSP430 target and ld.lld, when present, are the tests' third compiler and second
-# assembler.  mspsim runs the programs.
+# Built with the GNU MSP430 binutils: msp430-elf-as (or msp430-unknown-elf-as) assembles,
+# -ld links, -ar archives.  msp430-elf-gcc, when present, is the tests' second compiler,
+# and its libgcc.a follows our libc.a in a link.  clang's MSP430 target and ld.lld, when
+# present, are the tests' third compiler and second assembler.  mspsim runs the programs.
 #
 find_program(MSPSIM NAMES mspsim HINTS $ENV{HOME}/.local/bin)
-foreach(tool gcc as ld ar objcopy)
-    string(TOUPPER ${tool} var)
-    find_program(MSP430_${var}_EXE NAMES msp430-elf-${tool} HINTS $ENV{HOME}/.local/bin)
-endforeach()
-
-set(MSP430_TOOLS_FOUND OFF)
+# The classic MSP430, no -mmcu: no device files, no hardware multiplier.
+vcc_find_cross(MSP430
+    PREFIXES msp430-elf msp430-unknown-elf
+    GNU_ASFLAGS -mcpu=msp430
+    CLANG_TARGET "[\n] *msp430 +- "
+    CLANG_FLAGS --target=msp430
+    LLD_FLAGS -n)
+set(MSP430_OBJCOPY "")
+if(MSP430_GNU)
+    list(GET MSP430_AS 0 as)
+    string(REGEX REPLACE "as$" "objcopy" MSP430_OBJCOPY ${as})
+endif()
+find_program(MSP430_GCC_EXE NAMES msp430-elf-gcc msp430-unknown-elf-gcc HINTS ${VCC_CROSS_HINTS})
+set(MSP430_GCC_FOUND OFF)
 set(MSP430_LIBGCC "")
-if(MSP430_GCC_EXE AND MSP430_AS_EXE AND MSP430_LD_EXE AND MSP430_AR_EXE AND MSP430_OBJCOPY_EXE)
-    set(MSP430_TOOLS_FOUND ON)
+if(MSP430_GCC_EXE AND MSP430_GNU)
+    set(MSP430_GCC_FOUND ON)
     # The 430 multilib's libgcc: the helpers GCC's code calls beyond ours.
     execute_process(COMMAND ${MSP430_GCC_EXE} -mcpu=msp430 -print-libgcc-file-name
         OUTPUT_VARIABLE MSP430_LIBGCC OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 endif()
-set(MSP430_CLANG_FOUND OFF)
-if(RISCV_CLANG AND RISCV_LD)
-    execute_process(COMMAND ${RISCV_CLANG} --print-targets OUTPUT_VARIABLE targets
-        ERROR_QUIET)
-    if(targets MATCHES "[\n] *msp430 +- ")
-        set(MSP430_CLANG_FOUND ON)
-    endif()
+if(NOT VCC_LLD)
+    set(MSP430_CLANG_FOUND OFF CACHE INTERNAL "")
 endif()
 # For the backend tests.
-set(MSP430_TOOLS_FOUND ${MSP430_TOOLS_FOUND} CACHE INTERNAL "")
+set(MSP430_GCC_FOUND ${MSP430_GCC_FOUND} CACHE INTERNAL "")
 set(MSP430_GCC ${MSP430_GCC_EXE} CACHE INTERNAL "")
-set(MSP430_AS ${MSP430_AS_EXE} CACHE INTERNAL "")
-set(MSP430_LD ${MSP430_LD_EXE} CACHE INTERNAL "")
-set(MSP430_AR ${MSP430_AR_EXE} CACHE INTERNAL "")
-set(MSP430_OBJCOPY ${MSP430_OBJCOPY_EXE} CACHE INTERNAL "")
+set(MSP430_OBJCOPY ${MSP430_OBJCOPY} CACHE INTERNAL "")
 set(MSP430_LIBGCC ${MSP430_LIBGCC} CACHE INTERNAL "")
-set(MSP430_CLANG_FOUND ${MSP430_CLANG_FOUND} CACHE INTERNAL "")
-set(MSP430_CLANG ${RISCV_CLANG} CACHE INTERNAL "")
-set(MSP430_LLD ${RISCV_LD} CACHE INTERNAL "")
+set(MSP430_LLD ${VCC_LLD} CACHE INTERNAL "")
 set(MSP430_LIB_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL "")
 set(MSP430_LINK_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/link.ld CACHE INTERNAL "")
-# The classic MSP430, no -mmcu: no device files, no hardware multiplier.
-set(MSP430_TARGET_FLAGS -mcpu=msp430 CACHE INTERNAL "")
 
 # Standard-library header check, as for the other targets ...
 add_test(
@@ -80,29 +76,22 @@ install(FILES ${MSP430_TARGET_HEADERS} ${MSP430_MODEL_HEADERS} ${MSP430_COMMON_H
     DESTINATION share/vcc/msp430/include)
 
 if(NOT MSP430_TOOLS_FOUND)
-    message(STATUS "No msp430-elf-gcc/as/ld/ar/objcopy: the MSP430 runtime is not built")
+    message(STATUS "No MSP430 binutils or clang: the MSP430 runtime is not built")
     return()
 endif()
 if(NOT MSPSIM)
     message(STATUS "No mspsim: the MSP430 run tests will be skipped")
 endif()
 
-set(MSP430_ASFLAGS ${MSP430_TARGET_FLAGS} -c)
 set(src ${CMAKE_CURRENT_SOURCE_DIR})
 set(out ${CMAKE_CURRENT_BINARY_DIR})
 
-add_custom_command(OUTPUT ${out}/crt0.o
-    COMMAND ${MSP430_GCC} ${MSP430_ASFLAGS} -o ${out}/crt0.o ${src}/crt0.S
-    DEPENDS ${src}/crt0.S)
-add_custom_command(OUTPUT ${out}/crt0-status.o
-    COMMAND ${MSP430_GCC} ${MSP430_ASFLAGS} -DPRINT_STATUS -o ${out}/crt0-status.o
-            ${src}/crt0.S
-    DEPENDS ${src}/crt0.S)
+vcc_assemble_crt0(MSP430 ${src} ${out})
 # Assembly leaves, and the integer helpers under their MSP430 EABI names.
 set(MSP430_LIBC_OBJS "")
 foreach(name console divmod mul shift mspabi64 setjmp)
     add_custom_command(OUTPUT ${out}/${name}.o
-        COMMAND ${MSP430_GCC} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${src}/${name}.s
+        COMMAND ${MSP430_AS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
     list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)
 endforeach()
@@ -120,7 +109,7 @@ macro(msp430_compile_libc_c name srcdir)
         COMMAND parse ${out}/${name}.i ${out}/${name}.ast
         COMMAND lower -t msp430 ${out}/${name}.ast ${out}/${name}.tac
         COMMAND genmsp430 ${out}/${name}.tac ${out}/${name}.s
-        COMMAND ${MSP430_GCC} ${MSP430_ASFLAGS} -o ${out}/${name}.o ${out}/${name}.s
+        COMMAND ${MSP430_AS} -o ${out}/${name}.o ${out}/${name}.s
         DEPENDS ${srcdir}/${name}.c ${MSP430_LIBC_HEADERS} parse lower genmsp430
         COMMENT "Compiling ${name}.c -> ${name}.o (MSP430)")
     list(APPEND MSP430_LIBC_OBJS ${out}/${name}.o)

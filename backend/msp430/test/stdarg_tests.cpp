@@ -135,6 +135,7 @@ TEST_F(Msp430Test, RunVariadic)
 TEST_F(Msp430Test, RunVariadicCalledByGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     EXPECT_EQ("ok", GccRun(std::string(va_decls) + va_main,
                            CompileToMsp430((std::string(va_decls) + va_defs).c_str())));
     EXPECT_EQ(0, exit_status);
@@ -144,6 +145,7 @@ TEST_F(Msp430Test, RunVariadicCalledByGcc)
 TEST_F(Msp430Test, RunVariadicCallGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     EXPECT_EQ("ok", GccRun(std::string(va_decls) + va_defs,
                            CompileToMsp430((std::string(va_decls) + va_main).c_str())));
     EXPECT_EQ(0, exit_status);
@@ -153,6 +155,7 @@ TEST_F(Msp430Test, RunVariadicCallGcc)
 TEST_F(Msp430Test, RunVaListAcross)
 {
     SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
     std::string decls = std::string(va_decls) + R"(long cwrap(int n, ...);
 long clist(int n, va_list ap);
 )";

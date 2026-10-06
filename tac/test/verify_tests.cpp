@@ -102,8 +102,9 @@ protected:
         long len = ftell(f);
         rewind(f);
         std::string out(static_cast<size_t>(len), '\0');
-        if (len)
+        if (len) {
             EXPECT_TRUE(fread(&out[0], 1, static_cast<size_t>(len), f));
+        }
         fclose(f);
         return out;
     }

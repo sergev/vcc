@@ -292,12 +292,13 @@ an independent, mature RISC-V compiler, so every book program is a differential 
 well as a unit test: if our output and the expected literal agree but clang disagrees, the
 expectation itself is suspect.
 
-**When the tools are missing.** The run tests need clang with RISC-V support, `ld.lld` and
-`qemu-system-riscv64` (found by CMake in
-[libc/riscv64/CMakeLists.txt](../libc/riscv64/CMakeLists.txt); on macOS
-`brew install llvm lld qemu`). The fixture's `SetUp` calls `SKIP_IF_NO_RISCV_TOOLS()`, so on
+**When the tools are missing.** The run tests need the RISC-V binutils (or clang and
+`ld.lld`) and `qemu-system-riscv64` (found by CMake through
+[scripts/CrossTools.cmake](../scripts/CrossTools.cmake); see the prerequisites in the
+[README](../README.md)). The fixture's `SetUp` calls `SKIP_IF_NO_RISCV_TOOLS()`, so on
 a machine without them every book test reports *skipped* rather than failed, and
-`make run` stays green.
+`make run` stays green. Without clang, the comparison with clang's build is left out and
+each program is checked against the book's own result only.
 
 **Multi-file `libraries` tests.** Some book tests split a program across a client file and
 a library file. The fixture compiles a single source, so we **concatenate them into one

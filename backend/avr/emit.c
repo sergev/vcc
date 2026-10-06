@@ -7,10 +7,20 @@
 
 #include "avr_ir.h"
 
+// A symbol; quoted when it has a `$` (a static local's name$N), which GNU avr-as takes
+// only so.
+void avr_put_sym(FILE *out, const char *sym)
+{
+    if (strchr(sym, '$'))
+        fprintf(out, "\"%s\"", sym);
+    else
+        fputs(sym, out);
+}
+
 // sym, sym+off or sym-off.
 static void emit_sym_off(FILE *out, const char *sym, int64_t off)
 {
-    fputs(sym, out);
+    avr_put_sym(out, sym);
     if (off > 0)
         fprintf(out, "+%" PRId64, off);
     else if (off < 0)

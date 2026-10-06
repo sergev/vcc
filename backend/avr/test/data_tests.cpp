@@ -158,6 +158,7 @@ int main(void)
 TEST_F(AvrTest, RunDataWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("ok", CompileAndRunWithClang(R"(
 void putbyte(int c);
 long ours = 123456;

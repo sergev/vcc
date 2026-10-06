@@ -18,15 +18,29 @@ extern "C" {
 // The AVR tools, from CMake; a missing one names a path that does not exist.
 inline bool avr_tools_available()
 {
-    return AVR_TOOLS_FOUND && tool_available(AVR_CLANG) && tool_available(AVR_LLD) &&
+    return AVR_TOOLS_FOUND && command_available(AVR_ASSEMBLER) && tool_available(AVR_LLD) &&
            tool_available(AVR_QEMU);
 }
 
 // Skip a run test when the AVR toolchain or qemu is absent.
-#define SKIP_IF_NO_AVR_TOOLS()                                                     \
-    do {                                                                           \
-        if (!avr_tools_available())                                                \
-            GTEST_SKIP() << "AVR clang/ld.lld/qemu not found; skipping run test"; \
+#define SKIP_IF_NO_AVR_TOOLS()                                                        \
+    do {                                                                              \
+        if (!avr_tools_available())                                                   \
+            GTEST_SKIP() << "AVR assembler/linker/qemu not found; skipping run test"; \
+    } while (0)
+
+// clang, the reference compiler, when it has the target.
+inline bool avr_clang_available()
+{
+    // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
+    return avr_tools_available() && AVR_CLANG_FOUND && tool_available(AVR_CLANG);
+}
+
+// Skip a test that compiles C with clang.
+#define SKIP_IF_NO_AVR_CLANG()                                          \
+    do {                                                                \
+        if (!avr_clang_available())                                     \
+            GTEST_SKIP() << "AVR clang not found; skipping clang test"; \
     } while (0)
 
 class AvrTest : public QemuTest {
@@ -34,19 +48,20 @@ protected:
     // The target flags are AVR_TARGET_FLAGS of libc/avr/CMakeLists.txt.  qemu has no
     // way to exit on AVR: main's result goes out on USART1, and the run ends with it.
     AvrTest()
-        : QemuTest("avr", { "avr-tests",
-                            AVR_CLANG,
-                            { "--target=avr", "-mmcu=atmega1280" },
-                            { "-ffreestanding", "-fno-builtin" },
-                            AVR_LLD,
-                            AVR_LINK_SCRIPT,
-                            AVR_LIB_DIR,
-                            { AVR_QEMU, "-M", "arduino-mega", "-display", "none", "-monitor",
-                              "none", "-serial", "stdio" },
-                            "",
-                            false,
-                            "-bios",
-                            true })
+        : QemuTest("avr", cross_tools({ "avr-tests",
+                                        AVR_CLANG,
+                                        { "--target=avr", "-mmcu=atmega1280" },
+                                        { "-ffreestanding", "-fno-builtin" },
+                                        AVR_LLD,
+                                        AVR_LINK_SCRIPT,
+                                        AVR_LIB_DIR,
+                                        { AVR_QEMU, "-M", "arduino-mega", "-display", "none",
+                                          "-monitor", "none", "-serial", "stdio" },
+                                        "",
+                                        false,
+                                        "-bios",
+                                        true },
+                                      AVR_ASSEMBLER, AVR_LINK_FLAGS))
     {
         // The defaults; a test may change them.
         avr_regalloc = true;

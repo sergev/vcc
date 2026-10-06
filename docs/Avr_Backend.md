@@ -21,8 +21,8 @@ so it can call, and be called by, code compiled with clang for `--target=avr
   `pm_lo8(f)`/`pm_hi8(f)` in code. `.rodata` is copied to SRAM with `.data`, so an
   ordinary pointer reaches every object.
 - **Output:** a `.s` file in GNU avr-as syntax (`lo8()`, `hi8()`, `Y+q`), as clang emits
-  it, assembled by clang (`clang --target=avr -mmcu=atmega1280 -c`) and linked by
-  `ld.lld` into an ELF.
+  it, assembled by `avr-as -mmcu=atmega1280` and linked by `avr-ld -m avr51` into an ELF
+  (or by clang, `--target=avr -mmcu=atmega1280`, and `ld.lld`).
 - **Machine:** qemu `arduino-mega`, the image loaded with `-bios` (`-kernel` loads
   nothing on AVR). Output goes to USART0; `main`'s result goes out as one byte on USART1.
   Nothing on the machine can make qemu exit, so whoever runs it stops it once that byte
@@ -224,8 +224,10 @@ In `libc/avr/`:
 
 ## Running a program by hand
 
-You need clang with the AVR target, `ld.lld` and `qemu-system-avr`. On macOS:
-`brew install llvm lld qemu`. No avr-gcc, avr-binutils or avr-libc is needed.
+You need the AVR binutils (`avr-as` and `avr-ld`; or clang and `ld.lld`) and
+`qemu-system-avr`. On Debian and Ubuntu: `apt install binutils-avr qemu-system-misc`; on
+macOS: `brew tap osx-cross/avr && brew install avr-binutils qemu`. No avr-gcc or avr-libc
+is needed.
 
 After `make install`, which installs into `~/.local`, the driver does it all:
 
@@ -248,8 +250,8 @@ vcpp -t avr -nostdinc -I$P/share/vcc/avr/include hello.c hello.i  # preprocess
 vparse hello.i hello.ast                                          # parse
 vlower -t avr hello.ast hello.tac                                 # check and lower
 vgenavr hello.tac hello.s                                         # generate assembly
-clang --target=avr -mmcu=atmega1280 -c hello.s -o hello.o
-ld.lld -T $P/share/vcc/avr/lib/link.ld -o hello.elf \
+avr-as -mmcu=atmega1280 -o hello.o hello.s
+avr-ld -m avr51 -T $P/share/vcc/avr/lib/link.ld -o hello.elf \
     $P/share/vcc/avr/lib/crt0.o hello.o $P/share/vcc/avr/lib/libc.a
 ```
 

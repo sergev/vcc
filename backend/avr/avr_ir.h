@@ -206,6 +206,8 @@ void avr_emit_header(FILE *out);
 void avr_emit_func(FILE *out, const AVR_Func *fn);
 // One instruction, as a line of avr_emit_func.
 void avr_emit_instr(FILE *out, const AVR_Instr *in);
+// A symbol, quoted when it has a `$`.
+void avr_put_sym(FILE *out, const char *sym);
 
 #ifndef __cplusplus
 _Noreturn void fatal_error(const char *fmt, ...);

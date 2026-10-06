@@ -4,19 +4,25 @@
 #
 # vcc finds our own passes (vcpp, vparse, vlower, vgen*) in the directory it runs
 # from and each target's headers and libraries in ../share/vcc/<target>, so the
-# installation is relocatable.  The RISC-V assembler and linker default to the
-# clang and ld.lld found at configure time (libc/riscv64/CMakeLists.txt), the MSP430
-# ones to the GNU msp430-elf-as and msp430-elf-ld (libc/msp430/CMakeLists.txt), the MMIX
-# ones to mmix-knuth-mmixware-as and -ld (libc/mmix/CMakeLists.txt), else to whatever is
-# on PATH.
+# installation is relocatable.  Each target's assembler and linker default to those
+# libc/<target> found at configure time (scripts/CrossTools.cmake: GNU binutils, else
+# clang and ld.lld; the MMIX ones in libc/mmix), else to whatever is on PATH.
 #
 add_executable(cc cc.c)
-if(RISCV_CLANG AND RISCV_LD)
-    target_compile_definitions(cc PRIVATE RISCV_CLANG="${RISCV_CLANG}" RISCV_LD="${RISCV_LD}")
-endif()
+foreach(pair RISCV64:RISCV RISCV32:RISCV32 AARCH64:AARCH64 ARM32:ARM32 X86_64:X86 AVR:AVR
+        MSP430:MSP430)
+    string(REPLACE ":" ";" pair ${pair})
+    list(GET pair 0 def)
+    list(GET pair 1 var)
+    # MSP430 has no clang triple in vcc: a clang there only through VCC_AS.
+    if(${var}_TOOLS_FOUND AND (${var}_GNU OR NOT var STREQUAL "MSP430"))
+        list(GET ${var}_AS 0 as)
+        target_compile_definitions(cc PRIVATE ${def}_AS="${as}" ${def}_LD="${${var}_LD}"
+            ${def}_LDFLAGS="${${var}_LINK_FLAGS}")
+    endif()
+endforeach()
 if(MSP430_TOOLS_FOUND)
-    target_compile_definitions(cc PRIVATE MSP430_AS="${MSP430_AS}" MSP430_LD="${MSP430_LD}"
-        MSP430_LIBGCC="${MSP430_LIBGCC}")
+    target_compile_definitions(cc PRIVATE MSP430_LIBGCC="${MSP430_LIBGCC}")
 endif()
 if(MMIX_TOOLS_FOUND)
     target_compile_definitions(cc PRIVATE MMIX_AS="${MMIX_AS}" MMIX_LD="${MMIX_LD}"

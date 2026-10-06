@@ -32,6 +32,7 @@ std::string BothSides(const char *types, const char *decls, const char *defs, co
 TEST_F(Arm32Test, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     const char *types = R"(
 struct s3 { char a, b, c; };
 struct s12 { int a, b, c; };
@@ -130,6 +131,7 @@ int main(void) { return our_check() == 255 && their_check() == 255; }
 TEST_F(Arm32Test, RunVariadicTableWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     const char *types = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };
@@ -222,6 +224,7 @@ int main(void) { return our_check() + 8 * their_check(); }
 TEST_F(Arm32Test, RunClangRuntimeHelpers)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     std::string ours   = R"(
 long long their_div(long long a, long long b);
 unsigned long long their_udiv(unsigned long long a, unsigned long long b);
@@ -264,6 +267,7 @@ int their_copy(struct big *dst, struct big *src) { *dst = *src; return dst->a[39
 TEST_F(Arm32Test, HeadersAgreeWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     std::string values = R"(
 #include <float.h>
 #include <limits.h>

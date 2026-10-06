@@ -107,6 +107,7 @@ int main(void) {
 TEST_F(Arm32Test, RunCallsWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(R"(
 int c_mix(float a, double b, float c, double d, float e);
 int c_many(double a, double b, double c, double d, double e, double f, double g,

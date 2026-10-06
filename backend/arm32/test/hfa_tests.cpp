@@ -96,6 +96,7 @@ TEST(TacAbi, Aapcs32Class)
 TEST_F(Arm32Test, RunHfaInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     const char *decls = R"(
 struct f1 { float a; };
 struct f2 { float a, b; };
@@ -191,6 +192,7 @@ int call_ours(void)
 TEST_F(Arm32Test, RunHfaToVariadicClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
     std::string ours   = R"(
 struct f2 { float a, b; };
 struct d2 { double a, b; };
