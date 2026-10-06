@@ -225,7 +225,13 @@ void gen_return(Gen *g, const Tac_Val *v, bool last)
             copy_bytes(g, mmix_type_size(t), mmix_type_align(t));
         }
     }
-    if (!last)
+    if (last)
+        return;
+    // A function with no frame and no rJ to restore returns in place: its epilogue is
+    // the pop alone.
+    if (g->leaf && g->frame_size == 0)
+        emit2(g, MMIX_POP, mmix_imm(returns_value(g) ? 1 : 0), mmix_imm(0));
+    else
         emit1(g, MMIX_JMP, mmix_label(g->exit));
 }
 

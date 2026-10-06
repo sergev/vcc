@@ -919,8 +919,7 @@ static void adjust_sp(Gen *g, Mmix_Op op)
     }
 }
 
-// Whether the function returns a scalar: then pop hands back $0.
-static bool returns_value(const Gen *g)
+bool returns_value(const Gen *g)
 {
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)
         if (in->kind == TAC_INSTRUCTION_RETURN && in->u.return_.src)

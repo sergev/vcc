@@ -168,3 +168,38 @@ TEST_F(MmixTest, RunRegallocParallelMove)
     )"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A frameless leaf returns in place: each return is a pop, with no jump to an epilogue.
+TEST_F(MmixTest, FramelessEarlyReturn)
+{
+    std::string code = Code(CompileToMmix("long f(long a) { if (a < 0) return -a; return a; }"));
+    EXPECT_EQ(std::string::npos, code.find("jmp")) << code;
+    EXPECT_EQ(std::string::npos, code.find("$254")) << code;
+    EXPECT_EQ(std::string::npos, code.find("rJ")) << code;
+    size_t first = code.find("pop 1,0\n");
+    ASSERT_NE(std::string::npos, first) << code;
+    EXPECT_NE(std::string::npos, code.find("pop 1,0\n", first + 1)) << code;
+}
+
+// Run: early returns in place, of a value and of none.
+TEST_F(MmixTest, RunFramelessEarlyReturn)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", CompileAndRunMmix(R"(
+        long g;
+        long absval(long a) { if (a < 0) return -a; return a; }
+        void setg(long v) { if (v == 0) return; g = v; }
+        long sign(long a) { if (a < 0) return -1; if (a > 0) return 1; return 0; }
+        int main(void)
+        {
+            if (absval(-5) != 5 || absval(7) != 7) return 1;
+            setg(0);
+            if (g != 0) return 2;
+            setg(9);
+            if (g != 9) return 3;
+            if (sign(-3) != -1 || sign(4) != 1 || sign(0) != 0) return 4;
+            return 0;
+        }
+    )"));
+    EXPECT_EQ(0, exit_status);
+}

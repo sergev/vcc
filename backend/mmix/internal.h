@@ -219,6 +219,8 @@ void copy_named(Gen *g, const char *dst, int64_t doff, const char *src, int64_t 
 void gen_label_block(Gen *g, const char *label);
 // Fill the prologue and the epilogue, once the body is done.
 void gen_frame(Gen *g);
+// Whether the function returns a scalar: then pop hands back $0.
+bool returns_value(const Gen *g);
 
 //
 // Static data (data.c)
