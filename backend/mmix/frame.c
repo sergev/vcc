@@ -400,6 +400,15 @@ void layout_frame(Gen *g)
     g->copy_off   = g->frame_size;
     g->frame_size += g->copy_size;
 
+    // A variadic function stores the argument registers after its named ones at the top
+    // of its frame, directly below the incoming stack arguments: the variable arguments
+    // are then one run of 8-byte slots, from the first after the named ones.
+    if (g->tl->u.function.variadic) {
+        if (nparam < MAX_REG_ARGS)
+            g->frame_size += 8 * (MAX_REG_ARGS - nparam);
+        g->va_off = g->frame_size + 8 * (nparam - MAX_REG_ARGS);
+    }
+
     // The 17th parameter and later stay where they came in, an 8-byte slot each above
     // the frame, a narrow value (or a small structure) in its low-order (last) bytes, a
     // large structure as its address.

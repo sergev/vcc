@@ -9,12 +9,26 @@
 
 #include "internal.h"
 
+static bool is_va_start(const Tac_Instruction *in)
+{
+    return !in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0;
+}
+
 bool makes_call(const Tac_TopLevel *tl)
 {
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
-        if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN)
+        if ((in->kind == TAC_INSTRUCTION_FUN_CALL && !is_va_start(in)) ||
+            in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN)
             return true;
     return false;
+}
+
+int param_count(const Gen *g)
+{
+    int n = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next)
+        n++;
+    return n;
 }
 
 // A scalar in register `reg` as the ABI passes it, into its slot: a float's binary32
@@ -51,6 +65,11 @@ void store_params(Gen *g)
         else // the address of the caller's copy, which the body reads and writes
             mem_op_at(g, MMIX_STO, i, MMIX_SP, find_slot(g, p->name)->off);
     }
+    // A variadic function's save area: every argument register after the named ones,
+    // whether the caller passed it or not (a register above rL reads as 0).
+    if (g->tl->u.function.variadic)
+        for (int r = param_count(g); r < MAX_REG_ARGS; r++)
+            mem_op_at(g, MMIX_STO, r, MMIX_SP, g->va_off + 8 * (r - param_count(g)));
 }
 
 void gen_return(Gen *g, const Tac_Val *v, bool last)
@@ -112,8 +131,24 @@ static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type 
 // structure arguments, through $1-$3; then the stack arguments, through $1 and $2; then
 // the register arguments, while no argument register holds anything yet.  A structure
 // result goes where $251 points: the destination, or a scratch copy when there is none.
+// va_start(ap), a call of __va_start(&ap): ap = the first variable argument's slot.
+static void gen_va_start(Gen *g, const Tac_Instruction *in)
+{
+    if (!g->tl->u.function.variadic)
+        fatal_error("mmix: %s: va_start in a function without ...", gen_name(g));
+    if (!in->u.fun_call.args || in->u.fun_call.args->next)
+        fatal_error("mmix: %s: __va_start takes one argument", gen_name(g));
+    load_val(g, in->u.fun_call.args, REG_A);
+    add_offset(g, REG_B, MMIX_SP, g->va_off);
+    mem_op_at(g, MMIX_STO, REG_B, REG_A, 0);
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (is_va_start(in)) {
+        gen_va_start(g, in);
+        return;
+    }
     const Tac_Type *ft = in->u.fun_call.fun_type;
     int copy[MAX_ARGS];
     int cursor = g->copy_off, i = 0;

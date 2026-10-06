@@ -21,6 +21,8 @@
 //
 // Frame (SP is constant in the body; every offset is from it):
 //   frame + 8*i ...     incoming stack arguments, the 17th and later
+//   ... frame - 1       a variadic function's save area: the argument registers after
+//                       its named ones, so the variable arguments are one run of slots
 //   copy ... frame - 1  a call's copies of its large structure arguments and its
 //                       ignored structure result, for the call that needs most
 //   out ... copy - 1    slots: each aligned to its type; frame is a multiple of 8
@@ -67,6 +69,7 @@ typedef struct {
     int copy_off;      // the scratch area of a call: copies of its structure arguments
     int copy_size;     // over 8 bytes, and its structure result when it has no destination
     int frame_size;    // bytes of the outgoing area and the slots, a multiple of 8
+    int va_off;        // a variadic function: the first variable argument's slot
     bool leaf;         // makes no call: rJ stays where it is
     char exit[32];     // the label of the epilogue
 } Gen;
@@ -206,7 +209,9 @@ void gen_return(Gen *g, const Tac_Val *v, bool last);
 void gen_call(Gen *g, const Tac_Instruction *in);
 // The stack bytes of the arguments of call `in`.
 int call_stack_size(const Gen *g, const Tac_Instruction *in);
-// Whether the function makes a call.
+// Whether the function makes a call (__va_start is none: it is expanded in place).
 bool makes_call(const Tac_TopLevel *tl);
+// The number of named parameters of the function.
+int param_count(const Gen *g);
 
 #endif // MMIX_INTERNAL_H

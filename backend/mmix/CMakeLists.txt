@@ -33,6 +33,7 @@ add_executable(mmix-tests
     test/fp_tests.cpp
     test/ptr_tests.cpp
     test/struct_tests.cpp
+    test/stdarg_tests.cpp
     test/run_tests.cpp
     ${MMIX_BOOK_SOURCES}
 )

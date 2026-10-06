@@ -101,11 +101,10 @@ macro(mmix_compile_libc_c name srcdir)
     list(APPEND MMIX_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The shared C library but the variadic part (K16); from libc/lp64 the binary64
-# frexp/ldexp/modf.  No integer or soft-float helpers: they are instructions here.
-foreach(name atoi fabs fma fmax fmin memchr memcmp memcpy memmove memset puts putchar
-        strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
-        strtok)
+# The shared C library with the __doprnt printf engine (long double is double, as on
+# ARM32); from libc/lp64 the binary64 frexp/ldexp/modf.  No integer or soft-float
+# helpers: they are instructions here.
+foreach(name ${LIBC_C_COMMON} doprnt)
     mmix_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
 foreach(name ${LIBC_C_LP64})
