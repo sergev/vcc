@@ -181,6 +181,11 @@ static bool const_is_integer_kind(Tac_ConstKind k)
 // A signed constant reads as the code generator emits it: narrowed to the target's
 // signed width.  A literal too wide for it (2^48 - 659 as a BESM-6 long long, whose
 // value bits are 41) is stored unmasked, but means its low bits there.
+//
+// An unsigned int, long or long long constant reads the same way, as the signed type of
+// its width: a signed operator finds one only where a cast between the two types (which
+// emits no TAC) was copy-propagated through, so `int i = (int)3000000000u` leaves the
+// unsigned constant in `i >= 0`, which must compare a negative int.
 static int64_t const_to_int64(const Tac_Const *c)
 {
     switch (c->kind) {
@@ -191,11 +196,11 @@ static int64_t const_to_int64(const Tac_Const *c)
     case TAC_CONST_LONG_LONG:
         return sign_narrow((uint64_t)c->u.long_long_val, target_signed_bits(TAC_CONST_LONG_LONG));
     case TAC_CONST_UINT:
-        return (int64_t)c->u.uint_val;
+        return sign_narrow((uint64_t)c->u.uint_val, target_signed_bits(TAC_CONST_INT));
     case TAC_CONST_ULONG:
-        return (int64_t)c->u.ulong_val;
+        return sign_narrow((uint64_t)c->u.ulong_val, target_signed_bits(TAC_CONST_LONG));
     case TAC_CONST_ULONG_LONG:
-        return (int64_t)c->u.ulong_long_val;
+        return sign_narrow((uint64_t)c->u.ulong_long_val, target_signed_bits(TAC_CONST_LONG_LONG));
     case TAC_CONST_SCHAR:
         return c->u.char_val;
     case TAC_CONST_UCHAR:

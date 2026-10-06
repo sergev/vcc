@@ -153,6 +153,22 @@ TEST_F(PipelineTest, CopyPropChain)
               "    name: %x\n");
 }
 
+// A cast between int and unsigned emits no TAC, so `i = (int)u` copies the unsigned
+// constant into the int `i`, and copy propagation leaves it in `i >= 0`: a signed
+// comparison, which reads it as the int it is, negative.
+TEST_F(PipelineTest, SignedFoldOfUnsignedConstant)
+{
+    EXPECT_EQ(OptimizeYaml("int f(void) { unsigned u = 3000000000u; int i = (int)u; "
+                           "if (i >= 0) return 5; return i / 2 == -647483648; }"),
+              "- instruction:\n"
+              "  kind: return\n"
+              "  src:\n"
+              "    kind: constant\n"
+              "    const:\n"
+              "      kind: int\n"
+              "      value: 1\n");
+}
+
 // sizeof is a size_t constant: va_arg's `ap - ((sizeof(T) + 7) & ~7)` folds, over
 // several rounds, to a 64-bit -8. As an int constant it went through unsigned int
 // and became 2^32 - 8, which the pointer arithmetic zero-extended.
