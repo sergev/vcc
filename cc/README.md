@@ -86,7 +86,7 @@ and removed on exit.
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
-| `-E` | Preprocess only; write to `-o` or `.i` |
+| `-E` | Preprocess only; write to `-o` or standard output |
 | `-P` | With `-E`, no line markers |
 | `-x LANG` | The language of every input, whatever its suffix: `c`, `assembler-with-cpp` (as `.S`), `assembler` (as `.s`), or `none` (by suffix) |
 | `-o file` | Set the output file name (default `a.out` for a link) |

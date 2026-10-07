@@ -727,7 +727,8 @@ static int run_cpp(const char *in, const char *out, bool assembler)
     if (!opt_nostdinc)
         vec_push(&av, concat(concat("-I", share_dir), "/include"));
     vec_push(&av, (char *)in);
-    vec_push(&av, (char *)out);
+    if (out) // else vcpp writes to standard output
+        vec_push(&av, (char *)out);
     vec_push(&av, NULL);
 
     int rc = run(tool, av.data);
@@ -857,7 +858,7 @@ static int compile_one(const char *src)
         // Where the preprocessed assembly goes depends on the stop stage.
         const char *sfile;
         if (opt_E)
-            sfile = own(outfile ? strdup(outfile) : replace_suffix(src, "i"));
+            sfile = outfile; // NULL: standard output
         else if (opt_S)
             sfile = own(outfile ? strdup(outfile) : replace_suffix(src, "s"));
         else
@@ -865,7 +866,7 @@ static int compile_one(const char *src)
 
         // Guard against overwriting the source on a case-insensitive filesystem,
         // where replace_suffix("foo.S", "s") == "foo.s" names the same file.
-        if ((opt_E || opt_S) && same_file(src, sfile)) {
+        if ((opt_E || opt_S) && sfile && same_file(src, sfile)) {
             error("%s: refusing to overwrite input; use -o", src);
             return 1;
         }
@@ -890,7 +891,7 @@ static int compile_one(const char *src)
     // Preprocess: .c -> .i
     const char *ifile;
     if (opt_E)
-        ifile = own(outfile ? strdup(outfile) : replace_suffix(src, "i"));
+        ifile = outfile; // NULL: standard output
     else
         ifile = make_temp("i");
     if (run_cpp(src, ifile, false) != 0)
@@ -1104,7 +1105,7 @@ static void usage(void)
     printf("    -S              Compile only; emit assembly (.s)\n");
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");
     printf("    -Smadlen        Like -S, but emit Madlen-dialect assembly (besm6)\n");
-    printf("    -E              Preprocess only; write to output or .i\n");
+    printf("    -E              Preprocess only; write to output or standard output\n");
     printf("    -P              With -E, no line markers\n");
     printf("    -x LANG         Input language: c, assembler-with-cpp, assembler or none\n");
     printf("    -o file         Set output file name\n");

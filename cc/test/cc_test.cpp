@@ -513,7 +513,7 @@ TEST_F(CcDriver, PreprocessDefaultTarget)
 {
     WriteSource("t.c", kTargetProbe);
     ASSERT_EQ(Vcc({ "-E", "t.c" }), 0) << Stderr();
-    std::string text = ReadFile(Path("t.i"));
+    std::string text = Stdout();
     std::string host = HOST_TARGET;
     EXPECT_EQ(text.find("BESM6"), std::string::npos) << text;
     // cppcheck-suppress knownConditionTrueFalse ; depends on the host
@@ -575,7 +575,7 @@ TEST_F(CcDriver, PreprocessDefines)
 {
     WriteSource("t.c", "A B\n");
     ASSERT_EQ(Vcc({ "-E", "-D", "A=alpha", "-DB", "t.c" }), 0) << Stderr();
-    EXPECT_NE(ReadFile(Path("t.i")).find("alpha 1"), std::string::npos);
+    EXPECT_NE(Stdout().find("alpha 1"), std::string::npos);
 }
 
 // A .S file is assembly that goes through the preprocessor first, with
