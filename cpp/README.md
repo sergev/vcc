@@ -77,7 +77,8 @@ The target macros are ordinary macros and can be `#undef`'d.
 ## Directives
 
 `#include` (`<header>` and `"header"`), `#define`, `#undef`, `#if`, `#ifdef`, `#ifndef`,
-`#elif`, `#else`, `#endif`, `#line`, `#error` and `#pragma`. Unknown pragmas are ignored.
+`#elif`, `#else`, `#endif`, `#line`, `#error` and `#pragma`. `#pragma once` keeps a file
+from being included again (it is known by device and inode); other pragmas are ignored.
 Leading whitespace before the `#` is allowed (C11 §6.10), unlike a traditional `cpp`.
 
 `#if`/`#elif` take a full integer constant expression: arithmetic, bitwise, shift,

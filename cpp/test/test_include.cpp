@@ -95,3 +95,25 @@ TEST_F(Include, LineAndFileTracking) {
     ASSERT_EQ(r.exit_code, 0) << r.err;
     EXPECT_EQ(Normalize(r.out), "1 2");
 }
+
+// "#pragma once" keeps a header from being read again, under any spelling of its path.
+TEST_F(Include, PragmaOnce) {
+    EXPECT_TRUE(TokensAre(
+        "#include \"once.h\"\n"
+        "#include \"./once.h\"\n"
+        "#include <once.h>\n"
+        "end\n",
+        "int x ; end",
+        {},
+        {{"once.h", "#pragma once\nint x;\n"}}));
+}
+
+// Without it the header is read each time.
+TEST_F(Include, NoPragmaOnce) {
+    EXPECT_TRUE(TokensAre(
+        "#include \"twice.h\"\n"
+        "#include \"twice.h\"\n",
+        "x x",
+        {},
+        {{"twice.h", "#pragma other\nx\n"}}));
+}

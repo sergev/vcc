@@ -40,3 +40,8 @@ TEST_F(Paste, AtStartDiagnosed) {
 TEST_F(Paste, AtEndDiagnosed) {
     EXPECT_PP_DIAGNOSES("#define C(a) a##\nC(1)\n");
 }
+
+// §6.10.3.3: the operand is the argument's tokens, not the blank after its comma.
+TEST_F(Paste, ArgumentAfterCommaPastes) {
+    EXPECT_TOKENS("#define F(a, b) K_##b a##_K\nF( x , y )\n", "K_y x_K");
+}

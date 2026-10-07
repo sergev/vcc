@@ -92,17 +92,20 @@ struct symtab {
 #define MAXIF   64 // maximum depth of nested #if/#ifdef/#ifndef blocks
 
 // Max buffers of macro pushback in flight at once, max -D / -U options and max -I
-// directories accepted on the command line.  The host takes more: vcc's own sources
-// need them (an X-macro table expanded in place, cc.c's thirty -D, a library's -I
-// path), and each pushback buffer is BUFSIZ bytes of the side buffer.
+// directories accepted on the command line, max files that said "#pragma once".  The
+// host takes more: vcc's own sources need them (an X-macro table expanded in place,
+// cc.c's thirty -D, a library's -I path), and each pushback buffer is BUFSIZ bytes of
+// the side buffer.
 #ifdef besm6
 #   define MAXFRE  14
 #   define NPREDEF 20
 #   define MAXDIRS 8
+#   define MAXONCE 32
 #else
 #   define MAXFRE  64
 #   define NPREDEF 200
 #   define MAXDIRS 64
+#   define MAXONCE 1024
 #endif
 
 // The three scratch areas expand_macro() carves out of one heap block, and the

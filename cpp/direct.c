@@ -6,9 +6,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "intern.h"
+
+//
+// The files that said "#pragma once", by device and inode: a name tells nothing,
+// since one file is reached as "x.h", "./x.h" or through another -I directory.
+//
+static struct {
+    dev_t dev;
+    ino_t ino;
+} once_files[MAXONCE];
+static int once_count;
+
+// Has the file open on fd said "#pragma once"?
+static int is_once_file(int fd)
+{
+    struct stat st;
+    int i;
+
+    if (fstat(fd, &st) < 0)
+        return 0;
+    for (i = 0; i < once_count; i++)
+        if (once_files[i].dev == st.st_dev && once_files[i].ino == st.st_ino)
+            return 1;
+    return 0;
+}
+
+// Remember the file open on fd as included once.
+static void add_once_file(int fd)
+{
+    struct stat st;
+
+    if (is_once_file(fd) || fstat(fd, &st) < 0)
+        return;
+    if (once_count >= MAXONCE) {
+        pperror("too many #pragma once files");
+        return;
+    }
+    once_files[once_count].dev   = st.st_dev;
+    once_files[once_count++].ino = st.st_ino;
+}
 
 //
 // Handle a "#include" line.  Read the file name (either <name> or "name"),
@@ -100,6 +140,10 @@ static char *do_include(char *p)
             strcat(nfil, filname);
         }
         if (0 < (cpp.inc_fd[cpp.inc_level + 1] = open(nfil, READ))) {
+            if (is_once_file(cpp.inc_fd[cpp.inc_level + 1])) {
+                close(cpp.inc_fd[cpp.inc_level + 1]); // #pragma once: already in
+                return (p);
+            }
             filok     = 1;
             cpp.in_fd = cpp.inc_fd[++cpp.inc_level];
             break;
@@ -411,8 +455,16 @@ char *process_directives(char *p)
             // Inside a skipped conditional group: inert; fall through to the
             // shared drain-to-'\n' loop below, like a skipped #define/#undef.
         } else if (np == cpp.sym_pragma) { // pragma (§6.10.6): accept, ignore unknown
-            // No handling: fall through to the shared drain, which swallows the
-            // line without error (a conformant tool ignores unknown pragmas).
+            // "#pragma once" (not C11, but in every compiler) marks the file as
+            // included; any other falls through to the shared drain, which swallows
+            // the line without error (a conformant tool ignores unknown pragmas).
+            if (cpp.false_level == 0) {
+                ++cpp.false_level;
+                p = skip_blanks(p);
+                --cpp.false_level;
+                if (p - cpp.tok_ptr == 4 && strncmp(cpp.tok_ptr, "once", 4) == 0)
+                    add_once_file(cpp.in_fd);
+            }
         } else if (*++cpp.tok_ptr == '\n')
             cpp.out_ptr = cpp.tok_ptr; // allows blank line after #
         else

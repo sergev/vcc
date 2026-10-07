@@ -932,6 +932,12 @@ char *expand_macro(char *p, struct symtab *sp)
             const char *a0 = a1;
             while (a0[-1] != '\0') // walk back to the start of this actual's text
                 --a0;
+            // without the blanks around it (the one after a comma), which would split
+            // the pasted token
+            while (a0 < a1 && (*a0 == ' ' || *a0 == '\t' || *a0 == '\n'))
+                ++a0;
+            while (a1 > a0 && (a1[-1] == ' ' || a1[-1] == '\t' || a1[-1] == '\n'))
+                --a1;
             while (a1 > a0) { // push it back-to-front, adjacent to its neighbor
                 if (AT_BUF_START(p)) {
                     cpp.out_ptr = cpp.tok_ptr = p;
