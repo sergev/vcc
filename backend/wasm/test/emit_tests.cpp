@@ -123,7 +123,7 @@ TEST(WasmEmit, Forms)
         "\ti64.const\t1099511627776\n"
         "\tdrop\n"
         "\tf32.const\t0x1.8p+0\n"
-        "\tf64.const\t-inf\n"
+        "\tf64.const\t-infinity\n"
         "\ti32.const\tg+8\n"
         "\ti32.load\t4:p2align=0\n"
         "\ti64.store\th\n"
@@ -172,7 +172,8 @@ TEST(WasmEmit, UnreachableAtEnd)
     EXPECT_EQ(s.find("unreachable"), std::string::npos) << s;
 }
 
-// A NaN keeps its sign; a quiet NaN is spelled nan.
+// A NaN keeps its sign; the default quiet NaN is spelled nan, another with its
+// significand; an infinity is spelled infinity.
 TEST(WasmEmit, FloatSpecials)
 {
     Wasm_Func *fn                        = NewFunc("n", true, WASM_VOID);
@@ -180,9 +181,10 @@ TEST(WasmEmit, FloatSpecials)
     wasm_append(fn, WASM_F32_CONST)->imm = Bits(-INFINITY); // a float
     wasm_append(fn, WASM_F64_CONST)->imm = (int64_t)Bits(0.0);
     wasm_append(fn, WASM_F64_CONST)->imm = (int64_t)Bits(-0.0);
+    wasm_append(fn, WASM_F64_CONST)->imm = (int64_t)0xfff0000000000123ull;
     std::string s                        = Emit(fn);
-    EXPECT_NE(s.find("\tf64.const\tnan\n\tf32.const\t-inf\n\tf64.const\t0x0p+0\n"
-                     "\tf64.const\t-0x0p+0\n"),
+    EXPECT_NE(s.find("\tf64.const\tnan\n\tf32.const\t-infinity\n\tf64.const\t0x0p+0\n"
+                     "\tf64.const\t-0x0p+0\n\tf64.const\t-nan:0x123\n"),
               std::string::npos)
         << s;
 }

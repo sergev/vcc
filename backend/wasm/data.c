@@ -86,9 +86,10 @@ static int emit_init(FILE *out, const Tac_StaticInit *it)
     case TAC_STATIC_INIT_POINTER:
     case TAC_STATIC_INIT_FAT_POINTER:
         if (it->u.pointer.byte_offset)
-            fprintf(out, "\t.int32\t%s%+d\n", it->u.pointer.name, it->u.pointer.byte_offset);
+            fprintf(out, "\t.int32\t%s%+d\n", wasm_name(it->u.pointer.name),
+                    it->u.pointer.byte_offset);
         else
-            fprintf(out, "\t.int32\t%s\n", it->u.pointer.name);
+            fprintf(out, "\t.int32\t%s\n", wasm_name(it->u.pointer.name));
         return 4;
     }
     return 0;
@@ -105,6 +106,7 @@ static bool all_zero(const Tac_StaticInit *init)
 void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
                           const Tac_StaticInit *init, bool readonly, int alignment)
 {
+    name      = wasm_name(name);
     int size  = wasm_type_size(type);
     int align = wasm_type_align(type) > alignment ? wasm_type_align(type) : alignment;
     int log2  = 0;

@@ -583,10 +583,249 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 }
 
 //
+// Long double: binary128 in memory, its operations calls of the runtime (float128.c,
+// with libgcc's names), each operand two i64 and an arithmetic result through memory.
+//
+static const Tac_Type ld_type = { .kind = TAC_TYPE_LONG_DOUBLE }, int_type = { .kind = TAC_TYPE_INT };
+
+static bool is_ld(const Tac_Type *t)
+{
+    return t && t->kind == TAC_TYPE_LONG_DOUBLE;
+}
+
+static void check_ld_operand(const Gen *g, const Tac_Val *v)
+{
+    if (v->kind == TAC_VAL_CONSTANT && v->u.constant->kind != TAC_CONST_LONG_DOUBLE)
+        fatal_error("wasm: %s: a long double operand of constant kind %d", g->fn->name,
+                    v->u.constant->kind);
+}
+
+// A comparison routine's int on the stack, against 0 by operator op.
+static void ld_compare(Gen *g, Tac_BinaryOperator op)
+{
+    if (op == TAC_BINARY_EQUAL) {
+        emit(g, WASM_I32_EQZ);
+        return;
+    }
+    emit_imm(g, WASM_I32_CONST, 0);
+    switch (op) {
+    case TAC_BINARY_NOT_EQUAL:
+        emit(g, WASM_I32_NE);
+        break;
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_DOUBLE:
+        emit(g, WASM_I32_LT_S);
+        break;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_DOUBLE:
+        emit(g, WASM_I32_LE_S);
+        break;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_DOUBLE:
+        emit(g, WASM_I32_GT_S);
+        break;
+    default:
+        emit(g, WASM_I32_GE_S);
+        break;
+    }
+}
+
+static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
+{
+    static const struct {
+        Tac_BinaryOperator op;
+        const char *name;
+    } ops[] = {
+        { TAC_BINARY_ADD, "__addtf3" },
+        { TAC_BINARY_ADD_DOUBLE, "__addtf3" },
+        { TAC_BINARY_SUBTRACT, "__subtf3" },
+        { TAC_BINARY_SUBTRACT_DOUBLE, "__subtf3" },
+        { TAC_BINARY_MULTIPLY, "__multf3" },
+        { TAC_BINARY_MULTIPLY_DOUBLE, "__multf3" },
+        { TAC_BINARY_DIVIDE, "__divtf3" },
+        { TAC_BINARY_DIVIDE_DOUBLE, "__divtf3" },
+        { TAC_BINARY_EQUAL, "__eqtf2" },
+        { TAC_BINARY_NOT_EQUAL, "__netf2" },
+        { TAC_BINARY_LESS_THAN, "__lttf2" },
+        { TAC_BINARY_LESS_THAN_DOUBLE, "__lttf2" },
+        { TAC_BINARY_LESS_OR_EQUAL, "__letf2" },
+        { TAC_BINARY_LESS_OR_EQUAL_DOUBLE, "__letf2" },
+        { TAC_BINARY_GREATER_THAN, "__gttf2" },
+        { TAC_BINARY_GREATER_THAN_DOUBLE, "__gttf2" },
+        { TAC_BINARY_GREATER_OR_EQUAL, "__getf2" },
+        { TAC_BINARY_GREATER_OR_EQUAL_DOUBLE, "__getf2" },
+    };
+    Tac_BinaryOperator op = in->u.binary.op;
+    const char *name      = NULL;
+    for (size_t i = 0; i < sizeof(ops) / sizeof(ops[0]) && !name; i++)
+        if (ops[i].op == op)
+            name = ops[i].name;
+    if (!name)
+        fatal_error("wasm: %s: long double operator %d", g->fn->name, op);
+    const Tac_Val *dst            = in->u.binary.dst;
+    const Tac_Val *const args[2]  = { in->u.binary.src1, in->u.binary.src2 };
+    const Tac_Type *const types[2] = { &ld_type, &ld_type };
+    check_ld_operand(g, args[0]);
+    check_ld_operand(g, args[1]);
+    if (is_ld(type_of(g, dst->u.var_name))) {
+        gen_runtime(g, name, &ld_type, args, types, 2, dst);
+        return;
+    }
+    begin_dst(g, dst);
+    gen_runtime(g, name, &int_type, args, types, 2, NULL);
+    ld_compare(g, op);
+    end_dst(g, dst);
+}
+
+static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Val *src = in->u.unary.src, *dst = in->u.unary.dst;
+    check_ld_operand(g, src);
+    switch (in->u.unary.op) {
+    case TAC_UNARY_NEGATE:
+    case TAC_UNARY_NEGATE_DOUBLE: {
+        // A copy with the sign flipped.
+        Place p = place_named(dst->u.var_name, 0);
+        store_value(g, &p, src, &ld_type);
+        const char *sym;
+        int64_t off;
+        push_base(g, dst->u.var_name, &sym, &off);
+        push_base(g, dst->u.var_name, &sym, &off);
+        emit_access(g, WASM_I64_LOAD, sym, off + 8);
+        emit_imm(g, WASM_I64_CONST, INT64_MIN);
+        emit(g, WASM_I64_XOR);
+        emit_access(g, WASM_I64_STORE, sym, off + 8);
+        return;
+    }
+    case TAC_UNARY_NOT: {
+        Tac_Const zero               = { .kind = TAC_CONST_LONG_DOUBLE };
+        Tac_Val z                    = { .kind = TAC_VAL_CONSTANT, .u.constant = &zero };
+        const Tac_Val *const args[2] = { src, &z };
+        const Tac_Type *const types[2] = { &ld_type, &ld_type };
+        begin_dst(g, dst);
+        gen_runtime(g, "__eqtf2", &int_type, args, types, 2, NULL);
+        emit(g, WASM_I32_EQZ);
+        end_dst(g, dst);
+        return;
+    }
+    default:
+        fatal_error("wasm: %s: unary operator %d on long double", g->fn->name, in->u.unary.op);
+    }
+}
+
+static void gen_ld_convert(Gen *g, const Tac_Instruction *in)
+{
+    static const Tac_Type uint_type = { .kind = TAC_TYPE_UINT },
+                          ll_type   = { .kind = TAC_TYPE_LONG_LONG },
+                          ull_type  = { .kind = TAC_TYPE_ULONG_LONG },
+                          dbl_type  = { .kind = TAC_TYPE_DOUBLE },
+                          flt_type  = { .kind = TAC_TYPE_FLOAT };
+    const Tac_Val *src = in->u.int_to_double.src, *dst = in->u.int_to_double.dst;
+    const Tac_Type *dt = type_of(g, dst->u.var_name), *st = any_type(g, src);
+    const Tac_Type *arg = st, *ret = &ld_type;
+    const char *name;
+    bool w = wasm_type_size(st) <= 4;
+    switch (in->kind) {
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT: {
+        bool un = in->kind == TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT;
+        arg     = &ld_type;
+        if (wasm_type_size(dt) <= 4) {
+            name = un ? "__fixunstfsi" : "__fixtfsi";
+            ret  = un ? &uint_type : &int_type;
+        } else {
+            name = un ? "__fixunstfdi" : "__fixtfdi";
+            ret  = un ? &ull_type : &ll_type;
+        }
+        break;
+    }
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+        name = w ? "__floatsitf" : "__floatditf";
+        arg  = w ? &int_type : &ll_type;
+        break;
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+        name = w ? "__floatunsitf" : "__floatunditf";
+        arg  = w ? &uint_type : &ull_type;
+        break;
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+        name = "__extenddftf2";
+        arg  = &dbl_type;
+        break;
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        name = "__extendsftf2";
+        arg  = &flt_type;
+        break;
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+        name = "__trunctfdf2";
+        arg  = &ld_type;
+        ret  = &dbl_type;
+        break;
+    default: // LONG_DOUBLE_TO_FLOAT
+        name = "__trunctfsf2";
+        arg  = &ld_type;
+        ret  = &flt_type;
+        break;
+    }
+    if (is_ld(arg))
+        check_ld_operand(g, src);
+    const Tac_Val *const args[1]   = { src };
+    const Tac_Type *const types[1] = { arg };
+    if (wasm_type_size(dt) < 4 && !is_ld(dt)) {
+        // A narrow result: the routine's int, brought to the destination's form.
+        begin_dst(g, dst);
+        gen_runtime(g, name, ret, args, types, 1, NULL);
+        narrow(g, dt);
+        end_dst(g, dst);
+        return;
+    }
+    gen_runtime(g, name, ret, args, types, 1, dst);
+}
+
+// A jump on a long double: whether it is not zero, by __netf2(x, 0).
+static void gen_ld_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool if_zero)
+{
+    Tac_Const zero                 = { .kind = TAC_CONST_LONG_DOUBLE };
+    Tac_Val z                      = { .kind = TAC_VAL_CONSTANT, .u.constant = &zero };
+    const Tac_Val *const args[2]   = { cond, &z };
+    const Tac_Type *const types[2] = { &ld_type, &ld_type };
+    check_ld_operand(g, cond);
+    gen_branch_setup(g, target);
+    gen_runtime(g, "__netf2", &int_type, args, types, 2, NULL);
+    if (if_zero)
+        emit(g, WASM_I32_EQZ);
+    gen_branch(g, target, true);
+}
+
+bool is_ld_op(const Gen *g, const Tac_Instruction *in)
+{
+    switch (in->kind) {
+    case TAC_INSTRUCTION_BINARY:
+        return is_ld(any_type(g, in->u.binary.src1)) || is_ld(any_type(g, in->u.binary.src2));
+    case TAC_INSTRUCTION_UNARY:
+        return is_ld(any_type(g, in->u.unary.src));
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+//
 // Control: jumps by the skeleton's rules (structure.c).
 //
 static void gen_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool if_zero)
 {
+    if (is_ld(any_type(g, cond))) {
+        gen_ld_cond_jump(g, cond, target, if_zero);
+        return;
+    }
     Wasm_ValType t = val_valtype(g, cond);
     gen_branch_setup(g, target);
     push_val(g, cond, t);
@@ -925,7 +1164,20 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         gen_int_convert(g, in->u.truncate.src, in->u.truncate.dst, true);
         return;
     case TAC_INSTRUCTION_UNARY:
-        gen_unary(g, in);
+        if (is_ld(any_type(g, in->u.unary.src)))
+            gen_ld_unary(g, in);
+        else
+            gen_unary(g, in);
+        return;
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT:
+    case TAC_INSTRUCTION_INT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
+    case TAC_INSTRUCTION_DOUBLE_TO_LONG_DOUBLE:
+    case TAC_INSTRUCTION_LONG_DOUBLE_TO_FLOAT:
+    case TAC_INSTRUCTION_FLOAT_TO_LONG_DOUBLE:
+        gen_ld_convert(g, in);
         return;
     case TAC_INSTRUCTION_DOUBLE_TO_INT:
     case TAC_INSTRUCTION_DOUBLE_TO_UINT:
@@ -940,7 +1192,10 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         gen_fp_convert(g, in);
         return;
     case TAC_INSTRUCTION_BINARY:
-        gen_binary(g, in);
+        if (is_ld_op(g, in))
+            gen_ld_binary(g, in);
+        else
+            gen_binary(g, in);
         return;
     case TAC_INSTRUCTION_LABEL:
         return; // a block boundary: structure.c

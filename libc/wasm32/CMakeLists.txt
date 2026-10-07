@@ -73,7 +73,7 @@ set(out ${CMAKE_CURRENT_BINARY_DIR})
 vcc_assemble_crt0(WASM32 ${src} ${out})
 # Assembly leaves.
 set(WASM32_LIBC_OBJS "")
-foreach(name console main memory)
+foreach(name console main memory sqrt)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${WASM32_AS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
@@ -97,11 +97,10 @@ macro(wasm32_compile_libc_c name srcdir)
     list(APPEND WASM32_LIBC_OBJS ${out}/${name}.o)
 endmacro()
 
-# The common sources but for those the bulk memory instructions replace (memory.s) and
-# the printf family, which needs variable arguments, to come.
-set(WASM32_LIBC_C ${LIBC_C_COMMON})
-list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset printf snprintf
-     sprintf)
+# The common sources but for those the bulk memory instructions replace (memory.s), and
+# the IEEE ones: the printf engine and the binary128 long double runtime.
+set(WASM32_LIBC_C ${LIBC_C_COMMON} ${LIBC_C_IEEE})
+list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset)
 foreach(name ${WASM32_LIBC_C})
     wasm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()

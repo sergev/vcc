@@ -186,7 +186,8 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     emit(g, WASM_I32_STORE);
 }
 
-void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn)
+// A call; with `keep` and no destination, its result stays on the stack.
+static void call_with(Gen *g, const Tac_Instruction *in, bool noreturn, bool keep)
 {
     if (is_va_start(in)) {
         gen_va_start(g, in);
@@ -289,10 +290,54 @@ void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn)
                 narrow(g, dt);
             end_dst(g, dst);
         }
-    } else if (rpass == WASM_PASS_VALUE && ret->kind != TAC_TYPE_VOID) {
+    } else if (rpass == WASM_PASS_VALUE && ret->kind != TAC_TYPE_VOID && !keep) {
         emit(g, WASM_DROP);
     }
     free_layout(&L);
+}
+
+void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn)
+{
+    call_with(g, in, noreturn, false);
+}
+
+// The signature of a runtime routine, declared ahead of the function that calls it.
+static void declare_helper(Gen *g, const char *name, const Tac_Type *ft)
+{
+    for (int i = 0; i < g->nhelpers; i++)
+        if (strcmp(g->helpers[i].name, name) == 0)
+            return;
+    if (g->nhelpers >= (int)(sizeof(g->helpers) / sizeof(g->helpers[0])))
+        fatal_error("wasm: %s: too many runtime routines", g->fn->name);
+    Wasm_Sig sig;
+    wasm_signature(ft, &sig);
+    g->helpers[g->nhelpers].name  = name;
+    g->helpers[g->nhelpers++].sig = wasm_sig_string(&sig);
+}
+
+void gen_runtime(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
+                 const Tac_Type *const *types, int n, const Tac_Val *dst)
+{
+    Tac_Val vals[4];
+    Tac_Type params[4];
+    Tac_Type rt  = *ret;
+    rt.next      = NULL;
+    Tac_Type ft  = { .kind = TAC_TYPE_FUN_TYPE };
+    ft.u.fun_type.ret_type = &rt;
+    for (int i = n - 1; i >= 0; i--) {
+        vals[i]        = *args[i];
+        vals[i].next   = i + 1 < n ? &vals[i + 1] : NULL;
+        params[i]      = *types[i];
+        params[i].next = i + 1 < n ? &params[i + 1] : NULL;
+    }
+    ft.u.fun_type.param_types = n ? &params[0] : NULL;
+    Tac_Instruction in        = { .kind = TAC_INSTRUCTION_FUN_CALL };
+    in.u.fun_call.fun_name    = (char *)name;
+    in.u.fun_call.args        = n ? &vals[0] : NULL;
+    in.u.fun_call.dst         = (Tac_Val *)dst;
+    in.u.fun_call.fun_type    = &ft;
+    declare_helper(g, name, &ft);
+    call_with(g, &in, false, dst == NULL);
 }
 
 void gen_return(Gen *g, const Tac_Val *src)

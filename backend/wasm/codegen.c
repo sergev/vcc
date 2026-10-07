@@ -13,6 +13,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     gen_init(&g, program, tl);
     gen_prologue(&g);
     gen_body(&g);
+    for (int i = 0; i < g.nhelpers; i++)
+        fprintf(out, "\t.functype\t%s %s\n", g.helpers[i].name, g.helpers[i].sig);
     wasm_emit_func(out, g.fn);
     gen_done(&g);
     for (const Tac_StaticLocal *s = tl->u.function.static_locals; s; s = s->next)

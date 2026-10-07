@@ -34,6 +34,11 @@ add_executable(wasm32-tests
     test/struct_tests.cpp
     test/stdarg_tests.cpp
     test/interop_tests.cpp
+    test/printf_tests.cpp
+    test/str_tests.cpp
+    test/mem_tests.cpp
+    test/math_tests.cpp
+    test/float128_tests.cpp
     ../common/test/book/signed_char_tests.cpp
     test/run_tests.cpp
     ${WASM_BOOK_SOURCES}

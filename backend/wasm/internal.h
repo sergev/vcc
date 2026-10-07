@@ -40,6 +40,11 @@ typedef struct {
     int va_param;                // the parameter holding the variable arguments' address
     int call_area;               // the offset of the calls' area in the frame
     int scratch;                 // an i32 local for an address used twice + 1, or 0
+    struct {
+        const char *name;
+        char *sig;
+    } helpers[32];               // the runtime routines called, to declare
+    int nhelpers;
 } Gen;
 
 // How a value travels in a call, as clang's wasm32 passes it.
@@ -145,6 +150,13 @@ void load_value(Gen *g, const Place *p, const Tac_Type *t);
 //
 void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn);
 void gen_return(Gen *g, const Tac_Val *src);
+// A call of runtime routine `name` taking args[0..n-1] of types[0..n-1], its result of
+// type ret into dst, or left on the stack when dst is NULL.
+void gen_runtime(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *const *args,
+                 const Tac_Type *const *types, int n, const Tac_Val *dst);
+// Whether instruction `in` is a long double operation, a call of the runtime that may
+// need the calls' area for its result.
+bool is_ld_op(const Gen *g, const Tac_Instruction *in);
 // The bytes call `in` needs in the calls' area of the frame.
 int call_area_size(const Gen *g, const Tac_Instruction *in);
 
@@ -166,6 +178,8 @@ void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Ty
 //
 // Symbols and assembly (emit.c)
 //
+// The assembler's name of a symbol: `name` itself, but for those it cannot take.
+const char *wasm_name(const char *name);
 // The assembler's name of TAC name `name`: main as clang names it.
 const char *wasm_symbol(const Tac_TopLevel *program, const char *name);
 // The declarations a translation unit starts with: the target's features and the

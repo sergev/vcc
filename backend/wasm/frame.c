@@ -239,6 +239,8 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
             int size = call_area_size(g, in);
             if (size > area)
                 area = size;
+        } else if (is_ld_op(g, in) && area < 16) {
+            area = 16; // a long double result
         }
     if (area) {
         g->frame_size = (g->frame_size + 15) & -16;
@@ -304,6 +306,8 @@ void gen_done(Gen *g)
     map_destroy(&g->slots);
     map_destroy(&g->refs);
     map_destroy(&g->pindex);
+    for (int i = 0; i < g->nhelpers; i++)
+        xfree(g->helpers[i].sig);
     flow_free(g->flow);
     wasm_free_func(g->fn);
     g->fn   = NULL;
