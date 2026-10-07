@@ -236,9 +236,15 @@ structure.c drops whatever isn't reachable from the entry.
    returning `long double` (two i64, sret) came here too; its arithmetic is phase 5.
    The interop signature table includes doubles; `HeadersAgreeWithClang` waits for
    phase 5, as it compares long double values.
-5. **Floating point and long double**: binary128 through the helpers. Full libc (doprnt, float128, sqrt). Chapter 13, printf,
-   math and float128 tests, interop with doubles. **Whole book suite** (19–20
-   included).
+5. **Floating point and long double** (done): binary128 through the helpers. Full libc
+   (doprnt, float128, sqrt). Chapter 13, printf, math and float128 tests, interop with
+   doubles. **Whole book suite** (19–20 included).  Each long double operation is a
+   call of a `float128.c` routine through the ordinary call path, declared by
+   `.functype` ahead of the function that calls it.  The assembler reads `inf`, `nan`
+   and `infinity` as float literals wherever an operand may be one, and takes no quoted
+   names, so symbols of those names get a `.vcc` suffix; infinities are spelled
+   `infinity` and NaNs with a payload `nan:0x…`.  `HeadersAgreeWithClang` came here
+   from phase 4.
 6. **Structured control flow** (Ramsey) for reducible CFGs, with the dispatch loop
    as fallback. Flow goldens, then the book suite again.
 7. **Quality**: stackify, peephole, local coalescing, frameless leaves. Default

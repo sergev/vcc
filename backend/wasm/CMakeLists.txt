@@ -18,10 +18,6 @@ target_link_libraries(wasm backend_common tac libutil)
 # Tests for the wasm32 backend: golden assembly, run tests under node, and the shared book
 # suite.  Run tests skip themselves when clang, wasm-ld or node is absent.
 #
-# The book chapters the code generator handles so far.
-set(WASM_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER WASM_BOOK_SOURCES INCLUDE REGEX "/(chapter([1-9]|1[0-7])_tests|chapter18_tests[0-9])\\.cpp$")
-
 add_executable(wasm32-tests
     test/emit_tests.cpp
     test/codegen_tests.cpp
@@ -41,7 +37,7 @@ add_executable(wasm32-tests
     test/float128_tests.cpp
     ../common/test/book/signed_char_tests.cpp
     test/run_tests.cpp
-    ${WASM_BOOK_SOURCES}
+    ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(wasm32-tests wasm parser translator semantic GTest::gtest_main
     test_util backend_test_util)
