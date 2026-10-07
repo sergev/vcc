@@ -5,8 +5,9 @@
 # walked in the header and long double is double.  The code generator is genaarch64
 # --darwin: Mach-O, the GOT and Apple's arm64 calling convention.
 #
-# The C compiler is the one building vcc when the host is macOS on Apple silicon.  It
-# is AARCH64_DARWIN_CC, cached for vcc and the tests.
+# The C compiler is the host's, VCC_HOST_CC (the one building vcc, but the system cc
+# when that is vcc), when the host is macOS on Apple silicon.  It is AARCH64_DARWIN_CC,
+# cached for vcc and the tests.
 #
 set(DARWIN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
 
@@ -47,6 +48,6 @@ add_test(NAME aarch64-darwin-headers-cpp
 set(cc "")
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND
    CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
-    set(cc ${CMAKE_C_COMPILER})
+    set(cc ${VCC_HOST_CC})
 endif()
 set(AARCH64_DARWIN_CC "${cc}" CACHE INTERNAL "")

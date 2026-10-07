@@ -74,6 +74,17 @@ endif()
 # LIBC_COMMON_INCLUDE_DIR.
 #
 set(SystemCpp ${CMAKE_C_COMPILER})
+
+#
+# The host's C compiler, which assembles and links for the hosted targets (and is baked
+# into vcc for them): the one building vcc -- unless that is vcc itself (`make self`,
+# an unknown compiler to CMake), whose own path must not end up in the driver it builds.
+#
+if(CMAKE_C_COMPILER_ID)
+    set(VCC_HOST_CC ${CMAKE_C_COMPILER})
+else()
+    find_program(VCC_HOST_CC NAMES cc gcc clang)
+endif()
 set(BESM6_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/besm6/include)
 set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv64/include)
 set(RISCV32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv32/include)

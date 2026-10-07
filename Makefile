@@ -11,6 +11,11 @@
 #                 subset plus besm6.h); vgenriscv64 with the RISC-V runtime and
 #                 headers -- to ~/.local
 #
+# make self -- build vcc with vcc: stage 1 (./build/) is installed into ./build/stage/,
+#               whose vcc compiles stage 2, the compiler and the runtime, in ./build/self/
+#
+# make self-test -- make self, then build and run the unit tests against stage 2
+#
 # make clean -- remove build files
 #
 # To reconfigure for Debug build:
@@ -27,6 +32,17 @@ run:    test
 
 install: all
 	cmake --install build
+
+STAGE = $(CURDIR)/build/stage
+
+self:   all
+	cmake --install build --prefix $(STAGE)
+	cmake -Bbuild/self -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=$(STAGE)/bin/vcc
+	$(MAKE) -Cbuild/self all
+
+self-test: self
+	$(MAKE) -Cbuild/self tests
+	ctest --test-dir build/self --progress
 
 clean:
 	rm -rf build

@@ -5,8 +5,8 @@
 # call that glibc lacks (__va_arg).  The data model and the code are those of the
 # bare-metal x86_64 and aarch64; the code generator only adds .note.GNU-stack (--linux).
 #
-# The C compiler is the one building vcc when the host is that target, else
-# <triple>-gcc on PATH.  It is <T>_LINUX_CC, cached for vcc and the tests.
+# The C compiler is the host's, VCC_HOST_CC (the one building vcc, but the system cc
+# when that is vcc), when the host is that target, else <triple>-gcc on PATH.  It is <T>_LINUX_CC, cached for vcc and the tests.
 #
 set(LINUX_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include CACHE INTERNAL "")
 
@@ -47,7 +47,7 @@ function(vcc_linux_target name var arch triple gen helper_dir cpu_regex)
     set(cc "")
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux" AND
        CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "${cpu_regex}")
-        set(cc ${CMAKE_C_COMPILER})
+        set(cc ${VCC_HOST_CC})
     else()
         find_program(${var}_LINUX_GCC NAMES ${triple}-gcc HINTS ${VCC_CROSS_HINTS})
         if(${var}_LINUX_GCC)
