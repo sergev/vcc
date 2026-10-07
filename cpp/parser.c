@@ -125,7 +125,10 @@ static Value apply_op(int op, Value a, Value b)
     case RS:
         if (a.u)
             return value(ub >= BITS ? 0 : (intmax_t)(ua >> ub), 1);
-        return value(ub >= BITS ? (sa < 0 ? -1 : 0) : sa >> ub, 0);
+        if (ub >= BITS)
+            return value(sa < 0 ? -1 : 0, 0);
+        // arithmetic shift done unsigned
+        return value(sa < 0 ? (intmax_t) ~(~ua >> ub) : (intmax_t)(ua >> ub), 0);
     case '<':
         return value(u ? ua < ub : sa < sb, 0);
     case '>':
