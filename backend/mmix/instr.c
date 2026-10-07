@@ -17,6 +17,11 @@ static bool same_form(const Tac_Type *st, const Tac_Type *dt)
 {
     if (mmix_is_fp(st) || mmix_is_fp(dt))
         return mmix_is_float(st) == mmix_is_float(dt);
+    // A narrow value of the other signedness is extended the other way: (int)u must
+    // sign-extend what was zero-extended.
+    if (mmix_type_size(dt) == mmix_type_size(st) && mmix_type_size(dt) < 8 &&
+        mmix_is_scalar(st) && mmix_is_scalar(dt) && mmix_is_unsigned(st) != mmix_is_unsigned(dt))
+        return false;
     return mmix_type_size(dt) >= mmix_type_size(st);
 }
 
@@ -43,6 +48,24 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 static const Tac_Type *operand_type(const Gen *g, const Tac_Val *a, const Tac_Val *b)
 {
     return val_type(g, a->kind == TAC_VAL_VAR || !b ? a : b);
+}
+
+// Narrow integer type `t` with the signedness `is_unsigned`.  Copy propagation through a
+// same-width cast, which emits nothing, can leave an operation reading a variable of the
+// other signedness (`(int)u >> n` reads `u`); loaded in the type the operation works in,
+// load_val_as extends it again.
+static const Tac_Type *with_sign(const Tac_Type *t, bool is_unsigned)
+{
+    static const Tac_Type types[][2] = {
+        { { .kind = TAC_TYPE_SCHAR }, { .kind = TAC_TYPE_UCHAR } },
+        { { .kind = TAC_TYPE_SHORT }, { .kind = TAC_TYPE_USHORT } },
+        { { .kind = TAC_TYPE_INT }, { .kind = TAC_TYPE_UINT } },
+    };
+    for (size_t i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+        if (t->kind == types[i][0].kind || t->kind == types[i][1].kind)
+            return &types[i][is_unsigned];
+    }
+    return t;
 }
 
 // A width conversion: the source extended from its own width as `sign` says, or (`sign`
@@ -174,6 +197,7 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Mmix_Op zs, bool is_u
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     const Tac_Type *t = operand_type(g, a, b);
     is_unsigned |= t->kind == TAC_TYPE_POINTER;
+    t = with_sign(t, is_unsigned);
     int x = use_val(g, a, REG_A, t), d = def_reg(g, in->u.binary.dst, REG_A);
     if (!is_zero(b) || (is_unsigned && zs != MMIX_ZSZ && zs != MMIX_ZSNZ)) {
         Mmix_Operand z = val_operand(g, b, REG_B, t);
@@ -223,6 +247,10 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         gen_compare(g, in, zs, is_unsigned);
         return;
     }
+    // The other operations work in their result's type.
+    const Tac_Type *dt = val_type(g, in->u.binary.dst);
+    if (mmix_type_size(dt) == mmix_type_size(t))
+        t = with_sign(t, mmix_is_unsigned(dt));
     if (op == TAC_BINARY_DIVIDE || op == TAC_BINARY_REMAINDER) {
         gen_signed_divide(g, in, t, op == TAC_BINARY_REMAINDER);
         return;

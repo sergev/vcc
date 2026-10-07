@@ -211,3 +211,19 @@ int main(void)
                       ".gcc"));
     EXPECT_EQ(42, exit_status);
 }
+
+// An unsigned value converted to int of the same width is sign-extended again, also when
+// copy propagation has left the shift reading the unsigned temporary: (int)0x80000000 >> 5.
+TEST_F(MmixTest, RunUnsignedToIntThenShift)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("-67108864\n-67108864\n0\n", CompileAndRunBook(R"(
+#include <stdio.h>
+int cvt(unsigned u) { return (int)(u << 3) >> 5; }
+int same(unsigned u) { int i = (int)u; return i / 32; }
+int main(void) {
+    printf("%d\n", cvt(0x10000000u));
+    printf("%d\n", same(0x80000000u));
+    return 0;
+})"));
+}
