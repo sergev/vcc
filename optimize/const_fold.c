@@ -26,6 +26,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "optimize.h"
 #include "tac.h"
@@ -630,7 +631,9 @@ static bool binop_is_unsigned(Tac_BinaryOperator op)
 // variants pick the signed (s1/s2) or unsigned (u1/u2) 64-bit view accordingly.
 // Wrapping arithmetic is done in uint64 and narrowed back to c1's kind — forced
 // to the unsigned counterpart for the unsigned-variant operators.
-static Tac_Val *fold_binary_const(Tac_BinaryOperator op, const Tac_Const *c1, const Tac_Const *c2)
+// `dst_kind` is the constant kind of the destination's type, or -1 when unknown.
+static Tac_Val *fold_binary_const(Tac_BinaryOperator op, const Tac_Const *c1, const Tac_Const *c2,
+                                  int dst_kind)
 {
     if (!const_is_integer_kind(c1->kind) || !const_is_integer_kind(c2->kind))
         return fold_binary_float(op, c1, c2);
@@ -738,8 +741,44 @@ static Tac_Val *fold_binary_const(Tac_BinaryOperator op, const Tac_Const *c1, co
         return NULL;
     }
 
-    Tac_ConstKind result_kind = binop_is_unsigned(op) ? const_kind_to_unsigned(c1->kind) : c1->kind;
+    // The result has the destination's type: the first operand's constant can have
+    // another, through a same-width cast that emitted nothing (`unsigned u = 5; u << 45`
+    // has an int 5, and its result would be narrowed to a BESM-6 int's 41 bits).
+    Tac_ConstKind result_kind = dst_kind >= 0                ? (Tac_ConstKind)dst_kind
+                                : binop_is_unsigned(op)      ? const_kind_to_unsigned(c1->kind)
+                                                             : c1->kind;
     return make_int_const_val(result_kind, result);
+}
+
+// The constant kind of the int, long or long long variable `v` of function `fn`, or -1.
+static int var_const_kind(const Tac_TopLevel *fn, const Tac_Val *v)
+{
+    if (!fn || !v || v->kind != TAC_VAL_VAR)
+        return -1;
+    for (int list = 0; list < 2; list++) {
+        for (const Tac_Param *p = list ? fn->u.function.locals : fn->u.function.params; p;
+             p = p->next) {
+            if (!p->type || strcmp(p->name, v->u.var_name) != 0)
+                continue;
+            switch (p->type->kind) {
+            case TAC_TYPE_INT:
+                return TAC_CONST_INT;
+            case TAC_TYPE_UINT:
+                return TAC_CONST_UINT;
+            case TAC_TYPE_LONG:
+                return TAC_CONST_LONG;
+            case TAC_TYPE_ULONG:
+                return TAC_CONST_ULONG;
+            case TAC_TYPE_LONG_LONG:
+                return TAC_CONST_LONG_LONG;
+            case TAC_TYPE_ULONG_LONG:
+                return TAC_CONST_ULONG_LONG;
+            default:
+                return -1;
+            }
+        }
+    }
+    return -1;
 }
 
 // True for all 14 type-conversion instruction kinds (the three integer-width
@@ -1092,7 +1131,15 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
 // stolen dst field so tac_free_instruction does not free it (it now belongs to
 // the Copy), and NULL out `cur->next` so the recursive free does not cascade
 // into the rest of the list. The Copy is then spliced in where the original was.
+Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *fn);
+
 Tac_Instruction *constant_fold(Tac_Instruction *body)
+{
+    return constant_fold_typed(body, NULL);
+}
+
+// constant_fold, with `fn`'s params and locals for the types of its variables.
+Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *fn)
 {
     Tac_Instruction *prev = NULL;
     Tac_Instruction *cur  = body;
@@ -1137,7 +1184,8 @@ Tac_Instruction *constant_fold(Tac_Instruction *body)
         if (cur->kind == TAC_INSTRUCTION_BINARY && cur->u.binary.src1->kind == TAC_VAL_CONSTANT &&
             cur->u.binary.src2->kind == TAC_VAL_CONSTANT) {
             Tac_Val *folded = fold_binary_const(cur->u.binary.op, cur->u.binary.src1->u.constant,
-                                                cur->u.binary.src2->u.constant);
+                                                cur->u.binary.src2->u.constant,
+                                                var_const_kind(fn, cur->u.binary.dst));
             if (folded) {
                 opt_trace_instr("[const-fold] binary fold:", cur);
                 Tac_Instruction *copy = tac_new_instruction(TAC_INSTRUCTION_COPY);

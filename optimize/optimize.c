@@ -37,6 +37,7 @@
 
 // Pass entry points, implemented in the sibling translation units.
 Tac_Instruction *constant_fold(Tac_Instruction *body);
+Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *fn);
 void eliminate_unreachable(OptCfg *cfg);
 void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn);
 void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn);
@@ -115,7 +116,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, Tac_To
 
         // Constant folding first, on the flat list (no CFG required).
         OPT_TRACE("[optimize] running pass: const-fold\n");
-        body = constant_fold(body);
+        body = constant_fold_typed(body, fn);
 
         // Split into basic blocks for the three CFG-based passes.
         OptCfg *cfg = cfg_build(body);
