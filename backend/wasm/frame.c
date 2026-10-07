@@ -149,3 +149,31 @@ int var_local(const Gen *g, const char *name)
         fatal_error("wasm: %s: %s is not a local", g->fn->name, name);
     return (int)v - 1;
 }
+
+const Tac_Type *global_type(const Gen *g, const char *name)
+{
+    for (const Tac_StaticLocal *s = g->tl->u.function.static_locals; s; s = s->next)
+        if (strcmp(s->name, name) == 0)
+            return s->type;
+    for (const Tac_TopLevel *t = g->program; t; t = t->next) {
+        switch (t->kind) {
+        case TAC_TOPLEVEL_STATIC_VARIABLE:
+            if (strcmp(t->u.static_variable.name, name) == 0)
+                return t->u.static_variable.type;
+            break;
+        case TAC_TOPLEVEL_STATIC_CONSTANT:
+            if (strcmp(t->u.static_constant.name, name) == 0)
+                return t->u.static_constant.type;
+            break;
+        case TAC_TOPLEVEL_EXTERN:
+            if (strcmp(t->u.extern_.name, name) == 0)
+                return t->u.extern_.type;
+            break;
+        case TAC_TOPLEVEL_FUNCTION:
+            if (strcmp(t->u.function.name, name) == 0)
+                return t->u.function.type;
+            break;
+        }
+    }
+    return NULL;
+}

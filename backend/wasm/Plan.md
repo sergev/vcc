@@ -216,7 +216,8 @@ structure.c drops whatever isn't reachable from the entry.
 1. **Skeleton** (done): target entry, cpp macros, headers, CrossTools and cc changes,
    `run.mjs`, crt0/console, and a `genwasm` that compiles `return <const>`. Assemble,
    link, run; `cc -t wasm32` end to end. Book chapter 1.
-2. **Integers, locals, calls, dispatch-loop control flow**: book chapters 2–12
+2. **Integers, locals, calls, dispatch-loop control flow** (done; scalar static data
+   came in here too, for chapter 10's file-scope variables): book chapters 2–12
    (operators, locals, `if`, blocks, loops, functions, file scope, long, unsigned).
 3. **Memory**: shadow frame, globals and static data, static locals, pointers,
    arrays, chars and strings, LOAD/STORE, ADD_PTR, byte kinds. libc subset:

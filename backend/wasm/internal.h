@@ -26,6 +26,10 @@ typedef struct {
     const Tac_TopLevel *tl;      // the function
     StringMap locals;            // name → its local's index + 1
     StringMap types;             // name → const Tac_Type * of a frame-resident name
+    StringMap labels;            // label → its basic block
+    int nblocks;                 // basic blocks
+    int cur;                     // the block being translated
+    int state;                   // the dispatch loop's local: the block to go to
 } Gen;
 
 //
@@ -43,11 +47,29 @@ void gen_done(Gen *g);
 const Tac_Type *var_type(const Gen *g, const char *name);
 // The local holding name; fails when there is none.
 int var_local(const Gen *g, const char *name);
+// The type of static object `name` (a variable, constant or block-scope static of the
+// unit, or an extern), or NULL.
+const Tac_Type *global_type(const Gen *g, const char *name);
 
 //
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+
+//
+// Control flow (structure.c)
+//
+// Translate the function's body into its skeleton of blocks.
+void gen_body(Gen *g);
+// A jump to label `target`: what goes before its condition, then the branch.
+void gen_branch_setup(Gen *g, const char *target);
+void gen_branch(Gen *g, const char *target, bool conditional);
+
+//
+// Static data (data.c)
+//
+void emit_static_variable(FILE *out, const char *name, bool global, const Tac_Type *type,
+                          const Tac_StaticInit *init, bool readonly, int alignment);
 
 //
 // Symbols and assembly (emit.c)
