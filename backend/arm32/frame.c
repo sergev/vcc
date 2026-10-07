@@ -3,6 +3,7 @@
 //
 #include <string.h>
 
+#include "bitops.h"
 #include "codegen.h"
 #include "float128.h"
 #include "internal.h"
@@ -302,7 +303,7 @@ void gen_addr(Gen *g, int reg, int base, int64_t off)
         return;
     }
     while (abs) {
-        int p          = __builtin_ctz(abs) & ~1;
+        int p          = ctz32(abs) & ~1;
         uint32_t chunk = abs & (0xffu << p);
         emit3(g, op, a32_reg(reg), a32_reg(from), a32_imm(chunk));
         abs &= ~chunk;
@@ -846,14 +847,14 @@ static Frame scan_body(const Gen *g)
     // One vpush of a range: from the lowest d register saved to the highest.
     fr.dmask |= g->saved_vfp;
     if (fr.dmask) {
-        int lo = __builtin_ctz(fr.dmask), hi = 31 - __builtin_clz(fr.dmask);
+        int lo = ctz32(fr.dmask), hi = 31 - clz32(fr.dmask);
         fr.dmask = (2u << hi) - (1u << lo);
     }
     bool variadic = g->tl->u.function.variadic;
-    int vfp       = 8 * __builtin_popcount(fr.dmask);
+    int vfp       = 8 * popcount32(fr.dmask);
     fr.locals     = (g->locals_size + 7) / 8 * 8;
     if (!fr.sp) {
-        fr.core  = 4 * __builtin_popcount(g->saved_core);
+        fr.core  = 4 * popcount32(g->saved_core);
         fr.saves = vfp + (fr.r10 ? 4 : 0);
         fr.frame = fr.calls || fr.fb || fr.sp_used || fr.lr || fr.locals || fr.core ||
                    g->outgoing || fr.r10 || fr.dmask || variadic;
@@ -863,7 +864,7 @@ static Frame scan_body(const Gen *g)
     // register pushed, as clang does, while there is one.
     fr.push  = g->saved_core | (fr.r10 ? 1u << T2 : 0) | (fr.calls || fr.lr ? 1u << A32_LR : 0);
     fr.below = (g->outgoing + 7) / 8 * 8 + fr.locals;
-    fr.size  = 4 * __builtin_popcount(fr.push) + vfp + fr.below;
+    fr.size  = 4 * popcount32(fr.push) + vfp + fr.below;
     if ((fr.calls || fr.locals) && fr.size % 8) {
         int pad = A32_FP;
         while (pad >= A32_R4 && (fr.push & 1u << pad))

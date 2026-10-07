@@ -86,4 +86,12 @@ int  feof(FILE *stream);
 int  ferror(FILE *stream);
 void perror(const char *s);
 
+/* POSIX and BSD */
+FILE *fdopen(int fd, const char *mode);
+int   fileno(FILE *stream);
+FILE *open_memstream(char **bufp, size_t *sizep);
+int   pclose(FILE *stream);
+FILE *popen(const char *command, const char *mode);
+void  setbuffer(FILE *stream, char *buf, int size);
+
 #endif /* _STDIO_H */

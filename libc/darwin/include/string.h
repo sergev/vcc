@@ -33,4 +33,11 @@ void  *memset(void *s, int c, size_t n);
 char  *strerror(int errnum);
 size_t strlen(const char *s);
 
+/* POSIX */
+void  *memccpy(void *dest, const void *src, int c, size_t n);
+char  *strdup(const char *s);
+char  *strndup(const char *s, size_t n);
+char  *strtok_r(char *str, const char *delim, char **saveptr);
+size_t strnlen(const char *s, size_t maxlen);
+
 #endif /* _STRING_H */

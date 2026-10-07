@@ -32,4 +32,7 @@
 #define LLONG_MAX  9223372036854775807LL
 #define ULLONG_MAX 18446744073709551615ULL
 
+/* POSIX, from <sys/syslimits.h> */
+#define PATH_MAX 1024
+
 #endif /* _LIMITS_H */

@@ -29,6 +29,9 @@ foreach(dir ${dirs})
     endforeach()
 endforeach()
 install(FILES ${headers} DESTINATION share/vcc/aarch64-darwin/include)
+# The POSIX headers in subdirectories, enough for vcc to compile itself.
+install(DIRECTORY ${DARWIN_INCLUDE_DIR}/sys ${DARWIN_INCLUDE_DIR}/mach-o
+        DESTINATION share/vcc/aarch64-darwin/include)
 
 # The headers parse, through the system preprocessor and through ours.
 add_test(NAME aarch64-darwin-headers

@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include "bitops.h"
 #include "xalloc.h"
 
 typedef struct {
@@ -47,7 +48,7 @@ static int degree(const Alloc *a, int v)
 {
     int d = 0;
     for (int w = 0; w < a->words; w++)
-        d += __builtin_popcountll(row(a, v)[w]);
+        d += popcount64(row(a, v)[w]);
     return d;
 }
 

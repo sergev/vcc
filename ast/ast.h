@@ -653,13 +653,13 @@ bool compare_program(const Program *a, const Program *b);
 //
 // Import, export
 //
-Program *import_ast(int fileno);
-void export_ast(int fileno, Program *program);
+Program *import_ast(int fildes);
+void export_ast(int fildes, Program *program);
 void export_yaml(FILE *fd, Program *program);
 void export_dot(FILE *fd, Program *program);
 
 typedef struct _wfile WFILE;
-void ast_import_open(WFILE *input, int fileno);
+void ast_import_open(WFILE *input, int fildes);
 ExternalDecl *import_external_decl(WFILE *input);
 
 //

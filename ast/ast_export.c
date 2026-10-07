@@ -28,14 +28,14 @@ void export_decl_or_stmt(WFILE *fd, DeclOrStmt *dost);
 void export_for_init(WFILE *fd, ForInit *finit);
 void export_external_decl(WFILE *fd, ExternalDecl *exdecl);
 
-void export_ast(int fileno, Program *program)
+void export_ast(int fildes, Program *program)
 {
     if (export_debug) {
         printf("--- %s()\n", __func__);
     }
     WFILE fd;
-    if (wdopen(&fd, fileno, "a") < 0) {
-        fprintf(stderr, "Error exporting AST: cannot open file descriptor #%d\n", fileno);
+    if (wdopen(&fd, fildes, "a") < 0) {
+        fprintf(stderr, "Error exporting AST: cannot open file descriptor #%d\n", fildes);
         exit(1);
     }
     wputw(TAG_PROGRAM, &fd);

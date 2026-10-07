@@ -172,13 +172,13 @@ static Tac_Val *scale_byte_index(TacCtx *ctx, Tac_Val *idx, const Type *idx_type
 // a shift in the backend; otherwise it calls b/div.
 static Tac_Val *gen_div_const(TacCtx *ctx, Tac_Val *val, int divisor)
 {
-    Tac_Val *vd          = new_var_val(ctx, tac_type_ptrdiff());
-    Tac_Instruction *div = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-    div->u.binary.op     = TAC_BINARY_DIVIDE;
-    div->u.binary.src1   = val;
-    div->u.binary.src2   = val_int(divisor);
-    div->u.binary.dst    = vd;
-    tac_append(ctx, div);
+    Tac_Val *vd             = new_var_val(ctx, tac_type_ptrdiff());
+    Tac_Instruction *divide = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+    divide->u.binary.op     = TAC_BINARY_DIVIDE;
+    divide->u.binary.src1   = val;
+    divide->u.binary.src2   = val_int(divisor);
+    divide->u.binary.dst    = vd;
+    tac_append(ctx, divide);
     return val_var(vd->u.var_name);
 }
 

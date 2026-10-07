@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include "bitops.h"
 #include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
@@ -18,7 +19,7 @@ bool arm32_peephole      = true;
 // the type.
 static void layout_frame(Gen *g)
 {
-    g->locals_size = g->sp_frame ? 0 : 4 * __builtin_popcount(g->saved_core);
+    g->locals_size = g->sp_frame ? 0 : 4 * popcount32(g->saved_core);
     gen_params(g);
     StringMap allocs;
     map_init(&allocs);
