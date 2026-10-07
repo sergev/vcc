@@ -2,6 +2,7 @@
 // AArch64 peephole pass (peephole.c) and compare-and-branch fusion (instr.c): each
 // rewrite on a small function, and a run test of the corners.
 //
+#include "../../common/test/bitfield_run.h"
 #include "aarch64_test.h"
 
 // Each test compiles one translation unit: the fixture's symbol table lives per test.
@@ -149,4 +150,63 @@ TEST_F(Aarch64Test, PeepholeKeepsVolatileUnpaired)
         "long g(long a) { volatile long x = a, y = a; return x + y; }"));
     EXPECT_EQ(std::string::npos, code.find("ldp ")) << code;
     EXPECT_EQ(std::string::npos, code.find("stp ")) << code;
+}
+
+// Shifts and masks: ubfx, sbfx, bfi and ubfiz, at either width; and what they are not:
+// a mask with a hole, a shifted value read again.
+EXPECT_PEEPHOLE(PeepholeUbfx, "ubfx w0, w0, #13, #11\nret\n",
+                "unsigned f(unsigned x) { return (x >> 13) & 0x7ff; }")
+EXPECT_PEEPHOLE(PeepholeUbfxX, "ubfx x0, x0, #40, #16\nret\n",
+                "unsigned long f(unsigned long x) { return (x >> 40) & 0xffff; }")
+EXPECT_PEEPHOLE(PeepholeSbfx, "sbfx w0, w0, #13, #12\nret\n",
+                "int f(int x) { return (x << 7) >> 20; }")
+EXPECT_PEEPHOLE(
+    PeepholeBfi, "bfi w0, w1, #8, #12\nret\n",
+    "unsigned f(unsigned x, unsigned v) { return (x & 0xfff000ff) | (v & 0xfff) << 8; }")
+EXPECT_PEEPHOLE(PeepholeBfiX, "bfi x0, x1, #20, #30\nret\n",
+                "unsigned long f(unsigned long x, unsigned long v) "
+                "{ return (x & ~(0x3ffffffful << 20)) | (v & 0x3ffffffful) << 20; }")
+EXPECT_PEEPHOLE(PeepholeUbfiz, "ubfiz w0, w0, #8, #12\nret\n",
+                "unsigned f(unsigned v) { return (v & 0xfff) << 8; }")
+EXPECT_PEEPHOLE(PeepholeMaskWithHole, "lsr w0, w0, #4\nmov w10, #1285\nand w0, w0, w10\nret\n",
+                "unsigned f(unsigned x) { return (x >> 4) & 0x505; }")
+EXPECT_PEEPHOLE(PeepholeShiftReadAgain, "lsr w1, w0, #4\nand w0, w1, #4095\nadd w0, w0, w1\nret\n",
+                "unsigned f(unsigned x) { unsigned t = x >> 4; return (t & 0xfff) + t; }")
+
+// Bit-fields: a read is ubfx or sbfx, a store bfi, a store of zero an and with the
+// mask as an immediate (movz + movk once); a narrow unit loaded and stored without
+// extensions.
+TEST_F(Aarch64Test, PeepholeBitfields)
+{
+    std::string code = Code(CompileToAarch64(R"(
+struct S { unsigned a : 3; int b : 5; unsigned c : 12; unsigned d : 12; };
+unsigned get_c(struct S *p) { return p->c; }
+int get_b(struct S *p) { return p->b; }
+void set_c(struct S *p, unsigned v) { p->c = v; }
+void set_b(struct S *p, int v) { p->b = v; }
+void clear_c(struct S *p) { p->c = 0; }
+void bump_d(struct S *p) { p->d++; }
+)"));
+    EXPECT_NE(std::string::npos, code.find("ldr w0, [x0]\nubfx w0, w0, #8, #12\nret\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldrb w0, [x0]\nsbfx w0, w0, #3, #5\nret\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("ldr w0, [x2]\nbfi w0, w1, #8, #12\nstr w0, [x2]\nret\n"))
+        << code;
+    EXPECT_NE(std::string::npos,
+              code.find("ldrb w0, [x3]\nbfi w0, w1, #3, #5\nstrb w0, [x3]\nret\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("and w0, w0, #-1048321\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("ubfx w0, w2, #4, #12\nadd w0, w0, #1\nbfi w2, w0, #4, #12\n"))
+        << code;
+    EXPECT_EQ(std::string::npos, code.find("orr")) << code;
+    EXPECT_EQ(std::string::npos, code.find("movk")) << code;
+    EXPECT_EQ(std::string::npos, code.find("uxt")) << code;
+}
+
+// Bit-fields and shift-and-mask expressions computed as the host computes them.
+TEST_F(Aarch64Test, RunPeepholeBitfields)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    EXPECT_EQ(BitfieldRunExpected(), CompileAndRunAarch64(kBitfieldRunProgram));
 }

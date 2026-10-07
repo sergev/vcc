@@ -186,6 +186,9 @@ struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v);
+// The registers the function's result is returned in, for the peephole pass: bit 0 x0,
+// bit 1 x1, bit 2 + k v<k>.
+unsigned result_regs(const Gen *g);
 
 //
 // Static data (data.c)
@@ -205,7 +208,9 @@ bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction
 //
 // Peephole pass (peephole.c), on the finished function
 //
-void a64_peephole(A64_Func *fn);
+// `result` is what the function returns in, as result_regs gives it: a return reads
+// that.
+void a64_peephole(A64_Func *fn, unsigned result);
 // Whether `in` calls a runtime routine (long double arithmetic and conversions);
 // `type_of(arg, v)` gives the type of operand `v`.  Sets *dst to its result.
 typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);

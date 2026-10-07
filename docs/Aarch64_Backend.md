@@ -43,7 +43,19 @@ For each function, in this order (`codegen.c`):
    immediates for `and`/`orr`/`eor`, `cmn` for a negative compare), `wzr` for a stored
    zero, copies followed into their uses, no reload of a value just stored, addresses
    folded into loads and stores (`ldr x2, [x0, w3, sxtw #3]`), `madd`/`msub`,
-   `ldp`/`stp` for adjacent slots, `cbz`, and no jump to the next line.
+   `ldp`/`stp` for adjacent slots, `cbz`, and no jump to the next line. The shifts and
+   masks of a bit-field access (or the same written by hand) become `ubfx`/`sbfx` for a
+   read, `bfi` for a store and `ubfiz` for a value shifted into place, a `movz`/`movk`
+   mask that is a bitmask immediate becomes one, and a `uxtb`/`uxth` after an
+   `ldrb`/`ldrh` or before an `strb`/`strh` goes:
+
+   ```
+   ldrb    w0, [x3]            // p->b = v, b a 5-bit field at bit 3
+   bfi     w0, w1, #3, #5
+   strb    w0, [x3]
+   ```
+
+   A `ret` reads only the registers the function's result is in.
 
 A register holds an integer in a fixed form: a type of 32 bits or less in the W view
 with the upper half zero, `char` and `short` also extended to 32 bits by their type.

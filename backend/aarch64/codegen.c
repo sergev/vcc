@@ -94,7 +94,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);
     if (aarch64_peephole)
-        a64_peephole(g.fn);
+        a64_peephole(g.fn, result_regs(&g));
     if (g.flow) {
         flow_free(g.flow);
         xfree(g.uses);

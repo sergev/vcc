@@ -549,6 +549,22 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         hint[var] = a64_is_fp(t) ? A64_V0 : A64_X0;
 }
 
+unsigned result_regs(const Gen *g)
+{
+    const Tac_Type *rt = ret_type(g->tl->u.function.type);
+    int esize;
+    if (!rt || rt->kind == TAC_TYPE_VOID || indirect_result(rt))
+        return 0;
+    int n = hfa_of(rt, &esize);
+    if (n && a64_is_aggregate(rt))
+        return ((1u << n) - 1) << 2;
+    if (a64_is_ld(rt) || a64_is_fp(rt))
+        return 1u << 2;
+    if (a64_is_aggregate(rt) && a64_size(rt) > 8)
+        return 3;
+    return 1;
+}
+
 void gen_return(Gen *g, const Tac_Val *v)
 {
     if (v) {

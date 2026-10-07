@@ -12,7 +12,12 @@
 //   - mul + add is madd (mul + sub, msub); adjacent ldr/str of one base are ldp/stp,
 //     last;
 //   - cmp #0 + b.eq/b.ne is cbz/cbnz; a jump to the next label goes, a branch over a
-//     jump branches the other way, and code after a jump or return goes.
+//     jump branches the other way, and code after a jump or return goes;
+//   - the shifts and masks of a bit-field are ubfx/sbfx (a read), bfi (a store) and
+//     ubfiz (a value shifted into place); a movz/movk mask that is a bitmask immediate
+//     is one, a zero added or or-ed in is a move, and a uxtb/uxth after an ldrb/ldrh or
+//     before an strb/strh goes.
+// A return reads only the registers the function's result is in.
 // Code selection never carries a scratch register (x9-x17, v16-v31) past its block, so
 // whether a scratch value is read again is decided by looking to the end of the block;
 // any register is dead once an instruction writes it.  A move or computation in the W
@@ -20,8 +25,11 @@
 //
 #include <string.h>
 
+#include "bitops.h"
 #include "internal.h"
 #include "xalloc.h"
+
+static unsigned result; // the registers a return reads: bit 0 x0, 1 x1, 2 + k v<k>
 
 static bool is_call(A64_Op op)
 {
@@ -91,6 +99,12 @@ static bool is_mem_op(A64_Op op)
     }
 }
 
+// Whether `in` reads the register it writes: movk and bfi keep the bits they do not set.
+static bool reads_dest(A64_Op op)
+{
+    return op == A64_MOVK || op == A64_BFI;
+}
+
 // Whether operand `i` of `in` reads register r as a register (not as an address).
 static bool reads_operand(const A64_Instr *in, int i, int r)
 {
@@ -100,7 +114,7 @@ static bool reads_operand(const A64_Instr *in, int i, int r)
         return false;
     if (i > 0)
         return !(in->op == A64_LDP && i == 1);
-    return no_dest(in->op) || in->op == A64_MOVK;
+    return no_dest(in->op) || reads_dest(in->op);
 }
 
 static bool reads_as_address(const A64_Instr *in, int r)
@@ -118,7 +132,8 @@ static bool reads(const A64_Instr *in, int r)
     if (is_call(in->op) && is_arg(r))
         return true;
     if (in->op == A64_RET)
-        return r == A64_X0 || r == A64_X(1) || (r >= A64_V0 && r < A64_V(4)) || r == A64_LR;
+        return r == A64_LR || (r == A64_X0 && (result & 1)) || (r == A64_X(1) && (result & 2)) ||
+               (r >= A64_V0 && r < A64_V(4) && (result & (4u << (r - A64_V0))));
     for (int i = 0; i < A64_MAX_OPERANDS; i++)
         if (reads_operand(in, i, r))
             return true;
@@ -309,6 +324,26 @@ static bool fold_constant(A64_Instr **link)
     }
     if (reads_as_address(n, t))
         return false;
+    // A zero added, or-ed or xor-ed in, as a register, shifted or extended: a move.
+    if (v == 0 && (n->op == A64_ADD || n->op == A64_SUB || n->op == A64_ORR || n->op == A64_EOR) &&
+        o[0].kind == A64_OPND_REG && o[3].kind == A64_OPND_NONE) {
+        int keep = -1;
+        if (o[1].kind == A64_OPND_REG && o[1].reg != t && o[1].width == o[0].width &&
+            (o[2].kind == A64_OPND_REG || o[2].kind == A64_OPND_SHIFT ||
+             o[2].kind == A64_OPND_EXT) &&
+            o[2].reg == t)
+            keep = 1;
+        else if (n->op != A64_SUB && o[2].kind == A64_OPND_REG && o[2].reg != t &&
+                 o[2].width == o[0].width && o[1].kind == A64_OPND_REG && o[1].reg == t)
+            keep = 2;
+        if (keep > 0 && o[keep].reg != A64_ZR && (o[keep].reg != A64_SP || n->op == A64_ADD)) {
+            n->op = A64_MOV;
+            o[1]  = o[keep];
+            o[2]  = (A64_Operand){ 0 };
+            delete_at(link);
+            return true;
+        }
+    }
     bool regs3 = o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_REG &&
                  o[2].kind == A64_OPND_REG && o[3].kind == A64_OPND_NONE;
     A64_Operand imm, shift;
@@ -397,6 +432,8 @@ static bool can_substitute(const A64_Instr *in, int t, A64_Width w)
             return false;
         if (!reads_operand(in, i, t))
             continue;
+        if (i == 0 && reads_dest(in->op))
+            return false; // the destination would move with it
         if (w != A64_X && (o->kind != A64_OPND_REG || o->width != w))
             return false;
     }
@@ -447,7 +484,7 @@ static bool forward_move(A64_Instr **link)
 // could go to another register.
 static bool computes(const A64_Instr *in)
 {
-    if (no_dest(in->op) || is_call(in->op) || in->op == A64_MOVK || in->op == A64_LDP ||
+    if (no_dest(in->op) || is_call(in->op) || reads_dest(in->op) || in->op == A64_LDP ||
         in->opnd[0].kind != A64_OPND_REG || in->opnd[0].reg == A64_SP)
         return false;
     for (int i = 1; i < A64_MAX_OPERANDS; i++)
@@ -661,8 +698,9 @@ static bool pair(A64_Instr **link)
 static bool upper_unread(const A64_Instr *in, int r)
 {
     for (const A64_Instr *n = in->next; n; n = n->next) {
-        if (is_call(n->op) || n->op == A64_RET || is_branch(n->op) || n->op == A64_B ||
-            reads_as_address(n, r))
+        if (n->op == A64_RET)
+            return !reads(n, r);
+        if (is_call(n->op) || is_branch(n->op) || n->op == A64_B || reads_as_address(n, r))
             return false;
         for (int i = 0; i < A64_MAX_OPERANDS; i++)
             if (reads_operand(n, i, r) && (n->opnd[i].kind != A64_OPND_REG || n->opnd[i].width != A64_W))
@@ -670,6 +708,489 @@ static bool upper_unread(const A64_Instr *in, int r)
         if (writes(n, r))
             return true;
     }
+    return false;
+}
+
+// Bit-field instructions.  A rule rewrites a consumer `at` into ubfx/sbfx/bfi/ubfiz and
+// deletes the group of instructions of its block that fed it: shifts, masks, and the
+// mov/movz/movk of a mask that is no immediate.  The rewritten `at` reads the group's
+// sources where `at` is, so each must still hold there the value the group read; the
+// group's own writes go with it, so a source one of them overwrote after reading it
+// survives.  All at the width of `at`.
+enum { MAX_GROUP = 8, MAX_SOURCES = 2 };
+
+typedef struct {
+    A64_Instr *in[MAX_GROUP];
+    int n;
+    struct {
+        int reg;
+        const A64_Instr *reader; // the instruction of the group (or `at`) that read it
+    } src[MAX_SOURCES];
+    int nsrc;
+} Group;
+
+static A64_Block *cur_block; // the block being swept
+
+static bool in_group(const Group *g, const A64_Instr *in)
+{
+    for (int i = 0; i < g->n; i++)
+        if (g->in[i] == in)
+            return true;
+    return false;
+}
+
+static bool group_add(Group *g, A64_Instr *in)
+{
+    if (in_group(g, in))
+        return true;
+    if (g->n == MAX_GROUP)
+        return false;
+    g->in[g->n++] = in;
+    return true;
+}
+
+static void group_source(Group *g, int reg, const A64_Instr *reader)
+{
+    g->src[g->nsrc].reg    = reg;
+    g->src[g->nsrc].reader = reader;
+    g->nsrc++;
+}
+
+static bool is_gpr(const A64_Operand *o, A64_Width w)
+{
+    return o->kind == A64_OPND_REG && o->width == w && !a64_is_fpreg(o->reg) && o->reg != A64_SP;
+}
+
+// The last instruction of the block before `at` to write register `reg`, when it is a
+// plain computation of it at width `w`; NULL otherwise.
+static A64_Instr *last_def(const A64_Instr *at, int reg, A64_Width w)
+{
+    A64_Instr *d = NULL;
+    for (A64_Instr *in = cur_block->head; in && in != at; in = in->next)
+        if (writes(in, reg))
+            d = in;
+    if (!d || d->is_volatile || !computes(d) || d->opnd[0].reg != reg || d->opnd[0].width != w ||
+        is_mem_op(d->op))
+        return NULL;
+    return d;
+}
+
+// The value of operand `o` of an instruction of `g` (or `at`), of `bits` bits: an
+// immediate, or a register `at` sees loaded with a constant by mov, movz or movn and
+// any movk, added to `g`.
+static bool operand_value(const A64_Instr *at, const A64_Operand *o, int bits, uint64_t *v,
+                          Group *g)
+{
+    uint64_t mask = bits == 64 ? ~0ULL : (1ULL << bits) - 1;
+    if (o->kind == A64_OPND_IMM) {
+        *v = (uint64_t)o->imm & mask;
+        return true;
+    }
+    if (o->kind != A64_OPND_REG || a64_is_fpreg(o->reg) || o->reg == A64_SP || o->reg == A64_ZR)
+        return false;
+    uint64_t value = 0, known = 0; // the bits the movk seen so far set
+    for (const A64_Instr *stop = at;;) {
+        A64_Instr *d = NULL;
+        for (A64_Instr *in = cur_block->head; in && in != stop; in = in->next)
+            if (writes(in, o->reg))
+                d = in;
+        if (!d || d->is_volatile || d->opnd[0].kind != A64_OPND_REG || d->opnd[0].reg != o->reg ||
+            d->opnd[1].kind != A64_OPND_IMM || !group_add(g, d))
+            return false;
+        int shift = d->opnd[2].kind == A64_OPND_LSL ? (int)d->opnd[2].imm : 0;
+        if (d->opnd[2].kind != A64_OPND_NONE && d->opnd[2].kind != A64_OPND_LSL)
+            return false;
+        uint64_t part = (uint64_t)d->opnd[1].imm << shift;
+        switch (d->op) {
+        case A64_MOVK: {
+            uint64_t field = 0xffffULL << shift;
+            if (!(known & field))
+                value |= part & field;
+            known |= field;
+            stop = d;
+            continue;
+        }
+        case A64_MOV:
+        case A64_MOVZ:
+            value = (value & known) | (part & ~known);
+            break;
+        case A64_MOVN:
+            value = (value & known) | (~part & ~known);
+            break;
+        default:
+            return false;
+        }
+        *v = value & mask;
+        return true;
+    }
+}
+
+// Whether `at` may read the sources of `g` and the group go: every instruction of the
+// group comes before `at` in its block; what lies among them neither branches nor calls,
+// reads or writes what the group writes, nor writes a source; no member writes a source
+// before that source is read; and of what the group writes, nothing but `k1`/`k2` (what
+// the rewritten `at` writes; 0 for none) is read after `at`.
+static bool group_ok(const Group *g, const A64_Instr *at, int k1, int k2)
+{
+    for (int i = 0; i < g->n; i++)
+        if (g->in[i]->is_volatile)
+            return false;
+    for (int i = 0; i < g->nsrc; i++)
+        if (g->src[i].reg == A64_SP)
+            return false;
+    int found              = 0;
+    bool read[MAX_SOURCES] = { false };
+    for (const A64_Instr *in = cur_block->head; in != at; in = in->next) {
+        if (!in)
+            return false;
+        bool member = in_group(g, in);
+        if (member)
+            found++;
+        else if (found == 0)
+            continue;
+        if (!member) {
+            if (is_call(in->op) || is_branch(in->op) || in->op == A64_B || in->op == A64_RET)
+                return false;
+            for (int i = 0; i < g->n; i++) {
+                int r = g->in[i]->opnd[0].reg;
+                if (reads(in, r) || writes(in, r))
+                    return false;
+            }
+            for (int i = 0; i < g->nsrc; i++)
+                if (writes(in, g->src[i].reg))
+                    return false;
+            continue;
+        }
+        for (int i = 0; i < g->nsrc; i++)
+            if (g->src[i].reader == in)
+                read[i] = true;
+        for (int i = 0; i < g->nsrc; i++)
+            if (!read[i] && writes(in, g->src[i].reg))
+                return false;
+    }
+    if (found != g->n)
+        return false;
+    for (int i = 0; i < g->n; i++) {
+        int r = g->in[i]->opnd[0].reg;
+        if (r != k1 && r != k2 && !dies_after(at, r))
+            return false;
+    }
+    return true;
+}
+
+// Unlink and free the instructions of `g`.
+static void group_delete(const Group *g)
+{
+    for (A64_Instr **link = &cur_block->head; *link;)
+        if (in_group(g, *link))
+            delete_at(link);
+        else
+            link = &(*link)->next;
+}
+
+static void set_bitfield(A64_Instr *in, A64_Op op, int d, int s, A64_Width w, int lsb, int width)
+{
+    for (int i = 0; i < A64_MAX_OPERANDS; i++)
+        xfree(in->opnd[i].sym);
+    memset(in->opnd, 0, sizeof in->opnd);
+    in->op      = op;
+    in->opnd[0] = a64_reg(d, w);
+    in->opnd[1] = a64_reg(s, w);
+    in->opnd[2] = a64_imm(lsb);
+    in->opnd[3] = a64_imm(width);
+}
+
+// A new `mov d, s` at width w before *link.
+static void insert_move(A64_Instr **link, int d, int s, A64_Width w)
+{
+    A64_Instr *mv = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
+    mv->op        = A64_MOV;
+    mv->opnd[0]   = a64_reg(d, w);
+    mv->opnd[1]   = a64_reg(s, w);
+    mv->next      = *link;
+    *link         = mv;
+}
+
+static A64_Instr **link_of(const A64_Instr *at)
+{
+    A64_Instr **link = &cur_block->head;
+    while (*link != at)
+        link = &(*link)->next;
+    return link;
+}
+
+// The width of mask `m` = 2^w - 1, or 0 when it is not one.
+static int low_mask_width(uint64_t m)
+{
+    if (m == 0 || (m & (m + 1)))
+        return 0;
+    return popcount64(m);
+}
+
+// `op d, a, b` at width w on general registers.
+static bool is_op3(const A64_Instr *in, A64_Op op, A64_Width w)
+{
+    return in->op == op && !in->is_volatile && is_gpr(&in->opnd[0], w) && is_gpr(&in->opnd[1], w) &&
+           in->opnd[3].kind == A64_OPND_NONE;
+}
+
+// `lsl/lsr/asr d, a, #n` at width w, the amount maybe a constant in a register (added
+// to `g`): the register and the amount.
+static bool shift_by(const A64_Instr *in, A64_Op op, A64_Width w, int *a, int *n, Group *g)
+{
+    uint64_t v;
+    Group save = *g;
+    if (!is_op3(in, op, w) || in->opnd[1].reg == A64_ZR ||
+        (in->opnd[2].kind == A64_OPND_REG && in->opnd[2].reg == in->opnd[1].reg) ||
+        !operand_value(in, &in->opnd[2], 64, &v, g) || v == 0 || v >= (uint64_t)width_bits(w)) {
+        *g = save;
+        return false;
+    }
+    *a = in->opnd[1].reg;
+    *n = (int)v;
+    return true;
+}
+
+// A mask `and d, a, M` (either order) at width w, or uxtb/uxth (W): a and M.
+static bool mask_of(const A64_Instr *in, A64_Width w, int *a, uint64_t *m, Group *g)
+{
+    if ((in->op == A64_UXTB || in->op == A64_UXTH) && w == A64_W && is_gpr(&in->opnd[0], w) &&
+        is_gpr(&in->opnd[1], w) && in->opnd[2].kind == A64_OPND_NONE) {
+        *a = in->opnd[1].reg;
+        *m = in->op == A64_UXTB ? 0xff : 0xffff;
+        return true;
+    }
+    if (!is_op3(in, A64_AND, w))
+        return false;
+    Group save = *g;
+    if (operand_value(in, &in->opnd[2], width_bits(w), m, g)) {
+        *a = in->opnd[1].reg;
+        return true;
+    }
+    *g = save;
+    if (is_gpr(&in->opnd[2], w) && operand_value(in, &in->opnd[1], width_bits(w), m, g)) {
+        *a = in->opnd[2].reg;
+        return true;
+    }
+    *g = save;
+    return false;
+}
+
+// `at` = `and d, t, #(2^w - 1)` fed by `lsr t, a, #p`: `ubfx d, a, #p, #w`.  `at` =
+// `lsr`/`asr d, t, #r` fed by `lsl t, a, #l`: r >= l, `ubfx`/`sbfx d, a, #(r - l),
+// #(bits - r)`; r < l (lsr), `ubfiz d, a, #(l - r), #(bits - l)`.  `at` = `lsl d, t, #p`
+// fed by a mask `and t, a, #(2^w - 1)`: `ubfiz d, a, #p, #w`.
+static bool fold_extract(A64_Instr *at)
+{
+    A64_Width w = at->opnd[0].width;
+    if ((w != A64_W && w != A64_X) || !is_gpr(&at->opnd[0], w))
+        return false;
+    int bits = width_bits(w), d = at->opnd[0].reg, a, t, n, s;
+    Group g = { 0 };
+    uint64_t m;
+    if (at->op == A64_AND && mask_of(at, w, &t, &m, &g)) {
+        int fw = low_mask_width(m);
+        A64_Instr *f;
+        if (!fw || !(f = last_def(at, t, w)) || !shift_by(f, A64_LSR, w, &a, &n, &g) ||
+            !group_add(&g, f))
+            return false;
+        group_source(&g, a, f);
+        if (!group_ok(&g, at, d, 0))
+            return false;
+        set_bitfield(at, A64_UBFX, d, a, w, n, fw < bits - n ? fw : bits - n);
+        group_delete(&g);
+        return true;
+    }
+    if (shift_by(at, A64_LSL, w, &t, &n, &g)) {
+        A64_Instr *f = last_def(at, t, w);
+        if (!f || !mask_of(f, w, &a, &m, &g) || !low_mask_width(m) || !group_add(&g, f))
+            return false;
+        int fw = low_mask_width(m);
+        group_source(&g, a, f);
+        if (!group_ok(&g, at, d, 0))
+            return false;
+        set_bitfield(at, A64_UBFIZ, d, a, w, n, fw < bits - n ? fw : bits - n);
+        group_delete(&g);
+        return true;
+    }
+    bool arith = at->op == A64_ASR;
+    if (!shift_by(at, arith ? A64_ASR : A64_LSR, w, &t, &n, &g))
+        return false;
+    A64_Instr *f = last_def(at, t, w);
+    if (!f || !shift_by(f, A64_LSL, w, &a, &s, &g) || (arith && n < s))
+        return false;
+    group_add(&g, f);
+    group_source(&g, a, f);
+    if (!group_ok(&g, at, d, 0))
+        return false;
+    if (n >= s)
+        set_bitfield(at, arith ? A64_SBFX : A64_UBFX, d, a, w, n - s, bits - n);
+    else
+        set_bitfield(at, A64_UBFIZ, d, a, w, s - n, bits - s);
+    group_delete(&g);
+    return true;
+}
+
+// The field value `v` placed at bit `p` as operand `o` of `at`: `lsl y, z, #p` of a mask
+// `and z, v, #(2^fw - 1)`, or the mask alone (p = 0), or the shift alone when it drops
+// the bits above the field (fw = bits - p).  Its instructions join `g`.
+static bool placed_field(const A64_Instr *at, const A64_Operand *o, A64_Width w, int *v, int *p,
+                         int *fw, Group *g)
+{
+    int bits                = width_bits(w), z;
+    *p                      = 0;
+    const A64_Instr *reader = at;
+    if (!is_gpr(o, w))
+        return false;
+    A64_Instr *y = last_def(at, o->reg, w);
+    if (!y)
+        return false;
+    if (shift_by(y, A64_LSL, w, &z, p, g)) {
+        if (!group_add(g, y))
+            return false;
+        reader = y;
+    } else {
+        z = o->reg; // the mask, unshifted
+    }
+    A64_Instr *mk = last_def(reader, z, w);
+    uint64_t m;
+    Group save = *g;
+    if (mk && group_add(g, mk) && mask_of(mk, w, v, &m, g) && (*fw = low_mask_width(m)) != 0) {
+        if (*p + *fw > bits)
+            *fw = bits - *p;
+        group_source(g, *v, mk);
+        return true;
+    }
+    *g = save;
+    if (*p == 0)
+        return false;
+    *v  = z; // no mask: the shift drops the bits above
+    *fw = bits - *p;
+    group_source(g, z, reader);
+    return true;
+}
+
+// `at` = `orr r, x, y`, x = `and x, u, #keep` clearing a field, y the value placed
+// there: bfi into r after `mov r, u` (which the computation of u may then take over), or
+// into u when r is v.
+static bool fold_insert(A64_Instr *at)
+{
+    A64_Width w = at->opnd[0].width;
+    if ((w != A64_W && w != A64_X) || !is_op3(at, A64_ORR, w) || !is_gpr(&at->opnd[2], w))
+        return false;
+    int bits = width_bits(w), r = at->opnd[0].reg;
+    uint64_t all = bits == 64 ? ~0ULL : (1ULL << bits) - 1;
+    for (int side = 1; side <= 2; side++) {
+        const A64_Operand *xo = &at->opnd[side], *yo = &at->opnd[3 - side];
+        Group g      = { 0 };
+        A64_Instr *x = last_def(at, xo->reg, w);
+        uint64_t keep;
+        if (!x || !is_op3(x, A64_AND, w) || !group_add(&g, x) ||
+            !operand_value(x, &x->opnd[2], bits, &keep, &g))
+            continue;
+        int u = x->opnd[1].reg, v, p, fw;
+        if (!placed_field(at, yo, w, &v, &p, &fw, &g))
+            continue;
+        uint64_t field = (fw == 64 ? ~0ULL : ((1ULL << fw) - 1)) << p;
+        if (keep != (~field & all) || u == v || u == A64_ZR || v == A64_SP)
+            continue;
+        group_source(&g, u, x);
+        bool in_u = r == v;
+        if (in_u && !dies_after(at, u))
+            continue;
+        if (!group_ok(&g, at, r, in_u ? u : 0))
+            continue;
+        group_delete(&g);
+        if (in_u) {
+            set_bitfield(at, A64_BFI, u, v, w, p, fw);
+            insert_move(&at->next, r, u, w);
+        } else {
+            A64_Instr **link = link_of(at);
+            set_bitfield(at, A64_BFI, r, v, w, p, fw);
+            if (r != u)
+                insert_move(link, r, u, w);
+        }
+        return true;
+    }
+    return false;
+}
+
+// `at` = `and`/`orr`/`eor d, a, t`, t a constant from movz/movk (or mov/movn) that is a
+// bitmask immediate: the immediate form (fold_constant takes only a single mov).
+static bool fold_wide_constant(A64_Instr *at)
+{
+    A64_Width w = at->opnd[0].width;
+    if ((at->op != A64_AND && at->op != A64_ORR && at->op != A64_EOR) ||
+        (w != A64_W && w != A64_X) || !is_op3(at, at->op, w) || !is_gpr(&at->opnd[2], w))
+        return false;
+    Group g = { 0 };
+    uint64_t v;
+    int bits = width_bits(w);
+    if (!operand_value(at, &at->opnd[2], bits, &v, &g) || g.n < 2 || !bitmask_imm(v, bits) ||
+        at->opnd[1].reg == at->opnd[2].reg)
+        return false;
+    group_source(&g, at->opnd[1].reg, at);
+    if (!group_ok(&g, at, at->opnd[0].reg, 0))
+        return false;
+    at->opnd[2] = a64_imm(bits == 32 ? (int64_t)(int32_t)v : (int64_t)v);
+    group_delete(&g);
+    return true;
+}
+
+// `uxtb`/`uxth t, a` stored by `strb`/`strh t` at its last read: a stored instead.  And
+// a uxtb/uxth (or uxtb of a halfword) of what an ldrb/ldrh just loaded, already zero
+// extended: gone, or a move.
+static bool fold_narrow(A64_Instr **link)
+{
+    A64_Instr *at = *link;
+    if (at->is_volatile)
+        return false;
+    if ((at->op == A64_STRB || at->op == A64_STRH) && is_gpr(&at->opnd[0], A64_W) &&
+        at->opnd[0].reg != A64_ZR) {
+        int t        = at->opnd[0].reg;
+        A64_Instr *x = NULL;
+        for (A64_Instr *in = cur_block->head; in != at; in = in->next)
+            if (writes(in, t))
+                x = in;
+        if (!x || x->op != (at->op == A64_STRB ? A64_UXTB : A64_UXTH) ||
+            !is_gpr(&x->opnd[1], A64_W) || reads_as_address(at, t))
+            return false;
+        Group g = { 0 };
+        group_add(&g, x);
+        group_source(&g, x->opnd[1].reg, x);
+        if (!group_ok(&g, at, 0, 0))
+            return false;
+        at->opnd[0].reg = x->opnd[1].reg;
+        group_delete(&g);
+        return true;
+    }
+    A64_Instr *ext = at->next;
+    if ((at->op != A64_LDRB && at->op != A64_LDRH) || !ext ||
+        (ext->op != A64_UXTB && ext->op != A64_UXTH) || ext->is_volatile ||
+        (at->op == A64_LDRH && ext->op == A64_UXTB) || !is_gpr(&at->opnd[0], A64_W) ||
+        !is_gpr(&ext->opnd[0], A64_W) || !is_gpr(&ext->opnd[1], A64_W) ||
+        ext->opnd[1].reg != at->opnd[0].reg)
+        return false;
+    if (ext->opnd[0].reg == ext->opnd[1].reg) {
+        delete_at(&at->next);
+    } else {
+        ext->op = A64_MOV;
+    }
+    return true;
+}
+
+// One bit-field rewrite in block `b`; true when something changed (the block is then
+// to be swept again: instructions before the one rewritten may be gone).  Inserts
+// first: an extract would take the masks out of their shape.
+static bool fold_bitfields(A64_Block *b)
+{
+    cur_block = b;
+    for (A64_Instr *in = b->head; in; in = in->next)
+        if (fold_insert(in))
+            return true;
+    for (A64_Instr **link = &b->head; *link; link = &(*link)->next)
+        if (fold_extract(*link) || fold_wide_constant(*link) || fold_narrow(link))
+            return true;
     return false;
 }
 
@@ -782,12 +1303,15 @@ static bool rewrite_block_end(A64_Block *b)
 
 // The rewrites to a fixed point, then the pairing of loads and stores, which would
 // hide a store from the deletion of its reload.
-void a64_peephole(A64_Func *fn)
+void a64_peephole(A64_Func *fn, unsigned result_in)
 {
+    result       = result_in;
     bool changed = true;
     while (changed) {
         changed = false;
         for (A64_Block *b = fn->blocks; b; b = b->next) {
+            while (fold_bitfields(b))
+                changed = true;
             for (A64_Instr **link = &b->head; *link;) {
                 if (rewrite(link))
                     changed = true;
