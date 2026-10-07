@@ -87,6 +87,8 @@ and removed on exit.
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
 | `-E` | Preprocess only; write to `-o` or `.i` |
+| `-P` | With `-E`, no line markers |
+| `-x LANG` | The language of every input, whatever its suffix: `c`, `assembler-with-cpp` (as `.S`), `assembler` (as `.s`), or `none` (by suffix) |
 | `-o file` | Set the output file name (default `a.out` for a link) |
 | `-v` | Echo each sub-command before running it |
 | `-Dname[=v]`, `-Uname`, `-Ipath` | Passed to the preprocessor (`-D name` is folded into `-Dname`) |
@@ -95,6 +97,7 @@ and removed on exit.
 | `-nostdinc` | Do not add the target's standard include directory |
 | `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries; a hosted target passes it to its C compiler and drops `libvcc.a` |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
+| `-W…`, `-f…`, `-w`, `-std=…`, `-pedantic`, `-pipe`, `-arch A`, `-isysroot D` | Accepted and ignored, so that a build system written for GCC or clang (CMake among them) can drive `vcc` |
 
 The last stage is chosen by `-E`, `-S` or `-c`. With none of them, the objects are linked.
 Output names derive from the input's base name in the current directory (`src/foo.c` →

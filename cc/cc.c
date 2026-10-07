@@ -271,6 +271,7 @@ static bool opt_S;      // -S: compile to assembly only
 static bool opt_E;      // -E: preprocess only
 static bool opt_g;      // -g: request debug info (a no-op; README.md, "Reserved options")
 static bool opt_O;      // -O: request optimization (a no-op; README.md, "Reserved options")
+static char opt_x;      // -x LANG: the input language for every file, as its suffix ('c', 'S', 's'); 0 by suffix
 static bool opt_v;         // -v: echo each sub-command before running it
 static bool opt_nostdlib;  // -nostdlib: skip the library dir, crt0.o and the implicit -l's
 static bool opt_nostdinc;  // -nostdinc: skip the target's standard include dir
@@ -837,7 +838,7 @@ static int run_as(const char *in, const char *out)
 //
 static int compile_one(const char *src)
 {
-    char suf = suffix_of(src);
+    char suf = opt_x ? opt_x : suffix_of(src);
 
     // A .s file only needs assembling; a .o file is already an object.
     if (suf == 's') {
@@ -1104,6 +1105,8 @@ static void usage(void)
     printf("    -Sbemsh         Like -S, but emit Bemsh-dialect assembly (besm6)\n");
     printf("    -Smadlen        Like -S, but emit Madlen-dialect assembly (besm6)\n");
     printf("    -E              Preprocess only; write to output or .i\n");
+    printf("    -P              With -E, no line markers\n");
+    printf("    -x LANG         Input language: c, assembler-with-cpp, assembler or none\n");
     printf("    -o file         Set output file name\n");
     printf("    -O              Optimize (reserved; currently a no-op)\n");
     printf("    -g              Emit debug info (reserved; currently a no-op)\n");
@@ -1116,6 +1119,8 @@ static void usage(void)
     printf("    -T file         Linker script instead of the standard one (not besm6)\n");
     printf("    -nostdlib       Do not use the standard library dir, crt0.o or the implicit libraries\n");
     printf("    -nostdinc       Do not add the standard include directory\n");
+    printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
+    printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf("Inputs are dispatched by suffix: .c (compile), "
            ".S (preprocess + assemble), .s (assemble), .o and .a (link).\n");
     exit(1);
@@ -1156,6 +1161,37 @@ int main(int argc, char *argv[])
                 error("unknown option %s", arg);
                 usage();
             }
+            continue;
+        }
+        // Options of GCC and clang that build systems pass (CMake among them):
+        // accepted and ignored, those with a value taking it along.
+        if (strcmp(arg, "-arch") == 0 || strcmp(arg, "-isysroot") == 0) {
+            if (i + 1 < argc)
+                i++;
+            continue;
+        }
+        if (strcmp(arg, "-x") == 0 && i + 1 < argc) {
+            const char *lang = argv[++i];
+            if (strcmp(lang, "c") == 0)
+                opt_x = 'c';
+            else if (strcmp(lang, "assembler-with-cpp") == 0)
+                opt_x = 'S';
+            else if (strcmp(lang, "assembler") == 0)
+                opt_x = 's';
+            else if (strcmp(lang, "none") == 0)
+                opt_x = 0;
+            else {
+                error("unknown language %s", lang);
+                usage();
+            }
+            continue;
+        }
+        if (strcmp(arg, "-P") == 0) { // no line markers, for the preprocessor
+            vec_push(&cppflags, arg);
+            continue;
+        }
+        if (arg[1] == 'W' || arg[1] == 'f' || arg[1] == 'w' || strncmp(arg, "-std=", 5) == 0 ||
+            strncmp(arg, "-pedantic", 9) == 0 || strcmp(arg, "-pipe") == 0) {
             continue;
         }
         switch (arg[1]) {
