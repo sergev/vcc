@@ -85,6 +85,23 @@ if(CMAKE_C_COMPILER_ID)
 else()
     find_program(VCC_HOST_CC NAMES cc gcc clang)
 endif()
+
+#
+# Built by vcc on Linux: its code is not position-independent and calls __va_arg in
+# libvcc.a, both of which vcc's own links take care of; the C++ tests, linked by the
+# C++ compiler, need them too.
+#
+if(NOT CMAKE_C_COMPILER_ID AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    get_filename_component(vcc_bin ${CMAKE_C_COMPILER} DIRECTORY)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+        set(vcc_host aarch64-linux)
+    else()
+        set(vcc_host x86_64-linux)
+    endif()
+    add_link_options("$<$<LINK_LANGUAGE:CXX>:-no-pie>")
+    set(CMAKE_CXX_STANDARD_LIBRARIES
+        "${CMAKE_CXX_STANDARD_LIBRARIES} ${vcc_bin}/../share/vcc/${vcc_host}/lib/libvcc.a")
+endif()
 set(BESM6_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/besm6/include)
 set(RISCV_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv64/include)
 set(RISCV32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/riscv32/include)
