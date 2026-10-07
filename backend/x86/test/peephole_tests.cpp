@@ -105,11 +105,28 @@ int pick(int c, int a, int b) { int x; if (c) x = a; else x = b; return x; }
 )")));
 }
 
-// A constant is made conditional through r11, as cmov takes no immediate.
+// A constant is made conditional through r11, as cmov takes no immediate.  The cmov
+// is 64-bit: a 32-bit one clears the upper half even when the condition is false.
 TEST_F(X86Test, CmovConstant)
 {
-    EXPECT_EQ("testl %edi, %edi\nmovl $0, %r11d\ncmovl %r11d, %edi\nmovl %edi, %eax\nret\n",
+    EXPECT_EQ("testl %edi, %edi\nmovl $0, %r11d\ncmovl %r11, %rdi\nmovl %edi, %eax\nret\n",
               Code(CompileToX86("int clampzero(int x) { return x < 0 ? 0 : x; }")));
+}
+
+// A null pointer through r11 keeps the other pointer's upper half.
+TEST_F(X86Test, CmovNullPointer)
+{
+    EXPECT_EQ("testl %esi, %esi\nmovl $0, %r11d\ncmove %r11, %rdi\nmovq %rdi, %rax\nret\n",
+              Code(CompileToX86("char *f(char *a, int c) { return c ? a : 0; }")));
+}
+
+// A zero extension into a 64-bit value stays a branch: its 32-bit cmov would clear
+// the upper half of the value kept.
+TEST_F(X86Test, NoCmovZeroExtend)
+{
+    std::string code = Code(CompileToX86(
+        "unsigned long f(unsigned long d, unsigned u, int c) { if (c) d = u; return d; }"));
+    EXPECT_EQ(std::string::npos, code.find("cmov")) << code;
 }
 
 // A diamond whose arm loads through a pointer: that load would be made on both paths,
@@ -162,7 +179,9 @@ TEST_F(X86Test, FpNotEqualBranch)
 TEST_F(X86Test, RunPeephole)
 {
     SKIP_IF_NO_X86_TOOLS();
-    EXPECT_EQ("7 -3 7 0 5 9\n1 0 0 1 1 0 0 1\n10 30 6\n", CompileAndRunX86(R"(
+    EXPECT_EQ("7 -3 7 0 5 9\n1 0 0 1 1 0 0 1\n10 30 6\n"
+              "123456789a 7 123456789a 5 0 1 1\n",
+              CompileAndRunX86(R"(
 #include <stdio.h>
 
 int max(int a, int b) { return a > b ? a : b; }
@@ -180,6 +199,10 @@ struct s { int a, b; };
 int get(struct s *p, long i) { return p[i].b; }
 long sum(long *p, int n) { long s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
 
+unsigned long zext(unsigned long d, unsigned u, int c) { if (c) d = u; return d; }
+unsigned long five(unsigned long d, int c) { if (c) d = 5; return d; }
+char *orzero(char *a, int c) { return c ? a : 0; }
+
 int main(void)
 {
     double nan = 0.0 / 0.0;
@@ -191,6 +214,10 @@ int main(void)
     printf("%d %d %d %d %d %d %d %d\n", lt(1, 2), lt(2, 1), lt(nan, 1), eq(1, 1), ne(1, 2),
            eq(nan, nan), ne(1, 1), ne(nan, nan));
     printf("%ld %d %d\n", sum(w, 4), get(v, 2) * 3, get(v, 1));
+    unsigned long big = 0x123456789aUL;
+    char buf[1];
+    printf("%lx %lx %lx %lx %lx %d %d\n", zext(big, 7, 0), zext(big, 7, 1), five(big, 0),
+           five(big, 1), five(0, 0), orzero(buf, 1) == buf, orzero(buf, 0) == 0);
     return 0;
 }
 )"));

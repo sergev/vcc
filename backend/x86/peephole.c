@@ -1141,10 +1141,13 @@ static bool const_move(const X86_Instr *in, int d)
 }
 
 // Constant move `in` becomes cmov of r11 (`cc`), loaded with the constant first: the
-// load, returned, goes ahead of it.  r11 must be dead there.
+// load, returned, goes ahead of it.  r11 must be dead there.  A 32-bit move clears the
+// upper half, so its cmov takes all 64 bits of r11: a 32-bit cmov would clear D's
+// upper half even when the condition is false.
 static X86_Instr *cmov_from_r11(X86_Instr *in, int cc)
 {
     X86_Width w   = in->op == X86_XOR ? X86_L : in->width;
+    X86_Width cw  = w == X86_L ? X86_Q : w;
     int64_t k     = in->op == X86_XOR ? 0 : in->opnd[0].imm;
     X86_Instr *ld = xalloc(sizeof(X86_Instr), __func__, __FILE__, __LINE__);
     ld->op        = X86_MOV;
@@ -1153,9 +1156,10 @@ static X86_Instr *cmov_from_r11(X86_Instr *in, int cc)
     ld->opnd[1]   = x86_reg(X86_R11, w);
     in->op        = X86_CMOV;
     in->cond      = cc;
-    in->width     = w;
-    set_operand(in, 0, x86_reg(X86_R11, w));
-    set_operand(in, 1, x86_reg(in->opnd[1].reg, w));
+    in->width     = cw;
+    in->zext      = false;
+    set_operand(in, 0, x86_reg(X86_R11, cw));
+    set_operand(in, 1, x86_reg(in->opnd[1].reg, cw));
     ld->next = in;
     return ld;
 }
@@ -1231,8 +1235,9 @@ static bool make_cmov(X86_Func *fn)
                 continue;
             int d  = mv->opnd[1].reg;
             int cc = j->cond;
-            // A triangle.
-            if (mv == box->tail && jumps_to(j, after->label) &&
+            // A triangle.  Not a zero extension: its 32-bit cmov would clear the upper
+            // half of the 64-bit value D keeps when the condition is false.
+            if (mv == box->tail && jumps_to(j, after->label) && !mv->zext &&
                 (cmov_source(mv) || (r11_free && const_move(mv, d)))) {
                 detach_from(box, mv);
                 delete_instr(a, j);

@@ -150,7 +150,7 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
         if (sign && w == X86_Q)
             emit2(g, X86_MOVSL, X86_Q, m, x86_reg(r, X86_Q));
         else
-            emit2(g, X86_MOV, X86_L, m, x86_reg(r, X86_L)); // the upper half zero
+            emit2(g, X86_MOV, X86_L, m, x86_reg(r, X86_L))->zext = w == X86_Q; // the upper half zero
         break;
     default:
         load_val(g, r, src);

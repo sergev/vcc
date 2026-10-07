@@ -194,7 +194,8 @@ typedef struct X86_Instr {
     X86_Cond cond;   // the condition, for a conditional one
     X86_Operand opnd[X86_MAX_OPERANDS];
     bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
-    uint32_t wide;    // a call: bit r for each general register whose 64 bits are an argument
+    bool zext;        // a 32-bit move whose zero upper half is part of a 64-bit value
+    uint32_t wide;   // a call: bit r for each general register whose 64 bits are an argument
 } X86_Instr;
 
 typedef struct X86_Block {
