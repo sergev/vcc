@@ -977,6 +977,7 @@ TEST_F(CcDriver, LinkAndRunRiscv64)
                     lib + "/crt0.o", "t.c", lib + "/libc.a" }),
               0)
         << Stderr();
+    EXPECT_NE(access(Path("t.o").c_str(), F_OK), 0) << "the object is a temporary";
     EXPECT_EQ(RunQemu(Path("t.elf")), "hello 42\n");
 }
 

@@ -101,7 +101,9 @@ and removed on exit.
 
 The last stage is chosen by `-E`, `-S` or `-c`. With none of them, the objects are linked.
 Output names derive from the input's base name in the current directory (`src/foo.c` →
-`foo.o`). `-o` with `-c`, `-S` or `-E` takes a single input.
+`foo.o`). When linking, the objects of the sources are temporaries, removed afterwards,
+as with gcc: `vcc -o t t.c` leaves no `t.o`. `-o` with `-c`, `-S` or `-E` takes a single
+input.
 
 The exit status is 0 on success and 1 on any failure. One failing file does not stop
 the others from compiling, but it skips the link.

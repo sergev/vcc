@@ -21,7 +21,8 @@
 //
 // Selection of the last stage to run is controlled by -E (stop after cpp),
 // -S (stop after codegen, emit assembly) and -c (stop after as, emit object).
-// With none of those, the objects are linked into an executable.  On the BESM-6,
+// With none of those, the objects are linked into an executable; the objects
+// compiled from sources are then temporaries, as with gcc.  On the BESM-6,
 // -Sbemsh and -Smadlen behave like -S but also select the assembly dialect.
 //
 // THE INSTALLATION IS RELOCATABLE.  Our own passes are looked up in the directory
@@ -831,6 +832,17 @@ static int run_as(const char *in, const char *out)
 }
 
 //
+// The object file for `src`: with -c, the -o name or foo.o in the current
+// directory; when linking, a temporary, removed on exit (as gcc does).
+//
+static char *object_name(const char *src)
+{
+    if (!opt_c)
+        return make_temp("o");
+    return own(outfile ? strdup(outfile) : replace_suffix(src, "o"));
+}
+
+//
 // Compile one source file through the pipeline up to the stage selected by the
 // -E/-S/-c flags.  A .c file runs the full pipeline; a .S file is preprocessed
 // assembly (cpp -> as); a .s file only needs assembling.  A produced object file
@@ -845,7 +857,7 @@ static int compile_one(const char *src)
     if (suf == 's') {
         if (opt_E || opt_S)
             return 0;
-        char *obj = own(outfile && opt_c ? strdup(outfile) : replace_suffix(src, "o"));
+        char *obj = object_name(src);
         int rc = run_as(src, obj);
         vec_push(&objects, obj);
         return rc;
@@ -877,7 +889,7 @@ static int compile_one(const char *src)
             return 0;
 
         // Assemble the preprocessed output: .s -> .o
-        char *obj = own(outfile && opt_c ? strdup(outfile) : replace_suffix(src, "o"));
+        char *obj = object_name(src);
         int rc = run_as(sfile, obj);
         vec_push(&objects, obj);
         return rc;
@@ -921,7 +933,7 @@ static int compile_one(const char *src)
         return 0;
 
     // Assemble: .s -> .o
-    char *obj = own(outfile && opt_c ? strdup(outfile) : replace_suffix(src, "o"));
+    char *obj = object_name(src);
     int rc = run_as(asmfile, obj);
     vec_push(&objects, obj);
     return rc;
