@@ -54,7 +54,11 @@ static const Target targets[] = {
       NULL,     // va_class: every variadic argument is on the stack, va_arg a pointer walk
       24,       // ldouble_mant_dig: long double is double, IEEE single
       0,        // hw_sqrt: no FP hardware
-      24 },     // double_mant_dig: double is IEEE single
+      24,       // double_mant_dig: double is IEEE single
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      16 },     // bitfield_access_bits: clang's access units, at most an int
 
     { "msp430",
       1, 1,   // _Bool

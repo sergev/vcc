@@ -4,6 +4,7 @@
 // returns the number of the first check that failed, or 0.  Built for both widths.
 //
 #include "riscv_test.h"
+#include "../../common/test/bitfield_interop.h"
 
 static const std::string kDecls = R"(
 struct I2 { long a, b; };
@@ -228,5 +229,23 @@ TEST_F(RiscvTest, InteropClangCallsUs)
     SKIP_IF_NO_RISCV_TOOLS();
     SKIP_IF_NO_RISCV_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kCallee, kCaller));
+    EXPECT_EQ(0, exit_status);
+}
+
+// Bit-field structures as arguments, results and shared data, ours calling Clang's.
+TEST_F(RiscvTest, RunBitfieldsWeCallClang)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCaller, kBitfieldCallee));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The same, Clang calling ours.
+TEST_F(RiscvTest, RunBitfieldsClangCallsUs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
     EXPECT_EQ(0, exit_status);
 }

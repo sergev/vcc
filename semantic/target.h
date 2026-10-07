@@ -110,6 +110,11 @@ typedef struct {
     // then allocated from the most significant bit of their storage unit.
     int big_endian;
     BitfieldLayout bitfield_layout;
+    // A struct's TAC type lists clang's access units of its bit-fields rather than ours
+    // (AVR, whose ABI passes a structure flattened into them): a run of bit-fields up to
+    // another member or `:0`, split before a field on a byte boundary when the unit would
+    // grow past this many bits.  0 = our storage units.
+    int bitfield_access_bits;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

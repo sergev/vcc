@@ -6,6 +6,7 @@
 // our code under newlib.
 //
 #include "mmix_test.h"
+#include "../../common/test/bitfield_interop.h"
 
 namespace {
 
@@ -479,5 +480,21 @@ int main(void)
 }
 )");
     EXPECT_EQ("", Run(ours, "crt0.o", &gcc, { "-O2" }, ".gcc"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// Bit-field structures as arguments, results and shared data, ours calling Gcc's.
+TEST_F(MmixTest, RunBitfieldsWeCallGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCaller.c_str()), "crt0.o", &kBitfieldCallee, { "-O2" }, ".gcc"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The same, Gcc calling ours.
+TEST_F(MmixTest, RunBitfieldsGccCallsUs)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCallee.c_str()), "crt0.o", &kBitfieldCaller, { "-O2" }, ".gcc"));
     EXPECT_EQ(0, exit_status);
 }

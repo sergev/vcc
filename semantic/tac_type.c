@@ -45,10 +45,19 @@ static void add_member(Tac_Type *ts, const char *name, int offset, Tac_Type *typ
 // classifiers see bit-fields as integers.
 static void add_unit_member(Tac_Type *ts, int offset, int size)
 {
-    Type ut        = { .kind = unsigned_kind_of_size(size) };
-    Tac_Type *type = convert_type(&ut, true);
+    Tac_Type *type;
+    TypeKind k = unsigned_kind_of_size(size);
+    if (k != TYPE_VOID) {
+        Type ut = { .kind = k };
+        type    = convert_type(&ut, true);
+    } else {
+        // An access unit of an odd size (clang's i24, i40...): its bytes.
+        type                   = tac_new_type(TAC_TYPE_ARRAY);
+        type->u.array.elem_type = tac_new_type(TAC_TYPE_UCHAR);
+        type->u.array.size      = size;
+    }
     for (const Tac_Member *m = ts->u.structure.members; m; m = m->next) {
-        if (!m->name && m->offset == offset && m->type->kind == type->kind) {
+        if (!m->name && m->offset == offset && tac_compare_type(m->type, type)) {
             tac_free_type(type);
             return;
         }
@@ -144,9 +153,12 @@ static Tac_Type *convert_type(const Type *t, bool deep)
         ts->u.structure.alignment = d ? d->alignment : t->u.struct_t.cached_align;
         ts->u.structure.is_union = t->kind == TYPE_UNION;
         if (deep && d) {
+            bool access = target_config && target_config->bitfield_access_bits;
             for (const FieldDef *f = d->members; f; f = f->next) {
                 if (!f->bf.width)
                     add_member(ts, f->name, f->offset, convert_type(f->type, true));
+                else if (access)
+                    add_unit_member(ts, f->access_offset, f->access_size);
                 else if (!f->bf.bytewise)
                     add_unit_member(ts, f->offset, f->bf.unit_size);
             }

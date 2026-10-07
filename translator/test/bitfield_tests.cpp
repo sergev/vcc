@@ -135,3 +135,20 @@ TEST_F(TranslateTestX86, BitfieldStorageUnitMembers)
     EXPECT_EQ(Members(t), "c@0:schar @0:uint @1:uchar d@8:double @16:uchar");
     tac_free_toplevel(tac);
 }
+
+// On AVR a struct's TAC type lists clang's bit-field access units, as clang's IR types
+// show them -- { i40, i8, i16, [2 x i16] }, { i16, i16 }, { i8, i8 } -- since the ABI
+// passes a structure flattened into them.
+TEST_F(TranslateTestAvr, BitfieldAccessUnits)
+{
+    Tac_TopLevel *tac = CompileUnit(R"(
+        struct W { long q : 30; int r : 7; char s; short t : 11; int u[2]; };
+        struct T1 { int a : 4; int b : 4; int c : 8; int d : 12; };
+        struct T3 { int a : 3; int : 0; int b : 3; };
+        int f(struct W w, struct T1 t1, struct T3 t3) { return w.s + t1.a + t3.b; }
+    )");
+    EXPECT_EQ(Members(SymbolType(tac, "f", "%w")), "@0:[5]uchar s@5:schar @6:uint u@8:[2]int");
+    EXPECT_EQ(Members(SymbolType(tac, "f", "%t1")), "@0:uint @2:uint");
+    EXPECT_EQ(Members(SymbolType(tac, "f", "%t3")), "@0:uchar @1:uchar");
+    tac_free_toplevel(tac);
+}

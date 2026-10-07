@@ -4,6 +4,7 @@
 // calling the other's.
 //
 #include "arm32_test.h"
+#include "../../common/test/bitfield_interop.h"
 
 namespace {
 
@@ -310,5 +311,23 @@ int main(void)
     return 0;
 })";
     EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
+    EXPECT_EQ(0, exit_status);
+}
+
+// Bit-field structures as arguments, results and shared data, ours calling Clang's.
+TEST_F(Arm32Test, RunBitfieldsWeCallClang)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCaller, kBitfieldCallee));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The same, Clang calling ours.
+TEST_F(Arm32Test, RunBitfieldsClangCallsUs)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    SKIP_IF_NO_ARM32_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
     EXPECT_EQ(0, exit_status);
 }

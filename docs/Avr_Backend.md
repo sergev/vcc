@@ -154,8 +154,11 @@ below Y             the call-saved registers in use, pushed after Y is set up
   sender and again as the receiver.
 - **Structures** are passed as clang passes them, which is not as one block: a structure
   is **flattened** into its top-level members, each an argument of its own rounded up to
-  a pair (a nested structure, a union, an array, or the storage unit of bit-fields stays
-  one piece). So `struct { char a; int b; int c; }` goes `a` in `r24`, `b` in `r23:r22`,
+  a pair (a nested structure, a union, an array, or an access unit of bit-fields stays
+  one piece). clang's access units of bit-fields are a run of them, split before one on a
+  byte boundary that would make the unit wider than 16 bits; the struct's TAC type lists
+  them (`Target.bitfield_access_bits`), so `struct { long q : 30; int r : 7; char s; }`
+  passes `q` and `r` as one 5-byte piece. So `struct { char a; int b; int c; }` goes `a` in `r24`, `b` in `r23:r22`,
   `c` in `r21:r20`, and a structure can be split between registers and the stack.
 - **Stack arguments** lie above the return address in the order of the parameter list,
   unaligned; the caller pushes them last first and removes them after the call.

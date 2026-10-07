@@ -17,6 +17,10 @@ typedef struct FieldDef {
     Type *type;            // Member type (Type* from ast.h)
     int offset;            // Offset within the struct (in bytes); a bit-field's storage unit
     BitField bf;           // A bit-field's place in its unit; width 0 for any other member
+    // With Target.bitfield_access_units, the bytes of clang's access unit holding this
+    // bit-field, which the ABI passes as one piece; `access_break` marks a `:0` before it.
+    int access_offset, access_size;
+    bool access_break;
 } FieldDef;
 
 // Structure for a struct type entry.  A definition outlives its scope: on purge or

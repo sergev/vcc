@@ -250,7 +250,8 @@ alignment and inside the struct; failing that (on MMIX and AVR, where structs of
 bit-fields can be byte-aligned), its bytes one by one. A read loads the unit and shifts
 and masks the field out; a write merges the new bits into the unit and stores it whole.
 A struct's TAC type lists each storage unit as an unnamed unsigned member, so the ABI
-classifiers see integers there. `translator/test/bitfield_layouts.h` holds the layouts
+classifiers see integers there; on AVR, whose ABI passes a structure flattened into its
+members, it lists clang's access units instead (`Target.bitfield_access_bits`). `translator/test/bitfield_layouts.h` holds the layouts
 measured from the reference compilers, which `translate-tests` compares with ours.
 
 ### Checking a layout
@@ -285,6 +286,7 @@ records:
 | `struct_args_split`       | Pass a struct wider than a word as separate word arguments |
 | `big_endian`              | Most significant byte first; bit-fields from the top bit |
 | `bitfield_layout`         | The reference compilers' bit-field rule (below) |
+| `bitfield_access_bits`    | AVR: list clang's bit-field access units as the TAC members |
 
 The TAC carries each struct's size, alignment and member offsets, so a backend takes
 aggregate layout from its input rather than recomputing it.

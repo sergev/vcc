@@ -4,6 +4,7 @@
 // calling the other's.
 //
 #include "aarch64_test.h"
+#include "../../common/test/bitfield_interop.h"
 
 namespace {
 
@@ -181,4 +182,22 @@ long ld_val(long double x) { return (long)(x * 10); }
 )";
     EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
     EXPECT_EQ(15, exit_status);
+}
+
+// Bit-field structures as arguments, results and shared data, ours calling Clang's.
+TEST_F(Aarch64Test, RunBitfieldsWeCallClang)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCaller, kBitfieldCallee));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The same, Clang calling ours.
+TEST_F(Aarch64Test, RunBitfieldsClangCallsUs)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    SKIP_IF_NO_AARCH64_CLANG();
+    EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
+    EXPECT_EQ(0, exit_status);
 }

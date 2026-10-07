@@ -417,6 +417,41 @@ static int layout_bitfield(const Field *f, int start, int *alignment)
     return start;
 }
 
+// Group the bit-fields of `members`, whose offsets still hold the bit each starts at,
+// into clang's access units (Target.bitfield_access_bits): a run of bit-fields ends at
+// another member or a `:0`; a field that starts inside a byte joins the unit before it,
+// one on a byte boundary only while the unit stays within `max_bits`.
+static void access_units(FieldDef *members, int max_bits)
+{
+    FieldDef *first = NULL; // of the current unit
+    int lo = 0, hi = 0;     // its bytes
+    for (FieldDef *m = members;; m = m->next) {
+        bool join = false;
+        if (m && m->bf.width && first && !m->access_break) {
+            int end = (m->offset + m->bf.width + 7) / 8;
+            join    = m->offset % 8 != 0 || (end - lo) * 8 <= max_bits;
+        }
+        if (!join && first) {
+            for (FieldDef *f = first; f != m; f = f->next) {
+                if (f->bf.width) {
+                    f->access_offset = lo;
+                    f->access_size   = hi - lo;
+                }
+            }
+            first = NULL;
+        }
+        if (!m)
+            break;
+        if (!m->bf.width)
+            continue;
+        if (!first) {
+            first = m;
+            lo    = m->offset / 8;
+        }
+        hi = (m->offset + m->bf.width + 7) / 8;
+    }
+}
+
 // Choose the storage unit of bit-field `m`, whose offset still holds the bit it starts at,
 // in a struct of `size` bytes aligned to `alignment`: the smallest unsigned integer that
 // covers its bits, lies inside the struct and is aligned there, else its bytes one by
@@ -506,6 +541,7 @@ static void register_struct_type(const Type *t)
     // The layout advances in bits, for the bit-fields; every other member starts on a
     // byte, at the next multiple of its alignment.
     int current_bits      = 0;
+    bool access_break     = false; // a `:0` since the last named bit-field
     // On a word-addressed target every aggregate is padded to at least one machine word
     // (Target.aggregate_align) so array element strides stay word multiples and &arr[i]
     // never lands mid-word; byte-addressed targets use natural C packing (align 1).
@@ -532,8 +568,12 @@ static void register_struct_type(const Type *t)
                 *tail = new_member(f->u.member.name,
                                    clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
                                    start);
-                (*tail)->bf.width = width;
-                tail              = &(*tail)->next;
+                (*tail)->bf.width     = width;
+                (*tail)->access_break = access_break;
+                access_break          = false;
+                tail                  = &(*tail)->next;
+            } else if (width == 0) {
+                access_break = true;
             }
             if (kind == TYPE_STRUCT || start + width > current_bits)
                 current_bits = start + width;
@@ -554,6 +594,8 @@ static void register_struct_type(const Type *t)
             current_bits = member_end;
     }
     int size = round_away_from_zero(current_alignment, (current_bits + 7) / 8);
+    if (target_config && target_config->bitfield_access_bits)
+        access_units(members, target_config->bitfield_access_bits);
     for (FieldDef *m = members; m; m = m->next) {
         if (m->bf.width)
             place_bitfield(m, size, current_alignment);

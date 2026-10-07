@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "msp430_test.h"
+#include "../../common/test/bitfield_interop.h"
 
 namespace {
 
@@ -972,5 +973,23 @@ int main(void)
     return 0;
 }
 )"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// Bit-field structures as arguments, results and shared data, ours calling Gcc's.
+TEST_F(Msp430Test, RunBitfieldsWeCallGcc)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
+    EXPECT_EQ("", GccRun(kBitfieldCallee, CompileToMsp430(kBitfieldCaller.c_str())));
+    EXPECT_EQ(0, exit_status);
+}
+
+// The same, Gcc calling ours.
+TEST_F(Msp430Test, RunBitfieldsGccCallsUs)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
+    EXPECT_EQ("", GccRun(kBitfieldCaller, CompileToMsp430(kBitfieldCallee.c_str())));
     EXPECT_EQ(0, exit_status);
 }
