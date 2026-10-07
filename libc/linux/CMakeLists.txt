@@ -32,6 +32,9 @@ function(vcc_linux_target name var arch triple gen helper_dir cpu_regex)
         endforeach()
     endforeach()
     install(FILES ${headers} DESTINATION share/vcc/${name}/include)
+    # The POSIX headers in subdirectories, enough for vcc to compile itself.
+    install(DIRECTORY ${arch_include}/sys ${LINUX_INCLUDE_DIR}/sys
+            DESTINATION share/vcc/${name}/include)
 
     # The headers parse, through the system preprocessor and through ours.
     add_test(NAME ${name}-headers

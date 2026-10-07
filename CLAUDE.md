@@ -118,10 +118,12 @@ libraries from `../share/vcc/<target>/` (see [cc/README.md](cc/README.md)).
 **`make self`** configures `build/self` with `-DCMAKE_C_COMPILER=build/stage/bin/vcc` (an
 unknown compiler to CMake, so the driver ignores the GCC options CMake passes: `-W…`,
 `-f…`, `-std=`, `-arch`, `-isysroot`), which also makes `vcc -E` the `SystemCpp`. The
-hosted targets then keep the system `cc` (`VCC_HOST_CC`). It works on macOS (the
-`libc/darwin` headers carry the POSIX interfaces the sources use: `unistd.h`, `fcntl.h`,
-`getopt.h`, `sys/stat.h`, `sys/wait.h`, `mach-o/dyld.h`); `libc/linux` does not have them
-yet. The sources stay compilable by it: no GCC builtins outside `#ifdef __GNUC__`
+hosted targets then keep the system `cc` (`VCC_HOST_CC`). It works on macOS and Linux
+(the `libc/darwin` and `libc/linux` headers carry the POSIX interfaces the sources use:
+`unistd.h`, `fcntl.h`, `getopt.h`, `sys/stat.h`, `sys/wait.h`, and `mach-o/dyld.h` on
+macOS; on Linux `sys/types.h` and `sys/stat.h` are per architecture, glibc's
+`struct stat` differing). CMake does not rebuild `build/self` when stage 1 changes:
+`rm -rf build/self` first. The sources stay compilable by it: no GCC builtins outside `#ifdef __GNUC__`
 (`libutil/bitops.h`), and no local named like a libc function (no shadowing).
 Stage 2 rebuilt by itself gives identical objects.
 

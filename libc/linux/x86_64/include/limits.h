@@ -32,4 +32,7 @@
 #define LLONG_MAX  9223372036854775807LL
 #define ULLONG_MAX 18446744073709551615ULL
 
+/* POSIX, from <linux/limits.h> */
+#define PATH_MAX 4096
+
 #endif /* _LIMITS_H */
