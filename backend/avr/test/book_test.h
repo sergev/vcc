@@ -89,8 +89,11 @@ protected:
         std::string ours = AvrTest::CompileAndRunBook(src);
         int status       = exit_status;
         EXPECT_NE("ERROR", ours) << "did not run";
+        // GCC before 10 rejects &*p of a pointer to an incomplete struct (its bug
+        // 88827), and avr-gcc is often older: clang is the reference for that one.
+        bool gcc_ok = strcmp(name, "Chapter18_IncompleteStructs") != 0;
         // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain
-        if (avr_gcc_available()) {
+        if (avr_gcc_available() && gcc_ok) {
             EXPECT_EQ(GccRunBook(src), ours) << "differs from GCC";
             EXPECT_EQ(exit_status, status) << "exit status differs from GCC";
             exit_status = status;

@@ -201,8 +201,11 @@ protected:
         QemuConfig cfg = avr_config(AVR_GCC, { "-mmcu=atmega1280" });
         if (*AVR_LIBGCC)
             cfg.extra_libs = { AVR_LIBGCC };
-        const std::vector<std::string> flags = { "-O0", "-w", "-nostdinc", "-I", TEST_INCLUDE_DIR,
-                                                 "-I", TEST_MODEL_INCLUDE_DIR, "-I",
+        // -fhosted after the fixture's -ffreestanding: GCC gives main its implicit
+        // `return 0` (C11 5.1.2.2.3) only in a hosted program, which the book's are.
+        const std::vector<std::string> flags = { "-O0", "-w", "-fhosted", "-nostdinc",
+                                                 "-I", TEST_INCLUDE_DIR, "-I",
+                                                 TEST_MODEL_INCLUDE_DIR, "-I",
                                                  TEST_COMMON_INCLUDE_DIR };
         return Run(cfg, "", "crt0-status.o", &src, flags, ".gcc");
     }
