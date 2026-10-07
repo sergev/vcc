@@ -420,3 +420,28 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// An automatic union initialized by its first member, or not at all, is zero past
+// that member, as GCC and clang have it: the other members read as zero.
+TEST_F(RiscvTest, RunUnionZeroedPastFirstMember)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("", CompileAndRunRiscv(R"(
+struct I { int kind; union { char a; struct { long x, y; int flag; } big; } u; };
+struct J { int kind; struct I in; };
+void dirty(void) { volatile long junk[32]; for (int i = 0; i < 32; i++) junk[i] = -1; }
+int f(void) { struct I in = { .kind = 3 }; return in.u.big.flag || in.u.big.y; }
+int g(void) { struct I in = { 3, { 'x' } }; return in.u.big.flag || in.u.big.y || in.u.a != 'x'; }
+int h(void) { struct J j = { 1 }; return j.in.u.big.flag || j.in.u.big.x; }
+int main(void) {
+    int r = 0;
+    dirty();
+    r |= f();
+    dirty();
+    r |= g() << 1;
+    dirty();
+    r |= h() << 2;
+    return r;
+})"));
+    EXPECT_EQ(0, exit_status);
+}

@@ -237,11 +237,11 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         for (const InitItem *item = init->u.items; item; item = item->next)
             gen_init(ctx, var_name, base_offset + item->offset, item->init, skip_zero);
     } else if (t->kind == TYPE_UNION) {
-        // typecheck_init reduced the union initializer to its single first member,
-        // which lives at offset 0 of the union — initialize it there.  No structtab
-        // lookup is needed, so this works for block-scope unions too.
-        if (init->u.items)
-            gen_init(ctx, var_name, base_offset, init->u.items->init, skip_zero);
+        // typecheck_init reduced the union initializer to the chosen member, at offset
+        // 0, then the zeros for the rest of the union's storage at their offset.  No
+        // structtab lookup is needed, so this works for block-scope unions too.
+        for (const InitItem *item = init->u.items; item; item = item->next)
+            gen_init(ctx, var_name, base_offset + item->offset, item->init, skip_zero);
     } else {
         fatal_error("Compound initializer for unsupported type %d in TAC lowering", (int)t->kind);
     }

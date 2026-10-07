@@ -14,6 +14,29 @@
 #include "xalloc.h"
 
 // Create a zero initializer for a type.
+static Initializer *make_zero_init(Type *t);
+
+// The zeros for the rest of a union's storage past its initialized member, or NULL: a
+// second item, an array at the member's end, of int where the sizes allow.  The static
+// path zero-pads the same way, and GCC and clang zero the whole union (§6.7.9p10 zeroes
+// only the first member): code reads another member of `T x = { .kind = K };`.
+static InitItem *union_rest(const Type *u, const Type *member)
+{
+    int size = (int)structtab_find(u->u.struct_t.name)->size;
+    int used = (int)get_size(member);
+    if (size <= used)
+        return NULL;
+    int unit  = (int)target_config->int_size;
+    bool word = used % unit == 0 && size % unit == 0;
+    Type *pad = new_type(TYPE_ARRAY, __func__, __FILE__, __LINE__);
+    pad->u.array.element = new_type(word ? TYPE_INT : TYPE_UCHAR, __func__, __FILE__, __LINE__);
+    set_array_size(pad, word ? (size - used) / unit : size - used);
+    InitItem *rest = new_init_item(NULL, make_zero_init(pad));
+    rest->offset   = used;
+    free_type(pad);
+    return rest;
+}
+
 static Initializer *make_zero_init(Type *t)
 {
     if (semantic_debug) {
@@ -52,12 +75,12 @@ static Initializer *make_zero_init(Type *t)
         return init;
     }
     if (t->kind == TYPE_UNION) {
-        // A union's storage is its first member; zero that (build_static_init
-        // zero-pads the rest of the union to its full size).
-        Initializer *init = new_initializer(INITIALIZER_COMPOUND);
-        init->type        = clone_type(t, __func__, __FILE__, __LINE__);
-        FieldDef *first   = structtab_find(t->u.struct_t.name)->members;
-        init->u.items     = new_init_item(NULL, make_zero_init(first->type));
+        // Zero the first member, then the rest of the union's storage.
+        Initializer *init   = new_initializer(INITIALIZER_COMPOUND);
+        init->type          = clone_type(t, __func__, __FILE__, __LINE__);
+        FieldDef *first     = structtab_find(t->u.struct_t.name)->members;
+        init->u.items       = new_init_item(NULL, make_zero_init(first->type));
+        init->u.items->next = union_rest(t, first->type);
         return init;
     }
 
@@ -675,6 +698,7 @@ static Initializer *check_init(Type *target_type, Initializer *init)
     if (target_type->kind == TYPE_UNION) {
         const FieldDef *member = union_member(target_type, init->u.items);
         init->u.items->init    = check_init(member->type, init->u.items->init);
+        init->u.items->next    = union_rest(target_type, member->type);
         return init;
     }
 
