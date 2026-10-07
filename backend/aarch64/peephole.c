@@ -453,27 +453,39 @@ static void substitute(A64_Instr *in, int t, int r)
     }
 }
 
-// `mov t, r` with t scratch: the reads of t up to its next write read r instead, if r is
-// not written before the last of them and each can.
+// `mov t, r`: the reads of t up to its next write read r instead, if r is not written
+// before the last of them and each can.  A t other than a scratch register must be
+// written before any branch, or reach a return that does not read it.
 static bool forward_move(A64_Instr **link)
 {
     A64_Instr *mv = *link;
     int t = mv->opnd[0].reg, r = mv->opnd[1].reg;
     A64_Width w = mv->opnd[0].width;
-    if (!is_scratch(t) || t == r || r == A64_SP || r == A64_ZR)
+    bool scratch = is_scratch(t);
+    if (t == r || t == A64_SP || t == A64_ZR || r == A64_SP || r == A64_ZR)
         return false;
-    bool clobbered = false;
+    bool clobbered = false, done = scratch;
     const A64_Instr *end = NULL;
     for (const A64_Instr *n = mv->next; n; n = n->next) {
-        if (reads(n, t) && (clobbered || is_call(n->op) || !can_substitute(n, t, w)))
+        if (reads(n, t) &&
+            (clobbered || is_call(n->op) || n->op == A64_RET || !can_substitute(n, t, w)))
             return false;
         if (writes(n, t)) {
-            end = n->next;
+            end  = n->next;
+            done = true;
             break;
         }
+        if (!scratch && n->op == A64_RET) {
+            done = true;
+            break;
+        }
+        if (!scratch && (is_branch(n->op) || n->op == A64_B))
+            return false;
         if (writes(n, r))
             clobbered = true;
     }
+    if (!done)
+        return false;
     for (A64_Instr *n = mv->next; n != end; n = n->next)
         substitute(n, t, r);
     delete_at(link);

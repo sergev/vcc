@@ -175,7 +175,7 @@ EXPECT_PEEPHOLE(PeepholeShiftReadAgain, "lsr w1, w0, #4\nand w0, w1, #4095\nadd 
 
 // Bit-fields: a read is ubfx or sbfx, a store bfi, a store of zero an and with the
 // mask as an immediate (movz + movk once); a narrow unit loaded and stored without
-// extensions.
+// extensions, and a field updated in place stored from the unit's register.
 TEST_F(Aarch64Test, PeepholeBitfields)
 {
     std::string code = Code(CompileToAarch64(R"(
@@ -197,7 +197,8 @@ void bump_d(struct S *p) { p->d++; }
         << code;
     EXPECT_NE(std::string::npos, code.find("and w0, w0, #-1048321\n")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("ubfx w0, w2, #4, #12\nadd w0, w0, #1\nbfi w2, w0, #4, #12\n"))
+              code.find("ubfx w0, w2, #4, #12\nadd w0, w0, #1\nbfi w2, w0, #4, #12\n"
+                        "strh w2, [x3]\nret\n"))
         << code;
     EXPECT_EQ(std::string::npos, code.find("orr")) << code;
     EXPECT_EQ(std::string::npos, code.find("movk")) << code;
