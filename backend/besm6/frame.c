@@ -309,6 +309,20 @@ Frame *frame_build(const Tac_TopLevel *fn, const Tac_TopLevel *program)
             f->auto_is_temp[i] = false;
         TempFill tf = { f->auto_is_temp, f->num_autos };
         map_iterate(&f->slots, fill_auto_is_temp, &tf);
+        // A temporary whose address is taken is read through it (the result of a call
+        // returning a one-word struct, whose member is then loaded): not one only ever
+        // read by name, which is what the peephole's dead-store rule relies on.
+        for (const Tac_Instruction *instr = fn->u.function.body; instr; instr = instr->next) {
+            if (instr->kind != TAC_INSTRUCTION_GET_ADDRESS &&
+                instr->kind != TAC_INSTRUCTION_GET_ADDRESS_BYTE &&
+                instr->kind != TAC_INSTRUCTION_GET_ADDRESS_DECAY)
+                continue;
+            const Tac_Val *src = instr->u.get_address.src;
+            int reg, off;
+            if (src && src->kind == TAC_VAL_VAR && frame_lookup(f, src->u.var_name, &reg, &off) &&
+                reg == REG_AUTO && off >= 0 && off < f->num_autos)
+                f->auto_is_temp[off] = false;
+        }
     }
 
     return f;

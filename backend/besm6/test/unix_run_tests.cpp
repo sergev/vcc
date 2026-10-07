@@ -433,3 +433,27 @@ TEST_F(CodegenTest, UnixRunStructValueThroughMemory)
     )");
     EXPECT_EQ("1 2 3\n123 456 789 456\n789\n", result);
 }
+
+// A one-word struct returned by a call lands in a temporary whose member is then loaded
+// through its address: the store of the result must not be dropped as a dead store.
+TEST_F(CodegenTest, UnixRunMemberOfReturnedStruct)
+{
+    SKIP_IF_NO_UNIX_RUN_TOOLS();
+    EXPECT_EQ("42\n", CompileAndRunUnix(R"(
+        #include <stdio.h>
+        struct plain { int a; };
+        struct plain mk(int a) { struct plain r; r.a = a; return r; }
+        int main(void) { printf("%d\n", mk(42).a); return 0; }
+    )"));
+}
+
+// A folded operation takes its result's type: `unsigned u = 5` copy-propagates an int 5,
+// and 5 << 45 must keep all 48 bits of the unsigned word, not an int's 41.
+TEST_F(CodegenTest, UnixRunFoldUnsignedWideShift)
+{
+    SKIP_IF_NO_UNIX_RUN_TOOLS();
+    EXPECT_EQ("5000000000000000\n", CompileAndRunUnix(R"(
+        #include <stdio.h>
+        int main(void) { unsigned u = 5; unsigned v = u << 45; printf("%o\n", v); return 0; }
+    )"));
+}
