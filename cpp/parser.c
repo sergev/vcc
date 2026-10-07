@@ -12,26 +12,32 @@
 // parser with one-token lookahead kept in cpp.look_token / cpp.look_value.
 //
 
-#define YYSTYPE int // (historical) the value type carried by a token: plain int
+// A value: §6.10.1p4 computes in intmax_t, or in uintmax_t when either operand
+// of an operator is unsigned (the usual arithmetic conversions).
+typedef struct {
+    intmax_t v;
+    int u;
+} Value;
 
-void advance(void);
-int eval_expr(void);
-int eval_binary(int min_prec);
-int eval_term(void);
+static Value eval_expr(void);
+static Value eval_binary(int min_prec);
+static Value eval_term(void);
 
-//
-// Consume the current token and fetch the next one into the lookahead slot.
-//
-void advance(void)
+#define BITS (int)(8 * sizeof(intmax_t)) // a shift by this or more is out of range
+
+static Value value(intmax_t v, int u)
 {
-    cpp.look_token = lex_if_token();
-    cpp.look_value = cpp.tok_value;
+    Value r = { v, u };
+    return r;
 }
 
-//
-// If the lookahead token is "token", consume it and return 1 (true); otherwise
-// leave it in place and return 0.
-//
+void advance(void)
+{
+    cpp.look_token    = lex_if_token();
+    cpp.look_value    = cpp.tok_value;
+    cpp.look_unsigned = cpp.tok_unsigned;
+}
+
 int match(int token)
 {
     if (cpp.look_token == token) {
@@ -41,10 +47,6 @@ int match(int token)
     return 0;
 }
 
-//
-// Return the binding strength of an operator: bigger means it binds tighter
-// (e.g. '*' beats '+').  Used to decide the order operators are applied in.
-//
 int precedence(int token)
 {
     switch (token) {
@@ -94,59 +96,58 @@ int precedence(int token)
     }
 }
 
-//
-// Apply a binary operator "op" to two already-evaluated operands and return the
-// result.  Division/modulo by zero is reported (and yields 0); an operator token
-// with no arithmetic meaning here (e.g. a stray '.') is an error -- which is how
-// a malformed operand such as a floating constant gets diagnosed.
-//
-static int apply_op(int op, int a, int b)
+static Value apply_op(int op, Value a, Value b)
 {
+    int u        = a.u || b.u;
+    uintmax_t ua = (uintmax_t)a.v, ub = (uintmax_t)b.v;
+    intmax_t sa = a.v, sb = b.v;
+
     switch (op) {
     case '*':
-        return a * b;
+        return value((intmax_t)(ua * ub), u);
     case '/':
-        if (b == 0) {
-            pperror("Division by zero");
-            return 0;
-        }
-        return a / b;
     case '%':
-        if (b == 0) {
-            pperror("Modulo by zero");
-            return 0;
+        if (sb == 0) {
+            pperror(op == '/' ? "Division by zero" : "Modulo by zero");
+            return value(0, u);
         }
-        return a % b;
+        if (u)
+            return value((intmax_t)(op == '/' ? ua / ub : ua % ub), 1);
+        if (sb == -1) // INTMAX_MIN / -1 would trap
+            return value(op == '/' ? (intmax_t)(0 - ua) : 0, 0);
+        return value(op == '/' ? sa / sb : sa % sb, 0);
     case '+':
-        return a + b;
+        return value((intmax_t)(ua + ub), u);
     case '-':
-        return a - b;
-    case LS:
-        return a << b;
+        return value((intmax_t)(ua - ub), u);
+    case LS: // the type of the left operand
+        return value(ub >= BITS ? 0 : (intmax_t)(ua << ub), a.u);
     case RS:
-        return a >> b;
+        if (a.u)
+            return value(ub >= BITS ? 0 : (intmax_t)(ua >> ub), 1);
+        return value(ub >= BITS ? (sa < 0 ? -1 : 0) : sa >> ub, 0);
     case '<':
-        return a < b;
+        return value(u ? ua < ub : sa < sb, 0);
     case '>':
-        return a > b;
+        return value(u ? ua > ub : sa > sb, 0);
     case LE:
-        return a <= b;
+        return value(u ? ua <= ub : sa <= sb, 0);
     case GE:
-        return a >= b;
+        return value(u ? ua >= ub : sa >= sb, 0);
     case EQ:
-        return a == b;
+        return value(sa == sb, 0);
     case NE:
-        return a != b;
+        return value(sa != sb, 0);
     case '&':
-        return a & b;
+        return value(sa & sb, u);
     case '^':
-        return a ^ b;
+        return value(sa ^ sb, u);
     case '|':
-        return a | b;
+        return value(sa | sb, u);
     case ANDAND:
-        return a && b;
+        return value(sa && sb, 0);
     case OROR:
-        return a || b;
+        return value(sa || sb, 0);
     case ',':
         return b;
     default:
@@ -155,18 +156,9 @@ static int apply_op(int op, int a, int b)
     }
 }
 
-//
-// Parse and evaluate an expression using precedence climbing: an operand
-// (eval_term) followed by any number of "operator operand" pairs, where the
-// operand of each operator is parsed only as far as operators that bind at least
-// as tightly.  This honors both operator precedence (from precedence()) and
-// left-to-right associativity, and it handles the right-associative ?: ternary.
-// "min_prec" is the lowest precedence this call is allowed to consume.  Returns
-// the computed value.
-//
-int eval_binary(int min_prec)
+static Value eval_binary(int min_prec)
 {
-    int val = eval_term();
+    Value val = eval_term();
 
     for (;;) {
         int op   = cpp.look_token;
@@ -180,53 +172,44 @@ int eval_binary(int min_prec)
         advance(); // consume the operator
 
         if (op == '?') {
-            // Ternary conditional (right-associative): middle runs up to ':'.
-            int mid = eval_binary(precedence(','));
+            Value mid = eval_binary(precedence(','));
             if (!match(':'))
                 pperror("Expected ':' in ternary operator");
-            int els = eval_binary(prec);
-            val     = val ? mid : els;
+            Value els = eval_binary(prec);
+            val       = val.v ? mid : els;
+            val.u     = mid.u || els.u;
         } else if (op == '=') {
-            // Assignment is a constraint violation in a constant expression.
             pperror("Assignment operator not allowed in preprocessor if");
             eval_binary(prec); // consume the right-hand side to stay in sync
         } else {
-            // Left-associative binary operator: the right operand may only
-            // absorb operators that bind strictly tighter.
-            int rhs = eval_binary(prec + 1);
-            val     = apply_op(op, val, rhs);
+            Value rhs = eval_binary(prec + 1);
+            val       = apply_op(op, val, rhs);
         }
     }
 
     return val;
 }
 
-//
-// Parse and evaluate a whole #if expression (down to the comma operator).
-//
-int eval_expr(void)
+static Value eval_expr(void)
 {
     return eval_binary(precedence(','));
 }
 
-//
-// Parse and evaluate a single operand (a "term"): an optional unary operator
-// (-, !, ~) applied to another term, a parenthesized expression, a "defined(X)"
-// test, or a plain number.  Returns its value.
-//
-int eval_term(void)
+static Value eval_term(void)
 {
-    int val;
+    Value val;
 
     if (match('-')) {
         val = eval_term();
-        return -val;
+        return value((intmax_t)(0 - (uintmax_t)val.v), val.u);
+    } else if (match('+')) {
+        return eval_term();
     } else if (match('!')) {
         val = eval_term();
-        return !val;
+        return value(!val.v, 0);
     } else if (match('~')) {
         val = eval_term();
-        return ~val;
+        return value(~val.v, val.u);
     } else if (match('(')) {
         val = eval_expr();
         if (!match(')'))
@@ -236,38 +219,33 @@ int eval_term(void)
         if (match('(')) {
             if (cpp.look_token != number)
                 pperror("Expected number in DEFINED");
-            val = cpp.look_value;
+            val = value(cpp.look_value, 0);
             advance();
             if (!match(')'))
                 pperror("Expected ')' in DEFINED");
             return val;
         } else if (cpp.look_token == number) {
-            val = cpp.look_value;
+            val = value(cpp.look_value, 0);
             advance();
             return val;
         } else {
             pperror("Expected number or '(' after DEFINED");
         }
     } else if (cpp.look_token == number) {
-        val = cpp.look_value;
+        val = value(cpp.look_value, cpp.look_unsigned);
         advance();
         return val;
     }
 
     pperror("Invalid term");
-    return 0;
+    return value(0, 0);
 }
 
-//
-// Entry point called from the directive loop for a "#if" line: prime the
-// lookahead, evaluate the whole expression, and check that the line ended where
-// expected.  Returns the expression's value (nonzero = take the #if branch).
-//
 int eval_if(void)
 {
     advance();
-    int result = eval_expr();
+    Value result = eval_expr();
     if (cpp.look_token != stop)
         pperror("Expected stop token");
-    return result;
+    return result.v != 0;
 }

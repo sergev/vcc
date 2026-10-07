@@ -74,3 +74,29 @@ TEST_F(Conditional, AssignmentDiagnosed) {
 TEST_F(Conditional, CommandLineDefineActivatesIfdef) {
     EXPECT_TRUE(TokensAre("#ifdef FOO\nyes\n#else\nno\n#endif\n", "yes", {"-DFOO=1"}));
 }
+
+// §6.10.1p4: #if computes in intmax_t, so a constant wider than int keeps its value.
+TEST_F(Conditional, WideConstants) {
+    EXPECT_TOKENS("#if 1099511627775L > 0x1000000 && 017777777777777 > 0x1000000\nyes\n#endif\n",
+                  "yes");
+    EXPECT_TOKENS("#if 0x7fffffffffffffff == 9223372036854775807\nyes\n#endif\n", "yes");
+    EXPECT_TOKENS("#if (1LL << 40) / 3 == 366503875925\nyes\n#endif\n", "yes");
+}
+
+TEST_F(Conditional, HexDigits) {
+    EXPECT_TOKENS("#if 0xa == 10 && 0xFf == 255 && 0XABCDEF == 11259375\nyes\n#endif\n", "yes");
+}
+
+// ... or in uintmax_t when an operand is unsigned: by a 'u' suffix, or as a hex
+// constant beyond intmax_t.
+TEST_F(Conditional, UnsignedArithmetic) {
+    EXPECT_TOKENS("#if -1 < 0u\n#else\nyes\n#endif\n", "yes");
+    EXPECT_TOKENS("#if -1 < 0\nyes\n#endif\n", "yes");
+    EXPECT_TOKENS("#if 0xffffffffffffffff > 0 && 18446744073709551615u == -1\nyes\n#endif\n",
+                  "yes");
+    EXPECT_TOKENS("#if 10UL / 3lu == 3 && 7ull % 4 == 3 && +2 == 2\nyes\n#endif\n", "yes");
+}
+
+TEST_F(Conditional, IllegalOctalDigit) {
+    EXPECT_PP_DIAGNOSES("#if 09\n#endif\n");
+}

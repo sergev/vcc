@@ -3,6 +3,7 @@
 // (directly, or via intern.h): it defines the one big state struct, the symbol
 // table entry type, the sizing limits, and the character-class test macros.
 //
+#include <stdint.h>
 #include <stdio.h>
 
 //
@@ -233,9 +234,12 @@ struct cppstate {
     char if_taken[MAXIF + 1];
 
     // scratch shared by the #if expression lexer (yylex.c) and parser (parser.c)
-    int tok_value;  // value of the number token just scanned
-    int look_token; // one-token lookahead: type of the next token
-    int look_value; // value that went with the lookahead token
+    // §6.10.1p4: the arithmetic is in intmax_t, or uintmax_t for an unsigned operand.
+    intmax_t tok_value;    // value of the number token just scanned
+    int tok_unsigned;      // it has a 'u' suffix, or fits only uintmax_t
+    int look_token;        // one-token lookahead: type of the next token
+    intmax_t look_value;   // value that went with the lookahead token
+    int look_unsigned;     // ... and its signedness
 };
 
 extern struct cppstate cpp; // the single global instance, defined in cpp.c

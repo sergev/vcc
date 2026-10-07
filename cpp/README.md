@@ -84,8 +84,9 @@ Leading whitespace before the `#` is allowed (C11 §6.10), unlike a traditional 
 `#if`/`#elif` take a full integer constant expression: arithmetic, bitwise, shift,
 relational, equality and logical operators, `?:`, the comma operator, and both
 `defined name` and `defined(name)`. Operands are decimal, octal or hexadecimal integers
-(with an `L` suffix) or character constants; an undefined identifier is `0`. Division or
-modulo by zero is diagnosed.
+(with `u`, `l` and `ll` suffixes) or character constants; an undefined identifier is `0`.
+The arithmetic is in `intmax_t`, or `uintmax_t` when an operand is unsigned (C11
+§6.10.1p4). Division or modulo by zero is diagnosed.
 
 ## Macros
 
