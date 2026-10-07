@@ -82,3 +82,13 @@ TEST_F(Pragma, UnknownPragmaAccepted) {
 TEST_F(NullDirective, HasNoEffect) {
     EXPECT_TOKENS("#\nOK\n#   \n", "OK");
 }
+
+// In assembly (__ASSEMBLER__ defined, as vcc does for a .S file) a '#' that starts no
+// directive is a comment, dropped without a diagnostic as GCC does.
+TEST_F(Pragma, AssemblerCommentLine) {
+    EXPECT_TRUE(TokensAre("# a comment\n    nop\n", "nop", {"-D__ASSEMBLER__"}));
+}
+
+TEST_F(Pragma, UndefinedControlInC) {
+    EXPECT_PP_DIAGNOSES("# a comment\n");
+}

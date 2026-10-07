@@ -51,6 +51,18 @@ static void add_once_file(int fd)
 }
 
 //
+// Is the input assembly (a .S file, the driver defining __ASSEMBLER__)?  There a '#'
+// that starts no directive starts a comment.
+//
+static int in_assembler(void)
+{
+    static char name[] = "__ASSEMBLER__";
+    const struct symtab *sp = lookup(name, 0);
+
+    return sp->name && (unsigned char)sp->name[0] != DROP && sp->value;
+}
+
+//
 // Handle a "#include" line.  Read the file name (either <name> or "name"),
 // finish and flush the current line, then search for the file: <> names skip the
 // current directory, "" names include it.  On success we open the file, push a
@@ -467,8 +479,9 @@ char *process_directives(char *p)
             }
         } else if (*++cpp.tok_ptr == '\n')
             cpp.out_ptr = cpp.tok_ptr; // allows blank line after #
-        else
+        else if (!in_assembler())
             pperror("undefined control", 0);
+        // else an assembler comment ("# text" in a .S file), dropped as GCC does
         // flush to lf
         ++cpp.false_level;
         while (*cpp.tok_ptr != '\n') {
