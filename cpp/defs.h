@@ -69,7 +69,8 @@ struct symtab {
 #   define SYMSIZ  1021 // prime; 315 macros is the measured load of a kernel source
 #else
 #   define BUFSIZ  8192
-#   define SBSIZE  65536 // bytes of "side buffer" for saved macro/definition text (holds every macro's name+body)
+#   define SBSIZE  1048576 // bytes of "side buffer": every macro's name and body, the file names, and
+                           // the pushback buffers, BUFSIZ each (vcc's own X-macro tables need more than 64 KB)
 #   define SYMSIZ  6151  // number of slots in the symbol hash table (prime; holds the §5.2.4.1 min of 4095 macros)
 #endif
 
@@ -89,8 +90,20 @@ struct symtab {
 
 #define MAXINC  10 // maximum depth of nested #include files
 #define MAXIF   64 // maximum depth of nested #if/#ifdef/#ifndef blocks
-#define MAXFRE  14 // max buffers of macro pushback in flight at once
-#define NPREDEF 20 // max -D / -U options accepted on the command line
+
+// Max buffers of macro pushback in flight at once, max -D / -U options and max -I
+// directories accepted on the command line.  The host takes more: vcc's own sources
+// need them (an X-macro table expanded in place, cc.c's thirty -D, a library's -I
+// path), and each pushback buffer is BUFSIZ bytes of the side buffer.
+#ifdef besm6
+#   define MAXFRE  14
+#   define NPREDEF 20
+#   define MAXDIRS 8
+#else
+#   define MAXFRE  64
+#   define NPREDEF 200
+#   define MAXDIRS 64
+#endif
 
 // The three scratch areas expand_macro() carves out of one heap block, and the
 // isolated scan buffer expand_text() takes for itself.  They are on the heap and
@@ -174,7 +187,7 @@ struct cppstate {
     char *inc_file[MAXINC];   // file name (for line markers and errors)
     char *inc_dir[MAXINC];    // directory the file was found in (searched first for its #includes)
     int trig_nhold[MAXINC];   // trailing '?' count carried across a read boundary (per level, -trigraphs)
-    char *search_dirs[11];    // #include search path: [0]=current dir, then -I dirs, then system
+    char *search_dirs[MAXDIRS + 3]; // #include search path: [0]=current dir, then -I dirs, then system
     int in_fd;                // fd of the file currently being read; init: STDIN
     char *prog_name;          // diagnostic prefix: basename of argv[0]
     FILE *out_file;           // where preprocessed text is written (usually stdout)

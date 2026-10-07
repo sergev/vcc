@@ -274,7 +274,7 @@ static void parse_args(int argc, char *argv[])
                 *cpp.pre_undefs_end++ = argv[i] + 2;
                 continue;
             case 'I':
-                if (cpp.ndirs > 8)
+                if (cpp.ndirs > MAXDIRS)
                     pperror("excessive -I file (%s) ignored", argv[i]);
                 else
                     cpp.search_dirs[cpp.ndirs++] = argv[i] + 2;

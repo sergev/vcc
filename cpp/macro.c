@@ -47,6 +47,23 @@ static int macro_is_painted(const struct symtab *sp)
 }
 
 //
+// In an argument's isolated prescan (expand_text), is p at the end of the argument --
+// nothing but blanks, newlines and paint marks before its "\n#" sentinel?  A
+// function-like macro name there is not an invocation: the argument is replaced as
+// if it formed the rest of the file (§6.10.3.1), so the '(' may come only after
+// substitution.  The search for '(' must not go on, or it takes the sentinel for a
+// directive and reads the real input past it.
+//
+static int at_argument_end(const char *p)
+{
+    if (cpp.arg_depth == 0)
+        return 0;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || (unsigned char)*p == PAINT_END_MARK)
+        p++;
+    return p == cpp.buf_end - 1 && *p == '#';
+}
+
+//
 // Handle a "#define" line: parse the macro name, the optional parameter list,
 // and the replacement text, and store it in the symbol table.
 //
@@ -730,6 +747,8 @@ char *expand_macro(char *p, struct symtab *sp)
     // treated as a call (its following '(...)' is emitted verbatim).
     if (macro_is_painted(sp))
         return (p);
+    if ((vp[-1] & 0xFF) != 0 && at_argument_end(p))
+        return (p); // a function-like name ending an argument: rescanned after substitution
     if ((p - cpp.recur_bound) <= cpp.recur_bound_adj) {
         if (++cpp.recur_depth > SYMSIZ && !cpp.opt_recurse) {
             pperror("%s: macro recursion", sp->name);

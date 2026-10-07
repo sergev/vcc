@@ -72,3 +72,31 @@ TEST_F(Macro, TooFewArgumentsDiagnosed) {
 TEST_F(Macro, TooManyArgumentsDiagnosed) {
     EXPECT_PP_DIAGNOSES("#define F(a) a\nF(1,2)\n");
 }
+
+// §6.10.3.1: an argument naming a function-like macro is not invoked by its prescan;
+// the X-macro idiom calls it once substituted, and the text after the call survives.
+TEST_F(Macro, FunctionLikeNameAsArgument) {
+    EXPECT_TOKENS("#define OPS(X) X(A) X(B)\n#define F(op) op,\nOPS(F) end\n", "A , B , end");
+}
+
+TEST_F(Macro, FunctionLikeNameAsArgumentThroughObjectMacro) {
+    EXPECT_TOKENS("#define OPS(X) X(A)\n#define F(op) op\n#define G F\nOPS( G )\nend\n",
+                  "A end");
+}
+
+// A pass-through argument naming a function-like macro is called by what follows.
+TEST_F(Macro, FunctionLikeNameAsArgumentCalledAfter) {
+    EXPECT_TOKENS("#define H(x) x\n#define F(op) op\nH(F)(1)\n", "1");
+}
+
+// An X-macro table long enough to need many pushback buffers at once.
+TEST_F(Macro, LongXMacroTable) {
+    std::string src = "#define OPS(X) \\\n";
+    std::string want;
+    for (int i = 0; i < 200; ++i) {
+        src += "    X(N" + std::to_string(i) + ") \\\n";
+        want += (i ? " N" : "N") + std::to_string(i) + " ,";
+    }
+    src += "\n#define F(op) op,\nOPS(F)\n";
+    EXPECT_TOKENS(src, want);
+}

@@ -255,11 +255,11 @@ TEST_F(Predefined, UndefTargetMacroAllowed) {
     EXPECT_PP_OK("#undef __riscv\n");
 }
 
-// Up to 20 -D options (NPREDEF) are accepted, and every one takes effect.
-TEST_F(Predefined, TwentyDefineOptions) {
+// Up to 200 -D options (NPREDEF) are accepted, and every one takes effect.
+TEST_F(Predefined, ManyDefineOptions) {
     std::vector<std::string> args;
     std::string cond = "#if 1";
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 200; ++i) {
         args.push_back("-DM" + std::to_string(i));
         cond += " && M" + std::to_string(i);
     }
@@ -270,7 +270,7 @@ TEST_F(Predefined, TwentyDefineOptions) {
 // exit status like any other.
 TEST_F(Predefined, TooManyDefineOptionsFails) {
     std::vector<std::string> args;
-    for (int i = 0; i < 21; ++i) args.push_back("-DM" + std::to_string(i));
+    for (int i = 0; i < 201; ++i) args.push_back("-DM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("too many -D options"), std::string::npos) << r.err;
@@ -278,7 +278,7 @@ TEST_F(Predefined, TooManyDefineOptionsFails) {
 
 TEST_F(Predefined, TooManyUndefOptionsFails) {
     std::vector<std::string> args;
-    for (int i = 0; i < 21; ++i) args.push_back("-UM" + std::to_string(i));
+    for (int i = 0; i < 201; ++i) args.push_back("-UM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("too many -U options"), std::string::npos) << r.err;
