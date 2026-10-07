@@ -238,8 +238,9 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     // word in r12, the high one in lr, b's high word loaded into dst's high register
     // (every other source word read by then); the flags carry over.  Moves and loads
     // leave them alone.
-    int hi = var_reg_hi(g, dst);
-    op3(g, lo_op, T0, use_word(g, T0, a, t, 0), word_operand(g, T1, b, t, 0), carry);
+    int hi          = var_reg_hi(g, dst);
+    A32_Operand blo = word_operand(g, T1, b, t, 0); // ahead of a's: the order of the code
+    op3(g, lo_op, T0, use_word(g, T0, a, t, 0), blo, carry);
     load_word(g, T1, a, t, 1);
     op3(g, hi_op, T1, T1, word_operand(g, hi, b, t, 1), false);
     store_pair(g, dst, T0, T1);
