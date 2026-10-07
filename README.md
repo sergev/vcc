@@ -111,7 +111,14 @@ make            # build the compiler and the runtime libraries
 make test       # build the tests too
 make run        # build and run all the tests (or: ctest --test-dir build -j8)
 make install    # install the compiler and runtime into ~/.local
+make self       # build vcc with vcc (into build/self/)
+make self-test  # ... and run all the tests against it
 ```
+
+`make self` installs the compiler into `build/stage/` and builds itself and every
+target's runtime again with that `vcc` as the C compiler. Built once more by its own
+output, it gives identical objects. It needs a hosted target as the host, at present
+macOS on Apple silicon: the Linux headers do not have the POSIX interfaces yet.
 
 ### Compiling a program
 

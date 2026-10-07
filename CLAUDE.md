@@ -54,6 +54,8 @@ make              # configure + build the compiler & runtime (RelWithDebInfo) in
 make test         # build the compiler, runtime and all unit tests (incl. textbook chapter tests)
 make run          # make test, then ctest --progress
 make install      # build + install the compiler & runtime (see below)
+make self         # build vcc with vcc: stage 1 installed into build/stage, stage 2 in build/self
+make self-test    # make self, then build and run the tests against stage 2
 make debug        # build with Debug flags
 make clean        # remove ./build/
 ```
@@ -112,6 +114,16 @@ binaries are renamed (`v` prefix) only at install time via
 `build/backend/genbesm`, `build/cpp/cpp`, `build/cc/cc`) keep their original names.
 `vcc` is relocatable: it runs the passes from its own directory and takes headers and
 libraries from `../share/vcc/<target>/` (see [cc/README.md](cc/README.md)).
+
+**`make self`** configures `build/self` with `-DCMAKE_C_COMPILER=build/stage/bin/vcc` (an
+unknown compiler to CMake, so the driver ignores the GCC options CMake passes: `-W…`,
+`-f…`, `-std=`, `-arch`, `-isysroot`), which also makes `vcc -E` the `SystemCpp`. The
+hosted targets then keep the system `cc` (`VCC_HOST_CC`). It works on macOS (the
+`libc/darwin` headers carry the POSIX interfaces the sources use: `unistd.h`, `fcntl.h`,
+`getopt.h`, `sys/stat.h`, `sys/wait.h`, `mach-o/dyld.h`); `libc/linux` does not have them
+yet. The sources stay compilable by it: no GCC builtins outside `#ifdef __GNUC__`
+(`libutil/bitops.h`), and no local named like a libc function (no shadowing).
+Stage 2 rebuilt by itself gives identical objects.
 
 **Tests are not part of `all`.** A plain `make`/`make all` builds only the compiler and
 runtime (the passes, the driver and every target's libraries), which is all `make install`
