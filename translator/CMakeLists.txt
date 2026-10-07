@@ -26,6 +26,7 @@ add_executable(translate-tests
     test/avr_tests.cpp
     test/msp430_tests.cpp
     test/mmix_tests.cpp
+    test/wasm32_tests.cpp
 )
 target_link_libraries(translate-tests parser translator GTest::gtest_main test_util)
 target_compile_definitions(translate-tests PRIVATE

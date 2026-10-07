@@ -296,6 +296,37 @@ static const Target targets[] = {
       tac_apple64_class, // va_class: by reference or in 8-byte stack slots
       0,        // ldouble_mant_dig: long double is double, binary64
       1 },      // hw_sqrt: fsqrt
+
+    // WebAssembly, as clang's wasm32-unknown-unknown: ILP32 with a signed plain char and a
+    // software binary128 long double.
+    { "wasm32",
+      1, 1,   // _Bool
+      2, 2,   // short
+      4, 4,   // int
+      4, 4,   // long (ILP32: same size as int)
+      8, 8,   // long long (i64)
+      4, 4,   // float (f32)
+      8, 8,   // double (f64)
+     16,16,   // long double (IEEE 754 binary128, software)
+      4, 4,   // pointer
+      16, 32, 32, 64, // signed bits
+      1,   // plain char signed (clang wasm32)
+      0,   // signed >> arithmetic
+      1,   // aggregate_align (1)
+      SIZE_MAX, // struct_return_max: never lowered by the front end; the backend
+                // passes a struct holding one scalar as that scalar, any other
+                // result through a hidden pointer
+      0,        // struct_args_split
+      NULL,     // immediate_args
+      NULL,     // va_class: va_arg is a walk over the caller's argument buffer
+      0,        // ldouble_mant_dig: binary128
+      1,        // hw_sqrt: f64.sqrt
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      0 },      // bitfield_unit_per_field
 };
 // clang-format on
 

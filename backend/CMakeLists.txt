@@ -7,6 +7,7 @@ add_subdirectory(x86)
 add_subdirectory(avr)
 add_subdirectory(msp430)
 add_subdirectory(mmix)
+add_subdirectory(wasm)
 
 #
 # `genbesm` executable
@@ -88,3 +89,13 @@ add_executable(genmmix
 target_link_libraries(genmmix mmix backend_common)
 
 install(PROGRAMS $<TARGET_FILE:genmmix> DESTINATION bin RENAME vgenmmix)
+
+#
+# `genwasm` executable
+#
+add_executable(genwasm
+    wasm/main.c
+)
+target_link_libraries(genwasm wasm backend_common)
+
+install(PROGRAMS $<TARGET_FILE:genwasm> DESTINATION bin RENAME vgenwasm)

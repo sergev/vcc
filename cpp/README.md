@@ -23,7 +23,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `besm6`, or the hosted `x86_64-linux` and `aarch64-linux` (the architecture's macros plus `__linux__`, `__linux`, `__gnu_linux__`, `__unix__` and `__unix`) and `aarch64-darwin` (AArch64's, `__arm64__`, `__APPLE__` and `__MACH__`, without `__CHAR_UNSIGNED__` and `__ELF__`). Selects the predefined macros and the standard include directory. |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `besm6`, or the hosted `x86_64-linux` and `aarch64-linux` (the architecture's macros plus `__linux__`, `__linux`, `__gnu_linux__`, `__unix__` and `__unix`) and `aarch64-darwin` (AArch64's, `__arm64__`, `__APPLE__` and `__MACH__`, without `__CHAR_UNSIGNED__` and `__ELF__`). Selects the predefined macros and the standard include directory. |
 | `-Ipath` | Add a directory to the header search list (up to 64; 8 in the BESM-6 build). |
 | `-nostdinc` | Do not search the target's standard include directory. |
 | `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |
@@ -64,6 +64,7 @@ build/cpp/cpp -t besm6 -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog
 | `avr` | `__AVR`, `__AVR__`, `__AVR_ARCH__` = 51, `__AVR_ATmega1280__`, `__AVR_HAVE_MUL__`, `__AVR_HAVE_MOVW__`, `__AVR_HAVE_LPMX__`, `__AVR_HAVE_ELPM__`, `__AVR_HAVE_ELPMX__`, `__AVR_HAVE_JMP_CALL__`, `__AVR_2_BYTE_PC__`, `__ELF__` | `<prefix>/share/vcc/avr/include` |
 | `msp430` | `__MSP430__`, `__CHAR_UNSIGNED__`, `__ELF__` | `<prefix>/share/vcc/msp430/include` |
 | `mmix` | `__mmix__`, `__MMIX__`, `__MMIX_ABI_MMIXWARE__`, `__LP64__`, `_LP64` (GCC's; no `__ELF__`) | `<prefix>/share/vcc/mmix/include` |
+| `wasm32` | `__wasm__`, `__wasm`, `__wasm32__`, `__wasm32`, `__ILP32__`, `_ILP32`, and the feature macros `__wasm_bulk_memory__`, `__wasm_bulk_memory_opt__`, `__wasm_multivalue__`, `__wasm_mutable_globals__`, `__wasm_nontrapping_fptoint__`, `__wasm_reference_types__`, `__wasm_sign_ext__` (clang's with Braam's features; no `__ELF__`) | `<prefix>/share/vcc/wasm32/include` |
 | `besm6` | `besm6`, `__besm6__` | `<prefix>/share/vcc/besm6/include` |
 
 The RISC-V set is a subset of clang's, so a header written for clang takes the same

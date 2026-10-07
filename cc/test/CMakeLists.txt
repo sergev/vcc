@@ -6,8 +6,8 @@
 # share/vcc/<target>/) and run the driver from it with no overrides, which is
 # what checks the relocatable lookup.  Cases that assemble, link or run need the
 # target's GNU binutils (or clang and ld.lld) and qemu-system-riscv64, -aarch64, -arm,
-# -x86_64 or -avr (or b6as/b6ld for the BESM-6, mspsim for the MSP430, mmix for MMIX)
-# and are skipped without them.
+# -x86_64 or -avr (or b6as/b6ld for the BESM-6, mspsim for the MSP430, mmix for MMIX,
+# clang, wasm-ld and node for wasm32) and are skipped without them.
 #
 add_executable(cc-tests cc_test.cpp)
 target_link_libraries(cc-tests PRIVATE GTest::gtest_main)
@@ -25,6 +25,7 @@ target_compile_definitions(cc-tests PRIVATE
     VCC_GENAVR_PATH="$<TARGET_FILE:genavr>"
     VCC_GENMSP430_PATH="$<TARGET_FILE:genmsp430>"
     VCC_GENMMIX_PATH="$<TARGET_FILE:genmmix>"
+    VCC_GENWASM_PATH="$<TARGET_FILE:genwasm>"
     BESM6_INCLUDE_DIR="${BESM6_INCLUDE_DIR}"
     RISCV_INCLUDE_DIR="${RISCV_INCLUDE_DIR}"
     RISCV32_INCLUDE_DIR="${RISCV32_INCLUDE_DIR}"
@@ -34,6 +35,7 @@ target_compile_definitions(cc-tests PRIVATE
     AVR_INCLUDE_DIR="${AVR_INCLUDE_DIR}"
     MSP430_INCLUDE_DIR="${MSP430_INCLUDE_DIR}"
     MMIX_INCLUDE_DIR="${MMIX_INCLUDE_DIR}"
+    WASM32_INCLUDE_DIR="${WASM32_INCLUDE_DIR}"
     LP64_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     ILP32_INCLUDE_DIR="${ILP32_INCLUDE_DIR}"
     IP16_INCLUDE_DIR="${IP16_INCLUDE_DIR}"
@@ -101,9 +103,15 @@ target_compile_definitions(cc-tests PRIVATE
     MMIX_LD="${MMIX_LD}"
     MMIX_SIM="${MMIX_SIM}"
     MMIX_LIBGCC="${MMIX_LIBGCC}"
-    MMIX_LIB_DIR="${MMIX_LIB_DIR}")
+    MMIX_LIB_DIR="${MMIX_LIB_DIR}"
+    WASM32_TOOLS_FOUND=$<BOOL:${WASM32_TOOLS_FOUND}>
+    WASM32_ASSEMBLER="${WASM32_ASSEMBLER}"
+    WASM32_LD="${WASM32_LD}"
+    WASM32_NODE="${WASM32_NODE}"
+    WASM32_RUNNER="${WASM32_RUNNER}"
+    WASM32_LIB_DIR="${WASM32_LIB_DIR}")
 add_dependencies(cc-tests cc cpp parse lower genbesm genriscv genaarch64 genarm32 genx86 genavr
-    genmsp430 genmmix)
+    genmsp430 genmmix genwasm)
 if(RISCV_TOOLS_FOUND)
     add_dependencies(cc-tests riscv-libc)
 endif()
@@ -127,6 +135,9 @@ if(MSP430_TOOLS_FOUND)
 endif()
 if(MMIX_TOOLS_FOUND)
     add_dependencies(cc-tests mmix-libc)
+endif()
+if(WASM32_TOOLS_FOUND)
+    add_dependencies(cc-tests wasm32-libc)
 endif()
 foreach(t x86_64-linux aarch64-linux)
     if(TARGET ${t}-libc)

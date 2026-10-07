@@ -1,7 +1,8 @@
 #
-# Cross tools of the qemu targets (riscv64, riscv32, aarch64, arm32, x86_64, avr) and
-# the MSP430: GNU binutils first, clang + ld.lld + llvm-ar as the fallback, and clang
-# alone as the optional reference compiler of the tests.
+# Cross tools of the qemu targets (riscv64, riscv32, aarch64, arm32, x86_64, avr), the
+# MSP430 and wasm32: GNU binutils first, clang + ld.lld + llvm-ar as the fallback, and
+# clang alone as the optional reference compiler of the tests.  wasm32 has no binutils:
+# clang, wasm-ld and llvm-ar only.
 #
 # VCC_CROSS_TOOLS selects: auto (binutils, else clang), gnu or llvm.
 #
@@ -36,8 +37,11 @@ endif()
 #     CLANG_TARGET <regex>     the target's line in clang --print-targets
 #     CLANG_FLAGS <flag>...    clang --target=… and the ABI, for assembling and compiling
 #     LLD_FLAGS <flag>...      ld.lld flags
-#     [RWX_IMAGE])             the image is one RWX segment: GNU ld (2.39 and later) is
+#     LD <name>                the LLVM linker in place of ld.lld (wasm-ld)
+#     [RWX_IMAGE]              the image is one RWX segment: GNU ld (2.39 and later) is
 #                              told not to warn of it
+#     [LLVM_ONLY])             no binutils exist for the target: clang whatever
+#                              VCC_CROSS_TOOLS says
 #
 # Sets, cached:
 #   <VAR>_TOOLS_FOUND   an assembler, a linker and an archiver
@@ -50,8 +54,16 @@ endif()
 #                       string, for a C define
 #
 function(vcc_find_cross var)
-    cmake_parse_arguments(A "RWX_IMAGE" "CLANG_TARGET"
+    cmake_parse_arguments(A "RWX_IMAGE;LLVM_ONLY" "CLANG_TARGET;LD"
         "PREFIXES;GNU_ASFLAGS;GNU_LDFLAGS;CLANG_FLAGS;LLD_FLAGS" ${ARGN})
+
+    set(lld ${VCC_LLD})
+    if(A_LD)
+        unset(exe CACHE)
+        find_program(exe NAMES ${A_LD} HINTS /opt/homebrew/bin ${_llvm_hints})
+        set(lld ${exe})
+        unset(exe CACHE)
+    endif()
 
     set(as "")
     set(ld "")
@@ -92,10 +104,10 @@ function(vcc_find_cross var)
     if(VCC_CLANG AND VCC_CLANG_TARGETS MATCHES "${A_CLANG_TARGET}")
         set(clang_found ON)
     endif()
-    if(NOT gnu AND NOT VCC_CROSS_TOOLS STREQUAL "gnu" AND clang_found AND VCC_LLD
-       AND VCC_LLVM_AR)
+    if(NOT gnu AND (A_LLVM_ONLY OR NOT VCC_CROSS_TOOLS STREQUAL "gnu") AND clang_found
+       AND lld AND VCC_LLVM_AR)
         set(as ${VCC_CLANG} ${A_CLANG_FLAGS} -c)
-        set(ld ${VCC_LLD})
+        set(ld ${lld})
         set(ar ${VCC_LLVM_AR})
         set(ldflags ${A_LLD_FLAGS})
     endif()
@@ -107,7 +119,12 @@ function(vcc_find_cross var)
         message(STATUS "${var}: assembler ${tool}, linker ${ld}")
     else()
         string(JOIN ", " prefixes ${A_PREFIXES})
-        message(STATUS "${var}: no binutils (${prefixes}) and no clang/ld.lld/llvm-ar")
+        if(A_LD)
+            set(lld_name ${A_LD})
+        else()
+            set(lld_name ld.lld)
+        endif()
+        message(STATUS "${var}: no binutils (${prefixes}) and no clang/${lld_name}/llvm-ar")
     endif()
     string(JOIN " " assembler ${as})
     string(JOIN " " link_flags ${ldflags})

@@ -6,7 +6,8 @@
 # from and each target's headers and libraries in ../share/vcc/<target>, so the
 # installation is relocatable.  Each target's assembler and linker default to those
 # libc/<target> found at configure time (scripts/CrossTools.cmake: GNU binutils, else
-# clang and ld.lld; the MMIX ones in libc/mmix), else to whatever is on PATH.
+# clang and ld.lld, clang and wasm-ld for wasm32; the MMIX ones in libc/mmix), else to
+# whatever is on PATH.
 #
 add_executable(cc cc.c)
 foreach(pair RISCV64:RISCV RISCV32:RISCV32 AARCH64:AARCH64 ARM32:ARM32 X86_64:X86 AVR:AVR
@@ -27,6 +28,12 @@ endif()
 if(MMIX_TOOLS_FOUND)
     target_compile_definitions(cc PRIVATE MMIX_AS="${MMIX_AS}" MMIX_LD="${MMIX_LD}"
         MMIX_LIBGCC="${MMIX_LIBGCC}")
+endif()
+if(WASM32_TOOLS_FOUND)
+    list(GET WASM32_AS 0 as)
+    string(JOIN " " features ${WASM32_FEATURES})
+    target_compile_definitions(cc PRIVATE WASM32_AS="${as}" WASM32_LD="${WASM32_LD}"
+        WASM32_FEATURES="${features}")
 endif()
 # The C compilers that assemble and link for the hosted targets (libc/linux).
 foreach(var X86_64 AARCH64)

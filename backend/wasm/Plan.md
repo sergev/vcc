@@ -213,7 +213,7 @@ structure.c drops whatever isn't reachable from the entry.
 
 ## Phases (each ends green on `ctest -R wasm`, then a commit)
 
-1. **Skeleton**: target entry, cpp macros, headers, CrossTools and cc changes,
+1. **Skeleton** (done): target entry, cpp macros, headers, CrossTools and cc changes,
    `run.mjs`, crt0/console, and a `genwasm` that compiles `return <const>`. Assemble,
    link, run; `cc -t wasm32` end to end. Book chapter 1.
 2. **Integers, locals, calls, dispatch-loop control flow**: book chapters 2–12

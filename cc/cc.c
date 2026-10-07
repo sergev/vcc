@@ -9,11 +9,13 @@
 //     vlower     lower + opt     .ast -> .tac
 //     vgen<T>    code gen        .tac -> .s
 //     as         assemble        .s   -> .o     (b6as | clang | msp430-elf-as | mmix-...-as)
-//     ld         link            .o   -> a.out  (b6ld | ld.lld | msp430-elf-ld | mmix-...-ld)
+//     ld         link            .o   -> a.out  (b6ld | ld.lld | wasm-ld | msp430-elf-ld |
+//                                               mmix-...-ld)
 //
 // The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
-// system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430,
-// mmix and besm6 are bare metal.  By default it is the host, where that is one of the
+// system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64,
+// riscv32, aarch64, arm32, x86_64, avr, msp430, mmix and besm6 are bare metal, and wasm32
+// a WebAssembly module, run under node.  By default it is the host, where that is one of the
 // hosted targets, else riscv64.
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
@@ -129,6 +131,17 @@
 #ifndef MMIX_LIBGCC
 #define MMIX_LIBGCC ""
 #endif
+#ifndef WASM32_AS
+#define WASM32_AS ""
+#endif
+#ifndef WASM32_LD
+#define WASM32_LD ""
+#endif
+// Braam's wasm features, as libc/wasm32 assembles with them (WASM32_FEATURES there).
+#ifndef WASM32_FEATURES
+#define WASM32_FEATURES \
+    "-mreference-types -mbulk-memory -msign-ext -mmutable-globals -mnontrapping-fptoint"
+#endif
 #ifndef X86_64_LINUX_CC
 #define X86_64_LINUX_CC ""
 #endif
@@ -166,7 +179,8 @@ static char *progname = "vcc"; // diagnostic prefix: basename of argv[0]
 // when it was found, so that objects compiled by GCC link too.  MMIX is the same
 // with the GNU MMIX binutils, for Knuth's mmix: as GCC runs them, the assembler
 // with -x (it expands an out-of-range branch and allocates the base registers) and
-// the linker with no script, text from 0x100, its output Knuth's .mmo.
+// the linker with no script, text from 0x100, its output Knuth's .mmo.  wasm32 has no
+// binutils: clang assembles and wasm-ld links, with no script, a module for node.
 //
 // A hosted target (ARCH_HOSTED) both assembles and links with a C compiler: the one
 // found when vcc was configured, else <prefix>-gcc, else `cc` on the host itself, else
@@ -194,6 +208,8 @@ struct target {
     const char *gen_flag;         // code generator flag, or NULL
     bool pie;                     // hosted: a position-independent executable, no -no-pie
     bool no_runtime;              // hosted: no libvcc.a
+    const char *llvm_ld;          // the LLVM linker, when not ld.lld
+    const char *llvm_ld_flags;    // its flags, blank-separated, or NULL
 };
 
 #define RISCV_PREFIXES "riscv64-unknown-elf riscv64-elf riscv64-linux-gnu"
@@ -219,6 +235,10 @@ static const struct target targets[] = {
     { "mmix", ARCH_CROSS, "vgenmmix", MMIX_AS, MMIX_LD, MMIX_LDFLAGS, "mmix-knuth-mmixware",
       "-x -no-predefined-syms", NULL, NULL, NULL, "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC,
       true },
+    { .name = "wasm32", .arch = ARCH_CROSS, .codegen = "vgenwasm", .as_default = WASM32_AS,
+      .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
+      .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
+      .llvm_ld = "wasm-ld", .llvm_ld_flags = "--stack-first -z stack-size=1048576" },
     { .name = "x86_64-linux", .arch = ARCH_HOSTED, .codegen = "vgenx86",
       .as_default = X86_64_LINUX_CC, .ld_default = X86_64_LINUX_CC,
       .prefixes = "x86_64-linux-gnu", .triple = "x86_64-linux-gnu", .gen_flag = "--linux" },
@@ -574,13 +594,14 @@ static bool on_path(const char *name)
 }
 
 //
-// True if the tool `path` is clang or ld.lld rather than GNU binutils.
+// True if the tool `path` is clang, ld.lld or wasm-ld rather than GNU binutils.
 //
 static bool is_llvm(const char *path)
 {
     const char *base = strrchr(path, '/');
     base             = base ? base + 1 : path;
-    return strncmp(base, "clang", 5) == 0 || strstr(base, "lld") != NULL;
+    return strncmp(base, "clang", 5) == 0 || strstr(base, "lld") != NULL ||
+           strstr(base, "wasm-ld") != NULL;
 }
 
 //
@@ -590,7 +611,8 @@ static bool is_llvm(const char *path)
 //      blanks, so that it may carry arguments ("ld.lld -n");
 //   2. the path found when vcc was configured, if any;
 //   3. the GNU binutils <prefix>-<tool> on PATH, by each prefix in turn;
-//   4. clang or ld.lld, where the target has a clang triple;
+//   4. clang or ld.lld (or the target's own LLVM linker), where the target has a clang
+//      triple;
 //   5. the first prefix's name, which run() then reports missing.
 // Returns true if the tool is clang or ld.lld; sets *chosen_configured when it is the
 // configured one (if `chosen_configured` is not NULL).
@@ -642,7 +664,10 @@ static bool push_tool(struct vec *av, const char *envvar, const char *configured
         }
     }
     if (target->triple) {
-        vec_push(av, strcmp(tool, "as") == 0 ? "clang" : "ld.lld");
+        if (strcmp(tool, "as") == 0)
+            vec_push(av, "clang");
+        else
+            vec_push(av, target->llvm_ld ? (char *)target->llvm_ld : "ld.lld");
         return true;
     }
     vec_push(av, first);
@@ -799,6 +824,7 @@ static int run_codegen(const char *in, const char *out)
 //     mmix:    mmix-knuth-mmixware-as -x -no-predefined-syms -o out in
 // or with clang: clang --target=<triple> [flags] -c -o out in, e.g.
 //     riscv64: clang --target=riscv64 -march=rv64imfd -mabi=lp64d -c -o out in
+//     wasm32:  clang --target=wasm32 --no-default-config <features> -c -o out in
 // (a clang given by VCC_AS for a target with no triple carries its own flags).
 // A hosted target assembles with its C compiler:
 //     x86_64-linux: cc -c -o out in
@@ -946,6 +972,8 @@ static int compile_one(const char *src)
 //              ldflags -lc [libgcc.a]
 //     mmix:    mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100 -o out -L<lib>
 //              <lib>/crt0.o objs ldflags -lc [libgcc.a]
+//     wasm32:  wasm-ld --stack-first -z stack-size=1048576 -o out -L<lib> <lib>/crt0.o objs
+//              ldflags -lc
 //     others:  <prefix>-ld [flags] -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc,
 //              e.g. riscv64-unknown-elf-ld -m elf32lriscv for riscv32, avr-ld -m avr51;
 //              or ld.lld with no flags
@@ -1017,6 +1045,8 @@ static int link_objects(void)
     case ARCH_CROSS: {
         if (!llvm)
             push_words(&av, configured ? target->ld_default_flags : target->ld_flags);
+        else
+            push_words(&av, target->llvm_ld_flags);
         if (target->ld_flag)
             vec_push(&av, (char *)target->ld_flag);
         if (target->no_script && !linkscript)
@@ -1111,7 +1141,7 @@ static void usage(void)
     printf("Options:\n");
     printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux, aarch64-darwin\n");
     printf("                       (hosted), riscv64, riscv32, aarch64, arm32, x86_64, avr,\n");
-    printf("                       msp430, mmix or besm6 (bare metal); default %s\n",
+    printf("                       msp430, mmix, besm6 (bare metal) or wasm32; default %s\n",
            *HOST_TARGET ? HOST_TARGET : "riscv64");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");

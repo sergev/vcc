@@ -3,7 +3,8 @@
 // struct, its sizeof and _Alignof, and per member the bytes of a static instance with
 // only that member initialized to -1.  Measured from the objects of clang 21 (x86_64,
 // aarch64, arm32, riscv64, riscv32 and avr, with the targets of the vcc test fixtures),
-// msp430-elf-gcc 16, mmix-knuth-mmixware-gcc 16 and Apple clang 21 (aarch64-darwin).
+// msp430-elf-gcc 16, mmix-knuth-mmixware-gcc 16 and Apple clang 21 (aarch64-darwin), and
+// from a program built by clang 23 for wasm32.
 // On the 16-bit targets the 32-bit fields are long.
 //
 struct LayoutCase {
@@ -101,6 +102,24 @@ static const LayoutCase bitfield_layouts[] = {
     { "riscv32", "S17", "char a; long b:17; char c;", "size=8 align=4 a=ff00000000000000 b=00ffff0100000000 c=00000000ff000000" },
     { "riscv32", "S18", "int a:1; long long b:33; int c;", "size=16 align=8 a=01000000000000000000000000000000 b=feffffff030000000000000000000000 c=0000000000000000ffffffff00000000" },
     { "riscv32", "S19", "char a; long long :0; char b;", "size=9 align=1 a=ff0000000000000000 b=0000000000000000ff" },
+    { "wasm32",  "S1", "int a:3; int b:5; int c:24;", "size=4 align=4 a=07000000 b=f8000000 c=00ffffff" },
+    { "wasm32",  "S2", "char c; int x:4;", "size=4 align=4 c=ff000000 x=000f0000" },
+    { "wasm32",  "S3", "int a:3; int :0; int b:3;", "size=8 align=4 a=0700000000000000 b=0000000007000000" },
+    { "wasm32",  "S4", "char a; int :4; char b;", "size=3 align=1 a=ff0000 b=0000ff" },
+    { "wasm32",  "S5", "char a; long long x:4;", "size=8 align=8 a=ff00000000000000 x=000f000000000000" },
+    { "wasm32",  "S6", "int a:12; int b:12; int c:12;", "size=8 align=4 a=ff0f000000000000 b=00f0ff0000000000 c=00000000ff0f0000" },
+    { "wasm32",  "S7", "long x:20;", "size=4 align=4 x=ffff0f00" },
+    { "wasm32",  "S8", "unsigned a:1; _Bool b:1; unsigned short c:9;", "size=4 align=4 a=01000000 b=02000000 c=fc070000" },
+    { "wasm32",  "S9", "char a; int :0; char b;", "size=5 align=1 a=ff00000000 b=00000000ff" },
+    { "wasm32",  "S10", "char a:4; char b:6;", "size=2 align=1 a=0f00 b=003f" },
+    { "wasm32",  "S11", "long long a:40; int b:30;", "size=16 align=8 a=ffffffffff0000000000000000000000 b=0000000000000000ffffff3f00000000" },
+    { "wasm32",  "S13", "short a:9; short b:9; short c:9;", "size=6 align=2 a=ff0100000000 b=0000ff010000 c=00000000ff01" },
+    { "wasm32",  "S14", "char a; short :0;", "size=2 align=1 a=ff00" },
+    { "wasm32",  "S15", "int x:31; int y:2;", "size=8 align=4 x=ffffff7f00000000 y=0000000003000000" },
+    { "wasm32",  "S16", "char a; int b:7; char c;", "size=4 align=4 a=ff000000 b=007f0000 c=0000ff00" },
+    { "wasm32",  "S17", "char a; long b:17; char c;", "size=8 align=4 a=ff00000000000000 b=00ffff0100000000 c=00000000ff000000" },
+    { "wasm32",  "S18", "int a:1; long long b:33; int c;", "size=16 align=8 a=01000000000000000000000000000000 b=feffffff030000000000000000000000 c=0000000000000000ffffffff00000000" },
+    { "wasm32",  "S19", "char a; long long :0; char b;", "size=9 align=1 a=ff0000000000000000 b=0000000000000000ff" },
     { "avr", "S1", "long a:3; long b:5; long c:24;", "size=4 align=1 a=07000000 b=f8000000 c=00ffffff" },
     { "avr", "S2", "char c; int x:4;", "size=2 align=1 c=ff00 x=000f" },
     { "avr", "S3", "int a:3; int :0; int b:3;", "size=2 align=1 a=0700 b=0007" },

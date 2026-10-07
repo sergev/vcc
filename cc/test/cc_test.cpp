@@ -100,6 +100,14 @@ bool HaveArm32Run()
            access((std::string(ARM32_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
+// The same for wasm32: clang, wasm-ld, the runtime, and node to run a module.
+bool HaveWasm32Run()
+{
+    return WASM32_TOOLS_FOUND && HaveAssembler(WASM32_ASSEMBLER) && HaveTool(WASM32_LD) &&
+           HaveTool(WASM32_NODE) &&
+           access((std::string(WASM32_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+}
+
 // The same for x86-64, run on qemu `microvm`.
 bool HaveX86Run()
 {
@@ -302,10 +310,12 @@ protected:
                             : target == "avr"     ? AVR_INCLUDE_DIR
                             : target == "msp430"  ? MSP430_INCLUDE_DIR
                             : target == "mmix"    ? MMIX_INCLUDE_DIR
+                            : target == "wasm32"  ? WASM32_INCLUDE_DIR
                                                   : RISCV_INCLUDE_DIR;
-        const char *model = target == "avr" || target == "msp430"      ? IP16_INCLUDE_DIR
-                            : target == "riscv32" || target == "arm32" ? ILP32_INCLUDE_DIR
-                                                                       : LP64_INCLUDE_DIR;
+        const char *model = target == "avr" || target == "msp430" ? IP16_INCLUDE_DIR
+                            : target == "riscv32" || target == "arm32" || target == "wasm32"
+                                ? ILP32_INCLUDE_DIR
+                                : LP64_INCLUDE_DIR;
         return { inc, model, COMMON_INCLUDE_DIR };
     }
 
@@ -327,6 +337,7 @@ protected:
                : target == "avr"                                    ? VCC_GENAVR_PATH
                : target == "msp430"                                 ? VCC_GENMSP430_PATH
                : target == "mmix"                                   ? VCC_GENMMIX_PATH
+               : target == "wasm32"                                 ? VCC_GENWASM_PATH
                                                                     : VCC_GENRISCV_PATH,
                1);
 
@@ -372,6 +383,7 @@ protected:
         fs::create_symlink(VCC_GENAVR_PATH, prefix + "/bin/vgenavr");
         fs::create_symlink(VCC_GENMSP430_PATH, prefix + "/bin/vgenmsp430");
         fs::create_symlink(VCC_GENMMIX_PATH, prefix + "/bin/vgenmmix");
+        fs::create_symlink(VCC_GENWASM_PATH, prefix + "/bin/vgenwasm");
 
         std::string share = prefix + "/share/vcc/" + target;
         fs::create_directories(share + "/include");
@@ -419,6 +431,14 @@ protected:
         *status = RunProcess({ AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display", "none",
                                "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
                              out, Path("qemu.err"), 10);
+        return ReadFile(out);
+    }
+
+    // Run a linked wasm32 module under node; returns its output, main's result in *status.
+    std::string RunWasm32(const std::string &module, int *status)
+    {
+        std::string out = Path("node.out");
+        *status = RunProcess({ WASM32_NODE, WASM32_RUNNER, module }, out, Path("node.err"), 10);
         return ReadFile(out);
     }
 
@@ -682,6 +702,44 @@ TEST_F(CcDriver, LinkAndRunArm32)
         << Stderr();
     int status;
     EXPECT_EQ(RunQemuArm32(Path("t.elf"), &status), "42\n");
+    EXPECT_EQ(status, 3);
+}
+
+TEST_F(CcDriver, CompileToAssemblyWasm32)
+{
+    WriteSource("t.c", "int main(void) { return 42; }\n");
+    ASSERT_EQ(Vcc({ "-t", "wasm32", "-S", "t.c" }), 0) << Stderr();
+    std::string text = ReadFile(Path("t.s"));
+    EXPECT_NE(text.find("\t.functype\t__original_main () -> (i32)\n"), std::string::npos) << text;
+    EXPECT_NE(text.find("__main_void = __original_main\n"), std::string::npos) << text;
+    EXPECT_NE(text.find("\ti32.const\t42\n"), std::string::npos) << text;
+}
+
+// Separate compilation for wasm32, a .S among the sources, and the link of the build's
+// runtime by hand.
+TEST_F(CcDriver, LinkAndRunWasm32)
+{
+    if (!HaveWasm32Run())
+        GTEST_SKIP() << "clang/wasm-ld/node not found";
+    WriteSource("main.c", "int main(void) { return 3; }\n");
+    WriteSource("seven.S", "#ifdef __wasm32__\n"
+                           "        .section .text.seven,\"\",@\n"
+                           "        .globl  seven\n"
+                           "        .type   seven,@function\n"
+                           "seven:\n"
+                           "        .functype seven () -> (i32)\n"
+                           "        i32.const 7\n"
+                           "        end_function\n"
+                           "#endif\n");
+    ASSERT_EQ(Vcc({ "-t", "wasm32", "-c", "main.c", "seven.S" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("seven.o")).substr(0, 4), std::string("\0asm", 4));
+    std::string lib = WASM32_LIB_DIR;
+    ASSERT_EQ(Vcc({ "-t", "wasm32", "-nostdlib", "-o", "t.wasm", lib + "/crt0-status.o",
+                    "main.o", "seven.o", lib + "/libc.a" }),
+              0)
+        << Stderr();
+    int status;
+    EXPECT_EQ(RunWasm32(Path("t.wasm"), &status), "3\n");
     EXPECT_EQ(status, 3);
 }
 
@@ -1128,6 +1186,42 @@ int main(void)
     EXPECT_NE(echo.find(prefix + "/bin/vgenarm32 "), std::string::npos) << echo;
     EXPECT_NE(echo.find(std::string(ARM32_ASSEMBLER) + " -o "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -T " + lib + "/link.ld "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
+}
+
+// The same for wasm32: no linker script, wasm-ld and its flags, a module run by node.
+TEST_F(CcDriver, StagedPrefixWasm32)
+{
+    if (!HaveWasm32Run())
+        GTEST_SKIP() << "clang/wasm-ld/node not found";
+    std::string prefix = StagePrefix("wasm32");
+    std::string lib = prefix + "/share/vcc/wasm32/lib";
+    for (const char *name : { "crt0.o", "libc.a" })
+        fs::create_symlink(std::string(WASM32_LIB_DIR) + "/" + name, lib + "/" + name);
+
+    WriteSource("t.c", R"(#include <limits.h>
+int main(void)
+{
+    return CHAR_MAX == 127 ? 7 : 1;
+}
+)");
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "wasm32", "-v", "-o", "t.wasm", "t.c" }), 0) << Stderr();
+    int status;
+    EXPECT_EQ(RunWasm32(Path("t.wasm"), &status), "");
+    EXPECT_EQ(status, 7);
+
+    std::string echo = Stdout();
+    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t wasm32 -nostdinc -I" + prefix +
+                        "/share/vcc/wasm32/include "),
+              std::string::npos)
+        << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vlower -t wasm32 "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(prefix + "/bin/vgenwasm "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(WASM32_ASSEMBLER) + " -o "), std::string::npos) << echo;
+    EXPECT_NE(echo.find(std::string(WASM32_LD) + " --stack-first -z stack-size=1048576 -o "),
+              std::string::npos)
+        << echo;
+    EXPECT_EQ(echo.find(" -T "), std::string::npos) << echo;
     EXPECT_NE(echo.find(" -L" + lib + " " + lib + "/crt0.o "), std::string::npos) << echo;
 }
 

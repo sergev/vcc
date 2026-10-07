@@ -67,6 +67,7 @@ TEST_F(BitfieldTest, LayoutRiscv32) { CheckLayouts("riscv32"); }
 TEST_F(BitfieldTest, LayoutAvr) { CheckLayouts("avr"); }
 TEST_F(BitfieldTest, LayoutMsp430) { CheckLayouts("msp430"); }
 TEST_F(BitfieldTest, LayoutMmix) { CheckLayouts("mmix"); }
+TEST_F(BitfieldTest, LayoutWasm32) { CheckLayouts("wasm32"); }
 
 // C11 §6.7.2.1p4-5, §6.5.3.2p1, §6.5.3.4p1.
 TEST_F(TranslateTestRiscv, BitfieldWidthExceedsType)

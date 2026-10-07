@@ -235,6 +235,17 @@ protected:
     }
 };
 
+// Fixture for wasm32: ILP32 with a signed plain char and a binary128 long double, every
+// struct returned by the backend.
+class TranslateTestWasm32 : public TranslateTest {
+protected:
+    void SetUp() override
+    {
+        TranslateTest::SetUp();
+        target_config = target_lookup("wasm32");
+    }
+};
+
 // Fixture for the byte-addressed LP64 target the RISC-V backend uses.
 class TranslateTestRiscv : public TranslateTest {
 protected:
