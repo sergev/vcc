@@ -155,7 +155,8 @@ below Y             the call-saved registers in use, pushed after Y is set up
 - **Structures** are passed as clang passes them, which is not as one block: a structure
   is **flattened** into its top-level members, each an argument of its own rounded up to
   a pair (a nested structure, a union, an array, or an access unit of bit-fields stays
-  one piece). clang's access units of bit-fields are a run of them, split before one on a
+  one piece). clang's access units of bit-fields are a run of them, unnamed ones included
+  and ended by a `:0`, split before one on a
   byte boundary that would make the unit wider than 16 bits; the struct's TAC type lists
   them (`Target.bitfield_access_bits`), so `struct { long q : 30; int r : 7; char s; }`
   passes `q` and `r` as one 5-byte piece. So `struct { char a; int b; int c; }` goes `a` in `r24`, `b` in `r23:r22`,

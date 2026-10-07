@@ -15,6 +15,9 @@ struct bf_wide { long q : 30; int r : 7; char s; short t : 11; int u[2]; };
 struct bf_flt { float f; int x : 5; };
 struct bf_pair { unsigned char p : 4, q : 4; };
 struct bf_fpair { float f; unsigned char p : 3, q : 4; };
+struct bf_fanon { float f; int : 3; };
+struct bf_fzero { float f; int : 0; int x : 5; };
+struct bf_gap { char c; unsigned a : 4; unsigned : 8; unsigned b : 4; char d; };
 struct bf_small bf_mk_small(int a, int b, int c);
 int bf_sum_small(struct bf_small s);
 struct bf_wide bf_mk_wide(long q, int r);
@@ -24,6 +27,10 @@ int bf_sum_flt(struct bf_flt v);
 int bf_sum_pair(struct bf_pair a, struct bf_pair b);
 struct bf_fpair bf_mk_fpair(float f, int p, int q);
 int bf_sum_fpair(struct bf_fpair v, float g, int k);
+int bf_sum_fanon(struct bf_fanon v, int k);
+struct bf_fzero bf_mk_fzero(float f, int x);
+int bf_sum_fzero(struct bf_fzero v, float g);
+int bf_sum_gap(struct bf_gap v, int k);
 void bf_bump(struct bf_wide *w);
 extern struct bf_wide bf_global;
 )";
@@ -46,6 +53,15 @@ struct bf_fpair bf_mk_fpair(float f, int p, int q) {
 int bf_sum_fpair(struct bf_fpair v, float g, int k) {
     return (int)v.f * 1000 + v.p * 100 + v.q * 10 + (int)g + k;
 }
+int bf_sum_fanon(struct bf_fanon v, int k) { return (int)v.f * 10 + k; }
+struct bf_fzero bf_mk_fzero(float f, int x) {
+    struct bf_fzero v;
+    v.f = f;
+    v.x = x;
+    return v;
+}
+int bf_sum_fzero(struct bf_fzero v, float g) { return (int)v.f * 100 + v.x * 10 + (int)g; }
+int bf_sum_gap(struct bf_gap v, int k) { return v.c * 1000 + v.a * 100 + v.b * 10 + v.d + k; }
 void bf_bump(struct bf_wide *w) { w->q -= 1; w->r++; w->t = -w->t; }
 struct bf_wide bf_global = { -100000000l, -60, 'g', 1000, { 7, 8 } };
 )";
@@ -76,6 +92,13 @@ int main(void) {
     struct bf_fpair fp = bf_mk_fpair(3.0f, 5, 9);
     if (fp.f != 3.0f || fp.p != 5 || fp.q != 9) return 11;
     if (bf_sum_fpair(fp, 2.0f, 4) != 3596) return 12;
+    struct bf_fanon fa = { 6.0f };
+    if (bf_sum_fanon(fa, 7) != 67) return 13;
+    struct bf_fzero fz = bf_mk_fzero(4.0f, -3);
+    if (fz.f != 4.0f || fz.x != -3) return 14;
+    if (bf_sum_fzero(fz, 8.0f) != 378) return 15;
+    struct bf_gap gp = { 2, 3, 4, 5 };
+    if (bf_sum_gap(gp, 6) != 2351) return 16;
     return 0;
 }
 )";

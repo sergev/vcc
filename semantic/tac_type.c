@@ -66,6 +66,25 @@ static void add_unit_member(Tac_Type *ts, int offset, int size, bool per_field)
     add_member(ts, NULL, offset, type);
 }
 
+// An unnamed bit-field, for an ABI that sees it: its part of clang's access unit
+// (Target.bitfield_access_bits), else its own storage unit, and for a `:0` a marker, an
+// unnamed array of no bytes (Target.bitfield_unit_per_field).
+static void add_unnamed(Tac_Type *ts, const FieldDef *u, bool access)
+{
+    if (access) {
+        if (u->bf.width)
+            add_unit_member(ts, u->access_offset, u->access_size, false);
+    } else if (u->bf.width) {
+        if (!u->bf.bytewise)
+            add_unit_member(ts, u->offset, u->bf.unit_size, true);
+    } else {
+        Tac_Type *marker          = tac_new_type(TAC_TYPE_ARRAY);
+        marker->u.array.elem_type = tac_new_type(TAC_TYPE_UCHAR);
+        marker->u.array.size      = 0;
+        add_member(ts, NULL, u->offset, marker);
+    }
+}
+
 static Tac_Type *convert_type(const Type *t, bool deep)
 {
     t = unalias(t); // global typedef names survive into the translator as references
@@ -156,7 +175,12 @@ static Tac_Type *convert_type(const Type *t, bool deep)
         if (deep && d) {
             bool access    = target_config && target_config->bitfield_access_bits;
             bool per_field = target_config && target_config->bitfield_unit_per_field;
-            for (const FieldDef *f = d->members; f; f = f->next) {
+            const FieldDef *u = d->unnamed; // merged in declaration order
+            for (const FieldDef *f = d->members;; f = f->next) {
+                for (; u && (!f || u->index < f->index); u = u->next)
+                    add_unnamed(ts, u, access);
+                if (!f)
+                    break;
                 if (!f->bf.width)
                     add_member(ts, f->name, f->offset, convert_type(f->type, true));
                 else if (access)

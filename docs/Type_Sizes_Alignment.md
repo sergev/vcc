@@ -251,7 +251,10 @@ bit-fields can be byte-aligned), its bytes one by one. A read loads the unit and
 and masks the field out; a write merges the new bits into the unit and stores it whole.
 A struct's TAC type lists each storage unit as an unnamed unsigned member, so the ABI
 classifiers see integers there; on AVR, whose ABI passes a structure flattened into its
-members, it lists clang's access units instead (`Target.bitfield_access_bits`). `translator/test/bitfield_layouts.h` holds the layouts
+members, it lists clang's access units instead, unnamed bit-fields included
+(`Target.bitfield_access_bits`); on RISC-V, whose FP calling convention counts every
+bit-field as a field, a unit once per bit-field, named or not, and a `:0` as an unnamed
+array of no bytes (`Target.bitfield_unit_per_field`). `translator/test/bitfield_layouts.h` holds the layouts
 measured from the reference compilers, which `translate-tests` compares with ours.
 
 ### Checking a layout
@@ -287,6 +290,7 @@ records:
 | `big_endian`              | Most significant byte first; bit-fields from the top bit |
 | `bitfield_layout`         | The reference compilers' bit-field rule (below) |
 | `bitfield_access_bits`    | AVR: list clang's bit-field access units as the TAC members |
+| `bitfield_unit_per_field` | RISC-V: a unit member per bit-field, named or not, and `:0` markers |
 
 The TAC carries each struct's size, alignment and member offsets, so a backend takes
 aggregate layout from its input rather than recomputing it.

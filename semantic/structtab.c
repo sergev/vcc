@@ -43,6 +43,7 @@ void free_struct(StructDef *def)
 {
     if (def) {
         free_member(def->members);
+        free_member(def->unnamed);
         xfree(def->tag);
         xfree(def);
     }

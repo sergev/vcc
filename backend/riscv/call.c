@@ -4,7 +4,8 @@
 // or a variadic one, goes where an integer would.  A struct of up to 16 bytes that
 // flattens to one or two scalars, at least one of them floating, goes in FP registers
 // (or an FP and an integer register) when enough are left; each bit-field counts as a
-// scalar, its storage unit listed once per field.  Any other struct of up to
+// scalar, named or not, its storage unit listed once per field, and a `:0` ahead of the
+// second scalar of a struct keeps it out.  Any other struct of up to
 // 16 bytes goes as one or two doublewords (a register each, or the stack; the second
 // may follow on the stack when only a7 is left); a larger one by reference.  A long
 // double goes like such a struct.  A value of 16 bytes aligned to 16 starts at a
@@ -64,18 +65,34 @@ typedef struct {
     int offset;
 } Field;
 
+// The marker of a `:0` bit-field (Target.bitfield_unit_per_field): an unnamed array of
+// no bytes.
+static bool zero_width(const Tac_Member *m)
+{
+    return !m->name && m->type->kind == TAC_TYPE_ARRAY && m->type->u.array.size == 0;
+}
+
 // Flatten `t` at `off` into scalar fields; false when there would be more than two,
-// or one wider than a register of its class, or `t` holds a union.
+// or one wider than a register of its class, or `t` holds a union.  As with clang, a
+// structure that holds a `:0` before the member which brings the count to two is not
+// flattened either.
 static bool flatten(const Tac_Type *t, int off, Field *f, int *n)
 {
     switch (t->kind) {
-    case TAC_TYPE_STRUCTURE:
+    case TAC_TYPE_STRUCTURE: {
         if (t->u.structure.is_union)
             return false;
-        for (const Tac_Member *m = t->u.structure.members; m; m = m->next)
-            if (!flatten(m->type, off + m->offset, f, n))
+        bool zero = false;
+        for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
+            if (zero_width(m)) {
+                zero = true;
+                continue;
+            }
+            if (!flatten(m->type, off + m->offset, f, n) || (zero && *n == 2))
                 return false;
+        }
         return true;
+    }
     case TAC_TYPE_ARRAY:
         for (int i = 0; i < t->u.array.size; i++)
             if (!flatten(t->u.array.elem_type, off + i * rv_size(t->u.array.elem_type), f, n))

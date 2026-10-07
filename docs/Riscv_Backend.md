@@ -82,8 +82,12 @@ it is addressed from `sp` and `s0` is not used.
 - A struct of up to 16 bytes travels in one or two registers; a larger one is passed as
   a pointer to a copy. A struct of one or two scalar fields, at least one floating, uses
   an FP register for each floating one. As with clang, each bit-field counts as a field
-  of its own, so `{float f; unsigned char p : 3, q : 4;}` has three fields and goes in
-  integer registers.
+  of its own, named or not, so `{float f; unsigned char p : 3, q : 4;}` has three fields
+  and goes in integer registers, and `{float f; int : 3;}` goes in fa0 and a0. A `:0`
+  ahead of the second field also keeps a struct out of FP registers:
+  `{float f; int : 0; int x : 5;}` goes in an integer register, `{float f, g; int : 0;}`
+  in fa0 and fa1. The struct's TAC type lists a storage unit once per bit-field and marks
+  a `:0` by an unnamed array of no bytes (`Target.bitfield_unit_per_field`).
 - A `long double` travels in two integer registers. Its arithmetic is done by library
   functions such as `__addtf3` (add) and `__lttf2` (compare), in
   `libc/common/float128.c`.

@@ -218,3 +218,29 @@ li a2, 5
 call f
 )")) << s;
 }
+
+// An unnamed bit-field is a field too, so a float and one go in fa0 and a0.  A `:0`
+// ahead of the second field makes the struct go in integer registers, as with clang.
+TEST_F(InstrTest, UnnamedBitfieldStructArgument)
+{
+    std::string s = Code(CompileToRiscv(R"(
+struct fa { float f; int : 3; };
+struct fz { float f; int : 0; int x : 5; };
+struct ff { float f; float g; int : 0; };
+int f(struct fa a, struct fz z, struct ff w, int k);
+int h(void) {
+    struct fa a = { 1.5f };
+    struct fz z = { 2.5f, 3 };
+    struct ff w = { 3.5f, 4.5f };
+    return f(a, z, w, 5);
+}
+)"));
+    EXPECT_TRUE(Has(s, R"(flw fa0, -24(s0)
+lbu a0, -20(s0)
+ld a1, -32(s0)
+flw fa1, -60(s0)
+flw fa2, -56(s0)
+li a2, 5
+call f
+)")) << s;
+}

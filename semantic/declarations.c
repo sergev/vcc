@@ -417,39 +417,56 @@ static int layout_bitfield(const Field *f, int start, int *alignment)
     return start;
 }
 
-// Group the bit-fields of `members`, whose offsets still hold the bit each starts at,
-// into clang's access units (Target.bitfield_access_bits): a run of bit-fields ends at
-// another member or a `:0`; a field that starts inside a byte joins the unit before it,
-// one on a byte boundary only while the unit stays within `max_bits`.
-static void access_units(FieldDef *members, int max_bits)
+// Group the bit-fields of `members` and `unnamed` (each in declaration order, by `index`),
+// whose offsets still hold the bit each starts at, into clang's access units
+// (Target.bitfield_access_bits): a run of bit-fields, named or not, ends at another
+// member or a `:0`; a field that starts inside a byte joins the unit before it, one on a
+// byte boundary only while the unit stays within `max_bits`.
+static void access_units(FieldDef *members, FieldDef *unnamed, int max_bits)
 {
-    FieldDef *first = NULL; // of the current unit
-    int lo = 0, hi = 0;     // its bytes
-    for (FieldDef *m = members;; m = m->next) {
-        bool join = false;
-        if (m && m->bf.width && first && !m->access_break) {
+    int count = 0;
+    for (FieldDef *m = members; m; m = m->next)
+        count++;
+    for (FieldDef *m = unnamed; m; m = m->next)
+        count++;
+    FieldDef **field = xalloc((count + 1) * sizeof(*field), __func__, __FILE__, __LINE__);
+    FieldDef *a = members, *b = unnamed;
+    for (int i = 0; i < count; i++) {
+        if (a && (!b || a->index < b->index)) {
+            field[i] = a;
+            a        = a->next;
+        } else {
+            field[i] = b;
+            b        = b->next;
+        }
+    }
+    int first = -1;     // of the current unit
+    int lo = 0, hi = 0; // its bytes
+    for (int i = 0;; i++) {
+        FieldDef *m = i < count ? field[i] : NULL;
+        bool join   = false;
+        if (m && m->bf.width && first >= 0) {
             int end = (m->offset + m->bf.width + 7) / 8;
             join    = m->offset % 8 != 0 || (end - lo) * 8 <= max_bits;
         }
-        if (!join && first) {
-            for (FieldDef *f = first; f != m; f = f->next) {
-                if (f->bf.width) {
-                    f->access_offset = lo;
-                    f->access_size   = hi - lo;
-                }
+        if (!join && first >= 0) {
+            for (int j = first; j < i; j++) {
+                field[j]->access_offset = lo;
+                field[j]->access_size   = hi - lo;
             }
-            first = NULL;
+            first = -1;
         }
         if (!m)
             break;
         if (!m->bf.width)
             continue;
-        if (!first) {
-            first = m;
+        if (first < 0) {
+            first = i;
             lo    = m->offset / 8;
         }
         hi = (m->offset + m->bf.width + 7) / 8;
     }
+    xfree(field);
 }
 
 // Choose the storage unit of bit-field `m`, whose offset still holds the bit it starts at,
@@ -541,7 +558,13 @@ static void register_struct_type(const Type *t)
     // The layout advances in bits, for the bit-fields; every other member starts on a
     // byte, at the next multiple of its alignment.
     int current_bits      = 0;
-    bool access_break     = false; // a `:0` since the last named bit-field
+    // The unnamed bit-fields, for a target whose ABI sees them (Target.bitfield_unit_per_field,
+    // Target.bitfield_access_bits).
+    bool keep_unnamed     = target_config && (target_config->bitfield_unit_per_field ||
+                                              target_config->bitfield_access_bits);
+    FieldDef *unnamed     = NULL;
+    FieldDef **unnamed_tail = &unnamed;
+    int declared          = 0; // fields declared so far
     // On a word-addressed target every aggregate is padded to at least one machine word
     // (Target.aggregate_align) so array element strides stay word multiples and &arr[i]
     // never lands mid-word; byte-addressed targets use natural C packing (align 1).
@@ -551,6 +574,7 @@ static void register_struct_type(const Type *t)
     for (const Field *f = t->u.struct_t.fields; f; f = f->next) {
         if (f->kind == FIELD_STATIC_ASSERT)
             continue; /* already evaluated in validate_struct_definition */
+        declared++;
         int member_alignment = get_alignment(f->u.member.type);
         int alignas          = alignment_spec_value(f->u.member.align_spec);
         if (alignas && f->u.member.bitfield)
@@ -568,12 +592,17 @@ static void register_struct_type(const Type *t)
                 *tail = new_member(f->u.member.name,
                                    clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
                                    start);
-                (*tail)->bf.width     = width;
-                (*tail)->access_break = access_break;
-                access_break          = false;
-                tail                  = &(*tail)->next;
-            } else if (width == 0) {
-                access_break = true;
+                (*tail)->bf.width = width;
+                (*tail)->index    = declared;
+                tail              = &(*tail)->next;
+            } else if (keep_unnamed) {
+                *unnamed_tail = new_member(NULL,
+                                           clone_type(f->u.member.type, __func__, __FILE__,
+                                                      __LINE__),
+                                           width ? start : start / 8);
+                (*unnamed_tail)->bf.width = width;
+                (*unnamed_tail)->index    = declared;
+                unnamed_tail              = &(*unnamed_tail)->next;
             }
             if (kind == TYPE_STRUCT || start + width > current_bits)
                 current_bits = start + width;
@@ -582,9 +611,11 @@ static void register_struct_type(const Type *t)
         int offset = 0;
         if (kind == TYPE_STRUCT)
             offset = round_away_from_zero(member_alignment, (current_bits + 7) / 8);
-        *tail = new_member(f->u.member.name,
-                           clone_type(f->u.member.type, __func__, __FILE__, __LINE__), offset);
-        tail  = &(*tail)->next;
+        *tail          = new_member(f->u.member.name,
+                                    clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
+                                    offset);
+        (*tail)->index = declared;
+        tail           = &(*tail)->next;
         current_alignment =
             current_alignment > member_alignment ? current_alignment : member_alignment;
         // A struct grows past each member in turn; a union's size is the size of
@@ -595,13 +626,18 @@ static void register_struct_type(const Type *t)
     }
     int size = round_away_from_zero(current_alignment, (current_bits + 7) / 8);
     if (target_config && target_config->bitfield_access_bits)
-        access_units(members, target_config->bitfield_access_bits);
+        access_units(members, unnamed, target_config->bitfield_access_bits);
     for (FieldDef *m = members; m; m = m->next) {
+        if (m->bf.width)
+            place_bitfield(m, size, current_alignment);
+    }
+    for (FieldDef *m = unnamed; m; m = m->next) {
         if (m->bf.width)
             place_bitfield(m, size, current_alignment);
     }
     structtab_add_struct(t->u.struct_t.name, kind, true, current_alignment, size, members,
                          scope_level);
+    structtab_find(t->u.struct_t.name)->unnamed = unnamed;
 }
 
 // Register any inline struct/union definitions embedded in a type tree.
