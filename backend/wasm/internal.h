@@ -26,6 +26,10 @@ typedef struct {
     const Tac_TopLevel *tl;      // the function
     StringMap locals;            // name → its local's index + 1
     StringMap types;             // name → const Tac_Type * of a frame-resident name
+    struct Flow *flow;           // the body's CFG and liveness
+    StringMap slots;             // name → its frame slot's offset + 1
+    int frame_size;              // bytes of the frame on the shadow stack, 16-aligned
+    int fp;                      // the local holding the frame's address
     StringMap labels;            // label → its basic block
     int nblocks;                 // basic blocks
     int cur;                     // the block being translated
@@ -47,6 +51,17 @@ void gen_done(Gen *g);
 const Tac_Type *var_type(const Gen *g, const char *name);
 // The local holding name; fails when there is none.
 int var_local(const Gen *g, const char *name);
+// The local holding name, or -1.
+int find_local(const Gen *g, const char *name);
+// The offset of name's frame slot, or -1.
+int var_slot(const Gen *g, const char *name);
+// The frame on the shadow stack: allocated on entry (where a parameter living in a
+// slot is stored), released before each return.
+void gen_prologue(Gen *g);
+void gen_epilogue(Gen *g);
+// The load and store of a scalar of type t.
+Wasm_Op wasm_load_op(const Tac_Type *t);
+Wasm_Op wasm_store_op(const Tac_Type *t);
 // The type of static object `name` (a variable, constant or block-scope static of the
 // unit, or an extern), or NULL.
 const Tac_Type *global_type(const Gen *g, const char *name);

@@ -73,12 +73,43 @@ set(out ${CMAKE_CURRENT_BINARY_DIR})
 vcc_assemble_crt0(WASM32 ${src} ${out})
 # Assembly leaves.
 set(WASM32_LIBC_OBJS "")
-foreach(name console main)
+foreach(name console main memory)
     add_custom_command(OUTPUT ${out}/${name}.o
         COMMAND ${WASM32_AS} -o ${out}/${name}.o ${src}/${name}.s
         DEPENDS ${src}/${name}.s)
     list(APPEND WASM32_LIBC_OBJS ${out}/${name}.o)
 endforeach()
+
+# C sources, through cpp -> parse -> lower -> genwasm -> clang.
+file(GLOB WASM32_LIBC_HEADERS ${WASM32_INCLUDE_DIR}/*.h ${ILP32_INCLUDE_DIR}/*.h
+     ${LIBC_COMMON_INCLUDE_DIR}/*.h)
+macro(wasm32_compile_libc_c name srcdir)
+    add_custom_command(OUTPUT ${out}/${name}.o
+        COMMAND ${SystemCpp} -E -nostdinc -I${WASM32_INCLUDE_DIR} -I${ILP32_INCLUDE_DIR}
+                -I${LIBC_COMMON_INCLUDE_DIR}
+                ${srcdir}/${name}.c -o ${out}/${name}.i
+        COMMAND parse ${out}/${name}.i ${out}/${name}.ast
+        COMMAND lower -t wasm32 ${out}/${name}.ast ${out}/${name}.tac
+        COMMAND genwasm ${out}/${name}.tac ${out}/${name}.s
+        COMMAND ${WASM32_AS} -o ${out}/${name}.o ${out}/${name}.s
+        DEPENDS ${srcdir}/${name}.c ${WASM32_LIBC_HEADERS} parse lower genwasm
+        COMMENT "Compiling ${name}.c -> ${name}.o (wasm32)")
+    list(APPEND WASM32_LIBC_OBJS ${out}/${name}.o)
+endmacro()
+
+# The common sources but for those the bulk memory instructions replace (memory.s) and
+# the printf family, which needs variable arguments, to come.
+set(WASM32_LIBC_C ${LIBC_C_COMMON})
+list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset printf snprintf
+     sprintf)
+foreach(name ${WASM32_LIBC_C})
+    wasm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
+endforeach()
+# The ILP32 sources but int64.c and int64conv.c: long long is native here.
+foreach(name frexp ldexp modf)
+    wasm32_compile_libc_c(${name} ${LIBC_ILP32_DIR})
+endforeach()
+wasm32_compile_libc_c(malloc ${src})
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a

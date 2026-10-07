@@ -54,7 +54,7 @@ void gen_branch(Gen *g, const char *target, bool conditional)
 
 void gen_body(Gen *g)
 {
-    Flow *f    = flow_build(g->tl);
+    Flow *f    = g->flow;
     g->nblocks = f->nblocks;
     map_init(&g->labels);
     for (int b = 0; b < f->nblocks; b++)
@@ -94,5 +94,4 @@ void gen_body(Gen *g)
     if (loop)
         wasm_append(fn, WASM_END_LOOP);
     map_destroy(&g->labels);
-    flow_free(f);
 }

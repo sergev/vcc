@@ -11,6 +11,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    gen_prologue(&g);
     gen_body(&g);
     wasm_emit_func(out, g.fn);
     gen_done(&g);

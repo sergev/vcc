@@ -19,7 +19,7 @@ target_link_libraries(wasm backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(WASM_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER WASM_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-2])_tests\\.cpp$")
+list(FILTER WASM_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-7])_tests\\.cpp$")
 
 add_executable(wasm32-tests
     test/emit_tests.cpp
@@ -28,6 +28,8 @@ add_executable(wasm32-tests
     test/flow_tests.cpp
     test/data_tests.cpp
     test/call_tests.cpp
+    test/frame_tests.cpp
+    test/ptr_tests.cpp
     test/run_tests.cpp
     ${WASM_BOOK_SOURCES}
 )

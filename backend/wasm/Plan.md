@@ -219,14 +219,16 @@ structure.c drops whatever isn't reachable from the entry.
 2. **Integers, locals, calls, dispatch-loop control flow** (done; scalar static data
    came in here too, for chapter 10's file-scope variables): book chapters 2–12
    (operators, locals, `if`, blocks, loops, functions, file scope, long, unsigned).
-3. **Memory**: shadow frame, globals and static data, static locals, pointers,
+3. **Memory** (done): shadow frame, globals and static data, static locals, pointers,
    arrays, chars and strings, LOAD/STORE, ADD_PTR, byte kinds. libc subset:
-   mem/str/putchar plus malloc. Chapters 14–17; str and mem run tests.
+   mem/str/putchar plus malloc. Chapters 14–17. f32/f64 (arithmetic, comparisons,
+   `trunc_sat` conversions) and the double libc (`fabs`, `fma`, `fmax`, `fmin`,
+   `frexp`, `ldexp`, `modf`) came in here too, since chapters 14–17 use `double`;
+   chapter 13 passes with them.  The str and mem run tests use printf: phase 5.
 4. **Aggregates and the ABI**: struct/union offsets, the single-scalar rule,
    by-copy arguments, sret, variadics with `__va_start`, function pointers,
    bitfields. Chapter 18, stdarg tests, interop (integer side).
-5. **Floating point and long double**: f32/f64, guarded conversions, binary128
-   through the helpers. Full libc (doprnt, float128, sqrt). Chapter 13, printf,
+5. **Floating point and long double**: binary128 through the helpers. Full libc (doprnt, float128, sqrt). Chapter 13, printf,
    math and float128 tests, interop with doubles. **Whole book suite** (19–20
    included).
 6. **Structured control flow** (Ramsey) for reducible CFGs, with the dispatch loop

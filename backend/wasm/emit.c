@@ -45,6 +45,9 @@ static const char *const features[] = {
 
 void wasm_emit_unit_begin(FILE *out, const Tac_TopLevel *program)
 {
+    // The shadow stack's pointer, which wasm-ld defines; declared whether used or not
+    // (unused, it costs nothing).
+    fprintf(out, "\t.globaltype\t__stack_pointer, i32\n");
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         Wasm_Sig sig;
         if (t->kind == TAC_TOPLEVEL_FUNCTION && t->u.function.type) {

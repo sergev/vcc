@@ -3,6 +3,7 @@
 //
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -89,6 +90,41 @@ void wasm_signature(const Tac_Type *fun_type, Wasm_Sig *sig)
     sig->result = wasm_valtype(fun_type->u.fun_type.ret_type);
 }
 
+// Whether a value of type t can only live in memory: an aggregate or a long double.
+static bool memory_type(const Tac_Type *t)
+{
+    return t->kind == TAC_TYPE_STRUCTURE || t->kind == TAC_TYPE_ARRAY ||
+           t->kind == TAC_TYPE_LONG_DOUBLE;
+}
+
+// Whether frame-resident `name` lives in a frame slot: its address is taken, it is an
+// ALLOCATE_LOCAL object or volatile (Flow.in_memory), or its type is an aggregate.
+static bool in_slot(const Gen *g, const char *name, const Tac_Type *t)
+{
+    int v = flow_var(g->flow, name);
+    return memory_type(t) || (v >= 0 && flow_has(g->flow->in_memory, v));
+}
+
+// A slot for `name` of `size` bytes aligned to `align` (at most 16, the stack's).
+static void add_slot(Gen *g, const char *name, int size, int align)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_ALLOCATE_LOCAL &&
+            strcmp(in->u.allocate_local.name, name) == 0) {
+            if (in->u.allocate_local.size > size)
+                size = in->u.allocate_local.size;
+            if (in->u.allocate_local.alignment > align)
+                align = in->u.allocate_local.alignment;
+        }
+    if (align > 16)
+        align = 16;
+    if (align < 1)
+        align = 1;
+    int off = (g->frame_size + align - 1) & -align;
+    map_insert(&g->slots, name, off + 1, 0);
+    g->frame_size = off + (size > 0 ? size : 1);
+}
+
 void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
 {
     memset(g, 0, sizeof(*g));
@@ -96,9 +132,12 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     g->tl      = tl;
     map_init(&g->locals);
     map_init(&g->types);
-    g->fn = wasm_new_func(wasm_symbol(program, tl->u.function.name), tl->u.function.global);
+    map_init(&g->slots);
+    g->fn   = wasm_new_func(wasm_symbol(program, tl->u.function.name), tl->u.function.global);
+    g->flow = flow_build(tl);
 
-    // The parameters are the first locals, in order.
+    // The parameters are the first locals, in order; one that lives in a slot is
+    // stored there by the prologue.
     Wasm_Func *fn = g->fn;
     int n         = 0;
     for (const Tac_Param *p = tl->u.function.params; p; p = p->next)
@@ -110,7 +149,10 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
         if (!p->type)
             fatal_error("wasm: %s: parameter %s has no type", fn->name, p->name);
         map_insert(&g->types, p->name, (intptr_t)p->type, 0);
-        map_insert(&g->locals, p->name, fn->nparams + 1, 0);
+        if (in_slot(g, p->name, p->type))
+            add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
+        else
+            map_insert(&g->locals, p->name, fn->nparams + 1, 0);
         fn->params[fn->nparams++] = wasm_valtype(p->type);
     }
     if (tl->u.function.variadic)
@@ -124,16 +166,63 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
         if (!p->type)
             fatal_error("wasm: %s: local %s has no type", fn->name, p->name);
         map_insert(&g->types, p->name, (intptr_t)p->type, 0);
-        map_insert(&g->locals, p->name, wasm_add_local(fn, wasm_valtype(p->type)) + 1, 0);
+        if (in_slot(g, p->name, p->type))
+            add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
+        else
+            map_insert(&g->locals, p->name, wasm_add_local(fn, wasm_valtype(p->type)) + 1, 0);
     }
+    g->frame_size = (g->frame_size + 15) & -16;
+    if (g->frame_size)
+        g->fp = wasm_add_local(fn, WASM_I32);
+}
+
+void gen_prologue(Gen *g)
+{
+    if (!g->frame_size)
+        return;
+    Wasm_Func *fn                         = g->fn;
+    wasm_append(fn, WASM_GLOBAL_GET)->sym = xstrdup("__stack_pointer");
+    wasm_append(fn, WASM_I32_CONST)->imm  = g->frame_size;
+    wasm_append(fn, WASM_I32_SUB);
+    wasm_append(fn, WASM_LOCAL_TEE)->imm  = g->fp;
+    wasm_append(fn, WASM_GLOBAL_SET)->sym = xstrdup("__stack_pointer");
+    int index                             = 0;
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, index++) {
+        int off = var_slot(g, p->name);
+        if (off < 0)
+            continue;
+        wasm_append(fn, WASM_LOCAL_GET)->imm = g->fp;
+        wasm_append(fn, WASM_LOCAL_GET)->imm = index;
+        Wasm_Instr *in                       = wasm_append(fn, wasm_store_op(p->type));
+        in->imm                              = off;
+    }
+}
+
+void gen_epilogue(Gen *g)
+{
+    if (!g->frame_size)
+        return;
+    wasm_append(g->fn, WASM_LOCAL_GET)->imm = g->fp;
+    wasm_append(g->fn, WASM_I32_CONST)->imm = g->frame_size;
+    wasm_append(g->fn, WASM_I32_ADD);
+    wasm_append(g->fn, WASM_GLOBAL_SET)->sym = xstrdup("__stack_pointer");
 }
 
 void gen_done(Gen *g)
 {
     map_destroy(&g->locals);
     map_destroy(&g->types);
+    map_destroy(&g->slots);
+    flow_free(g->flow);
     wasm_free_func(g->fn);
-    g->fn = NULL;
+    g->fn   = NULL;
+    g->flow = NULL;
+}
+
+int var_slot(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->slots, name, &v) ? (int)v - 1 : -1;
 }
 
 const Tac_Type *var_type(const Gen *g, const char *name)
@@ -142,12 +231,70 @@ const Tac_Type *var_type(const Gen *g, const char *name)
     return map_get(&g->types, name, &v) ? (const Tac_Type *)v : NULL;
 }
 
-int var_local(const Gen *g, const char *name)
+int find_local(const Gen *g, const char *name)
 {
     intptr_t v;
-    if (!map_get(&g->locals, name, &v))
+    return map_get(&g->locals, name, &v) ? (int)v - 1 : -1;
+}
+
+int var_local(const Gen *g, const char *name)
+{
+    int local = find_local(g, name);
+    if (local < 0)
         fatal_error("wasm: %s: %s is not a local", g->fn->name, name);
-    return (int)v - 1;
+    return local;
+}
+
+Wasm_Op wasm_load_op(const Tac_Type *t)
+{
+    switch (t->kind) {
+    case TAC_TYPE_SCHAR:
+        return WASM_I32_LOAD8_S;
+    case TAC_TYPE_UCHAR:
+        return WASM_I32_LOAD8_U;
+    case TAC_TYPE_SHORT:
+        return WASM_I32_LOAD16_S;
+    case TAC_TYPE_USHORT:
+        return WASM_I32_LOAD16_U;
+    case TAC_TYPE_LONG_LONG:
+    case TAC_TYPE_ULONG_LONG:
+        return WASM_I64_LOAD;
+    case TAC_TYPE_FLOAT:
+        return WASM_F32_LOAD;
+    case TAC_TYPE_DOUBLE:
+        return WASM_F64_LOAD;
+    case TAC_TYPE_LONG_DOUBLE:
+    case TAC_TYPE_ARRAY:
+    case TAC_TYPE_STRUCTURE:
+        fatal_error("wasm: no scalar load of an aggregate or a long double");
+    default:
+        return WASM_I32_LOAD;
+    }
+}
+
+Wasm_Op wasm_store_op(const Tac_Type *t)
+{
+    switch (t->kind) {
+    case TAC_TYPE_SCHAR:
+    case TAC_TYPE_UCHAR:
+        return WASM_I32_STORE8;
+    case TAC_TYPE_SHORT:
+    case TAC_TYPE_USHORT:
+        return WASM_I32_STORE16;
+    case TAC_TYPE_LONG_LONG:
+    case TAC_TYPE_ULONG_LONG:
+        return WASM_I64_STORE;
+    case TAC_TYPE_FLOAT:
+        return WASM_F32_STORE;
+    case TAC_TYPE_DOUBLE:
+        return WASM_F64_STORE;
+    case TAC_TYPE_LONG_DOUBLE:
+    case TAC_TYPE_ARRAY:
+    case TAC_TYPE_STRUCTURE:
+        fatal_error("wasm: no scalar store of an aggregate or a long double");
+    default:
+        return WASM_I32_STORE;
+    }
 }
 
 const Tac_Type *global_type(const Gen *g, const char *name)

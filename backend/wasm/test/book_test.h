@@ -13,8 +13,11 @@ protected:
         // Programs whose expected results assume a 64-bit long, as on ARM32 (each gives
         // what clang gives, and three are not valid C on ILP32 at all), and those that
         // assume an unsigned plain char beyond them: signed_char_tests.cpp has versions
-        // of those.
+        // of those.  A function is called with the signature it is defined with or traps,
+        // so a program that declares the runtime's void putch(unsigned) as int putch(int)
+        // cannot run here, compiled by clang or by us.
 #define L "expects a 64-bit long"
+#define P "declares int putch(int): a call through another signature traps on wasm"
         static const SkippedTest skipped[] = {
             { "Chapter11_ArithmeticOps", L },
             { "Chapter11_Assign", L },
@@ -79,6 +82,7 @@ protected:
             { "Chapter16_CommonType", L },
             { "Chapter16_ConvertByAssignment", L },
             { "Chapter17_SizeofArray", L },
+            { "Chapter17_VoidForLoop", P },
             { "Chapter17_SizeofBasicTypes", L },
             { "Chapter17_SizeofBitwise", L },
             { "Chapter17_SizeofCompound", L },
@@ -101,6 +105,8 @@ protected:
             { "Chapter18_UnionInitAndMemberAccess", L },
             { "Chapter18_UnionInits", L },
             { "Chapter18_UnionRetvals", L },
+            { "Chapter19_WP_AllTypes_AliasAnalysisChange", P },
+            { "Chapter19_WP_AllTypes_FoldCharCondition", P },
             { "Chapter19_WP_AllTypes_FoldCompoundAssignAllTypes", L },
             { "Chapter19_WP_AllTypes_FoldCompoundBitwiseAssignAllTypes", L },
             { "Chapter19_WP_AllTypes_FoldExtensionAndTruncation", L },
@@ -109,6 +115,7 @@ protected:
             { nullptr, nullptr },
         };
 #undef L
+#undef P
         SkipIfListed(skipped);
         SKIP_IF_NO_WASM32_TOOLS();
     }
