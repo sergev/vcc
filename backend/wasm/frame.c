@@ -79,15 +79,53 @@ static void add_param(Wasm_Sig *sig, Wasm_ValType t)
     sig->params[sig->nparams++] = t;
 }
 
+Wasm_Pass wasm_pass(const Tac_Type *t, const Tac_Type **scalar)
+{
+    if (t->kind == TAC_TYPE_STRUCTURE && !t->u.structure.members && t->u.structure.size > 0)
+        fatal_error("wasm: structure %s passed with no members known",
+                    t->u.structure.tag ? t->u.structure.tag : "?");
+    const Tac_Type *s = tac_wasm32_scalar(t);
+    if (scalar)
+        *scalar = s;
+    if (!s)
+        return tac_wasm32_empty(t) ? WASM_PASS_NONE : WASM_PASS_REF;
+    return s->kind == TAC_TYPE_LONG_DOUBLE ? WASM_PASS_PAIR : WASM_PASS_VALUE;
+}
+
+bool wasm_sret(const Tac_Type *ret)
+{
+    Wasm_Pass pass = wasm_pass(ret, NULL);
+    return pass == WASM_PASS_PAIR || pass == WASM_PASS_REF;
+}
+
 void wasm_signature(const Tac_Type *fun_type, Wasm_Sig *sig)
 {
     memset(sig, 0, sizeof(*sig));
-    for (const Tac_Type *p = fun_type->u.fun_type.param_types; p; p = p->next)
-        add_param(sig, wasm_valtype(p));
+    const Tac_Type *ret = fun_type->u.fun_type.ret_type, *s;
+    sig->result         = WASM_VOID;
+    if (wasm_sret(ret))
+        add_param(sig, WASM_I32); // where the result goes
+    else if (wasm_pass(ret, &s) == WASM_PASS_VALUE)
+        sig->result = wasm_valtype(s);
+    for (const Tac_Type *p = fun_type->u.fun_type.param_types; p; p = p->next) {
+        switch (wasm_pass(p, &s)) {
+        case WASM_PASS_VALUE:
+            add_param(sig, wasm_valtype(s));
+            break;
+        case WASM_PASS_PAIR:
+            add_param(sig, WASM_I64);
+            add_param(sig, WASM_I64);
+            break;
+        case WASM_PASS_REF:
+            add_param(sig, WASM_I32);
+            break;
+        case WASM_PASS_NONE:
+            break;
+        }
+    }
     // The variable arguments come in a buffer, by its address.
     if (fun_type->u.fun_type.variadic)
         add_param(sig, WASM_I32);
-    sig->result = wasm_valtype(fun_type->u.fun_type.ret_type);
 }
 
 // Whether a value of type t can only live in memory: an aggregate or a long double.
@@ -130,36 +168,58 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     memset(g, 0, sizeof(*g));
     g->program = program;
     g->tl      = tl;
+    g->sret    = -1;
     map_init(&g->locals);
     map_init(&g->types);
     map_init(&g->slots);
+    map_init(&g->refs);
+    map_init(&g->pindex);
     g->fn   = wasm_new_func(wasm_symbol(program, tl->u.function.name), tl->u.function.global);
     g->flow = flow_build(tl);
-
-    // The parameters are the first locals, in order; one that lives in a slot is
-    // stored there by the prologue.
     Wasm_Func *fn = g->fn;
-    int n         = 0;
-    for (const Tac_Param *p = tl->u.function.params; p; p = p->next)
-        n++;
-    if (tl->u.function.variadic)
-        n++;
-    fn->params = xalloc((n + 1) * sizeof(Wasm_ValType), __func__, __FILE__, __LINE__);
+    if (!tl->u.function.type)
+        fatal_error("wasm: %s has no type", fn->name);
+
+    // The parameters are the first locals, as the signature has them: the result's
+    // address first when it goes through one.  A parameter that lives in a slot is
+    // stored there by the prologue; one passed by reference is used where it is.
+    Wasm_Sig sig;
+    wasm_signature(tl->u.function.type, &sig);
+    fn->params = xalloc((sig.nparams + 1) * sizeof(Wasm_ValType), __func__, __FILE__, __LINE__);
+    memcpy(fn->params, sig.params, sig.nparams * sizeof(Wasm_ValType));
+    fn->nparams = sig.nparams;
+    fn->result  = sig.result;
+    int index   = 0;
+    if (wasm_sret(tl->u.function.type->u.fun_type.ret_type))
+        g->sret = index++;
     for (const Tac_Param *p = tl->u.function.params; p; p = p->next) {
         if (!p->type)
             fatal_error("wasm: %s: parameter %s has no type", fn->name, p->name);
         map_insert(&g->types, p->name, (intptr_t)p->type, 0);
-        if (in_slot(g, p->name, p->type))
+        map_insert(&g->pindex, p->name, index + 1, 0);
+        switch (wasm_pass(p->type, NULL)) {
+        case WASM_PASS_VALUE:
+            if (in_slot(g, p->name, p->type))
+                add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
+            else
+                map_insert(&g->locals, p->name, index + 1, 0);
+            index++;
+            break;
+        case WASM_PASS_PAIR:
             add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
-        else
-            map_insert(&g->locals, p->name, fn->nparams + 1, 0);
-        fn->params[fn->nparams++] = wasm_valtype(p->type);
+            index += 2;
+            break;
+        case WASM_PASS_REF:
+            map_insert(&g->refs, p->name, index + 1, 0);
+            index++;
+            break;
+        case WASM_PASS_NONE:
+            add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
+            break;
+        }
     }
     if (tl->u.function.variadic)
-        fn->params[fn->nparams++] = WASM_I32;
-    fn->result = WASM_VOID;
-    if (tl->u.function.type)
-        fn->result = wasm_valtype(tl->u.function.type->u.fun_type.ret_type);
+        g->va_param = index++;
 
     // Every other frame-resident name: an automatic local or a temporary.
     for (const Tac_Param *p = tl->u.function.locals; p; p = p->next) {
@@ -170,6 +230,20 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
             add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
         else
             map_insert(&g->locals, p->name, wasm_add_local(fn, wasm_valtype(p->type)) + 1, 0);
+    }
+
+    // Below them, the calls' area: copies of arguments, variable arguments, results.
+    int area = 0;
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
+            int size = call_area_size(g, in);
+            if (size > area)
+                area = size;
+        }
+    if (area) {
+        g->frame_size = (g->frame_size + 15) & -16;
+        g->call_area  = g->frame_size;
+        g->frame_size += area;
     }
     g->frame_size = (g->frame_size + 15) & -16;
     if (g->frame_size)
@@ -186,15 +260,30 @@ void gen_prologue(Gen *g)
     wasm_append(fn, WASM_I32_SUB);
     wasm_append(fn, WASM_LOCAL_TEE)->imm  = g->fp;
     wasm_append(fn, WASM_GLOBAL_SET)->sym = xstrdup("__stack_pointer");
-    int index                             = 0;
-    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, index++) {
+    for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         int off = var_slot(g, p->name);
         if (off < 0)
             continue;
-        wasm_append(fn, WASM_LOCAL_GET)->imm = g->fp;
-        wasm_append(fn, WASM_LOCAL_GET)->imm = index;
-        Wasm_Instr *in                       = wasm_append(fn, wasm_store_op(p->type));
-        in->imm                              = off;
+        intptr_t index;
+        map_get(&g->pindex, p->name, &index);
+        index--;
+        const Tac_Type *s;
+        switch (wasm_pass(p->type, &s)) {
+        case WASM_PASS_VALUE:
+            wasm_append(fn, WASM_LOCAL_GET)->imm  = g->fp;
+            wasm_append(fn, WASM_LOCAL_GET)->imm  = index;
+            wasm_append(fn, wasm_store_op(s))->imm = off;
+            break;
+        case WASM_PASS_PAIR:
+            for (int half = 0; half < 2; half++) {
+                wasm_append(fn, WASM_LOCAL_GET)->imm  = g->fp;
+                wasm_append(fn, WASM_LOCAL_GET)->imm  = index + half;
+                wasm_append(fn, WASM_I64_STORE)->imm = off + 8 * half;
+            }
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -213,10 +302,18 @@ void gen_done(Gen *g)
     map_destroy(&g->locals);
     map_destroy(&g->types);
     map_destroy(&g->slots);
+    map_destroy(&g->refs);
+    map_destroy(&g->pindex);
     flow_free(g->flow);
     wasm_free_func(g->fn);
     g->fn   = NULL;
     g->flow = NULL;
+}
+
+int var_ref(const Gen *g, const char *name)
+{
+    intptr_t v;
+    return map_get(&g->refs, name, &v) ? (int)v - 1 : -1;
 }
 
 int var_slot(const Gen *g, const char *name)

@@ -76,17 +76,17 @@ static Wasm_ValType const_valtype(const Tac_Const *c)
     }
 }
 
-static Wasm_Instr *emit(Gen *g, Wasm_Op op)
+Wasm_Instr *emit(Gen *g, Wasm_Op op)
 {
     return wasm_append(g->fn, op);
 }
 
-static void emit_imm(Gen *g, Wasm_Op op, int64_t imm)
+void emit_imm(Gen *g, Wasm_Op op, int64_t imm)
 {
     emit(g, op)->imm = imm;
 }
 
-static void push_int(Gen *g, Wasm_ValType t, int64_t v)
+void push_int(Gen *g, Wasm_ValType t, int64_t v)
 {
     if (t == WASM_I64)
         emit_imm(g, WASM_I64_CONST, v);
@@ -126,7 +126,7 @@ static void push_const(Gen *g, const Tac_Const *c, Wasm_ValType t)
 // Variables: a local, a frame slot, or a static object in memory.
 //
 // The type of variable v, wherever it lives.
-static const Tac_Type *type_of(const Gen *g, const char *name)
+const Tac_Type *type_of(const Gen *g, const char *name)
 {
     const Tac_Type *t = var_type(g, name);
     if (!t)
@@ -139,8 +139,15 @@ static const Tac_Type *type_of(const Gen *g, const char *name)
 // Push the base of the address of named object `name`, which *sym (a symbol or NULL)
 // and *off complete in the access's immediate: the frame's address and the slot's
 // offset, or 0 and the static object's symbol.
-static void push_base(Gen *g, const char *name, const char **sym, int64_t *off)
+void push_base(Gen *g, const char *name, const char **sym, int64_t *off)
 {
+    int ref = var_ref(g, name);
+    if (ref >= 0) {
+        emit_imm(g, WASM_LOCAL_GET, ref);
+        *sym = NULL;
+        *off = 0;
+        return;
+    }
     int slot = var_slot(g, name);
     if (slot >= 0) {
         emit_imm(g, WASM_LOCAL_GET, g->fp);
@@ -154,7 +161,7 @@ static void push_base(Gen *g, const char *name, const char **sym, int64_t *off)
 }
 
 // A load or store at the address push_base began.
-static void emit_access(Gen *g, Wasm_Op op, const char *sym, int64_t off)
+void emit_access(Gen *g, Wasm_Op op, const char *sym, int64_t off)
 {
     Wasm_Instr *in = emit(g, op);
     in->sym        = sym ? xstrdup(sym) : NULL;
@@ -162,7 +169,7 @@ static void emit_access(Gen *g, Wasm_Op op, const char *sym, int64_t off)
 }
 
 // Push value v, of type t.
-static void push_val(Gen *g, const Tac_Val *v, Wasm_ValType t)
+void push_val(Gen *g, const Tac_Val *v, Wasm_ValType t)
 {
     if (v->kind == TAC_VAL_CONSTANT) {
         push_const(g, v->u.constant, t);
@@ -181,7 +188,7 @@ static void push_val(Gen *g, const Tac_Val *v, Wasm_ValType t)
 }
 
 // The value type of value v; a constant's is its kind's.
-static Wasm_ValType val_valtype(const Gen *g, const Tac_Val *v)
+Wasm_ValType val_valtype(const Gen *g, const Tac_Val *v)
 {
     if (v->kind == TAC_VAL_CONSTANT)
         return const_valtype(v->u.constant);
@@ -195,7 +202,7 @@ static const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
 }
 
 // The type of value v: a constant's by its kind.
-static const Tac_Type *any_type(const Gen *g, const Tac_Val *v)
+const Tac_Type *any_type(const Gen *g, const Tac_Val *v)
 {
     static const Tac_Type types[] = {
         [TAC_CONST_INT]         = { .kind = TAC_TYPE_INT },
@@ -222,7 +229,7 @@ static void check_dst(const Gen *g, const Tac_Val *dst)
 }
 
 // Before the value of `dst` is computed: the address of a destination in memory.
-static void begin_dst(Gen *g, const Tac_Val *dst)
+void begin_dst(Gen *g, const Tac_Val *dst)
 {
     check_dst(g, dst);
     if (find_local(g, dst->u.var_name) >= 0)
@@ -233,7 +240,7 @@ static void begin_dst(Gen *g, const Tac_Val *dst)
 }
 
 // Pop the value on top of the stack into `dst`.
-static void end_dst(Gen *g, const Tac_Val *dst)
+void end_dst(Gen *g, const Tac_Val *dst)
 {
     const char *name = dst->u.var_name;
     int local        = find_local(g, name);
@@ -242,7 +249,9 @@ static void end_dst(Gen *g, const Tac_Val *dst)
         return;
     }
     int slot = var_slot(g, name);
-    if (slot >= 0)
+    if (var_ref(g, name) >= 0)
+        emit_access(g, wasm_store_op(type_of(g, name)), NULL, 0);
+    else if (slot >= 0)
         emit_access(g, wasm_store_op(type_of(g, name)), NULL, slot);
     else
         emit_access(g, wasm_store_op(type_of(g, name)), wasm_symbol(g->program, name), 0);
@@ -264,7 +273,7 @@ static bool is_signed_type(const Tac_Type *t)
 
 // Bring an i32 holding a value of type t to its canonical form: a narrow type
 // extended from its width, by its signedness.
-static void narrow(Gen *g, const Tac_Type *t)
+void narrow(Gen *g, const Tac_Type *t)
 {
     int size = wasm_type_size(t);
     if (size >= 4 || t->kind == TAC_TYPE_VOID)
@@ -295,7 +304,7 @@ static int64_t narrow_const(int64_t v, const Tac_Type *t)
 // Push value v as a value of type t.  TAC leaves out a conversion between narrow types
 // of one width (signed char and unsigned char), so a narrow value whose own type is
 // not t is extended again by t's signedness.
-static void push_val_as(Gen *g, const Tac_Val *v, const Tac_Type *t)
+void push_val_as(Gen *g, const Tac_Val *v, const Tac_Type *t)
 {
     Wasm_ValType vt = wasm_valtype(t);
     if (v->kind == TAC_VAL_CONSTANT && (vt == WASM_I32 || vt == WASM_I64)) {
@@ -599,15 +608,20 @@ static void gen_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool 
 //
 // Memory: addresses, loads and stores through pointers, members of aggregates.
 //
-static bool is_aggregate(const Tac_Type *t)
+bool is_aggregate(const Tac_Type *t)
 {
     return t->kind == TAC_TYPE_STRUCTURE || t->kind == TAC_TYPE_ARRAY;
 }
 
 // Push the address of named object `name`: a slot's, a static object's, a function's
 // (its index in the table, which the relocation gives).
-static void push_addr(Gen *g, const char *name)
+void push_addr(Gen *g, const char *name)
 {
+    int ref = var_ref(g, name);
+    if (ref >= 0) {
+        emit_imm(g, WASM_LOCAL_GET, ref);
+        return;
+    }
     int slot = var_slot(g, name);
     if (slot >= 0) {
         emit_imm(g, WASM_LOCAL_GET, g->fp);
@@ -628,6 +642,104 @@ static void copy_bytes(Gen *g, int size)
 {
     emit_imm(g, WASM_I32_CONST, size);
     emit(g, WASM_MEMORY_COPY);
+}
+
+bool is_memory_type(const Tac_Type *t)
+{
+    return is_aggregate(t) || t->kind == TAC_TYPE_LONG_DOUBLE;
+}
+
+static void add_offset(Gen *g, int offset)
+{
+    if (offset) {
+        emit_imm(g, WASM_I32_CONST, offset);
+        emit(g, WASM_I32_ADD);
+    }
+}
+
+// The base of an access to place p, which *sym and *off complete in its immediate.
+static void place_base(Gen *g, const Place *p, const char **sym, int64_t *off)
+{
+    if (p->name) {
+        push_base(g, p->name, sym, off);
+    } else {
+        if (p->ptr)
+            push_val(g, p->ptr, WASM_I32);
+        else
+            emit_imm(g, WASM_LOCAL_GET, p->local);
+        *sym = NULL;
+        *off = 0;
+    }
+    *off += p->offset;
+}
+
+void place_addr(Gen *g, const Place *p)
+{
+    if (p->name)
+        push_addr(g, p->name);
+    else if (p->ptr)
+        push_val(g, p->ptr, WASM_I32);
+    else
+        emit_imm(g, WASM_LOCAL_GET, p->local);
+    add_offset(g, p->offset);
+}
+
+Place place_named(const char *name, int offset)
+{
+    return (Place){ .name = name, .offset = offset };
+}
+
+Place place_local(int local, int offset)
+{
+    return (Place){ .local = local, .offset = offset };
+}
+
+void store_value(Gen *g, const Place *dst, const Tac_Val *v, const Tac_Type *t)
+{
+    const char *sym;
+    int64_t off;
+    if (!is_memory_type(t)) {
+        place_base(g, dst, &sym, &off);
+        push_val_as(g, v, t);
+        emit_access(g, wasm_store_op(t), sym, off);
+        return;
+    }
+    if (v->kind == TAC_VAL_CONSTANT) {
+        if (v->u.constant->kind != TAC_CONST_LONG_DOUBLE)
+            fatal_error("wasm: %s: a constant of an aggregate type", g->fn->name);
+        Float128 bits = v->u.constant->u.long_double_val;
+        for (int half = 0; half < 2; half++) {
+            place_base(g, dst, &sym, &off);
+            emit_imm(g, WASM_I64_CONST, (int64_t)(half ? bits.hi : bits.lo));
+            emit_access(g, WASM_I64_STORE, sym, off + 8 * half);
+        }
+        return;
+    }
+    place_addr(g, dst);
+    push_addr(g, v->u.var_name);
+    copy_bytes(g, wasm_type_size(t));
+}
+
+void load_value(Gen *g, const Place *src, const Tac_Type *t)
+{
+    const char *sym;
+    int64_t off;
+    place_base(g, src, &sym, &off);
+    emit_access(g, wasm_load_op(t), sym, off);
+}
+
+// dst = the value of type t at place src.
+static void copy_from_place(Gen *g, const Place *src, const Tac_Val *dst, const Tac_Type *t)
+{
+    if (is_memory_type(t)) {
+        push_addr(g, dst->u.var_name);
+        place_addr(g, src);
+        copy_bytes(g, wasm_type_size(t));
+        return;
+    }
+    begin_dst(g, dst);
+    load_value(g, src, t);
+    end_dst(g, dst);
 }
 
 // The scalar of `size` bytes at byte `offset` of an object of type t, or NULL.
@@ -673,59 +785,22 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
         if (m && is_float_type(m) == is_float_type(t) && !is_aggregate(m))
             t = m;
     }
-    if (is_aggregate(t)) {
-        push_addr(g, dst);
-        if (offset) {
-            emit_imm(g, WASM_I32_CONST, offset);
-            emit(g, WASM_I32_ADD);
-        }
-        push_addr(g, src->u.var_name);
-        copy_bytes(g, wasm_type_size(t));
-        return;
-    }
-    const char *sym;
-    int64_t off;
-    push_base(g, dst, &sym, &off);
-    push_val(g, src, wasm_valtype(t));
-    emit_access(g, wasm_store_op(t), sym, off + offset);
+    Place p = place_named(dst, offset);
+    store_value(g, &p, src, t);
 }
 
 // Member load: dst = aggregate `src` at byte `offset`.
 static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_Val *dst)
 {
-    const Tac_Type *t = type_of(g, dst->u.var_name);
-    if (is_aggregate(t)) {
-        push_addr(g, dst->u.var_name);
-        push_addr(g, src);
-        if (offset) {
-            emit_imm(g, WASM_I32_CONST, offset);
-            emit(g, WASM_I32_ADD);
-        }
-        copy_bytes(g, wasm_type_size(t));
-        return;
-    }
-    begin_dst(g, dst);
-    const char *sym;
-    int64_t off;
-    push_base(g, src, &sym, &off);
-    emit_access(g, wasm_load_op(t), sym, off + offset);
-    end_dst(g, dst);
+    Place p = place_named(src, offset);
+    copy_from_place(g, &p, dst, type_of(g, dst->u.var_name));
 }
 
 // dst = *ptr.
 static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst)
 {
-    const Tac_Type *t = type_of(g, dst->u.var_name);
-    if (is_aggregate(t)) {
-        push_addr(g, dst->u.var_name);
-        push_val(g, ptr, WASM_I32);
-        copy_bytes(g, wasm_type_size(t));
-        return;
-    }
-    begin_dst(g, dst);
-    push_val(g, ptr, WASM_I32);
-    emit(g, wasm_load_op(t));
-    end_dst(g, dst);
+    Place p = { .ptr = ptr };
+    copy_from_place(g, &p, dst, type_of(g, dst->u.var_name));
 }
 
 // *ptr = src, in the type pointed to (a constant's own kind may be wider).
@@ -736,17 +811,11 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr)
         const Tac_Type *pt = type_of(g, ptr->u.var_name);
         if (pt->kind == TAC_TYPE_POINTER && pt->u.pointer.target_type &&
             pt->u.pointer.target_type->kind != TAC_TYPE_VOID &&
-            is_aggregate(pt->u.pointer.target_type) == is_aggregate(t))
+            is_memory_type(pt->u.pointer.target_type) == is_memory_type(t))
             t = pt->u.pointer.target_type;
     }
-    push_val(g, ptr, WASM_I32);
-    if (is_aggregate(t)) {
-        push_addr(g, src->u.var_name);
-        copy_bytes(g, wasm_type_size(t));
-        return;
-    }
-    push_val(g, src, wasm_valtype(t));
-    emit(g, wasm_store_op(t));
+    Place p = { .ptr = ptr };
+    store_value(g, &p, src, t);
 }
 
 // dst = ptr + index * scale, in bytes.
@@ -786,14 +855,13 @@ static void gen_ptr_diff(Gen *g, const Tac_Instruction *in)
     end_dst(g, in->u.ptr_diff.dst);
 }
 
-// dst = src, of an aggregate: a copy of its bytes.
+// dst = src: an aggregate or a long double by its bytes.
 static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 {
     const Tac_Type *t = type_of(g, dst->u.var_name);
-    if (is_aggregate(t)) {
-        push_addr(g, dst->u.var_name);
-        push_addr(g, src->u.var_name);
-        copy_bytes(g, wasm_type_size(t));
+    if (is_memory_type(t)) {
+        Place p = place_named(dst->u.var_name, 0);
+        store_value(g, &p, src, t);
         return;
     }
     begin_dst(g, dst);
@@ -801,57 +869,11 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     end_dst(g, dst);
 }
 
-//
-// Calls.
-//
-static void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn)
-{
-    const Tac_Val *dst       = in->u.fun_call.dst;
-    const Tac_Type *fun_type = in->u.fun_call.fun_type;
-    if (in->u.fun_call.indirect)
-        fatal_error("wasm: %s: indirect calls are not supported yet", g->fn->name);
-    if (!fun_type)
-        fatal_error("wasm: %s: call of %s with no type", g->fn->name, in->u.fun_call.fun_name);
-    if (dst)
-        begin_dst(g, dst);
-    const Tac_Type *p = fun_type->u.fun_type.param_types;
-    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next) {
-        if (p) {
-            push_val_as(g, a, p);
-            p = p->next;
-        } else if (fun_type->u.fun_type.variadic) {
-            fatal_error("wasm: %s: variable arguments are not supported yet", g->fn->name);
-        } else {
-            push_val(g, a, val_valtype(g, a)); // no prototype: the argument's own type
-        }
-    }
-    if (fun_type->u.fun_type.variadic)
-        fatal_error("wasm: %s: variadic calls are not supported yet", g->fn->name);
-    emit(g, WASM_CALL)->sym = xstrdup(wasm_symbol(g->program, in->u.fun_call.fun_name));
-    Wasm_ValType result     = wasm_valtype(fun_type->u.fun_type.ret_type);
-    if (noreturn)
-        emit(g, WASM_UNREACHABLE);
-    else if (dst) {
-        const Tac_Type *ret = fun_type->u.fun_type.ret_type;
-        if (wasm_type_size(ret) < 4 && type_of(g, dst->u.var_name)->kind != ret->kind)
-            narrow(g, type_of(g, dst->u.var_name));
-        end_dst(g, dst);
-    } else if (result != WASM_VOID)
-        emit(g, WASM_DROP);
-}
-
 void gen_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_RETURN:
-        if (in->u.return_.src && g->tl->u.function.type)
-            push_val_as(g, in->u.return_.src, g->tl->u.function.type->u.fun_type.ret_type);
-        else if (in->u.return_.src)
-            push_val(g, in->u.return_.src, g->fn->result);
-        else if (g->fn->result != WASM_VOID)
-            push_int(g, g->fn->result, 0); // `return;` in a function with a result
-        gen_epilogue(g);
-        emit(g, WASM_RETURN);
+        gen_return(g, in->u.return_.src);
         return;
     case TAC_INSTRUCTION_COPY:
     case TAC_INSTRUCTION_PTR_TO_CHAR_PTR:

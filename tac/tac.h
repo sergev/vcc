@@ -666,6 +666,17 @@ int tac_aapcs32_class(const Tac_Type *t);
 enum { TAC_MSP430_VALUE = 0, TAC_MSP430_BY_REF = 1 };
 int tac_msp430_class(const Tac_Type *t);
 //
+// WebAssembly C ABI, as clang's wasm32 (tac_abi.c).  The scalar a value of type `t`
+// travels as: `t` itself for a scalar, the one scalar of an aggregate holding exactly
+// one (a lone bit-field's as the unsigned integer of the aggregate's size), else NULL:
+// an empty aggregate travels not at all, any other by reference to a copy.  The class
+// of a variadic argument is the value of __builtin_va_class.
+//
+enum { TAC_WASM32_VALUE = 0, TAC_WASM32_BY_REF = 1 };
+const Tac_Type *tac_wasm32_scalar(const Tac_Type *t);
+bool tac_wasm32_empty(const Tac_Type *t);
+int tac_wasm32_class(const Tac_Type *t);
+//
 // System V AMD64 argument classes (tac_abi.c): in memory (over 16 bytes, or with an
 // eightbyte that merges to MEMORY), X87 (a long double, or a struct of one: returned in
 // st(0), passed in memory), or the class of each eightbyte, INTEGER or SSE, encoded

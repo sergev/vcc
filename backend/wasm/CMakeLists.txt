@@ -8,6 +8,7 @@ add_library(wasm STATIC
     instr.c
     data.c
     structure.c
+    call.c
     codegen.c
 )
 target_include_directories(wasm PUBLIC .)
@@ -19,7 +20,7 @@ target_link_libraries(wasm backend_common tac libutil)
 #
 # The book chapters the code generator handles so far.
 set(WASM_BOOK_SOURCES ${BOOK_TEST_SOURCES})
-list(FILTER WASM_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-7])_tests\\.cpp$")
+list(FILTER WASM_BOOK_SOURCES INCLUDE REGEX "/(chapter([1-9]|1[0-7])_tests|chapter18_tests[0-9])\\.cpp$")
 
 add_executable(wasm32-tests
     test/emit_tests.cpp
@@ -30,6 +31,10 @@ add_executable(wasm32-tests
     test/call_tests.cpp
     test/frame_tests.cpp
     test/ptr_tests.cpp
+    test/struct_tests.cpp
+    test/stdarg_tests.cpp
+    test/interop_tests.cpp
+    ../common/test/book/signed_char_tests.cpp
     test/run_tests.cpp
     ${WASM_BOOK_SOURCES}
 )

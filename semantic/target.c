@@ -318,7 +318,7 @@ static const Target targets[] = {
                 // result through a hidden pointer
       0,        // struct_args_split
       NULL,     // immediate_args
-      NULL,     // va_class: va_arg is a walk over the caller's argument buffer
+      tac_wasm32_class, // va_class: by value in the caller's buffer, or by reference
       0,        // ldouble_mant_dig: binary128
       1,        // hw_sqrt: f64.sqrt
       0,        // double_mant_dig: binary64
@@ -326,7 +326,7 @@ static const Target targets[] = {
       0,        // little-endian
       BITFIELD_SYSV,
       0,        // bitfield_access_bits
-      0 },      // bitfield_unit_per_field
+      1 },      // bitfield_unit_per_field: clang's single-element rule counts bit-fields
 };
 // clang-format on
 

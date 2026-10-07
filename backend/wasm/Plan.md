@@ -225,9 +225,17 @@ structure.c drops whatever isn't reachable from the entry.
    `trunc_sat` conversions) and the double libc (`fabs`, `fma`, `fmax`, `fmin`,
    `frexp`, `ldexp`, `modf`) came in here too, since chapters 14–17 use `double`;
    chapter 13 passes with them.  The str and mem run tests use printf: phase 5.
-4. **Aggregates and the ABI**: struct/union offsets, the single-scalar rule,
+4. **Aggregates and the ABI** (done): struct/union offsets, the single-scalar rule,
    by-copy arguments, sret, variadics with `__va_start`, function pointers,
-   bitfields. Chapter 18, stdarg tests, interop (integer side).
+   bitfields. Chapter 18, stdarg tests, interop (integer side).  The rule lives in
+   `tac/tac_abi.c` (`tac_wasm32_scalar`, and `tac_wasm32_class` for
+   `__builtin_va_class`); wasm32 lists a storage unit per bit-field
+   (`bitfield_unit_per_field`), since clang counts each as a field.  The callee uses
+   a by-reference argument in place; the copies, the variadic buffer and a result
+   with nowhere to go share one calls' area at the bottom of the frame.  Passing and
+   returning `long double` (two i64, sret) came here too; its arithmetic is phase 5.
+   The interop signature table includes doubles; `HeadersAgreeWithClang` waits for
+   phase 5, as it compares long double values.
 5. **Floating point and long double**: binary128 through the helpers. Full libc (doprnt, float128, sqrt). Chapter 13, printf,
    math and float128 tests, interop with doubles. **Whole book suite** (19–20
    included).

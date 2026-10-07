@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "internal.h"
+#include "xalloc.h"
 
 const char *wasm_symbol(const Tac_TopLevel *program, const char *name)
 {
@@ -28,6 +29,17 @@ static void print_sig(FILE *out, const Wasm_ValType *params, int nparams, Wasm_V
     fprintf(out, ") -> (%s)", wasm_valtype_name(result));
 }
 
+char *wasm_sig_string(const Wasm_Sig *sig)
+{
+    char buf[64 * 5 + 32];
+    int n = snprintf(buf, sizeof(buf), "(");
+    for (int i = 0; i < sig->nparams; i++)
+        n += snprintf(buf + n, sizeof(buf) - n, "%s%s", i ? ", " : "",
+                      wasm_valtype_name(sig->params[i]));
+    snprintf(buf + n, sizeof(buf) - n, ") -> (%s)", wasm_valtype_name(sig->result));
+    return xstrdup(buf);
+}
+
 static void print_functype(FILE *out, const char *name, const Wasm_Sig *sig)
 {
     fprintf(out, "\t.functype\t%s ", name);
@@ -48,6 +60,8 @@ void wasm_emit_unit_begin(FILE *out, const Tac_TopLevel *program)
     // The shadow stack's pointer, which wasm-ld defines; declared whether used or not
     // (unused, it costs nothing).
     fprintf(out, "\t.globaltype\t__stack_pointer, i32\n");
+    // The table of functions called through pointers, which wasm-ld makes.
+    fprintf(out, "\t.tabletype\t__indirect_function_table, funcref\n");
     for (const Tac_TopLevel *t = program; t; t = t->next) {
         Wasm_Sig sig;
         if (t->kind == TAC_TOPLEVEL_FUNCTION && t->u.function.type) {
@@ -56,7 +70,8 @@ void wasm_emit_unit_begin(FILE *out, const Tac_TopLevel *program)
             if (strcmp(t->u.function.name, "main") == 0 && !t->u.function.params)
                 fprintf(out, "\t.functype\tmain (i32, i32) -> (i32)\n");
         } else if (t->kind == TAC_TOPLEVEL_EXTERN && t->u.extern_.type &&
-                   t->u.extern_.type->kind == TAC_TYPE_FUN_TYPE) {
+                   t->u.extern_.type->kind == TAC_TYPE_FUN_TYPE &&
+                   strcmp(t->u.extern_.name, "__va_start") != 0) { // expanded in place
             wasm_signature(t->u.extern_.type, &sig);
             print_functype(out, wasm_symbol(program, t->u.extern_.name), &sig);
         }
