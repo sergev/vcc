@@ -3,6 +3,7 @@
 // typical code, and programs whose results must not change.
 //
 #include "arm32_test.h"
+#include "../../common/test/bitfield_run.h"
 
 // A loop: the compare fused with its branch, the index folded into the load.
 TEST_F(Arm32Test, PeepholeLoop)
@@ -141,4 +142,60 @@ TEST_F(Arm32Test, PeepholeKeepsVolatileUnpaired)
         Code(CompileToArm32("int g(int a, int b) { volatile int x = b, y = a; return x - y; }"));
     EXPECT_EQ(std::string::npos, code.find("ldrd ")) << code;
     EXPECT_EQ(std::string::npos, code.find("strd ")) << code;
+}
+
+// Bit-fields: a read is ubfx or sbfx, a store bfi (the masks' movw/movt gone with the
+// shifts), a store of zero bfc; a narrow unit is stored without its extension.
+TEST_F(Arm32Test, PeepholeBitfields)
+{
+    std::string code = Code(CompileToArm32(R"(
+struct S { unsigned a : 3; int b : 5; unsigned c : 12; unsigned d : 12; };
+unsigned get_c(struct S *p) { return p->c; }
+int get_b(struct S *p) { return p->b; }
+void set_c(struct S *p, unsigned v) { p->c = v; }
+void set_b(struct S *p, int v) { p->b = v; }
+void clear_c(struct S *p) { p->c = 0; }
+void bump_d(struct S *p) { p->d++; }
+)"));
+    EXPECT_NE(std::string::npos, code.find("ldr r0, [r0]\nubfx r0, r0, #8, #12\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldrb r0, [r0]\nsbfx r0, r0, #3, #5\nbx lr\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldr r0, [r2]\nbfi r0, r1, #8, #12\nstr r0, [r2]\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("ldrb r0, [r3]\nbfi r0, r1, #3, #5\nstrb r0, [r3]\nbx lr\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("ldr r0, [r1]\nbfc r0, #8, #12\nstr r0, [r1]\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("ubfx r0, r2, #4, #12\nadd r0, r0, #1\nbfi r2, r0, #4, #12\n"))
+        << code;
+    EXPECT_EQ(std::string::npos, code.find("orr")) << code;
+    EXPECT_EQ(std::string::npos, code.find("movw")) << code;
+    EXPECT_EQ(std::string::npos, code.find("uxt")) << code;
+}
+
+// The same shapes written out by hand; and what they are not: a mask with a hole, a
+// shifted value read again (the mask alone is a ubfx), a mask an immediate already.  The
+// movw of a mask has lr saved, and keeps it saved once gone.
+TEST_F(Arm32Test, PeepholeShiftMask)
+{
+    std::string code = Code(CompileToArm32(R"(
+unsigned ext(unsigned x) { return (x >> 13) & 0x7ff; }
+int sext(int x) { return (x << 7) >> 20; }
+unsigned ins(unsigned x, unsigned v) { return (x & 0xfff000ff) | (v & 0xfff) << 8; }
+unsigned hole(unsigned x) { return (x >> 4) & 0x505; }
+unsigned again(unsigned x) { unsigned t = x >> 4; return (t & 0xfff) + t; }
+unsigned low(unsigned x) { return x & 0xff; }
+)"));
+    EXPECT_NE(std::string::npos, code.find("push {lr}\nubfx r0, r0, #13, #11\npop {pc}\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sbfx r0, r0, #13, #12\nbx lr\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("push {lr}\nbfi r0, r1, #8, #12\npop {pc}\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("lsr r0, r0, #4\nmovw lr, #1285\nand r0, r0, lr\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("lsr r1, r0, #4\nubfx r0, r1, #0, #12\nadd r0, r0, r1\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("and r0, r0, #255\nbx lr\n")) << code;
+}
+
+// Bit-fields and shift-and-mask expressions computed as the host computes them.
+TEST_F(Arm32Test, RunPeepholeBitfields)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    EXPECT_EQ(BitfieldRunExpected(), CompileAndRunArm32(kBitfieldRunProgram));
 }

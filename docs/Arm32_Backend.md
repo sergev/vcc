@@ -49,7 +49,18 @@ For each function, in this order (`codegen.c`):
    reload of a value just stored, addresses folded into loads and stores
    (`ldr r2, [r0, r3, lsl #2]`), shifts into operands (`add r0, r0, r1, lsl #3`),
    `mla`/`mls`, `tst`, no jump to the next line, and `ldrd`/`strd` for adjacent
-   word-aligned slots. A short if/else or if becomes conditional instructions, up to
+   word-aligned slots. The shifts and masks of a bit-field access (or the same written
+   by hand) become `ubfx`/`sbfx` for a read, `bfi` for a store and `bfc` for a store of
+   zero, the `movw`/`movt` of a wide mask going with them, and a `uxtb`/`uxth` before a
+   `strb`/`strh` goes:
+
+   ```
+   ldrb    r0, [r3]            @ p->b = v, b a 5-bit field at bit 3
+   bfi     r0, r1, #3, #5
+   strb    r0, [r3]
+   ```
+
+   A short if/else or if becomes conditional instructions, up to
    four a side:
 
    ```

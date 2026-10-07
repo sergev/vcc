@@ -6,6 +6,9 @@
 //   - an address computation folds into the load or store it feeds ([base, #imm] or
 //     [base, index, lsl #s]), a shift by a constant into the operand2 it feeds, a mask
 //     into a tst, mul + add into mla (mul + sub, mls);
+//   - the shifts and masks of a bit-field are ubfx/sbfx (a read), bfi (a store) and bfc
+//     (a store of zero), the movw/movt of the masks gone with them, and a uxtb/uxth
+//     before a strb/strh goes;
 //   - a jump to the next label goes, a branch over a jump branches the other way, code
 //     after a jump or return goes;
 //   - a short diamond or triangle of a conditional branch becomes conditional
@@ -19,6 +22,7 @@
 //
 #include <string.h>
 
+#include "bitops.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -107,6 +111,13 @@ static bool def_operand(const A32_Instr *in, int i)
     return (i == 0 && !no_dest(in->op)) || (i == 1 && (in->op == A32_UMULL || in->op == A32_LDRD));
 }
 
+// Whether `in` reads the register it writes: movt and bfi/bfc keep the bits they do not
+// set.
+static bool reads_dest(const A32_Instr *in)
+{
+    return in->op == A32_MOVT || in->op == A32_BFI || in->op == A32_BFC;
+}
+
 static Regs return_regs(void);
 
 static Regs uses(const A32_Instr *in)
@@ -122,7 +133,7 @@ static Regs uses(const A32_Instr *in)
         const A32_Operand *o = &in->opnd[i];
         switch (o->kind) {
         case A32_OPND_REG:
-            if (!def_operand(in, i) || in->cond != A32_AL || in->op == A32_MOVT)
+            if (!def_operand(in, i) || in->cond != A32_AL || reads_dest(in))
                 u |= reg_set(o->reg, o->width);
             break;
         case A32_OPND_MEM:
@@ -176,7 +187,7 @@ static struct {
     int n;
     A32_Block **blocks;
     Regs *in, *out;
-    const A32_Block *cur;
+    A32_Block *cur;
 } live_info;
 
 static Regs return_regs(void)
@@ -358,7 +369,7 @@ static bool can_substitute(const A32_Instr *in, int t, A32_Width w)
             if (!(reg_set(o->reg, o->width) & tb))
                 break;
             if (def_operand(in, i)) {
-                if (in->cond != A32_AL || in->op == A32_MOVT)
+                if (in->cond != A32_AL || reads_dest(in))
                     return false;
                 break;
             }
@@ -432,7 +443,7 @@ static bool forward_move(A32_Instr **link)
 static bool computes(const A32_Instr *in)
 {
     if (!def_operand(in, 0) || in->cond != A32_AL || in->op == A32_UMULL ||
-        in->op == A32_LDRD || in->op == A32_MOVT)
+        in->op == A32_LDRD || reads_dest(in))
         return false;
     int r = in->opnd[0].reg;
     return r != A32_SP && r != A32_PC && r < A32_VREG;
@@ -764,20 +775,484 @@ static bool fold_test(A32_Instr **link)
     return true;
 }
 
+// Bit-field instructions.  A rule rewrites a consumer `at` into ubfx/sbfx/bfi/bfc and
+// deletes the group of instructions of its block that fed it: shifts, masks, and the
+// movw/movt of a mask that is no immediate.  The rewritten `at` reads the group's sources
+// where `at` is, so each must still hold there the value the group read; the group's own
+// writes go with it, so a source one of them overwrote after reading it survives.
+enum { MAX_GROUP = 8, MAX_SOURCES = 2 };
+
+typedef struct {
+    A32_Instr *in[MAX_GROUP];
+    int n;
+    struct {
+        int reg;
+        const A32_Instr *reader; // the instruction of the group (or `at`) that read it
+    } src[MAX_SOURCES];
+    int nsrc;
+} Group;
+
+static bool in_group(const Group *g, const A32_Instr *in)
+{
+    for (int i = 0; i < g->n; i++)
+        if (g->in[i] == in)
+            return true;
+    return false;
+}
+
+static bool group_add(Group *g, A32_Instr *in)
+{
+    if (in_group(g, in))
+        return true;
+    if (g->n == MAX_GROUP)
+        return false;
+    g->in[g->n++] = in;
+    return true;
+}
+
+static void group_source(Group *g, int reg, const A32_Instr *reader)
+{
+    g->src[g->nsrc].reg    = reg;
+    g->src[g->nsrc].reader = reader;
+    g->nsrc++;
+}
+
+// The last instruction of the current block before `at` to write core register `reg`,
+// when it writes that alone, always, and sets no flags; NULL otherwise.
+static A32_Instr *last_def(A32_Instr *at, int reg)
+{
+    A32_Instr *d = NULL;
+    for (A32_Instr *in = live_info.cur->head; in && in != at; in = in->next)
+        if (defs(in) & BIT(reg))
+            d = in;
+    if (!d || d->cond != A32_AL || d->set_flags || d->is_volatile || defs(d) != BIT(reg) ||
+        reads_dest(d))
+        return NULL;
+    return d;
+}
+
+// The value of operand `o` of an instruction of `g` (or `at`): an immediate, or a core
+// register `at` sees loaded with a constant by movw[+movt], mov or mvn, added to `g`.
+static bool operand_value(A32_Instr *at, const A32_Operand *o, uint32_t *v, Group *g)
+{
+    if (o->kind == A32_OPND_IMM) {
+        *v = (uint32_t)o->imm;
+        return true;
+    }
+    if (!is_reg(o) || o->width != A32_CORE || o->reg == A32_SP || o->reg == A32_PC)
+        return false;
+    A32_Instr *d = NULL;
+    for (A32_Instr *in = live_info.cur->head; in && in != at; in = in->next)
+        if (defs(in) & BIT(o->reg))
+            d = in;
+    if (!d || d->cond != A32_AL || d->set_flags || d->opnd[1].kind != A32_OPND_IMM ||
+        d->opnd[2].kind != A32_OPND_NONE)
+        return false;
+    uint32_t high = 0;
+    if (d->op == A32_MOVT) {
+        high = (uint32_t)d->opnd[1].imm << 16;
+        if (!group_add(g, d))
+            return false;
+        A32_Instr *lo = NULL;
+        for (A32_Instr *in = live_info.cur->head; in && in != d; in = in->next)
+            if (defs(in) & BIT(o->reg))
+                lo = in;
+        if (!lo || lo->op != A32_MOVW || lo->cond != A32_AL || lo->opnd[1].kind != A32_OPND_IMM)
+            return false;
+        d = lo;
+    }
+    switch (d->op) {
+    case A32_MOVW:
+        *v = high | (uint32_t)(d->opnd[1].imm & 0xffff);
+        break;
+    case A32_MOV:
+        *v = (uint32_t)d->opnd[1].imm;
+        break;
+    case A32_MVN:
+        *v = ~(uint32_t)d->opnd[1].imm;
+        break;
+    default:
+        return false;
+    }
+    return group_add(g, d);
+}
+
+// Whether `at` may read the sources of `g` and the group go: every instruction of the
+// group comes before `at` in its block; what lies among them neither branches nor calls,
+// reads or writes what the group writes, nor writes a source; no member writes a source
+// before that source is read; and of what the group writes, nothing but `keep` (what the
+// rewritten `at` writes) is read after `at`.
+static bool group_ok(const Group *g, const A32_Instr *at, Regs keep)
+{
+    Regs wr = 0, src = 0;
+    for (int i = 0; i < g->n; i++) {
+        if (g->in[i]->cond != A32_AL || g->in[i]->set_flags || g->in[i]->is_volatile)
+            return false;
+        wr |= defs(g->in[i]);
+    }
+    for (int i = 0; i < g->nsrc; i++)
+        src |= BIT(g->src[i].reg);
+    int found   = 0;
+    Regs unread = src; // sources whose reader is still to come
+    for (const A32_Instr *in = live_info.cur->head; in != at; in = in->next) {
+        if (!in)
+            return false;
+        bool member = in_group(g, in);
+        if (member)
+            found++;
+        else if (found == 0)
+            continue;
+        if (!member) {
+            if (is_call(in) || in->op == A32_B || (uses(in) & wr) || (defs(in) & (wr | src)))
+                return false;
+            continue;
+        }
+        for (int i = 0; i < g->nsrc; i++)
+            if (g->src[i].reader == in)
+                unread &= ~BIT(g->src[i].reg);
+        if (defs(in) & unread)
+            return false;
+    }
+    if (found != g->n)
+        return false;
+    for (int i = 0; i < g->nsrc; i++)
+        if (g->src[i].reg == A32_SP || g->src[i].reg == A32_PC)
+            return false;
+    Regs dead = wr & ~keep;
+    return !dead || dead_after(at, dead);
+}
+
+// Unlink and free the instructions of `g`.
+static void group_delete(const Group *g)
+{
+    for (A32_Instr **link = &live_info.cur->head; *link;)
+        if (in_group(g, *link))
+            delete_at(link);
+        else
+            link = &(*link)->next;
+}
+
+static void set_bitfield(A32_Instr *in, A32_Op op, int d, int s, int lsb, int width)
+{
+    for (int i = 0; i < A32_MAX_OPERANDS; i++)
+        xfree(in->opnd[i].sym);
+    memset(in->opnd, 0, sizeof in->opnd);
+    for (int i = 0; i < A32_MAX_OPERANDS; i++)
+        in->opnd[i].reg2 = -1;
+    in->op      = op;
+    in->opnd[0] = a32_reg(d);
+    int k       = 1;
+    if (s >= 0)
+        in->opnd[k++] = a32_reg(s);
+    in->opnd[k++] = a32_imm(lsb);
+    in->opnd[k]   = a32_imm(width);
+}
+
+// A new `mov d, s` before *link.
+static void insert_move(A32_Instr **link, int d, int s)
+{
+    A32_Instr *mv    = xalloc(sizeof(A32_Instr), __func__, __FILE__, __LINE__);
+    mv->op           = A32_MOV;
+    mv->opnd[0]      = a32_reg(d);
+    mv->opnd[1]      = a32_reg(s);
+    mv->opnd[2].reg2 = mv->opnd[3].reg2 = -1;
+    mv->next                            = *link;
+    *link                               = mv;
+}
+
+// The width of mask `m` = 2^w - 1, or 0 when it is not one.
+static int low_mask_width(uint32_t m)
+{
+    if (m == 0 || (m & (m + 1)))
+        return 0;
+    return 32 - clz32(m);
+}
+
+// The position and width of a field, the one run of ones in `f`; false if there is none.
+static bool field_of(uint32_t f, int *pos, int *width)
+{
+    if (f == 0)
+        return false;
+    int p = ctz32(f);
+    int w = low_mask_width(f >> p);
+    if (!w)
+        return false;
+    *pos   = p;
+    *width = w;
+    return true;
+}
+
+// A plain unconditional core operation `op d, a, b` setting no flags.
+static bool is_alu3(const A32_Instr *in, A32_Op op)
+{
+    return in->op == op && in->cond == A32_AL && !in->set_flags && !in->is_volatile &&
+           is_reg(&in->opnd[0]) && in->opnd[0].width == A32_CORE && is_reg(&in->opnd[1]) &&
+           in->opnd[3].kind == A32_OPND_NONE;
+}
+
+// `and d, a, M` as an operand of the group: the register a and the mask M, either
+// order; uxtb/uxth as masks 0xff/0xffff.
+static bool mask_of(A32_Instr *in, int *a, uint32_t *m, Group *g)
+{
+    if ((in->op == A32_UXTB || in->op == A32_UXTH) && in->cond == A32_AL && is_reg(&in->opnd[1]) &&
+        in->opnd[2].kind == A32_OPND_NONE) {
+        *a = in->opnd[1].reg;
+        *m = in->op == A32_UXTB ? 0xff : 0xffff;
+        return true;
+    }
+    if (!is_alu3(in, A32_AND))
+        return false;
+    Group save = *g;
+    if (operand_value(in, &in->opnd[2], m, g)) {
+        *a = in->opnd[1].reg;
+        return true;
+    }
+    *g = save;
+    if (is_reg(&in->opnd[2]) && operand_value(in, &in->opnd[1], m, g)) {
+        *a = in->opnd[2].reg;
+        return true;
+    }
+    *g = save;
+    return false;
+}
+
+// `at` = `and d, t, #(2^w - 1)` fed by `lsr t, a, #p`: `ubfx d, a, #p, #w`; with no
+// shift, and a mask that took a movw, `ubfx d, a, #0, #w`.  `at` = `lsr`/`asr d, t, #r`
+// fed by `lsl t, a, #l`, r >= l: `ubfx`/`sbfx d, a, #(r - l), #(32 - r)`.
+static bool fold_extract(A32_Instr *at)
+{
+    Group g = { 0 };
+    int d   = at->opnd[0].reg, a;
+    uint32_t m;
+    A32_Operand sh;
+    if (mask_of(at, &a, &m, &g) && at->op == A32_AND) {
+        int w = low_mask_width(m);
+        if (!w)
+            return false;
+        A32_Instr *f = last_def(at, a);
+        if (f && shift_operand(f, &sh) && sh.sub == A32_SHIFT_LSR && sh.reg2 < 0) {
+            Group with = g;
+            int p      = (int)sh.imm;
+            if (group_add(&with, f)) {
+                group_source(&with, sh.reg, f);
+                if (group_ok(&with, at, BIT(d))) {
+                    set_bitfield(at, A32_UBFX, d, sh.reg, p, w < 32 - p ? w : 32 - p);
+                    group_delete(&with);
+                    return true;
+                }
+            }
+        }
+        if (g.n == 0 || a32_operand2_imm(m))
+            return false; // an immediate mask: and is as good
+        group_source(&g, a, at);
+        if (!group_ok(&g, at, BIT(d)))
+            return false;
+        set_bitfield(at, A32_UBFX, d, a, 0, w);
+        group_delete(&g);
+        return true;
+    }
+    A32_Operand r;
+    if (!shift_operand(at, &r) || r.sub == A32_SHIFT_LSL || r.reg2 >= 0)
+        return false;
+    A32_Instr *f = last_def(at, r.reg);
+    if (!f || !shift_operand(f, &sh) || sh.sub != A32_SHIFT_LSL || sh.reg2 >= 0 || r.imm < sh.imm)
+        return false;
+    g = (Group){ 0 };
+    group_add(&g, f);
+    group_source(&g, sh.reg, f);
+    if (!group_ok(&g, at, BIT(d)))
+        return false;
+    set_bitfield(at, r.sub == A32_SHIFT_ASR ? A32_SBFX : A32_UBFX, d, sh.reg, (int)(r.imm - sh.imm),
+                 32 - (int)r.imm);
+    group_delete(&g);
+    return true;
+}
+
+// The field value `v` placed at bit `p` as operand `o` of `at`: `lsl y, z, #p` of a mask
+// `and z, v, #(2^w - 1)`, or the mask alone (p = 0), or the shift alone when it drops
+// the bits above the field (w = 32 - p).  Its instructions join `g`.
+static bool placed_field(A32_Instr *at, const A32_Operand *o, int *v, int *p, int *w, Group *g)
+{
+    int z                   = -1;
+    *p                      = 0;
+    const A32_Instr *reader = at;
+    A32_Operand sh;
+    if (o->kind == A32_OPND_SHIFT) {
+        if (o->sub != A32_SHIFT_LSL || o->reg2 >= 0)
+            return false;
+        z  = o->reg;
+        *p = (int)o->imm;
+    } else if (is_reg(o)) {
+        A32_Instr *y = last_def(at, o->reg);
+        if (!y)
+            return false;
+        if (shift_operand(y, &sh)) {
+            if (sh.sub != A32_SHIFT_LSL || sh.reg2 >= 0 || !group_add(g, y))
+                return false;
+            z      = sh.reg;
+            *p     = (int)sh.imm;
+            reader = y;
+        } else {
+            z = o->reg; // the mask, unshifted
+        }
+    } else {
+        return false;
+    }
+    A32_Instr *mk = last_def((A32_Instr *)reader, z);
+    uint32_t m;
+    Group save = *g;
+    if (mk && group_add(g, mk) && mask_of(mk, v, &m, g) && (*w = low_mask_width(m)) != 0) {
+        if (*p + *w > 32)
+            *w = 32 - *p;
+        group_source(g, *v, mk);
+        return true;
+    }
+    *g = save;
+    if (*p == 0)
+        return false;
+    *v = z; // no mask: the shift drops the bits above
+    *w = 32 - *p;
+    group_source(g, z, reader);
+    return true;
+}
+
+// `at` = `orr r, x, y`, x = `and x, u, #keep` (or `bic x, u, #f`) clearing a field, y
+// the value placed there: bfi into r after a move of u, or into u.
+static bool fold_insert(A32_Instr **link)
+{
+    A32_Instr *at = *link;
+    if (!is_alu3(at, A32_ORR))
+        return false;
+    int r = at->opnd[0].reg;
+    for (int side = 1; side <= 2; side++) {
+        const A32_Operand *xo = &at->opnd[side], *yo = &at->opnd[3 - side];
+        if (!is_reg(xo))
+            continue;
+        Group g      = { 0 };
+        A32_Instr *x = last_def(at, xo->reg);
+        uint32_t keep;
+        if (!x || !group_add(&g, x))
+            continue;
+        if (is_alu3(x, A32_AND) && operand_value(x, &x->opnd[2], &keep, &g)) {
+        } else if (is_alu3(x, A32_BIC) && x->opnd[2].kind == A32_OPND_IMM) {
+            keep = ~(uint32_t)x->opnd[2].imm;
+        } else {
+            continue;
+        }
+        int u = x->opnd[1].reg, v, p, w;
+        if (!placed_field(at, yo, &v, &p, &w, &g))
+            continue;
+        uint32_t field = (w == 32 ? ~0u : ((1u << w) - 1)) << p;
+        if (keep != ~field || u == v)
+            continue;
+        group_source(&g, u, x);
+        // Into r after `mov r, u`, which the computation of u may then take over; into
+        // u when r is v.
+        bool in_u = r == v;
+        if (in_u && !last_read(at, BIT(u)))
+            continue;
+        if (!group_ok(&g, at, BIT(r) | (in_u ? BIT(u) : 0)))
+            continue;
+        group_delete(&g);
+        for (link = &live_info.cur->head; *link != at; link = &(*link)->next)
+            ;
+        if (in_u) {
+            set_bitfield(at, A32_BFI, u, v, p, w);
+            if (r != u)
+                insert_move(&at->next, r, u);
+        } else {
+            set_bitfield(at, A32_BFI, r, v, p, w);
+            if (r != u)
+                insert_move(link, r, u);
+        }
+        return true;
+    }
+    return false;
+}
+
+// `at` = `and d, u, M` with M from a movw (and movt) clearing one field: bfc in place,
+// after a move of u when only that is no longer.
+static bool fold_clear(A32_Instr **link)
+{
+    A32_Instr *at = *link;
+    if (!is_alu3(at, A32_AND) || !is_reg(&at->opnd[2]))
+        return false;
+    Group g = { 0 };
+    uint32_t keep;
+    if (!operand_value(at, &at->opnd[2], &keep, &g) || a32_operand2_imm(keep) ||
+        a32_operand2_imm(~keep))
+        return false;
+    int d = at->opnd[0].reg, u = at->opnd[1].reg, p, w;
+    if (!field_of(~keep, &p, &w) || p + w == 32 || (d != u && g.n < 2))
+        return false; // a field to the top is the ubfx of the bits below it
+    group_source(&g, u, at);
+    if (!group_ok(&g, at, BIT(d)))
+        return false;
+    group_delete(&g);
+    for (link = &live_info.cur->head; *link != at; link = &(*link)->next)
+        ;
+    set_bitfield(at, A32_BFC, d, -1, p, w);
+    if (d != u)
+        insert_move(link, d, u);
+    return true;
+}
+
+// `uxtb`/`uxth t, a` stored by `strb`/`strh t` at its last read: a stored instead.
+static bool fold_narrow_store(A32_Instr *at)
+{
+    if ((at->op != A32_STRB && at->op != A32_STRH) || at->cond != A32_AL || at->is_volatile)
+        return false;
+    int t        = at->opnd[0].reg;
+    A32_Instr *x = last_def(at, t);
+    if (!x || x->op != (at->op == A32_STRB ? A32_UXTB : A32_UXTH) || !is_reg(&x->opnd[1]) ||
+        x->opnd[2].kind != A32_OPND_NONE)
+        return false;
+    const A32_Operand *m = &at->opnd[1];
+    if (m->kind != A32_OPND_MEM || m->reg == t || m->reg2 == t)
+        return false;
+    Group g = { 0 };
+    group_add(&g, x);
+    group_source(&g, x->opnd[1].reg, x);
+    if (!group_ok(&g, at, 0))
+        return false;
+    at->opnd[0].reg = x->opnd[1].reg;
+    group_delete(&g);
+    return true;
+}
+
+// One bit-field rewrite in block `b`; true when something changed (the block is then
+// to be swept again: instructions before the one rewritten may be gone).  Inserts
+// first: an extract or clear would take the masks out of their shape.
+static bool fold_bitfields(A32_Block *b)
+{
+    for (A32_Instr **link = &b->head; *link; link = &(*link)->next)
+        if (fold_insert(link))
+            return true;
+    for (A32_Instr **link = &b->head; *link; link = &(*link)->next) {
+        A32_Instr *in = *link;
+        if (in->cond != A32_AL || in->set_flags || in->is_volatile)
+            continue;
+        if (fold_extract(in) || fold_clear(link) || fold_narrow_store(in))
+            return true;
+    }
+    return false;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(A32_Instr **link)
 {
-    A32_Instr *in = *link;
+    A32_Instr *in  = *link;
     A32_Operand *o = in->opnd;
     // A move to itself.
     if (is_move(in) && o[0].reg == o[1].reg) {
         delete_at(link);
         return true;
     }
-    // An add or sub of zero: a move.
-    if ((in->op == A32_ADD || in->op == A32_SUB) && in->cond == A32_AL && !in->set_flags &&
-        is_reg(&o[0]) && is_reg(&o[1]) && o[2].kind == A32_OPND_IMM && o[2].imm == 0 &&
-        o[3].kind == A32_OPND_NONE) {
+    // An add, sub, orr, eor or bic of zero: a move.
+    if ((in->op == A32_ADD || in->op == A32_SUB || in->op == A32_ORR || in->op == A32_EOR ||
+         in->op == A32_BIC) &&
+        in->cond == A32_AL && !in->set_flags && is_reg(&o[0]) && is_reg(&o[1]) &&
+        o[2].kind == A32_OPND_IMM && o[2].imm == 0 && o[3].kind == A32_OPND_NONE) {
         in->op      = A32_MOV;
         o[2]        = (A32_Operand){ 0 };
         o[2].reg2   = -1;
@@ -1005,6 +1480,8 @@ void a32_peephole(A32_Func *fn, uint64_t result)
         compute_liveness(fn);
         for (A32_Block *b = fn->blocks; b; b = b->next) {
             live_info.cur = b;
+            while (fold_bitfields(b))
+                changed = true;
             for (A32_Instr **link = &b->head; *link;) {
                 if (rewrite(link))
                     changed = true;

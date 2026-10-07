@@ -96,7 +96,8 @@ typedef struct {
     X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc") X(AND, "and") X(ORR, "orr")     \
     X(EOR, "eor") X(BIC, "bic") X(MUL, "mul") X(MLA, "mla") X(MLS, "mls")                   \
     X(UMULL, "umull") X(SDIV, "sdiv") X(UDIV, "udiv") X(LSL, "lsl") X(LSR, "lsr")           \
-    X(ASR, "asr") X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx") X(VADD_F32, "vadd.f32") X(VADD_F64, "vadd.f64")          \
+    X(ASR, "asr") X(UBFX, "ubfx") X(SBFX, "sbfx") X(BFI, "bfi") X(BFC, "bfc")       \
+    X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx") X(VADD_F32, "vadd.f32") X(VADD_F64, "vadd.f64")          \
     X(VSUB_F32, "vsub.f32") X(VSUB_F64, "vsub.f64") X(VMUL_F32, "vmul.f32")                 \
     X(VMUL_F64, "vmul.f64") X(VDIV_F32, "vdiv.f32") X(VDIV_F64, "vdiv.f64")                 \
     X(VNEG_F32, "vneg.f32") X(VNEG_F64, "vneg.f64") X(VSQRT_F64, "vsqrt.f64")              \
