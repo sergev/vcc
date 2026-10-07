@@ -1,8 +1,9 @@
 //
 // Peephole pass over the AArch64 IR, after register allocation and the frame:
 //   - an operation on a just-loaded constant takes the immediate form (add/sub/cmp with
-//     12 bits, optionally shifted; and/orr/eor with a bitmask immediate; shifts), and a
-//     zero is stored from the zero register;
+//     12 bits, optionally shifted, the constant also when extended or shifted as an
+//     operand; and/orr/eor with a bitmask immediate; shifts), and a zero is stored from
+//     the zero register;
 //   - a move folds into its uses within the block, a result is computed where it is
 //     moved, a move to itself goes (a W one when the upper half it clears is not
 //     read), and so does the reload of what was just stored;
@@ -344,9 +345,58 @@ static bool fold_constant(A64_Instr **link)
             return true;
         }
     }
+    A64_Operand imm, shift;
+    // A constant added or subtracted extended or shifted (a member's offset, an index):
+    // its value, extended and shifted, as an immediate.
+    if ((n->op == A64_ADD || n->op == A64_SUB) && o[0].kind == A64_OPND_REG &&
+        o[1].kind == A64_OPND_REG && o[1].reg != t && o[1].reg != A64_ZR &&
+        o[1].width == o[0].width && o[2].reg == t && o[3].kind == A64_OPND_NONE &&
+        ((o[2].kind == A64_OPND_EXT && o[2].imm <= 4) ||
+         (o[2].kind == A64_OPND_SHIFT && o[2].sub == A64_SHIFT_LSL))) {
+        uint64_t u = bits == 32 ? (uint32_t)v : (uint64_t)v; // as the register holds it
+        int64_t x;
+        if (o[2].kind == A64_OPND_SHIFT) {
+            x = (int64_t)u;
+        } else {
+            switch ((A64_Extend)o[2].sub) {
+            case A64_EXT_UXTB:
+                x = (uint8_t)u;
+                break;
+            case A64_EXT_UXTH:
+                x = (uint16_t)u;
+                break;
+            case A64_EXT_UXTW:
+                x = (uint32_t)u;
+                break;
+            case A64_EXT_SXTB:
+                x = (int8_t)u;
+                break;
+            case A64_EXT_SXTH:
+                x = (int16_t)u;
+                break;
+            case A64_EXT_SXTW:
+                x = (int32_t)u;
+                break;
+            default:
+                x = (int64_t)u;
+                break;
+            }
+        }
+        x = (int64_t)((uint64_t)x << o[2].imm);
+        if (o[0].width == A64_W)
+            x = (int32_t)x;
+        bool neg   = x < 0;
+        uint64_t a = neg ? -(uint64_t)x : (uint64_t)x;
+        if (!arith_imm(a, &imm, &shift))
+            return false;
+        if (neg)
+            n->op = n->op == A64_ADD ? A64_SUB : A64_ADD;
+        set_imm(n, imm, shift);
+        delete_at(link);
+        return true;
+    }
     bool regs3 = o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_REG &&
                  o[2].kind == A64_OPND_REG && o[3].kind == A64_OPND_NONE;
-    A64_Operand imm, shift;
     switch (n->op) {
     case A64_ADD:
     case A64_AND:

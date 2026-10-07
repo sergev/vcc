@@ -35,6 +35,12 @@ EXPECT_PEEPHOLE(PeepholeMsub, "msub x0, x0, x1, x2\nret\n",
 // Addresses: a constant index is an offset, a variable one is scaled in the load.
 EXPECT_PEEPHOLE(PeepholeConstantIndex, "ldr x0, [x0, #16]\nret\n",
                 "long f(long *p) { return p[2]; }")
+// A constant offset added extended or shifted (a member, a pointer step) is an
+// immediate, a negative one subtracted.
+EXPECT_PEEPHOLE(PeepholeMemberOffset, "add x1, x0, #4\nldrh w0, [x1]\nadd w0, w0, #1\nstrh w0, [x1]\nret\n",
+                "struct T { int a; unsigned short h; }; void f(struct T *p) { p->h++; }")
+EXPECT_PEEPHOLE(PeepholeNegativeOffset, "sub x0, x0, #12\nret\n",
+                "int *f(int *p) { return p - 3; }")
 
 // A compare and branch, the index sign-extended and scaled in the load, a zero test as
 // cbz, the increment an immediate.
@@ -46,8 +52,7 @@ b.le .LL0
 ldr w1, [x0]
 cbz w1, .L8
 add w2, w2, #1
-mov x10, #1
-add x0, x0, x10, lsl #2
+add x0, x0, #4
 cmp x0, x3
 b.lo .L3
 mov w0, w2
