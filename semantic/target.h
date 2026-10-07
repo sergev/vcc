@@ -115,6 +115,10 @@ typedef struct {
     // another member or `:0`, split before a field on a byte boundary when the unit would
     // grow past this many bits.  0 = our storage units.
     int bitfield_access_bits;
+    // A struct's TAC type lists a bit-field's storage unit once per named bit-field it
+    // holds, not once per place (RISC-V, whose FP calling convention, as clang has it,
+    // counts every bit-field as a field of its own).
+    int bitfield_unit_per_field;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

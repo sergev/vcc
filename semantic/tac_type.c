@@ -42,8 +42,9 @@ static void add_member(Tac_Type *ts, const char *name, int offset, Tac_Type *typ
 // A bit-field's storage unit is a member of its own, an unsigned integer, once for each
 // place and size: the unit is what the code loads and stores, and a backend sizes a
 // constant stored into a structure by the member it finds there.  It also makes the ABI
-// classifiers see bit-fields as integers.
-static void add_unit_member(Tac_Type *ts, int offset, int size)
+// classifiers see bit-fields as integers.  With `per_field` it is listed once per
+// bit-field it holds, for a classifier that counts them (Target.bitfield_unit_per_field).
+static void add_unit_member(Tac_Type *ts, int offset, int size, bool per_field)
 {
     Tac_Type *type;
     TypeKind k = unsigned_kind_of_size(size);
@@ -56,7 +57,7 @@ static void add_unit_member(Tac_Type *ts, int offset, int size)
         type->u.array.elem_type = tac_new_type(TAC_TYPE_UCHAR);
         type->u.array.size      = size;
     }
-    for (const Tac_Member *m = ts->u.structure.members; m; m = m->next) {
+    for (const Tac_Member *m = ts->u.structure.members; m && !per_field; m = m->next) {
         if (!m->name && m->offset == offset && tac_compare_type(m->type, type)) {
             tac_free_type(type);
             return;
@@ -153,14 +154,15 @@ static Tac_Type *convert_type(const Type *t, bool deep)
         ts->u.structure.alignment = d ? d->alignment : t->u.struct_t.cached_align;
         ts->u.structure.is_union = t->kind == TYPE_UNION;
         if (deep && d) {
-            bool access = target_config && target_config->bitfield_access_bits;
+            bool access    = target_config && target_config->bitfield_access_bits;
+            bool per_field = target_config && target_config->bitfield_unit_per_field;
             for (const FieldDef *f = d->members; f; f = f->next) {
                 if (!f->bf.width)
                     add_member(ts, f->name, f->offset, convert_type(f->type, true));
                 else if (access)
-                    add_unit_member(ts, f->access_offset, f->access_size);
+                    add_unit_member(ts, f->access_offset, f->access_size, false);
                 else if (!f->bf.bytewise)
-                    add_unit_member(ts, f->offset, f->bf.unit_size);
+                    add_unit_member(ts, f->offset, f->bf.unit_size, per_field);
             }
         }
         return ts;

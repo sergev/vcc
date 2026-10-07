@@ -193,3 +193,28 @@ fsd fa0, -72(s0)
 fsd fa1, -64(s0)
 )")) << s;
 }
+
+// Each bit-field is a field of its own, as with clang: a float and one bit-field go in
+// fa0 and a0, a float and two bit-fields sharing a byte are three fields, so that struct
+// goes in an integer register, and the next float in fa1.
+TEST_F(InstrTest, FloatBitfieldStructArgument)
+{
+    std::string s = Code(CompileToRiscv(R"(
+struct fx { float f; int x : 5; };
+struct fb { float f; unsigned char p : 3, q : 4; };
+int f(struct fx a, struct fb b, float g, int k);
+int h(void) {
+    struct fx a = { 1.5f, 2 };
+    struct fb b = { 2.5f, 3, 4 };
+    return f(a, b, 3.5f, 5);
+}
+)"));
+    EXPECT_TRUE(Has(s, R"(flw fa0, -24(s0)
+lbu a0, -20(s0)
+ld a1, -52(s0)
+li t6, 1080033280
+fmv.w.x fa1, t6
+li a2, 5
+call f
+)")) << s;
+}

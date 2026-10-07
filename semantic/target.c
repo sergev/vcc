@@ -179,7 +179,13 @@ static const Target targets[] = {
       NULL,     // immediate_args
       NULL,     // va_class
       0,        // ldouble_mant_dig
-      1 },      // hw_sqrt: fsqrt.d
+      1,        // hw_sqrt: fsqrt.d
+      0,        // double_mant_dig
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      1 },      // bitfield_unit_per_field: the FP calling convention counts bit-fields
 
     { "riscv64",
       1, 1,   // _Bool
@@ -200,7 +206,13 @@ static const Target targets[] = {
       NULL,     // immediate_args
       NULL,     // va_class
       0,        // ldouble_mant_dig
-      1 },      // hw_sqrt: fsqrt.d
+      1,        // hw_sqrt: fsqrt.d
+      0,        // double_mant_dig
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      1 },      // bitfield_unit_per_field: the FP calling convention counts bit-fields
 
     { "mmix",
       1, 1,   // _Bool

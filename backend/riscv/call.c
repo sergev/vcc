@@ -3,7 +3,8 @@
 // in the next a/fa register, or on the stack in 8 bytes; a float or double past fa7,
 // or a variadic one, goes where an integer would.  A struct of up to 16 bytes that
 // flattens to one or two scalars, at least one of them floating, goes in FP registers
-// (or an FP and an integer register) when enough are left.  Any other struct of up to
+// (or an FP and an integer register) when enough are left; each bit-field counts as a
+// scalar, its storage unit listed once per field.  Any other struct of up to
 // 16 bytes goes as one or two doublewords (a register each, or the stack; the second
 // may follow on the stack when only a7 is left); a larger one by reference.  A long
 // double goes like such a struct.  A value of 16 bytes aligned to 16 starts at a

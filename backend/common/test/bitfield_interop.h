@@ -14,6 +14,7 @@ struct bf_small { unsigned a : 3; int b : 9; unsigned char c; };
 struct bf_wide { long q : 30; int r : 7; char s; short t : 11; int u[2]; };
 struct bf_flt { float f; int x : 5; };
 struct bf_pair { unsigned char p : 4, q : 4; };
+struct bf_fpair { float f; unsigned char p : 3, q : 4; };
 struct bf_small bf_mk_small(int a, int b, int c);
 int bf_sum_small(struct bf_small s);
 struct bf_wide bf_mk_wide(long q, int r);
@@ -21,6 +22,8 @@ long bf_sum_wide(struct bf_wide w);
 struct bf_flt bf_mk_flt(float f, int x);
 int bf_sum_flt(struct bf_flt v);
 int bf_sum_pair(struct bf_pair a, struct bf_pair b);
+struct bf_fpair bf_mk_fpair(float f, int p, int q);
+int bf_sum_fpair(struct bf_fpair v, float g, int k);
 void bf_bump(struct bf_wide *w);
 extern struct bf_wide bf_global;
 )";
@@ -36,6 +39,13 @@ long bf_sum_wide(struct bf_wide w) { return w.q + w.r + w.s + w.t + w.u[1]; }
 struct bf_flt bf_mk_flt(float f, int x) { struct bf_flt v; v.f = f; v.x = x; return v; }
 int bf_sum_flt(struct bf_flt v) { return (int)v.f + v.x; }
 int bf_sum_pair(struct bf_pair a, struct bf_pair b) { return a.p * 1000 + a.q * 100 + b.p * 10 + b.q; }
+struct bf_fpair bf_mk_fpair(float f, int p, int q) {
+    struct bf_fpair v = { f, p, q };
+    return v;
+}
+int bf_sum_fpair(struct bf_fpair v, float g, int k) {
+    return (int)v.f * 1000 + v.p * 100 + v.q * 10 + (int)g + k;
+}
 void bf_bump(struct bf_wide *w) { w->q -= 1; w->r++; w->t = -w->t; }
 struct bf_wide bf_global = { -100000000l, -60, 'g', 1000, { 7, 8 } };
 )";
@@ -63,6 +73,9 @@ int main(void) {
     bf_global.r = 63;
     bf_bump(&bf_global);
     if (bf_global.r != -64 || bf_global.s != 'g') return 10;
+    struct bf_fpair fp = bf_mk_fpair(3.0f, 5, 9);
+    if (fp.f != 3.0f || fp.p != 5 || fp.q != 9) return 11;
+    if (bf_sum_fpair(fp, 2.0f, 4) != 3596) return 12;
     return 0;
 }
 )";

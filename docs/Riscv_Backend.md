@@ -80,7 +80,10 @@ it is addressed from `sp` and `s0` is not used.
 - Arguments go in a0–a7 (integers, pointers) and fa0–fa7 (`float`, `double`); the rest
   go on the stack. The result comes back in a0 or fa0.
 - A struct of up to 16 bytes travels in one or two registers; a larger one is passed as
-  a pointer to a copy.
+  a pointer to a copy. A struct of one or two scalar fields, at least one floating, uses
+  an FP register for each floating one. As with clang, each bit-field counts as a field
+  of its own, so `{float f; unsigned char p : 3, q : 4;}` has three fields and goes in
+  integer registers.
 - A `long double` travels in two integer registers. Its arithmetic is done by library
   functions such as `__addtf3` (add) and `__lttf2` (compare), in
   `libc/common/float128.c`.
