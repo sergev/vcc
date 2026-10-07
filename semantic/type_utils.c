@@ -202,6 +202,46 @@ size_t get_alignment(const Type *t)
     return 0; // Unreachable
 }
 
+TypeKind unsigned_kind_of_size(int size)
+{
+    static const TypeKind kinds[] = { TYPE_UCHAR, TYPE_UINT, TYPE_USHORT, TYPE_ULONG,
+                                      TYPE_ULONG_LONG };
+    for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++) {
+        Type t = { .kind = kinds[i] };
+        if ((int)get_size(&t) == size)
+            return kinds[i];
+    }
+    return TYPE_VOID;
+}
+
+TypeKind signed_kind_of(TypeKind k)
+{
+    switch (k) {
+    case TYPE_UCHAR:
+        return TYPE_SCHAR;
+    case TYPE_USHORT:
+        return TYPE_SHORT;
+    case TYPE_UINT:
+        return TYPE_INT;
+    case TYPE_ULONG:
+        return TYPE_LONG;
+    case TYPE_ULONG_LONG:
+        return TYPE_LONG_LONG;
+    default:
+        return k;
+    }
+}
+
+const BitField *access_bitfield(const Expr *e)
+{
+    const BitField *bf = NULL;
+    if (e->kind == EXPR_FIELD_ACCESS)
+        bf = &e->u.field_access.bf;
+    else if (e->kind == EXPR_PTR_ACCESS)
+        bf = &e->u.ptr_access.bf;
+    return bf && bf->width ? bf : NULL;
+}
+
 bool is_signed(const Type *t)
 {
     t = unalias(t);

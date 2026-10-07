@@ -126,6 +126,19 @@ struct TypeQualifier {
 
 typedef enum { FIELD_MEMBER, FIELD_STATIC_ASSERT } FieldKind;
 
+// Where a bit-field member lies, set by typecheck from the struct layout.  Its bits are
+// read by loading the storage unit that holds them: unit_size bytes at the member's
+// offset, as one unsigned integer of that size, or byte by byte (bytewise) when no
+// integer of that size can be loaded there -- the span is not 1, 2, 4 or 8 bytes, or not
+// aligned for one, or would reach past the end of the struct.  `pos` numbers bits in that
+// integer's value from its least significant one, so it already reflects byte order.
+typedef struct {
+    int width;     // in bits; 0 for an ordinary member
+    int pos;       // of the field's least significant bit within the unit's value
+    int unit_size; // bytes
+    bool bytewise; // load and store the unit byte by byte
+} BitField;
+
 struct Field {
     Field *next; /* linked list */
     FieldKind kind;
@@ -235,6 +248,7 @@ struct InitItem {
     Designator *designators;
     Initializer *init;
     int offset; /* byte offset of this item within the enclosing struct; set by typecheck (0 otherwise) */
+    BitField bf; /* a bit-field member's place in the unit at offset; set by typecheck */
 };
 
 typedef enum { DESIGNATOR_ARRAY, DESIGNATOR_FIELD } DesignatorKind;
@@ -365,12 +379,14 @@ struct Expr {
             Ident field;
             int offset;        // byte offset within struct, set by typecheck
             Type *member_type; // declared type of the member, set by typecheck (see offset)
+            BitField bf;       // a bit-field's storage unit (at offset), set by typecheck
         } field_access;
         struct {
             Expr *expr;
             Ident field;
             int offset;        // byte offset within struct, set by typecheck
             Type *member_type; // declared type of the member, set by typecheck (see offset)
+            BitField bf;       // see field_access: the two must keep the same layout
         } ptr_access;
         Expr *post_inc;
         Expr *post_dec;

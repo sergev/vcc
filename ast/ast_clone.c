@@ -267,7 +267,9 @@ InitItem *clone_init_item(const InitItem *item)
         new_init_item(clone_designator(item->designators), clone_initializer(item->init));
     if (result == NULL)
         return NULL;
-    result->next = clone_init_item(item->next);
+    result->offset = item->offset;
+    result->bf     = item->bf;
+    result->next   = clone_init_item(item->next);
     return result;
 }
 
@@ -343,6 +345,7 @@ Expr *clone_expression(const Expr *expr)
         result->u.field_access.field =
             expr->u.field_access.field ? xstrdup(expr->u.field_access.field) : NULL;
         result->u.field_access.offset = expr->u.field_access.offset;
+        result->u.field_access.bf     = expr->u.field_access.bf;
         result->u.field_access.member_type =
             clone_type(expr->u.field_access.member_type, __func__, __FILE__, __LINE__);
         break;

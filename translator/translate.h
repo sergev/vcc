@@ -159,6 +159,10 @@ Tac_Type *tac_type_ptrdiff(void);
 // Expression and statement lowering (translate_expr.c, translate_stmt.c)
 //
 Tac_Val *gen_expr(TacCtx *ctx, Expr *e);
+// Initialize bit-field `bf` of type `type`, in the storage unit at `offset` of named
+// aggregate `var`, to owned value `v`.
+void gen_bitfield_init(TacCtx *ctx, const char *var, int offset, const BitField *bf,
+                       const Type *type, Tac_Val *v);
 Tac_Val *gen_cond_val(TacCtx *ctx, Expr *cond);
 void gen_stmt(TacCtx *ctx, Stmt *stmt);
 void gen_compound_init(TacCtx *ctx, const char *var_name, int base_offset, const Initializer *init);

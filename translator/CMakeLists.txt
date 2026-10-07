@@ -22,6 +22,7 @@ add_executable(translate-tests
     test/ptr_tests.cpp
     test/struct_tests.cpp
     test/type_tests.cpp
+    test/bitfield_tests.cpp
     test/avr_tests.cpp
     test/msp430_tests.cpp
     test/mmix_tests.cpp

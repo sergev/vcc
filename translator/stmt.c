@@ -192,6 +192,25 @@ static void gen_zero_fill(TacCtx *ctx, const char *var_name, int bytes)
 }
 
 static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const Initializer *init,
+                     bool skip_zero);
+
+// Initialize the struct or union member of `item`, in the aggregate at `base_offset` of
+// var_name.  A bit-field merges its bits into its storage unit; with no initializer it is
+// still stored, as zero, unless the aggregate was zero-filled.
+static void gen_member_init(TacCtx *ctx, const char *var_name, int base_offset,
+                            const InitItem *item, bool skip_zero)
+{
+    if (!item->bf.width) {
+        gen_init(ctx, var_name, base_offset + item->offset, item->init, skip_zero);
+        return;
+    }
+    if (skip_zero && is_zero_leaf(item->init))
+        return;
+    gen_bitfield_init(ctx, var_name, base_offset + item->offset, &item->bf, item->init->type,
+                      gen_expr(ctx, item->init->u.expr));
+}
+
+static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const Initializer *init,
                      bool skip_zero)
 {
     if (init->kind == INITIALIZER_SINGLE) {
@@ -235,13 +254,13 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         // (typecheck_init), while the struct tag was still live in structtab.  Consume
         // them here instead of re-querying structtab, which a block-local tag has left.
         for (const InitItem *item = init->u.items; item; item = item->next)
-            gen_init(ctx, var_name, base_offset + item->offset, item->init, skip_zero);
+            gen_member_init(ctx, var_name, base_offset, item, skip_zero);
     } else if (t->kind == TYPE_UNION) {
         // typecheck_init reduced the union initializer to the chosen member, at offset
         // 0, then the zeros for the rest of the union's storage at their offset.  No
         // structtab lookup is needed, so this works for block-scope unions too.
         for (const InitItem *item = init->u.items; item; item = item->next)
-            gen_init(ctx, var_name, base_offset + item->offset, item->init, skip_zero);
+            gen_member_init(ctx, var_name, base_offset, item, skip_zero);
     } else {
         fatal_error("Compound initializer for unsupported type %d in TAC lowering", (int)t->kind);
     }

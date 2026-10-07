@@ -36,6 +36,21 @@ typedef struct {
 //
 struct Tac_Type;
 
+// How bit-fields are laid out (Target.bitfield_layout), as the reference compilers do.
+typedef enum {
+    // GCC's and clang's rule on most targets: a bit-field never straddles a boundary of
+    // its declared type's alignment beyond the type's size, a named one aligns the struct
+    // to its type, an unnamed one does not, and `:0` moves to the next such boundary.
+    BITFIELD_SYSV,
+    // AAPCS and AAPCS64 (ELF): the same, but an unnamed bit-field, `:0` included, also
+    // aligns the struct to its declared type.
+    BITFIELD_AAPCS,
+    // GCC without PCC_BITFIELD_TYPE_MATTERS (MMIX): bit-fields are packed back to back
+    // whatever their type and leave the struct's alignment alone; `:0` moves to the next
+    // 8-byte boundary and aligns the struct to 8 bytes.
+    BITFIELD_PACKED,
+} BitfieldLayout;
+
 typedef struct {
     const char *name;
     size_t bool_size, bool_align;
@@ -91,6 +106,10 @@ typedef struct {
     // The loop optimizations (rotation, invariant code motion, induction variables) are
     // off: BESM-6 keeps the code it had before them.
     int no_loop_opt;
+    // The most significant byte of a word comes first in memory (MMIX); bit-fields are
+    // then allocated from the most significant bit of their storage unit.
+    int big_endian;
+    BitfieldLayout bitfield_layout;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

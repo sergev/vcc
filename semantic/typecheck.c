@@ -467,6 +467,11 @@ static int kind_value_bits(TypeKind k)
     }
 }
 
+int integer_value_bits(const Type *t)
+{
+    return kind_value_bits(unalias(t)->kind);
+}
+
 // Value-signedness of an integer type kind; plain char follows the target (see is_signed).
 static bool kind_is_unsigned(TypeKind k)
 {

@@ -100,7 +100,11 @@ static const Target targets[] = {
       NULL,     // immediate_args
       NULL,     // va_class: va_arg is a pointer walk, no argument classes
       0,        // ldouble_mant_dig
-      1 },      // hw_sqrt: vsqrt.f64
+      1,        // hw_sqrt: vsqrt.f64
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_AAPCS },
 
     { "aarch64",
       1, 1,   // _Bool
@@ -122,7 +126,11 @@ static const Target targets[] = {
       NULL,     // immediate_args
       tac_aapcs64_class, // va_class
       0,        // ldouble_mant_dig
-      1 },      // hw_sqrt: fsqrt
+      1,        // hw_sqrt: fsqrt
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_AAPCS },
 
     { "x86_64",
       1, 1,   // _Bool
@@ -211,7 +219,10 @@ static const Target targets[] = {
       NULL,     // va_class: va_arg is a walk over 8-byte slots, no argument classes
       0,        // ldouble_mant_dig: long double is double, binary64
       1,        // hw_sqrt: fsqrt
-      0 },      // double_mant_dig: binary64
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      1,        // big-endian
+      BITFIELD_PACKED },
 
     // BESM-6: 48-bit word-oriented machine.
     // sizeof() values are in 8-bit bytes (CHAR_BIT = 8).
@@ -243,7 +254,9 @@ static const Target targets[] = {
       0,    // ldouble_mant_dig
       0,    // hw_sqrt
       0,    // double_mant_dig
-      1 },  // no_loop_opt
+      1,    // no_loop_opt
+      1 },  // big-endian: chars are packed from the most significant end of the word,
+            // and so are bit-fields
 
     // AArch64 on macOS: Apple's arm64 ABI.  As AArch64 but for a signed plain char and a
     // long double that is double; va_arg walks the stack, where every variadic argument is.

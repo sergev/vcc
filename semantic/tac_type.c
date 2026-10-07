@@ -21,6 +21,41 @@ static const StructDef *struct_def_of(const Type *t)
 
 // `deep`: list struct members.  Below a pointer a struct is shallow (tag, size and
 // alignment only), which also ends the recursion of a self-referential struct.
+static Tac_Type *convert_type(const Type *t, bool deep);
+
+// Add member `name` (NULL for a bit-field storage unit) of `type` at byte `offset` to
+// structure `ts`, keeping the list in offset order: storage units of bit-fields can come
+// out of order, as each is the smallest that holds its field.
+static void add_member(Tac_Type *ts, const char *name, int offset, Tac_Type *type)
+{
+    Tac_Member *m = tac_new_member();
+    m->name       = name ? xstrdup(name) : NULL;
+    m->offset     = offset;
+    m->type       = type;
+    Tac_Member **p = &ts->u.structure.members;
+    while (*p && (*p)->offset <= offset)
+        p = &(*p)->next;
+    m->next = *p;
+    *p      = m;
+}
+
+// A bit-field's storage unit is a member of its own, an unsigned integer, once for each
+// place and size: the unit is what the code loads and stores, and a backend sizes a
+// constant stored into a structure by the member it finds there.  It also makes the ABI
+// classifiers see bit-fields as integers.
+static void add_unit_member(Tac_Type *ts, int offset, int size)
+{
+    Type ut        = { .kind = unsigned_kind_of_size(size) };
+    Tac_Type *type = convert_type(&ut, true);
+    for (const Tac_Member *m = ts->u.structure.members; m; m = m->next) {
+        if (!m->name && m->offset == offset && m->type->kind == type->kind) {
+            tac_free_type(type);
+            return;
+        }
+    }
+    add_member(ts, NULL, offset, type);
+}
+
 static Tac_Type *convert_type(const Type *t, bool deep)
 {
     t = unalias(t); // global typedef names survive into the translator as references
@@ -109,14 +144,11 @@ static Tac_Type *convert_type(const Type *t, bool deep)
         ts->u.structure.alignment = d ? d->alignment : t->u.struct_t.cached_align;
         ts->u.structure.is_union = t->kind == TYPE_UNION;
         if (deep && d) {
-            Tac_Member **tail = &ts->u.structure.members;
             for (const FieldDef *f = d->members; f; f = f->next) {
-                Tac_Member *m = tac_new_member();
-                m->name       = f->name ? xstrdup(f->name) : NULL;
-                m->offset     = f->offset;
-                m->type       = convert_type(f->type, true);
-                *tail         = m;
-                tail          = &m->next;
+                if (!f->bf.width)
+                    add_member(ts, f->name, f->offset, convert_type(f->type, true));
+                else if (!f->bf.bytewise)
+                    add_unit_member(ts, f->offset, f->bf.unit_size);
             }
         }
         return ts;

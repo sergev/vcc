@@ -147,7 +147,7 @@ protected:
             return "not a struct";
         for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
             char *ts = tac_type_str(m->type);
-            out += std::string(out.empty() ? "" : " ") + m->name + "@" + std::to_string(m->offset) +
+            out += std::string(out.empty() ? "" : " ") + (m->name ? m->name : "") + "@" + std::to_string(m->offset) +
                    ":" + ts;
             xfree(ts);
         }

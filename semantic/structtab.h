@@ -15,7 +15,8 @@ typedef struct FieldDef {
     struct FieldDef *next; // Next member in list
     char *name;            // Member name (Ident, owned copy)
     Type *type;            // Member type (Type* from ast.h)
-    int offset;            // Offset within the struct (in bytes)
+    int offset;            // Offset within the struct (in bytes); a bit-field's storage unit
+    BitField bf;           // A bit-field's place in its unit; width 0 for any other member
 } FieldDef;
 
 // Structure for a struct type entry.  A definition outlives its scope: on purge or

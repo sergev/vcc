@@ -37,8 +37,11 @@ simulator, `mmix`, from MMIXware.
     exits with it as its status.
 
 Not supported: GCC's `-mabi=gnu` (arguments in global registers), privileged MMIX,
-intrinsics for instructions C has no word for (`mor`, `sadd`, `bdif`…), `_Complex`,
-atomics and bit-fields.
+intrinsics for instructions C has no word for (`mor`, `sadd`, `bdif`…), `_Complex`
+and atomics.  Bit-fields are laid out as GCC lays them out here, packed back to back
+from the most significant bit whatever their type (no `PCC_BITFIELD_TYPE_MATTERS`), so
+a struct of them is often aligned to 1 and read byte by byte; see
+[Type_Sizes_Alignment.md](Type_Sizes_Alignment.md#bit-fields).
 
 ## How code is generated
 

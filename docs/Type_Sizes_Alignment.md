@@ -221,6 +221,38 @@ Layout also decides how a struct crosses a call (`backend/riscv/call.c`):
 - A `long double` is passed like a 16-byte struct, in two integer registers; a value of
   16 bytes aligned to 16 starts at a 16-byte boundary on the stack.
 
+### Bit-fields
+
+A bit-field is laid out as the reference compiler of the target lays it out, since
+code compiled by both shares structures. Three rules cover the targets
+(`Target.bitfield_layout`, applied by `layout_bitfield` in `semantic/declarations.c`):
+
+- **System V and GCC's usual rule** (x86-64, RISC-V, AVR as clang has it, MSP430,
+  macOS on arm64, BESM-6): bit-fields follow each other bit by bit, but one that would
+  cross a boundary of its declared type's alignment, past the type's size, starts at the
+  next boundary. A named bit-field aligns the struct to its type; an unnamed one does
+  not. `:0` moves to the next boundary of its type.
+- **AAPCS and AAPCS64** (ARM32, AArch64 ELF): the same, but an unnamed bit-field, `:0`
+  included, also aligns the struct to its type.
+- **Packed** (MMIX, GCC without `PCC_BITFIELD_TYPE_MATTERS`): bit-fields follow each
+  other whatever their type and leave the struct's alignment alone; `:0` moves to the
+  next 8-byte boundary and aligns the struct to 8.
+
+Bits are allocated from the least significant end on a little-endian target and from
+the most significant end on a big-endian one (MMIX, and BESM-6, whose `char`s are
+packed from the top of the word). Plain `int` bit-fields are signed, and every integer
+type is accepted, as GCC and clang accept it. A bit-field narrower than `int` promotes
+to `int`, also an unsigned one, as GCC and clang promote it.
+
+Code reaches a bit-field through a *storage unit*: the smallest unsigned integer of 1,
+2, 4 or 8 bytes that covers its bits, aligned for its type within the struct's own
+alignment and inside the struct; failing that (on MMIX and AVR, where structs of
+bit-fields can be byte-aligned), its bytes one by one. A read loads the unit and shifts
+and masks the field out; a write merges the new bits into the unit and stores it whole.
+A struct's TAC type lists each storage unit as an unnamed unsigned member, so the ABI
+classifiers see integers there. `translator/test/bitfield_layouts.h` holds the layouts
+measured from the reference compilers, which `translate-tests` compares with ours.
+
 ### Checking a layout
 
 `lower --yaml` prints each struct's size, alignment and member offsets for any target:
@@ -251,6 +283,8 @@ records:
 | `aggregate_align`         | Minimum alignment of any struct or union |
 | `struct_return_max`       | Widest struct returned in registers (0 = two pointers) |
 | `struct_args_split`       | Pass a struct wider than a word as separate word arguments |
+| `big_endian`              | Most significant byte first; bit-fields from the top bit |
+| `bitfield_layout`         | The reference compilers' bit-field rule (below) |
 
 The TAC carries each struct's size, alignment and member offsets, so a backend takes
 aggregate layout from its input rather than recomputing it.

@@ -988,6 +988,330 @@ static Tac_Val *gen_step(TacCtx *ctx, const Type *type, Tac_Val *src, bool inc)
     return dst;
 }
 
+//
+// Bit-fields.  A bit-field is reached through its storage unit (BitField, ast.h): the
+// unit is loaded as an unsigned integer, the field's bits are shifted and masked out of
+// it, and a store merges the new bits into the unit and stores it whole.  A unit that
+// cannot be loaded in one piece is loaded byte by byte and assembled in a wider integer.
+//
+
+// Where a bit-field's storage unit lies: in a named aggregate `var`, reached by
+// COPY_*_OFFSET, or else at `offset` from the struct address `addr`.
+typedef struct {
+    const char *var;
+    Tac_Val *addr; // owned; NULL with var
+    int offset;    // of the unit
+    bool vol;
+    const BitField *bf;
+    const Type *type; // the member's declared type
+    Type unit;        // the unsigned integer the unit is loaded as
+    Type work;        // the unsigned integer, at least an int, it is worked on in: the
+                      // backends shift and extend nothing narrower, as C never does
+} BfPlace;
+
+// Choose the unit and work types of `p`: a unit loaded byte by byte is assembled in the
+// next power-of-two size.
+static void bf_types(BfPlace *p)
+{
+    int size = p->bf->unit_size;
+    while (p->bf->bytewise && (size & (size - 1)))
+        size++;
+    p->unit.kind = unsigned_kind_of_size(size);
+    if (size < (int)target_config->int_size)
+        size = (int)target_config->int_size;
+    p->work.kind = unsigned_kind_of_size(size);
+}
+
+// The storage unit of bit-field access `e`, its struct base evaluated once.
+static BfPlace bf_place(TacCtx *ctx, Expr *e)
+{
+    BfPlace p = { 0 };
+    p.bf      = access_bitfield(e);
+    p.type    = e->type;
+    p.vol     = type_is_volatile(e->type);
+    if (e->kind == EXPR_FIELD_ACCESS) {
+        Expr *base = e->u.field_access.expr;
+        p.offset   = e->u.field_access.offset;
+        p.vol      = p.vol || type_is_volatile(base->type);
+        if (base->kind == EXPR_VAR)
+            p.var = base->u.var;
+        else
+            p.addr = gen_lval(ctx, base);
+    } else {
+        p.offset = e->u.ptr_access.offset;
+        p.addr   = gen_expr(ctx, e->u.ptr_access.expr);
+    }
+    bf_types(&p);
+    return p;
+}
+
+// A binary operation of type `t` on two owned values.
+static Tac_Val *bf_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b,
+                          const Type *t)
+{
+    Tac_Val *dst         = new_var_val(ctx, ast_type_to_tac_type(t));
+    Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+    bin->u.binary.op     = op;
+    bin->u.binary.src1   = a;
+    bin->u.binary.src2   = b;
+    bin->u.binary.dst    = dst;
+    tac_append(ctx, bin);
+    return val_var(dst->u.var_name);
+}
+
+// The unsigned constant `v` of integer type `t`.
+static Tac_Val *bf_const(const Type *t, uint64_t v)
+{
+    switch (unalias(t)->kind) {
+    case TYPE_ULONG_LONG:
+    case TYPE_LONG_LONG:
+        return val_ulong_long(v);
+    case TYPE_ULONG:
+    case TYPE_LONG:
+        return val_ulong((unsigned long)v);
+    default:
+        return val_uint(v);
+    }
+}
+
+// The low `width` bits set.
+static uint64_t bf_mask(int width)
+{
+    return width >= 64 ? ~(uint64_t)0 : ((uint64_t)1 << width) - 1;
+}
+
+// The address of the part of `p`'s unit at `offset`, of type `t`.
+static Tac_Val *bf_part_address(TacCtx *ctx, const BfPlace *p, int offset, const Type *t)
+{
+    Tac_Val *base = dup_val(p->addr);
+    if (member_is_byte_addressed(t))
+        base = member_byte_base(ctx, base);
+    Tac_Val *dst        = new_var_val(ctx, tac_type_ptr_to(t));
+    Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+    ap->u.add_ptr.ptr   = base;
+    emit_member_offset(ap, offset, t);
+    ap->u.add_ptr.dst = dst;
+    tac_append(ctx, ap);
+    return val_var(dst->u.var_name);
+}
+
+// Load the part of `p`'s unit at `offset`, of type `t`.
+static Tac_Val *bf_load_part(TacCtx *ctx, const BfPlace *p, int offset, const Type *t)
+{
+    bool byte    = byte_access_for(t);
+    Tac_Val *dst = new_var_val(ctx, ast_type_to_tac_type(t));
+    Tac_Instruction *in;
+    if (p->var) {
+        in = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET
+                                      : TAC_INSTRUCTION_COPY_FROM_OFFSET);
+        in->u.copy_from_offset.src    = xstrdup(p->var);
+        in->u.copy_from_offset.offset = offset;
+        in->u.copy_from_offset.dst    = dst;
+    } else {
+        Tac_Val *ptr = bf_part_address(ctx, p, offset, t);
+        in = tac_new_instruction(byte ? TAC_INSTRUCTION_LOAD_BYTE : TAC_INSTRUCTION_LOAD);
+        in->u.load.src_ptr = ptr;
+        in->u.load.dst     = dst;
+    }
+    in->is_volatile = p->vol;
+    tac_append(ctx, in);
+    return val_var(dst->u.var_name);
+}
+
+// Store owned value `v` of type `t` into the part of `p`'s unit at `offset`.
+static void bf_store_part(TacCtx *ctx, const BfPlace *p, int offset, const Type *t, Tac_Val *v)
+{
+    bool byte = byte_access_for(t);
+    Tac_Instruction *in;
+    if (p->var) {
+        in = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
+                                      : TAC_INSTRUCTION_COPY_TO_OFFSET);
+        in->u.copy_to_offset.src    = v;
+        in->u.copy_to_offset.dst    = xstrdup(p->var);
+        in->u.copy_to_offset.offset = offset;
+    } else {
+        Tac_Val *ptr = bf_part_address(ctx, p, offset, t);
+        in = tac_new_instruction(byte ? TAC_INSTRUCTION_STORE_BYTE : TAC_INSTRUCTION_STORE);
+        in->u.store.src     = v;
+        in->u.store.dst_ptr = ptr;
+    }
+    in->is_volatile = p->vol;
+    tac_append(ctx, in);
+}
+
+// The shift that places byte `i` of an `n`-byte unit in its value.
+static int bf_byte_shift(int i, int n)
+{
+    return 8 * (target_config->big_endian ? n - 1 - i : i);
+}
+
+// Load `p`'s storage unit, as its work type.
+static Tac_Val *bf_load_unit(TacCtx *ctx, const BfPlace *p)
+{
+    if (!p->bf->bytewise)
+        return emit_cast(ctx, bf_load_part(ctx, p, p->offset, &p->unit), &p->unit, &p->work);
+    static const Type uchar = { .kind = TYPE_UCHAR };
+    int n                   = p->bf->unit_size;
+    Tac_Val *acc            = NULL;
+    for (int i = 0; i < n; i++) {
+        Tac_Val *v = emit_cast(ctx, bf_load_part(ctx, p, p->offset + i, &uchar), &uchar, &p->work);
+        if (bf_byte_shift(i, n))
+            v = bf_binary(ctx, TAC_BINARY_LEFT_SHIFT, v, val_int(bf_byte_shift(i, n)), &p->work);
+        acc = acc ? bf_binary(ctx, TAC_BINARY_BITWISE_OR, acc, v, &p->work) : v;
+    }
+    return acc;
+}
+
+// Store owned unit value `u`, of the work type, into `p`'s storage unit.
+static void bf_store_unit(TacCtx *ctx, const BfPlace *p, Tac_Val *u)
+{
+    if (!p->bf->bytewise) {
+        bf_store_part(ctx, p, p->offset, &p->unit, emit_cast(ctx, u, &p->work, &p->unit));
+        return;
+    }
+    static const Type uchar = { .kind = TYPE_UCHAR };
+    int n                   = p->bf->unit_size;
+    for (int i = 0; i < n; i++) {
+        Tac_Val *v = dup_val(u);
+        if (bf_byte_shift(i, n))
+            v = bf_binary(ctx, TAC_BINARY_RIGHT_SHIFT_LOGICAL, v, val_int(bf_byte_shift(i, n)),
+                          &p->work);
+        bf_store_part(ctx, p, p->offset + i, &uchar, emit_cast(ctx, v, &p->work, &uchar));
+    }
+    tac_free_val(u);
+}
+
+// The `width`-bit field at bit `pos` of owned unit value `u` (of unsigned type `ut`),
+// converted to type `t`: zero-extended, or sign-extended when `t` is signed.
+static Tac_Val *bf_extract(TacCtx *ctx, Tac_Val *u, const Type *ut, int pos, int width,
+                           const Type *t)
+{
+    int ubits   = (int)get_size(ut) * 8;
+    bool sign   = is_signed(t);
+    if (sign && !target_config->right_shift_is_logical) {
+        // Shift the field to the top of the unit, then arithmetically down to the bottom.
+        Type st = { .kind = signed_kind_of(unalias(ut)->kind) };
+        if (ubits - pos - width)
+            u = bf_binary(ctx, TAC_BINARY_LEFT_SHIFT, u, val_int(ubits - pos - width), ut);
+        u = emit_cast(ctx, u, ut, &st);
+        if (ubits - width)
+            u = bf_binary(ctx, TAC_BINARY_RIGHT_SHIFT, u, val_int(ubits - width), &st);
+        return emit_cast(ctx, u, &st, t);
+    }
+    if (pos)
+        u = bf_binary(ctx, TAC_BINARY_RIGHT_SHIFT_LOGICAL, u, val_int(pos), ut);
+    if (pos + width < ubits)
+        u = bf_binary(ctx, TAC_BINARY_BITWISE_AND, u, bf_const(ut, bf_mask(width)), ut);
+    if (!sign)
+        return emit_cast(ctx, u, ut, t);
+    // No arithmetic shift (BESM-6): extend the sign as (u ^ m) - m, m the field's sign
+    // bit, in the signed type, at least an int.  The field's bits fit it as a value: a
+    // BESM-6 int has 41 value bits in a 48-bit word, and a negative one leaves the top 7
+    // clear, so the unsigned word cannot be reinterpreted as one.
+    Type st = { .kind = get_size(t) < target_config->int_size ? TYPE_INT : unalias(t)->kind };
+    uint64_t m = (uint64_t)1 << (width - 1);
+    u          = emit_cast(ctx, u, ut, &st);
+    u          = bf_binary(ctx, TAC_BINARY_BITWISE_XOR, u, bf_const(&st, m), &st);
+    u          = bf_binary(ctx, TAC_BINARY_SUBTRACT, u, bf_const(&st, m), &st);
+    return emit_cast(ctx, u, &st, t);
+}
+
+// Owned unit value `u` with `p`'s field replaced by owned value `v` of the field's type.
+static Tac_Val *bf_insert(TacCtx *ctx, const BfPlace *p, Tac_Val *u, Tac_Val *v)
+{
+    const Type *ut = &p->work;
+    int ubits      = (int)get_size(ut) * 8;
+    int pos        = p->bf->pos;
+    int width      = p->bf->width;
+    v              = emit_cast(ctx, v, p->type, ut);
+    if (width < ubits)
+        v = bf_binary(ctx, TAC_BINARY_BITWISE_AND, v, bf_const(ut, bf_mask(width)), ut);
+    if (pos)
+        v = bf_binary(ctx, TAC_BINARY_LEFT_SHIFT, v, val_int(pos), ut);
+    if (width == ubits) {
+        tac_free_val(u);
+        return v;
+    }
+    uint64_t keep = ~(bf_mask(width) << pos) & bf_mask(ubits);
+    u             = bf_binary(ctx, TAC_BINARY_BITWISE_AND, u, bf_const(ut, keep), ut);
+    return bf_binary(ctx, TAC_BINARY_BITWISE_OR, u, v, ut);
+}
+
+// The value `v` (owned, of the field's type) reads back as from `p`'s field: the value of
+// an assignment to it (C11 §6.5.16p3).
+static Tac_Val *bf_truncate(TacCtx *ctx, const BfPlace *p, Tac_Val *v)
+{
+    v = emit_cast(ctx, v, p->type, &p->work);
+    return bf_extract(ctx, v, &p->work, 0, p->bf->width, p->type);
+}
+
+// Initialize bit-field `bf` of type `type`, in the storage unit at `offset` of named
+// aggregate `var`, to owned value `v` (an automatic initializer).
+void gen_bitfield_init(TacCtx *ctx, const char *var, int offset, const BitField *bf,
+                       const Type *type, Tac_Val *v)
+{
+    BfPlace p = { .var = var, .offset = offset, .bf = bf, .type = type };
+    bf_types(&p);
+    bf_store_unit(ctx, &p, bf_insert(ctx, &p, bf_load_unit(ctx, &p), v));
+}
+
+// Read bit-field `e`.
+static Tac_Val *gen_bitfield_read(TacCtx *ctx, Expr *e)
+{
+    BfPlace p    = bf_place(ctx, e);
+    Tac_Val *r   = bf_extract(ctx, bf_load_unit(ctx, &p), &p.work, p.bf->pos, p.bf->width,
+                              p.type);
+    if (p.addr)
+        tac_free_val(p.addr);
+    return r;
+}
+
+// Assignment `e` to a bit-field, simple or compound, of the already evaluated `src`.
+static Tac_Val *gen_bitfield_assign(TacCtx *ctx, Expr *e, Tac_Val *src)
+{
+    BfPlace p  = bf_place(ctx, e->u.assign.target);
+    Tac_Val *u = bf_load_unit(ctx, &p);
+    Tac_Val *v = src;
+    if (e->u.assign.op != ASSIGN_SIMPLE) {
+        // Computed in the common type (e->u.assign.value->type, after typecheck's
+        // promotions) and converted back to the field's type.
+        const Type *op_type = e->u.assign.value->type;
+        bool widen          = unalias(op_type)->kind != unalias(p.type)->kind;
+        Tac_Val *cur = bf_extract(ctx, dup_val(u), &p.work, p.bf->pos, p.bf->width, p.type);
+        if (widen)
+            cur = emit_cast(ctx, cur, p.type, op_type);
+        v = bf_binary(ctx, map_assign_op(e->u.assign.op, op_type), cur, src, op_type);
+        if (widen)
+            v = emit_cast(ctx, v, op_type, p.type);
+    }
+    bf_store_unit(ctx, &p, bf_insert(ctx, &p, u, dup_val(v)));
+    Tac_Val *r = bf_truncate(ctx, &p, v);
+    if (p.addr)
+        tac_free_val(p.addr);
+    return r;
+}
+
+// ++/-- of bit-field `e`: the new value, or with `post` the old one.
+static Tac_Val *gen_bitfield_step(TacCtx *ctx, Expr *e, bool inc, bool post)
+{
+    BfPlace p     = bf_place(ctx, e);
+    Tac_Val *u    = bf_load_unit(ctx, &p);
+    Tac_Val *old  = bf_extract(ctx, dup_val(u), &p.work, p.bf->pos, p.bf->width, p.type);
+    Tac_Val *next = val_var(gen_step(ctx, p.type, dup_val(old), inc)->u.var_name);
+    bf_store_unit(ctx, &p, bf_insert(ctx, &p, u, dup_val(next)));
+    Tac_Val *r;
+    if (post) {
+        r = old;
+        tac_free_val(next);
+    } else {
+        r = bf_truncate(ctx, &p, next);
+        tac_free_val(old);
+    }
+    if (p.addr)
+        tac_free_val(p.addr);
+    return r;
+}
+
 Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
 {
     if (!e) {
@@ -1121,6 +1445,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         if (e->u.unary_op.op == UNARY_PRE_INC || e->u.unary_op.op == UNARY_PRE_DEC) {
             Expr *inner = e->u.unary_op.expr;
             bool inc    = (e->u.unary_op.op == UNARY_PRE_INC);
+            if (access_bitfield(inner))
+                return gen_bitfield_step(ctx, inner, inc, false);
             if (inner->kind == EXPR_VAR) {
                 const char *var     = inner->u.var;
                 const Tac_Val *vd   = gen_step(ctx, inner->type, read_var(ctx, var, inner->type), inc);
@@ -1175,6 +1501,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                                                 unalias(target->type)->kind == TYPE_UNION))
             return gen_aggregate_assign(ctx, target, e->u.assign.value, NULL);
         Tac_Val *src = gen_expr(ctx, e->u.assign.value);
+        if (access_bitfield(target))
+            return gen_bitfield_assign(ctx, e, src);
         if (target->kind == EXPR_VAR) {
             const char *dst = target->u.var;
             bool vol        = type_is_volatile(target->type);
@@ -1532,6 +1860,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
     case EXPR_POST_DEC: {
         Expr *inner = (e->kind == EXPR_POST_INC) ? e->u.post_inc : e->u.post_dec;
         bool inc    = (e->kind == EXPR_POST_INC);
+        if (access_bitfield(inner))
+            return gen_bitfield_step(ctx, inner, inc, true);
         if (inner->kind == EXPR_VAR) {
             bool vol             = type_is_volatile(inner->type);
             const char *var      = inner->u.var;
@@ -1599,6 +1929,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
     case EXPR_VA_CLASS:
         return val_int(va_class_of(e->u.va_class));
     case EXPR_FIELD_ACCESS: {
+        if (access_bitfield(e))
+            return gen_bitfield_read(ctx, e);
         const Expr *base = e->u.field_access.expr;
         int offset       = e->u.field_access.offset;
         // An array-typed member is not loaded: it decays to the address of its
@@ -1636,6 +1968,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         }
     }
     case EXPR_PTR_ACCESS: {
+        if (access_bitfield(e))
+            return gen_bitfield_read(ctx, e);
         // An array-typed member decays to the address of its first element.
         {
             const Type *mt = unalias(field_member_type(e));

@@ -69,6 +69,7 @@ static Initializer *make_zero_init(Type *t)
             // base_offset + item->offset; without this, every member of a zero-filled
             // nested struct collapses onto offset 0.
             item->offset   = members->offset;
+            item->bf       = members->bf;
             *tail          = item;
             tail           = &item->next;
         }
@@ -311,6 +312,94 @@ static Tac_StaticInit **append_zero(Tac_StaticInit **current, size_t n)
 }
 
 // Convert a canonical initializer (see init_normalize.c) to a Tac_StaticInit list.
+// The bytes of a run of initialized bit-fields: bytes[lo, hi) of the struct hold bits
+// of them; lo is -1 while there are none.
+typedef struct {
+    unsigned char *bytes; // as many as the struct has, zeroed
+    int lo, hi;
+} BitImage;
+
+// The integer value of a scalar static initializer, which it frees.
+static uint64_t static_int_value(Tac_StaticInit *si)
+{
+    uint64_t v;
+    switch (si->kind) {
+    case TAC_STATIC_INIT_I8:
+        v = (uint64_t)si->u.char_val;
+        break;
+    case TAC_STATIC_INIT_I16:
+        v = (uint64_t)si->u.short_val;
+        break;
+    case TAC_STATIC_INIT_I32:
+        v = (uint64_t)si->u.int_val;
+        break;
+    case TAC_STATIC_INIT_I64:
+        v = (uint64_t)si->u.long_val;
+        break;
+    case TAC_STATIC_INIT_U8:
+        v = si->u.uchar_val;
+        break;
+    case TAC_STATIC_INIT_U16:
+        v = si->u.ushort_val;
+        break;
+    case TAC_STATIC_INIT_U32:
+        v = si->u.uint_val;
+        break;
+    case TAC_STATIC_INIT_U64:
+        v = si->u.ulong_val;
+        break;
+    case TAC_STATIC_INIT_ZERO:
+        v = 0;
+        break;
+    default:
+        fatal_error("Bit-field initializer is not an integer constant");
+    }
+    tac_free_static_init(si);
+    return v;
+}
+
+// Put the low bits of `v` into bit-field `f` of a struct of `size` bytes, in memory order:
+// from the least significant bit of the unit up on a little-endian target, from the most
+// significant one down on a big-endian one (BitField.pos counts in the unit's value).
+static void put_bitfield(BitImage *img, int size, const FieldDef *f, uint64_t v)
+{
+    if (!img->bytes) {
+        img->bytes = xalloc((size_t)size + 1, __func__, __FILE__, __LINE__);
+        memset(img->bytes, 0, (size_t)size + 1);
+    }
+    int unit_bits = f->bf.unit_size * 8;
+    bool big      = target_config && target_config->big_endian;
+    for (int k = 0; k < f->bf.width; k++) {
+        int bit = f->bf.pos + k; // in the unit's value, from its least significant bit
+        // The byte of the unit holding it, and the bit in that byte.
+        int byte = big ? (unit_bits - 1 - bit) / 8 : bit / 8;
+        int at   = f->offset + byte;
+        if ((v >> k) & 1)
+            img->bytes[at] |= (unsigned char)(1u << (bit % 8));
+        if (img->lo < 0 || at < img->lo)
+            img->lo = at;
+        if (at + 1 > img->hi)
+            img->hi = at + 1;
+    }
+}
+
+// Emit the pending bit-field bytes after `*offset`, and advance it past them.
+static Tac_StaticInit **flush_bits(BitImage *img, Tac_StaticInit **current, int *offset)
+{
+    if (img->lo < 0)
+        return current;
+    current = append_zero(current, img->lo - *offset);
+    for (int i = img->lo; i < img->hi; i++) {
+        Tac_StaticInit *b = tac_new_static_init(TAC_STATIC_INIT_U8);
+        b->u.uchar_val    = img->bytes[i];
+        img->bytes[i]     = 0;
+        current           = append_static_init(current, b);
+    }
+    *offset = img->hi;
+    img->lo = img->hi = -1;
+    return current;
+}
+
 static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
 {
     // Look through a global typedef reference. Reads use the resolved type; the only
@@ -562,8 +651,18 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
 
         // Exactly one item per member.  An uninitialized member emits nothing: the
         // padding before the next initialized member (or the tail) zero-fills it.
+        // Bit-fields share bytes, so a run of them is gathered into a byte image first
+        // and emitted as bytes once a member that is not one follows.
+        BitImage img = { .bytes = NULL, .lo = -1, .hi = -1 };
         for (const InitItem *item = init->u.items; item; item = item->next, field = field->next) {
             assert(field);
+            if (field->bf.width) {
+                if (item->init)
+                    put_bitfield(&img, struct_def->size, field,
+                                 static_int_value(static_init(field->type, item->init)));
+                continue;
+            }
+            current = flush_bits(&img, current, &current_offset);
             if (!item->init) {
                 continue;
             }
@@ -571,6 +670,8 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
             current = append_static_init(current, static_init(field->type, item->init));
             current_offset = field->offset + get_size(field->type);
         }
+        current = flush_bits(&img, current, &current_offset);
+        xfree(img.bytes);
         append_zero(current, struct_def->size - current_offset);
         return struct_init;
     }
@@ -588,7 +689,18 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
             return zero_init;
         }
         Tac_StaticInit *u_init   = NULL;
-        Tac_StaticInit **current = append_static_init(&u_init, static_init(field->type, member));
+        Tac_StaticInit **current = &u_init;
+        if (field->bf.width) {
+            BitImage img = { .bytes = NULL, .lo = -1, .hi = -1 };
+            int offset   = 0;
+            put_bitfield(&img, union_def->size, field,
+                         static_int_value(static_init(field->type, member)));
+            current = flush_bits(&img, current, &offset);
+            xfree(img.bytes);
+            append_zero(current, union_def->size - offset);
+            return u_init;
+        }
+        current = append_static_init(current, static_init(field->type, member));
         append_zero(current, union_def->size - get_size(field->type));
         return u_init;
     }
@@ -690,6 +802,7 @@ static Initializer *check_init(Type *target_type, Initializer *init)
             // live; a block-local tag is purged on block exit, so the translator's
             // gen_compound_init can no longer resolve it.  Mirrors field_access.offset.
             item->offset = field->offset;
+            item->bf     = field->bf;
         }
         return init;
     }
@@ -698,6 +811,8 @@ static Initializer *check_init(Type *target_type, Initializer *init)
     if (target_type->kind == TYPE_UNION) {
         const FieldDef *member = union_member(target_type, init->u.items);
         init->u.items->init    = check_init(member->type, init->u.items->init);
+        init->u.items->offset  = member->offset;
+        init->u.items->bf      = member->bf;
         init->u.items->next    = union_rest(target_type, member->type);
         return init;
     }

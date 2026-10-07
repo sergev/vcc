@@ -24,6 +24,7 @@ static const Param *params_for_call(const Type *fn_type)
 }
 
 static Expr *decay_expr(Expr *typed);
+static TypeKind bitfield_promoted_kind(const Expr *e);
 
 // True if the (pre-decay) operand has array type but is not a string literal:
 // a named array, an array element/member, or a *ptr-to-array is never a
@@ -362,6 +363,9 @@ static Expr *typecheck_expr(Expr *e)
             if (!is_lvalue(inner) && !is_string_literal) {
                 fatal_error("Cannot take address of non-lvalue");
             }
+            if (access_bitfield(inner)) {
+                fatal_error("Cannot take address of bit-field");
+            }
             Type *ptr             = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
             ptr->u.pointer.target = clone_type(inner->type, __func__, __FILE__, __LINE__);
             free_type(e->type);
@@ -635,10 +639,15 @@ static Expr *typecheck_expr(Expr *e)
             // agree) or when the signedness also agrees, so the lvalue type is kept: on
             // BESM-6 a 48-bit unsigned result copied back to a 41-bit int would not be a
             // valid int.
-            const Type *common = get_common_type(lhs->type, rhs->type);
+            // A bit-field lvalue takes part with its promoted type (`unsigned u:3; u /= -2`
+            // divides as int), and is always converted back.
+            TypeKind bpk       = bitfield_promoted_kind(lhs);
+            Type promoted      = { .kind = bpk };
+            const Type *common = get_common_type(bpk != TYPE_VOID ? &promoted : lhs->type,
+                                                 rhs->type);
             bool additive      = e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB ||
                             e->u.assign.op == ASSIGN_MUL;
-            bool same_as_lhs = is_integer(common) && is_integer(lt) &&
+            bool same_as_lhs = bpk == TYPE_VOID && is_integer(common) && is_integer(lt) &&
                                get_size(common) == get_size(lt) &&
                                (additive || is_signed(common) == is_signed(lt)) &&
                                lt->kind != TYPE_BOOL && !is_promotable_narrow(lt);
@@ -786,6 +795,9 @@ static Expr *typecheck_expr(Expr *e)
         if (unalias(inner->type)->kind == TYPE_FUNCTION) {
             fatal_error("Can't apply sizeof to a function type");
         }
+        if (access_bitfield(inner)) {
+            fatal_error("Can't apply sizeof to a bit-field");
+        }
         if (!is_complete(inner->type)) {
             fatal_error("Can't apply sizeof to incomplete type");
         }
@@ -832,7 +844,7 @@ static Expr *typecheck_expr(Expr *e)
         const StructDef *entry = structtab_find(strct_ty->u.struct_t.name);
         const FieldDef *member = entry->members;
         for (; member; member = member->next) {
-            if (strcmp(member->name, e->u.field_access.field) == 0) {
+            if (member->name && strcmp(member->name, e->u.field_access.field) == 0) {
                 break;
             }
         }
@@ -844,6 +856,7 @@ static Expr *typecheck_expr(Expr *e)
         free_type(e->type);
         e->type                  = clone_type(member->type, __func__, __FILE__, __LINE__);
         e->u.field_access.offset = member->offset;
+        e->u.field_access.bf     = member->bf;
         // Stash the member's declared type alongside its offset: the tag may be block-local
         // and purged by the time the translator needs to know how the member is addressed,
         // and e->type is about to be decayed to a pointer for an array-typed member.
@@ -864,7 +877,7 @@ static Expr *typecheck_expr(Expr *e)
         const StructDef *entry  = structtab_find(target_type->u.struct_t.name);
         const FieldDef *member  = entry->members;
         for (; member; member = member->next) {
-            if (strcmp(member->name, e->u.ptr_access.field) == 0) {
+            if (member->name && strcmp(member->name, e->u.ptr_access.field) == 0) {
                 break;
             }
         }
@@ -876,6 +889,7 @@ static Expr *typecheck_expr(Expr *e)
         free_type(e->type);
         e->type                = clone_type(member->type, __func__, __FILE__, __LINE__);
         e->u.ptr_access.offset = member->offset;
+        e->u.ptr_access.bf     = member->bf;
         // See EXPR_FIELD_ACCESS above.
         free_type(e->u.ptr_access.member_type);
         e->u.ptr_access.member_type = clone_type(member->type, __func__, __FILE__, __LINE__);
@@ -1047,6 +1061,26 @@ static Expr *decay_expr(Expr *typed)
     return typed;
 }
 
+// The type a bit-field promotes to, as GCC and clang promote it (C11 §6.3.1.1p2 for
+// _Bool, int and unsigned int): int when it is narrower than int, whatever its declared
+// type, int or unsigned int by its signedness when it is as wide, else no promotion
+// (TYPE_VOID).
+static TypeKind bitfield_promoted_kind(const Expr *e)
+{
+    const BitField *bf = access_bitfield(e);
+    if (!bf)
+        return TYPE_VOID;
+    int int_bits = target_config ? target_config->int_bits : 32;
+    if (bf->width < int_bits)
+        return TYPE_INT;
+    if (bf->width == int_bits)
+        return is_signed(e->type) ? TYPE_INT : TYPE_UINT;
+    return TYPE_VOID;
+}
+
+// A bit-field read as a value has its promoted type right away: every operator would
+// otherwise promote its declared type, which is wrong for `unsigned u:3`, whose value
+// promotes to int.  Lvalue operands (assignment, ++, &) do not come through here.
 Expr *typecheck_and_decay(Expr *e)
 {
     if (semantic_debug) {
@@ -1054,7 +1088,11 @@ Expr *typecheck_and_decay(Expr *e)
     }
     if (!e)
         return NULL;
-    return decay_expr(typecheck_expr(e));
+    e           = decay_expr(typecheck_expr(e));
+    TypeKind pk = bitfield_promoted_kind(e);
+    if (pk != TYPE_VOID && unalias(e->type)->kind != pk)
+        e = convert_to_kind(e, pk);
+    return e;
 }
 
 // Type-check an expression and require it to be scalar.
