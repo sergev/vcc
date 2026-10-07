@@ -51,8 +51,9 @@ For each function, in this order (`codegen.c`):
    `mla`/`mls`, `tst`, no jump to the next line, and `ldrd`/`strd` for adjacent
    word-aligned slots. The shifts and masks of a bit-field access (or the same written
    by hand) become `ubfx`/`sbfx` for a read, `bfi` for a store and `bfc` for a store of
-   zero, the `movw`/`movt` of a wide mask going with them, and a `uxtb`/`uxth` before a
-   `strb`/`strh` goes:
+   zero, the `movw`/`movt` of a wide mask going with them (and the `push {lr}` it
+   needed, when that was the whole frame), and a `uxtb`/`uxth` before a `strb`/`strh`
+   goes:
 
    ```
    ldrb    r0, [r3]            @ p->b = v, b a 5-bit field at bit 3

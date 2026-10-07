@@ -145,7 +145,8 @@ TEST_F(Arm32Test, PeepholeKeepsVolatileUnpaired)
 }
 
 // Bit-fields: a read is ubfx or sbfx, a store bfi (the masks' movw/movt gone with the
-// shifts), a store of zero bfc; a narrow unit is stored without its extension.
+// shifts, and with them the save of lr), a store of zero bfc; a narrow unit is stored
+// without its extension, and a field updated in place from the unit's register.
 TEST_F(Arm32Test, PeepholeBitfields)
 {
     std::string code = Code(CompileToArm32(R"(
@@ -167,14 +168,16 @@ void bump_d(struct S *p) { p->d++; }
     EXPECT_NE(std::string::npos,
               code.find("ubfx r0, r2, #4, #12\nadd r0, r0, #1\nbfi r2, r0, #4, #12\n"))
         << code;
+    EXPECT_NE(std::string::npos, code.find("bfi r2, r0, #4, #12\nstrh r2, [r3]\nbx lr\n")) << code;
     EXPECT_EQ(std::string::npos, code.find("orr")) << code;
+    EXPECT_EQ(std::string::npos, code.find("push")) << code;
     EXPECT_EQ(std::string::npos, code.find("movw")) << code;
     EXPECT_EQ(std::string::npos, code.find("uxt")) << code;
 }
 
 // The same shapes written out by hand; and what they are not: a mask with a hole, a
 // shifted value read again (the mask alone is a ubfx), a mask an immediate already.  The
-// movw of a mask has lr saved, and keeps it saved once gone.
+// movw of a mask had lr saved: once it is gone, so is the save, but not where it stays.
 TEST_F(Arm32Test, PeepholeShiftMask)
 {
     std::string code = Code(CompileToArm32(R"(
@@ -185,10 +188,10 @@ unsigned hole(unsigned x) { return (x >> 4) & 0x505; }
 unsigned again(unsigned x) { unsigned t = x >> 4; return (t & 0xfff) + t; }
 unsigned low(unsigned x) { return x & 0xff; }
 )"));
-    EXPECT_NE(std::string::npos, code.find("push {lr}\nubfx r0, r0, #13, #11\npop {pc}\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ubfx r0, r0, #13, #11\nbx lr\n")) << code;
     EXPECT_NE(std::string::npos, code.find("sbfx r0, r0, #13, #12\nbx lr\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("push {lr}\nbfi r0, r1, #8, #12\npop {pc}\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("lsr r0, r0, #4\nmovw lr, #1285\nand r0, r0, lr\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("bfi r0, r1, #8, #12\nbx lr\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("push {lr}\nlsr r0, r0, #4\nmovw lr, #1285\nand r0, r0, lr\npop {pc}\n")) << code;
     EXPECT_NE(std::string::npos, code.find("lsr r1, r0, #4\nubfx r0, r1, #0, #12\nadd r0, r0, r1\n")) << code;
     EXPECT_NE(std::string::npos, code.find("and r0, r0, #255\nbx lr\n")) << code;
 }

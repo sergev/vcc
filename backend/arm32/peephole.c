@@ -14,7 +14,8 @@
 //   - a short diamond or triangle of a conditional branch becomes conditional
 //     instructions, when they set no flags and make no call;
 //   - adjacent ldr/str of a frame slot pair, of an even register and the next, are
-//     ldrd/strd, last.
+//     ldrd/strd, last;
+//   - and a frame of only `push {lr}`, for an lr the rewrites no longer use, goes.
 // Whether a value is read again is decided by the liveness of the registers over the
 // function's blocks, computed afresh after each round of rewrites.  Registers are
 // tracked as sets, s registers apart, so a d register is the two s registers it holds.
@@ -407,31 +408,38 @@ static void substitute(A32_Instr *in, int t, int r)
     }
 }
 
-// `mov t, r` with t scratch: the reads of t up to its next write read r instead, if r is
-// not written before the last of them and each can.
+// `mov t, r`: the reads of t up to its next write read r instead, if r is not written
+// before the last of them and each can.  A t other than a scratch register must be dead
+// where a branch passed goes, and at the end of the block if nothing writes it first.
 static bool forward_move(A32_Instr **link)
 {
     A32_Instr *mv = *link;
     int t = mv->opnd[0].reg, r = mv->opnd[1].reg;
     A32_Width w = mv->opnd[0].width;
     Regs tb = reg_set(t, w), rb = reg_set(r, w);
-    if ((tb & ~SCRATCH) || t == r || r == A32_SP || r == A32_PC)
+    bool scratch = !(tb & ~SCRATCH);
+    if (t == r || t == A32_SP || t == A32_PC || r == A32_SP || r == A32_PC)
         return false;
-    bool clobbered = false;
+    bool clobbered = false, written = false;
     const A32_Instr *end = NULL;
     for (const A32_Instr *n = mv->next; n; n = n->next) {
         if ((uses(n) & tb) && (clobbered || !can_substitute(n, t, w)))
             return false;
         Regs d = defs(n);
         if (n->cond == A32_AL && (d & tb) == tb) {
-            end = n->next;
+            end     = n->next;
+            written = true;
             break;
         }
         if (d & tb)
             return false;
+        if (!scratch && n->op == A32_B && (tb & live_at(target(n))))
+            return false;
         if (d & rb)
             clobbered = true;
     }
+    if (!scratch && !written && (tb & live_out()))
+        return false;
     for (A32_Instr *n = mv->next; n != end; n = n->next)
         substitute(n, t, r);
     delete_at(link);
@@ -1469,8 +1477,45 @@ static bool pair(A32_Instr **link)
     return true;
 }
 
+// A frame that is only `push {lr}`, laid out because lr was in use as a scratch
+// register, which the rewrites have since freed: with no call, no other mention of lr,
+// and no use of sp, the push goes and each `pop {pc}` is `bx lr`.
+static void drop_lr_save(A32_Func *fn)
+{
+    A32_Instr **push = NULL;
+    for (A32_Block *b = fn->blocks; b; b = b->next) {
+        for (A32_Instr **link = &b->head; *link; link = &(*link)->next) {
+            A32_Instr *in = *link;
+            if (in->op == A32_PUSH && in->opnd[0].kind == A32_OPND_REGLIST &&
+                in->opnd[0].width == A32_CORE && in->opnd[0].imm == 1 << A32_LR && !push &&
+                in->cond == A32_AL) {
+                push = link;
+                continue;
+            }
+            if (in->op == A32_POP && in->opnd[0].kind == A32_OPND_REGLIST &&
+                in->opnd[0].width == A32_CORE && in->opnd[0].imm == 1 << A32_PC)
+                continue;
+            if (is_call(in) || in->op == A32_PUSH || in->op == A32_POP || in->op == A32_VPUSH ||
+                in->op == A32_VPOP || ((uses(in) | defs(in)) & (BIT(A32_LR) | BIT(A32_SP))))
+                return;
+        }
+    }
+    if (!push)
+        return;
+    delete_at(push);
+    for (A32_Block *b = fn->blocks; b; b = b->next) {
+        for (A32_Instr *in = b->head; in; in = in->next) {
+            if (in->op == A32_POP) {
+                in->op      = A32_BX;
+                in->opnd[0] = a32_reg(A32_LR);
+            }
+        }
+    }
+}
+
 // The rewrites to a fixed point, then the conditional instructions, then the pairing of
-// loads and stores, which would hide a store from the deletion of its reload.
+// loads and stores, which would hide a store from the deletion of its reload; last, an
+// lr no longer in use is not saved.
 void a32_peephole(A32_Func *fn, uint64_t result)
 {
     live_info.result = result;
@@ -1496,9 +1541,11 @@ void a32_peephole(A32_Func *fn, uint64_t result)
             changed = predicate(fn, b);
     }
     free_liveness();
-    for (A32_Block *b = fn->blocks; b; b = b->next) {
+    for (A32_Block *b = fn->blocks; b; b = b->next)
         for (A32_Instr **link = &b->head; *link; link = &(*link)->next)
             pair(link);
+    drop_lr_save(fn);
+    for (A32_Block *b = fn->blocks; b; b = b->next) {
         b->tail = b->head;
         while (b->tail && b->tail->next)
             b->tail = b->tail->next;
