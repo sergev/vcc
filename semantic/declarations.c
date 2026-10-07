@@ -458,6 +458,14 @@ void register_inline_struct_defs(const Type *t)
             register_struct_type(t);
         break;
     }
+    case TYPE_ENUM:
+        // An enum defined in a typedef, a variable or a member declaration
+        // (`typedef enum { A, B } K;`) declares its constants too.  Every declarator
+        // carries a clone of the list, and registering it again only rewrites the same
+        // values: the parser has already rejected a constant declared twice.
+        if (t->u.enum_t.enumerators)
+            register_enum_constants(t);
+        break;
     case TYPE_ARRAY:
         register_inline_struct_defs(t->u.array.element);
         break;
@@ -502,6 +510,19 @@ static void typecheck_tag_decl(const Declaration *d)
     register_struct_type(t);
 }
 
+// Register a typedef name.  C11 §6.7p3: a typedef may be repeated in its scope with the
+// same type; elsewhere the name is taken, since no name may shadow another.
+static void add_typedef(const char *name, const Type *type)
+{
+    if (typetab_exists(name)) {
+        const TypeDef *old = typetab_find(name);
+        if (old->level != scope_level || !compatible_type(old->type, type))
+            fatal_error("Typedef %s redefined", name);
+        return;
+    }
+    typetab_add(name, type, scope_level);
+}
+
 // Type-check a local variable declaration.
 static void typecheck_local_var_decl(const Declaration *d)
 {
@@ -514,7 +535,7 @@ static void typecheck_local_var_decl(const Declaration *d)
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
             validate_type(decl->type);
-            typetab_add(decl->name, decl->type, scope_level);
+            add_typedef(decl->name, decl->type);
         }
         return;
     }
@@ -938,7 +959,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
             validate_type(decl->type);
-            typetab_add(decl->name, decl->type, scope_level);
+            add_typedef(decl->name, decl->type);
         }
         return;
     }

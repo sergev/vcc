@@ -749,3 +749,65 @@ TEST_F(PipelineTest, StaticCharConstantTooWideForInt_Neg)
 {
     EXPECT_DEATH(RunPipeline("int x = 'abcde';"), "character constant too long for type int");
 }
+
+// An enum defined in a typedef, a variable or a member declaration declares its
+// constants as a bare `enum { ... };` does.
+TEST_F(PipelineTest, EnumConstantsFromTypedefVarAndMember)
+{
+    RunPipeline(R"(typedef enum { K_A, K_B } Kind;
+enum { V_A = 3, V_B } v, w;
+struct S { enum { M_A, M_B = 7 } m; };
+int f(Kind k)
+{
+    enum { L_A = 5 } l = L_A;
+    switch (k) {
+    case K_B:
+        return V_B + M_B + l;
+    default:
+        return K_A;
+    }
+}
+)");
+    const Symbol *b = symtab_get_opt("K_B");
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(b->u.enum_val, 1);
+    ASSERT_NE(symtab_get_opt("V_B"), nullptr);
+    EXPECT_EQ(symtab_get_opt("V_B")->u.enum_val, 4);
+    ASSERT_NE(symtab_get_opt("M_B"), nullptr);
+    EXPECT_EQ(symtab_get_opt("M_B")->u.enum_val, 7);
+}
+
+// A tag spelled like a typedef name, and a typedef repeated with the same type (C11 §6.7p3).
+TEST_F(PipelineTest, TypedefRepeatedWithSameType)
+{
+    RunPipeline(R"(typedef struct W W;
+struct W { int x; };
+typedef struct W W;
+typedef enum E E;
+enum E { E_A };
+typedef unsigned long Size, *SizeP;
+typedef unsigned long Size;
+int f(W *w, SizeP p) { return w->x + (int)*p + E_A; }
+)");
+    EXPECT_NE(structtab_find("W"), nullptr);
+}
+
+TEST_F(PipelineTest, TypedefRedefinedWithOtherTypeDies)
+{
+    EXPECT_DEATH(RunPipeline("typedef int T; typedef long T;"), "Typedef T redefined");
+}
+
+TEST_F(PipelineTest, TypedefRepeatedInInnerScopeDies)
+{
+    EXPECT_DEATH(RunPipeline("typedef int T; void f(void) { typedef int T; }"),
+                 "Typedef T redefined");
+}
+
+// An automatic aggregate zero-fills its enum and long double members.
+TEST_F(PipelineTest, ZeroFillEnumAndLongDoubleMembers)
+{
+    RunPipeline(R"(enum E { A, B };
+struct S { int x; enum E e; long double d; };
+int f(void) { struct S s = { 1 }; return s.e + (int)s.d; }
+)");
+}

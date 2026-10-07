@@ -75,6 +75,7 @@ static Initializer *make_zero_init(Type *t)
     case TYPE_SHORT:
     case TYPE_USHORT:
     case TYPE_INT:
+    case TYPE_ENUM:
         init->u.expr->u.literal = new_literal(LITERAL_INT);
         break;
     case TYPE_UINT:
@@ -97,6 +98,9 @@ static Initializer *make_zero_init(Type *t)
         break;
     case TYPE_DOUBLE:
         init->u.expr->u.literal = new_literal(LITERAL_DOUBLE);
+        break;
+    case TYPE_LONG_DOUBLE:
+        init->u.expr->u.literal = new_literal(LITERAL_LONG_DOUBLE);
         break;
     case TYPE_POINTER:
         init->u.expr->u.literal = new_literal(LITERAL_INT); // Null pointer

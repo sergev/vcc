@@ -36,6 +36,14 @@ void reset_anon_tag_counter(void)
 }
 
 //
+// Set by parse_declaration_specifiers for a typedef declaration whose type is already
+// specified, as in the second of `typedef struct S T; typedef struct S T;`.  A typedef name
+// there is the declarator, not a type specifier: C11 §6.7p3 allows a typedef to be repeated
+// with the same type (the semantic pass checks that it is the same).
+//
+static bool typedef_redeclaration;
+
+//
 // The tag of a struct/union specifier: the source tag when it has one, a fresh synthetic tag when
 // it is an anonymous *definition*.  A specifier with neither (`struct;`) keeps a NULL name, which
 // is what xstrdup(NULL) yielded before.
@@ -416,7 +424,7 @@ void define_typedef(InitDeclarator *decl)
 {
     for (; decl; decl = decl->next) {
         int token = nametab_find(decl->name);
-        if (!token) {
+        if (!token || token == TOKEN_TYPEDEF_NAME) {
             nametab_define(decl->name, TOKEN_TYPEDEF_NAME, scope_level);
         } else {
             fatal_error("Typedef %s redefined", decl->name);
@@ -492,6 +500,9 @@ DeclSpec *parse_declaration_specifiers(Type **base_type_result)
                 fatal_error("Multiple storage class specifiers");
             }
             ds->storage = parse_storage_class_specifier();
+        } else if (current_token == TOKEN_TYPEDEF_NAME && type_specs &&
+                   ds->storage == STORAGE_CLASS_TYPEDEF) {
+            break; // a repeated typedef: the name is the declarator
         } else if (is_type_specifier(current_token) ||
                    (current_token == TOKEN_ATOMIC && next_token() == TOKEN_LPAREN)) {
             TypeSpec *ts = parse_type_specifier();
@@ -508,7 +519,8 @@ DeclSpec *parse_declaration_specifiers(Type **base_type_result)
             break;
         }
     }
-    *base_type_result = fuse_type_specifiers(type_specs);
+    typedef_redeclaration = ds->storage == STORAGE_CLASS_TYPEDEF && type_specs;
+    *base_type_result     = fuse_type_specifiers(type_specs);
     free_type_spec(type_specs);
     // Qualifiers from the declaration specifiers (const/volatile/...) qualify the
     // base type being declared. Attach them to the base type so every declarator
@@ -713,7 +725,9 @@ TypeSpec *parse_struct_or_union_specifier()
     TypeSpec *ts =
         new_type_spec(current_token == TOKEN_STRUCT ? TYPE_SPEC_STRUCT : TYPE_SPEC_UNION);
     advance_token();
-    if (current_token == TOKEN_IDENTIFIER) {
+    // Tags are a name space of their own (C11 §6.2.3): the tag may also be a typedef
+    // name, as in `typedef struct T T; struct T { ... };`.
+    if (current_token == TOKEN_IDENTIFIER || current_token == TOKEN_TYPEDEF_NAME) {
         ts->u.struct_spec.name = xstrdup(current_lexeme);
         advance_token();
     }
@@ -886,7 +900,7 @@ TypeSpec *parse_enum_specifier()
     }
     expect_token(TOKEN_ENUM);
     TypeSpec *ts = new_type_spec(TYPE_SPEC_ENUM);
-    if (current_token == TOKEN_IDENTIFIER) {
+    if (current_token == TOKEN_IDENTIFIER || current_token == TOKEN_TYPEDEF_NAME) {
         ts->u.enum_spec.name = xstrdup(current_lexeme);
         advance_token();
     }
@@ -1091,7 +1105,8 @@ Declarator *parse_direct_declarator()
         printf("--- %s()\n", __func__);
     }
     Declarator *decl;
-    if (current_token == TOKEN_IDENTIFIER) {
+    if (current_token == TOKEN_IDENTIFIER ||
+        (current_token == TOKEN_TYPEDEF_NAME && typedef_redeclaration)) {
         decl       = new_declarator();
         decl->name = xstrdup(current_lexeme);
         advance_token();
