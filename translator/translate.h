@@ -26,7 +26,8 @@ typedef struct {
     ExitKind kind;
     Stmt *stmt;  // EXIT_DEFER: the deferred statement
     char *frame; // EXIT_CO_RELEASE: the variable holding the frame, null when skipped
-    char *sp;    // EXIT_CO_RELEASE: the variable holding the stack pointer before it
+    char *sp;    // EXIT_CO_RELEASE: the variable holding the stack pointer before it;
+                 // NULL in a coroutine, whose co_alloca takes the arena
 } ExitAction;
 
 // A block being lowered, and the exit actions registered in it so far.
@@ -212,6 +213,7 @@ Tac_Type *tac_type_ptrdiff(void);
 // Expression and statement lowering (translate_expr.c, translate_stmt.c)
 //
 Tac_Val *gen_expr(TacCtx *ctx, Expr *e);
+Tac_Val *gen_string_constant(TacCtx *ctx, const char *s, size_t len); // its address
 // Initialize bit-field `bf` of type `type`, in the storage unit at `offset` of named
 // aggregate `var`, to owned value `v`.
 void gen_bitfield_init(TacCtx *ctx, const char *var, int offset, const BitField *bf,
@@ -237,6 +239,7 @@ void coro_layout(const Type *yield, const Type *result, int *value_off, int *res
                  int *align);
 Tac_Val *gen_yield(TacCtx *ctx, Expr *e);
 Tac_Val *gen_co_op(TacCtx *ctx, Expr *e);
+Tac_Val *gen_await(TacCtx *ctx, Expr *e);
 void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type); // value may be NULL
 void gen_co_release(TacCtx *ctx, const ExitAction *a);
 

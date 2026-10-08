@@ -374,3 +374,347 @@ TEST_F(WasmTest, CoroTraps)
         NextUnit();
     }
 }
+
+// Delegation: read_exact and read_header of the tutorial, against a scheduler written
+// in the program that serves the requests out of a string, a few bytes at a time.
+TEST_F(WasmTest, CoroAwaitReadHeader)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("req 0 8\nreq 0 5\nreq 0 2\nheader 0: 1234 abcd\nreq 0 8\nreq 0 5\nreq 0 3\nshort -1\n",
+              CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef struct { int fd; void *buf; size_t len; int out; } io_req;
+struct header { char a[4], b[4]; };
+
+coro(io_req *) int read_exact(int fd, char *p, size_t n)
+{
+    size_t got = 0;
+    while (got < n) {
+        io_req r = { .fd = fd, .buf = p + got, .len = n - got };
+        if ((yield &r) == CO_CANCEL)
+            return -1;
+        if (r.out <= 0)
+            return got;
+        got += r.out;
+    }
+    return got;
+}
+
+coro(io_req *) int read_header(int fd, struct header *h)
+{
+    int n = await read_exact(fd, (char *)h, sizeof *h);
+    return n == sizeof *h ? 0 : -1;
+}
+
+static const char *input;
+
+static void serve(io_req *r)
+{
+    printf("req %d %d\n", r->fd, (int)r->len);
+    size_t n = strlen(input);
+    if (n > 3)
+        n = 3;
+    if (n > r->len)
+        n = r->len;
+    memcpy(r->buf, input, n);
+    input += n;
+    r->out = n;
+}
+
+static int run(const char *text, struct header *h)
+{
+    static _Alignas(16) char storage[512];
+    input = text;
+    co_frame(io_req *, int) *t = co_init(storage, sizeof storage, read_header, 0, h);
+    while (co_resume(t) == CO_SUSPENDED)
+        serve(co_value(t));
+    return co_result(t);
+}
+
+int main(void)
+{
+    struct header h;
+    int st = run("1234abcd", &h);
+    printf("header %d: %.4s %.4s\n", st, h.a, h.b);
+    printf("short %d\n", run("12345", &h));
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// A recursive coroutine: an in-order tree walk, each level a frame on the arena.  The
+// arena is given back as each await finishes, so a second walk fits as the first did.
+TEST_F(WasmTest, CoroAwaitRecursive)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("1 2 3 4 5 6 7 = 7\n1 2 3 4 5 6 7 = 7\n", CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+struct node { int key; struct node *left, *right; };
+
+coro(int) int walk(struct node *t)
+{
+    if (!t)
+        return 0;
+    int n = await walk(t->left);
+    yield t->key;
+    return n + 1 + await walk(t->right);
+}
+
+static struct node n1 = { 1 }, n3 = { 3 }, n5 = { 5 }, n7 = { 7 };
+static struct node n2 = { 2, &n1, &n3 }, n6 = { 6, &n5, &n7 };
+static struct node n4 = { 4, &n2, &n6 };
+
+int main(void)
+{
+    static _Alignas(16) char storage[1024];
+    for (int k = 0; k < 2; k++) {
+        co_frame(int, int) *w = co_init(storage, sizeof storage, walk, &n4);
+        while (co_resume(w) == CO_SUSPENDED)
+            printf("%d ", co_value(w));
+        printf("= %d\n", co_result(w));
+    }
+    return 0;
+}
+)"));
+}
+
+// A three-level chain cancelled at the bottom: co_cancel of the root reaches the yield
+// of the innermost coroutine, and each level's defers run as it returns.
+TEST_F(WasmTest, CoroAwaitCancelChain)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("0 1 2 [bottom -1] [middle -1] [top -2]\n", CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+coro(int) int bottom(void)
+{
+    int r = 0;
+    defer printf("[bottom %d] ", r);
+    for (int i = 0;; i++)
+        if (yield i == CO_CANCEL) {
+            r = -1;
+            return r;
+        }
+}
+
+coro(int) int middle(void)
+{
+    int r = await bottom();
+    defer printf("[middle %d] ", r);
+    return r;
+}
+
+coro(int) int top(void)
+{
+    int r = await middle() - 1;
+    defer printf("[top %d]", r);
+    return r;
+}
+
+int main(void)
+{
+    co_frame(int, int) *t = co_alloca(top, 256);
+    for (int i = 0; i < 3; i++) {
+        co_resume(t);
+        printf("%d ", co_value(t));
+    }
+    int st = co_cancel(t);
+    printf("\n");
+    return st == CO_DONE && co_result(t) == -2 ? 0 : 1;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// co_destroy of a coroutine suspended in an await: the sub-coroutine is destroyed
+// first, then the defers of the awaiter's two open scopes, innermost first.  The arena
+// is given back, so the next chain fits.  And the explicit form, on a frame by co_init.
+TEST_F(WasmTest, CoroAwaitDestroy)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("v 10\n[sub]\n[inner]\n[outer]\ndone 1\nv 10\nv 11\n[sub]\nexplicit 5 7\n",
+              CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+coro(long) int sub(int n)
+{
+    defer puts("[sub]");
+    for (int i = 0; i < n; i++)
+        yield 10 + i;
+    return n + 3;
+}
+
+coro(long) int outer(void)
+{
+    defer puts("[outer]");
+    {
+        defer puts("[inner]");
+        return await sub(2);
+    }
+}
+
+coro(long) int explicit(int n)
+{
+    static _Alignas(16) char storage[128];
+    co_frame(long, int) *s = co_init(storage, sizeof storage, sub, n);
+    int r = await s;
+    return r + n;
+}
+
+int main(void)
+{
+    static _Alignas(16) char storage[256];
+    co_frame(long, int) *o = co_init(storage, sizeof storage, outer);
+    co_resume(o);
+    printf("v %ld\n", co_value(o));
+    co_destroy(o);
+    printf("done %d\n", co_done(o));
+
+    co_frame(long, int) *e = co_init(storage, sizeof storage, explicit, 2);
+    while (co_resume(e) == CO_SUSPENDED)
+        printf("v %ld\n", co_value(e));
+    printf("explicit 5 %d\n", co_result(e));
+    return 0;
+}
+)"));
+}
+
+// A coroutine driving a generator of another yield type through co_alloca: the frame
+// comes off the task's arena, and is destroyed and given back at the end of its block,
+// the loop's body each iteration.  co_destroy of the root cascades through two levels
+// of co_alloca.
+TEST_F(WasmTest, CoroAllocaInCoroutine)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("a b c |[letters gone]  a b c |[letters gone]  a b c x\n"
+              "[digits 2 gone] [letters gone] [root gone]\n",
+              CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+coro(int) void digits(int n)
+{
+    defer printf("[digits %d gone] ", n);
+    for (int i = 0; i < n; i++)
+        yield '0' + i;
+}
+
+coro(char) void letters(int n)
+{
+    defer printf("[letters gone] ");
+    for (int i = 0; i < n; i++)
+        yield 'a' + i;
+    co_frame(int, void) *d = co_alloca(digits, 0, 2);
+    co_resume(d);
+    yield 'x';
+    yield 'y';
+}
+
+coro(char) int root(void)
+{
+    defer printf("[root gone]\n");
+    for (int k = 0; k < 2; k++) {
+        co_frame(char, void) *l = co_alloca(letters, 64, 3);
+        for (int i = 0; i < 3 && co_resume(l) == CO_SUSPENDED; i++)
+            yield co_value(l);
+        yield '|';
+    }
+    co_frame(char, void) *l = co_alloca(letters, 64, 3);
+    while (co_resume(l) == CO_SUSPENDED)
+        yield co_value(l);
+    return 0;
+}
+
+int main(void)
+{
+    static _Alignas(16) char storage[96 + 2 * 160];
+    co_frame(char, int) *r = co_init(storage, sizeof storage, root);
+    for (int i = 0; co_resume(r) == CO_SUSPENDED; i++) {
+        printf(i ? " %c" : "%c", co_value(r));
+        if (co_value(r) == 'x')
+            break;
+    }
+    printf("\n");
+    co_destroy(r);
+    return 0;
+}
+)"));
+}
+
+// An arena with room for two frames more than the root: the third await traps, and
+// names the coroutine.
+TEST_F(WasmTest, CoroArenaOverflow)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("depth 0\ndepth 1\ndepth 2\ncoroutine trap: CO_TRAP_NO_SPACE: deep\n", CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+coro(void) int deep(int n)
+{
+    printf("depth %d\n", n);
+    return n < 1000 ? await deep(n + 1) : n;
+}
+
+int main(void)
+{
+    co_frame(void, int) *d = co_alloca(deep, 2 * co_sizeof(deep), 0);
+    co_resume(d);
+    puts("not reached");
+    return 0;
+}
+)"));
+    EXPECT_EQ(255, exit_status);
+}
+
+// await forwards a structure value unchanged and takes a structure result; one whose
+// result is a long double, awaited inside an expression.
+TEST_F(WasmTest, CoroAwaitStructures)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    EXPECT_EQ("(1,10) (2,20) (3,30) (9,9) -> 6 60 | 7.5\n", CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+struct pt { int x; long long y; };
+
+coro(struct pt) struct pt line(int n)
+{
+    struct pt sum = { 0, 0 };
+    for (int i = 1; i <= n; i++) {
+        struct pt p = { i, 10 * i };
+        yield p;
+        sum.x += p.x;
+        sum.y += p.y;
+    }
+    return sum;
+}
+
+coro(struct pt) long double outer(void)
+{
+    struct pt s = await line(3);
+    yield (struct pt){ 9, 9 };
+    printf("-> %d %lld | ", s.x, s.y);
+    return 1.5L + (await line(0)).x + s.x;
+}
+
+int main(void)
+{
+    co_frame(struct pt, long double) *o = co_alloca(outer, 512);
+    while (co_resume(o) == CO_SUSPENDED) {
+        struct pt p = co_value(o);
+        printf("(%d,%lld) ", p.x, p.y);
+    }
+    printf("%g\n", (double)co_result(o));
+    return 0;
+}
+)"));
+}

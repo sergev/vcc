@@ -462,6 +462,7 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
     }
     case EXPR_CALL:
     case EXPR_CO_OP:
+    case EXPR_AWAIT:
     case EXPR_COND: {
         // An aggregate temporary (struct/union returned by value, or selected by a
         // conditional) is already materialized into a frame slot by gen_expr — it
@@ -520,7 +521,7 @@ static Tac_Val *gen_aggregate_assign(TacCtx *ctx, Expr *target, Expr *value, Tac
     Tac_Val *src_material = NULL; // owned materialised rvalue (freed below)
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
         if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
-            value->kind == EXPR_CO_OP) {
+            value->kind == EXPR_CO_OP || value->kind == EXPR_AWAIT) {
             // An rvalue aggregate: gen_expr leaves it in a named temporary.
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
@@ -557,7 +558,7 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dname, int doff, Expr
     Tac_Val *src_material = NULL;
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
         if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
-            value->kind == EXPR_CO_OP) {
+            value->kind == EXPR_CO_OP || value->kind == EXPR_AWAIT) {
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
         } else {
@@ -1315,6 +1316,33 @@ static Tac_Val *gen_bitfield_step(TacCtx *ctx, Expr *e, bool inc, bool post)
     return r;
 }
 
+// The address of a string constant of `len` bytes at `s`, NUL-terminated.
+Tac_Val *gen_string_constant(TacCtx *ctx, const char *s, size_t len)
+{
+    const char *sname = symtab_add_string(s, len);
+    Symbol *sym       = symtab_get(sname);
+
+    Tac_TopLevel *sc           = tac_new_toplevel(TAC_TOPLEVEL_STATIC_CONSTANT);
+    sc->u.static_constant.name = xstrdup(sname);
+    sc->u.static_constant.type = ast_type_to_tac_type(sym->type);
+    sc->u.static_constant.init = sym->u.const_init;
+    sym->u.const_init          = NULL; // transfer ownership to TAC node
+
+    sc->next              = ctx->static_constants;
+    ctx->static_constants = sc;
+
+    Tac_Val *dst = new_var_val(ctx, tac_type_ptr(tac_type_char()));
+    // A string literal decays to a char* at its first byte (byte#0 = MSB):
+    // a fat pointer at offset_enc 5.
+    Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_GET_ADDRESS_DECAY);
+    in->u.get_address.src = val_var(sname);
+    in->u.get_address.dst = dst;
+    tac_append(ctx, in);
+
+    xfree((char *)sname);
+    return val_var(dst->u.var_name);
+}
+
 Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
 {
     if (!e) {
@@ -1347,29 +1375,9 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         case LITERAL_STRING: {
             size_t decoded_len;
             char *decoded_str = c_decode_string_literal(e->u.literal->u.string_val, &decoded_len);
-            const char *sname = symtab_add_string(decoded_str, decoded_len);
+            Tac_Val *v        = gen_string_constant(ctx, decoded_str, decoded_len);
             xfree(decoded_str);
-            Symbol *sym = symtab_get(sname);
-
-            Tac_TopLevel *sc           = tac_new_toplevel(TAC_TOPLEVEL_STATIC_CONSTANT);
-            sc->u.static_constant.name = xstrdup(sname);
-            sc->u.static_constant.type = ast_type_to_tac_type(sym->type);
-            sc->u.static_constant.init = sym->u.const_init;
-            sym->u.const_init          = NULL; // transfer ownership to TAC node
-
-            sc->next              = ctx->static_constants;
-            ctx->static_constants = sc;
-
-            Tac_Val *dst = new_var_val(ctx, tac_type_ptr(tac_type_char()));
-            // A string literal decays to a char* at its first byte (byte#0 = MSB):
-            // a fat pointer at offset_enc 5.
-            Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_GET_ADDRESS_DECAY);
-            in->u.get_address.src = val_var(sname);
-            in->u.get_address.dst = dst;
-            tac_append(ctx, in);
-
-            xfree((char *)sname);
-            return val_var(dst->u.var_name);
+            return v;
         }
         default:
             fatal_error("Unsupported literal in TAC lowering");
@@ -2016,7 +2024,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
     case EXPR_CO_OP:
         return gen_co_op(ctx, e);
     case EXPR_AWAIT:
-        fatal_error("coroutines: not yet: await"); // phase C4 (backend/wasm/Plan.md §8)
+        return gen_await(ctx, e);
     default:
         fatal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
     }

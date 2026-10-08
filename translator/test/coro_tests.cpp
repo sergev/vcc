@@ -75,21 +75,34 @@ void f(void)
         EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
 }
 
-// Phase C4: await, and co_alloca inside a coroutine.
-TEST_F(TranslateTestWasm32, AwaitNotYet)
+// An arena await: the sub-coroutine's frame pushed on the task's arena and set up in
+// the awaiter's task, resumed until done, then popped; one suspension of its own.
+TEST_F(TranslateTestWasm32, CoroutineAwait)
 {
-    EXPECT_DEATH(CompileToYaml((std::string(range) +
-                                "_Coro(int) void g(void) { _Await range(0, 1); }")
-                                   .c_str()),
-                 "coroutines: not yet: await");
+    std::string yaml = CompileToYaml((std::string(range) +
+                                      "_Coro(int) void g(void) { _Await range(0, 1); }")
+                                         .c_str());
+    for (const char *call : { "fun_name: __coro_push", "fun_name: __coro_setup",
+                              "fun_name: range$init", "fun_name: __coro_resume",
+                              "fun_name: __coro_pop", "name: %co.resume1" })
+        EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
+    size_t at = yaml.find("name: g$resume");
+    ASSERT_NE(std::string::npos, at) << yaml;
+    EXPECT_FALSE(Has(yaml.substr(at), "name: %co.resume2")) << yaml.substr(at);
 }
 
-TEST_F(TranslateTestWasm32, AllocaInCoroutineNotYet)
+// co_alloca in a coroutine takes the arena, not the shadow stack.
+TEST_F(TranslateTestWasm32, CoroutineAllocaInCoroutine)
 {
-    EXPECT_DEATH(CompileToYaml((std::string(range) +
-                                "_Coro(int) void g(void) { __co_alloca(range, 0, 0, 1); }")
-                                   .c_str()),
-                 "coroutines: not yet: co_alloca in a coroutine");
+    std::string yaml = CompileToYaml((std::string(range) +
+                                      "_Coro(int) void g(void) { __co_alloca(range, 0, 0, 1); }")
+                                         .c_str());
+    size_t at = yaml.find("name: g$resume");
+    ASSERT_NE(std::string::npos, at) << yaml;
+    std::string g = yaml.substr(at);
+    EXPECT_TRUE(Has(g, "fun_name: __coro_push")) << g;
+    EXPECT_TRUE(Has(g, "fun_name: __coro_pop")) << g;
+    EXPECT_FALSE(Has(g, "__builtin_stack_save")) << g;
 }
 
 // A prototype alone lowers to nothing, and an ordinary function beside it is unchanged.

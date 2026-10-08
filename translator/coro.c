@@ -294,14 +294,16 @@ static Tac_Val *coro_resume_fn(TacCtx *ctx, const char *g)
 }
 
 // A frame for coroutine `g` (the EXPR_VAR naming it) at `storage` of `bytes`: set up
-// by the runtime, then the arguments `args` stored by g$init.
+// by the runtime, the root of a task of its own or, with a `parent` frame, of the
+// parent's task; then the arguments `args` stored by g$init.
 static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *bytes,
-                        Tac_Val *desc, Expr *args)
+                        Tac_Val *desc, Tac_Val *parent, Expr *args)
 {
-    Tac_Val *sargs[]    = { storage, bytes, desc, coro_resume_fn(ctx, g->u.var) };
+    Tac_Val *sargs[]    = { storage, bytes, desc, coro_resume_fn(ctx, g->u.var),
+                            parent ? parent : val_int(0) };
     Tac_Type *sparams[] = { void_ptr(), size_type(), tac_type_ptr(size_type()),
-                            tac_type_ptr(resume_type()) };
-    tac_free_val(emit_call(ctx, "__coro_setup", void_ptr(), 4, sargs, sparams));
+                            tac_type_ptr(resume_type()), void_ptr() };
+    tac_free_val(emit_call(ctx, "__coro_setup", void_ptr(), 5, sargs, sparams));
 
     char *init                   = suffixed(g->u.var, "$init");
     Tac_Type *it                 = init_type(g->type);
@@ -320,6 +322,72 @@ static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *b
     xfree(init);
 }
 
+// The frame of the coroutine being lowered.
+static Tac_Val *own_frame(TacCtx *ctx)
+{
+    return val_var(ctx->coro->fp);
+}
+
+// A copy of `v` (owned) in a variable of its own, of type `type` (owned).
+static Tac_Val *in_variable(TacCtx *ctx, Tac_Val *v, Tac_Type *type)
+{
+    Tac_Val *p = new_var_val(ctx, type);
+    emit_copy(ctx, v, p->u.var_name);
+    Tac_Val *r = val_var(p->u.var_name);
+    tac_free_val(p);
+    return r;
+}
+
+static Tac_Val *emit_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b, Tac_Type *type)
+{
+    Tac_Val *dst        = new_var_val(ctx, type);
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+    in->u.binary.op     = op;
+    in->u.binary.src1   = a;
+    in->u.binary.src2   = b;
+    in->u.binary.dst    = dst;
+    append(ctx, in);
+    return val_var(dst->u.var_name);
+}
+
+static void emit_jump_if(TacCtx *ctx, bool nonzero, Tac_Val *cond, const char *target)
+{
+    Tac_Instruction *j = tac_new_instruction(nonzero ? TAC_INSTRUCTION_JUMP_IF_NOT_ZERO
+                                                     : TAC_INSTRUCTION_JUMP_IF_ZERO);
+    if (nonzero) {
+        j->u.jump_if_not_zero.condition = cond;
+        j->u.jump_if_not_zero.target    = xstrdup(target);
+    } else {
+        j->u.jump_if_zero.condition = cond;
+        j->u.jump_if_zero.target    = xstrdup(target);
+    }
+    append(ctx, j);
+}
+
+// co_resume, co_cancel, co_destroy: __coro_resume(p, signal), the status.
+static Tac_Val *emit_resume(TacCtx *ctx, Tac_Val *p, Tac_Val *signal)
+{
+    Tac_Val *args[]    = { p, signal };
+    Tac_Type *params[] = { void_ptr(), tac_kind(TAC_TYPE_INT) };
+    return emit_call(ctx, "__coro_resume", tac_kind(TAC_TYPE_INT), 2, args, params);
+}
+
+// Memory off the arena of the task the coroutine being lowered belongs to, for a frame
+// of coroutine `g`, which a trap names when it does not fit.
+static Tac_Val *emit_push(TacCtx *ctx, Tac_Val *bytes, Tac_Val *align, const char *g)
+{
+    Tac_Val *args[]    = { own_frame(ctx), bytes, align, gen_string_constant(ctx, g, strlen(g)) };
+    Tac_Type *params[] = { void_ptr(), size_type(), size_type(), char_ptr() };
+    return emit_call(ctx, "__coro_push", void_ptr(), 4, args, params);
+}
+
+static void emit_pop(TacCtx *ctx, Tac_Val *p)
+{
+    Tac_Val *args[]    = { own_frame(ctx), p };
+    Tac_Type *params[] = { void_ptr(), void_ptr() };
+    emit_call(ctx, "__coro_pop", tac_kind(TAC_TYPE_VOID), 2, args, params);
+}
+
 static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
 {
     Expr *a = e->u.co_op.args;
@@ -328,19 +396,15 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
         Tac_Val *bytes   = gen_expr(ctx, a->next);
         Expr *g          = a->next->next;
         // Into a variable: the setup and g$init both take it.
-        Tac_Val *p = new_var_val(ctx, ast_type_to_tac_type(e->type));
-        emit_copy(ctx, storage, p->u.var_name);
-        setup_frame(ctx, g, val_var(p->u.var_name), bytes, coro_desc(ctx, g->u.var), g->next);
-        Tac_Val *r = val_var(p->u.var_name);
-        tac_free_val(p);
-        return r;
+        Tac_Val *p = in_variable(ctx, storage, ast_type_to_tac_type(e->type));
+        setup_frame(ctx, g, dup_val(p), bytes, coro_desc(ctx, g->u.var), NULL, g->next);
+        return p;
     }
 
-    // co_alloca: the memory from the shadow stack, until the end of the block.
-    if (ctx->coro)
-        fatal_error("coroutines: not yet: co_alloca in a coroutine"); // phase C4
-    Expr *g      = a;
-    Tac_Val *sp  = emit_call(ctx, "__builtin_stack_save", void_ptr(), 0, NULL, NULL);
+    // co_alloca: memory until the end of the block, off the shadow stack in a function
+    // and off the task's arena in a coroutine, whose shadow stack goes at each suspension.
+    Expr *g       = a;
+    Tac_Val *sp   = ctx->coro ? NULL : emit_call(ctx, "__builtin_stack_save", void_ptr(), 0, NULL, NULL);
     Tac_Val *desc = coro_desc(ctx, g->u.var);
     Tac_Val *size = emit_load(ctx, dup_val(desc), size_type());
     Tac_Val *extra = gen_expr(ctx, a->next);
@@ -366,12 +430,16 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
     msk->u.binary.dst    = dup_val(bytes);
     append(ctx, msk);
 
-    Tac_Val *aargs[]    = { dup_val(bytes) };
-    Tac_Type *aparams[] = { size_type() };
-    Tac_Val *mem = emit_call(ctx, "__builtin_alloca", void_ptr(), 1, aargs, aparams);
-    Tac_Val *p   = new_var_val(ctx, ast_type_to_tac_type(e->type));
-    emit_copy(ctx, mem, p->u.var_name);
-    setup_frame(ctx, g, val_var(p->u.var_name), bytes, desc, g->next->next);
+    Tac_Val *mem;
+    if (ctx->coro) {
+        mem = emit_push(ctx, dup_val(bytes), val_size(16), g->u.var);
+    } else {
+        Tac_Val *aargs[]    = { dup_val(bytes) };
+        Tac_Type *aparams[] = { size_type() };
+        mem = emit_call(ctx, "__builtin_alloca", void_ptr(), 1, aargs, aparams);
+    }
+    Tac_Val *p = in_variable(ctx, mem, ast_type_to_tac_type(e->type));
+    setup_frame(ctx, g, dup_val(p), bytes, desc, NULL, g->next->next);
 
     // The frame is null until the co_alloca runs, so a release that finds it null does
     // nothing: one that ran on another path, or the block entered again.
@@ -380,39 +448,149 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
     zero->u.copy.dst      = val_var(p->u.var_name);
     tac_scope_entry(ctx, zero);
     tac_scope_add(ctx, (ExitAction){ EXIT_CO_RELEASE, NULL, xstrdup(p->u.var_name),
-                                     xstrdup(sp->u.var_name) });
+                                     sp ? xstrdup(sp->u.var_name) : NULL });
     tac_free_val(sp);
-    Tac_Val *r = val_var(p->u.var_name);
-    tac_free_val(p);
-    return r;
+    return p;
 }
 
 // At the end of a co_alloca's block: destroy the coroutine if it has not finished
 // (its defers run), and give the memory back.
 void gen_co_release(TacCtx *ctx, const ExitAction *a)
 {
-    char *skip                   = new_temp(ctx);
-    Tac_Instruction *jz          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
-    jz->u.jump_if_zero.condition = val_var(a->frame);
-    jz->u.jump_if_zero.target    = skip;
-    append(ctx, jz);
+    char *skip = new_temp(ctx);
+    emit_jump_if(ctx, false, val_var(a->frame), skip);
     Tac_Val *dargs[]    = { val_var(a->frame) };
     Tac_Type *dparams[] = { void_ptr() };
     Tac_Val *done       = emit_call(ctx, "__coro_done", tac_kind(TAC_TYPE_INT), 1, dargs, dparams);
-    char *kept                       = new_temp(ctx);
-    Tac_Instruction *jnz             = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
-    jnz->u.jump_if_not_zero.condition = done;
-    jnz->u.jump_if_not_zero.target    = kept;
-    append(ctx, jnz);
-    Tac_Val *rargs[]    = { val_var(a->frame), val_uint(CO_SIGNAL_DESTROY) };
-    Tac_Type *rparams[] = { void_ptr(), tac_kind(TAC_TYPE_UINT) };
-    tac_free_val(emit_call(ctx, "__coro_resume", tac_kind(TAC_TYPE_INT), 2, rargs, rparams));
+    char *kept          = new_temp(ctx);
+    emit_jump_if(ctx, true, done, kept);
+    tac_free_val(emit_resume(ctx, val_var(a->frame), val_int(CO_SIGNAL_DESTROY)));
     emit_label(ctx, kept);
-    Tac_Val *sargs[]    = { val_var(a->sp) };
-    Tac_Type *sparams[] = { void_ptr() };
-    emit_call(ctx, "__builtin_stack_restore", tac_kind(TAC_TYPE_VOID), 1, sargs, sparams);
+    if (a->sp) {
+        Tac_Val *sargs[]    = { val_var(a->sp) };
+        Tac_Type *sparams[] = { void_ptr() };
+        emit_call(ctx, "__builtin_stack_restore", tac_kind(TAC_TYPE_VOID), 1, sargs, sparams);
+    } else {
+        emit_pop(ctx, val_var(a->frame));
+    }
     emit_copy(ctx, val_int(0), a->frame);
     emit_label(ctx, skip);
+    xfree(skip);
+    xfree(kept);
+}
+
+// A value of type `t` at `addr` (a pointer variable): loaded, or an aggregate copied
+// into a slot of its own.
+static Tac_Val *read_at(TacCtx *ctx, const char *addr, const Type *t)
+{
+    if (!is_aggregate(t))
+        return emit_load(ctx, val_var(addr), ast_type_to_tac_type(t));
+    char *slot                     = new_typed_temp(ctx, ast_type_to_tac_type(t));
+    Tac_Instruction *al            = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
+    al->u.allocate_local.name      = xstrdup(slot);
+    al->u.allocate_local.size      = (int)get_size(t);
+    al->u.allocate_local.alignment = (int)get_alignment(t);
+    append(ctx, al);
+    AggPlace dst = { slot, 0, NULL };
+    AggPlace src = { NULL, 0, addr };
+    gen_aggregate_copy(ctx, &dst, &src, t);
+    Tac_Val *v = val_var(slot);
+    xfree(slot);
+    return v;
+}
+
+// Is `e` a call of a coroutine, an arena await's operand?
+static bool is_coroutine_call(const Expr *e)
+{
+    if (e->kind != EXPR_CALL || e->u.call.func->kind != EXPR_VAR)
+        return false;
+    const Symbol *sym = symtab_get_opt(e->u.call.func->u.var);
+    return sym && sym->kind == SYM_FUNC && sym->u.func.coro;
+}
+
+// await (docs/Coroutines_in_C.md, section 5): resume the sub-coroutine; while it
+// suspends, suspend too, its value forwarded to our resumer and the signal we are
+// resumed with forwarded into it; its result is the value.  The arena form takes the
+// sub-coroutine's frame off the task's arena and gives it back at the end.
+Tac_Val *gen_await(TacCtx *ctx, Expr *e)
+{
+    const TacCoro *co = ctx->coro;
+    Expr *op          = e->u.await_expr;
+    bool arena        = is_coroutine_call(op);
+    Tac_Val *sub;
+    if (arena) {
+        Expr *g        = op->u.call.func;
+        Tac_Val *desc  = coro_desc(ctx, g->u.var);
+        Tac_Val *size  = emit_load(ctx, dup_val(desc), size_type());
+        Tac_Val *alp   = emit_offset(ctx, desc->u.var_name, (int)target_config->pointer_size,
+                                     size_type());
+        Tac_Val *align = emit_load(ctx, alp, size_type());
+        sub = in_variable(ctx, emit_push(ctx, dup_val(size), align, g->u.var), void_ptr());
+        setup_frame(ctx, g, dup_val(sub), size, desc, own_frame(ctx), op->u.call.args);
+    } else {
+        sub = in_variable(ctx, gen_expr(ctx, op), void_ptr());
+    }
+    int value_off, result_off, end, align;
+    coro_layout(co->yield, e->type, &value_off, &result_off, &end, &align);
+
+    Tac_Val *sig = in_variable(ctx, val_int(0), tac_kind(TAC_TYPE_INT));
+    char *loop   = new_temp(ctx);
+    char *done   = new_temp(ctx);
+    emit_label(ctx, loop);
+    emit_jump_if(ctx, true, emit_resume(ctx, dup_val(sub), dup_val(sig)), done);
+
+    // Suspended: its value is ours, and so is the suspension.
+    if (unalias(co->yield)->kind != TYPE_VOID) {
+        Tac_Type *yt  = ast_type_to_tac_type(co->yield);
+        Tac_Val *from = emit_offset(ctx, sub->u.var_name, value_off, tac_clone_type(yt));
+        Tac_Val *to   = emit_offset(ctx, co->fp, value_off, yt);
+        if (is_aggregate(co->yield)) {
+            AggPlace dst = { NULL, 0, to->u.var_name };
+            AggPlace src = { NULL, 0, from->u.var_name };
+            gen_aggregate_copy(ctx, &dst, &src, co->yield);
+            tac_free_val(to);
+        } else {
+            emit_store(ctx, emit_load(ctx, dup_val(from), ast_type_to_tac_type(co->yield)), to);
+        }
+        tac_free_val(from);
+    }
+    Tac_Val *fargs[]    = { own_frame(ctx) };
+    Tac_Type *fparams[] = { char_ptr() };
+    Tac_Val *signal     = emit_call(ctx, "__coro_suspend", tac_kind(TAC_TYPE_INT), 1, fargs, fparams);
+
+    // Destroyed: the sub-coroutine first, then every block of ours.
+    char *over = new_temp(ctx);
+    emit_jump_if(ctx, false,
+                 emit_binary(ctx, TAC_BINARY_EQUAL, dup_val(signal), val_int(CO_SIGNAL_DESTROY),
+                             tac_kind(TAC_TYPE_INT)),
+                 over);
+    tac_free_val(emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
+    if (arena)
+        emit_pop(ctx, dup_val(sub));
+    gen_exits_all(ctx);
+    emit_state(ctx, CO_STATE_DESTROYED);
+    emit_return_int(ctx, 1);
+    emit_label(ctx, over);
+    emit_copy(ctx, signal, sig->u.var_name);
+    emit_jump(ctx, loop);
+
+    // Done: the result, read before the frame is given back.
+    emit_label(ctx, done);
+    Tac_Val *result = val_int(0);
+    if (unalias(e->type)->kind != TYPE_VOID) {
+        tac_free_val(result);
+        Tac_Val *addr = emit_offset(ctx, sub->u.var_name, result_off, ast_type_to_tac_type(e->type));
+        result        = read_at(ctx, addr->u.var_name, e->type);
+        tac_free_val(addr);
+    }
+    if (arena)
+        emit_pop(ctx, dup_val(sub));
+    tac_free_val(sub);
+    tac_free_val(sig);
+    xfree(loop);
+    xfree(done);
+    xfree(over);
+    return result;
 }
 
 // co_value and co_result: the address the runtime checks and returns, then the value.
@@ -428,25 +606,9 @@ static Tac_Val *read_frame(TacCtx *ctx, Expr *e)
     Tac_Type *params[]  = { void_ptr(), tac_kind(TAC_TYPE_UINT) };
     Tac_Val *raw        = emit_call(ctx, value ? "__coro_value" : "__coro_result", void_ptr(), 2, args,
                                     params);
-    Tac_Val *addr = new_var_val(ctx, tac_type_ptr_to(e->type));
-    emit_copy(ctx, raw, addr->u.var_name);
-    if (!is_aggregate(e->type)) {
-        Tac_Val *v = emit_load(ctx, val_var(addr->u.var_name), ast_type_to_tac_type(e->type));
-        tac_free_val(addr);
-        return v;
-    }
-    char *slot                     = new_typed_temp(ctx, ast_type_to_tac_type(e->type));
-    Tac_Instruction *al            = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
-    al->u.allocate_local.name      = xstrdup(slot);
-    al->u.allocate_local.size      = (int)get_size(e->type);
-    al->u.allocate_local.alignment = (int)get_alignment(e->type);
-    append(ctx, al);
-    AggPlace dst = { slot, 0, NULL };
-    AggPlace src = { NULL, 0, addr->u.var_name };
-    gen_aggregate_copy(ctx, &dst, &src, e->type);
+    Tac_Val *addr = in_variable(ctx, raw, tac_type_ptr_to(e->type));
+    Tac_Val *v    = read_at(ctx, addr->u.var_name, e->type);
     tac_free_val(addr);
-    Tac_Val *v = val_var(slot);
-    xfree(slot);
     return v;
 }
 
@@ -459,10 +621,8 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e)
     case CO_OP_RESUME:
     case CO_OP_CANCEL:
     case CO_OP_DESTROY: {
-        unsigned signal     = e->u.co_op.op - CO_OP_RESUME;
-        Tac_Val *args[]     = { gen_expr(ctx, e->u.co_op.args), val_uint(signal) };
-        Tac_Type *params[]  = { void_ptr(), tac_kind(TAC_TYPE_UINT) };
-        return emit_call(ctx, "__coro_resume", tac_kind(TAC_TYPE_INT), 2, args, params);
+        int signal = e->u.co_op.op - CO_OP_RESUME;
+        return emit_resume(ctx, gen_expr(ctx, e->u.co_op.args), val_int(signal));
     }
     case CO_OP_DONE: {
         Tac_Val *args[]    = { gen_expr(ctx, e->u.co_op.args) };
