@@ -474,7 +474,6 @@ The signed `char` and the big-endian byte order come from the `mmix` descriptor 
 | `emit.c` | LLVM wasm assembly, every `.functype` at the top of the unit, names the assembler cannot take renamed |
 | `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
 | `main.c` | `genwasm` entry |
-| `Plan.md` | The plan the backend was built by, phase by phase |
 | `test/*_tests.cpp` | GoogleTest suite (`wasm32-tests`) |
 
 The signed `char`, ILP32 and the binary128 `long double` come from the `wasm32`

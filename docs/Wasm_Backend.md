@@ -58,6 +58,25 @@ stack machine, and the first with no registers and no `goto`.
 - Automatic variables aligned to more than 16 get 16.
 - `_Complex` and atomics, as on every target here.
 
+## Design choices
+
+- **LLVM's assembly, not a binary module.** clang assembles it into a relocatable object,
+  and `wasm-ld` links it. That gives sections, relocations, symbols, static libraries,
+  dead-section removal and linking with clang's objects for nothing; writing the
+  binary format directly would mean writing a linker too.
+- **Braam's feature set,** no more. A module this backend builds must run where Braam
+  runs. Every object carries the same `target_features` section, which `wasm-ld`
+  compares across the objects it links.
+- **Two host imports,** `env.putch` and `env.exit`, and nothing else. WASI would bring a
+  file system and a clock this C library does not use. The host is about 50 lines of
+  JavaScript, and any engine can supply the two functions.
+- **clang's ABI, checked, not read.** Every rule under [Calls](#function-calls) was
+  established by compiling probes with `clang -S` and is held in place by the interop
+  tests, which link our code with clang's both ways.
+- **A correct translation first.** The dispatch skeleton handles any control flow, so
+  every test ran before the structured translation existed. It stays as the fallback
+  for an irreducible graph and as a check (`--no-structure`) of the structured one.
+
 ## How code is generated
 
 For each function, in this order (`codegen.c`):
@@ -389,7 +408,8 @@ node ~/.local/share/vcc/wasm32/lib/run.mjs hello.wasm
 ```
 
 The program's output goes to stdout, `[exit N]` to stderr, and node exits with `main`'s
-result. `wasm-validate hello.wasm` checks the module. `wasm-objdump -x -j Import
+result. `wasm-validate hello.wasm` checks the module. `wasm-objdump -x hello.o` lists an object's
+features under `target_features`, the same eight for ours as for clang's. `wasm-objdump -x -j Import
 hello.wasm` shows its two imports, `env.putch` and `env.exit`, and `wasm-objdump -d`
 disassembles it.
 
@@ -431,6 +451,47 @@ library in `build/libc/wasm32/`, and `libc/wasm32/run.mjs`.
   the runtime's `void putch(unsigned)` as `int putch(int)` cannot run here, compiled by
   clang or by us.
 
+## Outside the backend
+
+The target needed little from the shared code:
+- **`semantic/target.c`:** a `wasm32` descriptor, appended to the table so that the index
+  of the default target stays as it was. It has a signed `char`, aggregates aligned to
+  their members (`aggregate_align` 1), `struct_return_max` `SIZE_MAX` (the front end
+  never lowers a structure result; the backend classifies it), `hw_sqrt` for `f64.sqrt`,
+  a binary128 `long double`, System V bit-fields and `bitfield_unit_per_field`.
+- **`tac/tac_abi.c`:** `tac_wasm32_scalar` (the one-scalar rule), `tac_wasm32_empty` and
+  `tac_wasm32_class` (the answer of `__builtin_va_class`).
+- **`cpp/cpp.c`:** the target's predefined macros: `__wasm__`, `__wasm`, `__wasm32__`,
+  `__wasm32`, `__ILP32__`, `_ILP32` and clang's `__wasm_<feature>__` for each feature.
+  They are checked in `cpp/test/test_predefined_macros.cpp`.
+- **`translator/test/wasm32_tests.cpp`:** sizes, layouts and bit-fields against clang's.
+- **`scripts/CrossTools.cmake`:** `vcc_find_cross` takes `LD` (a linker other than
+  `ld.lld`) and `LLVM_ONLY` (no search for binutils), since there are no binutils for
+  wasm.
+- **`cc/cc.c`:** a target's own LLVM linker (`llvm_ld`, `llvm_ld_flags`), `wasm-ld`
+  recognised as an LLVM tool by its name, and the `wasm32` entry with its features and no
+  linker script.
+
+## How it was built
+
+In phases, each ending with the wasm32 tests green and a commit:
+1. the target entry, macros, headers, cross tools, driver, host and crt0, and a `genwasm`
+   that compiled `return 42` (book chapter 1);
+2. integers, locals, calls and static data, all control flow through the dispatch
+   skeleton (chapters 2 to 12);
+3. the shadow-stack frame, pointers, arrays, strings and the first of the C library,
+   with `float` and `double` (chapters 13 to 17);
+4. structures and clang's calling convention, variadics, function pointers and
+   bit-fields (chapter 18 and the interop tests);
+5. `long double` through the binary128 runtime, `printf` and the full C library (the
+   whole book suite);
+6. the structured translation;
+7. stackify, the peephole rules and coalescing, with the default-pipeline goldens and the
+   size comparison with clang;
+8. this document.
+
+`git log --grep=wasm` shows each phase.
+
 ## Tests
 
 `build/backend/wasm/wasm32-tests` checks the generated assembly and runs programs under
@@ -457,6 +518,14 @@ node:
   - clang's `main(argc, argv)` runs on our crt0;
   - the headers agree with clang's;
   - every book program's output and exit status is compared with clang's `-O0` build.
+
+The fixture (`test/wasm_test.h`) is the shared `QemuTest` with node and `run.mjs` in place
+of qemu, and `[exit ` as the report of a clean exit. It gives:
+- `CompileToWasm` (the unit's assembly, compiled in the test's process);
+- `Code` (its instruction lines alone, for goldens) and `EXPECT_CODE`;
+- `CompileAndRunWasm` and `CompileAndRunBook` (with `crt0-status.o`);
+- `CompileAndRunWithClang` (half the program by clang `-O1`) and `ClangRunBook` (a book
+  program by clang `-O0`).
 
 Book programs that expect a 64-bit `long`, or declare `putch` with another signature,
 are skipped with the reason in `test/book_test.h`; `signed_char_tests.cpp` runs versions
