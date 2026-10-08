@@ -2,7 +2,7 @@
 #
 # check_headers.sh — verify a target's standard headers preprocess and parse.
 #
-# For every <header.h> in the include directories (and once for all of them
+# For every <header.h> and <sys/header.h> in the include directories (and once for all of them
 # together) build a tiny translation unit that includes it, run it through the
 # system C preprocessor, then feed the result to the `parse` front end.  A
 # non-zero exit from cpp or parse fails the test, catching syntax errors, bad
@@ -29,11 +29,15 @@ status=0
 combined="$WORK/_all.c"
 : > "$combined"
 
-for h in $(for d in $INCDIRS; do ls "$d"/*.h; done); do
-    n=$(basename "$h")
-    src="$WORK/use_${n%.h}.c"
-    pre="$WORK/use_${n%.h}.i"
-    ast="$WORK/use_${n%.h}.ast"
+for h in $(for d in $INCDIRS; do ls "$d"/*.h; ls "$d"/sys/*.h 2>/dev/null; done); do
+    case "$h" in
+    */sys/*.h) n="sys/$(basename "$h")" ;;
+    *)         n=$(basename "$h") ;;
+    esac
+    u=$(echo "${n%.h}" | tr / _)
+    src="$WORK/use_$u.c"
+    pre="$WORK/use_$u.i"
+    ast="$WORK/use_$u.ast"
 
     printf '#include <%s>\nint main(void){return 0;}\n' "$n" > "$src"
 

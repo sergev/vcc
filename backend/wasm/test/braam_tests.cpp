@@ -371,3 +371,186 @@ TEST_F(BraamTest, TaskBytes)
                                    deep_src));
     EXPECT_EQ(0, status);
 }
+
+// The streams on files, and the file and directory calls (phase C7), inside a directory
+// named by argv[1], so tests running side by side do not meet: fopen and fprintf,
+// stat, fgets to the end, rewind and ungetc, fseek from the end, ftell, fread, fstat,
+// append, mkdir, rename, rmdir refused on a full directory, chdir and getcwd, unlink.
+TEST_F(BraamTest, Files)
+{
+    std::string dir = "braam-Files.d";
+    std::string cmd = "rm -rf " + dir;
+    ASSERT_EQ(0, system(cmd.c_str()));
+    EXPECT_EQ("size 19 reg 1 dir 0\n"
+              "1: one\n2: two\n3: three\n4: four\n"
+              "eof 1 err 0\n"
+              "first o again o\n"
+              "tell 13\n"
+              "read 5 '\nfour'\n"
+              "fstat size 19\n"
+              "appended 24\n"
+              "old -1 new 0\n"
+              "rmdir full -1 Not empty\n"
+              "cwd ends /d\n"
+              "unlink 0 rmdir 0 rmdir 0\n",
+              BuildAndRun(R"(
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+coro(braam_call *) int main(int argc, char **argv)
+{
+    struct stat st;
+    char line[64], cwd[256];
+    if (await mkdir(argv[1], 0755) < 0 || await chdir(argv[1]) < 0)
+        return 1;
+    FILE *f = await fopen("t.txt", "w");
+    if (!f)
+        return 2;
+    fprintf(f, "one\ntwo\nthree\n");
+    fwrite("four\n", 1, 5, f);
+    if (await fclose(f) != 0 || await stat("t.txt", &st) < 0)
+        return 3;
+    printf("size %d reg %d dir %d\n", (int)st.st_size, S_ISREG(st.st_mode), S_ISDIR(st.st_mode));
+    f = await fopen("t.txt", "r");
+    int n = 0;
+    while (await fgets(line, sizeof line, f))
+        printf("%d: %s", ++n, line);
+    printf("eof %d err %d\n", feof(f) != 0, ferror(f) != 0);
+    await rewind(f);
+    int c = await fgetc(f);
+    ungetc(c, f);
+    printf("first %c again %c\n", c, await getc(f));
+    await fseek(f, -6, SEEK_END);
+    printf("tell %ld\n", await ftell(f));
+    char buf[8] = { 0 };
+    printf("read %d '%s'\n", (int)await fread(buf, 1, 5, f), buf);
+    if (await fstat(fileno(f), &st) == 0)
+        printf("fstat size %d\n", (int)st.st_size);
+    await fclose(f);
+    f = await fopen("t.txt", "a");
+    fputs("five\n", f);
+    await fclose(f);
+    await stat("t.txt", &st);
+    printf("appended %d\n", (int)st.st_size);
+    await mkdir("d", 0755);
+    await rename("t.txt", "d/u.txt");
+    int old = await stat("t.txt", &st);
+    printf("old %d new %d\n", old, await stat("d/u.txt", &st));
+    int full = await rmdir("d");
+    printf("rmdir full %d %s\n", full, strerror(errno));
+    await chdir("d");
+    if (await getcwd(cwd, sizeof cwd))
+        printf("cwd ends %s\n", strrchr(cwd, '/'));
+    int u = await unlink("u.txt");
+    await chdir("..");
+    int r = await rmdir("d");
+    await chdir("..");
+    printf("unlink %d rmdir %d rmdir %d\n", u, r, await rmdir(argv[1]));
+    return 0;
+}
+)",
+                          { dir }));
+    EXPECT_EQ(0, status) << log;
+}
+
+// Errors: a missing file, a bad mode, perror on stderr, stat of nothing; stdio's own
+// stdout is unaffected.
+TEST_F(BraamTest, FileErrors)
+{
+    EXPECT_EQ("fopen 1 Not found\nmode 1 22\nstat -1 35\nfstat -1\n", BuildAndRun(R"(
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    struct stat st;
+    FILE *f = await fopen("braam-FileErrors.none", "r");
+    printf("fopen %d %s\n", f == NULL, strerror(errno));
+    perror("braam-FileErrors.none");
+    f = await fopen("x", "q");
+    printf("mode %d %d\n", f == NULL, errno == EINVAL ? 22 : errno);
+    int s = await stat("braam-FileErrors.none", &st);
+    printf("stat %d %d\n", s, errno);
+    printf("fstat %d\n", await fstat(1, &st));
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, status);
+    EXPECT_NE(std::string::npos, log.find("braam-FileErrors.none: Not found\n")) << log;
+}
+
+// Standard input through the stream: fgets with a line longer than its buffer, getchar
+// to the end across chunk boundaries (the input is several chunks), and the prompt out
+// before the first read.
+TEST_F(BraamTest, StdinStream)
+{
+    std::string in = "a long first line\n";
+    std::string rest;
+    for (int i = 0; i < 400; i++)
+        rest += std::to_string(i % 10) + (i % 50 == 49 ? "\n" : "");
+    in += rest;
+    std::string expect = "? [a long f] [irst lin] [e\n] \n";
+    for (char c : rest)
+        expect += c == '\n' ? '|' : c;
+    expect += "\n" + std::to_string(rest.size()) + " eof\n";
+    EXPECT_EQ(expect, BuildAndRun(R"(
+#include <stdio.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    char s[9];
+    printf("? ");
+    for (int i = 0; i < 3 && await fgets(s, sizeof s, stdin); i++)
+        printf("[%s] ", s);
+    printf("\n");
+    int c, n = 0;
+    while ((c = await getchar()) != EOF) {
+        putchar(c == '\n' ? '|' : c);
+        n++;
+    }
+    printf("\n%d %s\n", n, feof(stdin) ? "eof" : "?");
+    return 0;
+}
+)",
+                                  {}, in));
+    EXPECT_EQ(0, status);
+}
+
+// fread of a file bigger than a chunk, and fwrite of it back, against a copy made
+// byte by byte with fgetc and fputc.
+TEST_F(BraamTest, CopyFile)
+{
+    std::string src = "braam-CopyFile.data";
+    std::string data;
+    for (int i = 0; i < 5000; i++)
+        data += (char)('a' + i % 23);
+    std::ofstream(src) << data;
+    EXPECT_EQ("5000 5000 same\n", BuildAndRun(R"(
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    FILE *in = await fopen(argv[1], "rb");
+    char *a = malloc(8000), *b = malloc(8000);
+    size_t n = await fread(a, 1, 8000, in);
+    await rewind(in);
+    size_t m = 0;
+    int c;
+    while ((c = await fgetc(in)) != EOF)
+        b[m++] = (char)c;
+    await fclose(in);
+    FILE *out = await fopen("braam-CopyFile.copy", "w");
+    fwrite(a, 1, n, out);
+    await fclose(out);
+    printf("%d %d %s\n", (int)n, (int)m, n == m && !memcmp(a, b, n) ? "same" : "differ");
+    return await remove(argv[1]);
+}
+)",
+                                          { src }));
+    EXPECT_EQ(0, status);
+    EXPECT_EQ(data, ReadFile("braam-CopyFile.copy"));
+}

@@ -1,6 +1,7 @@
 /*
  * The asynchronous system calls of Braam (backend/wasm/Plan.md §7.3): braam_sys, the
- * one primitive, and the descriptor calls on it, each a coroutine yielding braam_call *.
+ * one primitive, and the descriptor, file and directory calls on it, each a coroutine
+ * yielding braam_call *.
  */
 #include <braam.h>
 #include <errno.h>
@@ -8,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int errno;
@@ -93,4 +95,155 @@ coro(braam_call *) int sleep_ms(unsigned ms)
 {
     int st = await braam_sys(BRAAM_SYS_SLEEP, &ms, 4, NULL, 0, NULL);
     return st < 0 ? failed(st) : 0;
+}
+
+static unsigned get_u32(const unsigned char *p)
+{
+    return p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24;
+}
+
+static unsigned long long get_u64(const unsigned char *p)
+{
+    return get_u32(p) | (unsigned long long)get_u32(p + 4) << 32;
+}
+
+coro(braam_call *) off_t lseek(int fd, off_t offset, int whence)
+{
+    unsigned char req[12], pos[8];
+    unsigned got;
+    unsigned long long o = (unsigned long long)offset;
+    for (int i = 0; i < 4; i++)
+        req[i] = (unsigned char)((unsigned)whence >> 8 * i);
+    for (int i = 0; i < 8; i++)
+        req[4 + i] = (unsigned char)(o >> 8 * i);
+    int st = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_SEEK, fd), req, 12, pos, 8, &got);
+    if (st < 0)
+        return failed(st);
+    return got == 8 ? (off_t)get_u64(pos) : failed(-8);
+}
+
+/* A call that names one path and answers with a status alone. */
+static coro(braam_call *) int on_path(unsigned op, const char *path)
+{
+    int st = await braam_sys(op, path, strlen(path), NULL, 0, NULL);
+    return st < 0 ? failed(st) : 0;
+}
+
+coro(braam_call *) int unlink(const char *path)
+{
+    return await on_path(BRAAM_SYS_REMOVE, path);
+}
+
+coro(braam_call *) int rmdir(const char *path)
+{
+    return await on_path(BRAAM_SYS_REMOVE, path);
+}
+
+coro(braam_call *) int remove(const char *path)
+{
+    return await on_path(BRAAM_SYS_REMOVE, path);
+}
+
+coro(braam_call *) int mkdir(const char *path, mode_t mode)
+{
+    (void)mode;
+    return await on_path(BRAAM_SYS_MKDIR, path);
+}
+
+coro(braam_call *) int chdir(const char *path)
+{
+    return await on_path(BRAAM_SYS_OP(BRAAM_SYS_CHDIR, 1), path);
+}
+
+coro(braam_call *) char *getcwd(char *buf, size_t size)
+{
+    char cwd[FILENAME_MAX + 1];
+    unsigned got;
+    int st = await braam_sys(BRAAM_SYS_CHDIR, NULL, 0, cwd, FILENAME_MAX + 1, &got);
+    if (st < 0) {
+        failed(st);
+        return NULL;
+    }
+    if (got >= size) {
+        errno = ERANGE;
+        return NULL;
+    }
+    memcpy(buf, cwd, got);
+    buf[got] = 0;
+    return buf;
+}
+
+/* rename's payload: u32 the old path's length, the old path, the new one. */
+coro(braam_call *) int rename(const char *from, const char *to)
+{
+    unsigned a = strlen(from), b = strlen(to);
+    unsigned char *req = malloc(4 + a + b);
+    if (!req) {
+        errno = ENOMEM;
+        return -1;
+    }
+    defer free(req);
+    for (int i = 0; i < 4; i++)
+        req[i] = (unsigned char)(a >> 8 * i);
+    memcpy(req + 4, from, a);
+    memcpy(req + 4 + a, to, b);
+    int st = await braam_sys(BRAAM_SYS_RENAME, req, 4 + a + b, NULL, 0, NULL);
+    return st < 0 ? failed(st) : 0;
+}
+
+pid_t getpid(void)
+{
+    return braam_sys_sync(BRAAM_SYS_GETPID, 0, 0, 0);
+}
+
+/* Stat's reply, u32 kind, u64 size, u64 mtime, as a struct stat. */
+static int fill(struct stat *st, const unsigned char *r, unsigned got, const char *path)
+{
+    if (got < 20)
+        return failed(-8);
+    unsigned kind = get_u32(r);
+    memset(st, 0, sizeof *st);
+    st->st_mode  = kind == BRAAM_KIND_DIR    ? S_IFDIR | 0755
+                   : kind == BRAAM_KIND_LINK ? S_IFLNK | 0777
+                                             : S_IFREG | 0644;
+    st->st_size  = (off_t)get_u64(r + 4);
+    st->st_mtime = (time_t)(get_u64(r + 12) / 1000);
+    st->st_atime = st->st_ctime = st->st_mtime;
+    st->st_dev   = 1;
+    st->st_nlink = 1;
+    st->st_blksize = 512;
+    st->st_blocks  = (st->st_size + 511) / 512;
+    if (path) { /* FNV-1a, as Braam's compat layer makes st_ino */
+        unsigned long long h = 0xcbf29ce484222325ull;
+        for (; *path; path++)
+            h = (h ^ (unsigned char)*path) * 0x100000001b3ull;
+        st->st_ino = h;
+    }
+    return 0;
+}
+
+static coro(braam_call *) int stat_of(const char *path, struct stat *st, unsigned arg)
+{
+    unsigned char r[20];
+    unsigned got;
+    int s = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_STAT, arg), path, strlen(path), r, 20, &got);
+    return s < 0 ? failed(s) : fill(st, r, got, path);
+}
+
+coro(braam_call *) int stat(const char *path, struct stat *st)
+{
+    return await stat_of(path, st, 0);
+}
+
+coro(braam_call *) int lstat(const char *path, struct stat *st)
+{
+    return await stat_of(path, st, BRAAM_STAT_NOFOLLOW);
+}
+
+coro(braam_call *) int fstat(int fd, struct stat *st)
+{
+    unsigned char r[20];
+    unsigned got;
+    int s = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_FSTAT, fd), NULL, 0, r, 20, &got);
+    return s < 0 ? failed(s) : fill(st, r, got, NULL);
 }

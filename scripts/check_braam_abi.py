@@ -4,7 +4,8 @@
     check_braam_abi.py braam.h sysabi.h result.h errno.h
 
 braam.h's BRAAM_PROC_* and BRAAM_SYS_* against sysabi.h's constants and its enum Sys
-(implicit values counted), BRAAM_O_* against SYS_O_*, BRAAM_CHUNK against SYS_CHUNK;
+(implicit values counted), BRAAM_O_* against SYS_O_*, BRAAM_KIND_* against SYS_KIND_*, BRAAM_CHUNK and
+BRAAM_STAT_NOFOLLOW against theirs;
 errno.h's Braam errors (Error + 32) against result.h's enum Error.  Prints each
 disagreement and exits 1 if there is one.
 """
@@ -51,7 +52,10 @@ def main(braam_h, sysabi_h, result_h, errno_h):
             check(name, value, want)
         if name.startswith("BRAAM_O_"):
             check(name, value, theirs.get("SYS_O_" + name[len("BRAAM_O_"):]))
+        if name.startswith("BRAAM_KIND_"):
+            check(name, value, theirs.get("SYS_KIND_" + name[len("BRAAM_KIND_"):]))
     check("BRAAM_CHUNK", ours.get("BRAAM_CHUNK"), theirs.get("SYS_CHUNK"))
+    check("BRAAM_STAT_NOFOLLOW", ours.get("BRAAM_STAT_NOFOLLOW"), theirs.get("SYS_STAT_NOFOLLOW"))
 
     errors = enum(open(result_h).read(), "Error")
     errno = open(errno_h).read()

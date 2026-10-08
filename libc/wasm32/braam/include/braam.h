@@ -52,10 +52,11 @@ typedef struct braam_call {
 #define BRAAM_SYS_TOUCH    24
 #define BRAAM_SYS_CHDIR    25
 #define BRAAM_SYS_DUP      26
-#define BRAAM_SYS_SEEK     30
+#define BRAAM_SYS_RENAME   29 /* payload u32 from_len, the old path, the new one */
+#define BRAAM_SYS_SEEK     30 /* arg fd; payload u32 whence, i64 offset; data u64 position */
 #define BRAAM_SYS_TRUNCATE 31
 #define BRAAM_SYS_SLEEP    32 /* payload u32 milliseconds */
-#define BRAAM_SYS_FSTAT    33
+#define BRAAM_SYS_FSTAT    33 /* arg fd; data as Stat's */
 #define BRAAM_SYS_POLL     86
 
 #define BRAAM_SYS_OP(op, arg) ((unsigned)(op) | (unsigned)(arg) << 8)
@@ -67,6 +68,12 @@ typedef struct braam_call {
 #define BRAAM_O_TRUNC  8
 #define BRAAM_O_APPEND 16
 #define BRAAM_O_EXCL   32
+
+/* Stat's kinds, and its argument. */
+#define BRAAM_KIND_FILE     0
+#define BRAAM_KIND_DIR      1
+#define BRAAM_KIND_LINK     2
+#define BRAAM_STAT_NOFOLLOW 1
 
 /* A read with no length; the most one may ask for. */
 #define BRAAM_CHUNK    512
