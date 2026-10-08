@@ -211,3 +211,18 @@ add_custom_target(braam-libc ALL
     DEPENDS ${BRAAM_SHARE}/lib/crt0.o ${BRAAM_SHARE}/lib/libc.a ${BRAAM_SHARE}/lib/run.mjs)
 install(FILES ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs
         DESTINATION share/vcc/wasm32-braam/lib)
+
+# On Braam itself (backend/wasm/Plan.md §7.5): when BRAAM_CORE is a built checkout,
+# hello, cat, wc and docs/examples/notes.c built by the in-tree driver and run from
+# the shell of a session of its system harness, after its abi.mjs checks them.
+if(WASM32_NODE AND EXISTS ${BRAAM_CORE}/build/kernel.wasm
+   AND EXISTS ${BRAAM_CORE}/build/web/rootfs.zip
+   AND EXISTS ${BRAAM_CORE}/test/system/harness.mjs)
+    add_test(NAME braam-system
+        COMMAND ${CMAKE_COMMAND} -E env
+                VCC_CPP=$<TARGET_FILE:cpp> VCC_PARSE=$<TARGET_FILE:parse>
+                VCC_LOWER=$<TARGET_FILE:lower> VCC_GEN=$<TARGET_FILE:genwasm>
+                ${WASM32_NODE} ${CMAKE_SOURCE_DIR}/backend/wasm/test/braam_system.mjs
+                ${BRAAM_CORE} ${CMAKE_CURRENT_BINARY_DIR}/braam-system
+                $<TARGET_FILE:cc> ${CMAKE_SOURCE_DIR}/docs/examples)
+endif()

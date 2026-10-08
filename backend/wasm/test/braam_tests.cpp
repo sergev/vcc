@@ -6,8 +6,10 @@
 //
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -553,4 +555,28 @@ coro(braam_call *) int main(int argc, char **argv)
                                           { src }));
     EXPECT_EQ(0, status);
     EXPECT_EQ(data, ReadFile("braam-CopyFile.copy"));
+}
+
+// The worked example of docs/Braam_Example.md, docs/examples/notes.c, through the
+// session the document shows; braam_system.mjs runs the same one on Braam.
+TEST_F(BraamTest, NotesExample)
+{
+    std::ifstream file(EXAMPLES_DIR "/notes.c");
+    std::string src((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    ASSERT_EQ("", Build(src));
+    std::remove("notes.txt");
+    EXPECT_EQ("no notes\n", Run());
+    Run({ "add", "buy", "milk" });
+    Run({ "add", "call", "the", "plumber" });
+    EXPECT_EQ("note? note? note? note? \n2 added\n",
+              Run({ "ask" }, "water plants\n\nwrite letter\n"));
+    EXPECT_EQ(0, status);
+    EXPECT_EQ("", Run({ "del", "2" }));
+    EXPECT_EQ("there is no note 9\n", Run({ "del", "9" }));
+    EXPECT_EQ(1, status);
+    EXPECT_EQ("  1  buy milk\n  2  water plants\n  3  write letter\n(3 notes, 35 bytes)\n", Run());
+    EXPECT_EQ("", Run({ "bogus" }));
+    EXPECT_EQ(2, status);
+    EXPECT_NE(std::string::npos, log.find("usage: notes")) << log;
+    std::remove("notes.txt");
 }

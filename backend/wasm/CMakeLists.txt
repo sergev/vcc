@@ -74,7 +74,8 @@ target_compile_definitions(wasm32-tests PRIVATE
     VCC_PARSE_PATH="$<TARGET_FILE:parse>"
     VCC_LOWER_PATH="$<TARGET_FILE:lower>"
     VCC_GENWASM_PATH="$<TARGET_FILE:genwasm>"
-    BRAAM_RUNNER="${CMAKE_BINARY_DIR}/share/vcc/wasm32-braam/lib/run.mjs")
+    BRAAM_RUNNER="${CMAKE_BINARY_DIR}/share/vcc/wasm32-braam/lib/run.mjs"
+    EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/docs/examples")
 target_include_directories(wasm32-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(wasm32-tests)
 gtest_discover_tests(wasm32-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)
