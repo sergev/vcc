@@ -78,6 +78,9 @@ protected:
 
     QemuTest(const char *target, QemuConfig cfg) : BackendTest(target), config(std::move(cfg)) {}
 
+    // The run configuration, for a test that links more of its own (extra_libs).
+    QemuConfig &Config() { return config; }
+
     // Scratch file of the current test: TEST_DIR/<Suite>.<Test><suffix><tag>.  The suite
     // keeps apart tests of one name in two suites.
     std::string QemuScratchPath(const std::string &tag) const

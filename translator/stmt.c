@@ -419,15 +419,36 @@ static void scope_push(TacCtx *ctx, const Stmt *key)
         xfree(ctx->scopes);
         ctx->scopes = s;
     }
-    ctx->scopes[ctx->nscopes++] = (TacScope){ key, NULL, 0, 0 };
+    ctx->scopes[ctx->nscopes++] = (TacScope){ key, NULL, 0, 0, ctx->tail };
 }
 
 static void scope_pop(TacCtx *ctx)
 {
-    xfree(ctx->scopes[--ctx->nscopes].actions);
+    TacScope *sc = &ctx->scopes[--ctx->nscopes];
+    for (int i = 0; i < sc->count; i++) {
+        xfree(sc->actions[i].frame);
+        xfree(sc->actions[i].sp);
+    }
+    xfree(sc->actions);
 }
 
-static void scope_add(TacCtx *ctx, ExitAction action)
+void tac_scope_entry(TacCtx *ctx, Tac_Instruction *in)
+{
+    Tac_Instruction *after = ctx->scopes[ctx->nscopes - 1].entry;
+    if (!after) {
+        in->next  = ctx->head;
+        ctx->head = in;
+        if (!ctx->tail)
+            ctx->tail = in;
+        return;
+    }
+    in->next    = after->next;
+    after->next = in;
+    if (ctx->tail == after)
+        ctx->tail = in;
+}
+
+void tac_scope_add(TacCtx *ctx, ExitAction action)
 {
     TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
     if (sc->count == sc->cap) {
@@ -503,6 +524,9 @@ static void run_action(TacCtx *ctx, const ExitAction *a)
     case EXIT_DEFER:
         gen_deferred(ctx, a->stmt);
         break;
+    case EXIT_CO_RELEASE:
+        gen_co_release(ctx, a);
+        break;
     }
 }
 
@@ -521,6 +545,11 @@ static void run_exits(TacCtx *ctx, int depth)
 {
     for (int i = ctx->nscopes - 1; i >= depth; i--)
         run_scope(ctx, i, ctx->scopes[i].count);
+}
+
+void gen_exits_all(TacCtx *ctx)
+{
+    run_exits(ctx, 0);
 }
 
 // The end of the innermost block, reached by falling through: its own actions.
@@ -595,6 +624,12 @@ static void emit_goto(TacCtx *ctx, const char *label)
 // return: the value is computed before the defers run, which may change what it names.
 static void emit_return(TacCtx *ctx, Stmt *stmt)
 {
+    if (ctx->coro) {
+        // The result goes into the frame before the defers run.
+        Tac_Val *v = stmt->u.expr ? gen_expr(ctx, stmt->u.expr) : NULL;
+        gen_coro_return(ctx, v, stmt->u.expr ? stmt->u.expr->type : NULL);
+        return;
+    }
     if (ctx->sret_name && stmt->u.expr) {
         // A struct return through the hidden pointer (sret): copy the result into the
         // caller's slot through the hidden return pointer, then return the pointer
@@ -661,7 +696,7 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         break;
     }
     case STMT_DEFER:
-        scope_add(ctx, (ExitAction){ EXIT_DEFER, stmt->u.defer_stmt });
+        tac_scope_add(ctx, (ExitAction){ EXIT_DEFER, stmt->u.defer_stmt, NULL, NULL });
         break;
     case STMT_EXPR:
         if (stmt->u.expr) {

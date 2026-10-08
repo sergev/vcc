@@ -86,7 +86,8 @@ void wasm_emit_unit_begin(FILE *out, const Tac_TopLevel *program)
                 fprintf(out, "\t.functype\tmain (i32, i32) -> (i32)\n");
         } else if (t->kind == TAC_TOPLEVEL_EXTERN && t->u.extern_.type &&
                    t->u.extern_.type->kind == TAC_TYPE_FUN_TYPE &&
-                   strcmp(t->u.extern_.name, "__va_start") != 0) { // expanded in place
+                   strcmp(t->u.extern_.name, "__va_start") != 0 && // expanded in place
+                   !wasm_stack_builtin(t->u.extern_.name)) {
             wasm_signature(t->u.extern_.type, &sig);
             print_functype(out, wasm_symbol(program, t->u.extern_.name), &sig);
         }

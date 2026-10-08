@@ -5,6 +5,7 @@ add_library(translator STATIC
     translate.c
     expr.c
     stmt.c
+    coro.c
 )
 target_include_directories(translator PUBLIC .)
 target_link_libraries(translator optimize semantic tac ast libutil)

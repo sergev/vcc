@@ -18,13 +18,15 @@ extern "C" {
 
 //
 // What runs when control leaves a block (docs/Coroutines_in_C.md, section 1): a
-// deferred statement.  The coroutines' co_alloca will add its release here.
+// deferred statement, or the release of a co_alloca's frame.
 //
-typedef enum { EXIT_DEFER } ExitKind;
+typedef enum { EXIT_DEFER, EXIT_CO_RELEASE } ExitKind;
 
 typedef struct {
     ExitKind kind;
-    Stmt *stmt; // EXIT_DEFER: the deferred statement
+    Stmt *stmt;  // EXIT_DEFER: the deferred statement
+    char *frame; // EXIT_CO_RELEASE: the variable holding the frame, null when skipped
+    char *sp;    // EXIT_CO_RELEASE: the variable holding the stack pointer before it
 } ExitAction;
 
 // A block being lowered, and the exit actions registered in it so far.
@@ -32,7 +34,16 @@ typedef struct {
     const Stmt *key; // as in DeferScope (semantic/defer.h)
     ExitAction *actions;
     int count, cap;
+    Tac_Instruction *entry; // the last instruction before the block, NULL at the start
 } TacScope;
+
+// The coroutine being lowered (translator/coro.c): its frame pointer parameter, and
+// where the value it yields and its result lie in the frame.
+typedef struct {
+    const char *fp;
+    const Type *yield, *result;
+    int value_off, result_off;
+} TacCoro;
 
 // A loop or switch being lowered: where its break and continue go, and how many
 // blocks were open outside it (those a break or continue does not leave).
@@ -68,6 +79,7 @@ typedef struct {
     bool label_pos_ready; // label_pos collected (only once a goto needs it)
     Stmt *body;           // the function body, where label_pos comes from
     int defer_depth;      // deferred statements being lowered, one inside another
+    const TacCoro *coro;  // the coroutine being lowered, or NULL
 } TacCtx;
 
 //
@@ -111,6 +123,9 @@ bool tac_is_array_local(const TacCtx *ctx, const char *name);
 // Record a block-scope declaration of an external object or function.  Its symbol is
 // purged before lowering, so it travels as an EXTERN toplevel ahead of the function.
 void tac_record_extern(TacCtx *ctx, const char *name, const Type *type);
+// The same with a TAC type (takes ownership): a runtime routine, or a name the
+// coroutine split defines (f$init, f$resume, f$co), which has no symbol.
+void tac_record_extern_tac(TacCtx *ctx, const char *name, Tac_Type *type);
 Tac_Val *val_int(int64_t v);
 Tac_Val *val_long(long v);
 Tac_Val *val_long_long(long long v);
@@ -206,6 +221,35 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt);
 void gen_compound_init(TacCtx *ctx, const char *var_name, int base_offset, const Initializer *init);
 void gen_aggregate_init(TacCtx *ctx, const char *var_name, const Initializer *init, int bytes);
 void gen_string_array_init(TacCtx *ctx, const char *var_name, const Expr *str_expr, int bytes);
+
+// Blocks and their exit actions (stmt.c), for the coroutines.
+void tac_scope_add(TacCtx *ctx, ExitAction action); // to the innermost block
+void tac_scope_entry(TacCtx *ctx, Tac_Instruction *in); // run on entering the innermost block
+void gen_exits_all(TacCtx *ctx); // the exit actions of every open block, innermost first
+
+//
+// Coroutines (coro.c; backend/wasm/Plan.md §6)
+//
+enum { CO_HEADER = 24 }; // state, flags, resume, task, top, limit
+// Where the value yielded and the result lie in a frame of co_frame(Y, T), and the
+// end of the two, from which the split pass lays out the rest; the frame's alignment so far.
+void coro_layout(const Type *yield, const Type *result, int *value_off, int *result_off, int *end,
+                 int *align);
+Tac_Val *gen_yield(TacCtx *ctx, Expr *e);
+Tac_Val *gen_co_op(TacCtx *ctx, Expr *e);
+void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type); // value may be NULL
+void gen_co_release(TacCtx *ctx, const ExitAction *a);
+
+// A coroutine after the optimizer: the split pass (stage 2) makes f$resume a state
+// machine over the frame, the user's parameters and every name live across a
+// suspension moved into it.  Returns f$init and f$co, to follow it in the unit.
+typedef struct {
+    const char *name; // f
+    bool global;
+    int frame_start;  // the end of the value and the result: where the rest goes
+    int frame_align;
+} CoroSplit;
+Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info);
 
 //
 // Convert one external declaration to TAC and optimize each function it yields.

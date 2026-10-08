@@ -461,6 +461,7 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
         return gen_lval(ctx, target);
     }
     case EXPR_CALL:
+    case EXPR_CO_OP:
     case EXPR_COND: {
         // An aggregate temporary (struct/union returned by value, or selected by a
         // conditional) is already materialized into a frame slot by gen_expr — it
@@ -518,7 +519,8 @@ static Tac_Val *gen_aggregate_assign(TacCtx *ctx, Expr *target, Expr *value, Tac
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL; // owned materialised rvalue (freed below)
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
-        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND) {
+        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
+            value->kind == EXPR_CO_OP) {
             // An rvalue aggregate: gen_expr leaves it in a named temporary.
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
@@ -554,7 +556,8 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dname, int doff, Expr
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL;
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
-        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND) {
+        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
+            value->kind == EXPR_CO_OP) {
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
         } else {
@@ -2009,9 +2012,11 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         return gen_expr(ctx, e->u.compound_literal.init->init->u.expr);
     }
     case EXPR_YIELD:
-    case EXPR_AWAIT:
+        return gen_yield(ctx, e);
     case EXPR_CO_OP:
-        fatal_error("coroutines: not yet"); // phase C3 (backend/wasm/Plan.md §8)
+        return gen_co_op(ctx, e);
+    case EXPR_AWAIT:
+        fatal_error("coroutines: not yet: await"); // phase C4 (backend/wasm/Plan.md §8)
     default:
         fatal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
     }

@@ -152,6 +152,10 @@ void load_value(Gen *g, const Place *p, const Tac_Type *t);
 // Calls (call.c)
 //
 void gen_call(Gen *g, const Tac_Instruction *in, bool noreturn);
+// __builtin_stack_save, __builtin_stack_restore, __builtin_alloca: nonzero for one of
+// them, which a call expands in place.
+int wasm_stack_builtin(const char *name);
+bool wasm_uses_alloca(const Tac_TopLevel *tl);
 void gen_return(Gen *g, const Tac_Val *src);
 // A call of runtime routine `name` taking args[0..n-1] of types[0..n-1], its result of
 // type ret into dst, or left on the stack when dst is NULL.

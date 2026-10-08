@@ -109,6 +109,7 @@ foreach(name frexp ldexp modf)
     wasm32_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
 wasm32_compile_libc_c(malloc ${src})
+wasm32_compile_libc_c(co ${src})
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a

@@ -248,6 +248,9 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
         g->frame_size += area;
     }
     g->frame_size = (g->frame_size + 15) & -16;
+    // co_alloca moves __stack_pointer: the epilogue puts it back from the frame pointer.
+    if (!g->frame_size && wasm_uses_alloca(tl))
+        g->frame_size = 16;
     if (g->frame_size)
         fn->frame = g->fp = wasm_add_local(fn, WASM_I32);
 }

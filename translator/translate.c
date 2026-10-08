@@ -105,6 +105,20 @@ void tac_record_extern(TacCtx *ctx, const char *name, const Type *type)
     *tail               = ext;
 }
 
+void tac_record_extern_tac(TacCtx *ctx, const char *name, Tac_Type *type)
+{
+    Tac_TopLevel **tail = &ctx->externs;
+    for (; *tail; tail = &(*tail)->next)
+        if (strcmp((*tail)->u.extern_.name, name) == 0) {
+            tac_free_type(type);
+            return;
+        }
+    Tac_TopLevel *ext   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    ext->u.extern_.name = xstrdup(name);
+    ext->u.extern_.type = type;
+    *tail               = ext;
+}
+
 bool tac_is_array_local(const TacCtx *ctx, const char *name)
 {
     for (const Tac_Param *p = ctx->array_locals; p; p = p->next)
@@ -893,12 +907,15 @@ static void emit_referenced_string_constants(const Tac_StaticInit *inits, Tac_To
     }
 }
 
+// The coroutine translate_fn lowered last, which translate() splits after the
+// optimizer (coro.c).
+static Tac_TopLevel *coro_pending_fn;
+static CoroSplit coro_pending;
+
 static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
 {
     const char *name  = ast->u.function.name;
     const Symbol *sym = symtab_get(name);
-    if (sym->u.func.coro)
-        fatal_error("coroutines: not yet"); // phase C3 (backend/wasm/Plan.md §8)
 
     Tac_TopLevel *tl        = tac_new_toplevel(TAC_TOPLEVEL_FUNCTION);
     tl->u.function.name     = xstrdup(name);
@@ -910,6 +927,35 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
     if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION)
         tl->u.function.type = ast_type_to_tac_type(ast->u.function.type);
 
+    // A coroutine is first f$resume(fp, params) -> int, over a frame at fp (coro.c).
+    TacCoro coro;
+    if (sym->u.func.coro) {
+        const Type *ret = ast->u.function.type->u.function.return_type;
+        int end, align;
+        coro_layout(sym->u.func.yield_type, ret, &coro.value_off, &coro.result_off, &end, &align);
+        coro.fp     = ".fp";
+        coro.yield  = sym->u.func.yield_type;
+        coro.result = ret;
+        xfree(tl->u.function.name);
+        size_t n            = strlen(name);
+        tl->u.function.name = xalloc(n + sizeof "$resume", __func__, __FILE__, __LINE__);
+        memcpy(tl->u.function.name, name, n);
+        memcpy(tl->u.function.name + n, "$resume", sizeof "$resume");
+        Tac_Param *fp       = tac_new_param();
+        fp->name            = xstrdup(coro.fp);
+        fp->type            = tac_type_ptr(tac_type_char());
+        fp->next            = tl->u.function.params;
+        tl->u.function.params = fp;
+        Tac_Type *ft          = tl->u.function.type;
+        Tac_Type *fpt         = tac_type_ptr(tac_type_char());
+        fpt->next             = ft->u.fun_type.param_types;
+        ft->u.fun_type.param_types = fpt;
+        tac_free_type(ft->u.fun_type.ret_type);
+        ft->u.fun_type.ret_type = tac_new_type(TAC_TYPE_INT);
+        coro_pending_fn         = tl;
+        coro_pending            = (CoroSplit){ name, sym->u.func.global, end, align };
+    }
+
     // A struct return too wide to return by value (type_is_byval_sret) uses the
     // hidden-pointer (sret) ABI: the caller passes
     // the address of the result slot as an implicit first argument.  Prepend it to the
@@ -917,7 +963,7 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
     // which body references pick up automatically by name).
     const char *sret_name = NULL;
     if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION &&
-        type_is_byval_sret(ast->u.function.type->u.function.return_type)) {
+        !sym->u.func.coro && type_is_byval_sret(ast->u.function.type->u.function.return_type)) {
         sret_name      = ".ret";
         Tac_Param *hp  = tac_new_param();
         hp->name       = xstrdup(sret_name);
@@ -933,8 +979,12 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         TacCtx ctx = { NULL, NULL, *label_seq, NULL, NULL, NULL, NULL, NULL };
         ctx.sret_name = sret_name;
         ctx.body      = ast->u.function.body;
+        ctx.coro      = sym->u.func.coro ? &coro : NULL;
         map_init(&ctx.user_labels);
         gen_stmt(&ctx, ast->u.function.body);
+        // The end of a coroutine's body: done.  (A non-void one cannot reach it.)
+        if (ctx.coro && unalias(coro.result)->kind == TYPE_VOID)
+            gen_coro_return(&ctx, NULL, NULL);
         *label_seq            = ctx.temp_id;
         tl->u.function.body   = ctx.head;
         tl->u.function.locals = ctx.locals;
@@ -1327,10 +1377,19 @@ static void note_init_refs(const Tac_StaticInit *init)
             note_referenced(init->u.pointer.name, NULL);
 }
 
+// A name the coroutine split defines (f$resume, f$init, f$co) has no symbol: its
+// type goes with the unit's externs, for the verifier and against a second EXTERN.
+static void note_own_type(const char *name, const Tac_Type *type)
+{
+    if (type && !symtab_get_opt(name) && !map_get(&unit_externs, name, NULL))
+        map_insert_free(&unit_externs, name, (intptr_t)tac_clone_type(type), 0, free_type_value);
+}
+
 static void note_toplevel(const Tac_TopLevel *t)
 {
     switch (t->kind) {
     case TAC_TOPLEVEL_FUNCTION:
+        note_own_type(t->u.function.name, t->u.function.type);
         map_insert(&unit_defined, t->u.function.name, 1, 0);
         for (const Tac_StaticLocal *sl = t->u.function.static_locals; sl; sl = sl->next) {
             map_insert(&unit_defined, sl->name, 1, 0);
@@ -1340,6 +1399,7 @@ static void note_toplevel(const Tac_TopLevel *t)
             tac_visit_names(in, note_referenced, NULL);
         break;
     case TAC_TOPLEVEL_STATIC_VARIABLE:
+        note_own_type(t->u.static_variable.name, t->u.static_variable.type);
         map_insert(&unit_defined, t->u.static_variable.name, 1, 0);
         note_init_refs(t->u.static_variable.init_list);
         break;
@@ -1452,11 +1512,34 @@ Tac_TopLevel *translate(const ExternalDecl *ast, OptFlags flags, int *label_seq)
             percent_locals_in_function(t);
             t->u.function.body = optimize_function(t->u.function.body, flags, t);
             optimize_prune_locals(t);
+            if (t == coro_pending_fn) {
+                // A coroutine: split, then optimized once more over its frame.
+                Tac_TopLevel *made = coro_split(t, &coro_pending);
+                Tac_TopLevel *last = made;
+                while (last->next)
+                    last = last->next;
+                last->next         = t->next;
+                t->next            = made;
+                t->u.function.body = optimize_function(t->u.function.body, flags, t);
+                optimize_prune_locals(t);
+                coro_pending_fn = NULL;
+            }
             if (translate_verify)
                 verify_function(tac, t);
         }
         if (unit_active)
             note_toplevel(t);
+    }
+    // The suspension was a call to the optimizer only; the split removed every one.
+    for (Tac_TopLevel **pp = &tac; *pp;) {
+        Tac_TopLevel *t = *pp;
+        if (t->kind == TAC_TOPLEVEL_EXTERN && strcmp(t->u.extern_.name, "__coro_suspend") == 0) {
+            *pp     = t->next;
+            t->next = NULL;
+            tac_free_toplevel(t);
+            continue;
+        }
+        pp = &t->next;
     }
     return tac;
 }

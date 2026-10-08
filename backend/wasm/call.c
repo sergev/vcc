@@ -22,6 +22,66 @@ static bool is_va_start(const Tac_Instruction *in)
     return !in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0;
 }
 
+// The shadow-stack builtins of co_alloca (translator/coro.c), expanded in place.
+enum { STACK_SAVE = 1, STACK_RESTORE, STACK_ALLOCA };
+
+int wasm_stack_builtin(const char *name)
+{
+    if (strcmp(name, "__builtin_stack_save") == 0)
+        return STACK_SAVE;
+    if (strcmp(name, "__builtin_stack_restore") == 0)
+        return STACK_RESTORE;
+    if (strcmp(name, "__builtin_alloca") == 0)
+        return STACK_ALLOCA;
+    return 0;
+}
+
+static int stack_builtin(const Tac_Instruction *in)
+{
+    return in->u.fun_call.indirect ? 0 : wasm_stack_builtin(in->u.fun_call.fun_name);
+}
+
+static void global_sp(Gen *g, Wasm_Op op)
+{
+    emit(g, op)->sym = xstrdup("__stack_pointer");
+}
+
+// save: dst = __stack_pointer; restore: __stack_pointer = arg; alloca: __stack_pointer
+// = (__stack_pointer - arg) & -16, dst = __stack_pointer.  The frame pointer keeps the
+// frame where it was (gen_init gives such a function one), and the epilogue resets
+// __stack_pointer from it.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in, int kind)
+{
+    const Tac_Val *dst = in->u.fun_call.dst;
+    if (kind == STACK_RESTORE || kind == STACK_ALLOCA) {
+        if (!in->u.fun_call.args)
+            fatal_error("wasm: %s: %s takes one argument", g->fn->name, in->u.fun_call.fun_name);
+        if (kind == STACK_ALLOCA) {
+            global_sp(g, WASM_GLOBAL_GET);
+            push_val(g, in->u.fun_call.args, WASM_I32);
+            emit(g, WASM_I32_SUB);
+            emit_imm(g, WASM_I32_CONST, -16);
+            emit(g, WASM_I32_AND);
+        } else {
+            push_val(g, in->u.fun_call.args, WASM_I32);
+        }
+        global_sp(g, WASM_GLOBAL_SET);
+    }
+    if (dst && kind != STACK_RESTORE) {
+        begin_dst(g, dst);
+        global_sp(g, WASM_GLOBAL_GET);
+        end_dst(g, dst);
+    }
+}
+
+bool wasm_uses_alloca(const Tac_TopLevel *tl)
+{
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && stack_builtin(in) == STACK_ALLOCA)
+            return true;
+    return false;
+}
+
 // Where a call's pieces go in the calls' area.
 typedef struct {
     int nargs;
@@ -125,7 +185,7 @@ static void free_layout(Layout *L)
 
 int call_area_size(const Gen *g, const Tac_Instruction *in)
 {
-    if (is_va_start(in) || !in->u.fun_call.fun_type)
+    if (is_va_start(in) || stack_builtin(in) || !in->u.fun_call.fun_type)
         return 0;
     Layout L;
     layout(g, in, &L);
@@ -191,6 +251,10 @@ static void call_with(Gen *g, const Tac_Instruction *in, bool noreturn, bool kee
 {
     if (is_va_start(in)) {
         gen_va_start(g, in);
+        return;
+    }
+    if (stack_builtin(in)) {
+        gen_stack_builtin(g, in, stack_builtin(in));
         return;
     }
     const Tac_Val *dst = in->u.fun_call.dst;

@@ -114,6 +114,22 @@ protected:
         return all_tac;
     }
 
+    // Start another translation unit in the same test: the last one's tables and source
+    // are gone, as between two runs of the compiler.
+    void NextUnit()
+    {
+        if (program)
+            free_program(program);
+        program = nullptr;
+        symtab_destroy();
+        structtab_destroy();
+        typetab_destroy();
+        nametab_destroy();
+        fclose(input_file);
+        input_file = tmpfile();
+        ASSERT_NE(nullptr, input_file);
+    }
+
     // Skip the current test if `list` names it (call from a fixture's SetUp).
     static void SkipIfListed(const SkippedTest *list)
     {

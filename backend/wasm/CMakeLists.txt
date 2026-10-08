@@ -41,6 +41,7 @@ add_executable(wasm32-tests
     ../common/test/book/signed_char_tests.cpp
     test/run_tests.cpp
     test/defer_tests.cpp
+    test/coro_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(wasm32-tests wasm parser translator semantic GTest::gtest_main
