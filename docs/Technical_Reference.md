@@ -262,7 +262,7 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `label_loops.c` | Annotates loop/switch statements with break/continue jump targets |
 | `resolve_labels.c` | `goto`/label validation per function |
 | `defer.c` | `defer` checks: no jump into a block past a defer or a `co_alloca`, into or out of a deferred statement, no `return` inside one; label positions for the translator |
-| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; the translator stops at them until phase C3 of [backend/wasm/Plan.md](../backend/wasm/Plan.md) |
+| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; lowered by `translator/coro.c` (see [backend/wasm/Plan.md](../backend/wasm/Plan.md) §6) |
 | `type_utils.c` | Type helpers: `get_size`, `get_alignment`, `is_integer`, etc. |
 | `const_convert.c` | Constant-expression evaluation and conversion |
 | `target.c`, `target.h` | Target descriptors: type sizes and alignment, plain-`char` signedness, shift semantics |
@@ -277,6 +277,7 @@ Tests: `symtab_tests.cpp`, `structtab_tests.cpp`, `typetab_tests.cpp`, `typechec
 | `translate.h`, `translate.c` | Shared helpers, type conversion, top-level entry points, unit begin/end |
 | `expr.c` | AST `Expr` → TAC instruction lowering |
 | `stmt.c` | AST `Stmt` → TAC instruction lowering; local declaration init |
+| `coro.c` | Coroutines: the operations lowered to calls of `libc/wasm32/co.c`, and the split pass that makes a coroutine a state machine over its frame after the optimizer ([backend/wasm/Plan.md](../backend/wasm/Plan.md) §6) |
 | `main.c` | `lower` entry: import → semantic passes → translate → emit |
 | `test/translate_test.h` | Test fixture helpers shared across translator test files |
 
@@ -286,7 +287,8 @@ Tests: `decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `
 
 Machine-independent TAC passes, run to a fixed point per function by `optimize_function`:
 constant folding (`const_fold.c`), unreachable code elimination (`unreachable.c`), copy
-propagation (`copy_prop.c`) and dead store elimination (`dead_store.c`), over a CFG
+propagation (`copy_prop.c`) and dead store elimination (`dead_store.c`, whose liveness
+analysis is `liveness.c`, shared with the coroutine split pass), over a CFG
 (`cfg.c`) with alias analysis (`alias.c`). See [TAC_Optimization.md](TAC_Optimization.md).
 
 Tests: `const_fold_tests.cpp`, `type_conv_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `dead_store_tests.cpp`, `pipeline_tests.cpp` → `optimizer-tests`.
@@ -994,7 +996,7 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `libutil-tests` | `libutil/test/c_escape_tests.cpp`, `string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` |
 | `tac-tests` | `tac/test/binary_tests.cpp`, `yaml_tests.cpp`, `graphviz_tests.cpp`, `verify_tests.cpp` |
 | `semantic-tests` | `semantic/test/*_tests.cpp` (11 unit-test files, listed above) |
-| `translate-tests` | `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `type_tests.cpp` |
+| `translate-tests` | `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `defer_tests.cpp`, `coro_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `type_tests.cpp` |
 | `optimizer-tests` | `optimize/test/const_fold_tests.cpp`, `type_conv_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `dead_store_tests.cpp`, `pipeline_tests.cpp` |
 | `backend-tests` | `backend/common/test/flow_tests.cpp` |
 | `riscv-tests` | `backend/riscv/test/*_tests.cpp` (emit, codegen golden assembly, frame, instr, register allocation, peephole, data, qemu run, clang interop, printf/str/mem/math libc, binary128 `long double`) and the book suite |

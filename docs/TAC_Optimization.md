@@ -463,7 +463,8 @@ The optimizer lives in a new top-level directory `optimizer/`:
 | `dataflow.h`, `dataflow.c` | Helpers shared by the forward dataflow passes |
 | `cse.c` | Available-expressions analysis and rewrite |
 | `copy_prop.c` | Reaching-copies analysis and substitution |
-| `dead_store.c` | Liveness analysis and dead store removal |
+| `dead_store.c` | Dead store removal |
+| `liveness.c` | Liveness analysis, for dead store removal and the coroutine split pass (`translator/coro.c`) |
 
 The pipeline entry point:
 

@@ -287,6 +287,16 @@ call needs: the variable arguments' buffer at its start, then the copies of argu
 passed by reference, then a result slot for a call whose structure or `long double`
 result has nowhere of its own to go. Every call in the function shares it.
 
+The coroutines' `co_alloca` moves `__stack_pointer` in the middle of a function, through
+three builtins the translator calls and `call.c` expands in place (no call, no calls'
+area, no `.functype`): `__builtin_stack_save()` is `global.get __stack_pointer`,
+`__builtin_stack_restore(p)` is `global.set __stack_pointer`, and `__builtin_alloca(n)`
+lowers it by `n` rounded to 16 and yields it. A function that allocates always has a
+frame, 16 bytes when it has no slots, so that its epilogue puts `__stack_pointer` back
+from the frame pointer. The coroutines themselves need nothing of the backend: the
+translator makes each an ordinary function `f$resume(fp)` over a frame in memory
+([backend/wasm/Plan.md](../backend/wasm/Plan.md) §6).
+
 ## Function calls
 
 The signature is clang's (checked against `clang -S`):
@@ -359,6 +369,10 @@ into `ap`. No `.functype` is emitted for it. `va_arg` is a macro, which asks
 - `main.s`: the weak `__main_void`.
 - `malloc.c`: a bump allocator from `__heap_base` up, growing the memory by the pages a
   block needs; `free` does nothing.
+- `co.c`: the coroutine runtime: `__coro_setup` (a frame on given storage),
+  `__coro_resume` (resume, cancel and destroy, through the frame's `f$resume`),
+  `__coro_done`, `__coro_value`, `__coro_result`, and the traps, which print
+  `coroutine trap: <name>` and exit with 255 ([docs/Coroutines_in_C.md](Coroutines_in_C.md)).
 - The C library of `libc/common` (`printf` over `doprnt`, `<string.h>`, `float128.c`, …)
   and `frexp`, `ldexp` and `modf` of `libc/ilp32`, compiled by our own passes. The
   `long long` helpers of `libc/ilp32` are left out: `i64` arithmetic is native.

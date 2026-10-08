@@ -9,11 +9,13 @@ vcc extends C with two features:
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
 > **Status.** `defer` (section 1) is implemented and works on every target;
-> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are being built: the
-> compiler parses them and reports every compile-time error of section 7, but makes no
-> code for them yet ("coroutines: not yet"). They work on wasm32 only, and they exist
-> for programs that run on [Braam](#8-coroutines-on-braam). The design and the work are
-> in [backend/wasm/Plan.md](../backend/wasm/Plan.md).
+> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are being built, on
+> wasm32 only: generators work (section 2, section 3 but `co_alloca` inside a
+> coroutine, section 4 but `await`, and `co_cancel` and `co_destroy` of section 6);
+> `await` (section 5), `co_alloca` inside a coroutine and the Braam runtime (section
+> 8) are next, and stop the compiler with "coroutines: not yet". Coroutines exist for
+> programs that run on [Braam](#8-coroutines-on-braam). The design and the work are in
+> [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
 ## Contents
 
@@ -419,8 +421,9 @@ block: finishing the coroutine, or calling `co_destroy`, is your job.
 
 ### `co_sizeof` and `co_alignof`
 
-They are fixed when the program is linked, and cost nothing to use. But the compiler
-does not know them yet when it compiles your code, so you cannot use them as an array
+They are fixed when the coroutine is compiled, and read from a small table in its
+unit, so they cost one load. But the compiler does not know them when it compiles a
+program that uses the coroutine, so you cannot use them as an array
 size: `char storage[co_sizeof(count_to)]` is an error. That is why `co_alloca`
 exists. With `co_init`, pick a size with room to spare, or check it:
 
@@ -489,8 +492,8 @@ All of them take a frame pointer `f`, except `co_alloca`, `co_init`, `co_sizeof`
 | `co_done(f)` | True once the coroutine has finished or been destroyed. |
 | `co_value(f)` | The value of the last `yield`. Valid only after `co_resume` or `co_cancel` returned `CO_SUSPENDED`. |
 | `co_result(f)` | The value the coroutine returned. Valid only after it finished with `CO_DONE`, not after `co_destroy`. |
-| `co_sizeof(g)` | Bytes of memory a frame of `g` needs. Fixed when the program is linked; not usable as an array size. |
-| `co_alignof(g)` | Alignment a frame of `g` needs. At most 16. Fixed when the program is linked. |
+| `co_sizeof(g)` | Bytes of memory a frame of `g` needs. Known when the program runs; not usable as an array size. |
+| `co_alignof(g)` | Alignment a frame of `g` needs. At most 16. Known when the program runs. |
 
 The types:
 
@@ -774,7 +777,8 @@ end without stopping.
 
 ### Traps
 
-These stop the program with a message naming the trap, in every build:
+These stop the program with a message naming the trap (`coroutine trap: CO_TRAP_…`,
+and exit status 255 under node), in every build:
 
 | Trap | Cause |
 |---|---|
@@ -919,7 +923,7 @@ co_destroy(f);                           /* run pending defers, finish */
 int done = co_done(f);
 Y v = co_value(f);                       /* after CO_SUSPENDED */
 T r = co_result(f);                      /* after CO_DONE */
-size_t n = co_sizeof(g), a = co_alignof(g);   /* fixed at link time */
+size_t n = co_sizeof(g), a = co_alignof(g);   /* not constants */
 ```
 
 | Short name | Long name |
