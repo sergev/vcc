@@ -399,3 +399,54 @@ again:
 }
 )").c_str());
 }
+
+// --- Braam (wasm32-braam: the runtime awaits main) -----------------------------
+
+namespace {
+class BraamMainTest : public CoroTest {
+protected:
+    void SetUp() override
+    {
+        CoroTest::SetUp();
+        target_config = target_lookup("wasm32-braam");
+    }
+};
+} // namespace
+
+static const char *const braam_call = "typedef struct braam_call braam_call;\n";
+
+TEST_F(BraamMainTest, CoroutineMain)
+{
+    EXPECT_EQ(1, target_config->braam);
+    RunPipeline((std::string(braam_call) +
+                 "_Coro(braam_call *) int main(int argc, char **argv) { return argc; }")
+                    .c_str());
+}
+
+TEST_F(BraamMainTest, PlainMain)
+{
+    EXPECT_DEATH(RunPipeline("int main(void) { return 0; }"),
+                 "on Braam, main is coro\\(braam_call \\*\\) int main\\(int, char \\*\\*\\)");
+}
+
+TEST_F(BraamMainTest, OtherYieldType)
+{
+    EXPECT_DEATH(RunPipeline("_Coro(int) int main(int argc, char **argv) { return 0; }"),
+                 "the yield type is not braam_call");
+}
+
+TEST_F(BraamMainTest, NoArguments)
+{
+    EXPECT_DEATH(RunPipeline((std::string(braam_call) +
+                              "_Coro(braam_call *) int main(void) { return 0; }")
+                                 .c_str()),
+                 "the parameters are not");
+}
+
+TEST_F(BraamMainTest, VoidResult)
+{
+    EXPECT_DEATH(RunPipeline((std::string(braam_call) +
+                              "_Coro(braam_call *) void main(int c, char **v) { }")
+                                 .c_str()),
+                 "it does not return int");
+}

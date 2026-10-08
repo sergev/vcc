@@ -338,22 +338,33 @@ static const Target targets[] = {
 
 const Target *target_config = &targets[DEFAULT_TARGET_INDEX];
 
-// Hosted targets whose data model is that of a bare-metal one.
+// Hosted targets whose data model is that of a bare-metal one; wasm32-braam is wasm32
+// with Braam's process model.
 static const struct {
     const char *name, *model;
+    int braam;
 } aliases[] = {
-    { "x86_64-linux", "x86_64" },
-    { "aarch64-linux", "aarch64" },
+    { "x86_64-linux", "x86_64", 0 },
+    { "aarch64-linux", "aarch64", 0 },
+    { "wasm32-braam", "wasm32", 1 },
 };
 
 const Target *target_lookup(const char *name)
 {
+    static Target braam; // the model's descriptor with the braam bit
+    int with_braam = 0;
     for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++)
-        if (strcmp(aliases[i].name, name) == 0)
-            name = aliases[i].model;
+        if (strcmp(aliases[i].name, name) == 0) {
+            name       = aliases[i].model;
+            with_braam = aliases[i].braam;
+        }
     for (int i = 0; i < NUM_TARGETS; i++) {
         if (strcmp(targets[i].name, name) == 0) {
-            return &targets[i];
+            if (!with_braam)
+                return &targets[i];
+            braam       = targets[i];
+            braam.braam = 1;
+            return &braam;
         }
     }
     return NULL;

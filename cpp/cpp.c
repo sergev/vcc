@@ -88,6 +88,11 @@ static const struct target targets[] = {
                    "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",
                    "__wasm_reference_types__", "__wasm_sign_ext__",
                    "__vcc_coroutines__" } }, // _Coro, _Yield, _Await, __co_*
+    { "wasm32-braam", { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
+                   "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
+                   "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",
+                   "__wasm_reference_types__", "__wasm_sign_ext__",
+                   "__vcc_coroutines__", "__braam__" } }, // Braam's process model
 };
 
 static const struct target *target;     // selected by -t; default riscv64, like lower
@@ -123,7 +128,7 @@ void usage()
     printf("Usage:\n");
     printf("    %s [options] [infile [outfile]]\n", cpp.prog_name ? cpp.prog_name : "cpp");
     printf("Options:\n");
-    printf("    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430, mmix or wasm32 (default riscv64)\n");
+    printf("    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430, mmix, wasm32 or wasm32-braam (default riscv64)\n");
     printf("    -I path             Add path to the search list for header files\n");
     printf("    -nostdinc           Do not search the target's standard include directory\n");
     printf("    -D macro[=value]    Fake a definition at the beginning\n");

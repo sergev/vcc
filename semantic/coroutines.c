@@ -110,13 +110,38 @@ void reject_coro_spec(const DeclSpec *spec, const char *name)
         fatal_error("_Coro on '%s', which is not a function", name);
 }
 
+// On Braam (backend/wasm/Plan.md §7) the runtime awaits main: it is a coroutine yielding
+// the runtime's requests, and takes argc and argv.
+static void check_braam_main(const Type *yield, const Type *fn_type)
+{
+    static const char shape[] = "on Braam, main is coro(braam_call *) int main(int, char **)";
+    const Type *y = unalias(yield);
+    const Type *t = y->kind == TYPE_POINTER ? unalias(y->u.pointer.target) : NULL;
+    if (!t || t->kind != TYPE_STRUCT || !t->u.struct_t.name ||
+        strcmp(t->u.struct_t.name, "braam_call") != 0)
+        fatal_error("%s: the yield type is not braam_call *", shape);
+    fn_type = unalias(fn_type);
+    if (unalias(fn_type->u.function.return_type)->kind != TYPE_INT)
+        fatal_error("%s: it does not return int", shape);
+    const Param *argc = fn_type->u.function.params;
+    const Param *argv = argc ? argc->next : NULL;
+    const Type *pp    = argv ? unalias(argv->type) : NULL;
+    if (!argv || argv->next || unalias(argc->type)->kind != TYPE_INT ||
+        (pp->kind != TYPE_POINTER && pp->kind != TYPE_ARRAY))
+        fatal_error("%s: the parameters are not (int, char **)", shape);
+}
+
 const Type *check_coroutine_decl(const char *name, const DeclSpec *spec, const Type *fn_type)
 {
     FunctionSpec *cs = coro_spec(spec);
-    if (!cs)
+    bool main        = strcmp(name, "main") == 0;
+    if (!cs) {
+        if (main && target_config->braam)
+            fatal_error("on Braam, main is coro(braam_call *) int main(int, char **)");
         return NULL;
+    }
     require_target();
-    if (strcmp(name, "main") == 0)
+    if (main && !target_config->braam)
         fatal_error("main cannot be a coroutine");
     for (const FunctionSpec *fs = spec->func_specs; fs; fs = fs->next) {
         if (fs->kind == FUNC_SPEC_INLINE)
@@ -132,6 +157,8 @@ const Type *check_coroutine_decl(const char *name, const DeclSpec *spec, const T
     cs->yield_type = resolve_typedef_names(cs->yield_type);
     validate_type(cs->yield_type);
     check_value_type(cs->yield_type, "The yield type of a coroutine");
+    if (main)
+        check_braam_main(cs->yield_type, fn_type);
     return cs->yield_type;
 }
 

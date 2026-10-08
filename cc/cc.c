@@ -14,8 +14,8 @@
 //
 // The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
 // system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64,
-// riscv32, aarch64, arm32, x86_64, avr, msp430, mmix and besm6 are bare metal, and wasm32
-// a WebAssembly module, run under node.  By default it is the host, where that is one of the
+// riscv32, aarch64, arm32, x86_64, avr, msp430, mmix and besm6 are bare metal, wasm32
+// a WebAssembly module, run under node, and wasm32-braam a process of Braam.  By default it is the host, where that is one of the
 // hosted targets, else riscv64.
 // Input files are dispatched by suffix: .c runs the full pipeline, .S is
 // preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
@@ -210,6 +210,7 @@ struct target {
     bool no_runtime;              // hosted: no libvcc.a
     const char *llvm_ld;          // the LLVM linker, when not ld.lld
     const char *llvm_ld_flags;    // its flags, blank-separated, or NULL
+    bool braam;                   // a Braam process: --initial-memory, then the braam section
 };
 
 #define RISCV_PREFIXES "riscv64-unknown-elf riscv64-elf riscv64-linux-gnu"
@@ -239,6 +240,14 @@ static const struct target targets[] = {
       .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
       .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
       .llvm_ld = "wasm-ld", .llvm_ld_flags = "--stack-first -z stack-size=1048576" },
+    // Braam's process ABI (backend/wasm/Plan.md §7.1): the memory imported, no entry (the
+    // exports are crt0.o's), the stack Braam's own programs have.
+    { .name = "wasm32-braam", .arch = ARCH_CROSS, .codegen = "vgenwasm", .as_default = WASM32_AS,
+      .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
+      .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
+      .llvm_ld       = "wasm-ld",
+      .llvm_ld_flags = "--no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections",
+      .braam         = true },
     { .name = "x86_64-linux", .arch = ARCH_HOSTED, .codegen = "vgenx86",
       .as_default = X86_64_LINUX_CC, .ld_default = X86_64_LINUX_CC,
       .prefixes = "x86_64-linux-gnu", .triple = "x86_64-linux-gnu", .gen_flag = "--linux" },
@@ -295,6 +304,8 @@ static bool opt_O;      // -O: request optimization (a no-op; README.md, "Reserv
 static char opt_x;      // -x LANG: the input language for every file, as its suffix ('c', 'S', 's'); 0 by suffix
 static bool opt_v;         // -v: echo each sub-command before running it
 static bool opt_nostdlib;  // -nostdlib: skip the library dir, crt0.o and the implicit -l's
+static unsigned long braam_pages = 4; // --initial-pages: a Braam process's initial memory, as
+                                      // BRAAM_BIN_INITIAL_PAGES in braam-core's BraamProgram.cmake
 static bool opt_nostdinc;  // -nostdinc: skip the target's standard include dir
 static char *outfile;      // -o NAME: explicit output name
 static char *linkscript;   // -T FILE: linker script (not besm6), instead of the standard one
@@ -974,6 +985,9 @@ static int compile_one(const char *src)
 //              <lib>/crt0.o objs ldflags -lc [libgcc.a]
 //     wasm32:  wasm-ld --stack-first -z stack-size=1048576 -o out -L<lib> <lib>/crt0.o objs
 //              ldflags -lc
+//     wasm32-braam: wasm-ld --no-entry --import-memory --stack-first -z stack-size=131072
+//              --gc-sections --initial-memory=<pages * 65536> -o out -L<lib> <lib>/crt0.o
+//              objs ldflags -lc, then the braam section (braam_stamp)
 //     others:  <prefix>-ld [flags] -T <script> -o out -L<lib> <lib>/crt0.o objs ldflags -lc,
 //              e.g. riscv64-unknown-elf-ld -m elf32lriscv for riscv32, avr-ld -m avr51;
 //              or ld.lld with no flags
@@ -1027,6 +1041,80 @@ static int link_hosted(const char *libdir)
     return rc;
 }
 
+//
+// The metadata Braam's exec reads, appended to a linked process: a custom section
+// "braam" of five little-endian u32, magic, PROC_ABI, flags, the initial pages (those
+// of --initial-memory) and the most the kernel allows; braam-core's tools/stamp.py
+// does the same for its own programs.  An earlier "braam" section is dropped first.
+// The numbers are libc/wasm32/braam/include/braam.h's.  Returns 0 on success.
+//
+static int braam_stamp(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        error("cannot read %s", path);
+        return 1;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *data = malloc(size > 0 ? (size_t)size : 1);
+    unsigned char *out  = malloc((size_t)size + 64);
+    if (!data || !out || fread(data, 1, (size_t)size, f) != (size_t)size || size < 8 ||
+        memcmp(data, "\0asm", 4) != 0) {
+        fclose(f);
+        free(data);
+        free(out);
+        error("%s is not a wasm module", path);
+        return 1;
+    }
+    fclose(f);
+
+    // Every section but a "braam" one.
+    size_t n = 8, at = 8;
+    memcpy(out, data, 8);
+    while (at < (size_t)size) {
+        size_t start = at, len = 0;
+        unsigned shift = 0;
+        unsigned char id = data[at++];
+        while (at < (size_t)size) {
+            unsigned char b = data[at++];
+            len |= (size_t)(b & 0x7f) << shift;
+            shift += 7;
+            if (!(b & 0x80))
+                break;
+        }
+        size_t end = at + len < (size_t)size ? at + len : (size_t)size;
+        bool braam = id == 0 && len >= 6 && data[at] == 5 && memcmp(data + at + 1, "braam", 5) == 0;
+        if (!braam) {
+            memcpy(out + n, data + start, end - start);
+            n += end - start;
+        }
+        at = end;
+    }
+
+    // The section: id 0, its size, the name, five words.
+    unsigned long meta[5] = { 0x6d617262, 21, 0, braam_pages, 1600 };
+    out[n++] = 0;
+    out[n++] = 1 + 5 + 20;
+    out[n++] = 5;
+    memcpy(out + n, "braam", 5);
+    n += 5;
+    for (int i = 0; i < 5; i++)
+        for (int k = 0; k < 4; k++)
+            out[n++] = (unsigned char)(meta[i] >> (8 * k));
+
+    f       = fopen(path, "wb");
+    bool ok = f && fwrite(out, 1, n, f) == n;
+    if (f && fclose(f) != 0)
+        ok = false;
+    free(data);
+    free(out);
+    if (!ok)
+        error("cannot write %s", path);
+    return ok ? 0 : 1;
+}
+
 static int link_objects(void)
 {
     char *libdir = concat(share_dir, "/lib");
@@ -1049,6 +1137,11 @@ static int link_objects(void)
             push_words(&av, target->llvm_ld_flags);
         if (target->ld_flag)
             vec_push(&av, (char *)target->ld_flag);
+        if (target->braam) {
+            char pages[48];
+            snprintf(pages, sizeof pages, "--initial-memory=%lu", braam_pages * 65536UL);
+            vec_push(&av, concat(pages, ""));
+        }
         if (target->no_script && !linkscript)
             break;
         char *script = linkscript ? linkscript : concat(libdir, "/link.ld");
@@ -1106,6 +1199,8 @@ static int link_objects(void)
 
     int rc = run(av.data[0], av.data);
     vec_free(&av);
+    if (rc == 0 && target->braam)
+        rc = braam_stamp(outfile ? outfile : "a.out");
     return rc;
 }
 
@@ -1141,7 +1236,8 @@ static void usage(void)
     printf("Options:\n");
     printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux, aarch64-darwin\n");
     printf("                       (hosted), riscv64, riscv32, aarch64, arm32, x86_64, avr,\n");
-    printf("                       msp430, mmix, besm6 (bare metal) or wasm32; default %s\n",
+    printf("                       msp430, mmix, besm6 (bare metal), wasm32 or wasm32-braam\n");
+    printf("                       (a process of Braam); default %s\n",
            *HOST_TARGET ? HOST_TARGET : "riscv64");
     printf("    -c              Compile and assemble, but do not link\n");
     printf("    -S              Compile only; emit assembly (.s)\n");
@@ -1162,6 +1258,8 @@ static void usage(void)
     printf("    -T file         Linker script instead of the standard one (not besm6)\n");
     printf("    -nostdlib       Do not use the standard library dir, crt0.o or the implicit libraries\n");
     printf("    -nostdinc       Do not add the standard include directory\n");
+    printf("    --initial-pages=N  wasm32-braam: the process's initial memory, in 64 KiB pages\n");
+    printf("                    (default 4)\n");
     printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
     printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf("Inputs are dispatched by suffix: .c (compile), "
@@ -1193,6 +1291,15 @@ int main(int argc, char *argv[])
         }
         if (strcmp(arg, "-nostdinc") == 0) {
             opt_nostdinc = true;
+            continue;
+        }
+        if (strncmp(arg, "--initial-pages=", 16) == 0) {
+            char *end;
+            braam_pages = strtoul(arg + 16, &end, 10);
+            if (*end || braam_pages == 0 || braam_pages > 1600) {
+                error("bad %s: 1 to 1600 pages of 64 KiB", arg);
+                usage();
+            }
             continue;
         }
         if (strncmp(arg, "--target", 8) == 0) {

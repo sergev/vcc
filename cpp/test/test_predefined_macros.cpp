@@ -246,6 +246,13 @@ TEST_F(Predefined, Wasm32Target) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "wasm32"}));
 }
 
+// wasm32-braam: wasm32's set and __braam__, which plain wasm32 has not got.
+TEST_F(Predefined, Wasm32BraamTarget) {
+    EXPECT_TRUE(TokensAre("#if __wasm32__ && __ILP32__ && __vcc_coroutines__ && __braam__\n"
+                          "TARGET\n#endif\n", "TARGET", {"-t", "wasm32-braam"}));
+    EXPECT_TRUE(TokensAre("#ifndef __braam__\nTARGET\n#endif\n", "TARGET", {"-t", "wasm32"}));
+}
+
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
     EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv) && "
