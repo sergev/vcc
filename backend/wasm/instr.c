@@ -78,7 +78,9 @@ static Wasm_ValType const_valtype(const Tac_Const *c)
 
 Wasm_Instr *emit(Gen *g, Wasm_Op op)
 {
-    return wasm_append(g->fn, op);
+    Wasm_Instr *in = wasm_append(g->fn, op);
+    in->barrier    = g->barrier;
+    return in;
 }
 
 void emit_imm(Gen *g, Wasm_Op op, int64_t imm)
@@ -1111,7 +1113,7 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
     end_dst(g, dst);
 }
 
-void gen_instr(Gen *g, const Tac_Instruction *in)
+static void select_instr(Gen *g, const Tac_Instruction *in)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_RETURN:
@@ -1223,4 +1225,11 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     }
     fatal_error("wasm: %s: TAC %s is not supported yet", g->fn->name,
                 tac_instruction_name(in->kind));
+}
+
+void gen_instr(Gen *g, const Tac_Instruction *in)
+{
+    g->barrier = in->is_volatile;
+    select_instr(g, in);
+    g->barrier = false;
 }

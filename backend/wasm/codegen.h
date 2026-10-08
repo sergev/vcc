@@ -13,6 +13,12 @@ extern "C" {
 // Structured control flow (on by default): off, every function gets the dispatch
 // skeleton (genwasm --no-structure).
 extern bool wasm_structure;
+// The rewrites of the finished code (on by default): the peephole rules, keeping values
+// on the operand stack (stackify), and sharing locals (coalescing); genwasm
+// --no-peephole, --no-stackify, --no-coalesce.
+extern bool wasm_peephole;
+extern bool wasm_stackify;
+extern bool wasm_coalesce;
 
 // Translate one TAC toplevel to WebAssembly assembly (the LLVM assembler's syntax) on
 // `out`.  `program` heads the whole translation unit, lowered with -t wasm32.

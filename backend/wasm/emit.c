@@ -195,23 +195,6 @@ static void emit_instr(FILE *out, const Wasm_Instr *in)
     fputc('\n', out);
 }
 
-// Whether control cannot run off the end of the function's code.  Where it can, a
-// non-void function gets an unreachable there, which makes its result's absence valid.
-static bool ends_in_transfer(const Wasm_Func *fn)
-{
-    if (!fn->last)
-        return false;
-    switch (fn->last->op) {
-    case WASM_RETURN:
-    case WASM_UNREACHABLE:
-    case WASM_BR:
-    case WASM_BR_TABLE:
-        return true;
-    default:
-        return false;
-    }
-}
-
 void wasm_emit_func(FILE *out, const Wasm_Func *fn)
 {
     fprintf(out, "\t.section\t.text.%s,\"\",@\n", fn->name);
@@ -230,8 +213,6 @@ void wasm_emit_func(FILE *out, const Wasm_Func *fn)
     }
     for (const Wasm_Instr *in = fn->first; in; in = in->next)
         emit_instr(out, in);
-    if (fn->result != WASM_VOID && !ends_in_transfer(fn))
-        fputs("\tunreachable\n", out);
     fputs("\tend_function\n", out);
 }
 

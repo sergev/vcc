@@ -253,8 +253,27 @@ structure.c drops whatever isn't reachable from the entry.
    every one under `genwasm --no-structure` (`wasm_structure`), gets the skeleton.  A
    conditional jump whose two ways meet is a plain branch; falling off the last block
    returns (void) or is unreachable.  The whole libc and book suite run structured.
-7. **Quality**: stackify, peephole, local coalescing, frameless leaves. Default
+7. **Quality** (done): stackify, peephole, local coalescing, frameless leaves. Default
    goldens. Code size against `clang -O2` with the same features on the book programs.
+   The rewrites work on the finished code (`peephole.c`), not on TAC: a local set once
+   and read once later in the same straight run stays on the operand stack, either
+   waiting below code that leaves the stack as it found it (nothing moves, so calls and
+   stores need no care) or, for an expression with no effect, moved down to its use
+   when nothing between writes what it reads (a load never crosses a store, a call or a
+   volatile access, whose instructions are marked as barriers); then tees, dead values
+   dropped, tests folded into comparisons, constant additions into memarg offsets, a
+   multiply by a power of two as a shift, constant stores side by side merged up to an
+   i64 (natural alignment only through the frame), and dead code, branches to where
+   control runs anyway, unnamed blocks and loops and the final return removed.
+   `structure.c` emits a `br_if` where one way of a conditional jump is a bare branch.
+   `locals.c` solves liveness over the structured code itself, merges copy-related
+   locals that never interfere into groups, and colours the groups.  Frameless leaves
+   were there from phase 3 (no frame without slots).  `genwasm --no-peephole`,
+   `--no-stackify`, `--no-coalesce`; `NaiveSelection()` turns all three off, and
+   `peephole_tests.cpp` holds the default-pipeline goldens.  `scripts/bench_wasm.sh`
+   compares Code section bytes: the 607 book programs 137384 against clang -O2's 79760
+   (1.72x; clang folds many of them to a constant), the C files of `libc/common` 25717
+   against 22138 (1.16x); with no rewrites ours were 1.49x and 1.42x bigger.
 8. **Docs**: `docs/Wasm_Backend.md`; `CLAUDE.md`, `README.md`,
    `docs/Technical_Reference.md`, `docs/Type_Sizes_Alignment.md`, `cc/README.md`,
    `cpp/README.md`.

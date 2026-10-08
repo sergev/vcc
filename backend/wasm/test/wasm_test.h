@@ -57,10 +57,21 @@ inline QemuConfig wasm32_config()
 
 class WasmTest : public QemuTest {
 protected:
-    WasmTest() : QemuTest("wasm32", wasm32_config()) { wasm_structure = true; }
+    WasmTest() : QemuTest("wasm32", wasm32_config())
+    {
+        wasm_structure = true;
+        wasm_peephole  = true;
+        wasm_stackify  = true;
+        wasm_coalesce  = true;
+    }
 
-    // Pin instruction selection itself: nothing so far to turn off.
-    static void NaiveSelection() {}
+    // Pin instruction selection itself: no rewrites of the finished code.
+    static void NaiveSelection()
+    {
+        wasm_peephole = false;
+        wasm_stackify = false;
+        wasm_coalesce = false;
+    }
 
     // Assembly of every toplevel of the translation unit.
     std::string CompileToWasm(const char *src)

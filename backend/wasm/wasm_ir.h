@@ -218,6 +218,9 @@ typedef struct Wasm_Instr {
     int *table;      // owned: br_table's depths, the default last
     int ntable;      // their count
     Wasm_ValType bt; // a block's result type
+    int pops;        // a call's: the values it takes
+    int pushes;      // a call's: the values it leaves
+    bool barrier;    // part of a volatile access: the optimizer moves nothing across it
 } Wasm_Instr;
 
 typedef struct {
@@ -228,6 +231,7 @@ typedef struct {
     Wasm_ValType result;    // WASM_VOID for none
     Wasm_ValType *locals;   // owned: the types of the locals after the parameters
     int nlocals;
+    int frame;              // the local holding the frame's address (16-aligned), or -1
     Wasm_Instr *first, *last;
 } Wasm_Func;
 
@@ -244,6 +248,13 @@ Wasm_Instr *wasm_append(Wasm_Func *fn, Wasm_Op op);
 void wasm_remove(Wasm_Func *fn, Wasm_Instr *in);
 // A new local of type t; its index (after the parameters).
 int wasm_add_local(Wasm_Func *fn, Wasm_ValType t);
+// A new instruction op before `at` (at the end when NULL).
+Wasm_Instr *wasm_insert(Wasm_Func *fn, Wasm_Instr *at, Wasm_Op op);
+// Move instructions first..last (a run of fn) in front of `at`.
+void wasm_move(Wasm_Func *fn, Wasm_Instr *first, Wasm_Instr *last, Wasm_Instr *at);
+// The values instruction `in` takes from the stack and leaves on it; false for a
+// structured or branch instruction, whose effect is not a plain one.
+bool wasm_stack_effect(const Wasm_Instr *in, int *pops, int *pushes);
 
 #ifndef __cplusplus
 _Noreturn void fatal_error(const char *fmt, ...);

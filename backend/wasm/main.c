@@ -8,13 +8,28 @@
 
 static const BackendFlag flags[] = {
     { "no-structure", "the dispatch skeleton for every function, no blocks and loops" },
+    { "no-peephole", "no peephole rewrites of the finished code" },
+    { "no-stackify", "every value through a local, none left on the operand stack" },
+    { "no-coalesce", "a local for every name, none shared" },
     { NULL, NULL },
 };
 
 static void flag(int index)
 {
-    if (index == 0)
+    switch (index) {
+    case 0:
         wasm_structure = false;
+        break;
+    case 1:
+        wasm_peephole = false;
+        break;
+    case 2:
+        wasm_stackify = false;
+        break;
+    case 3:
+        wasm_coalesce = false;
+        break;
+    }
 }
 
 static const char *output_ext(void)

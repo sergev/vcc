@@ -9,6 +9,8 @@ add_library(wasm STATIC
     data.c
     structure.c
     call.c
+    peephole.c
+    locals.c
     codegen.c
 )
 target_include_directories(wasm PUBLIC .)
@@ -25,6 +27,7 @@ add_executable(wasm32-tests
     test/flow_tests.cpp
     test/data_tests.cpp
     test/call_tests.cpp
+    test/peephole_tests.cpp
     test/frame_tests.cpp
     test/ptr_tests.cpp
     test/struct_tests.cpp

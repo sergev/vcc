@@ -249,7 +249,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     }
     g->frame_size = (g->frame_size + 15) & -16;
     if (g->frame_size)
-        g->fp = wasm_add_local(fn, WASM_I32);
+        fn->frame = g->fp = wasm_add_local(fn, WASM_I32);
 }
 
 void gen_prologue(Gen *g)

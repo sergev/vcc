@@ -169,7 +169,7 @@ int main(void) {
 // A call of sqrt is the f64.sqrt instruction, not a call.
 TEST_F(WasmTest, SqrtInstruction)
 {
-    EXPECT_EQ("local.get 0\nf64.sqrt\nlocal.set 1\nlocal.get 1\nreturn\nend_function\n",
+    EXPECT_EQ("local.get 0\nf64.sqrt\nend_function\n",
               Code(CompileToWasm(R"(
 #include <math.h>
 double f(double x) { return sqrt(x); }

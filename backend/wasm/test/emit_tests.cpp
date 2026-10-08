@@ -156,20 +156,14 @@ TEST(WasmEmit, StaticVoid)
         Emit(fn));
 }
 
-// Control that can run off the end of a function with a result reaches an unreachable.
-TEST(WasmEmit, UnreachableAtEnd)
+// The code is printed as it is, the end of a function with a result included: its
+// result is what is left on the stack there.
+TEST(WasmEmit, FallsOffTheEnd)
 {
     Wasm_Func *fn                        = NewFunc("u", true, WASM_I32);
     wasm_append(fn, WASM_I32_CONST)->imm = 1;
-    wasm_append(fn, WASM_DROP);
-    std::string s = Emit(fn);
-    EXPECT_NE(s.find("\tdrop\n\tunreachable\n\tend_function\n"), std::string::npos) << s;
-
-    fn                                   = NewFunc("r", true, WASM_I32);
-    wasm_append(fn, WASM_I32_CONST)->imm = 1;
-    wasm_append(fn, WASM_RETURN);
-    s = Emit(fn);
-    EXPECT_EQ(s.find("unreachable"), std::string::npos) << s;
+    std::string s                        = Emit(fn);
+    EXPECT_NE(s.find("\ti32.const\t1\n\tend_function\n"), std::string::npos) << s;
 }
 
 // A NaN keeps its sign; the default quiet NaN is spelled nan, another with its

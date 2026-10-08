@@ -7,12 +7,32 @@
 
 #include "internal.h"
 
+// Whether control cannot run off the end of the function's code.
+static bool ends_in_transfer(const Wasm_Func *fn)
+{
+    if (!fn->last)
+        return false;
+    switch (fn->last->op) {
+    case WASM_RETURN:
+    case WASM_UNREACHABLE:
+    case WASM_BR:
+    case WASM_BR_TABLE:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
     gen_init(&g, program, tl);
     gen_prologue(&g);
     gen_body(&g);
+    // Where control can run off the end, a result's absence is made valid.
+    if (g.fn->result != WASM_VOID && !ends_in_transfer(g.fn))
+        wasm_append(g.fn, WASM_UNREACHABLE);
+    wasm_optimize(g.fn);
     for (int i = 0; i < g.nhelpers; i++)
         fprintf(out, "\t.functype\t%s %s\n", g.helpers[i].name, g.helpers[i].sig);
     wasm_emit_func(out, g.fn);

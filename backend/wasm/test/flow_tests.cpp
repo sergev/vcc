@@ -44,6 +44,7 @@ TEST_F(WasmTest, Loop)
 // the entry innermost; the jump from block 0 to block 2 leaves B_2, at depth 1.
 TEST_F(WasmTest, DispatchForward)
 {
+    NaiveSelection();
     wasm_structure = false;
     EXPECT_EQ("block\nblock\nlocal.get 0\ni32.eqz\nbr_if 1\nend_block\ni32.const 1\nreturn\n"
               "end_block\ni32.const 2\nreturn\nend_function\n",
@@ -53,6 +54,7 @@ TEST_F(WasmTest, DispatchForward)
 // The dispatch skeleton's loop: a backward jump sets the state and restarts it.
 TEST_F(WasmTest, DispatchBackward)
 {
+    NaiveSelection();
     wasm_structure = false;
     std::string s  = Code(
         CompileToWasm("int f(int n) { int s = 0; for (int i = 0; i < n; i++) s += i; return s; }"));

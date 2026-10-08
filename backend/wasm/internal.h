@@ -45,6 +45,7 @@ typedef struct {
         char *sig;
     } helpers[32];               // the runtime routines called, to declare
     int nhelpers;
+    bool barrier;                // translating a volatile access
 } Gen;
 
 // How a value travels in a call, as clang's wasm32 passes it.
@@ -171,6 +172,14 @@ void gen_body(Gen *g);
 // A jump to label `target`: what goes before its condition, then the branch.
 void gen_branch_setup(Gen *g, const char *target);
 void gen_branch(Gen *g, const char *target, bool conditional);
+
+//
+// The finished code (peephole.c, locals.c)
+//
+// Stackify, the peephole rules and coalescing, as switched on.
+void wasm_optimize(Wasm_Func *fn);
+// Share locals whose values are never live at once.
+void wasm_coalesce_locals(Wasm_Func *fn);
 
 //
 // Static data (data.c)

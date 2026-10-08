@@ -17,7 +17,6 @@ TEST_F(WasmTest, MainVoid)
     EXPECT_NE(s.find("__original_main:\n"
                      "\t.functype\t__original_main () -> (i32)\n"
                      "\ti32.const\t42\n"
-                     "\treturn\n"
                      "\tend_function\n"),
               std::string::npos)
         << s;
@@ -37,7 +36,7 @@ TEST_F(WasmTest, MainArgcArgv)
     EXPECT_NE(s.find("__main_argc_argv:\n"
                      "\t.functype\t__main_argc_argv (i32, i32) -> (i32)\n"
                      "\tlocal.get\t0\n"
-                     "\treturn\n"),
+                     "\tend_function\n"),
               std::string::npos)
         << s;
     EXPECT_EQ(s.find("\nmain:"), std::string::npos) << s;

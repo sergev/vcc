@@ -261,15 +261,21 @@ static void call_with(Gen *g, const Tac_Instruction *in, bool noreturn, bool kee
     }
 
     // The call.
+    Wasm_Sig sig;
+    wasm_signature(ft, &sig);
+    Wasm_Instr *call;
     if (in->u.fun_call.indirect) {
         Tac_Val callee = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
         push_val(g, &callee, WASM_I32);
-        Wasm_Sig sig;
-        wasm_signature(ft, &sig);
-        emit(g, WASM_CALL_INDIRECT)->sym = wasm_sig_string(&sig);
+        call       = emit(g, WASM_CALL_INDIRECT);
+        call->sym  = wasm_sig_string(&sig);
+        call->pops = 1;
     } else {
-        emit(g, WASM_CALL)->sym = xstrdup(wasm_symbol(g->program, in->u.fun_call.fun_name));
+        call      = emit(g, WASM_CALL);
+        call->sym = xstrdup(wasm_symbol(g->program, in->u.fun_call.fun_name));
     }
+    call->pops += sig.nparams;
+    call->pushes = sig.result != WASM_VOID;
 
     // The result.
     if (noreturn) {

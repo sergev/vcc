@@ -288,6 +288,12 @@ static void do_branch(Structure *s, int from, int to)
         do_tree(s, to);
 }
 
+// Whether going from block x to block `to` is a bare br: backward, or to a merge node.
+static bool is_br(const Structure *s, int from, int to)
+{
+    return s->rpo[to] <= s->rpo[from] || s->nfwd[to] >= 2;
+}
+
 // Running on from the end of block x: into the next, or off the end of the function.
 static void do_fall(Structure *s, int x)
 {
@@ -337,12 +343,25 @@ static void node_within(Structure *s, int x, const int *ys, int k)
     case TAC_INSTRUCTION_JUMP_IF_ZERO:
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO: {
         int t = target_of(g, in->u.jump_if_zero.target), e = x + 1;
+        bool if_zero = in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO;
         if (t == e) { // both ways to one place
             do_branch(s, x, t);
             return;
         }
-        push_condition(g, in->u.jump_if_zero.condition,
-                       in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO);
+        if (is_br(s, x, t) || (e < s->n && is_br(s, x, e))) {
+            // One way is a bare br: a br_if, then the other way.
+            bool to_t = is_br(s, x, t);
+            push_condition(g, in->u.jump_if_zero.condition, to_t ? if_zero : !if_zero);
+            int to = to_t ? t : e;
+            wasm_append(fn, WASM_BR_IF)->imm =
+                s->rpo[to] <= s->rpo[x] ? ctx_depth(s, CTX_LOOP, to) : ctx_depth(s, CTX_BLOCK, to);
+            if (to_t)
+                do_fall(s, x);
+            else
+                do_branch(s, x, t);
+            return;
+        }
+        push_condition(g, in->u.jump_if_zero.condition, if_zero);
         wasm_append(fn, WASM_IF);
         push_ctx(s, CTX_IF, x);
         do_branch(s, x, t);

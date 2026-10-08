@@ -43,8 +43,8 @@ TEST_F(WasmTest, FrameLayout)
         }
     )"));
     EXPECT_EQ(s.find("global.get __stack_pointer\ni32.const 32\ni32.sub\n"), 0u) << s;
-    EXPECT_NE(s.find("i32.const 8\ni32.add\n"), std::string::npos) << s;  // &d
-    EXPECT_NE(s.find("i32.const 16\ni32.add\n"), std::string::npos) << s; // &i
+    EXPECT_NE(s.find("f64.store 8\n"), std::string::npos) << s;  // d
+    EXPECT_NE(s.find("i32.store 16\n"), std::string::npos) << s; // i
 }
 
 // Run: frames nest and are released, through recursion and an early return.

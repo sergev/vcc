@@ -51,6 +51,7 @@ Wasm_Func *wasm_new_func(const char *name, bool global)
     Wasm_Func *fn = xalloc(sizeof(Wasm_Func), __func__, __FILE__, __LINE__);
     fn->name      = xstrdup(name);
     fn->global    = global;
+    fn->frame     = -1;
     return fn;
 }
 
@@ -99,6 +100,113 @@ void wasm_remove(Wasm_Func *fn, Wasm_Instr *in)
     else
         fn->last = in->prev;
     free_instr(in);
+}
+
+Wasm_Instr *wasm_insert(Wasm_Func *fn, Wasm_Instr *at, Wasm_Op op)
+{
+    if (!at)
+        return wasm_append(fn, op);
+    Wasm_Instr *in = xalloc(sizeof(Wasm_Instr), __func__, __FILE__, __LINE__);
+    in->op         = op;
+    in->next       = at;
+    in->prev       = at->prev;
+    if (at->prev)
+        at->prev->next = in;
+    else
+        fn->first = in;
+    at->prev = in;
+    return in;
+}
+
+void wasm_move(Wasm_Func *fn, Wasm_Instr *first, Wasm_Instr *last, Wasm_Instr *at)
+{
+    // Unlink the run.
+    if (first->prev)
+        first->prev->next = last->next;
+    else
+        fn->first = last->next;
+    if (last->next)
+        last->next->prev = first->prev;
+    else
+        fn->last = first->prev;
+    // Link it in before `at`.
+    first->prev = at ? at->prev : fn->last;
+    last->next  = at;
+    if (first->prev)
+        first->prev->next = first;
+    else
+        fn->first = first;
+    if (at)
+        at->prev = last;
+    else
+        fn->last = last;
+}
+
+bool wasm_stack_effect(const Wasm_Instr *in, int *pops, int *pushes)
+{
+    Wasm_Op op = in->op;
+    *pops = *pushes = 0;
+    switch (op) {
+    case WASM_UNREACHABLE:
+    case WASM_BLOCK:
+    case WASM_LOOP:
+    case WASM_IF:
+    case WASM_ELSE:
+    case WASM_END_BLOCK:
+    case WASM_END_LOOP:
+    case WASM_END_IF:
+    case WASM_BR:
+    case WASM_BR_IF:
+    case WASM_BR_TABLE:
+    case WASM_RETURN:
+        return false;
+    case WASM_NOP:
+        return true;
+    case WASM_CALL:
+    case WASM_CALL_INDIRECT:
+        *pops   = in->pops;
+        *pushes = in->pushes;
+        return true;
+    case WASM_DROP:
+    case WASM_LOCAL_SET:
+    case WASM_GLOBAL_SET:
+        *pops = 1;
+        return true;
+    case WASM_SELECT:
+        *pops   = 3;
+        *pushes = 1;
+        return true;
+    case WASM_LOCAL_GET:
+    case WASM_GLOBAL_GET:
+    case WASM_MEMORY_SIZE:
+    case WASM_I32_CONST:
+    case WASM_I64_CONST:
+    case WASM_F32_CONST:
+    case WASM_F64_CONST:
+        *pushes = 1;
+        return true;
+    case WASM_MEMORY_COPY:
+    case WASM_MEMORY_FILL:
+        *pops = 3;
+        return true;
+    default:
+        break;
+    }
+    if (op >= WASM_I32_STORE && op <= WASM_I64_STORE32) {
+        *pops = 2;
+        return true;
+    }
+    // A comparison or a binary operation takes two; the rest (a test, a load, a unary
+    // operation or a conversion) one; each leaves one.
+    bool binary = (op >= WASM_I32_EQ && op <= WASM_I32_GE_U) ||
+                  (op >= WASM_I64_EQ && op <= WASM_I64_GE_U) ||
+                  (op >= WASM_F32_EQ && op <= WASM_F64_GE) ||
+                  (op >= WASM_I32_ADD && op <= WASM_I64_SHR_U) ||
+                  (op >= WASM_F32_ADD && op <= WASM_F32_DIV) ||
+                  (op >= WASM_F64_ADD && op <= WASM_F64_DIV);
+    *pops   = binary ? 2 : 1;
+    *pushes = 1;
+    return true;
 }
 
 int wasm_add_local(Wasm_Func *fn, Wasm_ValType t)
