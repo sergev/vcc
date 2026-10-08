@@ -268,9 +268,13 @@ Defines readable spellings of the operator tokens: `and`, `or`, `not`, `xor`, `c
 ### `<coro.h>` — vcc's extensions (not C11)
 
 Defines `defer` as `_Defer`, the statement that runs when its block is left, on every
-target; the coroutines planned for wasm32 will add their names here.
-[Coroutines_in_C.md](Coroutines_in_C.md) is the manual. Like `<stdnoreturn.h>` it is
-only names, so it is installed with the compiler's own headers for BESM-6 too.
+target, and the short names of the coroutines of wasm32: `coro(Y)`, `yield`, `await`,
+`co_frame(Y, T)` and `co_init` … `co_alignof` for `_Coro(Y)`, `_Yield`, `_Await`,
+`_Coro_frame(Y, T)` and `__co_init` … `__co_alignof`, with the enums `co_status`
+(`CO_SUSPENDED`, `CO_DONE`) and `co_signal` (`CO_CONTINUE`, `CO_CANCEL`). The compiler
+predefines `__vcc_coroutines__` where coroutines exist; elsewhere a coroutine is an
+error. [Coroutines_in_C.md](Coroutines_in_C.md) is the manual. Like `<stdnoreturn.h>` it
+is only names, so it is installed with the compiler's own headers for BESM-6 too.
 
 ---
 
@@ -560,7 +564,7 @@ hosted remainder; "Source" says whether a header is RISC-V-specific (`riscv`) or
 | `<uchar.h>` | hosted | common | Unicode characters |
 | `<wchar.h>` | hosted | common | wide characters and multibyte conversion |
 | `<wctype.h>` | hosted | common | wide character classification |
-| `<coro.h>` | vcc extension | common | `defer` |
+| `<coro.h>` | vcc extension | common | `defer`, coroutines |
 
 Full hosted conformance still excludes `<complex.h>`, `<stdatomic.h>`, and `<threads.h>`,
 which depend on language features the compiler does not provide. With those three

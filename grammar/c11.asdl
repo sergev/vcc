@@ -41,6 +41,7 @@ module C {
          | Array(Type element, Expr? size, TypeQualifier* qualifiers)
          | Function(Type returnType, ParamList params, bool variadic)
          | Struct(Ident? name, Field* fields)
+         | CoroFrame(Type yield, Type result)               # vcc extension: _Coro_frame(Y, T)
          | Union(Ident? name, Field* fields)
          | Enum(Ident? name, Enumerator* enumerators)
          | TypedefName(Ident name)
@@ -90,6 +91,7 @@ module C {
 
     FunctionSpec = Inline
                  | NoReturn
+                 | Coro(Type yield)                         # vcc extension: _Coro(Y)
 
     AlignmentSpec = AlignAsType(Type type)
                   | AlignAsExpr(Expr expr)
@@ -130,7 +132,12 @@ module C {
          | SizeOfType(Type type)
          | AlignOf(Type type)
          | Generic(Expr controllingExpr, GenericAssoc* associations)
+         | Yield(Expr? expr)                                # vcc extension: _Yield [expr]
+         | Await(Expr expr)                                 # vcc extension: _Await expr
+         | CoOp(CoOp op, Expr* args)                        # vcc extension: __co_init ...
          attributes(Type type)
+
+    CoOp = Init | Alloca | Resume | Cancel | Destroy | Done | Value | Result | Sizeof | Alignof
 
     Literal = IntLit(int value)
             | FloatLit(float value)

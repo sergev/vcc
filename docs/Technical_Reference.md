@@ -41,7 +41,7 @@ vcc/
 ├── parser/         # Recursive-descent parser, nametab; parse driver
 ├── scanner/        # Hand-written lexer
 ├── scripts/        # check_headers.sh, googletest.xml (cppcheck), validate_asdl.py
-├── semantic/       # symtab, structtab, typetab, typecheck, label_loops, resolve_labels, defer, const_convert, target
+├── semantic/       # symtab, structtab, typetab, typecheck, label_loops, resolve_labels, defer, coroutines, const_convert, target
 ├── tac/            # TAC IR: alloc, print, free, compare, walk, verify, export/import, YAML, Graphviz
 ├── translator/     # AST→TAC lowering (translate, expr, stmt); lower driver
 ├── CMakeLists.txt  # Root CMake project (project name: c-scanner)
@@ -261,7 +261,8 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `declarations.c` | Declaration processing |
 | `label_loops.c` | Annotates loop/switch statements with break/continue jump targets |
 | `resolve_labels.c` | `goto`/label validation per function |
-| `defer.c` | `defer` checks: no jump into a block past a defer, into or out of a deferred statement, no `return` inside one; label positions for the translator |
+| `defer.c` | `defer` checks: no jump into a block past a defer or a `co_alloca`, into or out of a deferred statement, no `return` inside one; label positions for the translator |
+| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; the translator stops at them until phase C3 of [backend/wasm/Plan.md](../backend/wasm/Plan.md) |
 | `type_utils.c` | Type helpers: `get_size`, `get_alignment`, `is_integer`, etc. |
 | `const_convert.c` | Constant-expression evaluation and conversion |
 | `target.c`, `target.h` | Target descriptors: type sizes and alignment, plain-`char` signedness, shift semantics |

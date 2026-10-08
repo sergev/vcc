@@ -56,7 +56,9 @@
 %token  ALIGNAS ALIGNOF ATOMIC GENERIC NORETURN STATIC_ASSERT THREAD_LOCAL
 
 /* vcc extension (docs/Coroutines_in_C.md) */
-%token  DEFER
+%token  DEFER CORO CORO_FRAME YIELD AWAIT
+%token  CO_INIT CO_ALLOCA CO_RESUME CO_CANCEL CO_DESTROY CO_DONE CO_VALUE CO_RESULT
+%token  CO_SIZEOF CO_ALIGNOF
 
 %start translation_unit
 %%
@@ -124,6 +126,24 @@ unary_expression
     | SIZEOF unary_expression
     | SIZEOF '(' type_name ')'
     | ALIGNOF '(' type_name ')'
+    | YIELD relational_expression           /* vcc extension */
+    | YIELD                                 /* vcc extension */
+    | AWAIT cast_expression                 /* vcc extension */
+    | co_operation '(' argument_expression_list ')'   /* vcc extension */
+    ;
+
+/* vcc extension: the coroutine operations, keywords with call syntax */
+co_operation
+    : CO_INIT
+    | CO_ALLOCA
+    | CO_RESUME
+    | CO_CANCEL
+    | CO_DESTROY
+    | CO_DONE
+    | CO_VALUE
+    | CO_RESULT
+    | CO_SIZEOF
+    | CO_ALIGNOF
     ;
 
 unary_operator
@@ -286,6 +306,7 @@ type_specifier
     | struct_or_union_specifier
     | enum_specifier
     | TYPEDEF_NAME      /* after it has been defined as such */
+    | coro_frame_specifier  /* vcc extension */
     ;
 
 struct_or_union_specifier
@@ -350,6 +371,11 @@ atomic_type_specifier
     : ATOMIC '(' type_name ')'
     ;
 
+/* vcc extension: the frame of a coroutine yielding the first type, returning the second */
+coro_frame_specifier
+    : CORO_FRAME '(' type_name ',' type_name ')'
+    ;
+
 type_qualifier
     : CONST
     | RESTRICT
@@ -360,6 +386,7 @@ type_qualifier
 function_specifier
     : INLINE
     | NORETURN
+    | CORO '(' type_name ')'    /* vcc extension: a coroutine yielding type_name */
     ;
 
 alignment_specifier

@@ -9,10 +9,11 @@ vcc extends C with two features:
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
 > **Status.** `defer` (section 1) is implemented and works on every target;
-> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are planned, not
-> implemented yet: they will work on wasm32 only, and they exist for programs that run
-> on [Braam](#8-coroutines-on-braam). The design and the work are in
-> [backend/wasm/Plan.md](../backend/wasm/Plan.md).
+> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are being built: the
+> compiler parses them and reports every compile-time error of section 7, but makes no
+> code for them yet ("coroutines: not yet"). They work on wasm32 only, and they exist
+> for programs that run on [Braam](#8-coroutines-on-braam). The design and the work are
+> in [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
 ## Contents
 
@@ -304,16 +305,17 @@ coro(int) long sum_up(int n)            /* yields each term, returns the total *
     long total = co_result(f);          /* 15 for n = 5 */
 ```
 
-A coroutine whose return type is not `void` must end with a `return`. Running off
-its end is a trap (section 7).
+A coroutine whose return type is not `void` must end with a `return`, as any such
+function must in vcc: the compiler reports one that may run off its end.
 
 ### What may be a coroutine
 
 Any function except:
 
 - a variadic one (`...`);
-- an `inline` one;
-- one with an old-style (K&R) parameter list.
+- an `inline` or `_Noreturn` one;
+- one without a prototype: write `coro(int) void f(void)`, not `f()`;
+- `main`.
 
 A coroutine is not an ordinary function. You cannot call it as `count_to(3)`, and
 you cannot take its address as a function pointer. You use its name only in
@@ -755,11 +757,16 @@ end without stopping.
 - `await` of a coroutine whose yield type is not exactly yours.
 - `co_value` on a `coro(void)` frame; `co_result` on a frame whose return type is
   `void`.
-- A coroutine that is variadic, `inline`, or has a K&R parameter list.
+- A coroutine that is variadic, `inline` or `_Noreturn`, that has no prototype, or that
+  is `main`; `coro(Y)` on anything but a function; a yield type that is an array or a
+  function.
+- A coroutine whose return type is not `void` that may run off its end.
 - A coroutine name used other than in `co_alloca`, `co_init`, `co_sizeof`, `co_alignof` or
   `await`: called directly, assigned, or converted to a function pointer.
 - A jump into a block past one of its `defer`s or `co_alloca`s, including a `case`
   label.
+- A `co_alloca` in the head of a loop (the condition of a `while` or `do`, or a clause
+  of a `for`), which would run each time the head does. Put it in the body.
 - `co_sizeof` or `co_alignof` used where a constant is required: an array size, a
   `case` label, a `_Static_assert`.
 - `return`, `goto`, or a `break`/`continue` that leaves a deferred statement.
@@ -776,7 +783,6 @@ These stop the program with a message naming the trap, in every build:
 | `CO_TRAP_FINISHED` | `co_resume`, `co_cancel` or `co_destroy` on a finished frame |
 | `CO_TRAP_NO_VALUE` | `co_value` when the last resume did not return `CO_SUSPENDED` |
 | `CO_TRAP_NOT_DONE` | `co_result` before the coroutine finished, or after `co_destroy` |
-| `CO_TRAP_NO_RETURN` | a coroutine with a non-`void` return type ran off its end |
 | `CO_TRAP_NO_SPACE` | an `await`, or a `co_alloca` inside a coroutine, found no spare room left (section 5) |
 
 A `co_alloca` in an ordinary function that runs out of stack stops the program as any

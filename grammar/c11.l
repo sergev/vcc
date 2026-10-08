@@ -118,14 +118,28 @@ static int check_type(void);
 "_Alignas"                          { return ALIGNAS; }
 "_Alignof"                          { return ALIGNOF; }
 "_Atomic"                           { return ATOMIC; }
+"_Await"                            { return AWAIT; }   /* vcc extension */
 "_Bool"                             { return BOOL; }
 "_Complex"                          { return COMPLEX; }
+"_Coro"                             { return CORO; }    /* vcc extension */
+"_Coro_frame"                       { return CORO_FRAME; }  /* vcc extension */
 "_Defer"                            { return DEFER; }   /* vcc extension */
 "_Generic"                          { return GENERIC; }
 "_Imaginary"                        { return IMAGINARY; }
 "_Noreturn"                         { return NORETURN; }
 "_Static_assert"                    { return STATIC_ASSERT; }
 "_Thread_local"                     { return THREAD_LOCAL; }
+"_Yield"                            { return YIELD; }   /* vcc extension */
+"__co_init"                         { return CO_INIT; }     /* vcc extension */
+"__co_alloca"                       { return CO_ALLOCA; }   /* vcc extension */
+"__co_resume"                       { return CO_RESUME; }   /* vcc extension */
+"__co_cancel"                       { return CO_CANCEL; }   /* vcc extension */
+"__co_destroy"                      { return CO_DESTROY; }  /* vcc extension */
+"__co_done"                         { return CO_DONE; }     /* vcc extension */
+"__co_value"                        { return CO_VALUE; }    /* vcc extension */
+"__co_result"                       { return CO_RESULT; }   /* vcc extension */
+"__co_sizeof"                       { return CO_SIZEOF; }   /* vcc extension */
+"__co_alignof"                      { return CO_ALIGNOF; }  /* vcc extension */
 "__func__"                          { return FUNC_NAME; }
 
 {L}{A}*                             { return check_type(); }

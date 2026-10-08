@@ -462,8 +462,8 @@ The target needed little from the shared code:
 - **`tac/tac_abi.c`:** `tac_wasm32_scalar` (the one-scalar rule), `tac_wasm32_empty` and
   `tac_wasm32_class` (the answer of `__builtin_va_class`).
 - **`cpp/cpp.c`:** the target's predefined macros: `__wasm__`, `__wasm`, `__wasm32__`,
-  `__wasm32`, `__ILP32__`, `_ILP32` and clang's `__wasm_<feature>__` for each feature.
-  They are checked in `cpp/test/test_predefined_macros.cpp`.
+  `__wasm32`, `__ILP32__`, `_ILP32`, clang's `__wasm_<feature>__` for each feature, and
+  `__vcc_coroutines__`, since wasm32 alone has vcc's coroutines. They are checked in `cpp/test/test_predefined_macros.cpp`.
 - **`translator/test/wasm32_tests.cpp`:** sizes, layouts and bit-fields against clang's.
 - **`scripts/CrossTools.cmake`:** `vcc_find_cross` takes `LD` (a linker other than
   `ld.lld`) and `LLVM_ONLY` (no search for binutils), since there are no binutils for

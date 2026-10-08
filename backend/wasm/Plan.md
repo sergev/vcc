@@ -109,9 +109,10 @@ void print_range(void)
 }
 ```
 
-- `coro(Y) T f(params)` declares a coroutine. It may not be variadic, `inline`, or
-  K&R; it does not convert to a function pointer (§2.4 has the indirect form). Its
-  prototype and definition must agree on `Y` as on everything else.
+- `coro(Y) T f(params)` declares a coroutine. It may not be variadic, `inline`,
+  `_Noreturn` or `main`, and needs a prototype; it does not convert to a function
+  pointer (§2.4 has the indirect form). Its prototype and definition must agree on `Y`
+  as on everything else.
 - **Frames.** A frame is an object in storage the caller supplies, address-stable for
   its life. `co_init(storage, bytes, f, args...)` builds `f`'s frame at the front of
   `storage`, copies the arguments in, runs no body code, and returns a
@@ -278,17 +279,19 @@ does.
 Compile-time errors: `yield`/`await` outside a coroutine or inside a `defer`;
 `yield expr` in a `coro(void)` and bare `yield` elsewhere; `await` of a different `Y`;
 `co_value` on a `co_frame(void, T)`, `co_result` on a `co_frame(Y, void)`; a coroutine
-that is variadic, `inline`, or K&R; its name used as a value other than in `co_init`,
-`co_alloca`, `co_sizeof`, `co_alignof` or an arena `await`; a jump past a `defer` or a
-`co_alloca`; control leaving a
-`defer` body; `main` as a coroutine outside Braam mode.
+that is variadic, `inline`, `_Noreturn`, or without a prototype; `_Coro` on anything but
+a function; a yield type (or a `co_frame`'s `Y` or `T`) that is an array or a function;
+its name used as a value other than in `co_init`, `co_alloca`, `co_sizeof`, `co_alignof`
+or an arena `await`; a jump past a `defer` or a `co_alloca`; a `co_alloca` in the head
+of a loop, which runs more than once per entry of the block; control leaving a `defer`
+body; a non-void coroutine that may fall off its end (as for any function); `main` as a
+coroutine outside Braam mode; any of it on a target without coroutines.
 
 Traps, in every build: `co_init` on storage too small or misaligned
 (`CO_TRAP_STORAGE`); resuming a frame that is running (`CO_TRAP_REENTRANT`) or
 finished (`CO_TRAP_FINISHED`); `co_value` when the last status was not `CO_SUSPENDED`
 (`CO_TRAP_NO_VALUE`); `co_result` before `CO_DONE` or after `co_destroy`
-(`CO_TRAP_NOT_DONE`); falling off the end of a non-void coroutine
-(`CO_TRAP_NO_RETURN`); an arena `await`, or a `co_alloca` in a coroutine, that does
+(`CO_TRAP_NOT_DONE`); an arena `await`, or a `co_alloca` in a coroutine, that does
 not fit (`CO_TRAP_NO_SPACE`); a `co_alloca` in a function past the end of the shadow
 stack (the ordinary out-of-bounds trap). A trap
 is `__co_trap(code)`: under node it prints the name and exits 255; on Braam it is
@@ -345,23 +348,21 @@ BESM-6 output is unchanged because no BESM-6 program uses it.
   (`parser/stmt.c:137-140`, `:260-263`) and `decl.c:513` learn the token.
 - `_Defer stmt`: `STMT_DEFER{body}` in `parse_statement`.
 - `_Yield [expr]`, `_Await expr`: unary-level expressions, `EXPR_YIELD{expr?}` and
-  `EXPR_AWAIT{expr}`, in `parse_unary_expression` (`parser/expr.c:656`). `_Await`
-  binds like `sizeof`: `await f(x) + 1` is `(await f(x)) + 1`. `if (yield i ==
-  CO_CANCEL)` would parse as `yield (i == CO_CANCEL)` under those rules, which is
-  never what is meant. Decision: `_Yield` takes an *assignment-expression*
-  and binds tighter than `==`, so `yield i == CO_CANCEL` means `(yield i) ==
-  CO_CANCEL`; the grammar note records it, and `<coro.h>` examples write the
-  parentheses anyway.
-- The ten operations: one `EXPR_CO_OP{op, args}` kind with an enum, argument counts
-  checked in the parser, like `__builtin_va_class` (`expr.c:708`). `co_init`'s third
+  `EXPR_AWAIT{expr}`, in `parse_unary_expression`. `_Await` takes a
+  cast-expression: `await f(x) + 1` is `(await f(x)) + 1`. `_Yield` takes a
+  *relational-expression*, so it binds tighter than `==`: `yield i == CO_CANCEL` means
+  `(yield i) == CO_CANCEL`, and `yield a + b` yields the sum. It has no operand when
+  the next token cannot begin an expression.
+- The ten operations: one `EXPR_CO_OP{op, args}` kind with an enum `CoOp`, argument
+  counts checked in the parser. `co_init`'s third
   argument, `co_alloca`'s first and `co_sizeof`'s only one are identifiers naming a
   coroutine; they are parsed as expressions and judged in semantic.
-- `_Coro_frame(Y, T)`: a type specifier (`TYPE_SPEC_CORO_FRAME` with two type names)
-  in `parse_type_specifier` and `is_type_specifier`; `fuse_type_specifiers` makes it a
-  `TYPE_STRUCT` with a canonical tag spelled from `Y` and `T` (`__co_frame(int,void)`),
-  never defined, so it is incomplete and two spellings of the same `Y`, `T` are one
-  type by the existing tag rule. No new `TypeKind`, so the Type switches in
-  ast/semantic/translator are untouched.
+- `_Coro_frame(Y, T)`: a type specifier in `parse_type_specifier` and
+  `is_type_specifier`, which builds a `TYPE_STRUCT` tagged `__co_frame` carrying `Y`
+  and `T` in `struct_t.frame_yield`/`frame_result`; it is never defined, so it is
+  incomplete. `compatible_type` compares two frame types by `Y` and `T` (a typedef'd
+  spelling is the same type), not by the tag. No new `TypeKind`, so the Type switches
+  in ast/semantic/translator are untouched.
 - New AST kinds go through the usual files: `ast.asdl`, `ast.h`, `ast_alloc.c`,
   `ast_free.c`, `ast_clone.c`, `ast_compare.c`, `ast_export.c`, `ast_import.c` (the
   `tag > TAG_STMT + STMT_DEFAULT` and `TAG_EXPR + EXPR_VA_CLASS` range checks move),
@@ -373,41 +374,42 @@ BESM-6 output is unchanged because no BESM-6 program uses it.
 
 ### 4.2 Semantic
 
-- **Coroutine-ness on the symbol.** `Symbol.u.func` gains `coro` and `yield_type`,
-  beside `noret` (`semantic/symtab.h:40-44`); `symtab_add_fun` checks a redeclaration
-  agrees. The C function type stays `T f(params)`, so argument checking is unchanged.
-- **Context.** A `current_coro` like `current_switch`: set by `typecheck_fn_decl`
-  around the body with `Y` and `T`; `yield`/`await` check against it; `return` in a
-  coroutine checks `T` as now. `in_defer` depth for the `defer` rules.
-- **`defer`.** `typecheck_statement` checks the body with `in_defer` raised;
-  `label_loops` pushes a barrier frame so `break`/`continue` inside the body resolve
-  only to loops inside it ("break statement not inside loop or switch" otherwise), and
-  `return`/`yield`/`await`/`goto`-out are refused. A new pass or an extension of
-  `resolve_labels.c` records, per label and per `case`, the scope path and whether a
-  `defer` precedes it in its scope, and rejects the jumps §2.3 forbids. `Stmt` has no
-  source location, so the message names the label and the function.
+In `semantic/coroutines.c`, but for the jumps:
+
+- **Coroutine-ness on the symbol.** `Symbol.u.func` has `coro` and `yield_type`,
+  beside `noret`; a redeclaration must agree on both. The C function type stays
+  `T f(params)`, so argument checking is unchanged (`typecheck_call_args`, shared by
+  calls, `co_init`, `co_alloca` and the arena `await`).
+- **Context.** The yield type of the coroutine being checked, set by
+  `typecheck_fn_decl` around the body; the depth of deferred statements and of loop
+  heads, kept by `statements.c`.
 - **Types.** `yield e` coerces `e` to `Y` (as `return` does to `T`) and has type
-  `co_signal` (an `int` enum declared by the compiler, as `size_t` is by the headers:
-  `<coro.h>` declares both enums, and the compiler types `yield` as `int`). `await e`:
-  `e` is a `co_frame(Y', T') *` with `Y' == Y`, result `T'`; or a call expression whose
-  callee is a coroutine symbol, checked as an ordinary call plus the `Y` rule.
-  `co_init(storage, bytes, f, args...)`: `void *`, `size_t`, a coroutine symbol, then
-  the arguments checked against `f`'s parameters as a call; result `co_frame(Y, T) *`
-  for `f`'s types. `co_alloca(f, extra, args...)`: a coroutine symbol, `size_t`, then
-  the arguments as for `co_init`; same result type. `co_resume`/`co_cancel`/`co_destroy`
-  → `co_status` (`int`),
-  `co_done` → `int`, `co_value` → `Y`, `co_result` → `T`, `co_sizeof`/`co_alignof` →
-  `size_t`, not constant (`is_constant_expression` says no: they are link-time
-  values).
-- `co_alloca` takes part in the jump check like a `defer`: `resolve_labels.c` treats
-  it as one when it records what precedes each label in its scope.
-- A coroutine symbol decays nowhere else. `main` may be a coroutine only when
-  `target_config->braam` is set (§7).
+  `int` (`co_signal`). `await e`: a call whose callee is a coroutine symbol (the
+  arena form), checked as a call, its value `T`; or a `co_frame(Y', T') *` (the
+  explicit form), its value `T'`; either way `Y' == Y`. `co_init(storage, bytes, f,
+  args...)`: `void *`, `size_t`, a coroutine, then the arguments as a call;
+  `co_alloca(f, extra, args...)` likewise; both give `co_frame(Y, T) *` for `f`.
+  `co_resume`/`co_cancel`/`co_destroy`/`co_done` → `int`, `co_value` → `Y`,
+  `co_result` → `T`, `co_sizeof`/`co_alignof` → `size_t`, not constant. A coroutine
+  named by an operation has its function type on the `EXPR_VAR`, as a callee has.
+- **Jumps.** `semantic/defer.c` counts each `co_alloca` as a `defer` registered after
+  the declaration or expression statement holding it, or, in the head of an `if` or
+  `switch`, before the body, so a `goto` or `case` past one is the same error.
+  `co_alloca` may not be in a loop's head, which runs more than once per entry of the
+  block.
+- A coroutine symbol decays nowhere else. `main` may not be a coroutine; Braam mode
+  will allow it (§7).
+- `Target.coroutines` is set for wasm32 alone; elsewhere a coroutine, a `yield`, an
+  `await` or an operation is "coroutines are not supported on target …". `cpp -t
+  wasm32` predefines `__vcc_coroutines__`, and `<coro.h>` has the short names and the
+  two enums.
 - `eval_const` and `const_convert.c` never see the new expressions: none is a constant
   expression.
 
-Tests: `parser/test/negative_tests.cpp` and `semantic/test/*` with `EXPECT_DEATH`, as
-the existing negative tests do; positive parses in YAML.
+Tests: `parser/test/negative_tests.cpp` (argument counts), `parser/test/serialize_tests.cpp`
+(a round trip), `semantic/test/coro_tests.cpp` (each rule), and
+`translator/test/coro_tests.cpp`, where the translator stops with "coroutines: not yet"
+until C3.
 
 ## 5. Lowering `defer`
 
@@ -513,7 +515,11 @@ does on it with `bytes = n = (f$size + extra + 15) & -16`:
   it is one of the scope exits active at the suspension point.
 
 Either way `__co_setup` makes `%p` the root of its own task, with the `extra` bytes
-as its arena.
+as its arena. A `co_alloca` in an operand of `&&`, `||` or `?:` may be skipped while
+its block runs on, so `%p` is set to null at the block's entry and the release tests
+it first; the optimizer drops the test where the allocation always runs. One inside
+a `sizeof` is never evaluated and registers nothing (`semantic/defer.c` does not count
+it either).
 
 ### 6.2 The two-stage translation
 
@@ -545,7 +551,7 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
   %sig)` delivers it.
 - `return e` → `defer`s (§5), store `e` at `result_off`, state = DONE, clear RUNNING,
   `RETURN CO_DONE`. The end of a void body is the same without the store; the end
-  of a non-void body is `FUN_CALL_NORETURN __co_trap(CO_TRAP_NO_RETURN)`.
+  of a non-void body is unreachable (semantic rejects one that is not).
 - `co_*` operations → loads and stores against the header and calls of `__co_*`
   (`libc/wasm32/co.c`, ordinary C compiled by us, ~150 lines). `co_sizeof(g)` is
   `GET_ADDRESS g$size` converted to `size_t`, `co_alignof(g)` the same of `g$align`;
@@ -816,10 +822,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C2. Coroutine front end.** `_Coro(Y)` on symbols, `_Coro_frame(Y, T)`, `_Yield`,
-   `_Await`, the ten operations: parsed, type-checked, serialized, printed; every
-   compile-time rule of §2.4 with a negative test; the translator says "coroutines:
-   not yet" so nothing links. `Target.coroutines` for wasm32.
 - **C3. Generators.** First, the toolchain check: clang's assembler must turn `.set
    g$size, 48` and `.globl g$size` into an absolute data symbol, and wasm-ld must
    resolve an `i32.const g$size` from another object to 48 (`wasm-objdump -x`, a
@@ -829,8 +831,9 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
    `co_result`/`co_done`/`co_sizeof`/`co_alignof`; `optimize/liveness.c` factored
    out of `dead_store.c`; the split pass with spills, dispatch, `f$init`, and the
    `frame_size`/`frame_align` fields (`TAC6`); the `.set` lines and the three
-   builtins in the backend; `libc/wasm32/co.c`; `<coro.h>`. Tests: translator YAML of the state machine
-   (`translator/test/coro_tests.cpp`), wasm32 run tests under node
+   builtins in the backend; `libc/wasm32/co.c`, with the frame header beside `<coro.h>`;
+   the translator's "coroutines: not yet" goes, for these operations. Tests: translator
+   YAML of the state machine (`translator/test/coro_tests.cpp`), wasm32 run tests under node
    (`backend/wasm/test/coro_tests.cpp`: `range`, a Fibonacci generator, a coroutine
    with a struct local whose address is yielded, two frames of one coroutine
    interleaved, `co_sizeof` across two units — `CompileAndRunWithClang`'s two-unit
@@ -940,7 +943,7 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 ## 11. Verification
 
 - `ctest -j8` after each phase, the output tee'd to a scratch file; the full suite
-  after phases C2, C5 and C6 (shared code). BESM-6 output unchanged.
+  after phases C5 and C6 (shared code). BESM-6 output unchanged.
 - By hand, plain wasm32: `build/cc/cc -t wasm32 gen.c -o gen.wasm && node
   libc/wasm32/run.mjs gen.wasm`.
 - By hand, Braam without Braam: `build/cc/cc -t wasm32-braam cat.c -o cat &&
