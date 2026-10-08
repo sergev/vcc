@@ -1,6 +1,7 @@
 #ifndef WASM_CODEGEN_H
 #define WASM_CODEGEN_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "tac.h"
@@ -8,6 +9,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Structured control flow (on by default): off, every function gets the dispatch
+// skeleton (genwasm --no-structure).
+extern bool wasm_structure;
 
 // Translate one TAC toplevel to WebAssembly assembly (the LLVM assembler's syntax) on
 // `out`.  `program` heads the whole translation unit, lowered with -t wasm32.

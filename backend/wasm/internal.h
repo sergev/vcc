@@ -123,6 +123,8 @@ void push_addr(Gen *g, const char *name);
 void begin_dst(Gen *g, const Tac_Val *dst);
 void end_dst(Gen *g, const Tac_Val *dst);
 bool is_aggregate(const Tac_Type *t);
+// Push an i32, nonzero when a JUMP_IF_ZERO (if_zero) or JUMP_IF_NOT_ZERO on `cond` jumps.
+void push_condition(Gen *g, const Tac_Val *cond, bool if_zero);
 // Whether a value of type t lives only in memory, moved by its bytes: an aggregate or a
 // long double.
 bool is_memory_type(const Tac_Type *t);
@@ -163,7 +165,8 @@ int call_area_size(const Gen *g, const Tac_Instruction *in);
 //
 // Control flow (structure.c)
 //
-// Translate the function's body into its skeleton of blocks.
+// Translate the function's body: into blocks, loops and ifs when its graph is
+// reducible (and wasm_structure is on), else into the dispatch skeleton.
 void gen_body(Gen *g);
 // A jump to label `target`: what goes before its condition, then the branch.
 void gen_branch_setup(Gen *g, const char *target);

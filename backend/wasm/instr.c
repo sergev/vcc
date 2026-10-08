@@ -781,19 +781,15 @@ static void gen_ld_convert(Gen *g, const Tac_Instruction *in)
     gen_runtime(g, name, ret, args, types, 1, dst);
 }
 
-// A jump on a long double: whether it is not zero, by __netf2(x, 0).
-static void gen_ld_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool if_zero)
+// Whether a long double is zero, by __netf2(x, 0): its int, 0 when zero.
+static void push_ld_nonzero(Gen *g, const Tac_Val *cond)
 {
     Tac_Const zero                 = { .kind = TAC_CONST_LONG_DOUBLE };
     Tac_Val z                      = { .kind = TAC_VAL_CONSTANT, .u.constant = &zero };
     const Tac_Val *const args[2]   = { cond, &z };
     const Tac_Type *const types[2] = { &ld_type, &ld_type };
     check_ld_operand(g, cond);
-    gen_branch_setup(g, target);
     gen_runtime(g, "__netf2", &int_type, args, types, 2, NULL);
-    if (if_zero)
-        emit(g, WASM_I32_EQZ);
-    gen_branch(g, target, true);
 }
 
 bool is_ld_op(const Gen *g, const Tac_Instruction *in)
@@ -820,14 +816,15 @@ bool is_ld_op(const Gen *g, const Tac_Instruction *in)
 //
 // Control: jumps by the skeleton's rules (structure.c).
 //
-static void gen_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool if_zero)
+void push_condition(Gen *g, const Tac_Val *cond, bool if_zero)
 {
     if (is_ld(any_type(g, cond))) {
-        gen_ld_cond_jump(g, cond, target, if_zero);
+        push_ld_nonzero(g, cond);
+        if (if_zero)
+            emit(g, WASM_I32_EQZ);
         return;
     }
     Wasm_ValType t = val_valtype(g, cond);
-    gen_branch_setup(g, target);
     push_val(g, cond, t);
     if (is_fp_valtype(t)) {
         Tac_Const zero = { .kind = TAC_CONST_DOUBLE };
@@ -841,6 +838,12 @@ static void gen_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool 
     } else if (if_zero) {
         emit(g, WASM_I32_EQZ);
     }
+}
+
+static void gen_cond_jump(Gen *g, const Tac_Val *cond, const char *target, bool if_zero)
+{
+    gen_branch_setup(g, target);
+    push_condition(g, cond, if_zero);
     gen_branch(g, target, true);
 }
 

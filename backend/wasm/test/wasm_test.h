@@ -57,7 +57,7 @@ inline QemuConfig wasm32_config()
 
 class WasmTest : public QemuTest {
 protected:
-    WasmTest() : QemuTest("wasm32", wasm32_config()) {}
+    WasmTest() : QemuTest("wasm32", wasm32_config()) { wasm_structure = true; }
 
     // Pin instruction selection itself: nothing so far to turn off.
     static void NaiveSelection() {}

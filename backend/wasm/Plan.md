@@ -245,8 +245,14 @@ structure.c drops whatever isn't reachable from the entry.
    names, so symbols of those names get a `.vcc` suffix; infinities are spelled
    `infinity` and NaNs with a payload `nan:0x…`.  `HeadersAgreeWithClang` came here
    from phase 4.
-6. **Structured control flow** (Ramsey) for reducible CFGs, with the dispatch loop
-   as fallback. Flow goldens, then the book suite again.
+6. **Structured control flow** (done) (Ramsey) for reducible CFGs, with the dispatch loop
+   as fallback. Flow goldens, then the book suite again.  `structure.c` numbers the
+   blocks in reverse postorder, finds dominators (Cooper–Harvey–Kennedy over
+   predecessor lists), loop headers and merge nodes, and refuses a graph with a
+   backward jump to a block that does not dominate its source; that function, and
+   every one under `genwasm --no-structure` (`wasm_structure`), gets the skeleton.  A
+   conditional jump whose two ways meet is a plain branch; falling off the last block
+   returns (void) or is unreachable.  The whole libc and book suite run structured.
 7. **Quality**: stackify, peephole, local coalescing, frameless leaves. Default
    goldens. Code size against `clang -O2` with the same features on the book programs.
 8. **Docs**: `docs/Wasm_Backend.md`; `CLAUDE.md`, `README.md`,

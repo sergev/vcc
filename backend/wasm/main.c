@@ -7,12 +7,14 @@
 #include "driver.h"
 
 static const BackendFlag flags[] = {
+    { "no-structure", "the dispatch skeleton for every function, no blocks and loops" },
     { NULL, NULL },
 };
 
 static void flag(int index)
 {
-    (void)index;
+    if (index == 0)
+        wasm_structure = false;
 }
 
 static const char *output_ext(void)

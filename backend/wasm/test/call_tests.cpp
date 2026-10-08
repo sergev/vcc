@@ -6,8 +6,8 @@
 #include "wasm_test.h"
 
 // Each argument in its parameter's type (the constant 2 converted in TAC); the result
-// goes to a temporary, which a void function falls off the end with.
-EXPECT_CODE(CallArguments, "i32.const 1\ni64.const 2\ncall g\nlocal.set 0\nend_function\n",
+// goes to a temporary, and the void function returns at its end.
+EXPECT_CODE(CallArguments, "i32.const 1\ni64.const 2\ncall g\nlocal.set 0\nreturn\nend_function\n",
             "int g(int a, long long b); void f(void) { g(1, 2); }")
 
 // A _Noreturn call ends in unreachable.
