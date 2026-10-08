@@ -60,6 +60,7 @@ protected:
     WasmTest() : QemuTest("wasm32", wasm32_config())
     {
         wasm_structure = true;
+        wasm_regional  = true;
         wasm_peephole  = true;
         wasm_stackify  = true;
         wasm_coalesce  = true;

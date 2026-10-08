@@ -171,7 +171,8 @@ int call_area_size(const Gen *g, const Tac_Instruction *in);
 // Control flow (structure.c)
 //
 // Translate the function's body: into blocks, loops and ifs when its graph is
-// reducible (and wasm_structure is on), else into the dispatch skeleton.
+// reducible or can be made so with a dispatch per irreducible region (and
+// wasm_structure is on), else into the dispatch skeleton.
 void gen_body(Gen *g);
 // A jump to label `target`: what goes before its condition, then the branch.
 void gen_branch_setup(Gen *g, const char *target);

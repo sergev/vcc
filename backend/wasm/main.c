@@ -11,6 +11,7 @@ static const BackendFlag flags[] = {
     { "no-peephole", "no peephole rewrites of the finished code" },
     { "no-stackify", "every value through a local, none left on the operand stack" },
     { "no-coalesce", "a local for every name, none shared" },
+    { "no-regional", "the dispatch skeleton for an irreducible function, not a dispatch per region" },
     { NULL, NULL },
 };
 
@@ -28,6 +29,9 @@ static void flag(int index)
         break;
     case 3:
         wasm_coalesce = false;
+        break;
+    case 4:
+        wasm_regional = false;
         break;
     }
 }

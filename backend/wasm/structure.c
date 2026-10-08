@@ -14,6 +14,14 @@
 // the stack of enclosing constructs: a backward one continues its loop, a forward one
 // to a merge node leaves its block.
 //
+// An irreducible graph is made reducible first, as LLVM's FixIrreducibleControlFlow
+// does: each strongly connected region with several entries gets a dispatch node of its
+// own, and every jump to one of those entries goes through it, setting the state local
+// to the entry's index; the dispatch node is a br_table on the state.  The region is
+// then a loop headed by the dispatch node, and the regions inside it are fixed the same
+// way.  Ramsey's translation runs over that graph, where each entry of a dispatch node
+// counts as a merge node, so the br_table leaves the block in front of it.
+//
 // The skeleton: the basic blocks in their order, block i's code just after the end of
 // a wasm block B_i, with B_i enclosing every earlier block's code:
 //     loop                        only with a backward jump
@@ -42,6 +50,7 @@
 #include "xalloc.h"
 
 bool wasm_structure = true;
+bool wasm_regional  = true;
 
 // The block a jump to label `target` goes to.
 static int target_block(const Gen *g, const char *target)
@@ -119,9 +128,20 @@ static void gen_dispatch(Gen *g)
 enum { CTX_IF, CTX_LOOP, CTX_BLOCK };
 
 typedef struct {
+    int from, to;  // a jump from block `from` to block `to`
+    int via, index; // goes to dispatch node `via` with the state `index`
+} Redirect;
+
+typedef struct {
     Gen *g;
     const Flow *f;
-    int n;
+    int n;        // the basic blocks, 0..n-1; dispatch nodes follow, up to N-1
+    int N, cap;
+    int *nsucc;   // node → its successors in the graph translated
+    int **succ;
+    Redirect *rd;
+    int nrd, caprd;
+    bool every;   // redirect every jump to an entry, not only those from outside or back
     int *rpo;     // block → its number in reverse postorder, -1 when unreachable
     int *order;   // number → block
     int count;    // reachable blocks
@@ -161,8 +181,7 @@ static bool dominates(const Structure *s, int d, int b)
 // graph is irreducible (a backward jump to a block that does not dominate its source).
 static bool analyze(Structure *s)
 {
-    const Flow *f = s->f;
-    int n         = s->n;
+    int n = s->N;
     for (int b = 0; b < n; b++)
         s->rpo[b] = s->idom[b] = -1;
 
@@ -179,8 +198,8 @@ static bool analyze(Structure *s)
     seen[0]    = true;
     while (sp) {
         int b = stack[sp - 1];
-        if (next[sp - 1] < f->blocks[b].nsucc) {
-            int t = f->blocks[b].succ[next[sp - 1]++];
+        if (next[sp - 1] < s->nsucc[b]) {
+            int t = s->succ[b][next[sp - 1]++];
             if (!seen[t]) {
                 seen[t]    = true;
                 stack[sp]  = t;
@@ -203,12 +222,15 @@ static bool analyze(Structure *s)
 
     // Dominators (Cooper, Harvey and Kennedy), over the predecessors.
     int *start = xalloc((n + 1) * sizeof(int), __func__, __FILE__, __LINE__);
-    int *preds = xalloc((2 * n + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+    int nedges = 0;
+    for (int b = 0; b < n; b++)
+        nedges += s->nsucc[b];
+    int *preds = xalloc((nedges + 1) * sizeof(int), __func__, __FILE__, __LINE__);
     for (int b = 0; b <= n; b++)
         start[b] = 0;
     for (int i = 0; i < s->count; i++)
-        for (int k = 0; k < f->blocks[s->order[i]].nsucc; k++)
-            start[f->blocks[s->order[i]].succ[k] + 1]++;
+        for (int k = 0; k < s->nsucc[s->order[i]]; k++)
+            start[s->succ[s->order[i]][k] + 1]++;
     for (int b = 0; b < n; b++)
         start[b + 1] += start[b];
     int *fill = xalloc((n + 1) * sizeof(int), __func__, __FILE__, __LINE__);
@@ -216,8 +238,8 @@ static bool analyze(Structure *s)
         fill[b] = start[b];
     for (int i = 0; i < s->count; i++) {
         int p = s->order[i];
-        for (int k = 0; k < f->blocks[p].nsucc; k++)
-            preds[fill[f->blocks[p].succ[k]]++] = p;
+        for (int k = 0; k < s->nsucc[p]; k++)
+            preds[fill[s->succ[p][k]]++] = p;
     }
     xfree(fill);
     s->idom[0]   = 0;
@@ -247,8 +269,8 @@ static bool analyze(Structure *s)
     }
     for (int i = 0; i < s->count; i++) {
         int p = s->order[i];
-        for (int k = 0; k < f->blocks[p].nsucc; k++) {
-            int t = f->blocks[p].succ[k];
+        for (int k = 0; k < s->nsucc[p]; k++) {
+            int t = s->succ[p][k];
             if (s->rpo[t] <= s->rpo[p]) {
                 if (!dominates(s, t, p))
                     return false;
@@ -258,7 +280,254 @@ static bool analyze(Structure *s)
             }
         }
     }
+    // The entries of a dispatch node are left by its br_table, as merge nodes are.
+    for (int d = s->n; d < n; d++)
+        for (int k = 0; k < s->nsucc[d]; k++)
+            if (s->nfwd[s->succ[d][k]] < 2)
+                s->nfwd[s->succ[d][k]] = 2;
     return true;
+}
+
+//
+// Making the graph reducible.
+//
+
+// The redirection of the jump from block `from` to block `to`, or NULL.
+static const Redirect *redirect_of(const Structure *s, int from, int to)
+{
+    for (int i = 0; i < s->nrd; i++)
+        if (s->rd[i].from == from && s->rd[i].to == to)
+            return &s->rd[i];
+    return NULL;
+}
+
+// Where the jump from block `from` to block `to` goes in the graph translated.
+static int effective(const Structure *s, int from, int to)
+{
+    const Redirect *r = redirect_of(s, from, to);
+    return r ? r->via : to;
+}
+
+typedef struct {
+    Structure *s;
+    const bool *in; // the region
+    int header;     // its header, whose incoming edges are left out, or -1
+    int *index, *low, *stack, *comp;
+    bool *on;
+    int sp, counter, ncomp;
+} Scc;
+
+static bool edge_in(const Scc *c, int t)
+{
+    return c->in[t] && t != c->header;
+}
+
+// Tarjan's strongly connected components of the region.
+static void strongconnect(Scc *c, int v)
+{
+    Structure *s = c->s;
+    c->index[v] = c->low[v] = c->counter++;
+    c->stack[c->sp++]       = v;
+    c->on[v]                = true;
+    for (int k = 0; k < s->nsucc[v]; k++) {
+        int w = s->succ[v][k];
+        if (!edge_in(c, w))
+            continue;
+        if (c->index[w] < 0) {
+            strongconnect(c, w);
+            if (c->low[w] < c->low[v])
+                c->low[v] = c->low[w];
+        } else if (c->on[w] && c->index[w] < c->low[v]) {
+            c->low[v] = c->index[w];
+        }
+    }
+    if (c->low[v] == c->index[v]) {
+        int w;
+        do {
+            w          = c->stack[--c->sp];
+            c->on[w]   = false;
+            c->comp[w] = c->ncomp;
+        } while (w != v);
+        c->ncomp++;
+    }
+}
+
+static bool fix_region(Structure *s, const bool *in, int header);
+
+// The jumps of region `scc` that a depth-first walk from node v finds going back:
+// back[u * 2 + j] for the j-th successor of block u (a block of the region has two at
+// most, the dispatch node walked from is outside the array's use).
+static void find_back(const Structure *s, const bool *scc, int v, char *mark, bool *back)
+{
+    mark[v] = 1;
+    for (int j = 0; j < s->nsucc[v]; j++) {
+        int w = s->succ[v][j];
+        if (!scc[w])
+            continue;
+        if (mark[w] == 1)
+            back[v * 2 + j] = true;
+        else if (mark[w] == 0)
+            find_back(s, scc, w, mark, back);
+    }
+    mark[v] = 2;
+}
+
+// A node for a dispatch on the state to entries es[0..k-1] of region `scc`, the jumps to
+// them from the rest of `region` redirected to it, and those inside the region that go
+// back to one (with s->every, all of them).  A jump forward inside the region may stay:
+// the dispatch node dominates its target all the same.  False when the node cannot be
+// made (a jump to redirect leaves a dispatch node, or the region is entered at the
+// function's start).
+static bool add_dispatch(Structure *s, const bool *region, bool *scc, const int *es, int k)
+{
+    if (s->N == s->cap)
+        return false;
+    int d       = s->N++;
+    s->nsucc[d] = k;
+    s->succ[d]  = xalloc(k * sizeof(int), __func__, __FILE__, __LINE__);
+    for (int i = 0; i < k; i++)
+        s->succ[d][i] = es[i];
+    scc[d]     = true;
+    char *mark = xalloc(s->cap, __func__, __FILE__, __LINE__);
+    bool *back = xalloc((size_t)s->cap * 2 * sizeof(bool), __func__, __FILE__, __LINE__);
+    for (int v = 0; v < s->cap; v++)
+        mark[v] = 0;
+    for (int j = 0; j < s->cap * 2; j++)
+        back[j] = false;
+    find_back(s, scc, d, mark, back);
+    xfree(mark);
+    bool ok = true;
+    for (int i = 0; i < k && ok; i++) {
+        int e = es[i];
+        if (e == 0) {
+            ok = false;
+            break;
+        }
+        for (int u = 0; u < d && ok; u++) {
+            if (!region[u])
+                continue;
+            bool found = false;
+            for (int j = 0; j < s->nsucc[u]; j++)
+                if (s->succ[u][j] == e && (!scc[u] || s->every || back[u * 2 + j])) {
+                    s->succ[u][j] = d;
+                    found         = true;
+                }
+            if (!found)
+                continue;
+            if (u >= s->n) {
+                ok = false;
+                break;
+            }
+            if (s->nrd == s->caprd) {
+                s->caprd   = s->caprd ? 2 * s->caprd : 16;
+                Redirect *r = xalloc(s->caprd * sizeof *r, __func__, __FILE__, __LINE__);
+                for (int j = 0; j < s->nrd; j++)
+                    r[j] = s->rd[j];
+                xfree(s->rd);
+                s->rd = r;
+            }
+            s->rd[s->nrd++] = (Redirect){ u, e, d, i };
+        }
+    }
+    xfree(back);
+    return ok && fix_region(s, scc, d);
+}
+
+// Give each region of `in` with several entries a dispatch node, the edges into
+// `header` left out; then the same inside each region.
+static bool fix_region(Structure *s, const bool *in, int header)
+{
+    int cap = s->cap;
+    Scc c   = { .s = s, .in = in, .header = header };
+    c.index = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    c.low   = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    c.stack = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    c.comp  = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    c.on    = xalloc(cap * sizeof(bool), __func__, __FILE__, __LINE__);
+    int n   = s->N; // the nodes the components are of: those made below are not
+    for (int v = 0; v < n; v++) {
+        c.index[v] = -1;
+        c.on[v]    = false;
+        c.comp[v]  = -1;
+    }
+    for (int v = 0; v < n; v++)
+        if (in[v] && v != header && c.index[v] < 0)
+            strongconnect(&c, v);
+
+    bool ok    = true;
+    bool *scc  = xalloc(cap * sizeof(bool), __func__, __FILE__, __LINE__);
+    int *es    = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    for (int k = 0; k < c.ncomp && ok; k++) {
+        int size = 0, ne = 0;
+        bool cycle = false;
+        for (int v = 0; v < cap; v++)
+            scc[v] = v < n && c.comp[v] == k;
+        for (int v = 0; v < n; v++) {
+            if (!scc[v])
+                continue;
+            size++;
+            for (int j = 0; j < s->nsucc[v]; j++)
+                if (s->succ[v][j] == v)
+                    cycle = true;
+        }
+        if (size < 2 && !cycle)
+            continue;
+        // Its entries: entered from the rest of the region, or the function's start.
+        for (int v = 0; v < n; v++) {
+            if (!scc[v])
+                continue;
+            bool entry = v == 0;
+            for (int u = 0; u < n && !entry; u++)
+                if (in[u] && !scc[u])
+                    for (int j = 0; j < s->nsucc[u]; j++)
+                        if (s->succ[u][j] == v)
+                            entry = true;
+            if (entry)
+                es[ne++] = v;
+        }
+        if (ne == 1)
+            ok = fix_region(s, scc, es[0]);
+        else
+            ok = add_dispatch(s, in, scc, es, ne);
+    }
+    xfree(scc);
+    xfree(es);
+    xfree(c.index);
+    xfree(c.low);
+    xfree(c.stack);
+    xfree(c.comp);
+    xfree(c.on);
+    return ok;
+}
+
+// The graph as the flow has it, with no dispatch node.
+static void reset_graph(Structure *s)
+{
+    for (int b = 0; b < s->n; b++)
+        for (int k = 0; k < s->nsucc[b]; k++)
+            s->succ[b][k] = s->f->blocks[b].succ[k];
+    for (int d = s->n; d < s->N; d++)
+        xfree(s->succ[d]);
+    s->N   = s->n;
+    s->nrd = 0;
+}
+
+// The graph, made reducible: false when that fails.  Redirecting only the jumps from
+// outside a region and those back is enough but for a region inside it that a dispatch
+// node enters by two ways or more; then every jump to an entry is redirected.
+static bool make_reducible(Structure *s)
+{
+    bool *in = xalloc(s->cap * sizeof(bool), __func__, __FILE__, __LINE__);
+    for (int b = 0; b < s->cap; b++)
+        in[b] = b < s->n && s->rpo[b] >= 0; // reachable
+    bool ok = fix_region(s, in, -1);
+    if (!ok) {
+        reset_graph(s);
+        s->every = true;
+        ok       = fix_region(s, in, -1);
+    }
+    xfree(in);
+    return ok;
 }
 
 static void push_ctx(Structure *s, int kind, int block)
@@ -278,6 +547,7 @@ static int ctx_depth(const Structure *s, int kind, int block)
 
 static void do_tree(Structure *s, int x);
 
+// To node `to` of the graph translated, from block or dispatch node `from`.
 static void do_branch(Structure *s, int from, int to)
 {
     if (s->rpo[to] <= s->rpo[from])
@@ -288,17 +558,34 @@ static void do_branch(Structure *s, int from, int to)
         do_tree(s, to);
 }
 
-// Whether going from block x to block `to` is a bare br: backward, or to a merge node.
+// Whether going from block x to node `to` is a bare br: backward, or to a merge node.
 static bool is_br(const Structure *s, int from, int to)
 {
     return s->rpo[to] <= s->rpo[from] || s->nfwd[to] >= 2;
+}
+
+// The state for a jump from block x to block `to` that goes through a dispatch node.
+static void set_state(Structure *s, int x, int to)
+{
+    const Redirect *r = redirect_of(s, x, to);
+    if (r) {
+        wasm_append(s->g->fn, WASM_I32_CONST)->imm = r->index;
+        wasm_append(s->g->fn, WASM_LOCAL_SET)->imm = s->g->state;
+    }
+}
+
+// The jump from block x to block `to`.
+static void do_jump(Structure *s, int x, int to)
+{
+    set_state(s, x, to);
+    do_branch(s, x, effective(s, x, to));
 }
 
 // Running on from the end of block x: into the next, or off the end of the function.
 static void do_fall(Structure *s, int x)
 {
     if (x + 1 < s->n)
-        do_branch(s, x, x + 1);
+        do_jump(s, x, x + 1);
     else if (s->g->fn->result == WASM_VOID)
         gen_return(s->g, NULL);
     else
@@ -329,6 +616,17 @@ static void node_within(Structure *s, int x, const int *ys, int k)
         do_tree(s, y);
         return;
     }
+    if (x >= s->n) {
+        // A dispatch node: to the entry the state names, leaving the block before it.
+        wasm_append(fn, WASM_LOCAL_GET)->imm = g->state;
+        Wasm_Instr *bt = wasm_append(fn, WASM_BR_TABLE);
+        bt->ntable     = s->nsucc[x] + 1;
+        bt->table      = xalloc(bt->ntable * sizeof(int), __func__, __FILE__, __LINE__);
+        for (int i = 0; i < s->nsucc[x]; i++)
+            bt->table[i] = ctx_depth(s, CTX_BLOCK, s->succ[x][i]);
+        bt->table[s->nsucc[x]] = bt->table[0];
+        return;
+    }
     const Flow_Block *blk     = &s->f->blocks[x];
     const Tac_Instruction *in = s->f->instrs[blk->last];
     bool jump = in->kind == TAC_INSTRUCTION_JUMP || in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ||
@@ -338,33 +636,36 @@ static void node_within(Structure *s, int x, const int *ys, int k)
         gen_instr(g, s->f->instrs[i]);
     switch (in->kind) {
     case TAC_INSTRUCTION_JUMP:
-        do_branch(s, x, target_of(g, in->u.jump.target));
+        do_jump(s, x, target_of(g, in->u.jump.target));
         return;
     case TAC_INSTRUCTION_JUMP_IF_ZERO:
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO: {
         int t = target_of(g, in->u.jump_if_zero.target), e = x + 1;
         bool if_zero = in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO;
         if (t == e) { // both ways to one place
-            do_branch(s, x, t);
+            do_jump(s, x, t);
             return;
         }
-        if (is_br(s, x, t) || (e < s->n && is_br(s, x, e))) {
-            // One way is a bare br: a br_if, then the other way.
-            bool to_t = is_br(s, x, t);
-            push_condition(g, in->u.jump_if_zero.condition, to_t ? if_zero : !if_zero);
-            int to = to_t ? t : e;
+        bool br_t = is_br(s, x, effective(s, x, t));
+        if (br_t || (e < s->n && is_br(s, x, effective(s, x, e)))) {
+            // One way is a bare br: a br_if, then the other way.  A state it sets is
+            // read by nothing on the other way, which sets its own if it needs one.
+            int orig = br_t ? t : e;
+            int to   = effective(s, x, orig);
+            set_state(s, x, orig);
+            push_condition(g, in->u.jump_if_zero.condition, br_t ? if_zero : !if_zero);
             wasm_append(fn, WASM_BR_IF)->imm =
                 s->rpo[to] <= s->rpo[x] ? ctx_depth(s, CTX_LOOP, to) : ctx_depth(s, CTX_BLOCK, to);
-            if (to_t)
+            if (br_t)
                 do_fall(s, x);
             else
-                do_branch(s, x, t);
+                do_jump(s, x, t);
             return;
         }
         push_condition(g, in->u.jump_if_zero.condition, if_zero);
         wasm_append(fn, WASM_IF);
         push_ctx(s, CTX_IF, x);
-        do_branch(s, x, t);
+        do_jump(s, x, t);
         wasm_append(fn, WASM_ELSE);
         do_fall(s, x);
         s->nctx--;
@@ -390,7 +691,7 @@ static void do_tree(Structure *s, int x)
 {
     // The merge nodes x immediately dominates, in reverse postorder.
     int k   = 0;
-    int *ys = xalloc((s->n + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+    int *ys = xalloc((s->N + 1) * sizeof(int), __func__, __FILE__, __LINE__);
     for (int i = 0; i < s->count; i++) {
         int y = s->order[i];
         if (y != x && s->idom[y] == x && s->nfwd[y] >= 2)
@@ -414,15 +715,30 @@ static void do_tree(Structure *s, int x)
 // irreducible.
 static bool gen_structured(Gen *g)
 {
-    Structure s = { .g = g, .f = g->flow, .n = g->flow->nblocks };
-    int n       = s.n + 1;
-    s.rpo       = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
-    s.order     = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
-    s.idom      = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
-    s.nfwd      = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
-    s.header    = xalloc(n * sizeof(bool), __func__, __FILE__, __LINE__);
-    s.ctx       = xalloc(3 * n * sizeof(*s.ctx), __func__, __FILE__, __LINE__);
-    bool ok     = analyze(&s);
+    const Flow *f = g->flow;
+    Structure s   = { .g = g, .f = f, .n = f->nblocks, .N = f->nblocks };
+    s.cap         = 2 * s.n + 2; // a dispatch node has two entries or more
+    int n         = s.cap;
+    s.nsucc       = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
+    s.succ        = xalloc(n * sizeof(int *), __func__, __FILE__, __LINE__);
+    for (int b = 0; b < s.n; b++) {
+        s.nsucc[b] = f->blocks[b].nsucc;
+        s.succ[b]  = xalloc(2 * sizeof(int), __func__, __FILE__, __LINE__);
+        for (int k = 0; k < f->blocks[b].nsucc; k++)
+            s.succ[b][k] = f->blocks[b].succ[k];
+    }
+    s.rpo    = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
+    s.order  = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
+    s.idom   = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
+    s.nfwd   = xalloc(n * sizeof(int), __func__, __FILE__, __LINE__);
+    s.header = xalloc(n * sizeof(bool), __func__, __FILE__, __LINE__);
+    s.ctx    = xalloc(3 * n * sizeof(*s.ctx), __func__, __FILE__, __LINE__);
+    bool ok  = analyze(&s);
+    if (!ok && wasm_regional && make_reducible(&s)) {
+        ok = analyze(&s);
+        if (ok)
+            g->state = wasm_add_local(g->fn, WASM_I32);
+    }
     if (ok) {
         map_init(&g->labels);
         for (int b = 0; b < s.n; b++)
@@ -432,6 +748,11 @@ static bool gen_structured(Gen *g)
         do_tree(&s, 0);
         map_destroy(&g->labels);
     }
+    for (int b = 0; b < s.N; b++)
+        xfree(s.succ[b]);
+    xfree(s.succ);
+    xfree(s.nsucc);
+    xfree(s.rd);
     xfree(s.rpo);
     xfree(s.order);
     xfree(s.idom);

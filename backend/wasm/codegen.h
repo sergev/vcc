@@ -13,6 +13,9 @@ extern "C" {
 // Structured control flow (on by default): off, every function gets the dispatch
 // skeleton (genwasm --no-structure).
 extern bool wasm_structure;
+// A dispatch for each irreducible region (on by default): off, a function with one gets
+// the whole-function skeleton (genwasm --no-regional).
+extern bool wasm_regional;
 // The rewrites of the finished code (on by default): the peephole rules, keeping values
 // on the operand stack (stackify), and sharing locals (coalescing); genwasm
 // --no-peephole, --no-stackify, --no-coalesce.
