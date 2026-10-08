@@ -183,7 +183,7 @@ lowered with `-t avr`, assembled by `avr-as -mmcu=atmega1280`) takes
 assembled by `msp430-elf-as -mcpu=msp430`) and `genmmix` (TAC lowered with `-t mmix`,
 assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms`). `genwasm` (TAC lowered
 with `-t wasm32`, assembled by `clang --target=wasm32` with the wasm features) takes
-`--no-structure`, `--no-peephole`, `--no-stackify` and `--no-coalesce`, and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
+`--no-structure`, `--no-regional`, `--no-peephole`, `--no-stackify` and `--no-coalesce`, and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
 
 ### Installation
 
@@ -471,7 +471,7 @@ The signed `char` and the big-endian byte order come from the `mmix` descriptor 
 | `frame.c` | Types, clang's signatures (`wasm_pass`, `wasm_sret`), which names are locals and which frame slots, the shadow-stack prologue and epilogue (none without slots) |
 | `instr.c` | Selection of stack code: push the operands, compute, pop into the destination; narrow values kept extended; `long double` through the runtime |
 | `call.c` | clang's calls: single-scalar structures by value, others by reference to a caller's copy, sret, `long double` as two `i64`, the variadic buffer and `__va_start`, `call_indirect` |
-| `structure.c` | Structured control flow by Ramsey's translation (reverse postorder, dominators, loop headers, merge nodes); the dispatch skeleton for an irreducible graph |
+| `structure.c` | Structured control flow by Ramsey's translation (reverse postorder, dominators, loop headers, merge nodes); an irreducible graph made reducible first by a dispatch node per region with several entries; the whole-function dispatch skeleton as the last fallback |
 | `peephole.c` | Rewrites of the finished code: stackify, tees, dead values, tests, offsets folded into accesses, stores merged, dead code and branches removed |
 | `locals.c` | Local coalescing: liveness over the structured code, copy-related locals merged, groups coloured |
 | `data.c` | Static data, a section per variable |

@@ -74,8 +74,9 @@ stack machine, and the first with no registers and no `goto`.
   established by compiling probes with `clang -S` and is held in place by the interop
   tests, which link our code with clang's both ways.
 - **A correct translation first.** The dispatch skeleton handles any control flow, so
-  every test ran before the structured translation existed. It stays as the fallback
-  for an irreducible graph and as a check (`--no-structure`) of the structured one.
+  every test ran before the structured translation existed. It stays as the last
+  fallback for an irreducible graph and as a check (`--no-structure`) of the structured
+  one.
 
 ## How code is generated
 
@@ -97,7 +98,7 @@ instructions and code the engine can read as expressions.
 
 To see the code without the rewrites, give `genwasm` `--no-peephole`, `--no-stackify`
 and `--no-coalesce` (each turns off its part). `--no-structure` gives every function the
-dispatch skeleton below.
+dispatch skeleton below, and `--no-regional` every function with an irreducible graph.
 
 ### Locals and the frame
 
@@ -156,12 +157,33 @@ Relooper", ICFP 2022):
    function, and is `unreachable` in any other.
 
 The method needs a **reducible** graph. A backward jump to a block that does not
-dominate its source (a `goto` into a loop, Duff's device) makes the graph irreducible.
-Such a function gets the **dispatch skeleton**, which is correct for any graph: a
-`state` local, and `loop { block … block; br_table }` with a block per basic block. A
-jump sets `state` and branches to the loop; a fall-through runs straight on into the
-next block. The skeleton came first, and got every test running before the structured
-translation existed.
+dominate its source (a `goto` into a loop, Duff's device, a coroutine resumed inside a
+loop it does not suspend at every turn) makes the graph irreducible. Such a graph is
+first made reducible, as LLVM's `FixIrreducibleControlFlow` does:
+
+1. Find the strongly connected regions (Tarjan) of the reachable blocks. One with a
+   single entry is a loop; its header's incoming edges are set aside and the regions
+   inside it are looked at the same way.
+2. A region with several entries gets a **dispatch node**, a `local.get state;
+   br_table` over its entries. A jump into an entry from outside the region, and a jump
+   inside it that a depth-first walk from the dispatch node finds going back, set
+   `state` to the entry's index and go to the dispatch node instead. A forward jump
+   inside the region stays as it is: the dispatch node dominates its target anyway, so
+   Duff's cases still run into one another. The region is now a loop headed by the
+   dispatch node, and its inner regions are looked at in turn.
+3. In the rare graph where that is not enough (a region inside entered by the dispatch
+   node in two ways), every jump to an entry is redirected and the work starts again.
+
+Ramsey's translation then runs over that graph; each entry of a dispatch node counts as
+a merge node, so the `br_table` leaves the block in front of it. One `state` local
+serves every dispatch node, since each reads it right after the jump that set it. Code
+outside the irreducible regions keeps its structure.
+
+Should that fail (a region entered at the function's very start), the function gets
+the **dispatch skeleton**, which is correct for any graph: a `state` local, and `loop {
+block … block; br_table }` with a block per basic block. A jump sets `state` and
+branches to the loop; a fall-through runs straight on into the next block. The skeleton
+came first, and got every test running before the structured translation existed.
 
 For
 
@@ -503,7 +525,9 @@ In phases, each ending with the wasm32 tests green and a commit:
 6. the structured translation;
 7. stackify, the peephole rules and coalescing, with the default-pipeline goldens and the
    size comparison with clang;
-8. this document.
+8. this document;
+9. later, for the coroutines (phase C5 of [backend/wasm/Plan.md](../backend/wasm/Plan.md)),
+   a dispatch node per irreducible region in place of the whole-function skeleton.
 
 `git log --grep=wasm` shows each phase.
 
@@ -515,14 +539,15 @@ node:
   - the emitter (forms, float specials);
   - `main`'s names, the target features and the declarations;
   - integers, frames, pointers, static data, calls, structure signatures and variadics;
-  - the structured translation (if/else, merge nodes, loops, the irreducible fallback
-    and the skeleton).
+  - the structured translation (if/else, merge nodes, loops, a dispatch per irreducible
+    region for a `goto` into a loop, Duff's device and a generator, and the skeleton).
 
   These run with all rewrites off (`NaiveSelection()`). `peephole_tests.cpp` has the
   goldens of the default pipeline.
 - **Runs:**
   - narrow and `long long` arithmetic, control flow of every kind, Duff's device and a
-    `goto` into a loop;
+    `goto` into a loop (with and without `--no-regional`), irreducible graphs of random
+    `goto`s, checked against the skeleton;
   - recursion and frames, pointers, statics, structures by value and by reference,
     function pointers and variadics;
   - the libc (`printf`, `<string.h>`, the `mem*` functions, `malloc`, math);

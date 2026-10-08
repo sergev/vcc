@@ -1,8 +1,9 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C4 are built — `defer`, the coroutines' front end, generators, and
+Status: phases C1–C5 are built — `defer`, the coroutines' front end, generators,
 delegation (`await` in both forms, the arena, `co_alloca` in functions and
-coroutines, every operation); §8 lists what remains, from the regional dispatch on. The document defines two extensions of C — a `defer`
+coroutines, every operation), and a dispatch per irreducible region in the wasm
+backend; §8 lists what remains, from the Braam target on. The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -324,7 +325,7 @@ optimizer   unchanged: the suspension is a call it may not move or drop
 coro split  after the optimizer: liveness, frame layout, spills, dispatch, f$init,
             the descriptor f$co                              (translator/coro.c)
 genwasm     __builtin_stack_save/restore/alloca for co_alloca (call.c); a
-            dispatch loop around an irreducible region only, not around the
+            dispatch node per irreducible region, not a skeleton around the
             whole function                                   (structure.c)
 runtime     libc/wasm32: co.c (setup, resume, arena push/pop, checks, traps);
             libc/wasm32/braam: crt0, syscalls,
@@ -633,9 +634,8 @@ machine is acyclic and Ramsey's translation structures it as is.
 ### 6.3 What the wasm backend sees
 
 - `f$resume` is a function with one `i32` parameter. Where a loop runs part of its
-  iterations without suspending, the dispatch enters it in the middle, and today's
-  `structure.c` falls back to the whole-function dispatch skeleton — correct, and
-  slower than it should be. §6.5.
+  iterations without suspending, the dispatch enters it in the middle, and that loop
+  gets a dispatch of its own (§6.5); the rest stays structured.
 - Frame accesses are `i32.load off`/`i32.store off` on the parameter: the constant
   addends fold into memarg offsets (`peephole.c`) where the address is not shared.
 - `call_indirect (i32) -> (i32)` for `__coro_resume`'s dispatch is an indirect call
@@ -660,21 +660,44 @@ user-facing macros and enums only.
 
 ### 6.5 Structured control flow for irreducible regions
 
-`backend/wasm/structure.c` chooses between Ramsey's translation for the whole
-function and the dispatch skeleton for the whole function. The coroutine dispatch
-makes every loop containing a suspension point multi-entry, so coroutines would
-always get the skeleton. The change, which also improves Duff's device and `goto`
-into a loop: find the irreducible strongly connected regions (the retreating edges
-whose target does not dominate the source, and the SCC each lies in); give each such
-region one *dispatch header* — a `loop` with a `br_table` over the region's entry
-blocks on a `state` local, as LLVM's `FixIrreducibleControlFlow` does; route every
-edge into an entry block through it; then Ramsey's translation runs over the graph
-with the region collapsed to that header, and inside the region the blocks that are
-not entries keep their structure. The whole-function skeleton stays for
-`--no-structure` and as the fallback for a region the new code declines.
+Built in phase C5 (`backend/wasm/structure.c`; [docs/Wasm_Backend.md](../../docs/Wasm_Backend.md)
+has the description). The coroutine dispatch makes a loop that does not suspend at
+every iteration multi-entry, and that made the whole function the dispatch skeleton.
+Now, only when Ramsey's analysis finds the graph irreducible, `structure.c` works on a
+copy of it, as LLVM's `FixIrreducibleControlFlow` does:
 
-Measure on a generator with a loop, a `read_exact`-style awaiter and the Braam `cat`
-of §7: code-section bytes and `bench_wasm.sh`, before and after.
+- Tarjan's strongly connected regions of the reachable blocks; inside a region with
+  one entry (a loop), the same again with its header's incoming edges set aside.
+- A region with several entries gets a **dispatch node**, `local.get state;
+  br_table` over its entries. The jumps into an entry from the rest of the region,
+  and those inside it that a depth-first walk from the dispatch node finds going
+  back, set `state` and go to the dispatch node instead. A forward jump inside the
+  region stays, so Duff's cases still run into each other. Then the region, now a
+  loop headed by the dispatch node, is looked at in turn.
+- When that is not enough (an inner region entered by the dispatch node as well as
+  from inside, 58 of 300 random `goto` graphs), every jump to an entry is redirected,
+  and the work starts again. Should that fail too (a region entered at the function's
+  start), the whole-function skeleton remains; it also stays for `--no-structure`,
+  and `--no-regional` asks for it in place of the dispatch nodes.
+- Ramsey's translation runs over that graph unchanged, each entry of a dispatch node
+  counting as a merge node; one `state` local serves every dispatch node. A jump that
+  goes through one sets the state just before it, a `br_if` setting it ahead of its
+  test: the other way reads no state, or sets its own.
+
+Code-section bytes (genwasm with all rewrites; before = the C4 build, the same as
+`--no-regional`):
+
+| Program | Before | After |
+|---|---|---|
+| a generator whose loop does not always suspend | 243 | 215 |
+| Duff's device and a `goto` into a loop | 484 | 470 |
+| the nested region of `flow_tests.cpp` (every jump redirected) | 243 | 224 |
+| `read_exact`/`read_header`, a `cat` loop (every iteration suspends: acyclic) | 583, 366 | 583, 366 |
+| the 607 book programs (`bench_wasm.sh`; all reducible) | 137384 | 137384 |
+
+The random `goto` graphs of `flow_tests.cpp` (and 300 more, by hand) give the
+skeleton's output. They also found a hang in CSE, whose fixpoint did not converge on
+such graphs; it is fixed (docs/TAC_Optimization.md, available expressions).
 
 ## 7. Braam: target, runtime and libc
 
@@ -829,9 +852,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C5. Backend quality.** §6.5's regional dispatch in `structure.c`; flow goldens for
-   Duff's device and `goto` into a loop change from the skeleton to the regional
-   form; coroutine goldens; sizes measured.
 - **C6. Braam target and runtime.** `wasm32-braam` in `cc.c`, `cpp`, CMake and the
    install; `crt0.c`, the allocator, `braam_sys`, `read`/`write`/`open`/`close`/
    `sleep_ms`/`fflush`, the headers, `run.mjs`; the ABI constants and the drift test.
