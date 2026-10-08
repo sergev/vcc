@@ -417,12 +417,16 @@ The target `wasm32-braam` uses this backend unchanged, with a runtime of its own
 (`crt0.o`: the five exports `_start`, `_resume`, `_alloc`, `_free`, `_sig`, and the
 imports `kernel.sys` and `kernel.sys_async`), `rt.c` (the root task, a coroutine that
 awaits `main` and flushes, stepped by `_start` and `_resume`), `sys.c` (`braam_sys`,
-`read`, `write`, `open`, `close`, `sleep_ms`, coroutines), `stdio.c` (buffered streams,
-`fflush` a coroutine), `malloc.c` (first fit, since Braam frees every reply block) and
+the descriptor, `stat` and path calls, coroutines), `stdio.c` (streams buffered both
+ways, `fflush`, `fgetc`, `fgets`, `fread`, `fopen`, `fclose` and `fseek` coroutines),
+`malloc.c` (first fit, since Braam frees every reply block) and
 `strerror.c`, with this library's objects but the console, `main.s`, the bump
 allocator and `strerror`. Its headers come first: `braam.h`, `unistd.h`, `fcntl.h`,
-`errno.h`, `stdio.h`, `stdlib.h`. `run.mjs` there is a fake kernel for node, which checks
-the process ABI before it runs a program.
+`errno.h`, `stdio.h`, `stdlib.h`, `sys/types.h`, `sys/stat.h`. `run.mjs` there is a fake
+kernel for node, which checks the process ABI before it runs a program; the ctest
+`braam-system` runs programs on Braam itself when a built braam-core is at hand.
+[Braam_Example.md](Braam_Example.md) works a program through, built and run both
+ways.
 
 ## Costs against clang
 

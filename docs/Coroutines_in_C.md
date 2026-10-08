@@ -11,9 +11,10 @@ This is a tutorial. It assumes you know ordinary C and nothing else.
 > **Status.** `defer` (section 1) is implemented and works on every target;
 > `<coro.h>` defines its short name. Coroutines (sections 2 to 7) work on wasm32
 > only. Section 8 works with `vcc -t wasm32-braam`, run under node by a fake kernel
-> (`share/vcc/wasm32-braam/lib/run.mjs`): `read`, `write`, `open`, `close`,
-> `sleep_ms`, `fflush` and the output buffer; `fgetc`, `fgets`, `stat`, running on Braam
-> itself, `braam_yield` and signals are next. Coroutines exist for
+> (`share/vcc/wasm32-braam/lib/run.mjs`) and on Braam itself: the descriptor calls,
+> `stat` and the path calls, and `stdio.h` with input buffered too
+> ([Braam_Example.md](Braam_Example.md) works a program through); `braam_yield` and
+> signals are next. Coroutines exist for
 > programs that run on [Braam](#8-coroutines-on-braam). The design and the work are in
 > [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 

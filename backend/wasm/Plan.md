@@ -1,10 +1,11 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C6 are built — `defer`, the coroutines' front end, generators,
+Status: phases C1–C7 are built — `defer`, the coroutines' front end, generators,
 delegation (`await` in both forms, the arena, `co_alloca` in functions and
 coroutines, every operation), a dispatch per irreducible region in the wasm backend,
-and the target `wasm32-braam` with its runtime and a fake kernel for node; §8 lists
-what remains, from running on Braam itself on. The document defines two extensions of C — a `defer`
+and the target `wasm32-braam` with its runtime, `stdio.h` on files and stdin, a fake
+kernel for node and a system test on Braam itself; §8 lists what remains, from
+signals and tasks on. The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -829,8 +830,31 @@ flags Sys::Open's bits, so `O_RDONLY` is 1), `close`, `sleep_ms` and `fflush`; o
 error they return -1 and set `errno`. A `read` of standard input flushes standard
 output first, so a prompt is out before the answer is read. `printf`, `puts`, `putchar`, `fprintf`,
 `vfprintf`, `vprintf`, `fputs` and `fputc` fill a stream's buffer: `putbyte` writes to
-the stream of the `fprintf` running, stdout otherwise. `stat`, `fgetc`, `fgets` and
-`getchar` are C7's.
+the stream of the `fprintf` running, stdout otherwise.
+
+Built in C7, the rest of `stdio.h`:
+
+- **Input.** Each stream has an input buffer of `BRAAM_CHUNK` bytes, plus one byte
+  in front of it for `ungetc`. `fgetc`, `getc`, `getchar`, `fgets` and `fread` take
+  from it and refill it with `read`. Like `read`, a refill on stdin flushes stdout
+  first.
+- **Opening and closing.** `fopen` reads the mode as Braam's compat layer does, and
+  a stream it makes joins the list that `fflush(NULL)` and the runtime's last flush
+  walk. `fclose` writes the buffer out, closes the descriptor and frees the buffers;
+  for a stream from `fopen` it frees the `FILE` too.
+- **Positioning.** `fseek` writes out pending output, moves the descriptor back past
+  what was read ahead and not taken, and drops the input buffer. `ftell` and
+  `rewind` go through it.
+- **Output.** `fwrite`, `putc` and `perror` fill the buffer, as `fputc` does.
+- **The `C` rule.** Switching a stream between input and output needs an `fflush` or
+  `fseek` between, as C requires.
+- **File and directory calls.** `stat`, `lstat` and `fstat` (`<sys/stat.h>`) fill a
+  `struct stat` as Braam's `cstat.cpp` does: the mode from the kind, `st_ino` an
+  FNV-1a hash of the path, and the time in seconds. `<unistd.h>` gains `lseek`
+  (Sys::Seek), `unlink`, `rmdir` and `remove` (all three Sys::Remove), `chdir`,
+  `getcwd` and `getpid`; `mkdir` and `rename` are here too. `<sys/types.h>` gives
+  `off_t` and the other types 64 bits, as Braam's replies carry them.
+- **Not built:** `scanf`, `tmpfile`, `setvbuf`, and Sys::List (directory reading).
 
 Headers in `libc/wasm32/braam/include/`, first on the search path: `braam.h`
 (`braam_call`, `braam_sys`, `braam_sys_sync`, `sleep_ms`, `braam_now`, the ABI
@@ -848,22 +872,39 @@ the five exports; one `braam` section with the magic, `PROC_ABI` and 1600 pages)
 `env.memory` of the section's page counts, writes argv (the program's name first)
 through `_alloc` and calls `_start`. It serves `kernel.sys` (Exit, GetPid, Now,
 Random) and `kernel.sys_async` for Write (fd 1 and 2 to stdout and stderr), Read (fd 0
-from stdin, in 512-byte chunks), Open, Close, Read and Write on files, and Sleep
-(`setTimeout`); anything else is `Err(Unsupported)`. Each reply goes through `_resume`
+from stdin, in 512-byte chunks), Open, Close, Read, Write, Seek and FStat on files
+(node has no `lseek`, so it keeps each descriptor's position itself), Stat, Remove,
+MkDir, Chdir and Rename on paths, and Sleep (`setTimeout`); anything else is
+`Err(Unsupported)`. Each reply goes through `_resume`
 from a later macrotask, never from inside `sys_async`, so a program that forgets to
 return from the step is caught. It prints `[exit N]` on stderr and exits with N; a trap
 is a crash, status 255, with what Sys::Exit said if anything (as after `exit()`); a
-process that waits while nothing is coming, 254. Poll waits for C7.
+process that waits while nothing is coming, 254. Poll waits for C8, which needs it.
 
 ### 7.5 Running on Braam
 
-An optional ctest, on when `-DBRAAM_CORE=<path to a built braam-core>` is given:
-plants `hello`, `cat`, `wc` built by `vcc -t wasm32-braam` into a session of the
-SDK's harness (`test/system/harness.mjs`: `store.files.set("/bin/<name>", bytes)`,
-`submit("<name> ...")`, read the screen), the way `braam-apps/devel/c4/test/run.mjs`
-does, and runs `test/system/abi.mjs` over them. Skipped otherwise, like every run
-test without its tools. A `braam_add_package`-style recipe for a `.zip` is a
-documentation item, not code here.
+Built in C7. The ctest `braam-system` (`backend/wasm/test/braam_system.mjs`) is
+defined when `BRAAM_CORE` is a built checkout, one with `build/kernel.wasm` and
+`build/web/rootfs.zip`. By default `BRAAM_CORE` is `../../Braam/braam-core`;
+`-DBRAAM_CORE=` overrides it. Otherwise the test is left out, like every run test
+without its tools. The test:
+
+- builds `hello`, `cat`, `wc` and the worked example `docs/examples/notes.c` with the
+  in-tree driver;
+- runs braam-core's `test/system/abi.mjs` over them;
+- plants them in `/bin` of a session of the harness (`test/system/harness.mjs`), the
+  way `braam-apps/devel/c4/test/run.mjs` does;
+- types command lines at the shell, the output redirected to a file and the status
+  echoed to another:
+  - hello's arguments and status;
+  - `cat` and `wc` on a file and through `<`;
+  - a missing file;
+  - `notes`' whole session, `notes ask` reading the terminal up to `^D`.
+
+Every program ran on the first try on the real kernel. The fake kernel and Braam
+gave the same output for the same programs, but for the pid.
+[docs/Braam_Example.md](../../docs/Braam_Example.md) walks through the example both
+ways. A `braam_add_package`-style recipe for a `.zip` stays a documentation item.
 
 ## 8. Phases
 
@@ -871,8 +912,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C7. On Braam.** §7.5's optional system test; `stat`, `fgets`, `getchar`, `stdio.h`
-   completed; a worked example in `docs/` built both ways.
 - **C8. Signals and tasks.** `_sig`, `sig_catch`/`sig_take`, `Err(Intr)` on a read;
    `braam_spawn` and the pending table; `braam_yield`.
 - **C9. Later, as needed.** `coro_ptr(Y, T)` with a `void *` init thunk and a
@@ -925,7 +964,7 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
   less: the kernel drops the instance at exit). Braam's C++ has the same limit, a
   destructor cannot `co_await`. Lifting the rule is backward-compatible, since it only
   turns a compile-time error into accepted code, so it waits for evidence from real
-  programs on the Braam runtime (phases C6–C7). What it would take: on ordinary exits
+  programs on the Braam runtime (phases C6–C7; `notes` closes its files by hand). What it would take: on ordinary exits
   nothing new — the cleanup is code in the coroutine body and the split pass handles
   its suspension like any other; on `co_destroy`, destruction becomes an unwind that
   can wait — `co_destroy` may return `CO_SUSPENDED`, and whoever runs the coroutine
@@ -961,8 +1000,7 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
   libc/wasm32/run.mjs gen.wasm`.
 - By hand, Braam without Braam: `build/cc/cc -t wasm32-braam cat.c -o cat &&
   node libc/wasm32/braam/run.mjs cat < input`.
-- By hand, on Braam: `node test/run.mjs --kernel build/kernel.wasm
-  build/web/rootfs.zip $VCC/cat` from braam-core asserts the ABI; the harness session
-  of §7.5 runs it.
+- On Braam: the ctest `braam-system` (§7.5); by hand, `fimport` the binary in a
+  Braam tab and run `/import/<name>` (docs/Braam_Example.md §4).
 - `wasm-objdump -x cat` shows the three imports, the five exports, no `memory`
   export, and one `braam` section; `wasm-validate` passes.

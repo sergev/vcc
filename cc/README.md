@@ -329,4 +329,5 @@ exports coming from `crt0.o`. After the link the driver appends the custom secti
 `braam` that `exec` reads (magic, `PROC_ABI`, flags, the initial pages, 1600), as
 braam-core's `tools/stamp.py` does for its own programs, replacing an earlier one.
 `node share/vcc/wasm32-braam/lib/run.mjs prog [args...]` runs the result on a fake
-kernel.
+kernel, and `fimport` in a Braam tab brings it to Braam itself;
+[docs/Braam_Example.md](../docs/Braam_Example.md) works a program through.
