@@ -35,6 +35,8 @@ digraph AST_Structures {
         Type -> Type [label="u.atomic.base"];
         Type -> TypeQualifier [label="qualifiers"];
         Type -> Field [label="u.struct_t.fields"];
+        Type -> Type [label="u.struct_t.frame_yield"];
+        Type -> Type [label="u.struct_t.frame_result"];
         Type -> Enumerator [label="u.enum_t.enumerators"];
         Type -> Param [label="u.function.params"];
 
@@ -75,6 +77,7 @@ digraph AST_Structures {
         DeclSpec -> TypeQualifier [label="qualifiers"];
         DeclSpec -> StorageClass [label="storage"];
         DeclSpec -> FunctionSpec [label="func_specs"];
+        FunctionSpec -> Type [label="yield_type"];
         DeclSpec -> AlignmentSpec [label="align_spec"];
         AlignmentSpec -> Type [label="u.type"];
         AlignmentSpec -> Expr [label="u.expr"];
@@ -132,6 +135,9 @@ digraph AST_Structures {
         Expr -> Type [label="u.align_of"];
         Expr -> Expr [label="u.generic.controlling_expr"];
         Expr -> GenericAssoc [label="u.generic.associations"];
+        Expr -> Expr [label="u.yield_expr"];
+        Expr -> Expr [label="u.await_expr"];
+        Expr -> Expr [label="u.co_op.args"];
         Expr -> Type [label="type"];
         GenericAssoc -> GenericAssoc [label="next"];
         GenericAssoc -> Type [label="u.type_assoc.type"];

@@ -85,6 +85,7 @@ Enumerator *parse_enumerator(void);
 Type *parse_atomic_type_specifier(void);
 TypeQualifier *parse_type_qualifier(void);
 FunctionSpec *parse_function_specifier(void);
+Type *parse_coro_frame_specifier(void);
 AlignmentSpec *parse_alignment_specifier(void);
 Declarator *parse_declarator(void);
 Declarator *parse_direct_declarator(void);

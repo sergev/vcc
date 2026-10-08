@@ -64,6 +64,35 @@ void f(int x) { _Defer g(1); _Defer { g(2); g(3); } if (x) _Defer g(4); }
     free_program(deserialized);
 }
 
+// The coroutine extension survives a round trip: _Coro(Y), _Coro_frame(Y, T), _Yield with
+// and without an operand, _Await, and the operations.
+TEST_F(ParserTest, ExportCoroutines)
+{
+    program = parse(CreateTempFile(R"(
+_Coro(int) void range(int lo, int hi) { for (int i = lo; i < hi; i++) if (_Yield i == 1) return; }
+_Coro(void) long sum(void) { long s = _Await range(0, 3) + 1; _Yield; return s; }
+void f(void)
+{
+    _Coro_frame(int, void) *p = __co_alloca(range, 0, 0, 10);
+    while (__co_resume(p) == 0)
+        __co_value(p);
+    unsigned long n = __co_sizeof(range) + __co_alignof(range);
+    char buf[64];
+    p = __co_init(buf, sizeof buf, range, 1, 2);
+    __co_cancel(p), __co_destroy(p), __co_done(p), __co_result(p);
+}
+)"));
+    ASSERT_NE(nullptr, program);
+
+    int fd = CreateAstFile();
+    export_ast(fd, program);
+
+    Program *deserialized = import_ast(fd);
+    EXPECT_TRUE(compare_program(program, deserialized));
+    close(fd);
+    free_program(deserialized);
+}
+
 #if 0
 TEST_F(ParserTest, ExportComplexType)
 {

@@ -85,7 +85,7 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
     const TypeSpec *union_spec   = NULL;
     const TypeSpec *enum_spec    = NULL;
     const TypeSpec *typedef_spec = NULL;
-    const TypeSpec *atomic_spec  = NULL;
+    const TypeSpec *atomic_spec  = NULL; // _Atomic(type) or _Coro_frame(Y, T)
 
     /* Collect specifiers */
     for (const TypeSpec *s = specs; s; s = s->next) {
@@ -225,10 +225,11 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
                 fatal_error("typedef name cannot combine with other distinct types");
             }
             typedef_spec = s;
-        } else if (s->kind == TYPE_SPEC_ATOMIC) {
+        } else if (s->kind == TYPE_SPEC_ATOMIC || s->kind == TYPE_SPEC_CORO_FRAME) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("_Atomic(type) cannot combine with other distinct types");
+                fatal_error("%s cannot combine with other distinct types",
+                            s->kind == TYPE_SPEC_ATOMIC ? "_Atomic(type)" : "_Coro_frame");
             }
             atomic_spec = s;
         }
@@ -252,6 +253,8 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
     } else if (typedef_spec) {
         result                      = new_type(TYPE_TYPEDEF_NAME, __func__, __FILE__, __LINE__);
         result->u.typedef_name.name = xstrdup(typedef_spec->u.typedef_name.name);
+    } else if (atomic_spec && atomic_spec->kind == TYPE_SPEC_CORO_FRAME) {
+        result = clone_type(atomic_spec->u.atomic.type, __func__, __FILE__, __LINE__);
     } else if (atomic_spec) {
         result = new_type(TYPE_ATOMIC, __func__, __FILE__, __LINE__);
         result->u.atomic.base =
@@ -510,7 +513,8 @@ DeclSpec *parse_declaration_specifiers(Type **base_type_result)
         } else if (is_type_qualifier(current_token) || current_token == TOKEN_ATOMIC) {
             TypeQualifier *q = parse_type_qualifier();
             append_list(&ds->qualifiers, q);
-        } else if (current_token == TOKEN_INLINE || current_token == TOKEN_NORETURN) {
+        } else if (current_token == TOKEN_INLINE || current_token == TOKEN_NORETURN ||
+                   current_token == TOKEN_CORO) {
             FunctionSpec *fs = parse_function_specifier();
             append_list(&ds->func_specs, fs);
         } else if (current_token == TOKEN_ALIGNAS) {
@@ -629,6 +633,7 @@ StorageClass parse_storage_class_specifier()
 //     | struct_or_union_specifier
 //     | enum_specifier
 //     | TYPEDEF_NAME      /* after it has been defined as such */
+//     | coro_frame_specifier  /* vcc extension */
 //     ;
 // Returns non-NULL value.
 //
@@ -689,6 +694,9 @@ TypeSpec *parse_type_specifier()
     } else if (current_token == TOKEN_ATOMIC && next_token() == TOKEN_LPAREN) {
         ts                = new_type_spec(TYPE_SPEC_ATOMIC);
         ts->u.atomic.type = parse_atomic_type_specifier();
+    } else if (current_token == TOKEN_CORO_FRAME) {
+        ts                = new_type_spec(TYPE_SPEC_CORO_FRAME);
+        ts->u.atomic.type = parse_coro_frame_specifier();
     } else if (current_token == TOKEN_STRUCT || current_token == TOKEN_UNION) {
         ts = parse_struct_or_union_specifier();
     } else if (current_token == TOKEN_ENUM) {
@@ -1013,6 +1021,7 @@ TypeQualifier *parse_type_qualifier()
 // function_specifier
 //     : INLINE
 //     | NORETURN
+//     | CORO '(' type_name ')'   /* vcc extension */
 //     ;
 //
 FunctionSpec *parse_function_specifier()
@@ -1020,9 +1029,41 @@ FunctionSpec *parse_function_specifier()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    if (current_token == TOKEN_CORO) {
+        advance_token();
+        expect_token(TOKEN_LPAREN);
+        FunctionSpec *fs = new_function_spec(FUNC_SPEC_CORO);
+        fs->yield_type   = parse_type_name();
+        expect_token(TOKEN_RPAREN);
+        return fs;
+    }
     FunctionSpecKind kind = current_token == TOKEN_INLINE ? FUNC_SPEC_INLINE : FUNC_SPEC_NORETURN;
     advance_token();
     return new_function_spec(kind);
+}
+
+//
+// coro_frame_specifier (vcc extension)
+//     : CORO_FRAME '(' type_name ',' type_name ')'
+//     ;
+// The frame of a coroutine yielding Y and returning T: a struct with the tag
+// __co_frame that is never defined, so only pointers to it exist.  Two frame types
+// are the same type when their Y and T are (compatible_type).
+//
+Type *parse_coro_frame_specifier()
+{
+    if (parser_debug) {
+        printf("--- %s()\n", __func__);
+    }
+    expect_token(TOKEN_CORO_FRAME);
+    expect_token(TOKEN_LPAREN);
+    Type *frame                    = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
+    frame->u.struct_t.name         = xstrdup("__co_frame");
+    frame->u.struct_t.frame_yield  = parse_type_name();
+    expect_token(TOKEN_COMMA);
+    frame->u.struct_t.frame_result = parse_type_name();
+    expect_token(TOKEN_RPAREN);
+    return frame;
 }
 
 //

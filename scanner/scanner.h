@@ -48,14 +48,28 @@ enum {
     TOKEN_ALIGNOF,              // _Alignof
     TOKEN_VA_CLASS,             // __builtin_va_class
     TOKEN_ATOMIC,               // _Atomic
+    TOKEN_AWAIT,                // _Await (vcc extension)
     TOKEN_BOOL,                 // _Bool
     TOKEN_COMPLEX,              // _Complex
+    TOKEN_CORO,                 // _Coro (vcc extension)
+    TOKEN_CORO_FRAME,           // _Coro_frame (vcc extension)
     TOKEN_DEFER,                // _Defer (vcc extension)
     TOKEN_GENERIC,              // _Generic
     TOKEN_IMAGINARY,            // _Imaginary
     TOKEN_NORETURN,             // _Noreturn
     TOKEN_STATIC_ASSERT,        // _Static_assert
     TOKEN_THREAD_LOCAL,         // _Thread_local
+    TOKEN_YIELD,                // _Yield (vcc extension)
+    TOKEN_CO_INIT,              // __co_init: the coroutine operations, in CoOp order
+    TOKEN_CO_ALLOCA,            // __co_alloca
+    TOKEN_CO_RESUME,            // __co_resume
+    TOKEN_CO_CANCEL,            // __co_cancel
+    TOKEN_CO_DESTROY,           // __co_destroy
+    TOKEN_CO_DONE,              // __co_done
+    TOKEN_CO_VALUE,             // __co_value
+    TOKEN_CO_RESULT,            // __co_result
+    TOKEN_CO_SIZEOF,            // __co_sizeof
+    TOKEN_CO_ALIGNOF,           // __co_alignof
     TOKEN_FUNC_NAME,            // __func__
     TOKEN_IDENTIFIER,           // identifier (e.g., variable, _abc123)
     TOKEN_I_CONSTANT,           // integer/character constant (e.g., 123, 0x1a, 'a', L'\n')

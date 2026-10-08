@@ -47,6 +47,17 @@ static const char *expr_kind_str[] = {
     [EXPR_ALIGNOF]      = "Alignof",
     [EXPR_GENERIC]      = "Generic",
     [EXPR_VA_CLASS]     = "VaClass",
+    [EXPR_YIELD]        = "Yield",
+    [EXPR_AWAIT]        = "Await",
+    [EXPR_CO_OP]        = "CoOp",
+};
+
+const char *co_op_name[] = {
+    [CO_OP_INIT] = "__co_init",       [CO_OP_ALLOCA] = "__co_alloca",
+    [CO_OP_RESUME] = "__co_resume",   [CO_OP_CANCEL] = "__co_cancel",
+    [CO_OP_DESTROY] = "__co_destroy", [CO_OP_DONE] = "__co_done",
+    [CO_OP_VALUE] = "__co_value",     [CO_OP_RESULT] = "__co_result",
+    [CO_OP_SIZEOF] = "__co_sizeof",   [CO_OP_ALIGNOF] = "__co_alignof",
 };
 
 static const char *stmt_kind_str[] = { [STMT_EXPR] = "Expression",  [STMT_IF] = "If",
@@ -300,6 +311,14 @@ void print_type(FILE *fd, const Type *type, int indent)
                 print_field(fd, f, indent + 2);
             }
         }
+        if (type->u.struct_t.frame_yield) {
+            print_indent(fd, indent + 1);
+            fprintf(fd, "FrameYield:\n");
+            print_type(fd, type->u.struct_t.frame_yield, indent + 2);
+            print_indent(fd, indent + 1);
+            fprintf(fd, "FrameResult:\n");
+            print_type(fd, type->u.struct_t.frame_result, indent + 2);
+        }
         break;
     case TYPE_UNION:
         fprintf(fd, "union %s\n", type->u.struct_t.name ? type->u.struct_t.name : "(anonymous)");
@@ -501,6 +520,20 @@ void print_expression(FILE *fd, const Expr *expr, int indent)
     case EXPR_VA_CLASS:
         print_type(fd, expr->u.va_class, indent + 2);
         break;
+    case EXPR_YIELD:
+        if (expr->u.yield_expr)
+            print_expression(fd, expr->u.yield_expr, indent + 2);
+        break;
+    case EXPR_AWAIT:
+        print_expression(fd, expr->u.await_expr, indent + 2);
+        break;
+    case EXPR_CO_OP:
+        print_indent(fd, indent + 2);
+        fprintf(fd, "Op: %s\n", co_op_name[expr->u.co_op.op]);
+        for (const Expr *arg = expr->u.co_op.args; arg; arg = arg->next) {
+            print_expression(fd, arg, indent + 4);
+        }
+        break;
     case EXPR_GENERIC:
         print_expression(fd, expr->u.generic.controlling_expr, indent + 2);
         print_indent(fd, indent + 2);
@@ -641,6 +674,10 @@ void print_type_spec(FILE *fd, const TypeSpec *spec, int indent)
         fprintf(fd, "_Atomic\n");
         print_type(fd, spec->u.atomic.type, indent + 4);
         break;
+    case TYPE_SPEC_CORO_FRAME:
+        fprintf(fd, "_Coro_frame\n");
+        print_type(fd, spec->u.atomic.type, indent + 4);
+        break;
     }
 }
 
@@ -691,6 +728,10 @@ static void print_decl_spec(FILE *fd, const DeclSpec *spec, int indent)
             break;
         case FUNC_SPEC_NORETURN:
             fprintf(fd, "_Noreturn\n");
+            break;
+        case FUNC_SPEC_CORO:
+            fprintf(fd, "_Coro\n");
+            print_type(fd, spec->func_specs->yield_type, indent + 4);
             break;
         }
     }

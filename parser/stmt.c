@@ -159,6 +159,7 @@ DeclOrStmt *parse_block_item()
     if (is_storage_class_specifier(current_token) || is_type_specifier(current_token) ||
         is_type_qualifier(current_token) || current_token == TOKEN_ATOMIC ||
         current_token == TOKEN_INLINE || current_token == TOKEN_NORETURN ||
+        current_token == TOKEN_CORO ||
         current_token == TOKEN_ALIGNAS || current_token == TOKEN_STATIC_ASSERT) {
         Declaration *decl = parse_declaration();
         DeclOrStmt *ds    = new_decl_or_stmt(DECL_OR_STMT_DECL);
@@ -282,6 +283,7 @@ Stmt *parse_iteration_statement()
     if (is_storage_class_specifier(current_token) || is_type_specifier(current_token) ||
         is_type_qualifier(current_token) || current_token == TOKEN_ATOMIC ||
         current_token == TOKEN_INLINE || current_token == TOKEN_NORETURN ||
+        current_token == TOKEN_CORO ||
         current_token == TOKEN_ALIGNAS || current_token == TOKEN_STATIC_ASSERT) {
         Declaration *decl = parse_declaration();
         init              = new_for_init(FOR_INIT_DECL);

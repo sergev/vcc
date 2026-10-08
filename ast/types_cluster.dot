@@ -22,6 +22,8 @@ digraph Types_Cluster {
     Type -> Type [label="u.atomic.base"];
     Type -> TypeQualifier [label="qualifiers"];
     Type -> Field [label="u.struct_t.fields"];
+    Type -> Type [label="u.struct_t.frame_yield"];
+    Type -> Type [label="u.struct_t.frame_result"];
     Type -> Enumerator [label="u.enum_t.enumerators"];
     Type -> Param [label="u.function.params"];
 

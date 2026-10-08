@@ -24,7 +24,8 @@ typedef enum {
     TYPE_SPEC_UNION,
     TYPE_SPEC_ENUM,
     TYPE_SPEC_TYPEDEF_NAME,
-    TYPE_SPEC_ATOMIC
+    TYPE_SPEC_ATOMIC,
+    TYPE_SPEC_CORO_FRAME // _Coro_frame(Y, T): the finished frame type in u.atomic.type
 } TypeSpecKind; // Internal for parser only
 
 struct TypeSpec {   // Internal for parser only

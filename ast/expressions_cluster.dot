@@ -45,6 +45,9 @@ digraph Expressions_Cluster {
     Expr -> Type [label="u.align_of"];
     Expr -> Expr [label="u.generic.controlling_expr"];
     Expr -> GenericAssoc [label="u.generic.associations"];
+    Expr -> Expr [label="u.yield_expr"];
+    Expr -> Expr [label="u.await_expr"];
+    Expr -> Expr [label="u.co_op.args"];
     Expr -> Type [label="type"];
     GenericAssoc -> GenericAssoc [label="next"];
     GenericAssoc -> Type [label="u.type_assoc.type"];

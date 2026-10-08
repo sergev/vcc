@@ -13,6 +13,7 @@ module AST {
     StorageClass = Typedef | Extern | Static | ThreadLocal | Auto | Register
 
     FunctionSpec = Inline | NoReturn
+                 | Coro(Type yield_type)   -- vcc extension: _Coro(Y)
 
     AlignmentSpec = AlignType(Type type) | AlignExpr(Expr expr)
 
@@ -41,7 +42,9 @@ module AST {
          | Pointer(Type target, TypeQualifier* qualifiers)
          | Array(Type element, Expr? size, TypeQualifier* qualifiers, bool is_static)
          | Function(Type return_type, Param* params, bool variadic)
-         | Struct(identifier? name, Field* fields)
+         -- frame_yield and frame_result are set on _Coro_frame(Y, T) alone (vcc
+         -- extension): a struct tagged __co_frame, never defined
+         | Struct(identifier? name, Field* fields, Type? frame_yield, Type? frame_result)
          | Union(identifier? name, Field* fields)
          | Enum(identifier? name, Enumerator* enumerators)
          | TypedefName(identifier name)
@@ -79,7 +82,14 @@ module AST {
          -- __builtin_va_class(type): the target's argument class of `type`, an integer
          -- constant (AArch64: tac_aapcs64_class), for <stdarg.h>'s va_arg
          | VaClass(Type type)
+         -- vcc extension, coroutines: _Yield [expr], _Await expr, and __co_init ...
+         -- __co_alignof, where a coroutine is named by a Var
+         | Yield(Expr? expr)
+         | Await(Expr expr)
+         | CoOp(CoOp op, Expr* args)
          attributes(Type? type)
+
+    CoOp = Init | Alloca | Resume | Cancel | Destroy | Done | Value | Result | Sizeof | Alignof
 
     -- The integer kinds also carry `spelling`: radix and suffixes, from which the
     -- semantic pass types the constant for the target (C11 §6.4.4.1).

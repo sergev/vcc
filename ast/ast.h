@@ -97,6 +97,8 @@ struct Type {
             int cached_size;  /* bytes; 0 = not resolved (set by validate_type while tag is live) */
             int cached_align; /* bytes; 0 = not resolved */
             const struct StructDef *cached_def; /* the tag's definition; NULL = not resolved */
+            Type *frame_yield;  /* _Coro_frame(Y, T): Y (void included); NULL for any other */
+            Type *frame_result; /* _Coro_frame(Y, T): T */
         } struct_t; /* optional name */
         struct {
             Ident name;
@@ -208,11 +210,16 @@ struct DeclSpec {
     AlignmentSpec *align_spec; // _Alignas
 };
 
-typedef enum { FUNC_SPEC_INLINE, FUNC_SPEC_NORETURN } FunctionSpecKind;
+typedef enum {
+    FUNC_SPEC_INLINE,
+    FUNC_SPEC_NORETURN,
+    FUNC_SPEC_CORO /* vcc extension: _Coro(Y) */
+} FunctionSpecKind;
 
 struct FunctionSpec {
     FunctionSpec *next; /* linked list */
     FunctionSpecKind kind;
+    Type *yield_type; /* FUNC_SPEC_CORO: Y, void included; else NULL */
 };
 
 typedef enum { ALIGN_SPEC_TYPE, ALIGN_SPEC_EXPR } AlignmentSpecKind;
@@ -282,8 +289,25 @@ typedef enum {
     EXPR_SIZEOF_TYPE,
     EXPR_ALIGNOF,
     EXPR_GENERIC,
-    EXPR_VA_CLASS // __builtin_va_class(type): the target's argument class, for va_arg
+    EXPR_VA_CLASS, // __builtin_va_class(type): the target's argument class, for va_arg
+    EXPR_YIELD,    // vcc extension: _Yield [expr]
+    EXPR_AWAIT,    // vcc extension: _Await expr
+    EXPR_CO_OP     // vcc extension: __co_init(...) ... __co_alignof(...)
 } ExprKind;
+
+// The coroutine operations, in the order of their tokens (TOKEN_CO_INIT ...).
+typedef enum {
+    CO_OP_INIT,    // __co_init(storage, bytes, f, args...)
+    CO_OP_ALLOCA,  // __co_alloca(f, extra, args...)
+    CO_OP_RESUME,  // __co_resume(p)
+    CO_OP_CANCEL,  // __co_cancel(p)
+    CO_OP_DESTROY, // __co_destroy(p)
+    CO_OP_DONE,    // __co_done(p)
+    CO_OP_VALUE,   // __co_value(p)
+    CO_OP_RESULT,  // __co_result(p)
+    CO_OP_SIZEOF,  // __co_sizeof(f)
+    CO_OP_ALIGNOF  // __co_alignof(f)
+} CoOp;
 
 typedef enum {
     UNARY_ADDRESS,
@@ -394,6 +418,12 @@ struct Expr {
         Type *sizeof_type;
         Type *align_of;
         Type *va_class;
+        Expr *yield_expr; /* optional */
+        Expr *await_expr;
+        struct {
+            CoOp op;
+            Expr *args; /* a coroutine is named by an EXPR_VAR */
+        } co_op;
         struct {
             Expr *controlling_expr;
             GenericAssoc *associations;
@@ -692,6 +722,7 @@ void print_declaration(FILE *fd, Declaration *decl, int indent);
 void print_external_decl(FILE *fd, ExternalDecl *ext, int indent);
 void print_initializer(FILE *fd, const Initializer *init, int indent);
 extern const char *type_kind_str[];
+extern const char *co_op_name[]; // "__co_init" ... "__co_alignof", by CoOp
 
 #ifdef __cplusplus
 }

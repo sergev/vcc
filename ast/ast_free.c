@@ -38,6 +38,8 @@ void free_type(Type *type)
     case TYPE_UNION:
         xfree(type->u.struct_t.name);
         free_field(type->u.struct_t.fields);
+        free_type(type->u.struct_t.frame_yield);
+        free_type(type->u.struct_t.frame_result);
         break;
     case TYPE_ENUM:
         xfree(type->u.enum_t.name);
@@ -146,6 +148,7 @@ void free_function_spec(FunctionSpec *fs)
 {
     while (fs != NULL) {
         FunctionSpec *next = fs->next;
+        free_type(fs->yield_type);
         xfree(fs);
         fs = next;
     }
@@ -280,6 +283,15 @@ void free_expression(Expr *expr)
         case EXPR_GENERIC:
             free_expression(expr->u.generic.controlling_expr);
             free_generic_assoc(expr->u.generic.associations);
+            break;
+        case EXPR_YIELD:
+            free_expression(expr->u.yield_expr);
+            break;
+        case EXPR_AWAIT:
+            free_expression(expr->u.await_expr);
+            break;
+        case EXPR_CO_OP:
+            free_expression(expr->u.co_op.args);
             break;
         }
         free_type(expr->type);
@@ -449,6 +461,7 @@ void free_type_spec(TypeSpec *ts)
             xfree(ts->u.typedef_name.name);
             break;
         case TYPE_SPEC_ATOMIC:
+        case TYPE_SPEC_CORO_FRAME:
             free_type(ts->u.atomic.type);
             break;
         }

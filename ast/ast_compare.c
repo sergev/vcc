@@ -50,6 +50,9 @@ bool compare_type(const Type *a, const Type *b)
     case TYPE_UNION:
         if (!compare_ident(a->u.struct_t.name, b->u.struct_t.name))
             return false;
+        if (!compare_type(a->u.struct_t.frame_yield, b->u.struct_t.frame_yield) ||
+            !compare_type(a->u.struct_t.frame_result, b->u.struct_t.frame_result))
+            return false;
         return compare_field(a->u.struct_t.fields, b->u.struct_t.fields);
     case TYPE_ENUM:
         if (!compare_ident(a->u.enum_t.name, b->u.enum_t.name))
@@ -173,7 +176,7 @@ bool compare_decl_spec(const DeclSpec *a, const DeclSpec *b)
 bool compare_function_spec(const FunctionSpec *a, const FunctionSpec *b)
 {
     while (a && b) {
-        if (a->kind != b->kind)
+        if (a->kind != b->kind || !compare_type(a->yield_type, b->yield_type))
             return false;
         a = a->next;
         b = b->next;
@@ -339,6 +342,12 @@ bool compare_expr(const Expr *a, const Expr *b)
         if (!compare_expr(a->u.generic.controlling_expr, b->u.generic.controlling_expr))
             return false;
         return compare_generic_assoc(a->u.generic.associations, b->u.generic.associations);
+    case EXPR_YIELD:
+        return compare_expr(a->u.yield_expr, b->u.yield_expr);
+    case EXPR_AWAIT:
+        return compare_expr(a->u.await_expr, b->u.await_expr);
+    case EXPR_CO_OP:
+        return a->u.co_op.op == b->u.co_op.op && compare_expr(a->u.co_op.args, b->u.co_op.args);
     }
     return compare_type(a->type, b->type);
 }

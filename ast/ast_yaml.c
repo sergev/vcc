@@ -270,6 +270,14 @@ static void export_type(FILE *fd, Type *type, int level)
             fprintf(fd, "fields:\n");
             export_field(fd, type->u.struct_t.fields, level + 1);
         }
+        if (type->u.struct_t.frame_yield) {
+            print_indent(fd, level);
+            fprintf(fd, "frame_yield:\n");
+            export_type(fd, type->u.struct_t.frame_yield, level + 1);
+            print_indent(fd, level);
+            fprintf(fd, "frame_result:\n");
+            export_type(fd, type->u.struct_t.frame_result, level + 1);
+        }
         break;
     case TYPE_ENUM:
         export_ident(fd, type->u.enum_t.name, level);
@@ -334,6 +342,12 @@ static void export_function_spec(FILE *fd, const FunctionSpec *fs, int level)
             break;
         case FUNC_SPEC_NORETURN:
             fprintf(fd, "noreturn\n");
+            break;
+        case FUNC_SPEC_CORO:
+            fprintf(fd, "coro\n");
+            print_indent(fd, level + 1);
+            fprintf(fd, "yield_type:\n");
+            export_type(fd, fs->yield_type, level + 2);
             break;
         }
         fs = fs->next;
@@ -895,6 +909,31 @@ static void export_expr(FILE *fd, Expr *expr, int level)
             print_indent(fd, level + 1);
             fprintf(fd, "associations:\n");
             export_generic_assoc(fd, expr->u.generic.associations, level + 2);
+        }
+        break;
+    case EXPR_YIELD:
+        fprintf(fd, "yield\n");
+        if (expr->u.yield_expr) {
+            print_indent(fd, level + 1);
+            fprintf(fd, "expr:\n");
+            export_expr(fd, expr->u.yield_expr, level + 2);
+        }
+        break;
+    case EXPR_AWAIT:
+        fprintf(fd, "await\n");
+        print_indent(fd, level + 1);
+        fprintf(fd, "expr:\n");
+        export_expr(fd, expr->u.await_expr, level + 2);
+        break;
+    case EXPR_CO_OP:
+        fprintf(fd, "co_op\n");
+        print_indent(fd, level + 1);
+        fprintf(fd, "op: %s\n", co_op_name[expr->u.co_op.op]);
+        if (expr->u.co_op.args) {
+            print_indent(fd, level + 1);
+            fprintf(fd, "args:\n");
+            for (Expr *arg = expr->u.co_op.args; arg; arg = arg->next)
+                export_expr(fd, arg, level + 2);
         }
         break;
     }

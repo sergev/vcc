@@ -29,6 +29,7 @@ digraph Declarations_Cluster {
     DeclSpec -> TypeQualifier [label="qualifiers"];
     DeclSpec -> StorageClass [label="storage"];
     DeclSpec -> FunctionSpec [label="func_specs"];
+    FunctionSpec -> Type [label="yield_type"];
     DeclSpec -> AlignmentSpec [label="align_spec"];
     AlignmentSpec -> Type [label="u.type"];
     AlignmentSpec -> Expr [label="u.expr"];

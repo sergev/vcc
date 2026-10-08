@@ -81,6 +81,10 @@ Type *clone_type(const Type *type, const char *funcname, const char *filename, u
         result->u.struct_t.cached_size  = type->u.struct_t.cached_size;
         result->u.struct_t.cached_align = type->u.struct_t.cached_align;
         result->u.struct_t.cached_def   = type->u.struct_t.cached_def;
+        result->u.struct_t.frame_yield =
+            clone_type(type->u.struct_t.frame_yield, __func__, __FILE__, __LINE__);
+        result->u.struct_t.frame_result =
+            clone_type(type->u.struct_t.frame_result, __func__, __FILE__, __LINE__);
         break;
     case TYPE_ENUM:
         result->u.enum_t.name        = type->u.enum_t.name ? xstrdup(type->u.enum_t.name) : NULL;
@@ -208,6 +212,7 @@ FunctionSpec *clone_function_spec(const FunctionSpec *fs)
     FunctionSpec *result = new_function_spec(fs->kind);
     if (result == NULL)
         return NULL;
+    result->yield_type = clone_type(fs->yield_type, __func__, __FILE__, __LINE__);
     result->next = clone_function_spec(fs->next);
     return result;
 }
@@ -364,6 +369,16 @@ Expr *clone_expression(const Expr *expr)
     case EXPR_GENERIC:
         result->u.generic.controlling_expr = clone_expression(expr->u.generic.controlling_expr);
         result->u.generic.associations     = clone_generic_assoc(expr->u.generic.associations);
+        break;
+    case EXPR_YIELD:
+        result->u.yield_expr = clone_expression(expr->u.yield_expr);
+        break;
+    case EXPR_AWAIT:
+        result->u.await_expr = clone_expression(expr->u.await_expr);
+        break;
+    case EXPR_CO_OP:
+        result->u.co_op.op   = expr->u.co_op.op;
+        result->u.co_op.args = clone_expression(expr->u.co_op.args);
         break;
     }
     result->type = clone_type(expr->type, __func__, __FILE__, __LINE__);
@@ -585,6 +600,7 @@ TypeSpec *clone_type_spec(const TypeSpec *ts)
             ts->u.typedef_name.name ? xstrdup(ts->u.typedef_name.name) : NULL;
         break;
     case TYPE_SPEC_ATOMIC:
+    case TYPE_SPEC_CORO_FRAME:
         result->u.atomic.type = clone_type(ts->u.atomic.type, __func__, __FILE__, __LINE__);
         break;
     }

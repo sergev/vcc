@@ -157,6 +157,8 @@ Type *import_type(WFILE *input)
                 break;
             next_field = &(*next_field)->next;
         }
+        type->u.struct_t.frame_yield  = import_type(input);
+        type->u.struct_t.frame_result = import_type(input);
         break;
     case TYPE_ENUM:
         type->u.enum_t.name = wgetstr(input);
@@ -356,12 +358,14 @@ FunctionSpec *import_function_spec(WFILE *input)
     check_input(input, "function spec tag");
     if (tag == TAG_EOL)
         return NULL;
-    if (tag < TAG_FUNCTIONSPEC || tag > TAG_FUNCTIONSPEC + FUNC_SPEC_NORETURN) {
+    if (tag < TAG_FUNCTIONSPEC || tag > TAG_FUNCTIONSPEC + FUNC_SPEC_CORO) {
         fprintf(stderr, "Error: Expected TAG_FUNCTIONSPEC, got 0x%zx\n", tag);
         exit(1);
     }
     FunctionSpecKind kind = (FunctionSpecKind)(tag - TAG_FUNCTIONSPEC);
     FunctionSpec *fspec   = new_function_spec(kind);
+    if (kind == FUNC_SPEC_CORO)
+        fspec->yield_type = import_type(input);
     return fspec;
 }
 
@@ -499,7 +503,7 @@ Expr *import_expr(WFILE *input)
     check_input(input, "expr tag");
     if (tag == TAG_EOL)
         return NULL;
-    if (tag < TAG_EXPR || tag > TAG_EXPR + EXPR_VA_CLASS) {
+    if (tag < TAG_EXPR || tag > TAG_EXPR + EXPR_CO_OP) {
         fprintf(stderr, "Error: Expected TAG_EXPR, got 0x%zx\n", tag);
         exit(1);
     }
@@ -588,6 +592,24 @@ Expr *import_expr(WFILE *input)
     case EXPR_VA_CLASS:
         expr->u.va_class = import_type(input);
         break;
+    case EXPR_YIELD:
+        expr->u.yield_expr = import_expr(input);
+        break;
+    case EXPR_AWAIT:
+        expr->u.await_expr = import_expr(input);
+        break;
+    case EXPR_CO_OP: {
+        expr->u.co_op.op = (CoOp)wgetw(input);
+        check_input(input, "coroutine operation");
+        Expr **next_co_arg = &expr->u.co_op.args;
+        for (;;) {
+            *next_co_arg = import_expr(input);
+            if (!*next_co_arg)
+                break;
+            next_co_arg = &(*next_co_arg)->next;
+        }
+        break;
+    }
     case EXPR_GENERIC:
         expr->u.generic.controlling_expr = import_expr(input);
         GenericAssoc **next_gasc         = &expr->u.generic.associations;

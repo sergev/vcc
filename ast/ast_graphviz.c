@@ -274,6 +274,10 @@ static void export_type(FILE *fd, Type *type, int parent_id)
         if (type->u.struct_t.fields) {
             export_field(fd, type->u.struct_t.fields, id);
         }
+        if (type->u.struct_t.frame_yield) {
+            export_type(fd, type->u.struct_t.frame_yield, id);
+            export_type(fd, type->u.struct_t.frame_result, id);
+        }
         break;
     case TYPE_ENUM:
         export_ident(fd, type->u.enum_t.name, id, "name");
@@ -337,9 +341,14 @@ static void export_function_spec(FILE *fd, const FunctionSpec *fs, int parent_id
         case FUNC_SPEC_NORETURN:
             fprintf(fd, "noreturn");
             break;
+        case FUNC_SPEC_CORO:
+            fprintf(fd, "coro");
+            break;
         }
         fprintf(fd, "\", shape=box];\n");
         fprintf(fd, "  n%d -> n%d [label=\"func_spec\"];\n", parent_id, id);
+        if (fs->yield_type)
+            export_type(fd, fs->yield_type, id);
         fs = fs->next;
     }
 }
@@ -751,6 +760,15 @@ static void export_expr(FILE *fd, Expr *expr, int parent_id)
     case EXPR_GENERIC:
         fprintf(fd, "generic");
         break;
+    case EXPR_YIELD:
+        fprintf(fd, "yield");
+        break;
+    case EXPR_AWAIT:
+        fprintf(fd, "await");
+        break;
+    case EXPR_CO_OP:
+        fprintf(fd, "%s", co_op_name[expr->u.co_op.op]);
+        break;
     }
     fprintf(fd, "\", shape=oval];\n");
     fprintf(fd, "  n%d -> n%d [label=\"expr\"];\n", parent_id, id);
@@ -835,6 +853,17 @@ static void export_expr(FILE *fd, Expr *expr, int parent_id)
         if (expr->u.generic.associations) {
             export_generic_assoc(fd, expr->u.generic.associations, id);
         }
+        break;
+    case EXPR_YIELD:
+        if (expr->u.yield_expr)
+            export_expr(fd, expr->u.yield_expr, id);
+        break;
+    case EXPR_AWAIT:
+        export_expr(fd, expr->u.await_expr, id);
+        break;
+    case EXPR_CO_OP:
+        for (Expr *arg = expr->u.co_op.args; arg; arg = arg->next)
+            export_expr(fd, arg, id);
         break;
     }
     if (expr->type) {

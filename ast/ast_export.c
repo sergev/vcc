@@ -113,6 +113,8 @@ void export_type(WFILE *fd, Type *type)
             export_field(fd, f);
         }
         wputw(TAG_EOL, fd);
+        export_type(fd, type->u.struct_t.frame_yield);
+        export_type(fd, type->u.struct_t.frame_result);
         break;
     case TYPE_ENUM:
         wputstr(type->u.enum_t.name, fd);
@@ -261,6 +263,8 @@ void export_function_spec(WFILE *fd, const FunctionSpec *fspec)
         return;
     }
     wputw(TAG_FUNCTIONSPEC + fspec->kind, fd);
+    if (fspec->kind == FUNC_SPEC_CORO)
+        export_type(fd, fspec->yield_type);
 }
 
 void export_alignment_spec(WFILE *fd, AlignmentSpec *aspec)
@@ -446,6 +450,19 @@ void export_expr(WFILE *fd, Expr *expr)
         export_expr(fd, expr->u.generic.controlling_expr);
         for (GenericAssoc *ga = expr->u.generic.associations; ga; ga = ga->next) {
             export_generic_assoc(fd, ga);
+        }
+        wputw(TAG_EOL, fd);
+        break;
+    case EXPR_YIELD:
+        export_expr(fd, expr->u.yield_expr);
+        break;
+    case EXPR_AWAIT:
+        export_expr(fd, expr->u.await_expr);
+        break;
+    case EXPR_CO_OP:
+        wputw(expr->u.co_op.op, fd);
+        for (Expr *arg = expr->u.co_op.args; arg; arg = arg->next) {
+            export_expr(fd, arg);
         }
         wputw(TAG_EOL, fd);
         break;

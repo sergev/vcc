@@ -147,6 +147,12 @@ static bool is_constant_expression(const Expr *expression)
     case EXPR_GENERIC:
         /* _Generic is not constant (type selection may be runtime-dependent) */
         return false;
+
+    case EXPR_YIELD:
+    case EXPR_AWAIT:
+    case EXPR_CO_OP:
+        /* Coroutine operations run code; co_sizeof is a link-time value */
+        return false;
     }
 
     return false; /* Unreachable, but for safety */
@@ -642,6 +648,58 @@ static Expr *parse_prefix_operand()
     return parse_unary_expression();
 }
 
+// Can this token begin an expression?  A bare `_Yield` is followed by one that cannot.
+static bool starts_expression(int token)
+{
+    switch (token) {
+    case TOKEN_IDENTIFIER:
+    case TOKEN_I_CONSTANT:
+    case TOKEN_F_CONSTANT:
+    case TOKEN_STRING_LITERAL:
+    case TOKEN_ENUMERATION_CONSTANT:
+    case TOKEN_FUNC_NAME:
+    case TOKEN_GENERIC:
+    case TOKEN_LPAREN:
+    case TOKEN_INC_OP:
+    case TOKEN_DEC_OP:
+    case TOKEN_AMPERSAND:
+    case TOKEN_STAR:
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:
+    case TOKEN_TILDE:
+    case TOKEN_NOT:
+    case TOKEN_SIZEOF:
+    case TOKEN_ALIGNOF:
+    case TOKEN_VA_CLASS:
+    case TOKEN_YIELD:
+    case TOKEN_AWAIT:
+        return true;
+    default:
+        return token >= TOKEN_CO_INIT && token <= TOKEN_CO_ALIGNOF;
+    }
+}
+
+// The coroutine operations (vcc extension): keywords with call syntax.  The number of
+// arguments is checked here; their types, and which name a coroutine, in semantic.
+static Expr *parse_co_op()
+{
+    CoOp op = (CoOp)(current_token - TOKEN_CO_INIT);
+    advance_token();
+    expect_token(TOKEN_LPAREN);
+    Expr *result         = new_expression(EXPR_CO_OP);
+    result->u.co_op.op   = op;
+    result->u.co_op.args = current_token == TOKEN_RPAREN ? NULL : parse_argument_expression_list();
+    expect_token(TOKEN_RPAREN);
+    int n = 0;
+    for (const Expr *a = result->u.co_op.args; a; a = a->next)
+        n++;
+    int min = op == CO_OP_INIT ? 3 : op == CO_OP_ALLOCA ? 2 : 1;
+    if (n < min || (min == 1 && n > 1))
+        fatal_error("%s takes %s%d argument%s", co_op_name[op], min > 1 ? "at least " : "", min,
+                    min > 1 ? "s" : "");
+    return result;
+}
+
 //
 // unary_expression
 //     : postfix_expression
@@ -651,7 +709,14 @@ static Expr *parse_prefix_operand()
 //     | SIZEOF unary_expression
 //     | SIZEOF '(' type_name ')'
 //     | ALIGNOF '(' type_name ')'
+//     | YIELD relational_expression          /* vcc extension */
+//     | YIELD                                /* vcc extension */
+//     | AWAIT cast_expression                /* vcc extension */
+//     | CO_INIT ... CO_ALIGNOF '(' argument_expression_list ')'   /* vcc extension */
 //     ;
+// The operand of _Yield is a relational expression, so `yield i == CO_CANCEL` means
+// `(yield i) == CO_CANCEL`; that of _Await binds like a cast's, so `await f(x) + 1`
+// means `(await f(x)) + 1`.
 //
 Expr *parse_unary_expression()
 {
@@ -712,6 +777,19 @@ Expr *parse_unary_expression()
         result->u.va_class = parse_type_name();
         expect_token(TOKEN_RPAREN);
         return result;
+    } else if (current_token == TOKEN_YIELD) {
+        advance_token();
+        Expr *result = new_expression(EXPR_YIELD);
+        if (starts_expression(current_token))
+            result->u.yield_expr = parse_relational_expression();
+        return result;
+    } else if (current_token == TOKEN_AWAIT) {
+        advance_token();
+        Expr *result         = new_expression(EXPR_AWAIT);
+        result->u.await_expr = parse_cast_expression();
+        return result;
+    } else if (current_token >= TOKEN_CO_INIT && current_token <= TOKEN_CO_ALIGNOF) {
+        return parse_co_op();
     } else {
         return parse_postfix_expression();
     }

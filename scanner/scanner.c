@@ -160,15 +160,29 @@ static int is_keyword(const char *str)
         { "_Alignas", TOKEN_ALIGNAS },
         { "_Alignof", TOKEN_ALIGNOF },
         { "_Atomic", TOKEN_ATOMIC },
+        { "_Await", TOKEN_AWAIT },
         { "_Bool", TOKEN_BOOL },
         { "_Complex", TOKEN_COMPLEX },
+        { "_Coro", TOKEN_CORO },
+        { "_Coro_frame", TOKEN_CORO_FRAME },
         { "_Defer", TOKEN_DEFER },
         { "_Generic", TOKEN_GENERIC },
         { "_Imaginary", TOKEN_IMAGINARY },
         { "_Noreturn", TOKEN_NORETURN },
         { "_Static_assert", TOKEN_STATIC_ASSERT },
         { "_Thread_local", TOKEN_THREAD_LOCAL },
+        { "_Yield", TOKEN_YIELD },
         { "__builtin_va_class", TOKEN_VA_CLASS },
+        { "__co_alignof", TOKEN_CO_ALIGNOF },
+        { "__co_alloca", TOKEN_CO_ALLOCA },
+        { "__co_cancel", TOKEN_CO_CANCEL },
+        { "__co_destroy", TOKEN_CO_DESTROY },
+        { "__co_done", TOKEN_CO_DONE },
+        { "__co_init", TOKEN_CO_INIT },
+        { "__co_result", TOKEN_CO_RESULT },
+        { "__co_resume", TOKEN_CO_RESUME },
+        { "__co_sizeof", TOKEN_CO_SIZEOF },
+        { "__co_value", TOKEN_CO_VALUE },
         { "__func__", TOKEN_FUNC_NAME },
         { "auto", TOKEN_AUTO },
         { "break", TOKEN_BREAK },
@@ -800,14 +814,28 @@ const char *token_name(int token)
     case TOKEN_ALIGNOF:              return "'_Alignof'";
     case TOKEN_VA_CLASS:             return "'__builtin_va_class'";
     case TOKEN_ATOMIC:               return "'_Atomic'";
+    case TOKEN_AWAIT:                return "'_Await'";
     case TOKEN_BOOL:                 return "'_Bool'";
     case TOKEN_COMPLEX:              return "'_Complex'";
+    case TOKEN_CORO:                 return "'_Coro'";
+    case TOKEN_CORO_FRAME:           return "'_Coro_frame'";
     case TOKEN_DEFER:                return "'_Defer'";
     case TOKEN_GENERIC:              return "'_Generic'";
     case TOKEN_IMAGINARY:            return "'_Imaginary'";
     case TOKEN_NORETURN:             return "'_Noreturn'";
     case TOKEN_STATIC_ASSERT:        return "'_Static_assert'";
     case TOKEN_THREAD_LOCAL:         return "'_Thread_local'";
+    case TOKEN_YIELD:                return "'_Yield'";
+    case TOKEN_CO_INIT:              return "'__co_init'";
+    case TOKEN_CO_ALLOCA:            return "'__co_alloca'";
+    case TOKEN_CO_RESUME:            return "'__co_resume'";
+    case TOKEN_CO_CANCEL:            return "'__co_cancel'";
+    case TOKEN_CO_DESTROY:           return "'__co_destroy'";
+    case TOKEN_CO_DONE:              return "'__co_done'";
+    case TOKEN_CO_VALUE:             return "'__co_value'";
+    case TOKEN_CO_RESULT:            return "'__co_result'";
+    case TOKEN_CO_SIZEOF:            return "'__co_sizeof'";
+    case TOKEN_CO_ALIGNOF:           return "'__co_alignof'";
     case TOKEN_FUNC_NAME:            return "'__func__'";
     case TOKEN_IDENTIFIER:           return "identifier";
     case TOKEN_I_CONSTANT:           return "integer constant";
