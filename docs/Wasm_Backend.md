@@ -410,6 +410,20 @@ headers are `libc/wasm32/include` (`float.h` for binary128, `limits.h` for the s
 (`inttypes.h`, `math.h`), then `libc/common/include`. Everything installs to
 `share/vcc/wasm32/`, `run.mjs` into its `lib/`.
 
+### A process of Braam
+
+The target `wasm32-braam` uses this backend unchanged, with a runtime of its own in
+`libc/wasm32/braam` ([backend/wasm/Plan.md](../backend/wasm/Plan.md) §7): `exports.s`
+(`crt0.o`: the five exports `_start`, `_resume`, `_alloc`, `_free`, `_sig`, and the
+imports `kernel.sys` and `kernel.sys_async`), `rt.c` (the root task, a coroutine that
+awaits `main` and flushes, stepped by `_start` and `_resume`), `sys.c` (`braam_sys`,
+`read`, `write`, `open`, `close`, `sleep_ms`, coroutines), `stdio.c` (buffered streams,
+`fflush` a coroutine), `malloc.c` (first fit, since Braam frees every reply block) and
+`strerror.c`, with this library's objects but the console, `main.s`, the bump
+allocator and `strerror`. Its headers come first: `braam.h`, `unistd.h`, `fcntl.h`,
+`errno.h`, `stdio.h`, `stdlib.h`. `run.mjs` there is a fake kernel for node, which checks
+the process ABI before it runs a program.
+
 ## Costs against clang
 
 `scripts/bench_wasm.sh` compiles C files by our passes, as they are and with the

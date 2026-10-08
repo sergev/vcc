@@ -37,6 +37,7 @@ linker       link          .o   -> a.out
 | AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `avr-as -mmcu=atmega1280` | `avr-ld -m avr51 -T link.ld` |
 | MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
 | WebAssembly (clang's wasm32 C ABI) | `wasm32` | `vgenwasm` | `clang --target=wasm32 --no-default-config <features> -c` | `wasm-ld --stack-first -z stack-size=1048576` |
+| A process of Braam (wasm32, [backend/wasm/Plan.md](../backend/wasm/Plan.md) §7) | `wasm32-braam` | `vgenwasm` | the same | `wasm-ld --no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections --initial-memory=<pages * 64 KiB>`, then the `braam` section |
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
@@ -69,7 +70,7 @@ with no linker flags:
 | `arm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` |
 | `x86_64` | `clang --target=x86_64-none-elf -c` |
 | `avr` | `clang --target=avr -mmcu=atmega1280 -c` |
-| `wasm32` | `clang --target=wasm32 --no-default-config -mreference-types -mbulk-memory -msign-ext -mmutable-globals -mnontrapping-fptoint -c` |
+| `wasm32`, `wasm32-braam` | `clang --target=wasm32 --no-default-config -mreference-types -mbulk-memory -msign-ext -mmutable-globals -mnontrapping-fptoint -c` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
 and removed on exit.
@@ -87,7 +88,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32` or `besm6`; by default the host (see above) |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `wasm32-braam` or `besm6`; by default the host (see above) |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -100,6 +101,7 @@ and removed on exit.
 | `-Lpath`, `-lname` | Passed to the linker, after the objects |
 | `-T file` | Linker script instead of the standard `link.ld` (not `besm6`; for `mmix` and `wasm32`, which have none, a script of one's own); passed on for a hosted target |
 | `-nostdinc` | Do not add the target's standard include directory |
+| `--initial-pages=N` | `wasm32-braam`: the process's initial memory, 1 to 1600 pages of 64 KiB (default 4, braam-core's `BRAAM_BIN_INITIAL_PAGES`); the link's `--initial-memory` and the `braam` section both say it |
 | `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries; a hosted target passes it to its C compiler and drops `libvcc.a` |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
 | `-W…`, `-f…`, `-w`, `-std=…`, `-pedantic`, `-pipe`, `-arch A`, `-isysroot D` | Accepted and ignored, so that a build system written for GCC or clang (CMake among them) can drive `vcc` |
@@ -316,3 +318,15 @@ skip when they are missing.
 ```sh
 ./build/cc/test/cc-tests
 ```
+
+## A process of Braam
+
+`-t wasm32-braam` builds a process for [Braam](../backend/wasm/Plan.md#7-braam-target-runtime-and-libc):
+the same code generator as `wasm32`, `lower` with Braam's process model (`main` is
+`coro(braam_call *) int main(int, char **)`), the headers and runtime of
+`share/vcc/wasm32-braam`, and a link with the memory imported and no entry, the five
+exports coming from `crt0.o`. After the link the driver appends the custom section
+`braam` that `exec` reads (magic, `PROC_ABI`, flags, the initial pages, 1600), as
+braam-core's `tools/stamp.py` does for its own programs, replacing an earlier one.
+`node share/vcc/wasm32-braam/lib/run.mjs prog [args...]` runs the result on a fake
+kernel.
