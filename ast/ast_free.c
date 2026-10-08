@@ -374,6 +374,9 @@ void free_statement(Stmt *stmt)
     case STMT_DEFAULT:
         free_statement(stmt->u.default_stmt);
         break;
+    case STMT_DEFER:
+        free_statement(stmt->u.defer_stmt);
+        break;
     }
     xfree(stmt->loop_end_label);
     xfree(stmt->loop_continue_label);

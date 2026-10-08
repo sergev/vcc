@@ -155,6 +155,7 @@ endif() # BESM6_TOOLS_FOUND
 #
 install(FILES
     include/besm6.h
+    ${LIBC_COMMON_INCLUDE_DIR}/coro.h
     include/float.h
     ${LIBC_COMMON_INCLUDE_DIR}/iso646.h
     include/limits.h

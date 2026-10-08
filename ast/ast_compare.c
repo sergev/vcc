@@ -475,6 +475,9 @@ bool compare_stmt(const Stmt *a, const Stmt *b)
     case STMT_DEFAULT:
         body_ok = compare_stmt(a->u.default_stmt, b->u.default_stmt);
         break;
+    case STMT_DEFER:
+        body_ok = compare_stmt(a->u.defer_stmt, b->u.defer_stmt);
+        break;
     default:
         body_ok = true;
         break;

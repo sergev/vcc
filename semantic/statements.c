@@ -176,6 +176,11 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
         s->u.labeled.stmt = typecheck_statement(ret_type, s->u.labeled.stmt);
         return s;
     }
+    case STMT_DEFER:
+        // What a deferred statement may not do (leave it, or a jump past it) is
+        // checked by check_defers() once the function's labels are known.
+        s->u.defer_stmt = typecheck_statement(ret_type, s->u.defer_stmt);
+        return s;
     default:
         fatal_error("Unsupported statement kind %d", s->kind);
     }

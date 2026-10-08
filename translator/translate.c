@@ -72,6 +72,12 @@ char *new_typed_temp(TacCtx *ctx, Tac_Type *type)
 // from observable globals (whose stores must be preserved).
 void tac_record_local(TacCtx *ctx, const char *name, const Type *type)
 {
+    // A deferred statement is lowered once per exit, so its locals are met again.
+    if (ctx->defer_depth > 0) {
+        for (const Tac_Param *p = ctx->locals; p; p = p->next)
+            if (strcmp(p->name, name) == 0)
+                return;
+    }
     record_symbol(ctx, name, ast_type_to_tac_type(type));
 }
 
@@ -616,6 +622,11 @@ static void free_label_name(intptr_t v)
     xfree((void *)v);
 }
 
+void free_user_labels(StringMap *labels)
+{
+    map_destroy_free(labels, free_label_name);
+}
+
 // Map a user C label to a unique per-function TAC name (%L<n>) so identically
 // named labels in different functions never collide once the Unix backend drops
 // Madlen's per-function module framing (b6as emits into one flat namespace).
@@ -919,13 +930,18 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         // backend (see translate.h); write the advanced value back afterwards.
         TacCtx ctx = { NULL, NULL, *label_seq, NULL, NULL, NULL, NULL, NULL };
         ctx.sret_name = sret_name;
+        ctx.body      = ast->u.function.body;
         map_init(&ctx.user_labels);
         gen_stmt(&ctx, ast->u.function.body);
         *label_seq            = ctx.temp_id;
         tl->u.function.body   = ctx.head;
         tl->u.function.locals = ctx.locals;
         tac_free_param(ctx.array_locals);
-        map_destroy_free(&ctx.user_labels, free_label_name);
+        free_user_labels(&ctx.user_labels);
+        xfree(ctx.scopes);
+        xfree(ctx.breaks);
+        if (ctx.label_pos_ready)
+            defer_free_labels(&ctx.label_pos);
 
         // Attach this function's block-scope statics, captured during typecheck.  The
         // capture list is newest-first; prepend each as we walk it so the result is in

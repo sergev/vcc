@@ -17,6 +17,7 @@ add_library(semantic STATIC
     type_utils.c
     const_convert.c
     label_loops.c
+    defer.c
     resolve_labels.c
     target.c
     tac_type.c
@@ -36,6 +37,7 @@ add_executable(semantic-tests
    test/pipeline_tests.cpp
    test/init_normalize_tests.cpp
    test/label_loops_tests.cpp
+   test/defer_tests.cpp
    test/const_convert_tests.cpp
    test/coercion_tests.cpp
    test/intrinsics_tests.cpp

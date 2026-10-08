@@ -708,7 +708,7 @@ Stmt *import_stmt(WFILE *input)
     check_input(input, "stmt tag");
     if (tag == TAG_EOL)
         return NULL;
-    if (tag < TAG_STMT || tag > TAG_STMT + STMT_DEFAULT) {
+    if (tag < TAG_STMT || tag > TAG_STMT + STMT_DEFER) {
         fprintf(stderr, "Error: Expected TAG_STMT, got 0x%zx\n", tag);
         exit(1);
     }
@@ -772,6 +772,9 @@ Stmt *import_stmt(WFILE *input)
         break;
     case STMT_DEFAULT:
         stmt->u.default_stmt = import_stmt(input);
+        break;
+    case STMT_DEFER:
+        stmt->u.defer_stmt = import_stmt(input);
         break;
     }
     return stmt;

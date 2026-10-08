@@ -11,6 +11,7 @@
 //     | selection_statement
 //     | iteration_statement
 //     | jump_statement
+//     | defer_statement           (vcc extension)
 //     ;
 //
 Stmt *parse_statement()
@@ -32,6 +33,8 @@ Stmt *parse_statement()
     } else if (current_token == TOKEN_GOTO || current_token == TOKEN_CONTINUE ||
                current_token == TOKEN_BREAK || current_token == TOKEN_RETURN) {
         return parse_jump_statement();
+    } else if (current_token == TOKEN_DEFER) {
+        return parse_defer_statement();
     } else {
         return parse_expression_statement();
     }
@@ -76,6 +79,25 @@ Stmt *parse_labeled_statement()
     Stmt *default_stmt           = new_stmt(STMT_DEFAULT);
     default_stmt->u.default_stmt = stmt;
     return default_stmt;
+}
+
+//
+// defer_statement
+//     : DEFER statement
+//     ;
+//
+// The statement runs when control leaves the block that contains the defer
+// (docs/Coroutines_in_C.md, section 1).
+//
+Stmt *parse_defer_statement()
+{
+    if (parser_debug) {
+        printf("--- %s()\n", __func__);
+    }
+    expect_token(TOKEN_DEFER);
+    Stmt *stmt         = new_stmt(STMT_DEFER);
+    stmt->u.defer_stmt = parse_statement();
+    return stmt;
 }
 
 //

@@ -185,6 +185,7 @@ module C {
          | Labeled(Ident label, Stmt stmt)
          | Case(Expr expr, Stmt stmt)
          | Default(Stmt stmt)
+         | Defer(Stmt stmt)        -- vcc extension: run stmt when the block is left
 
     DeclOrStmt = Decl(Declaration decl)
                | Stmt(Stmt stmt)

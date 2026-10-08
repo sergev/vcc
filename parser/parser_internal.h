@@ -112,6 +112,7 @@ Stmt *parse_expression_statement(void);
 Stmt *parse_selection_statement(void);
 Stmt *parse_iteration_statement(void);
 Stmt *parse_jump_statement(void);
+Stmt *parse_defer_statement(void);
 
 /* Translation unit (defined in parser.c) */
 Program *parse_translation_unit(void);

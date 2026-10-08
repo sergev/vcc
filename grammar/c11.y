@@ -55,6 +55,9 @@
 
 %token  ALIGNAS ALIGNOF ATOMIC GENERIC NORETURN STATIC_ASSERT THREAD_LOCAL
 
+/* vcc extension (docs/Coroutines_in_C.md) */
+%token  DEFER
+
 %start translation_unit
 %%
 
@@ -493,6 +496,7 @@ statement
     | selection_statement
     | iteration_statement
     | jump_statement
+    | defer_statement
     ;
 
 labeled_statement
@@ -542,6 +546,11 @@ jump_statement
     | BREAK ';'
     | RETURN ';'
     | RETURN expression ';'
+    ;
+
+/* vcc extension: the statement runs when the enclosing block is left */
+defer_statement
+    : DEFER statement
     ;
 
 translation_unit

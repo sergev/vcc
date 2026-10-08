@@ -8,10 +8,11 @@ vcc extends C with two features:
 
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
-> **Status: planned.** None of this is implemented yet. The design and the work are
-> in [backend/wasm/Plan.md](../backend/wasm/Plan.md). `defer` will work on every
-> target. Coroutines will work on wasm32 only, and they exist for programs that run
-> on [Braam](#8-coroutines-on-braam).
+> **Status.** `defer` (section 1) is implemented and works on every target;
+> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are planned, not
+> implemented yet: they will work on wasm32 only, and they exist for programs that run
+> on [Braam](#8-coroutines-on-braam). The design and the work are in
+> [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
 ## Contents
 

@@ -27,8 +27,16 @@ void typecheck_program(const Program *p);
 // Annotate loops and break/continue statements, drawing label numbers from *seq.
 void label_loops(const ExternalDecl *ast, int *seq);
 
+// Label the loops of one statement anew (a deferred statement the translator lowers
+// once more), drawing label numbers from *seq.
+void label_loops_stmt(Stmt *stmt, int *seq);
+
 // Validate labeled statements and goto targets within a function.
 void resolve_labels(const ExternalDecl *ast);
+
+// Check what deferred statements may not do: be left by return, break, continue or
+// goto, or be jumped past by a goto or a case label (docs/Coroutines_in_C.md, 1).
+void check_defers(const ExternalDecl *ast);
 
 // Error handling.
 #ifdef __cplusplus

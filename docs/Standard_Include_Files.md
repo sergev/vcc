@@ -265,6 +265,13 @@ Defines `noreturn` as `_Noreturn`, used to mark functions that never return (suc
 Defines readable spellings of the operator tokens: `and`, `or`, `not`, `xor`, `compl`,
 `bitand`, `bitor`, `not_eq`, `and_eq`, `or_eq`, `xor_eq`.
 
+### `<coro.h>` — vcc's extensions (not C11)
+
+Defines `defer` as `_Defer`, the statement that runs when its block is left, on every
+target; the coroutines planned for wasm32 will add their names here.
+[Coroutines_in_C.md](Coroutines_in_C.md) is the manual. Like `<stdnoreturn.h>` it is
+only names, so it is installed with the compiler's own headers for BESM-6 too.
+
 ---
 
 ## Hosted headers
@@ -553,6 +560,7 @@ hosted remainder; "Source" says whether a header is RISC-V-specific (`riscv`) or
 | `<uchar.h>` | hosted | common | Unicode characters |
 | `<wchar.h>` | hosted | common | wide characters and multibyte conversion |
 | `<wctype.h>` | hosted | common | wide character classification |
+| `<coro.h>` | vcc extension | common | `defer` |
 
 Full hosted conformance still excludes `<complex.h>`, `<stdatomic.h>`, and `<threads.h>`,
 which depend on language features the compiler does not provide. With those three

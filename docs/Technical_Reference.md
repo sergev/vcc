@@ -41,7 +41,7 @@ vcc/
 ├── parser/         # Recursive-descent parser, nametab; parse driver
 ├── scanner/        # Hand-written lexer
 ├── scripts/        # check_headers.sh, googletest.xml (cppcheck), validate_asdl.py
-├── semantic/       # symtab, structtab, typetab, typecheck, label_loops, resolve_labels, const_convert, target
+├── semantic/       # symtab, structtab, typetab, typecheck, label_loops, resolve_labels, defer, const_convert, target
 ├── tac/            # TAC IR: alloc, print, free, compare, walk, verify, export/import, YAML, Graphviz
 ├── translator/     # AST→TAC lowering (translate, expr, stmt); lower driver
 ├── CMakeLists.txt  # Root CMake project (project name: c-scanner)
@@ -139,7 +139,7 @@ parse input.c -                 # binary AST to stdout
 **Input:** binary AST stream as produced by `parse` (opened with `ast_import_open` / `import_external_decl`).
 
 **Processing order** (per top-level declaration): `typecheck_decl` (`typecheck_global_decl` →
-`label_loops` → `resolve_labels`) → `translate` (lowering, `%`-renaming of locals, the
+`label_loops` → `resolve_labels` → `check_defers`) → `translate` (lowering, `%`-renaming of locals, the
 optimizer, and the type verifier when enabled) → emit. After the last declaration,
 `translate_unit_end` emits one `extern` toplevel for every name the unit references but
 does not define.
@@ -261,6 +261,7 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `declarations.c` | Declaration processing |
 | `label_loops.c` | Annotates loop/switch statements with break/continue jump targets |
 | `resolve_labels.c` | `goto`/label validation per function |
+| `defer.c` | `defer` checks: no jump into a block past a defer, into or out of a deferred statement, no `return` inside one; label positions for the translator |
 | `type_utils.c` | Type helpers: `get_size`, `get_alignment`, `is_integer`, etc. |
 | `const_convert.c` | Constant-expression evaluation and conversion |
 | `target.c`, `target.h` | Target descriptors: type sizes and alignment, plain-`char` signedness, shift semantics |

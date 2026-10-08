@@ -55,7 +55,8 @@ static const char *stmt_kind_str[] = { [STMT_EXPR] = "Expression",  [STMT_IF] = 
                                        [STMT_GOTO] = "Goto",        [STMT_CONTINUE] = "Continue",
                                        [STMT_BREAK] = "Break",      [STMT_RETURN] = "Return",
                                        [STMT_LABELED] = "Labeled",  [STMT_CASE] = "Case",
-                                       [STMT_DEFAULT] = "Default",  [STMT_COMPOUND] = "Compound" };
+                                       [STMT_DEFAULT] = "Default",  [STMT_COMPOUND] = "Compound",
+                                       [STMT_DEFER] = "Defer" };
 
 const char *type_kind_str[] = {
     [TYPE_VOID]         = "void",
@@ -850,6 +851,11 @@ void print_statement(FILE *fd, Stmt *stmt, int indent)
         print_indent(fd, indent + 2);
         fprintf(fd, "Default:\n");
         print_statement(fd, stmt->u.default_stmt, indent + 4);
+        break;
+    case STMT_DEFER:
+        print_indent(fd, indent + 2);
+        fprintf(fd, "Defer:\n");
+        print_statement(fd, stmt->u.defer_stmt, indent + 4);
         break;
     case STMT_COMPOUND:
         print_indent(fd, indent + 2);

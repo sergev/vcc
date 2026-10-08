@@ -46,6 +46,24 @@ int f(void) { return __builtin_va_class(double) + _Generic(1, int: 2); }
     free_program(deserialized);
 }
 
+// The last statement kind, _Defer, survives a round trip, in every position.
+TEST_F(ParserTest, ExportDefer)
+{
+    program = parse(CreateTempFile(R"(
+void g(int);
+void f(int x) { _Defer g(1); _Defer { g(2); g(3); } if (x) _Defer g(4); }
+)"));
+    ASSERT_NE(nullptr, program);
+
+    int fd = CreateAstFile();
+    export_ast(fd, program);
+
+    Program *deserialized = import_ast(fd);
+    EXPECT_TRUE(compare_program(program, deserialized));
+    close(fd);
+    free_program(deserialized);
+}
+
 #if 0
 TEST_F(ParserTest, ExportComplexType)
 {

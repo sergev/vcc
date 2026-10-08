@@ -73,6 +73,9 @@ static void collect_labels(const Stmt *stmt, StringMap *labels)
     case STMT_DEFAULT:
         collect_labels(stmt->u.default_stmt, labels);
         break;
+    case STMT_DEFER:
+        collect_labels(stmt->u.defer_stmt, labels);
+        break;
     default: // leaf statements: nothing to collect
         break;
     }
@@ -118,6 +121,9 @@ static void validate_gotos(const Stmt *stmt, const StringMap *labels)
         break;
     case STMT_DEFAULT:
         validate_gotos(stmt->u.default_stmt, labels);
+        break;
+    case STMT_DEFER:
+        validate_gotos(stmt->u.defer_stmt, labels);
         break;
     case STMT_GOTO:
         if (!map_get(labels, stmt->u.goto_label, NULL)) {

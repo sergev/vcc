@@ -983,6 +983,9 @@ static void export_stmt(FILE *fd, Stmt *stmt, int level)
     case STMT_DEFAULT:
         fprintf(fd, "default\n");
         break;
+    case STMT_DEFER:
+        fprintf(fd, "defer\n");
+        break;
     }
     switch (stmt->kind) {
     case STMT_EXPR:
@@ -1075,6 +1078,11 @@ static void export_stmt(FILE *fd, Stmt *stmt, int level)
         print_indent(fd, level);
         fprintf(fd, "stmt:\n");
         export_stmt(fd, stmt->u.default_stmt, level + 1);
+        break;
+    case STMT_DEFER:
+        print_indent(fd, level);
+        fprintf(fd, "stmt:\n");
+        export_stmt(fd, stmt->u.defer_stmt, level + 1);
         break;
     case STMT_RETURN:
         if (stmt->u.expr) {

@@ -920,6 +920,9 @@ static void export_stmt(FILE *fd, Stmt *stmt, int parent_id)
     case STMT_DEFAULT:
         fprintf(fd, "default");
         break;
+    case STMT_DEFER:
+        fprintf(fd, "defer");
+        break;
     }
     fprintf(fd, "\", shape=oval];\n");
     fprintf(fd, "  n%d -> n%d [label=\"stmt\"];\n", parent_id, id);
@@ -976,6 +979,9 @@ static void export_stmt(FILE *fd, Stmt *stmt, int parent_id)
         break;
     case STMT_DEFAULT:
         export_stmt(fd, stmt->u.default_stmt, id);
+        break;
+    case STMT_DEFER:
+        export_stmt(fd, stmt->u.defer_stmt, id);
         break;
     case STMT_RETURN:
         if (stmt->u.expr) {

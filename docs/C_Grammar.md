@@ -576,7 +576,13 @@ Stmt = ExprStmt(Expr? expr)
      | Labeled(Ident label, Stmt stmt)
      | Case(Expr expr, Stmt stmt)
      | Default(Stmt stmt)
+     | Defer(Stmt stmt)
 ```
+
+`Defer` is not C11. It is vcc's extension, marked as such in all three files: the keyword
+`_Defer` (`defer` from `<coro.h>`), a `defer_statement : DEFER statement` alternative of
+`statement` in `c11.y`, and this variant. The statement runs when the block holding it is left
+— [Coroutines_in_C.md](Coroutines_in_C.md) section 1 is the manual.
 
 `Compound` contains `DeclOrStmt*` — a list of items that can be either declarations or
 statements, reflecting C99's rule that declarations and statements can be freely mixed within

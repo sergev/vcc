@@ -120,6 +120,7 @@ static int check_type(void);
 "_Atomic"                           { return ATOMIC; }
 "_Bool"                             { return BOOL; }
 "_Complex"                          { return COMPLEX; }
+"_Defer"                            { return DEFER; }   /* vcc extension */
 "_Generic"                          { return GENERIC; }
 "_Imaginary"                        { return IMAGINARY; }
 "_Noreturn"                         { return NORETURN; }

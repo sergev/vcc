@@ -64,6 +64,15 @@ TEST_F(ScannerTest, HandlesKeywords)
     EXPECT_EQ(GetLexeme(), "for");
 }
 
+// vcc's extension keyword; the short name `defer` is only <coro.h>'s macro.
+TEST_F(ScannerTest, HandlesDefer)
+{
+    SetInput("_Defer defer");
+    EXPECT_EQ(GetNextToken(), TOKEN_DEFER);
+    EXPECT_EQ(GetLexeme(), "_Defer");
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+}
+
 // Test identifiers
 TEST_F(ScannerTest, HandlesIdentifiers)
 {

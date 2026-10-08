@@ -9,11 +9,38 @@ extern "C" {
 #endif
 
 #include "ast.h"
+#include "defer.h"
 #include "optimize.h"
 #include "semantic.h"
 #include "string_map.h"
 #include "symtab.h"
 #include "tac.h"
+
+//
+// What runs when control leaves a block (docs/Coroutines_in_C.md, section 1): a
+// deferred statement.  The coroutines' co_alloca will add its release here.
+//
+typedef enum { EXIT_DEFER } ExitKind;
+
+typedef struct {
+    ExitKind kind;
+    Stmt *stmt; // EXIT_DEFER: the deferred statement
+} ExitAction;
+
+// A block being lowered, and the exit actions registered in it so far.
+typedef struct {
+    const Stmt *key; // as in DeferScope (semantic/defer.h)
+    ExitAction *actions;
+    int count, cap;
+} TacScope;
+
+// A loop or switch being lowered: where its break and continue go, and how many
+// blocks were open outside it (those a break or continue does not leave).
+typedef struct {
+    const char *break_label;
+    const char *cont_label; // NULL for a switch
+    int depth;
+} TacBreak;
 
 //
 // TAC generation context — one per function being lowered.
@@ -31,6 +58,16 @@ typedef struct {
     const char *sret_name;          // hidden return-pointer param name when the current
                                     // function returns a multi-word struct by value; else NULL
     StringMap user_labels;          // source label name -> unique %L<n> TAC name, per function
+    // defer: the blocks open at the point being lowered, innermost last, and the loops
+    // and switches around it.  While a deferred statement is lowered, they are its own.
+    TacScope *scopes;
+    int nscopes, scopes_cap;
+    TacBreak *breaks;
+    int nbreaks, breaks_cap;
+    StringMap label_pos;  // label -> DeferPos *, for a goto that leaves defers behind
+    bool label_pos_ready; // label_pos collected (only once a goto needs it)
+    Stmt *body;           // the function body, where label_pos comes from
+    int defer_depth;      // deferred statements being lowered, one inside another
 } TacCtx;
 
 //
@@ -98,6 +135,7 @@ Tac_Val *emit_bool_normalize(TacCtx *ctx, Tac_Val *src, const Type *from, const 
 void emit_jump(TacCtx *ctx, const char *target);
 void emit_label(TacCtx *ctx, const char *name);
 const char *user_label_name(TacCtx *ctx, const char *src);
+void free_user_labels(StringMap *labels);
 
 //
 // Struct-by-value support (translate.c)

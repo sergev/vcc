@@ -589,6 +589,9 @@ void export_stmt(WFILE *fd, Stmt *stmt)
     case STMT_DEFAULT:
         export_stmt(fd, stmt->u.default_stmt);
         break;
+    case STMT_DEFER:
+        export_stmt(fd, stmt->u.defer_stmt);
+        break;
     }
 }
 

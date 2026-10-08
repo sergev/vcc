@@ -486,7 +486,8 @@ typedef enum {
     STMT_RETURN,
     STMT_LABELED,
     STMT_CASE,
-    STMT_DEFAULT
+    STMT_DEFAULT,
+    STMT_DEFER /* vcc extension: _Defer stmt */
 } StmtKind;
 
 struct Stmt {
@@ -527,6 +528,7 @@ struct Stmt {
             Stmt *stmt;
         } case_stmt;
         Stmt *default_stmt;
+        Stmt *defer_stmt;
     } u;
     /* Assigned by label_loops() in translator; not serialized to .ast files. */
     char *loop_end_label;

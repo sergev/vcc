@@ -162,6 +162,7 @@ static int is_keyword(const char *str)
         { "_Atomic", TOKEN_ATOMIC },
         { "_Bool", TOKEN_BOOL },
         { "_Complex", TOKEN_COMPLEX },
+        { "_Defer", TOKEN_DEFER },
         { "_Generic", TOKEN_GENERIC },
         { "_Imaginary", TOKEN_IMAGINARY },
         { "_Noreturn", TOKEN_NORETURN },
@@ -801,6 +802,7 @@ const char *token_name(int token)
     case TOKEN_ATOMIC:               return "'_Atomic'";
     case TOKEN_BOOL:                 return "'_Bool'";
     case TOKEN_COMPLEX:              return "'_Complex'";
+    case TOKEN_DEFER:                return "'_Defer'";
     case TOKEN_GENERIC:              return "'_Generic'";
     case TOKEN_IMAGINARY:            return "'_Imaginary'";
     case TOKEN_NORETURN:             return "'_Noreturn'";

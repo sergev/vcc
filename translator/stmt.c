@@ -17,6 +17,7 @@ static void collect_cases(TacCtx *ctx, Stmt *stmt, CaseList *list)
         return;
     switch (stmt->kind) {
     case STMT_CASE: {
+        xfree(stmt->branch_target_label); // a copy of a deferred switch is labeled anew
         stmt->branch_target_label = new_temp(ctx);
         CaseEntry *e              = xalloc(sizeof *e, __func__, __FILE__, __LINE__);
         e->expr                   = stmt->u.case_stmt.expr;
@@ -28,6 +29,7 @@ static void collect_cases(TacCtx *ctx, Stmt *stmt, CaseList *list)
         break;
     }
     case STMT_DEFAULT:
+        xfree(stmt->branch_target_label);
         stmt->branch_target_label = new_temp(ctx);
         list->default_label       = stmt->branch_target_label;
         collect_cases(ctx, stmt->u.default_stmt, list);
@@ -398,6 +400,248 @@ static void emit_loop_test(TacCtx *ctx, Expr *cond, bool if_true, const char *ta
     tac_append(ctx, j);
 }
 
+//
+// defer (docs/Coroutines_in_C.md, section 1).  Each block being lowered is a TacScope
+// holding the exit actions registered in it so far; every edge that leaves blocks
+// lowers their actions on the spot, innermost block first and each block's last
+// action first.  A deferred statement is thus lowered once per exit, as fresh code:
+// its loops and labels are renamed each time, and its own blocks and loops are a
+// stack of their own, since nothing leaves it (semantic/defer.c checks that).
+//
+
+static void scope_push(TacCtx *ctx, const Stmt *key)
+{
+    if (ctx->nscopes == ctx->scopes_cap) {
+        ctx->scopes_cap = ctx->scopes_cap ? 2 * ctx->scopes_cap : 8;
+        TacScope *s     = xalloc(ctx->scopes_cap * sizeof *s, __func__, __FILE__, __LINE__);
+        for (int i = 0; i < ctx->nscopes; i++)
+            s[i] = ctx->scopes[i];
+        xfree(ctx->scopes);
+        ctx->scopes = s;
+    }
+    ctx->scopes[ctx->nscopes++] = (TacScope){ key, NULL, 0, 0 };
+}
+
+static void scope_pop(TacCtx *ctx)
+{
+    xfree(ctx->scopes[--ctx->nscopes].actions);
+}
+
+static void scope_add(TacCtx *ctx, ExitAction action)
+{
+    TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
+    if (sc->count == sc->cap) {
+        sc->cap        = sc->cap ? 2 * sc->cap : 4;
+        ExitAction *a  = xalloc(sc->cap * sizeof *a, __func__, __FILE__, __LINE__);
+        for (int i = 0; i < sc->count; i++)
+            a[i] = sc->actions[i];
+        xfree(sc->actions);
+        sc->actions = a;
+    }
+    sc->actions[sc->count++] = action;
+}
+
+static void breaks_push(TacCtx *ctx, const char *break_label, const char *cont_label)
+{
+    if (ctx->nbreaks == ctx->breaks_cap) {
+        ctx->breaks_cap = ctx->breaks_cap ? 2 * ctx->breaks_cap : 8;
+        TacBreak *b     = xalloc(ctx->breaks_cap * sizeof *b, __func__, __FILE__, __LINE__);
+        for (int i = 0; i < ctx->nbreaks; i++)
+            b[i] = ctx->breaks[i];
+        xfree(ctx->breaks);
+        ctx->breaks = b;
+    }
+    ctx->breaks[ctx->nbreaks++] = (TacBreak){ break_label, cont_label, ctx->nscopes };
+}
+
+static bool have_exits(const TacCtx *ctx)
+{
+    for (int i = 0; i < ctx->nscopes; i++)
+        if (ctx->scopes[i].count > 0)
+            return true;
+    return false;
+}
+
+static void gen_sub(TacCtx *ctx, Stmt *stmt);
+
+// Lower a deferred statement afresh, with blocks, loops and labels of its own.
+static void gen_deferred(TacCtx *ctx, Stmt *body)
+{
+    TacScope *scopes  = ctx->scopes;
+    int nscopes       = ctx->nscopes;
+    int scopes_cap    = ctx->scopes_cap;
+    TacBreak *breaks  = ctx->breaks;
+    int nbreaks       = ctx->nbreaks;
+    int breaks_cap    = ctx->breaks_cap;
+    StringMap labels  = ctx->user_labels;
+    ctx->scopes       = NULL;
+    ctx->nscopes      = ctx->scopes_cap = 0;
+    ctx->breaks       = NULL;
+    ctx->nbreaks      = ctx->breaks_cap = 0;
+    map_init(&ctx->user_labels);
+
+    label_loops_stmt(body, &ctx->temp_id);
+    ctx->defer_depth++;
+    gen_sub(ctx, body);
+    ctx->defer_depth--;
+
+    xfree(ctx->scopes);
+    xfree(ctx->breaks);
+    free_user_labels(&ctx->user_labels);
+    ctx->scopes      = scopes;
+    ctx->nscopes     = nscopes;
+    ctx->scopes_cap  = scopes_cap;
+    ctx->breaks      = breaks;
+    ctx->nbreaks     = nbreaks;
+    ctx->breaks_cap  = breaks_cap;
+    ctx->user_labels = labels;
+}
+
+static void run_action(TacCtx *ctx, const ExitAction *a)
+{
+    switch (a->kind) {
+    case EXIT_DEFER:
+        gen_deferred(ctx, a->stmt);
+        break;
+    }
+}
+
+// The actions of block `i` from the `from`-th registered down to the first.
+static void run_scope(TacCtx *ctx, int i, int from)
+{
+    for (int j = from - 1; j >= 0; j--) {
+        // The array may move while a deferred statement is lowered: index it anew.
+        ExitAction a = ctx->scopes[i].actions[j];
+        run_action(ctx, &a);
+    }
+}
+
+// Leaving every block from the innermost one out to block `depth`, that one included.
+static void run_exits(TacCtx *ctx, int depth)
+{
+    for (int i = ctx->nscopes - 1; i >= depth; i--)
+        run_scope(ctx, i, ctx->scopes[i].count);
+}
+
+// The end of the innermost block, reached by falling through: its own actions.
+static void end_scope(TacCtx *ctx)
+{
+    TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
+    if (sc->count > 0) {
+        // Not after a jump or return: what follows one is unreachable.
+        bool reachable = !ctx->tail || (ctx->tail->kind != TAC_INSTRUCTION_RETURN &&
+                                        ctx->tail->kind != TAC_INSTRUCTION_JUMP);
+        if (reachable)
+            run_scope(ctx, ctx->nscopes - 1, sc->count);
+    }
+    scope_pop(ctx);
+}
+
+// A substatement of a selection, iteration or defer statement: a block of its own.
+static void gen_sub(TacCtx *ctx, Stmt *stmt)
+{
+    if (!stmt || stmt->kind == STMT_COMPOUND) {
+        gen_stmt(ctx, stmt);
+        return;
+    }
+    scope_push(ctx, stmt);
+    gen_stmt(ctx, stmt);
+    end_scope(ctx);
+}
+
+// break or continue to `target`: leave the blocks inside its loop or switch.
+static void emit_break(TacCtx *ctx, const char *target, bool is_continue)
+{
+    for (int i = ctx->nbreaks - 1; i >= 0; i--) {
+        const char *l = is_continue ? ctx->breaks[i].cont_label : ctx->breaks[i].break_label;
+        if (l && strcmp(l, target) == 0) {
+            run_exits(ctx, ctx->breaks[i].depth);
+            break;
+        }
+    }
+    emit_jump(ctx, target);
+}
+
+// goto: leave the blocks the label is not in, and the defers of the innermost common
+// block registered after the label (a jump back over them).
+static void emit_goto(TacCtx *ctx, const char *label)
+{
+    if (have_exits(ctx)) {
+        if (!ctx->label_pos_ready) {
+            map_init(&ctx->label_pos);
+            defer_collect_labels(ctx->body, &ctx->label_pos);
+            ctx->label_pos_ready = true;
+        }
+        intptr_t v;
+        if (!map_get(&ctx->label_pos, label, &v))
+            fatal_error("goto: no position for label %s", label);
+        const DeferPos *to = (const DeferPos *)v;
+        int k              = 0;
+        while (k < ctx->nscopes && k < to->depth && ctx->scopes[k].key == to->scopes[k].key)
+            k++;
+        run_exits(ctx, k);
+        if (k > 0) {
+            int have = ctx->scopes[k - 1].count;
+            int keep = to->scopes[k - 1].count;
+            for (int j = have - 1; j >= keep; j--) {
+                ExitAction a = ctx->scopes[k - 1].actions[j];
+                run_action(ctx, &a);
+            }
+        }
+    }
+    emit_jump(ctx, user_label_name(ctx, label));
+}
+
+// return: the value is computed before the defers run, which may change what it names.
+static void emit_return(TacCtx *ctx, Stmt *stmt)
+{
+    if (ctx->sret_name && stmt->u.expr) {
+        // A struct return through the hidden pointer (sret): copy the result into the
+        // caller's slot through the hidden return pointer, then return the pointer
+        // itself.
+        Tac_Val *src  = gen_expr(ctx, stmt->u.expr); // VAR naming the source aggregate
+        AggPlace dst  = { NULL, 0, ctx->sret_name };
+        AggPlace from = { src->u.var_name, 0, NULL };
+        gen_aggregate_copy(ctx, &dst, &from, stmt->u.expr->type);
+        tac_free_val(src);
+        run_exits(ctx, 0);
+        Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
+        in->u.return_.src   = val_var(ctx->sret_name);
+        tac_append(ctx, in);
+        return;
+    }
+    Tac_Val *v = stmt->u.expr ? gen_expr(ctx, stmt->u.expr) : NULL;
+    if (v && v->kind == TAC_VAL_VAR && v->u.var_name[0] != '%' && have_exits(ctx)) {
+        // A named object a deferred statement could change: return a copy of it.
+        const Type *t = unalias(stmt->u.expr->type);
+        if (t->kind == TYPE_STRUCT || t->kind == TYPE_UNION) {
+            char *slot                     = new_typed_temp(ctx, ast_type_to_tac_type(t));
+            Tac_Instruction *al            = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
+            al->u.allocate_local.name      = xstrdup(slot);
+            al->u.allocate_local.size      = (int)get_size(t);
+            al->u.allocate_local.alignment = (int)get_alignment(t);
+            tac_append(ctx, al);
+            AggPlace dst  = { slot, 0, NULL };
+            AggPlace from = { v->u.var_name, 0, NULL };
+            gen_aggregate_copy(ctx, &dst, &from, t);
+            tac_free_val(v);
+            v = val_var(slot);
+            xfree(slot);
+        } else {
+            Tac_Val *copy       = new_var_val(ctx, ast_type_to_tac_type(t));
+            Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
+            cp->u.copy.src      = v;
+            cp->u.copy.dst      = copy;
+            tac_append(ctx, cp);
+            v = val_var(copy->u.var_name);
+        }
+    }
+    run_exits(ctx, 0);
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
+    in->u.return_.src   = v;
+    tac_append(ctx, in);
+}
+
 void gen_stmt(TacCtx *ctx, Stmt *stmt)
 {
     if (!stmt) {
@@ -405,6 +649,7 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
     }
     switch (stmt->kind) {
     case STMT_COMPOUND: {
+        scope_push(ctx, stmt);
         for (DeclOrStmt *ds = stmt->u.compound; ds; ds = ds->next) {
             if (ds->kind == DECL_OR_STMT_DECL) {
                 gen_local_decl(ctx, ds->u.decl);
@@ -412,33 +657,20 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
                 gen_stmt(ctx, ds->u.stmt);
             }
         }
+        end_scope(ctx);
         break;
     }
+    case STMT_DEFER:
+        scope_add(ctx, (ExitAction){ EXIT_DEFER, stmt->u.defer_stmt });
+        break;
     case STMT_EXPR:
         if (stmt->u.expr) {
             tac_free_val(gen_expr(ctx, stmt->u.expr));
         }
         break;
-    case STMT_RETURN: {
-        if (ctx->sret_name && stmt->u.expr) {
-            // A struct return through the hidden pointer (sret): copy the result into the
-            // caller's slot through the
-            // hidden return pointer, then return the pointer itself.
-            Tac_Val *src = gen_expr(ctx, stmt->u.expr); // VAR naming the source aggregate
-            AggPlace dst = { NULL, 0, ctx->sret_name };
-            AggPlace from = { src->u.var_name, 0, NULL };
-            gen_aggregate_copy(ctx, &dst, &from, stmt->u.expr->type);
-            tac_free_val(src);
-            Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
-            in->u.return_.src   = val_var(ctx->sret_name);
-            tac_append(ctx, in);
-            break;
-        }
-        Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
-        in->u.return_.src   = stmt->u.expr ? gen_expr(ctx, stmt->u.expr) : NULL;
-        tac_append(ctx, in);
+    case STMT_RETURN:
+        emit_return(ctx, stmt);
         break;
-    }
     case STMT_IF: {
         Tac_Val *cond = gen_cond_val(ctx, stmt->u.if_stmt.condition);
         char *else_l  = new_temp(ctx);
@@ -448,11 +680,11 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         jz->u.jump_if_zero.condition = cond;
         jz->u.jump_if_zero.target    = else_l; // instruction takes ownership
         tac_append(ctx, jz);
-        gen_stmt(ctx, stmt->u.if_stmt.then_stmt);
+        gen_sub(ctx, stmt->u.if_stmt.then_stmt);
         emit_jump(ctx, end_l);
         emit_label(ctx, else_l);
         if (stmt->u.if_stmt.else_stmt) {
-            gen_stmt(ctx, stmt->u.if_stmt.else_stmt);
+            gen_sub(ctx, stmt->u.if_stmt.else_stmt);
         }
         emit_label(ctx, end_l);
         xfree(end_l); // emit_jump and emit_label each xstrdup; free the original
@@ -469,7 +701,9 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
             emit_loop_test(ctx, stmt->u.while_stmt.condition, false, bl);
             char *top = new_temp(ctx);
             emit_label(ctx, top);
-            gen_stmt(ctx, stmt->u.while_stmt.body);
+            breaks_push(ctx, bl, cl);
+            gen_sub(ctx, stmt->u.while_stmt.body);
+            ctx->nbreaks--;
             emit_label(ctx, cl);
             emit_loop_test(ctx, stmt->u.while_stmt.condition, true, top);
             xfree(top);
@@ -478,7 +712,9 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         }
         emit_label(ctx, cl);
         emit_loop_test(ctx, stmt->u.while_stmt.condition, false, bl);
-        gen_stmt(ctx, stmt->u.while_stmt.body);
+        breaks_push(ctx, bl, cl);
+        gen_sub(ctx, stmt->u.while_stmt.body);
+        ctx->nbreaks--;
         emit_jump(ctx, cl);
         emit_label(ctx, bl);
         break;
@@ -491,7 +727,9 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         }
         char *loop_top = new_temp(ctx);
         emit_label(ctx, loop_top);
-        gen_stmt(ctx, stmt->u.do_while.body);
+        breaks_push(ctx, bl, cl);
+        gen_sub(ctx, stmt->u.do_while.body);
+        ctx->nbreaks--;
         emit_label(ctx, cl);
         Tac_Val *cond                     = gen_cond_val(ctx, stmt->u.do_while.condition);
         Tac_Instruction *jnz              = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
@@ -524,7 +762,9 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         emit_label(ctx, top);
         if (cond && !rotate)
             emit_loop_test(ctx, cond, false, bl);
-        gen_stmt(ctx, stmt->u.for_stmt.body);
+        breaks_push(ctx, bl, cl);
+        gen_sub(ctx, stmt->u.for_stmt.body);
+        ctx->nbreaks--;
         emit_label(ctx, cl);
         if (stmt->u.for_stmt.update) {
             tac_free_val(gen_expr(ctx, stmt->u.for_stmt.update));
@@ -575,7 +815,9 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         }
 
         emit_jump(ctx, cases.default_label ? cases.default_label : stmt->loop_end_label);
-        gen_stmt(ctx, stmt->u.switch_stmt.body);
+        breaks_push(ctx, stmt->loop_end_label, NULL);
+        gen_sub(ctx, stmt->u.switch_stmt.body);
+        ctx->nbreaks--;
         emit_label(ctx, stmt->loop_end_label);
 
         for (CaseEntry *e = cases.head; e;) {
@@ -589,18 +831,18 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
         if (!stmt->branch_target_label) {
             fatal_error("break without target label");
         }
-        emit_jump(ctx, stmt->branch_target_label);
+        emit_break(ctx, stmt->branch_target_label, false);
         break;
     }
     case STMT_CONTINUE: {
         if (!stmt->branch_target_label) {
             fatal_error("continue without target label");
         }
-        emit_jump(ctx, stmt->branch_target_label);
+        emit_break(ctx, stmt->branch_target_label, true);
         break;
     }
     case STMT_GOTO:
-        emit_jump(ctx, user_label_name(ctx, stmt->u.goto_label));
+        emit_goto(ctx, stmt->u.goto_label);
         break;
     case STMT_LABELED:
         emit_label(ctx, user_label_name(ctx, stmt->u.labeled.label));

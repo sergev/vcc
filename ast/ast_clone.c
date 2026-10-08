@@ -494,6 +494,9 @@ Stmt *clone_stmt(const Stmt *stmt)
     case STMT_DEFAULT:
         result->u.default_stmt = clone_stmt(stmt->u.default_stmt);
         break;
+    case STMT_DEFER:
+        result->u.defer_stmt = clone_stmt(stmt->u.defer_stmt);
+        break;
     }
     result->loop_end_label = stmt->loop_end_label ? xstrdup(stmt->loop_end_label) : NULL;
     result->loop_continue_label =

@@ -816,10 +816,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C1. `defer`.** Scanner, parser, AST (the full file list of §4.1), semantic rules
-   (§4.2's `defer` items), translator scope stack of exit actions (built for both
-   kinds from the start, though only `defer` uses it yet) and `emit_scope_exits`,
-   YAML and run tests. The warm-up through every AST file, and useful on its own.
 - **C2. Coroutine front end.** `_Coro(Y)` on symbols, `_Coro_frame(Y, T)`, `_Yield`,
    `_Await`, the ten operations: parsed, type-checked, serialized, printed; every
    compile-time rule of §2.4 with a negative test; the translator says "coroutines:
@@ -944,7 +940,7 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 ## 11. Verification
 
 - `ctest -j8` after each phase, the output tee'd to a scratch file; the full suite
-  after phases C1, C2, C5 and C6 (shared code). BESM-6 output unchanged.
+  after phases C2, C5 and C6 (shared code). BESM-6 output unchanged.
 - By hand, plain wasm32: `build/cc/cc -t wasm32 gen.c -o gen.wasm && node
   libc/wasm32/run.mjs gen.wasm`.
 - By hand, Braam without Braam: `build/cc/cc -t wasm32-braam cat.c -o cat &&

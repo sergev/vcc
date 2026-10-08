@@ -997,6 +997,8 @@ static bool stmt_falls_through(const Stmt *s)
         return stmt_falls_through(s->u.case_stmt.stmt);
     case STMT_DEFAULT:
         return stmt_falls_through(s->u.default_stmt);
+    case STMT_DEFER:
+        return true; // only registers its statement; control goes on past it
     case STMT_SWITCH:
     default:
         // A switch is not analysed for exhaustiveness; treat it as not certainly

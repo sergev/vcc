@@ -16,6 +16,7 @@ add_executable(translate-tests
     test/decl_tests.cpp
     test/expr_tests.cpp
     test/stmt_tests.cpp
+    test/defer_tests.cpp
     test/cast_tests.cpp
     test/incdec_tests.cpp
     test/switch_tests.cpp

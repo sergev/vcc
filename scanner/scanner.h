@@ -50,6 +50,7 @@ enum {
     TOKEN_ATOMIC,               // _Atomic
     TOKEN_BOOL,                 // _Bool
     TOKEN_COMPLEX,              // _Complex
+    TOKEN_DEFER,                // _Defer (vcc extension)
     TOKEN_GENERIC,              // _Generic
     TOKEN_IMAGINARY,            // _Imaginary
     TOKEN_NORETURN,             // _Noreturn

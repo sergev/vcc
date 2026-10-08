@@ -33,6 +33,7 @@ digraph Statements_Cluster {
     Stmt -> Expr [label="u.case_stmt.expr"];
     Stmt -> Stmt [label="u.case_stmt.stmt"];
     Stmt -> Stmt [label="u.default_stmt"];
+    Stmt -> Stmt [label="u.defer_stmt"];
     DeclOrStmt -> DeclOrStmt [label="next"];
     DeclOrStmt -> Declaration [label="u.decl"];
     DeclOrStmt -> Stmt [label="u.stmt"];
