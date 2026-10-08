@@ -9,6 +9,7 @@ add_library(optimize STATIC
     cse.c
     ivsr.c
     dead_store.c
+    liveness.c
 )
 target_include_directories(optimize PUBLIC .)
 # const_fold.c queries the active Target (target_config) to wrap folded integer
