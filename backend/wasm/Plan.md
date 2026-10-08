@@ -274,9 +274,16 @@ structure.c drops whatever isn't reachable from the entry.
    compares Code section bytes: the 607 book programs 137384 against clang -O2's 79760
    (1.72x; clang folds many of them to a constant), the C files of `libc/common` 25717
    against 22138 (1.16x); with no rewrites ours were 1.49x and 1.42x bigger.
-8. **Docs**: `docs/Wasm_Backend.md`; `CLAUDE.md`, `README.md`,
+8. **Docs** (done): `docs/Wasm_Backend.md`; `CLAUDE.md`, `README.md`,
    `docs/Technical_Reference.md`, `docs/Type_Sizes_Alignment.md`, `cc/README.md`,
-   `cpp/README.md`.
+   `cpp/README.md` (which had wasm32 since phase 1), and `libc/ilp32/include/README.md`.
+   Where this plan and the code part ways, `docs/Wasm_Backend.md` describes the code:
+   there is no `fp.c` (floating point is in `instr.c`) and no `wasm.md`; every aggregate
+   copy is a `memory.copy`; the stack is 1 MiB, and `--gc-sections` is not passed, being
+   `wasm-ld`'s default;
+   coalescing solves its own liveness over the structured code rather than using
+   `flow.c`'s; and the tests do not run `wasm-validate`, which the backend document
+   gives as a step by hand.
 
 ## Verification
 

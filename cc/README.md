@@ -36,12 +36,14 @@ linker       link          .o   -> a.out
 | x86-64 (SysV psABI) | `x86_64` | `vgenx86` | `x86_64-elf-as --64` | `x86_64-elf-ld -T link.ld` |
 | AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `avr-as -mmcu=atmega1280` | `avr-ld -m avr51 -T link.ld` |
 | MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
+| WebAssembly (clang's wasm32 C ABI) | `wasm32` | `vgenwasm` | `clang --target=wasm32 --no-default-config <features> -c` | `wasm-ld --stack-first -z stack-size=1048576` |
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
 The first three are **hosted**: the program runs under Linux, linked against glibc, or
 under macOS, linked against libSystem, either of which supplies the startup files and the
-C library. The rest are bare metal, run on qemu or a simulator. **The default target is
+C library. The rest are bare metal, run on qemu or a simulator, or for WebAssembly under
+node. **The default target is
 the host**: `x86_64-linux` on x86-64 Linux, `aarch64-linux` on AArch64 Linux,
 `aarch64-darwin` on a Mac with Apple silicon, and `riscv64` on any other machine. It is
 decided when `vcc` is compiled.
@@ -54,8 +56,10 @@ else the host's `cc`; else `clang --target=x86_64-linux-gnu` (or `aarch64-linux-
 For the bare-metal targets, the binutils prefix is the first one found of several: `riscv64-unknown-elf`, `riscv64-elf`
 or `riscv64-linux-gnu`; `aarch64-none-elf`, `aarch64-elf` or `aarch64-linux-gnu`;
 `x86_64-elf`, `x86_64-linux-gnu` or the host's own `as`/`ld` on x86-64 Linux; `msp430-elf`
-or `msp430-unknown-elf`. Where there are no binutils, the targets but MSP430 and MMIX
-are assembled by clang and linked by `ld.lld`, with no linker flags:
+or `msp430-unknown-elf`. WebAssembly has no binutils: clang assembles it and `wasm-ld`
+links it, always, with the features of the table below. Where there are no binutils,
+the other targets but MSP430 and MMIX are assembled by clang and linked by `ld.lld`,
+with no linker flags:
 
 | `-t` | clang |
 | --- | --- |
@@ -65,6 +69,7 @@ are assembled by clang and linked by `ld.lld`, with no linker flags:
 | `arm32` | `clang --target=armv7a-none-eabihf -mcpu=cortex-a15 -mfpu=vfpv3-d16 -c` |
 | `x86_64` | `clang --target=x86_64-none-elf -c` |
 | `avr` | `clang --target=avr -mmcu=atmega1280 -c` |
+| `wasm32` | `clang --target=wasm32 --no-default-config -mreference-types -mbulk-memory -msign-ext -mmutable-globals -mnontrapping-fptoint -c` |
 
 The intermediate files are temporaries in `$TMPDIR` (or `/tmp`), named `vccXXXXXX.<suffix>`
 and removed on exit.
@@ -82,7 +87,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix` or `besm6`; by default the host (see above) |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32` or `besm6`; by default the host (see above) |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -93,7 +98,7 @@ and removed on exit.
 | `-v` | Echo each sub-command before running it |
 | `-Dname[=v]`, `-Uname`, `-Ipath` | Passed to the preprocessor (`-D name` is folded into `-Dname`) |
 | `-Lpath`, `-lname` | Passed to the linker, after the objects |
-| `-T file` | Linker script instead of the standard `link.ld` (not `besm6`); passed on for a hosted target |
+| `-T file` | Linker script instead of the standard `link.ld` (not `besm6`; for `mmix` and `wasm32`, which have none, a script of one's own); passed on for a hosted target |
 | `-nostdinc` | Do not add the target's standard include directory |
 | `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries; a hosted target passes it to its C compiler and drops `libvcc.a` |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
@@ -118,12 +123,12 @@ takes everything relative to it:
 | --- | --- |
 | `vcpp`, `vparse`, `vlower`, `vgen<T>` | the directory `vcc` is in |
 | standard headers | `../share/vcc/<target>/include` |
-| `crt0.o`, libraries, `link.ld` (hosted: `libvcc.a` alone) | `../share/vcc/<target>/lib` |
+| `crt0.o`, libraries, `link.ld` (hosted: `libvcc.a` alone; wasm32: no `link.ld`, and the host `run.mjs`) | `../share/vcc/<target>/lib` |
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
 directory plays no part. The assembler and linker belong to other projects. They are the
 ones found when the build was configured (`scripts/CrossTools.cmake`: GNU binutils, else
-clang and `ld.lld`; nothing for the BESM-6), or else the first binutils on `PATH` by the
+clang and `ld.lld`; clang and `wasm-ld` for WebAssembly; nothing for the BESM-6), or else the first binutils on `PATH` by the
 prefixes above, then `clang`/`ld.lld` (`b6as`/`b6ld` for the BESM-6). Which of the two a
 tool is, by its name, decides its flags.
 
@@ -249,6 +254,23 @@ mmix-knuth-mmixware-ld --oformat elf64-mmix --defsym=__.MMIX.start..text=0x100 -
 mmix-knuth-mmixware-objdump -d a.elf
 ```
 
+WebAssembly:
+
+```text
+wasm-ld --stack-first -z stack-size=1048576 -o a.out -L<lib> <lib>/crt0.o objects... -L/-l flags... -lc
+```
+
+There is no linker script: `wasm-ld` lays out the linear memory, the 1 MiB shadow stack
+first (`--stack-first`, so that an overflow traps below address 0 rather than running
+into the data), then the data and the heap. `vgenwasm` puts every function and variable
+in a section of its own, and `wasm-ld` drops those nothing reaches, by default. The result is a WebAssembly module whose
+entry is `_start` and which imports two functions, `env.putch` and `env.exit`. The host
+installed beside the runtime runs it:
+`node <lib>/run.mjs a.out` prints the program's output, reports `[exit N]` on the
+standard error and exits with `main`'s result; a trap exits with 255 and no report.
+`wasm-validate a.out` and `wasm-objdump -d a.out`, from WABT, check and disassemble it.
+See [docs/Wasm_Backend.md](../docs/Wasm_Backend.md).
+
 BESM-6:
 
 ```text
@@ -264,7 +286,7 @@ libc calls the helpers, never the reverse.
 
 `-nostdlib` drops `-L<lib>`, `crt0.o` and the implicit `-l`s, but keeps the linker
 script, since it is the machine's memory map and not a library. Use `-T` to replace it
-(or, for MMIX, to give one where the linker's own is used).
+(or, for MMIX and WebAssembly, to give one where the linker's own is used).
 
 ## Testing
 
@@ -280,14 +302,16 @@ in a temporary directory, with the in-tree passes chosen through the `VCC_*` var
   with a stand-in linker
 - `-c`, a link and a run under qemu for RISC-V, AArch64, ARM32, x86-64 and AVR, and under
   mspsim for the MSP430 (its Intel HEX as well, and with clang and `ld.lld` through
-  `VCC_AS`/`VCC_LD`), and under Knuth's `mmix` for MMIX
+  `VCC_AS`/`VCC_LD`), under Knuth's `mmix` for MMIX, and under node for WebAssembly
+  (a separately compiled `.S` among the sources)
 - the BESM-6 link line, checked with a stand-in linker
 
 The `StagedPrefix` cases build a miniature installation (`bin/vcc` plus links to the
 passes, `share/vcc/<target>/`) and run it with no overrides. That is what tests the
 relocatable lookup. They expect in the `-v` echo the assembler command CMake found, so
 vcc's flags must agree with `scripts/CrossTools.cmake`'s. Cases that need the binutils
-(or clang and `ld.lld`), qemu, mspsim, `mmix` or `b6as` skip when they are missing.
+(or clang and `ld.lld`), qemu, mspsim, `mmix`, clang with `wasm-ld` and node, or `b6as`
+skip when they are missing.
 
 ```sh
 ./build/cc/test/cc-tests

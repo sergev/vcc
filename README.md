@@ -18,13 +18,15 @@ optimizer stay as they are.
 | `aarch64`        | ARMv8-A, AAPCS64                                                         | clang's objects |
 | `arm32`          | ARMv7-A, AAPCS-VFP hard float                                            | clang's objects |
 | `x86_64`         | System V psABI, x87 `long double`                                        | clang's objects |
+| `wasm32`         | WebAssembly, clang's wasm32 C ABI, a module run under node               | clang's objects |
 | `avr`            | 8-bit ATmega1280, avr-gcc ABI, 16-bit `int`, binary32 `double`           | clang's objects |
 | `msp430`         | 16-bit classic MSP430, GCC's EABI, soft binary64 `double`                | GCC's objects   |
 | `mmix`           | Knuth's 64-bit big-endian RISC, GCC's MMIXware ABI, register stack       | GCC's objects   |
 | `besm6`          | 48-bit word-addressed mainframe; three assembler dialects                | v7besm's        |
 
 All are complete. `vcc` builds for the machine it runs on by default (one of the three
-hosted targets, else `riscv64`); the rest are bare metal, run under a simulator. Targets
+hosted targets, else `riscv64`); the rest are bare metal, run under a simulator, or for
+WebAssembly under node. Targets
 this far apart keep the front end honest: nothing in it may assume one kind of machine.
 
 ## How it works
@@ -67,6 +69,7 @@ tools; without them its runtime is not built and its run tests are skipped.
 | x86-64 | `x86_64-elf-` binutils, or the host's own on x86-64 Linux | `qemu-system-x86_64` | clang |
 | AVR | `avr-` binutils | `qemu-system-avr` | `avr-gcc`; clang |
 | MSP430 | `msp430-elf-` (or `msp430-unknown-elf-`) binutils | [mspsim](https://github.com/sergev/mspsim) | `msp430-elf-gcc` with newlib; clang |
+| WebAssembly | clang with the WebAssembly target, `wasm-ld` and `llvm-ar` (no binutils) | node | clang |
 | MMIX | `mmix-knuth-mmixware-` binutils, GCC and newlib | `mmix` from [MMIXware](https://www-cs-faculty.stanford.edu/~knuth/mmix.html) | |
 | BESM-6 | `b6as`, `b6ld` from [v7besm](https://github.com/besm6/v7besm) | `b6sim`; `dubna` (with `besmc` for Bemsh) | |
 
@@ -85,6 +88,7 @@ sudo apt install build-essential cmake git cppcheck \
     qemu-system-misc qemu-system-arm qemu-system-x86
 sudo apt install qemu-system-riscv        # Debian 13 and later: RISC-V is split out
 sudo apt install clang lld llvm gcc-avr   # optional: the reference compilers
+sudo apt install clang lld llvm nodejs    # WebAssembly: its only tools
 ```
 
 Where the `-none-elf` packages are missing, `binutils-riscv64-linux-gnu` and
@@ -97,6 +101,7 @@ brew install cmake cppcheck qemu \
     riscv64-elf-binutils aarch64-elf-binutils arm-none-eabi-binutils x86_64-elf-binutils
 brew tap osx-cross/avr && brew install avr-binutils
 brew install llvm lld                     # optional: the reference compiler
+brew install llvm lld node                # WebAssembly: its only tools
 ```
 
 The MSP430 GCC and newlib and the MMIX toolchain are built from source
@@ -141,6 +146,7 @@ For a bare-metal target, add `-t` and run the result under its simulator:
 | `avr`     | `vcc -t avr -o hello.elf hello.c`      | `qemu-system-avr -M arduino-mega -display none -monitor none -serial stdio -serial file:status -bios hello.elf` |
 | `msp430`  | `vcc -t msp430 -o hello.elf hello.c`   | `mspsim hello.elf`                                                                                        |
 | `mmix`    | `vcc -t mmix -o hello.mmo hello.c`     | `mmix hello.mmo`                                                                                          |
+| `wasm32`  | `vcc -t wasm32 -o hello.wasm hello.c`  | `node ~/.local/share/vcc/wasm32/lib/run.mjs hello.wasm`                                                   |
 
 Most exit with `main`'s result. x86-64 qemu exits with `(result << 1) | 1`; the AVR's
 result is the byte in the file `status`, and its qemu must be stopped with Ctrl-C.
@@ -166,10 +172,11 @@ and run by hand.
 
 - `bin/vcc`, `bin/vcpp`, `bin/vparse`, `bin/vlower` — the driver and the shared passes;
 - `bin/vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`,
-  `vgenmsp430`, `vgenmmix`, `vgenbesm6` — the code generators;
+  `vgenmsp430`, `vgenmmix`, `vgenwasm`, `vgenbesm6` — the code generators;
 - `share/vcc/<target>/include/` and `lib/` — each target's C headers and runtime.
 
-A bare-metal target gets `crt0.o`, `libc.a` and, for qemu and mspsim, a linker script. A
+A bare-metal target gets `crt0.o`, `libc.a` and, for qemu and mspsim, a linker script;
+WebAssembly gets `run.mjs`, the node host its programs run under. A
 hosted one gets headers matching the system's C library (our parser cannot read the
 system's own) and, on Linux, a small `libvcc.a`. BESM-6,
 whose C library belongs to the [v7besm](https://github.com/besm6/v7besm) Unix port, gets
@@ -204,7 +211,7 @@ the rest in a directory per target under [libc/](libc/).
   hosted Linux and macOS targets), [ARM32](docs/Arm32_Backend.md),
   [x86-64](docs/X86_64_Backend.md) (also hosted Linux), [AVR](docs/Avr_Backend.md),
   [MSP430](docs/Msp430_Backend.md), [MMIX](docs/Mmix_Backend.md),
-  [BESM-6](backend/besm6/Besm6_Calling_Conventions.md)
+  [WebAssembly](docs/Wasm_Backend.md), [BESM-6](backend/besm6/Besm6_Calling_Conventions.md)
 
 ## License
 

@@ -1,7 +1,7 @@
 //
 // Control flow.  TAC jumps to labels; wasm only branches out of an enclosing block (to
 // its end) or loop (to its start).  A reducible graph becomes blocks, loops and ifs by
-// Ramsey's translation ("Beyond Relooper", JFP 2022); any graph, an irreducible one
+// Ramsey's translation ("Beyond Relooper", ICFP 2022); any graph, an irreducible one
 // included, the dispatch skeleton.
 //
 // Ramsey's translation walks the dominator tree, the blocks numbered in reverse

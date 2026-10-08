@@ -3,7 +3,7 @@
 This document lists repository layout, build details, components, tests, and development notes. The [README](../README.md) is the overview for new readers.
 
 VCC is one machine-independent C11 front end (scanner, parser, semantic analysis, TAC
-lowering and optimization) feeding per-target code generators. Eight are complete:
+lowering and optimization) feeding per-target code generators. Nine are complete:
 RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, see
 [Riscv_Backend.md](Riscv_Backend.md)), AArch64 AAPCS64 (`genaarch64`, see
 [Aarch64_Backend.md](Aarch64_Backend.md)), ARMv7-A AAPCS-VFP (`genarm32`, see
@@ -11,7 +11,8 @@ RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, see
 [X86_64_Backend.md](X86_64_Backend.md)), AVR ATmega1280 with the avr-gcc ABI (`genavr`, see
 [Avr_Backend.md](Avr_Backend.md)), the classic MSP430 with the EABI as GCC has it (`genmsp430`,
 see [Msp430_Backend.md](Msp430_Backend.md)), Knuth's MMIX with the MMIXware ABI as GCC has it
-(`genmmix`, see [Mmix_Backend.md](Mmix_Backend.md)) and BESM-6 (`genbesm`). The examples in
+(`genmmix`, see [Mmix_Backend.md](Mmix_Backend.md)), WebAssembly wasm32 with clang's C ABI
+(`genwasm`, see [Wasm_Backend.md](Wasm_Backend.md)) and BESM-6 (`genbesm`). The examples in
 this document use RISC-V.
 
 ## Repository layout
@@ -28,7 +29,8 @@ vcc/
 │   ├── avr/        # AVR codegen: IR (avr_ir.h), register allocation, two-form selection, peephole, branch relaxation, tests
 │   ├── msp430/     # MSP430 codegen: IR (msp_ir.h), register allocation, memory-to-memory selection, peephole, branch relaxation, tests
 │   ├── besm6/      # BESM-6 codegen: IR (besm.h, besm6.asdl), three assembler dialects, tests, BESM-6 docs
-│   └── mmix/       # MMIX codegen: IR (mmix_ir.h), register allocation in GCC's fixed model, selection with fusions, peephole, tests
+│   ├── mmix/       # MMIX codegen: IR (mmix_ir.h), register allocation in GCC's fixed model, selection with fusions, peephole, tests
+│   └── wasm/       # WebAssembly codegen: IR (wasm_ir.h), stack-code selection, structured control flow, stackify, peephole, local coalescing, tests
 ├── cc/             # Compiler driver vcc (from v7besm's b6cc), its end-to-end tests
 ├── cpp/            # C preprocessor (v7 cpp, C11; from v7besm's b6cpp), its conformance tests
 ├── docs/           # Project documentation (this file)
@@ -62,6 +64,7 @@ vcc/
 | `genavr` | `build/backend/genavr` | `bin/vgenavr` | binary TAC (`-t avr`) | AVR GNU avr-as assembly (`.s`) |
 | `genmsp430` | `build/backend/genmsp430` | `bin/vgenmsp430` | binary TAC (`-t msp430`) | MSP430 GNU msp430-as assembly (`.s`) |
 | `genmmix` | `build/backend/genmmix` | `bin/vgenmmix` | binary TAC (`-t mmix`) | MMIX GNU mmix-as assembly (`.s`) |
+| `genwasm` | `build/backend/genwasm` | `bin/vgenwasm` | binary TAC (`-t wasm32`) | LLVM wasm assembly (`.s`) |
 | `genbesm` | `build/backend/genbesm` | `bin/vgenbesm6` | binary TAC | BESM-6 assembly (`.s`, `.mad` or `.bem`) |
 
 `parse` and `lower` are built from the root `CMakeLists.txt`, `cc` and `cpp` from
@@ -147,7 +150,7 @@ does not define.
 fixes type sizes, alignment, the signedness of plain `char` and struct layout. The
 default is `riscv64`; BESM-6 code must be lowered with `-t besm6`. `lower -h` lists
 the known descriptors: `avr`, `msp430`, `arm32`, `aarch64`, `x86_64`, `riscv32`,
-`riscv64`, `mmix`, `besm6`.
+`riscv64`, `mmix`, `wasm32`, `besm6`.
 
 **Options** (see `translator/main.c`): `--tac` (default), `--yaml`, `--dot`, `-t`/`--target`,
 `--no-unreachable`, `--no-copy-prop`, `--no-dead-store`, `--opt-debug`, `--verify`, `-v`,
@@ -178,7 +181,9 @@ lowered with `-t x86_64`, assembled by `x86_64-elf-as --64`). `genavr` (TAC
 lowered with `-t avr`, assembled by `avr-as -mmcu=atmega1280`) takes
 `--no-regalloc` and `--no-peephole`, as does `genmsp430` (TAC lowered with `-t msp430`,
 assembled by `msp430-elf-as -mcpu=msp430`) and `genmmix` (TAC lowered with `-t mmix`,
-assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms`), and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
+assembled by `mmix-knuth-mmixware-as -x -no-predefined-syms`). `genwasm` (TAC lowered
+with `-t wasm32`, assembled by `clang --target=wasm32` with the wasm features) takes
+`--no-structure`, `--no-peephole`, `--no-stackify` and `--no-coalesce`, and `genbesm` uses the same driver too; see [BESM-6 backend](#besm-6-backend-backendbesm6).
 
 ### Installation
 
@@ -189,7 +194,7 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 
 | Path under `~/.local` | Contents |
 |-----------------------|----------|
-| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`, `vgenmsp430`, `vgenmmix`, `vgenbesm6` |
+| `bin/` | `vcc`, `vcpp`, `vparse`, `vlower`, `vgenriscv64`, `vgenriscv32`, `vgenaarch64`, `vgenarm32`, `vgenx86`, `vgenavr`, `vgenmsp430`, `vgenmmix`, `vgenwasm`, `vgenbesm6` |
 | `share/vcc/riscv64/lib/` | `crt0.o`, `libc.a`, `link.ld` (only when a RISC-V clang and `llvm-ar` were found) |
 | `share/vcc/riscv64/include/` | all RISC-V and shared headers, hosted ones included |
 | `share/vcc/aarch64/lib/`, `include/` | the same for AArch64 (the runtime only when the clang has an AArch64 target) |
@@ -198,6 +203,7 @@ with a `v` prefix only at install time; each target's runtime and headers go to
 | `share/vcc/avr/lib/`, `include/` | the same for AVR (the runtime only when the clang has an AVR target) |
 | `share/vcc/msp430/lib/`, `include/` | the same for MSP430, `link.ld` for mspsim (the runtime only when the GNU MSP430 toolchain was found) |
 | `share/vcc/mmix/lib/`, `include/` | `crt0.o` and `libc.a` for MMIX, with no linker script (the runtime only when the GNU MMIX toolchain was found) |
+| `share/vcc/wasm32/lib/`, `include/` | `crt0.o`, `libc.a` and the node host `run.mjs` for wasm32, with no linker script (the runtime only when a clang with the WebAssembly target, `wasm-ld` and `llvm-ar` were found) |
 | `share/vcc/besm6/lib/` | `libc.bin`, `libbem.bin`, `libruntime.a` |
 | `share/vcc/besm6/include/` | the C11 freestanding headers and `besm6.h` (the hosted libc comes from [v7besm](https://github.com/besm6/v7besm)) |
 
@@ -453,6 +459,27 @@ the `msp430` descriptor in `semantic/target.c`. See [Msp430_Backend.md](Msp430_B
 The signed `char` and the big-endian byte order come from the `mmix` descriptor in
 `semantic/target.c`. See [Mmix_Backend.md](Mmix_Backend.md).
 
+### WebAssembly backend (`backend/wasm/`)
+
+| File | Role |
+|------|------|
+| `wasm_ir.h`, `wasm_ir.c` | IR: a function as one flat list of stack instructions, `block`/`loop`/`if`/`end` among them; each instruction's stack effect |
+| `frame.c` | Types, clang's signatures (`wasm_pass`, `wasm_sret`), which names are locals and which frame slots, the shadow-stack prologue and epilogue (none without slots) |
+| `instr.c` | Selection of stack code: push the operands, compute, pop into the destination; narrow values kept extended; `long double` through the runtime |
+| `call.c` | clang's calls: single-scalar structures by value, others by reference to a caller's copy, sret, `long double` as two `i64`, the variadic buffer and `__va_start`, `call_indirect` |
+| `structure.c` | Structured control flow by Ramsey's translation (reverse postorder, dominators, loop headers, merge nodes); the dispatch skeleton for an irreducible graph |
+| `peephole.c` | Rewrites of the finished code: stackify, tees, dead values, tests, offsets folded into accesses, stores merged, dead code and branches removed |
+| `locals.c` | Local coalescing: liveness over the structured code, copy-related locals merged, groups coloured |
+| `data.c` | Static data, a section per variable |
+| `emit.c` | LLVM wasm assembly, every `.functype` at the top of the unit, names the assembler cannot take renamed |
+| `codegen.c`, `codegen.h`, `internal.h` | Per-function driver |
+| `main.c` | `genwasm` entry |
+| `Plan.md` | The plan the backend was built by, phase by phase |
+| `test/*_tests.cpp` | GoogleTest suite (`wasm32-tests`) |
+
+The signed `char`, ILP32 and the binary128 `long double` come from the `wasm32`
+descriptor in `semantic/target.c`. See [Wasm_Backend.md](Wasm_Backend.md).
+
 **Walkthrough.** For
 
 ```c
@@ -497,13 +524,14 @@ instruction selection on its own.
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
 | `libc/riscv64/include/` | RISC-V's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/lp64/include/` | LP64 data-model headers shared by riscv64, aarch64, x86-64 and mmix (`float.h`, `inttypes.h`, `limits.h`, `math.h`; x86-64 and mmix have their own `float.h` and `limits.h`) |
-| `libc/ilp32/include/` | ILP32 data-model headers shared by riscv32 and arm32 (`inttypes.h`, `limits.h`, `math.h`) |
+| `libc/ilp32/include/` | ILP32 data-model headers shared by riscv32, arm32 and wasm32 (`inttypes.h`, `limits.h`, `math.h`; wasm32 has its own `limits.h`) |
 | `libc/aarch64/include/` | AArch64's own headers (`stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/arm32/include/` | ARM32's own headers (`float.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/x86/include/` | x86-64's own headers (`float.h`, `limits.h`, `stdarg.h`, `stddef.h`, `stdint.h`, `setjmp.h`) |
 | `libc/avr/include/` | AVR's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`) |
 | `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
 | `libc/mmix/include/` | MMIX's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
+| `libc/wasm32/include/` | wasm32's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`); its runtime (`crt0.S`, `console.s`, `memory.s`, `sqrt.s`, `main.s`, `malloc.c`, `run.mjs`) is in `libc/wasm32/` |
 | `libc/ip16/include/` | 16-bit data-model headers: `inttypes.h`, shared by avr and msp430, and avr's `stddef.h` and `stdint.h` (msp430 has its own, with a `long` `wchar_t`) |
 | `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too, and MSP430 |
 | `libc/common/float64.c` | binary64 soft-float (`__adddf3`, `__ltdf2`, `sqrt`, …), correctly rounded, for MSP430 |
@@ -917,7 +945,7 @@ rejects it ("character constant too long"). With riscv64's 32-bit `int` that all
 allows 5 and 6. The AST integer fields use 64-bit host storage.
 
 A constant of one byte without a prefix (`'\xff'`) is the value of a plain `char`
-converted to `int` (C11 §6.4.4.4p10): −1 where plain `char` is signed (x86-64, AVR, MMIX),
+converted to `int` (C11 §6.4.4.4p10): −1 where plain `char` is signed (x86-64, AVR, MMIX, wasm32),
 255 where it is unsigned. `parse` has no target, so it keeps the byte and marks the literal
 `LITERAL_CHAR_BYTE`; the semantic pass sign-extends it (`type_char_literal`).
 
@@ -973,10 +1001,11 @@ below), so `make run` runs them too. Test executables and their unit-test source
 | `arm32-tests` | `backend/arm32/test/*_tests.cpp` (golden assembly, qemu run, clang interop, headers against clang's, `long long`, HFAs, variadics, register allocation, frames, peephole, libc) and the book suite |
 | `x86-tests` | `backend/x86/test/*_tests.cpp` (golden assembly, also checked by GNU `as`, qemu run, clang interop, headers against clang's, the x87 `long double`, structs, variadics, register allocation, frames, peephole, libc) and the book suite |
 | `mmix-tests` | `backend/mmix/test/*_tests.cpp` (golden assembly, runs under Knuth's `mmix`, GCC interop both ways, headers against GCC's, register allocation, peephole, libc also under newlib) and the book suite, compared with GCC's build |
+| `wasm32-tests` | `backend/wasm/test/*_tests.cpp` (golden assembly with and without the rewrites, runs under node, clang interop both ways, headers against clang's, structured control flow and its fallback, variadics, libc, binary128 `long double`) and the book suite, compared with clang's build |
 | `besm-tests` | `backend/besm6/test/*_tests.cpp` (golden output for the three dialects, run tests under the `dubna` and `b6sim` simulators) and the book suite |
 
 Besides the GoogleTest cases, ctest runs the `riscv-headers`, `aarch64-headers`,
-`arm32-headers`, `x86_64-headers`, `mmix-headers` and `besm-headers` header checks, and their `-cpp` twins that preprocess with our own `cpp`. cppcheck, when installed, runs during the build, not under ctest.
+`arm32-headers`, `x86_64-headers`, `mmix-headers`, `wasm32-headers` and `besm-headers` header checks, and their `-cpp` twins that preprocess with our own `cpp`. cppcheck, when installed, runs during the build, not under ctest.
 
 `riscv-tests` runs programs on bare-metal `qemu-system-riscv64`, links VCC code with
 clang-compiled code in both directions, and compares every book program's output with
@@ -1066,4 +1095,5 @@ dot -Tpng tac.dot -o tac.png
 - **AVR:** [avr-gcc ABI](https://gcc.gnu.org/wiki/avr-gcc) — the calling convention `genavr` follows, as clang implements it; the [AVR instruction set manual](https://ww1.microchip.com/downloads/en/devicedoc/atmel-0856-avr-instruction-set-manual.pdf).
 - **MSP430:** [MSP430 Embedded Application Binary Interface](https://www.ti.com/lit/pdf/slaa534) (TI SLAA534) — the ABI `genmsp430` follows, as msp430-elf-gcc implements it; [mspsim](https://github.com/sergev/mspsim), the simulator the programs run on, and its `MSP430_Instruction_Set.md`.
 - **MMIX:** [MMIXware](https://www-cs-faculty.stanford.edu/~knuth/mmixware.html) (Knuth, *The Art of Computer Programming*, Volume 1, Fascicle 1) — the architecture, and `mmix`, the simulator the programs run on; GCC's `mmix-knuth-mmixware` port, whose ABI `genmmix` follows.
+- **WebAssembly:** the [WebAssembly specification](https://webassembly.github.io/spec/core/); clang's [wasm32 C ABI](https://github.com/WebAssembly/tool-conventions/blob/main/BasicCABI.md) in the tool conventions, which `genwasm` follows; Norman Ramsey, ["Beyond Relooper: recursive translation of unstructured control flow to structured control flow"](https://dl.acm.org/doi/10.1145/3547621) (ICFP 2022), the translation `structure.c` implements.
 - **BESM-6:** [v7besm](https://github.com/besm6/v7besm) (Unix v7 on BESM-6), [dubna](https://github.com/besm6/dubna) (Dubna monitor simulator).

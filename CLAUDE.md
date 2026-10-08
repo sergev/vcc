@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Project status: active, eight targets.** One C11 frontend feeds eight backends: BESM-6
+**Project status: active, nine targets.** One C11 frontend feeds nine backends: BESM-6
 (`genbesm`; used to port [Unix v7 to the BESM-6](https://github.com/besm6/v7besm)),
 RISC-V RV64IMFD/LP64D and RV32IMFD/ILP32D (`genriscv`, `--rv32`; bare-metal qemu,
 link-compatible with clang — see [docs/Riscv_Backend.md](docs/Riscv_Backend.md)),
@@ -23,7 +23,12 @@ reference; bare-metal `mspsim`, link-compatible with `msp430-elf-gcc -mcpu=msp43
 Knuth's 64-bit big-endian RISC with the MMIXware ABI as GCC implements it (`genmmix`; LP64,
 signed `char`, the register stack, binary64 in hardware with `float` only in memory; Knuth's
 `mmix` simulator, link-compatible with `mmix-knuth-mmixware-gcc`, its `libgcc.a` and newlib —
-see [docs/Mmix_Backend.md](docs/Mmix_Backend.md)).
+see [docs/Mmix_Backend.md](docs/Mmix_Backend.md)), and WebAssembly wasm32 with clang's C ABI
+(`genwasm`; ILP32, signed `char`, binary128 `long double`, Braam's features
+`-mreference-types -mbulk-memory -msign-ext -mmutable-globals -mnontrapping-fptoint` in
+`WASM32_FEATURES`; LLVM wasm assembly assembled by clang and linked by `wasm-ld`, run
+under node with `libc/wasm32/run.mjs` as the host of `env.putch`/`env.exit`;
+link-compatible with clang — see [docs/Wasm_Backend.md](docs/Wasm_Backend.md)).
 Two **hosted** targets reuse the x86-64 and AArch64 code generators: `x86_64-linux` and
 `aarch64-linux` (`vgenx86`/`vgenaarch64 --linux`, which adds `.note.GNU-stack`; `lower`
 aliases them to the bare-metal descriptors), assembled and linked by the system C compiler
@@ -42,7 +47,10 @@ header layouts and constants with the system compiler's.
 Run the tests with `ctest -j8` (or `make run`): it is much faster than the binaries.
 `scripts/bench_msp430.sh` prints mspsim cycles and code size of `bench/msp430/*.c`, ours
 against `msp430-elf-gcc -O2`; `scripts/bench_mmix.sh` prints `mmix -s` instructions, oops
-and mems of `bench/mmix/*.c`, ours against `mmix-knuth-mmixware-gcc -O2`.
+and mems of `bench/mmix/*.c`, ours against `mmix-knuth-mmixware-gcc -O2`;
+`scripts/bench_wasm.sh` prints the Code section bytes of C files (by default the book
+programs `wasm32-tests` leaves in `build/backend/wasm`), ours with and without the
+rewrites against clang `-O2` and `-Os`.
 A shared-code
 change must keep every backend's tests green, and must not change BESM-6 output except
 to fix a bug.
@@ -100,6 +108,11 @@ for the `stddef.h`/`stdint.h` MSP430 has its own) and shared headers →
 runtime (`crt0.o` and `libc.a`; no linker script, the linker's own serves) →
 `share/vcc/mmix/lib/` (when the GNU MMIX toolchain was found) and the MMIX, `lp64` (but for the
 `float.h`/`limits.h` MMIX has its own) and shared headers → `share/vcc/mmix/include/`.
+And for WebAssembly: `genwasm` → `bin/vgenwasm`, the `libc/wasm32` runtime (`crt0.o`,
+`libc.a`, no linker script, and the node host `run.mjs`) → `share/vcc/wasm32/lib/` (when a
+clang with the WebAssembly target, `wasm-ld` and `llvm-ar` were found) and the wasm32,
+`ilp32` (but for the `limits.h` wasm32 has its own) and shared headers →
+`share/vcc/wasm32/include/`.
 And for the hosted targets (`libc/linux/CMakeLists.txt`): `share/vcc/x86_64-linux/` and
 `share/vcc/aarch64-linux/`, `lib/libvcc.a` (built only where a C compiler for that Linux
 exists: the build's own on a matching host, else `<triple>-gcc`) and `include/` merged from
@@ -299,13 +312,14 @@ plus emitter literal bugs (Madlen-form `=377`/`=:64` literals → Bemsh `=в'377
 and a type-Е mantissa overflow on 2^40 → octal bit-pattern fallback). To reproduce by hand:
 `dubna [-d rime] build/backend/besm6/<TestName>.dub`.
 
-**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/avr/include/`, `libc/msp430/include/`, `libc/mmix/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/ip16/include/`, `libc/common/include/`).**
+**Target standard headers (`libc/besm6/include/`, `libc/riscv64/include/`, `libc/riscv32/include/`, `libc/aarch64/include/`, `libc/arm32/include/`, `libc/x86/include/`, `libc/avr/include/`, `libc/msp430/include/`, `libc/mmix/include/`, `libc/wasm32/include/`, `libc/lp64/include/`, `libc/ilp32/include/`, `libc/ip16/include/`, `libc/common/include/`).**
 C11 standard-library headers: each target's directory holds the headers that depend on its
 data model (`float.h`, `limits.h`, `stdint.h`, `inttypes.h`, `stddef.h`, `stdarg.h`, `math.h`,
 `setjmp.h`; BESM-6 also `besm6.h`, `malloc.h`) — except that riscv64 and aarch64 share
 `float.h`/`inttypes.h`/`limits.h`/`math.h` in `libc/lp64/include/` (x86-64 takes
 `inttypes.h`/`math.h` from there, with its own `float.h` for the x87 `long double` and
-`limits.h` for the signed `char`), and riscv32 and arm32
+`limits.h` for the signed `char`), and riscv32, arm32 and wasm32 (which has its own
+`limits.h`, for the signed `char`)
 `inttypes.h`/`limits.h`/`math.h` in `libc/ilp32/include/`, searched second
 (`wchar_t` keeps `stddef.h`/`stdint.h` apart, and `long double` the ILP32 `float.h`); AVR and MSP430
 share the 16-bit `inttypes.h` in `libc/ip16/include/`, whose `stddef.h`/`stdint.h` are AVR's
@@ -321,7 +335,7 @@ does (`SystemCpp`), the C compiler's `cc -E` — not a traditional standalone `c
 `#include` lines silently fail to expand. No `-P` is needed — `parse`'s scanner consumes
 `# line` markers and keeping them preserves original line numbers in diagnostics:
 `cc -E -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog.c | parse -`. The
-`besm-headers`, `riscv-headers`, `aarch64-headers`, `arm32-headers`, `x86_64-headers`, `avr-headers`, `msp430-headers` and `mmix-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
+`besm-headers`, `riscv-headers`, `aarch64-headers`, `arm32-headers`, `x86_64-headers`, `avr-headers`, `msp430-headers`, `mmix-headers` and `wasm32-headers` CTests (`scripts/check_headers.sh`, run under `make run`)
 preprocess and parse every header to catch syntax errors; their `besm-headers-cpp`/
 `riscv-headers-cpp` twins do the same through our `cpp` (`CPPFLAGS=-t<target>`). The unit-test fixtures preprocess
 their C snippets automatically via `libutil/test/test_preprocess.h` (using the CMake
@@ -376,7 +390,8 @@ C is compiled as C11 (`CMAKE_C_STANDARD 11`): GCC 15's default C23 makes `aligna
 **Cross tools** (`scripts/CrossTools.cmake`, `vcc_find_cross`, called by each `libc/<target>/CMakeLists.txt`):
 GNU binutils first, by a list of prefixes (`riscv64-unknown-elf`, `aarch64-none-elf`, `arm-none-eabi`,
 `x86_64-elf`/`x86_64-linux-gnu`/the host's, `avr`, `msp430-elf`/`msp430-unknown-elf`); else clang +
-ld.lld + llvm-ar (`-DVCC_CROSS_TOOLS=gnu|llvm` forces one). It sets `<T>_AS` (command with flags),
+ld.lld + llvm-ar (`-DVCC_CROSS_TOOLS=gnu|llvm` forces one). wasm32 has no binutils:
+`LLVM_ONLY` and `LD wasm-ld` give it clang + wasm-ld + llvm-ar alone. It sets `<T>_AS` (command with flags),
 `<T>_LD`/`<T>_LDFLAGS`, `<T>_AR`, `<T>_TOOLS_FOUND`, and separately `<T>_CLANG_FOUND`: clang is only
 the tests' optional *reference compiler* (interop, the book comparison, `HeadersAgreeWithClang`),
 guarded by `SKIP_IF_NO_<T>_CLANG()` (for the AVR book programs `avr-gcc` takes its place when found); `msp430-elf-gcc` likewise by `SKIP_IF_NO_MSP430_GCC()`. The test
@@ -385,10 +400,10 @@ fixtures take the assembler as `<T>_ASSEMBLER` (one blank-separated string, `cro
 
 ## Architecture
 
-This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6, RISC-V, AArch64, ARM32, x86-64, AVR, MSP430 and MMIX. The pipeline:
+This is a multi-platform C11 compiler. The shared frontend emits TAC; machine backends under `backend/` consume TAC and emit target assembly: BESM-6, RISC-V, AArch64, ARM32, x86-64, AVR, MSP430, MMIX and WebAssembly. The pipeline:
 
 ```
-[vcc] drives the whole chain, then the assembler and linker (<target>-as + <target>-ld GNU binutils, else clang + ld.lld | b6as + b6ld):
+[vcc] drives the whole chain, then the assembler and linker (<target>-as + <target>-ld GNU binutils, else clang + ld.lld | clang + wasm-ld | b6as + b6ld):
 
 Source (.c)
   → [cpp]        Macro expansion, #include, #if → preprocessed C (`-t` target macros)
@@ -413,6 +428,10 @@ Source (.c)
   → [genmmix]    Register alloc → Frame → Instruction select → Prologue/epilogue → Peephole
                  → GNU mmix-as assembly (.s)   (TAC lowered with `lower -t mmix`;
                  assembled with mmix-knuth-mmixware-as -x, linked by -ld into a .mmo)
+  → [genwasm]    Frame → Instruction select within Structured control flow → Stackify
+                 → Peephole → Local coalescing → LLVM wasm assembly (.s)   (TAC lowered
+                 with `lower -t wasm32`; assembled by clang --target=wasm32, linked by
+                 wasm-ld into a module run under node)
 ```
 
 **`parse`** (`parser/main.c`): Lexes and parses a C source file, outputs a binary AST stream (via `wio`) to stdout, or `--yaml`/`--dot` for human-readable forms.
@@ -423,7 +442,7 @@ Source (.c)
 
 | Phase | Location | Status |
 |---|---|---|
-| Compiler driver | `cc/` | Complete (ported from v7besm `cmd/cc` (b6cc); `-t riscv64|riscv32|aarch64|arm32|x86_64|avr|msp430|mmix|besm6`, `-E/-S/-c`, `-Smadlen/-Sbemsh`, assembles and links with the target's GNU binutils (`riscv64-unknown-elf-`, `aarch64-none-elf-`, `arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`; else clang and ld.lld), msp430-elf-ld (`--gc-sections`, then GCC's `libgcc.a` when found), mmix-knuth-mmixware-ld (text at 0x100, the linker's own script, a `.mmo`, then GCC's `libgcc.a` when found) or b6ld; finds the passes beside itself and `../share/vcc/<target>`; tool overrides `VCC_CPP`/`VCC_PARSE`/`VCC_LOWER`/`VCC_GEN`/`VCC_AS`/`VCC_LD` (the last two split at blanks, so `VCC_AS="clang --target=msp430 -c"` works); the BESM-6 `crt0.o`/`libc.a` are v7besm's, not installed here; see [cc/README.md](cc/README.md)) |
+| Compiler driver | `cc/` | Complete (ported from v7besm `cmd/cc` (b6cc); `-t riscv64|riscv32|aarch64|arm32|x86_64|avr|msp430|mmix|wasm32|besm6`, `-E/-S/-c`, `-Smadlen/-Sbemsh`, assembles and links with the target's GNU binutils (`riscv64-unknown-elf-`, `aarch64-none-elf-`, `arm-none-eabi-`, `x86_64-elf-` or the host's, `avr-`; else clang and ld.lld), msp430-elf-ld (`--gc-sections`, then GCC's `libgcc.a` when found), mmix-knuth-mmixware-ld (text at 0x100, the linker's own script, a `.mmo`, then GCC's `libgcc.a` when found), clang and wasm-ld for wasm32 (a module for node, no script) or b6ld; finds the passes beside itself and `../share/vcc/<target>`; tool overrides `VCC_CPP`/`VCC_PARSE`/`VCC_LOWER`/`VCC_GEN`/`VCC_AS`/`VCC_LD` (the last two split at blanks, so `VCC_AS="clang --target=msp430 -c"` works); the BESM-6 `crt0.o`/`libc.a` are v7besm's, not installed here; see [cc/README.md](cc/README.md)) |
 | Preprocessor | `cpp/` | Complete (Reiser v7 cpp modernized to C11, ported from v7besm `cmd/cpp` (b6cpp); adds `-t`/`--target` and `-nostdinc`; the `#ifdef besm6` size profile in `defs.h` is kept for diffability with v7besm, where it builds natively; see [cpp/README.md](cpp/README.md)) |
 | Lexer | `scanner/` | Complete |
 | Parser | `parser/` | Complete |
@@ -441,6 +460,7 @@ Source (.c)
 | AVR code gen | `backend/avr/` | Complete: the ATmega1280 (`avr51`) with the avr-gcc ABI as clang implements it — arguments from r25 down in even pairs to r8, then all on the stack, structures flattened into their members, results from r24/r22/r18, a variadic callee taking every argument on the stack; a 16-bit `int` and binary32 `double` (in `semantic/target.c`, which the front end now honours for constants, `size_t` and folding); register allocation on `backend/common/regalloc.c` with the register pair as unit (instructions that need the r18–r25 blocks or a helper count as calls through `uses_scratch`), a scratch-free selection in the destination's registers or X/Z beside the naive block form, parallel moves, compare-and-branch fusion, a peephole pass over register and SREG liveness, Y-addressed frames (`rcall .` for small ones, none without slots, Y then allocatable) and branch relaxation; a binary32 soft-float runtime (`libc/common/float32.c`) and the libgcc integer helpers with their special register contracts; runs on qemu `arduino-mega`, the status on USART1; `setjmp`/`longjmp`; see [docs/Avr_Backend.md](docs/Avr_Backend.md) |
 | MSP430 code gen | `backend/msp430/` | Complete: the classic MSP430 (no MSP430X, no hardware multiplier) with the MSP430 EABI as msp430-elf-gcc implements it — arguments in r12–r15 left to right, a 32-bit value in the next two consecutive registers, the split `long` (low word in r15, high on the stack), a 64-bit one only in all four, later arguments still taking free registers; **every structure or union argument by reference** (the caller passes its own object uncopied, the callee copies it first thing, or reads through the pointer when it only reads it and makes no call, store through a pointer or global write) and every structure result through a hidden pointer in r12; a variadic callee taking its last named argument and the variable ones on the stack; results in r12 up; a 16-bit `int`, unsigned `char`, alignment 2 and a binary64 `double` (`semantic/target.c`); register allocation on `backend/common/regalloc.c` with the 16-bit register as unit (r12–r14/r11 for values not live across a call or helper, then r10–r4; r15 the selection's one scratch, never allocated; r8–r10 kept free in a function calling an r8–r11 helper), selection on operands where they lie (register or memory, either side, memory to memory), parallel moves with `xor` swaps, compare-and-branch fusion, inline constant multiply, a peephole pass (constant-generator aliases, copy/constant/memory forwarding, dead code over register and SR liveness, loads sunk into their use, read-modify-write on memory, offsets folded into addresses, `@rN+`, tail `br`, dead stores to frame slots over a byte-level slot liveness that knows where the frame's address escapes, then no frame at all when no slot is left; a call reads only its own argument registers; `volatile` left alone), SP-addressed frames and frameless leaves, branch relaxation, a section per function and variable with `--gc-sections`; a correctly rounded soft binary64 (`libc/common/float64.c`) and binary32, GCC's `__mspabi_*` helpers with their r8–r11 contract (`mspabi64.s`), libgcc's complete shift groups and shared epilogues; runs on `mspsim` (UART stdout, exit status from the stop register 0x01FE); `setjmp`/`longjmp`; interop with GCC, libgcc and newlib both ways, and with clang but for structure arguments; see [docs/Msp430_Backend.md](docs/Msp430_Backend.md) |
 | MMIX code gen | `backend/mmix/` | Complete: Knuth's MMIX in user mode with the MMIXware ABI as `mmix-knuth-mmixware-gcc` implements it — `pushj $X, f` on the register stack, up to sixteen arguments in `$(X+1)`… (the callee's `$0`…), the 17th on up at `0($254)`…, the result in `$X`, `pop 1, 0`; `rJ` saved in a local by a non-leaf; structures of 8 bytes or less right-justified in one register, larger ones by reference (the callee copies, ours also passes a copy), every structure result through the address in the global `$251`; a variadic callee storing `$n`…`$15` just below its stack arguments, so `va_list` is a `char *` over 8-byte slots; LP64 with a **signed** plain `char`, **big-endian**, `long double` = `double` (`semantic/target.c`); register allocation on `backend/common/regalloc.c` in GCC's fixed model (`$0`–`$13` for values live across a call, which the register stack keeps for free, `$14` `rJ`, `$15` the hole, `$16`–`$31` the rest) and a compaction (`phys_reg`) that shifts the upper range down to just above the highest of `$0`–`$13` in use; selection with 8-bit immediates (`$248`–`$250` and `$255` as scratch), signed `/` and `%` by `div` and a six-instruction fix-up (`div` floors), `float` held as its exact binary64 value and rounded through the slot `%.fround`, `sflot` for integer to `float`, globals through linker-allocated base registers (`crt0` reserves `$247`–`$254`), fusions of compare-and-branch, `!x`-and-branch, pointer sums into indexed or offset addresses, and a returned call into a tail `jmp`; a signed `int`/`long` `+`/`-`/`*` result left unextended (its overflow is undefined, as GCC does); a peephole pass over register liveness (results in place, dead and overwritten instructions, copy forwarding, post-increment, redundant `%.fround` rounding, jump cleanups, `cs*`/`zs*`, `pb*` backward branches, `rJ` dropped with the last call); `$254`-addressed frames and frameless leaves that `pop` in place; no runtime helpers at all (multiply, divide, binary64 and `sqrt` are instructions), so `libc/mmix` is `crt0.S`, the buffered `console.s` (an `[exit N]` report on stderr), newlib's `setjmp.s`, `sqrt.s` and a bump `malloc.c`; runs on `mmix` (`$255` at `trap 0, Halt, 0` is the exit status); interop with GCC, libgcc and newlib both ways; see [docs/Mmix_Backend.md](docs/Mmix_Backend.md) |
+| WebAssembly code gen | `backend/wasm/` | Complete: wasm32 with clang's C ABI for `wasm32-unknown-unknown` on Braam's features (`WASM32_FEATURES`: reference types, bulk memory, sign-ext, mutable globals, non-trapping float-to-int); ILP32 with a signed `char` and a binary128 `long double` through `libc/common/float128.c`; a scalar a wasm local, an aggregate, `long double` or address-taken name a slot in a frame on the shadow stack (`__stack_pointer`; none without slots); narrow integers kept extended in their `i32`; calls as clang makes them: a structure of one scalar (`tac_wasm32_scalar`, which counts each bit-field as a field, hence `bitfield_unit_per_field`) by value, an empty one not at all, any other by reference to a caller's copy, a result that is not a scalar and every `long double` result through an sret first parameter, a `long double` argument as two `i64`, variadics in a buffer the caller fills, its address one more `i32` (`va_list` a `char *`, `__va_start` expanded in place), function pointers as table indices and `call_indirect`; `main(void)` as `__original_main` with clang's `main`/`__main_void`, `main(argc, argv)` as `__main_argc_argv`; structured control flow by Ramsey's translation ("Beyond Relooper": reverse postorder, dominators, loop headers, merge nodes, `br_if` where one way is a bare branch), the dispatch skeleton (`loop`/`br_table` over a state local) for an irreducible graph and under `--no-structure`; rewrites of the finished code (`--no-peephole`, `--no-stackify`, `--no-coalesce`): stackify (a value set once and read once later in a straight run stays on the operand stack, waiting below stack-neutral code or, when it has no effect, moved to its use; nothing with a load crosses a store, call or volatile access), tees, dead values, tests folded into comparisons, constant addends into memarg offsets, power-of-two multiplies as shifts, adjacent constant stores merged up to an `i64`, dead code, needless branches and unnamed blocks removed; local coalescing over liveness solved on the structured code, copy-related locals merged into groups, then coloured; every `.functype` at the top of the unit (the assembler wants it before any use), symbols `inf`/`nan`/`infinity` renamed `*.vcc`; the runtime `crt0.S`, `console.s` (imports `env.putch`/`env.exit`), `memory.s` (`memcpy`/`memmove`/`memset` as `memory.copy`/`memory.fill`), `sqrt.s`, a bump `malloc.c`, and the node host `run.mjs` (`[exit N]` on stderr); no `setjmp`/`longjmp` (no wasm exception handling); 1.16× clang `-O2`'s code size on `libc/common`; see [docs/Wasm_Backend.md](docs/Wasm_Backend.md) |
 
 ### Key data structures
 
@@ -515,6 +535,7 @@ Tests are GoogleTest (C++17). Source lives alongside the module it tests:
 - `backend/avr/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `fp_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `avr_test.h` also runs programs on bare-metal `qemu-system-avr -M arduino-mega`, skipped without the tools), `interop_tests.cpp` (a signature table linked with clang both ways, the call-saved registers, clang's code on our runtime, the headers checked against clang's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64, and the book suite (compared with avr-gcc, else clang) → `avr-tests`
 - `backend/msp430/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `relax_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `fp_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `msp430_test.h` assembles and links with the GNU MSP430 toolchain and runs programs on `mspsim`, skipped without the tools), `float32_tests.cpp`/`float64_tests.cpp` (the soft-float runtime against the host bit for bit), `interop_tests.cpp` (a signature table linked with GCC both ways and with clang but for structures, the call-saved registers, GCC's and clang's code on our runtime, our helpers against libgcc's, our code under newlib, the headers checked against GCC's and clang's), `regalloc_tests.cpp`, the libc run tests ported from AVR (also run against newlib), and the book suite (compared with GCC's build and clang's) → `msp430-tests`
 - `backend/mmix/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp`, `call_tests.cpp`, `data_tests.cpp`, `fp_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly, the selection goldens under `NaiveSelection()`; `mmix_test.h` assembles and links with the GNU MMIX toolchain and runs programs on Knuth's `mmix`, skipped without the tools), `interop_tests.cpp` (a signature table linked with GCC both ways, the `regcheck` harness for the registers a call keeps, GCC's code on our runtime, our code under newlib, the headers checked against GCC's), `regalloc_tests.cpp`, `peephole_tests.cpp`, the libc run tests ported from x86-64 (also run against newlib), `book_mmix_tests.cpp` (big-endian versions of the byte-order book programs) with `backend/common/test/book/signed_char_tests.cpp`, and the book suite (compared with GCC's build) → `mmix-tests`
+- `backend/wasm/test/emit_tests.cpp`, `codegen_tests.cpp`, `frame_tests.cpp`, `int_tests.cpp`, `flow_tests.cpp` (the structured translation, the skeleton, the irreducible fallback), `call_tests.cpp`, `data_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `stdarg_tests.cpp`, `run_tests.cpp` (golden assembly under `NaiveSelection()`, which turns the rewrites off; `wasm_test.h` assembles with clang, links with `wasm-ld` and runs modules under node, skipped without the tools), `peephole_tests.cpp` (the goldens of the default pipeline, and a run), `interop_tests.cpp` (a signature table, structures of each class, `long double`, variadics and bit-fields linked with clang both ways, clang's `main(argc, argv)` on our crt0, the headers checked against clang's), `float128_tests.cpp`, the libc run tests ported from ARM32, `backend/common/test/book/signed_char_tests.cpp`, and the book suite (compared with clang) → `wasm32-tests`
 - `backend/common/test/flow_tests.cpp` (CFG and liveness over TAC, `backend/common/flow.c`) → `backend-tests`
 - `translator/test/decl_tests.cpp`, `expr_tests.cpp`, `stmt_tests.cpp`, `cast_tests.cpp`, `incdec_tests.cpp`, `switch_tests.cpp`, `ptr_tests.cpp`, `struct_tests.cpp`, `type_tests.cpp` (typed TAC, struct layout, target struct ABI) → `translate-tests`
 - `optimize/test/const_fold_tests.cpp`, `jump_unreachable_tests.cpp`, `copy_prop_tests.cpp`, `cse_tests.cpp`, `loop_tests.cpp` (rotation, strength reduction, the BESM-6 opt-out), `dead_store_tests.cpp`, `type_conv_tests.cpp`, `pipeline_tests.cpp` → `optimizer-tests`
@@ -556,6 +577,7 @@ run by `make run` (see **Build & Test** above).
 - [docs/Avr_Backend.md](docs/Avr_Backend.md) — the AVR backend: target, the 16-bit data model and binary32 `double`, passes, frames and `Y+63`, branch relaxation, avr-gcc calls and variadics, the runtime's helper contracts, running a program by hand under qemu
 - [docs/Msp430_Backend.md](docs/Msp430_Backend.md) — the MSP430 backend: target, passes, selection on operands in memory and the constant generators, frames, branch relaxation, GCC's calls with structures by reference and variadics, where clang differs, sections and `--gc-sections`, the soft binary64 and the helper contracts, costs against GCC, running a program by hand under mspsim
 - [docs/Mmix_Backend.md](docs/Mmix_Backend.md) — the MMIX backend: target, passes, the register stack, GCC's fixed register model and the compaction, selection with 8-bit immediates, signed division, `float` held as binary64, linker-allocated base registers, the peephole pass, frames, GCC's calls with structures and variadics, big-endian notes, the runtime, costs against GCC, running a program by hand under `mmix`
+- [docs/Wasm_Backend.md](docs/Wasm_Backend.md) — the WebAssembly backend: target and features, locals and the shadow-stack frame, stack-code selection, structured control flow by Ramsey's translation and the dispatch fallback, stackify and the peephole rules, local coalescing, clang's calls with structures, `long double` and variadics, the assembler's peculiarities, the runtime and the node host, costs against clang, running a program by hand
 - [backend/besm6/Peephole_Rewrites.md](backend/besm6/Peephole_Rewrites.md) — peephole optimization in the BESM-6 backend: concept, the `besm_peephole` pass, and the catalogue of store/reload, NTR, compare/branch, and strength-reduction rewrites (Phase M)
 - [docs/C_Grammar.md](docs/C_Grammar.md) — C grammar article: scanner (`c11.l`), parser (`c11.y`), ASDL (`c11.asdl`), and how they relate to the hand-written implementation
 - [docs/Tests_From_The_Book.md](docs/Tests_From_The_Book.md) — textbook-style intro for newcomers: test-driven development, how the "Writing a C Compiler" tests are organized, and how each test maps to a compiler phase

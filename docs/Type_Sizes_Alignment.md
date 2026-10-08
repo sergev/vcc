@@ -39,7 +39,7 @@ The common models on byte-addressed machines are:
 | Model | `int`  | `long` | `long long` | pointer | Typical platform |
 |-------|--------|--------|-------------|---------|------------------|
 | LP16  | 16-bit | 32-bit | 64-bit      | 16-bit  | AVR, MSP430      |
-| ILP32 | 32-bit | 32-bit | 64-bit      | 32-bit  | ARM32, RISC-V 32 |
+| ILP32 | 32-bit | 32-bit | 64-bit      | 32-bit  | ARM32, RISC-V 32, WebAssembly (wasm32) |
 | LP64  | 32-bit | 64-bit | 64-bit      | 64-bit  | RISC-V 64, AArch64, x86_64 (Linux/macOS), MMIX |
 | LLP64 | 32-bit | 32-bit | 64-bit      | 64-bit  | x86_64 (Windows) |
 
@@ -227,8 +227,8 @@ A bit-field is laid out as the reference compiler of the target lays it out, sin
 code compiled by both shares structures. Three rules cover the targets
 (`Target.bitfield_layout`, applied by `layout_bitfield` in `semantic/declarations.c`):
 
-- **System V and GCC's usual rule** (x86-64, RISC-V, AVR as clang has it, MSP430,
-  macOS on arm64, BESM-6): bit-fields follow each other bit by bit, but one that would
+- **System V and GCC's usual rule** (x86-64, RISC-V, WebAssembly, AVR as clang has it,
+  MSP430, macOS on arm64, BESM-6): bit-fields follow each other bit by bit, but one that would
   cross a boundary of its declared type's alignment, past the type's size, starts at the
   next boundary. A named bit-field aligns the struct to its type; an unnamed one does
   not. `:0` moves to the next boundary of its type.
@@ -254,7 +254,8 @@ classifiers see integers there; on AVR, whose ABI passes a structure flattened i
 members, it lists clang's access units instead, unnamed bit-fields included
 (`Target.bitfield_access_bits`); on RISC-V, whose FP calling convention counts every
 bit-field as a field, a unit once per bit-field, named or not, and a `:0` as an unnamed
-array of no bytes (`Target.bitfield_unit_per_field`). `translator/test/bitfield_layouts.h` holds the layouts
+array of no bytes (`Target.bitfield_unit_per_field`); on WebAssembly, whose test for a
+structure of one scalar counts every bit-field as a field, a unit per bit-field too. `translator/test/bitfield_layouts.h` holds the layouts
 measured from the reference compilers, which `translate-tests` compares with ours.
 
 ### Checking a layout
@@ -299,51 +300,51 @@ aggregate layout from its input rather than recomputing it.
 
 ## 6. Target Comparison
 
-`semantic/target.c` defines nine target descriptors, each with a code generator:
+`semantic/target.c` defines ten target descriptors, each with a code generator:
 `riscv64` and `riscv32` (`genriscv`), `x86_64` (`genx86`), `aarch64` (`genaarch64`),
-`arm32` (`genarm32`), `avr` (`genavr`), `msp430` (`genmsp430`), `mmix` (`genmmix`) and
-`besm6` (`genbesm`). `x86_64` is the default when a program using the libraries sets no
+`arm32` (`genarm32`), `wasm32` (`genwasm`), `avr` (`genavr`), `msp430` (`genmsp430`),
+`mmix` (`genmmix`) and `besm6` (`genbesm`). `x86_64` is the default when a program using the libraries sets no
 target.
 
 Sizes, in bytes (`sizeof` units):
 
-| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
-|---------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
-| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
-| `char`        | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 1     |
-| `short`       | 2       | 2       | 2      | 2       | 2     | 2    | 2      | 2   | 6     |
-| `int`         | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 2   | 6     |
-| `long`        | 8       | 4       | 8      | 8       | 4     | 8    | 4      | 4   | 6     |
-| `long long`   | 8       | 8       | 8      | 8       | 8     | 8    | 8      | 8   | 6     |
-| `float`       | 4       | 4       | 4      | 4       | 4     | 4    | 4      | 4   | 6     |
-| `double`      | 8       | 8       | 8      | 8       | 8     | 8    | 8      | 4   | 6     |
-| `long double` | 16      | 16      | 16     | 16      | 8     | 8    | 8      | 4   | 6     |
-| pointer       | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 2   | 6     |
+| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | wasm32 | mmix | msp430 | avr | besm6 |
+|---------------|---------|---------|--------|---------|-------|--------|------|--------|-----|-------|
+| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1      | 1    | 1      | 1   | 6     |
+| `char`        | 1       | 1       | 1      | 1       | 1     | 1      | 1    | 1      | 1   | 1     |
+| `short`       | 2       | 2       | 2      | 2       | 2     | 2      | 2    | 2      | 2   | 6     |
+| `int`         | 4       | 4       | 4      | 4       | 4     | 4      | 4    | 2      | 2   | 6     |
+| `long`        | 8       | 4       | 8      | 8       | 4     | 4      | 8    | 4      | 4   | 6     |
+| `long long`   | 8       | 8       | 8      | 8       | 8     | 8      | 8    | 8      | 8   | 6     |
+| `float`       | 4       | 4       | 4      | 4       | 4     | 4      | 4    | 4      | 4   | 6     |
+| `double`      | 8       | 8       | 8      | 8       | 8     | 8      | 8    | 8      | 4   | 6     |
+| `long double` | 16      | 16      | 16     | 16      | 8     | 16     | 8    | 8      | 4   | 6     |
+| pointer       | 8       | 4       | 8      | 8       | 4     | 4      | 8    | 2      | 2   | 6     |
 
 Alignments, in bytes:
 
-| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
-|---------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
-| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
-| `char`        | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 1     |
-| `short`       | 2       | 2       | 2      | 2       | 2     | 2    | 2      | 1   | 6     |
-| `int`         | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 1   | 6     |
-| `long`        | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 1   | 6     |
-| `long long`   | 8       | 8       | 8      | 8       | 8     | 8    | 2      | 1   | 6     |
-| `float`       | 4       | 4       | 4      | 4       | 4     | 4    | 2      | 1   | 6     |
-| `double`      | 8       | 8       | 8      | 8       | 8     | 8    | 2      | 1   | 6     |
-| `long double` | 16      | 16      | 16     | 16      | 8     | 8    | 2      | 1   | 6     |
-| pointer       | 8       | 4       | 8      | 8       | 4     | 8    | 2      | 1   | 6     |
-| struct (min.) | 1       | 1       | 1      | 1       | 1     | 1    | 1      | 1   | 6     |
+| Type          | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | wasm32 | mmix | msp430 | avr | besm6 |
+|---------------|---------|---------|--------|---------|-------|--------|------|--------|-----|-------|
+| `_Bool`       | 1       | 1       | 1      | 1       | 1     | 1      | 1    | 1      | 1   | 6     |
+| `char`        | 1       | 1       | 1      | 1       | 1     | 1      | 1    | 1      | 1   | 1     |
+| `short`       | 2       | 2       | 2      | 2       | 2     | 2      | 2    | 2      | 1   | 6     |
+| `int`         | 4       | 4       | 4      | 4       | 4     | 4      | 4    | 2      | 1   | 6     |
+| `long`        | 8       | 4       | 8      | 8       | 4     | 4      | 8    | 2      | 1   | 6     |
+| `long long`   | 8       | 8       | 8      | 8       | 8     | 8      | 8    | 2      | 1   | 6     |
+| `float`       | 4       | 4       | 4      | 4       | 4     | 4      | 4    | 2      | 1   | 6     |
+| `double`      | 8       | 8       | 8      | 8       | 8     | 8      | 8    | 2      | 1   | 6     |
+| `long double` | 16      | 16      | 16     | 16      | 8     | 16     | 8    | 2      | 1   | 6     |
+| pointer       | 8       | 4       | 8      | 8       | 4     | 4      | 8    | 2      | 1   | 6     |
+| struct (min.) | 1       | 1       | 1      | 1       | 1     | 1      | 1    | 1      | 1   | 6     |
 
 Other target-defined choices:
 
-| Property              | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | mmix | msp430 | avr | besm6 |
-|-----------------------|---------|---------|--------|---------|-------|------|--------|-----|-------|
-| plain `char`          | unsigned | unsigned | signed | unsigned | unsigned | signed | unsigned | signed | unsigned |
-| signed `int` bits     | 32      | 32      | 32     | 32      | 32    | 32   | 16     | 16  | 41    |
-| signed `long` bits    | 64      | 32      | 64     | 64      | 32    | 64   | 32     | 32  | 41    |
-| signed `>>`           | arith.  | arith.  | arith. | arith.  | arith. | arith. | arith. | arith. | logical |
+| Property              | riscv64 | riscv32 | x86_64 | aarch64 | arm32 | wasm32 | mmix | msp430 | avr | besm6 |
+|-----------------------|---------|---------|--------|---------|-------|--------|------|--------|-----|-------|
+| plain `char`          | unsigned | unsigned | signed | unsigned | unsigned | signed | signed | unsigned | signed | unsigned |
+| signed `int` bits     | 32      | 32      | 32     | 32      | 32    | 32     | 32   | 16     | 16  | 41    |
+| signed `long` bits    | 64      | 32      | 64     | 64      | 32    | 32     | 64   | 32     | 32  | 41    |
+| signed `>>`           | arith.  | arith.  | arith. | arith.  | arith. | arith. | arith. | arith. | arith. | logical |
 
 Notes on the individual targets:
 
@@ -354,6 +355,10 @@ Notes on the individual targets:
   80-bit value stored in a 16-byte, 16-aligned slot.
 - **aarch64** (AAPCS64): the same sizes as riscv64, including binary128 `long double`.
 - **arm32** (ARM EABI): `long double` is the same 64-bit format as `double`.
+- **wasm32** (WebAssembly, clang's `wasm32-unknown-unknown`): ILP32 like ARM32, but
+  plain `char` is signed and `long double` is binary128, 16 bytes aligned to 16, as on
+  riscv32; `size_t` is `unsigned long` and `wchar_t` is `int`. Bit-fields follow the
+  System V rules. Compiled by `genwasm`; see [Wasm_Backend.md](Wasm_Backend.md).
 - **mmix** (Knuth's MMIX, big-endian): LP64 integers, but `long double` is the same
   8-byte format as `double` (the GCC MMIX port's choice; the FPU has no wider format);
   plain `char` is signed; `wchar_t` is `int`. Compiled by `genmmix`; see
@@ -370,8 +375,9 @@ Notes on the individual targets:
   [Avr_Backend.md](Avr_Backend.md).
 - **besm6**: every scalar is one 48-bit word; see the next section.
 
-Taken together: riscv64, aarch64, x86_64 and mmix share LP64 integers; riscv32 and
-arm32 share ILP32; `long double` is a true binary128 on riscv64, riscv32 and aarch64.
+Taken together: riscv64, aarch64, x86_64 and mmix share LP64 integers; riscv32, arm32
+and wasm32 share ILP32; `long double` is a true binary128 on riscv64, riscv32, aarch64
+and wasm32.
 
 ---
 
