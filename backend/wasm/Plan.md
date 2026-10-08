@@ -129,7 +129,9 @@ void print_range(void)
 - `co_resume(p)` runs to the next suspension or to the return; `co_cancel(p)` does the
   same, delivering `CO_CANCEL` at the suspension point; `co_destroy(p)` does not resume
   user code at all: it runs the `defer`s active at the suspension point, innermost
-  first, and finishes the frame (§2.3). `co_done(p)` is true once the body has
+  first, finishes the frame (§2.3) and returns `CO_DONE`. All three trap on a frame
+  that has finished or been destroyed, so a program that may hold one tests
+  `co_done(p)` before `co_destroy(p)`. `co_done(p)` is true once the body has
   returned or the frame was destroyed. `co_value(p)` is the last yielded value, type
   `Y`; `co_result(p)` the return value, type `T`.
 - Coroutines start suspended; `co_init` runs nothing.
@@ -227,7 +229,11 @@ The rules:
   is left: by falling off its end, `return`, `break`, `continue`, or a `goto` out of
   it. Several in one scope run in reverse order; each scope has its own list. A
   `defer` is activated when control passes it, and `exit`, `longjmp` (which wasm32 has
-  not got) and traps run none.
+  not got) and traps run none. The scopes are C11's blocks (§6.8p3, §6.8.4p3,
+  §6.8.5p5): a compound statement, a selection or iteration statement as a whole,
+  and each of their substatements, braced or not. So `if (x) defer f();` runs `f()`
+  at once, since the `if` body ends there, and a `defer` that is the unbraced body
+  of a loop runs at the end of each iteration.
 - `stmt` may be any statement, a compound one included, but control may not leave it
   except by completing it: no `return`, no `break`/`continue` that would leave it, no
   `goto` out, and **no `yield` or `await` inside it.** A suspension inside cleanup
@@ -384,9 +390,12 @@ control-flow edge leaving one or more lexical scopes passes through the cleanup 
 those scopes, innermost first.
 
 - `TacCtx` (`translator/translate.h:21-34`; it is initialised positionally at
-  `translate.c:920`) gains a scope stack: each compound statement (and `for`'s own
-  scope) pushes an entry holding the list of `Stmt *` deferred so far; `gen_stmt`'s
-  `STMT_DEFER` appends to the top entry and emits nothing.
+  `translate.c:920`) gains a scope stack: each block of §2.3 pushes an entry holding
+  the list of `Stmt *` deferred so far — a compound statement, `for`'s own scope,
+  and every substatement of `if`, `switch`, `while`, `do` and `for`, braced or not
+  (an unbraced one is a block of its own in C11, so `if (x) defer f();` lowers to
+  `f()` right there); `gen_stmt`'s `STMT_DEFER` appends to the top entry and emits
+  nothing.
 - `emit_scope_exits(ctx, down_to)` lowers, with `gen_stmt`, the deferred statements
   of every scope from the innermost to `down_to`, each scope's in reverse order. It
   is called: at the end of a compound statement for its own scope (only when the end
