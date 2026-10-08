@@ -72,7 +72,7 @@ blocking functions is made with it in mind).
 
 ## 2. The surface
 
-Two statements, two expressions, one function specifier, one type, nine operations.
+Two statements, two expressions, one function specifier, one type, ten operations.
 Spellings follow C's convention for added keywords: reserved identifiers in the
 compiler, short names from a header, so no existing program changes meaning unless it
 includes `<coro.h>`.
@@ -84,7 +84,7 @@ includes `<coro.h>`.
 | `_Await e` | `await` | run a coroutine to completion, forwarding its suspensions |
 | `_Defer stmt` | `defer` | run `stmt` when the enclosing scope is left |
 | `_Coro_frame(Y, T)` | `co_frame(Y, T)` | the frame of a coroutine yielding `Y` and returning `T`: an incomplete type, only pointers to it exist |
-| `__co_init`, `__co_resume`, `__co_cancel`, `__co_destroy`, `__co_done`, `__co_value`, `__co_result`, `__co_sizeof`, `__co_alignof` | `co_init` … `co_alignof` | the operations, keywords with call syntax like `__builtin_va_class` |
+| `__co_init`, `__co_alloca`, `__co_resume`, `__co_cancel`, `__co_destroy`, `__co_done`, `__co_value`, `__co_result`, `__co_sizeof`, `__co_alignof` | `co_init` … `co_alignof` | the operations, keywords with call syntax like `__builtin_va_class` |
 
 ```c
 typedef enum { CO_SUSPENDED, CO_DONE } co_status;
@@ -103,8 +103,7 @@ coro(int) void range(int lo, int hi)
 
 void print_range(void)
 {
-    static _Alignas(16) char storage[256];
-    co_frame(int, void) *f = co_init(storage, sizeof storage, range, 0, 10);
+    co_frame(int, void) *f = co_alloca(range, 0, 0, 10);
     while (co_resume(f) == CO_SUSPENDED)
         print_int(co_value(f));
 }
@@ -120,12 +119,27 @@ void print_range(void)
   end to `storage + bytes`, is the **arena** from which the frames of everything `f`
   awaits are taken (§2.2). A block of exactly `co_sizeof(f)` bytes is a frame for a
   coroutine that awaits nothing.
-- **Sizes are run-time values**, not constant expressions: `co_sizeof(f)` and
-  `co_alignof(f)` read `f`'s descriptor, a word of data the defining unit emits
-  (§6.3). This is the price of separate compilation — a program must await the
-  libc's coroutines without seeing their bodies — and of laying frames out after the
-  optimizer has run. §9 argues it. `_Alignas(16)` and `co_sizeof(f) <= bytes` are the
-  caller's to arrange; `co_init` traps otherwise.
+- **Sizes are link-time constants.** The unit defining `f` emits two absolute
+  symbols, `f$size` and `f$align` (§6.3); `co_sizeof(f)` and `co_alignof(f)` are
+  their addresses, an `i32.const` the linker fills in, so they cost no load. They
+  are not integer constant expressions — no array size, `case` label or
+  `_Static_assert` may use them — because the frame is laid out after the optimizer
+  has run, in the unit that defines `f`, and a program must await the libc's
+  coroutines without seeing their bodies. §9 argues it. With `co_init`, `_Alignas(16)`
+  and `co_sizeof(f) <= bytes` are the caller's to arrange; `co_init` traps otherwise.
+- **`co_alloca(f, extra, args...)`** is the way to give a frame its own size: it
+  builds `f`'s frame, followed by `extra` bytes of arena for what `f` awaits, in
+  memory that lives **until the end of the enclosing block**, and returns the
+  `co_frame(Y, T) *`. In an ordinary function the memory comes off the shadow stack;
+  in a coroutine, from the task's arena (§2.2), since a coroutine's shadow stack is
+  unwound at every suspension and the arena is not. The new frame is the root of a
+  task of its own, its `extra` bytes its own arena. At the end of the block, on every
+  exit edge and on `co_destroy` of the enclosing coroutine, an implicit cleanup runs
+  — `if (!co_done(p)) co_destroy(p);`, then the memory is given back — ordered as if
+  the `co_alloca` were a `defer` at its own position (§2.3). So a sub-coroutine
+  started with `co_alloca` never outlives its block with its `defer`s unrun, a
+  loop body's `co_alloca` is released every iteration, and the allocations nest
+  with the blocks, LIFO.
 - `co_resume(p)` runs to the next suspension or to the return; `co_cancel(p)` does the
   same, delivering `CO_CANCEL` at the suspension point; `co_destroy(p)` does not resume
   user code at all: it runs the `defer`s active at the suspension point, innermost
@@ -134,7 +148,7 @@ void print_range(void)
   `co_done(p)` before `co_destroy(p)`. `co_done(p)` is true once the body has
   returned or the frame was destroyed. `co_value(p)` is the last yielded value, type
   `Y`; `co_result(p)` the return value, type `T`.
-- Coroutines start suspended; `co_init` runs nothing.
+- Coroutines start suspended; `co_init` and `co_alloca` run nothing.
 
 ### 2.2 Suspending and delegating
 
@@ -204,7 +218,9 @@ when it completes. An `await` chain is strictly LIFO, so one bump pointer per ta
 serves every level, recursion included, and no frame size has to be known at compile
 time. A chain that does not fit traps (`CO_TRAP_NO_SPACE`); the root's owner chooses
 the block size, and a trap names the coroutine it could not start. Nothing calls an
-allocator.
+allocator. A `co_alloca` inside a coroutine pushes on the same stack and is popped at
+the end of its block, so arena `await`s and `co_alloca`s nest in one LIFO order; the
+frame it builds is the root of a new task whose arena is the `extra` it was given.
 
 A suspension may appear anywhere an expression may: `x = g() + await f();` is legal.
 What is live across it is the compiler's problem (§6.2), not the programmer's. A
@@ -248,7 +264,9 @@ The rules:
   static fact at every point, which is what lets the compiler emit the cleanup
   inline with no run-time bookkeeping, and what makes `co_destroy` possible. A
   `defer` inside a `case` needs braces, which also makes its scope the case rather
-  than the whole switch.
+  than the whole switch. A `co_alloca` is a `defer` for this purpose: its release
+  (§2.1) is ordered with the `defer`s of its block, and no jump may enter the block
+  past it.
 - In a coroutine, suspension is not scope exit: the `defer`s stay active across a
   `yield`. They run when the scope is left on resumption, or on `co_destroy`.
 
@@ -261,7 +279,8 @@ Compile-time errors: `yield`/`await` outside a coroutine or inside a `defer`;
 `yield expr` in a `coro(void)` and bare `yield` elsewhere; `await` of a different `Y`;
 `co_value` on a `co_frame(void, T)`, `co_result` on a `co_frame(Y, void)`; a coroutine
 that is variadic, `inline`, or K&R; its name used as a value other than in `co_init`,
-`co_sizeof`, `co_alignof` or an arena `await`; a jump past a `defer`; control leaving a
+`co_alloca`, `co_sizeof`, `co_alignof` or an arena `await`; a jump past a `defer` or a
+`co_alloca`; control leaving a
 `defer` body; `main` as a coroutine outside Braam mode.
 
 Traps, in every build: `co_init` on storage too small or misaligned
@@ -269,23 +288,26 @@ Traps, in every build: `co_init` on storage too small or misaligned
 finished (`CO_TRAP_FINISHED`); `co_value` when the last status was not `CO_SUSPENDED`
 (`CO_TRAP_NO_VALUE`); `co_result` before `CO_DONE` or after `co_destroy`
 (`CO_TRAP_NOT_DONE`); falling off the end of a non-void coroutine
-(`CO_TRAP_NO_RETURN`); an arena `await` that does not fit (`CO_TRAP_NO_SPACE`). A trap
+(`CO_TRAP_NO_RETURN`); an arena `await`, or a `co_alloca` in a coroutine, that does
+not fit (`CO_TRAP_NO_SPACE`); a `co_alloca` in a function past the end of the shadow
+stack (the ordinary out-of-bounds trap). A trap
 is `__co_trap(code)`: under node it prints the name and exits 255; on Braam it is
 `unreachable`, which the kernel reports as a crash.
 
-Not covered: letting storage go out of scope while its frame is suspended; that
-leaks whatever the coroutine owned, and the language cannot detect it without
-ownership tracking. `co_destroy` is the tool, and a later lint can flag the pattern.
+Not covered: letting storage given to `co_init` go out of scope while its frame is
+suspended; that leaks whatever the coroutine owned, and the language cannot detect it
+without ownership tracking. `co_destroy` is the tool, and a later lint can flag the
+pattern. A `co_alloca` frame cannot be left behind: its block's end destroys it.
 
 A function pointer to a coroutine (`coro_ptr(Y, T)`, a pointer plus the coroutine's
 descriptor, so a scheduler can hold a heterogeneous list of tasks) is deferred to
-phase 9: Braam's runtime does not need it (`main` is known), and its init thunk needs
+phase C9: Braam's runtime does not need it (`main` is known), and its init thunk needs
 a uniform argument list, which the plan proposes as "one `void *`" there.
 
 ## 3. Where each part lives
 
 ```
-scanner     four keywords, nine builtins, _Coro_frame        (scanner.c keyword table)
+scanner     four keywords, ten builtins, _Coro_frame         (scanner.c keyword table)
 parser      specifier, statements, expressions, the type     (decl.c, stmt.c, expr.c)
 ast         STMT_DEFER, EXPR_YIELD/AWAIT/CO_*, FUNC_SPEC_CORO, the frame type
 semantic    coroutine-ness on the symbol, Y/T types, every compile-time rule
@@ -294,9 +316,10 @@ translator  defer as inline cleanup on every exit edge; a coroutine body as an
             stores and calls against a fixed header layout
 optimizer   unchanged: the suspension is a call it may not move or drop
 coro split  after the optimizer: liveness, frame layout, spills, dispatch, f$init,
-            the descriptor                                   (translator/coro.c)
-genwasm     one change: a dispatch loop around an irreducible region only, not
-            around the whole function                        (structure.c)
+            the frame size and alignment                     (translator/coro.c)
+genwasm     the f$size/f$align symbols; __builtin_stack_save/restore/alloca
+            for co_alloca (call.c); a dispatch loop around an irreducible
+            region only, not around the whole function       (structure.c)
 runtime     libc/wasm32: co.c (push/pop/trap); libc/wasm32/braam: crt0, syscalls,
             allocator, headers, a fake kernel for node
 driver      target wasm32-braam: link line, the braam section
@@ -329,10 +352,10 @@ BESM-6 output is unchanged because no BESM-6 program uses it.
   and binds tighter than `==`, so `yield i == CO_CANCEL` means `(yield i) ==
   CO_CANCEL`; the grammar note records it, and `<coro.h>` examples write the
   parentheses anyway.
-- The nine operations: one `EXPR_CO_OP{op, args}` kind with an enum, argument counts
+- The ten operations: one `EXPR_CO_OP{op, args}` kind with an enum, argument counts
   checked in the parser, like `__builtin_va_class` (`expr.c:708`). `co_init`'s third
-  argument and `co_sizeof`'s only one are identifiers naming a coroutine; they are
-  parsed as expressions and judged in semantic.
+  argument, `co_alloca`'s first and `co_sizeof`'s only one are identifiers naming a
+  coroutine; they are parsed as expressions and judged in semantic.
 - `_Coro_frame(Y, T)`: a type specifier (`TYPE_SPEC_CORO_FRAME` with two type names)
   in `parse_type_specifier` and `is_type_specifier`; `fuse_type_specifiers` makes it a
   `TYPE_STRUCT` with a canonical tag spelled from `Y` and `T` (`__co_frame(int,void)`),
@@ -370,9 +393,14 @@ BESM-6 output is unchanged because no BESM-6 program uses it.
   callee is a coroutine symbol, checked as an ordinary call plus the `Y` rule.
   `co_init(storage, bytes, f, args...)`: `void *`, `size_t`, a coroutine symbol, then
   the arguments checked against `f`'s parameters as a call; result `co_frame(Y, T) *`
-  for `f`'s types. `co_resume`/`co_cancel`/`co_destroy` → `co_status` (`int`),
+  for `f`'s types. `co_alloca(f, extra, args...)`: a coroutine symbol, `size_t`, then
+  the arguments as for `co_init`; same result type. `co_resume`/`co_cancel`/`co_destroy`
+  → `co_status` (`int`),
   `co_done` → `int`, `co_value` → `Y`, `co_result` → `T`, `co_sizeof`/`co_alignof` →
-  `size_t`, not constant (`is_constant_expression` says no).
+  `size_t`, not constant (`is_constant_expression` says no: they are link-time
+  values).
+- `co_alloca` takes part in the jump check like a `defer`: `resolve_labels.c` treats
+  it as one when it records what precedes each label in its scope.
 - A coroutine symbol decays nowhere else. `main` may be a coroutine only when
   `target_config->braam` is set (§7).
 - `eval_const` and `const_convert.c` never see the new expressions: none is a constant
@@ -391,13 +419,14 @@ those scopes, innermost first.
 
 - `TacCtx` (`translator/translate.h:21-34`; it is initialised positionally at
   `translate.c:920`) gains a scope stack: each block of §2.3 pushes an entry holding
-  the list of `Stmt *` deferred so far — a compound statement, `for`'s own scope,
+  the list of **exit actions** registered so far — a deferred `Stmt *`, or a
+  `co_alloca` release (§6.1) — for a compound statement, `for`'s own scope,
   and every substatement of `if`, `switch`, `while`, `do` and `for`, braced or not
   (an unbraced one is a block of its own in C11, so `if (x) defer f();` lowers to
   `f()` right there); `gen_stmt`'s `STMT_DEFER` appends to the top entry and emits
-  nothing.
-- `emit_scope_exits(ctx, down_to)` lowers, with `gen_stmt`, the deferred statements
-  of every scope from the innermost to `down_to`, each scope's in reverse order. It
+  nothing, and a `co_alloca` appends its release after emitting the allocation.
+- `emit_scope_exits(ctx, down_to)` lowers the exit actions — a deferred statement
+  with `gen_stmt`, a release as its few instructions — of every scope from the innermost to `down_to`, each scope's in reverse order. It
   is called: at the end of a compound statement for its own scope (only when the end
   is reachable — `stmt_falls_through` already exists); before `RETURN` for every
   scope; before `break`/`continue` for the scopes down to the loop's or switch's
@@ -425,13 +454,16 @@ and wasm32 run tests (`backend/wasm/test/defer_tests.cpp`: the order printed).
 
 ### 6.1 Shape of the result
 
-`coro(Y) T f(A a, B b)` becomes three toplevels in its unit:
+`coro(Y) T f(A a, B b)` becomes two functions and two absolute symbols in its unit:
 
 ```
 int   f$resume(void *fp)            the body as a state machine; returns co_status
 void  f$init(void *fp, A a, B b)    stores the arguments, state = 0
-const struct __co_desc f$co = { size, align, f$resume }       .rodata, global
+      f$size  = frame size          .set, an absolute data symbol: co_sizeof(f)
+      f$align = frame alignment     .set, an absolute data symbol: co_alignof(f)
 ```
+
+The symbols are global for a global `f`, local for a `static` one.
 
 and the frame it runs in, laid out by the compiler (the *header* is a fixed ABI; the
 rest is the unit's business):
@@ -464,8 +496,24 @@ RUNNING, sets RUNNING and the signal bits, and calls `p->resume(p)` through
 `call_indirect`. (Through a `co_frame(Y, T) *` the callee is not statically known; a
 direct call when `p` is the result of a visible `co_init` is a later peephole, not a
 requirement.) `co_init(storage, bytes, f, args)` is `__co_setup(storage, bytes,
-&f$co)` — size and alignment checks, header zeroed, `task = storage`, `top = storage
-+ size`, `limit = storage + bytes` — then `f$init(storage, args)`.
+f$size, f$align, f$resume)` — size and alignment checks, header zeroed, `resume`
+set, `task = storage`, `top = storage + size`, `limit = storage + bytes` — then
+`f$init(storage, args)`.
+
+`co_alloca(f, extra, args)` gets its memory one of two ways, then does what `co_init`
+does on it with `bytes = n = (f$size + extra + 15) & -16`:
+
+- **In an ordinary function**: `%sp = __builtin_stack_save()`, `%p =
+  __builtin_alloca(n)`. The release, run at the end of the block (§5), is `if
+  (!co_done(%p)) co_destroy(%p); __builtin_stack_restore(%sp)`. The three builtins
+  are expanded inline by the backend (§6.3).
+- **In a coroutine**: `%p = __co_push(task, n, 16)`, from the arena of the task the
+  coroutine belongs to. The release is `if (!co_done(%p)) co_destroy(%p);
+  __co_pop(task, %p)`. The coroutine's own `co_destroy` reaches the release because
+  it is one of the scope exits active at the suspension point.
+
+Either way `__co_setup` makes `%p` the root of its own task, with the `extra` bytes
+as its arena.
 
 ### 6.2 The two-stage translation
 
@@ -488,8 +536,7 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
   content; the optimizer treats it as an opaque call: never dead, kills every memory
   fact, stays where it is. Nothing in `optimize/` changes.
 - `await` → the loop of §2.2, in TAC: for the arena form `%sub = FUN_CALL
-  __co_push(task, &f$co)` (reads size and align from the descriptor, traps on no
-  space) then `FUN_CALL f$init(%sub, args)`; for the explicit form `%sub` is the
+  __co_push(task, g$size, g$align)` (traps on no space) then `FUN_CALL f$init(%sub, args)`; for the explicit form `%sub` is the
   operand. Then `L: %st = FUN_CALL __co_resume(%sub, %sig); JUMP_IF_NOT_ZERO (%st ==
   CO_DONE) done; copy sub->value to fp->value; %sig = __co_suspend(%fp); JUMP_IF
   (%sig == 2) destroy; JUMP L; destroy: __co_resume(%sub, DESTROY); __co_pop; <scope
@@ -500,9 +547,15 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
   `RETURN CO_DONE`. The end of a void body is the same without the store; the end
   of a non-void body is `FUN_CALL_NORETURN __co_trap(CO_TRAP_NO_RETURN)`.
 - `co_*` operations → loads and stores against the header and calls of `__co_*`
-  (`libc/wasm32/co.c`, ordinary C compiled by us, ~150 lines). `co_sizeof(f)` is a
-  `LOAD` of `f$co`'s first word; the unit gets an `EXTERN f$co` when `f` is not
-  defined in it, through `tac_record_extern`, and an `EXTERN f$init` likewise.
+  (`libc/wasm32/co.c`, ordinary C compiled by us, ~150 lines). `co_sizeof(g)` is
+  `GET_ADDRESS g$size` converted to `size_t`, `co_alignof(g)` the same of `g$align`;
+  the unit gets `EXTERN g$size` and `EXTERN g$align` (typed `char`, so they are data
+  symbols) when `g` is not defined in it, through `tac_record_extern`, and `EXTERN
+  g$init`, `EXTERN g$resume` likewise.
+- `co_alloca` → §6.1's two sequences, chosen by whether the function being lowered
+  is a coroutine; the release goes on the scope stack as an exit action (§5). In a
+  coroutine, `%p` is an ordinary value that the split pass spills when it is live
+  across a suspension; the function form's `%sp` never crosses one.
 - Frame-resident storage: every `ALLOCATE_LOCAL` of the body and every
   `GET_ADDRESS` target stays as it is at this stage; the split pass moves them.
 
@@ -534,11 +587,12 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
    the runtime's, before the call.
 5. Parameters: dropped from `f$resume`'s list (they are frame members now);
    `f$init(%fp, %a, %b)` is synthesized as a function toplevel storing each at its
-   offset, with `state = 0`; the descriptor `f$co` is a `STATIC_CONSTANT` toplevel
-   with `{size, align, f$resume}` — a function address in static data is already
-   supported (`backend/wasm/data.c:86-93`, a table-index relocation). Both are
-   appended to the chain `translate_fn` returns, so `emit_unit_begin` lists their
-   `.functype`s.
+   offset, with `state = 0`, and appended to the chain `translate_fn` returns, so
+   `emit_unit_begin` lists its `.functype`. The size and alignment go on `f$resume`'s
+   toplevel as two new fields, `frame_size` and `frame_align` (0 on every ordinary
+   function), serialized with it; the TAC stream magic goes from `TAC5` to `TAC6`
+   (`tac/tags.h`). They are the one fact about a coroutine that must reach the
+   backend.
 6. `verify_function` sees ordinary TAC. `tac_verify` gains nothing; `fp` is a `char
    *` and the frame accesses are `ADD_PTR` + `LOAD`/`STORE`.
 
@@ -546,8 +600,8 @@ Why the body is correct across the two optimizer rounds: before the split, no na
 crosses a suspension in the optimizer's eyes (the suspension is a call, and a call
 returns to the same point); after the split, the only names that cross a `RETURN`
 are in memory. `dead_store` would otherwise delete the last store to a local before
-a `RETURN`, which is exactly the failure mode the agent's survey flagged
-(`dead_store.c:431-436`); step 3 is what prevents it.
+a `RETURN` (exit blocks are seeded only with observable and address-taken names,
+`dead_store.c:431-436`); step 3 is what prevents it.
 
 ### 6.3 What the wasm backend sees
 
@@ -564,12 +618,27 @@ a `RETURN`, which is exactly the failure mode the agent's survey flagged
   it awaits.
 - `call_indirect (i32) -> (i32)` for `__co_resume`'s dispatch is an indirect
   `FUN_CALL` the backend already handles; `f$resume` gets a table slot because
-  `f$co` takes its address.
+  `co_init` and `co_alloca` pass its address.
+- A function toplevel with a nonzero `frame_size` gets two lines in `emit.c`, named
+  after the coroutine (the toplevel's name without `$resume`): `.set f$size, N` and
+  `.set f$align, A`, with `.globl` for a global coroutine. A reference is `i32.const
+  f$size`, a memory-address relocation the linker resolves to the symbol's value: the
+  wasm object format has absolute data symbols (flag `0x200`), and Braam's own linker
+  (`braam-apps/devel/wasm/ld`) handles them too.
+- `co_alloca`'s three builtins are expanded in `call.c` the way `is_va_start`/
+  `gen_va_start` expand `__va_start`: `__builtin_stack_save()` is `global.get
+  __stack_pointer`; `__builtin_stack_restore(p)` is `global.set __stack_pointer`;
+  `__builtin_alloca(n)` is `global.get __stack_pointer`, `n`, `i32.sub`, `i32.const
+  -16`, `i32.and`, `local.tee`, `global.set __stack_pointer`. They take no calls'
+  area and are left out of the unit's `.functype`s. A function that uses them gets a
+  frame pointer in `frame.c` even with no slots, because its epilogue must restore
+  `__stack_pointer` from it rather than add a constant to the moved one.
 - Nothing else. The backend does not know what a coroutine is.
 
 ### 6.4 Runtime: `libc/wasm32/co.c`
 
-`__co_setup`, `__co_push`, `__co_pop`, `__co_resume`, `__co_trap`; the header struct
+`__co_setup(storage, bytes, size, align, resume)`, `__co_push(task, size, align)`,
+`__co_pop(task, p)`, `__co_resume(p, signal)`, `__co_trap(code)`; the header struct
 in `libc/wasm32/include/coro.h` under `__co_` names, with the user-facing macros and
 enums beside them. Compiled by `wasm32_compile_libc_c`, in `libc.a`, so a program
 that uses no coroutine carries nothing (`--gc-sections`). `__co_trap` prints the
@@ -672,7 +741,7 @@ int _resume(unsigned token, unsigned reply, unsigned len)
 - `_sig(n)` records a bit; `sig_catch`/`sig_take` as in `rt.h`.
 - Several tasks (`PROC_TASKS`): a table of roots and pending calls, `braam_spawn(f,
   arg)` creating a second root in its own static block, `_resume` searching the
-  table by token. Phase 8; `chat` is the only Braam program that needs it.
+  table by token. Phase C8; `chat` is the only Braam program that needs it.
 - `exit(n)` from inside the program: there is no unwinding, so, as in Braam's own
   compat layer (`doc/Compat.md`: "C `exit()` and `abort()` trap"), `exit` records the
   status with `sys(Exit)` and traps; the kernel reports a crash. A program ends by
@@ -747,48 +816,64 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-1. **`defer`.** Scanner, parser, AST (the full file list of §4.1), semantic rules
-   (§4.2's `defer` items), translator scope stack and `emit_scope_exits`, YAML and run
-   tests. The warm-up through every AST file, and useful on its own.
-2. **Coroutine front end.** `_Coro(Y)` on symbols, `_Coro_frame(Y, T)`, `_Yield`,
-   `_Await`, the nine operations: parsed, type-checked, serialized, printed; every
+- **C1. `defer`.** Scanner, parser, AST (the full file list of §4.1), semantic rules
+   (§4.2's `defer` items), translator scope stack of exit actions (built for both
+   kinds from the start, though only `defer` uses it yet) and `emit_scope_exits`,
+   YAML and run tests. The warm-up through every AST file, and useful on its own.
+- **C2. Coroutine front end.** `_Coro(Y)` on symbols, `_Coro_frame(Y, T)`, `_Yield`,
+   `_Await`, the ten operations: parsed, type-checked, serialized, printed; every
    compile-time rule of §2.4 with a negative test; the translator says "coroutines:
    not yet" so nothing links. `Target.coroutines` for wasm32.
-3. **Generators.** Stage 1 for `yield`, `return`, `co_init`/`co_resume`/`co_value`/
-   `co_result`/`co_done`/`co_sizeof`; `optimize/liveness.c` factored out of
-   `dead_store.c`; the split pass with spills, dispatch, `f$init` and `f$co`;
-   `libc/wasm32/co.c`; `<coro.h>`. Tests: translator YAML of the state machine
+- **C3. Generators.** First, the toolchain check: clang's assembler must turn `.set
+   g$size, 48` and `.globl g$size` into an absolute data symbol, and wasm-ld must
+   resolve an `i32.const g$size` from another object to 48 (`wasm-objdump -x`, a
+   two-unit link); if either fails, `co_sizeof`/`co_alignof` fall back to a load
+   from a small descriptor and nothing else changes. Then stage 1 for `yield`,
+   `return`, `co_init`/`co_alloca` (the function form)/`co_resume`/`co_value`/
+   `co_result`/`co_done`/`co_sizeof`/`co_alignof`; `optimize/liveness.c` factored
+   out of `dead_store.c`; the split pass with spills, dispatch, `f$init`, and the
+   `frame_size`/`frame_align` fields (`TAC6`); the `.set` lines and the three
+   builtins in the backend; `libc/wasm32/co.c`; `<coro.h>`. Tests: translator YAML of the state machine
    (`translator/test/coro_tests.cpp`), wasm32 run tests under node
    (`backend/wasm/test/coro_tests.cpp`: `range`, a Fibonacci generator, a coroutine
    with a struct local whose address is yielded, two frames of one coroutine
    interleaved, `co_sizeof` across two units — `CompileAndRunWithClang`'s two-unit
-   plumbing with our own second unit — and each trap).
-4. **Delegation.** `await` in both forms, the arena (`__co_push`/`__co_pop`),
-   `co_cancel` and forwarding, `co_destroy` with `defer`, `yield` nested in
-   expressions. Tests: `read_exact`/`read_header` of §2.2 against a
-   scheduler written in the test program, a recursive coroutine (tree walk), a
-   three-level chain cancelled at the bottom, `co_destroy` running two scopes'
-   defers, an arena that overflows.
-5. **Backend quality.** §6.5's regional dispatch in `structure.c`; flow goldens for
+   plumbing with our own second unit — a generator on `co_alloca`, `co_alloca` in a
+   loop body leaving `__stack_pointer` where it was, a `co_alloca` block left by
+   `return`, `break` and `goto` with the sub-coroutine destroyed each time, and each
+   trap).
+- **C4. Delegation.** `await` in both forms, the arena (`__co_push`/`__co_pop`),
+   `co_alloca` in coroutines, `co_cancel` and forwarding, `co_destroy` with `defer`
+   and the `co_alloca` releases, `yield` nested in expressions. Tests:
+   `read_exact`/`read_header` of §2.2 against a scheduler written in the test
+   program, a recursive coroutine (tree walk), a three-level chain cancelled at the
+   bottom, `co_destroy` running two scopes' defers, a coroutine driving a generator
+   of another yield type through `co_alloca` and `co_resume`, `co_destroy` cascading
+   through two `co_alloca` levels, an arena that overflows.
+- **C5. Backend quality.** §6.5's regional dispatch in `structure.c`; flow goldens for
    Duff's device and `goto` into a loop change from the skeleton to the regional
    form; coroutine goldens; sizes measured.
-6. **Braam target and runtime.** `wasm32-braam` in `cc.c`, `cpp`, CMake and the
+- **C6. Braam target and runtime.** `wasm32-braam` in `cc.c`, `cpp`, CMake and the
    install; `crt0.c`, the allocator, `braam_sys`, `read`/`write`/`open`/`close`/
    `sleep_ms`/`fflush`, the headers, `run.mjs`; the ABI constants and the drift test.
    Tests (`backend/wasm/test/braam_tests.cpp`, a fixture over the fake kernel): hello
    through `printf` and the exit flush; `cat` (stdin to stdout, the `cat.s`
    program in C); `wc`; a sleep; the import/export/section check; `exit()`'s
    behaviour; a program that returns a status.
-7. **On Braam.** §7.5's optional system test; `stat`, `fgets`, `getchar`, `stdio.h`
+- **C7. On Braam.** §7.5's optional system test; `stat`, `fgets`, `getchar`, `stdio.h`
    completed; a worked example in `docs/` built both ways.
-8. **Signals and tasks.** `_sig`, `sig_catch`/`sig_take`, `Err(Intr)` on a read;
+- **C8. Signals and tasks.** `_sig`, `sig_catch`/`sig_take`, `Err(Intr)` on a read;
    `braam_spawn` and the pending table; `braam_yield`.
-9. **Later, as needed.** `coro_ptr(Y, T)` with a `void *` init thunk; a direct call
+- **C9. Later, as needed.** `coro_ptr(Y, T)` with a `void *` init thunk and a
+   descriptor (size, alignment, init, resume) for it; a direct call
    in `__co_resume` when the callee is visible; a `JUMP_TABLE` for wide dispatches;
-   shared cleanup blocks for `defer`; a lint for a suspended frame going out of
-   scope.
-10. **Docs.** `docs/Coroutines.md` (the language: §2 of this plan as a manual, the
-    frame ABI, the traps), `docs/Braam.md` (the target, the runtime, porting a
+   shared cleanup blocks for `defer` — one block per scope and a "where next"
+   temporary instead of a copy of the cleanup on every exit edge, which matters most
+   in coroutines: each suspension point has a destroy path carrying every active
+   cleanup, so code grows with suspension points × cleanup size; a lint for a
+   suspended frame going out of scope.
+- **C10. Docs.** `docs/Coroutines_in_C.md` (the tutorial, written ahead of the code)
+    brought up to date with what was built, and the frame ABI added, `docs/Braam.md` (the target, the runtime, porting a
     program, running one by hand), a section in `docs/Wasm_Backend.md` for §6.5,
     `CLAUDE.md`, `README.md`, `docs/Technical_Reference.md`, `cc/README.md`,
     `cpp/README.md`, `docs/C_Grammar.md`.
@@ -797,31 +882,51 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
 | Alternative | Chosen | Reason |
 |---|---|---|
-| `coro_frame(f)`, a complete object type per coroutine, and `co_sizeof(f)` an integer constant expression | `co_frame(Y, T)`, incomplete; storage supplied with its size; `co_sizeof` a run-time load | The libc's coroutines are awaited from units that never see their bodies; and the frame is laid out after the optimizer, which is what keeps it small. A fixed-size object type would fix the layout at the declaration. |
+| `coro_frame(f)`, a complete object type per coroutine, and `co_sizeof(f)` an integer constant expression | `co_frame(Y, T)`, incomplete; `co_sizeof` a link-time constant, an absolute symbol the defining unit emits | The libc's coroutines are awaited from units that never see their bodies; and the frame is laid out after the optimizer, which is what keeps it small. A fixed-size object type would fix the layout at the declaration. The symbol costs no load, which a descriptor read would. |
+| A restricted VLA, `char buf[co_sizeof(f)]`, to put a frame in a local of its own size | `co_alloca(f, extra, args)` | A link-time constant is not an array size, so this would need run-time-sized arrays in the type system and in `sizeof`. `co_alloca` gives the same memory with none of that, and adds the cleanup a plain array cannot have. |
+| `co_alloca` scoped to the function, as C's `alloca`, and banned in coroutines (whose shadow stack unwinds at each suspension) | Scoped to the block, usable everywhere: shadow stack in a function, the task's arena in a coroutine | A coroutine that starts coroutines needs it; a function-scoped allocation would grow without bound in a loop; and the end of a block is where an unfinished sub-coroutine can be destroyed, which closes the "storage goes away while suspended" hole for these frames. |
 | Frames never nested: every `await` on a frame the awaiter declared as a local | Also `await f(args)`: the callee's frame from the task's arena, LIFO | Without compile-time sizes a sub-frame cannot be a local. An await chain is a stack, so a bump pointer per task costs nothing and permits recursion and separate compilation. Storage is still the program's: the root's block. |
 | Cancellation only through `co_cancel`, cleanup entirely the coroutine's | `co_destroy` as well | It runs the `defer`s active at the suspension point and nothing else, so a scheduler can drop a suspended task without the task's cooperation, and a resource registered with `defer` is released exactly once however the scope ends: by completion, return, cancellation or destruction. |
-| `coro_ptr(Y, T)` in the first version | Phase 9 | Braam needs none; the init thunk's argument list is the unresolved part. |
+| `coro_ptr(Y, T)` in the first version | Phase C9 | Braam needs none; the init thunk's argument list is the unresolved part. |
 | `yield` at the precedence of a unary operator, with parentheses required around `yield e == …` | `_Yield` takes an assignment-expression and binds above `==` | So `if (yield i == CO_CANCEL)` means what it looks like. |
 | The whole frame layout part of the ABI | The header is ABI; the rest is the defining unit's | Only the header crosses units. The rest may change with the optimizer. |
-| A trap for resuming an uninitialised frame | None | A frame comes only from `co_init`; storage that was never initialised is garbage the language cannot recognise. The reentrancy and finished checks stay. |
-| Eager start (the body runs to its first suspension inside `co_init`) | Lazy: `co_init` runs nothing | Otherwise the point at which side effects happen depends on the call site rather than the source. |
+| A trap for resuming an uninitialised frame | None | A frame comes only from `co_init` or `co_alloca`; storage that was never initialised is garbage the language cannot recognise. The reentrancy and finished checks stay. |
+| Eager start (the body runs to its first suspension inside `co_init`) | Lazy: `co_init` and `co_alloca` run nothing | Otherwise the point at which side effects happen depends on the call site rather than the source. |
 | A `defer` whose run-time "active" flag a jump may skip, so `goto` and `case` into its scope are allowed | Such jumps are compile-time errors | The active set stays a static fact, cleanup is inline code, and `co_destroy` knows from the state number alone what to run. The flag remains possible later without breaking programs. |
 | `defer` running at a suspension (releasing a lock across `await`) | Suspension is not scope exit | A suspended scope is alive; a resource held across `await` stays held, and the programmer who does not want that closes the scope before the `await`, which keeps lifetimes visible in the source. |
 | Symmetric transfer, awaiting arbitrary "awaitables", task groups, allocator hooks | None | Library concerns, or specification weight for little gain; a `select` is a scheduler that resumes several frames. |
 
 ## 10. Risks and open questions
 
+- **Absolute symbols in the toolchain.** That clang's assembler emits an absolute data
+  symbol from `.set` and wasm-ld resolves a reference to it is checked first in
+  phase C3. If not, `co_sizeof`/`co_alignof` become a load from a descriptor the defining
+  unit emits; `co_alloca` reads the same value at run time either way.
 - **Code size of the dispatch.** A compare chain per resume and a `LOAD`/`STORE`
   per frame access. The second optimizer round and the memarg folding should keep a
   generator within 1.5× of the hand-written `cat.s` shape; §6.5 is the lever if not.
 - **The `defer`-past-`case` rule** may surprise; the alternative (a run-time active
   flag per `defer` that a jump may skip) is implementable later without changing
   programs that compile today.
+- **Suspending `defer`.** A deferred statement may not suspend, so `defer await
+  close(fd)` and `defer await fflush(f)` are errors — and on Braam a descriptor and a
+  buffered stream are the resources a program most wants released (memory matters
+  less: the kernel drops the instance at exit). Braam's C++ has the same limit, a
+  destructor cannot `co_await`. Lifting the rule is backward-compatible, since it only
+  turns a compile-time error into accepted code, so it waits for evidence from real
+  programs on the Braam runtime (phases C6–C7). What it would take: on ordinary exits
+  nothing new — the cleanup is code in the coroutine body and the split pass handles
+  its suspension like any other; on `co_destroy`, destruction becomes an unwind that
+  can wait — `co_destroy` may return `CO_SUSPENDED`, and whoever runs the coroutine
+  resumes it until `CO_DONE`; the end-of-block destroy of a `co_alloca` frame forwards
+  the suspensions in a coroutine, as `await` does, and must trap in an ordinary
+  function, which has nobody to forward them to — a run-time trap, since the
+  sub-coroutine's body may be in another unit.
 - **`exit()` as a trap** is Braam's own limitation. If it matters, the runtime can
   make `exit` set a sticky status and have every libc coroutine return an error
   afterwards, so the program unwinds by its own returns — the pattern Braam's `vi`
   port uses.
-- **`main(void)` in Braam mode.** Phase 6 requires `coro(braam_call *) int main(int,
+- **`main(void)` in Braam mode.** Phase C6 requires `coro(braam_call *) int main(int,
   char **)`; a wrapper for the `(void)` form is small if wanted.
 - **`PROC_ABI` tracking.** The drift test fails loudly, but only where braam-core is
   checked out beside this tree.
@@ -839,7 +944,7 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 ## 11. Verification
 
 - `ctest -j8` after each phase, the output tee'd to a scratch file; the full suite
-  after phases 1, 2, 5 and 6 (shared code). BESM-6 output unchanged.
+  after phases C1, C2, C5 and C6 (shared code). BESM-6 output unchanged.
 - By hand, plain wasm32: `build/cc/cc -t wasm32 gen.c -o gen.wasm && node
   libc/wasm32/run.mjs gen.wasm`.
 - By hand, Braam without Braam: `build/cc/cc -t wasm32-braam cat.c -o cat &&

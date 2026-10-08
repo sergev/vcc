@@ -230,8 +230,7 @@ coro(int) void count_to(int n)          /* yields ints, returns nothing */
 
 int main(void)
 {
-    static _Alignas(16) char storage[256];
-    co_frame(int, void) *f = co_init(storage, sizeof storage, count_to, 3);
+    co_frame(int, void) *f = co_alloca(count_to, 0, 3);
 
     while (co_resume(f) == CO_SUSPENDED)
         printf("%d\n", co_value(f));    /* prints 1, 2, 3 */
@@ -244,8 +243,10 @@ Step by step:
 1. `coro(int) void count_to(int n)` declares a coroutine. The `int` in `coro(int)` is
    the type of the values it yields. `void` is the type it returns at the end, as
    with any function.
-2. `co_init(storage, sizeof storage, count_to, 3)` prepares a run of `count_to(3)` in
-   `storage`. **No code of `count_to` runs yet.**
+2. `co_alloca(count_to, 0, 3)` prepares a run of `count_to(3)` in memory on the
+   stack, and returns a pointer to it, `f`. (The `0` is extra room, explained in
+   section 3.) **No code of `count_to` runs yet.** The memory is freed when the block
+   containing the `co_alloca` ends — here, when `main` returns.
 3. `co_resume(f)` runs the coroutine until it reaches a `yield` or finishes. It
    returns `CO_SUSPENDED` if it stopped at a `yield`, or `CO_DONE` if it finished.
 4. `co_value(f)` is the value of the last `yield`.
@@ -255,7 +256,7 @@ You write the loop inside the coroutine as a plain loop. The caller sees a seque
 of values.
 
 `#include <coro.h>` gives the short names `coro`, `yield`, `await`, `defer`,
-`co_frame` and `co_init` through `co_alignof`, and declares `co_status` and
+`co_frame`, `co_alloca` and `co_init` through `co_alignof`, and declares `co_status` and
 `co_signal`. Without the header the long spellings still work: `_Coro`, `_Yield`,
 `_Await`, `_Defer`, `_Coro_frame`, `__co_init` and so on. So a program that already
 uses a variable named `yield` or `defer` is not affected unless it includes
@@ -315,10 +316,11 @@ Any function except:
 
 A coroutine is not an ordinary function. You cannot call it as `count_to(3)`, and
 you cannot take its address as a function pointer. You use its name only in
-`co_init`, `co_sizeof`, `co_alignof` and `await` (section 5).
+`co_alloca`, `co_init`, `co_sizeof`, `co_alignof` and `await` (section 5).
 
 A coroutine may call ordinary functions as usual. An ordinary function may run a
-coroutine with `co_init` and `co_resume`, but it cannot `yield` or `await` itself.
+coroutine with `co_alloca` or `co_init` and `co_resume`, but it cannot `yield` or
+`await` itself.
 
 ---
 
@@ -331,39 +333,107 @@ Everything a coroutine must remember while it is stopped is kept in its **frame*
 - where to continue;
 - the last value yielded and, at the end, the result.
 
-**You supply the memory for the frame.** The compiler never allocates any. You give
-`co_init` a block of memory and its size:
+**The compiler never allocates memory for a frame by itself.** You say where it goes,
+in one of two ways.
+
+### On the stack: `co_alloca`
+
+```c
+co_frame(int, void) *f = co_alloca(count_to, 0, 3);
+```
+
+`co_alloca(g, extra, args...)` makes a frame for a run of `g` with these arguments,
+of exactly the right size, and returns its pointer. The memory lives **until the end
+of the block** that contains the `co_alloca`. This is the easy way, and usually the
+right one.
+
+`extra` is spare room for the coroutines that `g` itself awaits (section 5). Give
+`0` when `g` awaits nothing.
+
+When the block ends — by reaching `}`, or by `return`, `break`, `continue` or a
+`goto` out of it — two things happen, as if you had written a `defer` (section 1)
+at the place of the `co_alloca`:
+
+1. If the coroutine has not finished, it is destroyed: its pending `defer`s run
+   (section 6). So nothing it holds is leaked.
+2. The memory is freed.
+
+```c
+void first_three(void)
+{
+    for (int k = 0; k < 10; k++) {
+        co_frame(int, void) *f = co_alloca(count_to, 0, 100);
+        for (int i = 0; i < 3 && co_resume(f) == CO_SUSPENDED; i++)
+            printf("%d\n", co_value(f));
+    }                                   /* f destroyed and freed, every time round */
+}
+```
+
+A `co_alloca` in a loop body is freed at the end of every iteration, so the loop does
+not use up the stack.
+
+`co_alloca` works in coroutines too. There the memory comes from the coroutine's own
+spare room (section 5) rather than the stack, and the rules are the same. This is how
+a coroutine runs another coroutine of a different yield type:
+
+```c
+coro(char *) void report(void)          /* yields lines of text */
+{
+    static char line[32];
+    co_frame(int, void) *n = co_alloca(count_to, 0, 3);
+    while (co_resume(n) == CO_SUSPENDED) {
+        snprintf(line, sizeof line, "got %d", co_value(n));
+        yield line;
+    }
+}
+```
+
+Whoever starts `report` must give it spare room for that frame:
+`co_alloca(report, co_sizeof(count_to))`.
+
+You may not jump with `goto` into a block past a `co_alloca` in it, nor put a `case`
+label after one; the same rule as for `defer`.
+
+### In memory you own: `co_init`
 
 ```c
 static _Alignas(16) char storage[256];
 co_frame(int, void) *f = co_init(storage, sizeof storage, count_to, 3);
 ```
 
-The block may be static, a local array, or memory from `malloc`. It must be:
+`co_init(mem, size, g, args...)` builds the frame in a block you supply: a static
+array, a local array, or memory from `malloc`. Use it when the frame must outlive the
+block that creates it — for example, a task a scheduler keeps in a table. The block
+must be:
 
-- **large enough**: at least `co_sizeof(count_to)` bytes;
+- **large enough**: at least `co_sizeof(count_to)` bytes, plus room for what the
+  coroutine awaits;
 - **aligned** to `co_alignof(count_to)`, which is never more than 16, so
   `_Alignas(16)` is always enough.
 
-If either is wrong, `co_init` traps.
+If either is wrong, `co_init` traps. Nothing is cleaned up for you at the end of a
+block: finishing the coroutine, or calling `co_destroy`, is your job.
 
-`co_sizeof` and `co_alignof` are known only when the program runs, not when it is
-compiled. So you cannot write `char storage[co_sizeof(count_to)]`. Pick a size with
-room to spare, or check it:
+### `co_sizeof` and `co_alignof`
+
+They are fixed when the program is linked, and cost nothing to use. But the compiler
+does not know them yet when it compiles your code, so you cannot use them as an array
+size: `char storage[co_sizeof(count_to)]` is an error. That is why `co_alloca`
+exists. With `co_init`, pick a size with room to spare, or check it:
 
 ```c
 if (co_sizeof(count_to) > sizeof storage)
     fatal("storage too small");
 ```
 
-They are run-time values for two reasons. The compiler decides what goes into the
-frame only after optimizing the coroutine, which keeps frames small. And you can run
-a coroutine from a library without seeing its source.
+The compiler decides what goes into a frame only after optimizing the coroutine,
+which keeps frames small, and only in the file that defines the coroutine — you can
+run a coroutine from a library without seeing its source.
 
 ### The frame pointer
 
-`co_init` returns a `co_frame(Y, T) *`, where `Y` is the yield type and `T` the return
-type. You use this pointer with every other operation. `co_frame(Y, T)` is an
+`co_alloca` and `co_init` return a `co_frame(Y, T) *`, where `Y` is the yield type and
+`T` the return type. You use this pointer with every other operation. `co_frame(Y, T)` is an
 incomplete type: you can only have pointers to it, never an object of it.
 
 The pointer type mentions only `Y` and `T`, not which coroutine it is. So one
@@ -372,10 +442,12 @@ function can drive any coroutine that yields `int` and returns `void`.
 ### Rules for the storage
 
 - **Do not move or copy** a frame while it is in use. Its address must stay the same
-  from `co_init` to the end.
-- **Keep the storage alive** while the frame is in use. If a local array goes out of
-  scope while its coroutine is stopped in the middle, anything the coroutine was
-  holding is lost. Finish the coroutine, or use `co_destroy` (section 6), first.
+  from its creation to the end.
+- **Do not use a `co_alloca` frame after its block has ended.** The pointer is dead
+  then, like a pointer to a local variable.
+- **Keep `co_init` storage alive** while the frame is in use. If a local array goes
+  out of scope while its coroutine is stopped in the middle, anything the coroutine
+  was holding is lost. Finish the coroutine, or use `co_destroy` (section 6), first.
 - **Each run needs its own frame.** You can run the same coroutine several times at
   once, each in its own storage. The runs do not affect each other:
 
@@ -401,11 +473,12 @@ it: a value computed before a `yield` and used after it is always still there.
 
 ## 4. The operations
 
-All of them take the frame pointer `f` from `co_init`, except `co_init`, `co_sizeof`
-and `co_alignof`.
+All of them take a frame pointer `f`, except `co_alloca`, `co_init`, `co_sizeof` and
+`co_alignof`.
 
 | Operation | What it does |
 |---|---|
+| `co_alloca(g, extra, args...)` | Prepares a run of coroutine `g` with these arguments in memory that lives until the end of the block, plus `extra` bytes for what `g` awaits. At the end of the block, destroys `g` if unfinished and frees the memory. Runs no code of `g`. Returns the frame pointer. |
 | `co_init(mem, size, g, args...)` | Prepares a run of coroutine `g` with these arguments in `mem`. Runs no code of `g`. Returns the frame pointer. |
 | `co_resume(f)` | Runs until the next `yield` (returns `CO_SUSPENDED`) or until the coroutine finishes (returns `CO_DONE`). |
 | `co_cancel(f)` | Like `co_resume`, but the `yield` the coroutine is stopped at returns `CO_CANCEL`, asking it to stop (section 6). |
@@ -413,8 +486,8 @@ and `co_alignof`.
 | `co_done(f)` | True once the coroutine has finished or been destroyed. |
 | `co_value(f)` | The value of the last `yield`. Valid only after `co_resume` or `co_cancel` returned `CO_SUSPENDED`. |
 | `co_result(f)` | The value the coroutine returned. Valid only after it finished with `CO_DONE`, not after `co_destroy`. |
-| `co_sizeof(g)` | Bytes of memory a frame of `g` needs. |
-| `co_alignof(g)` | Alignment a frame of `g` needs. At most 16. |
+| `co_sizeof(g)` | Bytes of memory a frame of `g` needs. Fixed when the program is linked; not usable as an array size. |
+| `co_alignof(g)` | Alignment a frame of `g` needs. At most 16. Fixed when the program is linked. |
 
 The types:
 
@@ -423,7 +496,7 @@ typedef enum { CO_SUSPENDED, CO_DONE } co_status;      /* what co_resume returns
 typedef enum { CO_CONTINUE, CO_CANCEL } co_signal;     /* what yield returns */
 ```
 
-`co_init` checks the arguments against the coroutine's parameters as an ordinary
+`co_alloca` and `co_init` check the arguments against the coroutine's parameters as an ordinary
 call does, and converts them the same way.
 
 These operations look like function calls but are built into the compiler. You
@@ -456,17 +529,28 @@ The example also shows that a coroutine may `await` itself recursively.
 
 ### Where the sub-coroutine's frame comes from
 
-You gave `co_init` a block of memory. The front of it holds the frame of the
-coroutine you started. **The rest of the block is spare room**, and every `await`
-inside that run takes the frame of the coroutine it calls from there. The frame is
-given back when that coroutine finishes. `await`s always finish in reverse order of
-starting, so this is a simple stack.
+When you started the outermost coroutine, its frame got **spare room** after it:
+the `extra` bytes of `co_alloca`, or the rest of the block you gave `co_init`. Every
+`await` inside that run takes the frame of the coroutine it calls from this spare
+room, and gives it back when that coroutine finishes. `await`s always finish in
+reverse order of starting, so the spare room is used as a simple stack. A
+`co_alloca` inside any coroutine of the run takes its memory from the same spare
+room, and gives it back at the end of its block.
 
-So the size you pass to `co_init` must cover the deepest chain of `await`s: for `walk`
-on a tree of depth 20, about 21 frames of `walk`. If the room runs out, the program
-traps and names the coroutine that did not fit. Make the block bigger.
+So the spare room must cover the deepest chain of `await`s: for `walk` on a tree of
+depth 20, about 20 more frames of `walk`, that is `20 * co_sizeof(walk)`:
 
-A coroutine that awaits nothing needs only `co_sizeof` of itself.
+```c
+co_frame(int, void) *t = co_alloca(walk, 20 * co_sizeof(walk), root);
+```
+
+If the room runs out, the program traps and names the coroutine that did not fit.
+Give more.
+
+A coroutine that awaits nothing, and uses no `co_alloca`, needs no spare room.
+
+A frame made by `co_alloca` gets its own spare room, the `extra` you gave it. It does
+not share its caller's.
 
 ### The second form: awaiting a frame you made
 
@@ -479,6 +563,8 @@ await sub;
 ```
 
 Both forms mean the same. The first is shorter and needs no extra storage.
+`co_alloca` makes the second form easy inside a coroutine too:
+`await co_alloca(walk, 0, root)`.
 
 ### Yield types must match
 
@@ -487,8 +573,9 @@ must be **exactly** the yield type of the coroutine that awaits it. A `coro(int)
 await only `coro(int)` coroutines. A `coro(void)` can await only `coro(void)` ones.
 The return types may differ: the result is the value of the `await` expression.
 
-To use a coroutine with a different yield type, run it by hand with `co_init` and
-`co_resume`. Any function or coroutine may do that.
+To use a coroutine with a different yield type, run it by hand with `co_alloca` (or
+`co_init`) and `co_resume`, as `report` does in section 3. Any function or coroutine
+may do that.
 
 ### `await` and `yield` inside expressions
 
@@ -610,7 +697,8 @@ the `yield` the inner coroutine is stopped at returns `CO_CANCEL`.
 `co_destroy(f)` runs none of the coroutine's ordinary code. It runs only the
 `defer`s that are active at the `yield` where it stopped, innermost first, and marks
 the frame finished. If the coroutine is inside an `await`, the inner coroutine's
-`defer`s run first.
+`defer`s run first. A coroutine it started with `co_alloca`, in a block it has not
+yet left, is destroyed too, in its place among the `defer`s.
 
 ```c
 coro(int) void reader(void)
@@ -667,9 +755,12 @@ end without stopping.
 - `co_value` on a `coro(void)` frame; `co_result` on a frame whose return type is
   `void`.
 - A coroutine that is variadic, `inline`, or has a K&R parameter list.
-- A coroutine name used other than in `co_init`, `co_sizeof`, `co_alignof` or
+- A coroutine name used other than in `co_alloca`, `co_init`, `co_sizeof`, `co_alignof` or
   `await`: called directly, assigned, or converted to a function pointer.
-- A jump into a block past one of its `defer`s, including a `case` label.
+- A jump into a block past one of its `defer`s or `co_alloca`s, including a `case`
+  label.
+- `co_sizeof` or `co_alignof` used where a constant is required: an array size, a
+  `case` label, a `_Static_assert`.
 - `return`, `goto`, or a `break`/`continue` that leaves a deferred statement.
 - Coroutines on a target other than wasm32.
 
@@ -685,12 +776,17 @@ These stop the program with a message naming the trap, in every build:
 | `CO_TRAP_NO_VALUE` | `co_value` when the last resume did not return `CO_SUSPENDED` |
 | `CO_TRAP_NOT_DONE` | `co_result` before the coroutine finished, or after `co_destroy` |
 | `CO_TRAP_NO_RETURN` | a coroutine with a non-`void` return type ran off its end |
-| `CO_TRAP_NO_SPACE` | an `await` found no room left in the block given to `co_init` |
+| `CO_TRAP_NO_SPACE` | an `await`, or a `co_alloca` inside a coroutine, found no spare room left (section 5) |
+
+A `co_alloca` in an ordinary function that runs out of stack stops the program as any
+stack overflow does.
 
 ### What the language does not catch
 
 - Memory given to `co_init` that goes away while the coroutine is stopped. Finish or
-  `co_destroy` the coroutine first.
+  `co_destroy` the coroutine first. (A `co_alloca` frame cannot be left behind: the
+  end of its block destroys it.)
+- A `co_alloca` frame pointer used after its block has ended.
 - Copying or moving a frame's memory.
 - Two threads resuming one frame. (wasm32 has no threads.)
 
@@ -801,12 +897,14 @@ yield;                                   /* stop (Y is void) */
 co_signal s = (yield e);                 /* CO_CONTINUE or CO_CANCEL */
 
 T r = await g(args);                     /* run g to its end, passing its yields up */
-T r = await f;                           /* the same, on a frame made with co_init */
+T r = await f;                           /* the same, on a frame you made */
 
 defer statement;                         /* run statement when this block is left */
 
+co_frame(Y, T) *f = co_alloca(g, extra, args);   /* until the end of this block */
+
 static _Alignas(16) char mem[N];
-co_frame(Y, T) *f = co_init(mem, sizeof mem, g, args);
+co_frame(Y, T) *f = co_init(mem, sizeof mem, g, args);   /* in memory you own */
 
 co_status st = co_resume(f);             /* CO_SUSPENDED or CO_DONE */
 co_status st = co_cancel(f);             /* resume, yield returns CO_CANCEL */
@@ -814,7 +912,7 @@ co_destroy(f);                           /* run pending defers, finish */
 int done = co_done(f);
 Y v = co_value(f);                       /* after CO_SUSPENDED */
 T r = co_result(f);                      /* after CO_DONE */
-size_t n = co_sizeof(g), a = co_alignof(g);
+size_t n = co_sizeof(g), a = co_alignof(g);   /* fixed at link time */
 ```
 
 | Short name | Long name |
@@ -824,4 +922,4 @@ size_t n = co_sizeof(g), a = co_alignof(g);
 | `await` | `_Await` |
 | `defer` | `_Defer` |
 | `co_frame(Y, T)` | `_Coro_frame(Y, T)` |
-| `co_init` … `co_alignof` | `__co_init` … `__co_alignof` |
+| `co_alloca`, `co_init` … `co_alignof` | `__co_alloca`, `__co_init` … `__co_alignof` |
