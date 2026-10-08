@@ -371,7 +371,8 @@ into `ap`. No `.functype` is emitted for it. `va_arg` is a macro, which asks
   block needs; `free` does nothing.
 - `co.c`: the coroutine runtime: `__coro_setup` (a frame on given storage),
   `__coro_resume` (resume, cancel and destroy, through the frame's `f$resume`),
-  `__coro_done`, `__coro_value`, `__coro_result`, and the traps, which print
+  `__coro_done`, `__coro_value`, `__coro_result`, `__coro_push` and `__coro_pop` (a
+  task's arena, for `await` and for `co_alloca` in a coroutine), and the traps, which print
   `coroutine trap: <name>` and exit with 255 ([docs/Coroutines_in_C.md](Coroutines_in_C.md)).
 - The C library of `libc/common` (`printf` over `doprnt`, `<string.h>`, `float128.c`, …)
   and `frexp`, `ldexp` and `modf` of `libc/ilp32`, compiled by our own passes. The

@@ -1,9 +1,8 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C3 are built — `defer`, the coroutines' front end, and generators
-(`yield`, `co_init`, `co_alloca` in a function, `co_resume`, `co_cancel`,
-`co_destroy`, `co_value`, `co_result`, `co_done`, `co_sizeof`, `co_alignof`); §8 lists
-what remains, from `await` on. The document defines two extensions of C — a `defer`
+Status: phases C1–C4 are built — `defer`, the coroutines' front end, generators, and
+delegation (`await` in both forms, the arena, `co_alloca` in functions and
+coroutines, every operation); §8 lists what remains, from the regional dispatch on. The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -327,7 +326,7 @@ coro split  after the optimizer: liveness, frame layout, spills, dispatch, f$ini
 genwasm     __builtin_stack_save/restore/alloca for co_alloca (call.c); a
             dispatch loop around an irreducible region only, not around the
             whole function                                   (structure.c)
-runtime     libc/wasm32: co.c (setup, resume, checks, traps; push/pop to come);
+runtime     libc/wasm32: co.c (setup, resume, arena push/pop, checks, traps);
             libc/wasm32/braam: crt0, syscalls,
             allocator, headers, a fake kernel for node
 driver      target wasm32-braam: link line, the braam section
@@ -413,8 +412,7 @@ In `semantic/coroutines.c`, but for the jumps:
 
 Tests: `parser/test/negative_tests.cpp` (argument counts), `parser/test/serialize_tests.cpp`
 (a round trip), `semantic/test/coro_tests.cpp` (each rule), and
-`translator/test/coro_tests.cpp`, where the translator stops with "coroutines: not yet"
-until C3.
+`translator/test/coro_tests.cpp`.
 
 ## 5. Lowering `defer`
 
@@ -461,8 +459,7 @@ and wasm32 run tests (`backend/wasm/test/defer_tests.cpp`: the order printed).
 
 ### 6.1 Shape of the result
 
-Built in phase C3 (`translator/coro.c`, `libc/wasm32/co.c`); `await`, the arena and
-`co_alloca` in a coroutine are phase C4, described here as planned.
+Built in phases C3 and C4 (`translator/coro.c`, `libc/wasm32/co.c`).
 
 `coro(Y) T f(A a, B b)` becomes two functions and a descriptor in its unit, global for a
 global `f`, local for a `static` one:
@@ -503,11 +500,12 @@ nothing in it was address-taken — but the language promises nothing, and the
 The runtime routines (`libc/wasm32/co.c`, ordinary C compiled by us; named `__coro_*`
 because `__co_*` are the operations' keywords):
 
-- `__coro_setup(storage, bytes, desc, resume)`: checks `storage` against `desc`'s
-  alignment and `bytes` against its size (`CO_TRAP_STORAGE`), clears the header, sets
-  `resume`, `task = storage`, `top = storage + size`, `limit = storage + bytes`.
-  `co_init(storage, bytes, f, args)` is that with `&f$co` and `&f$resume`, then
-  `f$init(storage, args)`.
+- `__coro_setup(storage, bytes, desc, resume, parent)`: checks `storage` against
+  `desc`'s alignment and `bytes` against its size (`CO_TRAP_STORAGE`), clears the
+  header, sets `resume`, `top = storage + size`, `limit = storage + bytes`, and `task =
+  storage` for a root (`parent` null) or `parent->task` for an arena `await`'s frame.
+  `co_init(storage, bytes, f, args)` is that with `&f$co`, `&f$resume` and no parent,
+  then `f$init(storage, args)`.
 - `__coro_resume(p, signal)`: `co_resume`, `co_cancel`, `co_destroy` with signals 0, 1,
   2. Traps on DONE/DESTROYED (`CO_TRAP_FINISHED`) and on RUNNING
   (`CO_TRAP_REENTRANT`); a destroy of a frame never started marks it DESTROYED, there
@@ -518,7 +516,10 @@ because `__co_*` are the operations' keywords):
 - `__coro_value(p, off)` and `__coro_result(p, off)`: check the state
   (`CO_TRAP_NO_VALUE` unless suspended; `CO_TRAP_NOT_DONE` unless DONE) and return
   `p + off`, which the caller reads as `Y` or `T` at the offset it computed.
-- C4: `__coro_push(task, size, align)` (`CO_TRAP_NO_SPACE`) and `__coro_pop(task, p)`.
+- `__coro_push(fp, bytes, align, name)`: `bytes` aligned to `align` off the arena of
+  `fp->task`, bumping its `top`; `CO_TRAP_NO_SPACE: name` when they do not fit, `name`
+  the coroutine being started (a string constant at each site). `__coro_pop(fp, p)`
+  sets `fp->task->top` back to `p`.
 
 `co_alloca(f, extra, args)` gets its memory one of two ways, then does what `co_init`
 does on it with `bytes = n = (f$co[0] + extra + 15) & -16`:
@@ -527,9 +528,9 @@ does on it with `bytes = n = (f$co[0] + extra + 15) & -16`:
   __builtin_alloca(n)`. The release, run at the end of the block (§5), is `if (%p) {
   if (!__coro_done(%p)) __coro_resume(%p, 2); __builtin_stack_restore(%sp); %p = 0; }`.
   The three builtins are expanded inline by the backend (§6.3).
-- **In a coroutine** (C4): `%p = __coro_push(task, n, 16)`, from the arena of the task
-  the coroutine belongs to. The release is `if (!co_done(%p)) co_destroy(%p);
-  __coro_pop(task, %p)`. The coroutine's own `co_destroy` reaches the release because
+- **In a coroutine**: `%p = __coro_push(fp, n, 16, "f")`, from the arena of the task
+  the coroutine belongs to. The release is the same with `__coro_pop(fp, %p)` in place
+  of the restore. The coroutine's own `co_destroy` reaches the release because
   it is one of the scope exits active at the suspension point.
 
 Either way `__coro_setup` makes `%p` the root of its own task, with the `extra` bytes
@@ -564,21 +565,25 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
   state = DONE and `RETURN 1` (CO_DONE). The end of a void body is the same without
   the store; the end of a non-void body is unreachable (semantic rejects one that is
   not).
-- `await` (C4) → the loop of §2.2, in TAC: for the arena form `%sub = FUN_CALL
-  __coro_push(task, g$co[0], g$co[1])` (traps on no space) then `FUN_CALL g$init(%sub,
-  args)`; for the explicit form `%sub` is the operand. Then `L: %st = FUN_CALL
-  __coro_resume(%sub, %sig); JUMP_IF_NOT_ZERO (%st == CO_DONE) done; copy sub->value to
-  fp->value; %sig = __coro_suspend(%fp); JUMP_IF (%sig == 2) destroy; JUMP L; destroy:
-  __coro_resume(%sub, DESTROY); __coro_pop; <scope exits>; RETURN; done: result from
-  sub->result; __coro_pop(task, %sub)` (arena form only). The forwarding of CANCEL is
-  `%sig` itself: the next `__coro_resume(%sub, %sig)` delivers it.
+- `await` (`gen_await`) → the loop of §2.2, in TAC: for the arena form `%sub =
+  FUN_CALL __coro_push(fp, g$co[0], g$co[1], "g")`, `__coro_setup(%sub, g$co[0], &g$co,
+  &g$resume, fp)` (the sub-frame joins the awaiter's task) and `g$init(%sub, args)`;
+  for the explicit form `%sub` is a copy of the operand, evaluated once. Then `%sig = 0;
+  L: %st = __coro_resume(%sub, %sig); JUMP_IF_NOT_ZERO %st done; copy sub->value to
+  fp->value; %s = __coro_suspend(fp); if (%s == 2) { __coro_resume(%sub, 2);
+  __coro_pop(fp, %sub); <every block's exit actions>; state = DESTROYED; RETURN 1 }
+  %sig = %s; JUMP L; done: the result from sub->result; __coro_pop(fp, %sub)` (the
+  pops in the arena form only: an explicit frame is the program's, and destroying the
+  awaiter leaves it suspended, as the equivalence of §2.2 says). The forwarding of
+  CANCEL is `%sig` itself: the next `__coro_resume(%sub, %sig)` delivers it. `%sub` and
+  `%sig` live across the suspension, so the split puts them in the frame.
 - `co_*` operations → calls of the runtime (§6.1). `co_sizeof(g)` loads `g$co[0]`,
   `co_alignof(g)` `g$co[1]`. A unit names `g$co`, `g$init` and `g$resume` through
   EXTERNs with TAC types (`tac_record_extern_tac`), since they have no symbol; a name
   the unit defines itself goes with the unit's externs (`note_own_type`), for the
   verifier and against a second EXTERN.
 - `co_alloca` → §6.1's sequence for a function; the release goes on the block's exit
-  actions (`EXIT_CO_RELEASE`, §5). In a coroutine it is C4's.
+  actions (`EXIT_CO_RELEASE`, §5, its `sp` null in a coroutine).
 
 **Stage 2, the split pass** (`coro_split`, called from `translate()` after
 `optimize_function`, then `optimize_function` once more and the verifier):
@@ -824,14 +829,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C4. Delegation.** `await` in both forms, the arena (`__coro_push`/`__coro_pop`),
-   `co_alloca` in coroutines, `co_cancel` and forwarding, `co_destroy` with `defer`
-   and the `co_alloca` releases, `yield` nested in expressions. Tests:
-   `read_exact`/`read_header` of §2.2 against a scheduler written in the test
-   program, a recursive coroutine (tree walk), a three-level chain cancelled at the
-   bottom, `co_destroy` running two scopes' defers, a coroutine driving a generator
-   of another yield type through `co_alloca` and `co_resume`, `co_destroy` cascading
-   through two `co_alloca` levels, an arena that overflows.
 - **C5. Backend quality.** §6.5's regional dispatch in `structure.c`; flow goldens for
    Duff's device and `goto` into a loop change from the skeleton to the regional
    form; coroutine goldens; sizes measured.

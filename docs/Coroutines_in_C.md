@@ -9,11 +9,8 @@ vcc extends C with two features:
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
 > **Status.** `defer` (section 1) is implemented and works on every target;
-> `<coro.h>` defines its short name. Coroutines (sections 2 to 8) are being built, on
-> wasm32 only: generators work (section 2, section 3 but `co_alloca` inside a
-> coroutine, section 4 but `await`, and `co_cancel` and `co_destroy` of section 6);
-> `await` (section 5), `co_alloca` inside a coroutine and the Braam runtime (section
-> 8) are next, and stop the compiler with "coroutines: not yet". Coroutines exist for
+> `<coro.h>` defines its short name. Coroutines (sections 2 to 7) work on wasm32
+> only; the Braam runtime (section 8) is next. Coroutines exist for
 > programs that run on [Braam](#8-coroutines-on-braam). The design and the work are in
 > [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
