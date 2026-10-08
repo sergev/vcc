@@ -251,6 +251,8 @@ CSE is a forward dataflow analysis on the CFG, with the same structure as reachi
 
 The rewrite replays each block from its in-set. A candidate `d = E` with (E → h) available becomes `d = h`, provided d is private and has the same type as h. When d is h itself, the recomputation is deleted.
 
+Keeping the old holder makes the transfer non-monotone: a smaller in-set without (E → h) gives an out-set with (E → d), which the larger in-set's out-set lacks. On an irreducible graph (random `goto`s among a dozen labels) the out-sets can then cycle and the fixpoint never ends. So past `CSE_MONOTONE_AFTER` (64) iterations, which no converging function comes near, a block's new out-set is intersected with its old one: the sets only shrink, and every fact kept still comes from the transfer of the in-set, so it holds.
+
 As in dead store elimination, a block that is still reachable but has been emptied by an earlier pass takes part as an identity node. Left unvisited, an empty block on the way into a loop would let a fact from the back edge look available on entry.
 
 ### Candidates and expression keys

@@ -717,3 +717,76 @@ TEST_F(CsePipelineTest, StoreThenLoad)
     EXPECT_EQ(KindHistogram(Optimize("int f(int *p, int x) { *p = x; return *p; }", true)),
               "return=1 store=1");
 }
+
+// Random gotos among twelve labels, an irreducible graph on which the fixpoint of the
+// available expressions used to cycle forever: the transfer keeps an older holder, so
+// it is not monotone.  It converges.
+TEST_F(CsePipelineTest, IrreducibleConverges)
+{
+    std::string yaml = OptimizeYaml(R"(
+unsigned f(unsigned x)
+{
+    unsigned steps = 0;
+    switch (x % 12) {
+    case 0: goto L0;
+    case 1: goto L1;
+    case 5: goto L5;
+    case 8: goto L8;
+    case 9: goto L9;
+    case 10: goto L10;
+    case 11: goto L11;
+    default: goto L0;
+    }
+L0:
+    x = x * 1103515245u + 32;
+    if (++steps > 200) return x ^ 0;
+    goto L6;
+L1:
+    x = x * 1103515245u + 32;
+    if (++steps > 200) return x ^ 1;
+    goto L0;
+L2:
+    x = x * 1103515245u + 36;
+    if (++steps > 200) return x ^ 2;
+    goto L2;
+L3:
+    x = x * 1103515245u + 10;
+    if (++steps > 200) return x ^ 3;
+    if ((x >> 9) & 1) goto L2; else goto L9;
+L4:
+    x = x * 1103515245u + 17;
+    if (++steps > 200) return x ^ 4;
+    if ((x >> 9) & 1) goto L2; else goto L0;
+L5:
+    x = x * 1103515245u + 1;
+    if (++steps > 200) return x ^ 5;
+    if ((x >> 9) & 1) goto L3; else goto L3;
+L6:
+    x = x * 1103515245u + 22;
+    if (++steps > 200) return x ^ 6;
+    if ((x >> 7) % 3 == 0) goto L2;
+L7:
+    x = x * 1103515245u + 26;
+    if (++steps > 200) return x ^ 7;
+    if ((x >> 9) & 1) goto L8; else goto L10;
+L8:
+    x = x * 1103515245u + 24;
+    if (++steps > 200) return x ^ 8;
+    if ((x >> 9) & 1) goto L11; else goto L3;
+L9:
+    x = x * 1103515245u + 50;
+    if (++steps > 200) return x ^ 9;
+    if ((x >> 7) % 3 == 0) goto L4;
+L10:
+    x = x * 1103515245u + 22;
+    if (++steps > 200) return x ^ 10;
+    goto L2;
+L11:
+    x = x * 1103515245u + 39;
+    if (++steps > 200) return x ^ 11;
+    goto L9;
+    return x;
+}
+)");
+    EXPECT_NE(std::string::npos, yaml.find("return")) << yaml;
+}

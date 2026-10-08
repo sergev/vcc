@@ -69,6 +69,9 @@ typedef struct {
                       // store), that constant; `holder` is then its spelling
 } Fact;
 
+// Iterations of the fixpoint after which an out-set may only shrink (see below).
+enum { CSE_MONOTONE_AFTER = 64 };
+
 static void fact_free(intptr_t value)
 {
     Fact *f = (Fact *)value;
@@ -804,6 +807,15 @@ void eliminate_common_subexpressions(OptCfg *cfg, const Tac_TopLevel *fn)
             expr_set_copy(&new_out, &new_in);
             for (Tac_Instruction *ins = b->first; ins; ins = ins->next)
                 apply_transfer(&new_out, ins, &ctx);
+
+            // The transfer is not monotone: an expression already available keeps
+            // its older holder, one that is not gets this instruction's, so a
+            // smaller in-set may give an out-set the larger one's does not contain,
+            // and around an irreducible graph the sets can cycle.  Past a bound no
+            // converging function reaches, an out-set only shrinks; the facts kept
+            // are still made by the transfer from the in-set, so they hold.
+            if (visited[i] && iter > CSE_MONOTONE_AFTER)
+                expr_set_intersect(&new_out, &out_sets[i]);
 
             if (!visited[i] || !expr_set_equal(&new_out, &out_sets[i])) {
                 OPT_TRACE("[cse] block %d out-set changed\n", i);
