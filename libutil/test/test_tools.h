@@ -144,10 +144,11 @@ inline int RunTool(const std::vector<std::string> &argv, const std::string &log_
 // killing it after `seconds`.  Returns its exit code, -1 if it could not be run or was
 // killed by a signal, or -2 on timeout.  With a `done_path`, a program that never exits
 // by itself (qemu on AVR) has finished once that file is not empty: it is killed then,
-// after a moment for its output to drain, and the result is 0.
+// after a moment for its output to drain, and the result is 0.  With an `in_path`, the
+// standard input comes from that file.
 inline int RunWithTimeout(const std::vector<std::string> &argv, const std::string &out_path,
                           const std::string &err_path, int seconds,
-                          const std::string &done_path = "")
+                          const std::string &done_path = "", const std::string &in_path = "")
 {
     pid_t pid = fork();
     if (pid < 0)
@@ -157,6 +158,13 @@ inline int RunWithTimeout(const std::vector<std::string> &argv, const std::strin
         int err_fd = open(err_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (out_fd < 0 || err_fd < 0)
             _exit(127);
+        if (!in_path.empty()) {
+            int in_fd = open(in_path.c_str(), O_RDONLY);
+            if (in_fd < 0)
+                _exit(127);
+            dup2(in_fd, STDIN_FILENO);
+            close(in_fd);
+        }
         dup2(out_fd, STDOUT_FILENO);
         dup2(err_fd, STDERR_FILENO);
         close(out_fd);

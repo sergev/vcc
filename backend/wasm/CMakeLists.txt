@@ -42,13 +42,16 @@ add_executable(wasm32-tests
     test/run_tests.cpp
     test/defer_tests.cpp
     test/coro_tests.cpp
+    test/braam_tests.cpp
     ${BOOK_TEST_SOURCES}
 )
 target_link_libraries(wasm32-tests wasm parser translator semantic GTest::gtest_main
     test_util backend_test_util)
 if(WASM32_TOOLS_FOUND)
-    add_dependencies(wasm32-tests wasm32-libc)
+    add_dependencies(wasm32-tests wasm32-libc braam-libc)
 endif()
+# The Braam tests run the driver with the in-tree passes.
+add_dependencies(wasm32-tests cc cpp parse lower genwasm)
 string(JOIN " " wasm32_target_flags ${WASM32_TARGET_FLAGS})
 target_compile_definitions(wasm32-tests PRIVATE
     TEST_DIR="${CMAKE_CURRENT_BINARY_DIR}"
@@ -65,7 +68,13 @@ target_compile_definitions(wasm32-tests PRIVATE
     WASM32_LINK_FLAGS="${WASM32_LINK_FLAGS}"
     WASM32_NODE="${WASM32_NODE}"
     WASM32_RUNNER="${WASM32_RUNNER}"
-    WASM32_LIB_DIR="${WASM32_LIB_DIR}")
+    WASM32_LIB_DIR="${WASM32_LIB_DIR}"
+    VCC_COMMAND="$<TARGET_FILE:cc>"
+    VCC_CPP_PATH="$<TARGET_FILE:cpp>"
+    VCC_PARSE_PATH="$<TARGET_FILE:parse>"
+    VCC_LOWER_PATH="$<TARGET_FILE:lower>"
+    VCC_GENWASM_PATH="$<TARGET_FILE:genwasm>"
+    BRAAM_RUNNER="${CMAKE_BINARY_DIR}/share/vcc/wasm32-braam/lib/run.mjs")
 target_include_directories(wasm32-tests PRIVATE test) # book_test.h for the shared suite
 test_chdir_to_bindir(wasm32-tests)
 gtest_discover_tests(wasm32-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 30)

@@ -59,6 +59,48 @@ file(GLOB WASM32_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 install(FILES ${WASM32_TARGET_HEADERS} ${WASM32_COMMON_HEADERS}
         DESTINATION share/vcc/wasm32/include)
 
+# wasm32-braam (backend/wasm/Plan.md §7): its own headers first, then wasm32's, the first
+# of a name winning.  Staged in the build tree as an installation lays them out, so the
+# driver finds them from build/cc (the Braam tests run it).
+set(BRAAM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/braam/include)
+set(BRAAM_SHARE ${CMAKE_BINARY_DIR}/share/vcc/wasm32-braam)
+file(GLOB BRAAM_OWN_HEADERS ${BRAAM_INCLUDE_DIR}/*.h)
+set(BRAAM_TARGET_HEADERS ${BRAAM_OWN_HEADERS})
+foreach(h ${WASM32_TARGET_HEADERS} ${WASM32_COMMON_HEADERS})
+    get_filename_component(name ${h} NAME)
+    if(NOT EXISTS ${BRAAM_INCLUDE_DIR}/${name})
+        list(APPEND BRAAM_TARGET_HEADERS ${h})
+    endif()
+endforeach()
+install(FILES ${BRAAM_TARGET_HEADERS} DESTINATION share/vcc/wasm32-braam/include)
+file(MAKE_DIRECTORY ${BRAAM_SHARE}/include ${BRAAM_SHARE}/lib)
+foreach(h ${BRAAM_TARGET_HEADERS})
+    get_filename_component(name ${h} NAME)
+    configure_file(${h} ${BRAAM_SHARE}/include/${name} COPYONLY)
+endforeach()
+
+add_test(
+    NAME braam-headers-cpp
+    COMMAND ${CMAKE_COMMAND} -E env CPPFLAGS=-twasm32-braam
+            ${CMAKE_SOURCE_DIR}/scripts/check_headers.sh
+            $<TARGET_FILE:cpp>
+            $<TARGET_FILE:parse>
+            ${CMAKE_CURRENT_BINARY_DIR}/header-check-braam
+            ${BRAAM_SHARE}/include)
+
+# The ABI numbers of braam.h against braam-core's src/kernel/sysabi.h, when that tree is
+# beside this one (or named by BRAAM_CORE): a drift is a failing test, not a stale binary.
+set(BRAAM_CORE ${CMAKE_SOURCE_DIR}/../../Braam/braam-core CACHE PATH "a braam-core checkout")
+if(EXISTS ${BRAAM_CORE}/src/kernel/sysabi.h)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME braam-abi
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check_braam_abi.py
+                    ${BRAAM_INCLUDE_DIR}/braam.h ${BRAAM_CORE}/src/kernel/sysabi.h
+                    ${BRAAM_CORE}/src/kernel/result.h ${BRAAM_INCLUDE_DIR}/errno.h)
+    endif()
+endif()
+
 if(NOT WASM32_TOOLS_FOUND)
     message(STATUS "No clang with wasm32, wasm-ld or llvm-ar: the wasm32 runtime is not built")
     return()
@@ -120,3 +162,45 @@ add_custom_target(wasm32-libc ALL
 
 # The runtime, with the host that runs a program under node.
 install(FILES ${out}/crt0.o ${out}/libc.a ${src}/run.mjs DESTINATION share/vcc/wasm32/lib)
+
+# The Braam runtime: crt0.o is the exports (braam/exports.s); libc.a is wasm32's but for
+# the console, main.s, the bump allocator and strerror, with the process runtime, the
+# system calls and the streams of braam/, compiled with Braam's headers.
+set(bsrc ${src}/braam)
+set(bout ${out}/braam)
+file(MAKE_DIRECTORY ${bout})
+add_custom_command(OUTPUT ${bout}/crt0.o
+    COMMAND ${WASM32_AS} -o ${bout}/crt0.o ${bsrc}/exports.s
+    DEPENDS ${bsrc}/exports.s)
+set(BRAAM_LIBC_OBJS "")
+foreach(o ${WASM32_LIBC_OBJS})
+    get_filename_component(name ${o} NAME_WE)
+    if(NOT name MATCHES "^(console|main|malloc|strerror)$")
+        list(APPEND BRAAM_LIBC_OBJS ${o})
+    endif()
+endforeach()
+foreach(name rt sys stdio malloc strerror taskbytes)
+    add_custom_command(OUTPUT ${bout}/${name}.o
+        COMMAND cpp -t wasm32-braam -nostdinc -I${BRAAM_SHARE}/include
+                ${bsrc}/${name}.c ${bout}/${name}.i
+        COMMAND parse ${bout}/${name}.i ${bout}/${name}.ast
+        COMMAND lower -t wasm32-braam ${bout}/${name}.ast ${bout}/${name}.tac
+        COMMAND genwasm ${bout}/${name}.tac ${bout}/${name}.s
+        COMMAND ${WASM32_AS} -o ${bout}/${name}.o ${bout}/${name}.s
+        DEPENDS ${bsrc}/${name}.c ${BRAAM_TARGET_HEADERS} cpp parse lower genwasm
+        COMMENT "Compiling ${name}.c -> ${name}.o (wasm32-braam)")
+    list(APPEND BRAAM_LIBC_OBJS ${bout}/${name}.o)
+endforeach()
+add_custom_command(OUTPUT ${bout}/libc.a
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${bout}/libc.a
+    COMMAND ${WASM32_AR} rcs ${bout}/libc.a ${BRAAM_LIBC_OBJS}
+    DEPENDS ${BRAAM_LIBC_OBJS})
+add_custom_command(OUTPUT ${BRAAM_SHARE}/lib/crt0.o ${BRAAM_SHARE}/lib/libc.a
+                          ${BRAAM_SHARE}/lib/run.mjs
+    COMMAND ${CMAKE_COMMAND} -E copy ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs
+            ${BRAAM_SHARE}/lib
+    DEPENDS ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs)
+add_custom_target(braam-libc ALL
+    DEPENDS ${BRAAM_SHARE}/lib/crt0.o ${BRAAM_SHARE}/lib/libc.a ${BRAAM_SHARE}/lib/run.mjs)
+install(FILES ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs
+        DESTINATION share/vcc/wasm32-braam/lib)
