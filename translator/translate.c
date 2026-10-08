@@ -897,6 +897,8 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
 {
     const char *name  = ast->u.function.name;
     const Symbol *sym = symtab_get(name);
+    if (sym->u.func.coro)
+        fatal_error("coroutines: not yet"); // phase C3 (backend/wasm/Plan.md §8)
 
     Tac_TopLevel *tl        = tac_new_toplevel(TAC_TOPLEVEL_FUNCTION);
     tl->u.function.name     = xstrdup(name);

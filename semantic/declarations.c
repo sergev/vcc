@@ -246,7 +246,8 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
     if (is_static(specifiers) && scope_level > 0) {
         fatal_error("Block-scope function declaration cannot be static");
     }
-    bool global = !is_static(specifiers);
+    bool global       = !is_static(specifiers);
+    const Type *yield = check_coroutine_decl(decl->name, specifiers, var_type);
 
     // Strip the void sentinel and decay array params to pointers — same
     // normalization as in typecheck_fn_decl so prototypes and definitions store
@@ -266,6 +267,7 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
         if (!compatible_type(existing->type, adj)) {
             fatal_error("Conflicting declarations for function %s", decl->name);
         }
+        agree_coroutine(existing, yield, decl->name);
     }
     bool defined   = existing && existing->kind == SYM_FUNC && existing->u.func.defined;
     bool fn_global = (existing && existing->kind == SYM_FUNC) ? existing->u.func.global : global;
@@ -274,6 +276,8 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
     bool noret = is_noreturn(specifiers) ||
                  (existing && existing->kind == SYM_FUNC && existing->u.func.noret);
     symtab_add_fun(decl->name, adj, fn_global, defined, noret);
+    if (yield)
+        symtab_set_coro(decl->name, yield);
     free_type(decl->type);
     decl->type = adj; // normalized type now owned by AST
 }
@@ -729,6 +733,7 @@ static void typecheck_local_var_decl(const Declaration *d)
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
         reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+            reject_coro_spec(d->u.var.specifiers, decl->name);
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
             validate_type(decl->type);
@@ -747,6 +752,7 @@ static void typecheck_local_var_decl(const Declaration *d)
             register_function_declaration(decl, d->u.var.specifiers);
             continue;
         }
+        reject_coro_spec(d->u.var.specifiers, decl->name);
         if (unalias(var_type)->kind == TYPE_VOID) {
             fatal_error("No void declarations");
         }
@@ -1027,6 +1033,8 @@ static void typecheck_fn_decl(ExternalDecl *d)
         fatal_error("Function has non-function type");
     }
     check_duplicate_params(adjusted_type);
+    const Type *yield =
+        check_coroutine_decl(d->u.function.name, d->u.function.specifiers, fun_type);
     bool has_body            = d->u.function.body != NULL;
     const Param *params      = adjusted_type->u.function.params;
     bool all_params_complete = true;
@@ -1058,6 +1066,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
             if (existing->u.func.global && is_static(d->u.function.specifiers)) {
                 fatal_error("Static function declaration follows non-static");
             }
+            agree_coroutine(existing, yield, d->u.function.name);
             defined = has_body || existing->u.func.defined;
             global  = existing->u.func.global;
         }
@@ -1066,6 +1075,8 @@ static void typecheck_fn_decl(ExternalDecl *d)
     bool noret = is_noreturn(d->u.function.specifiers) ||
                  (existing && existing->kind == SYM_FUNC && existing->u.func.noret);
     symtab_add_fun(d->u.function.name, adjusted_type, global, defined, noret);
+    if (yield)
+        symtab_set_coro(d->u.function.name, yield);
     if (has_body) {
         if (d->u.function.param_decls) {
             fatal_error("Function parameters in K&R style are not supported");
@@ -1084,8 +1095,10 @@ static void typecheck_fn_decl(ExternalDecl *d)
             symtab_add_automatic_var_type(p->name, p->type, scope_level);
         }
         static_locals_set_function(d->u.function.name);
+        coro_begin_body(yield);
         d->u.function.body =
             typecheck_statement(fun_type->u.function.return_type, d->u.function.body);
+        coro_end_body();
 
         // A non-void function whose body can fall off the end yields an
         // indeterminate value (C11 §6.9.1p12).  Reject that — except for main(),
@@ -1155,6 +1168,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
         reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+            reject_coro_spec(d->u.var.specifiers, decl->name);
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
             validate_type(decl->type);
@@ -1176,6 +1190,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
             register_function_declaration(decl, d->u.var.specifiers);
             continue;
         }
+        reject_coro_spec(d->u.var.specifiers, decl->name);
 
         if (unalias(var_type)->kind == TYPE_VOID) {
             fatal_error("Void variables not allowed");

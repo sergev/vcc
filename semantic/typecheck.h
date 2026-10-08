@@ -53,6 +53,7 @@ bool try_eval_const_ld(const Expr *e, Float128 *out);
 
 // Expression type-checking — expressions.c
 Expr *typecheck_string(Expr *e);
+Expr *typecheck_call_args(const Type *fn_type, Expr *args);
 Expr *typecheck_and_decay(Expr *e);
 Expr *typecheck_scalar(Expr *e);
 
@@ -77,6 +78,26 @@ bool has_storage(const DeclSpec *spec);
 // Declaration type-checking — declarations.c
 void typecheck_local_decl(Declaration *d);
 void typecheck_global_decl(ExternalDecl *d);
+
+// Coroutines — coroutines.c
+struct Symbol;
+extern int coro_defer_depth;     // deferred statements around the expression checked
+extern int coro_loop_head_depth; // loop heads around it: no co_alloca there
+bool is_frame_type(const Type *t);                  // _Coro_frame(Y, T)
+bool same_frame_type(const Type *a, const Type *b); // two frame types: Y and T agree
+void check_frame_type(const Type *t);
+void reject_coro_spec(const DeclSpec *spec, const char *name);
+// The yield type of a function declared _Coro(Y), its declaration checked; else NULL.
+const Type *check_coroutine_decl(const char *name, const DeclSpec *spec, const Type *fn_type);
+// A redeclaration agrees with `existing` on being a coroutine, and on Y.
+void agree_coroutine(const struct Symbol *existing, const Type *yield, const char *name);
+void coro_begin_body(const Type *yield); // NULL for an ordinary function
+void coro_end_body(void);
+void check_coroutine_name(const struct Symbol *sym); // a coroutine named as a value
+bool coroutine_call_allowed(const Expr *call);       // the call an arena await makes
+Expr *typecheck_yield(Expr *e);
+Expr *typecheck_await(Expr *e);
+Expr *typecheck_co_op(Expr *e);
 
 #ifdef __cplusplus
 }

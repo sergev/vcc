@@ -97,6 +97,7 @@ static Expr *typecheck_var(Expr *e)
         printf("--- %s()\n", __func__);
     }
     const Symbol *sym = symtab_get(e->u.var);
+    check_coroutine_name(sym);
 
     // A block-scope static is keyed in the symtab by its source name but carries a distinct
     // backend name (so sibling-block repeats stay unique); rewrite the reference to it so the
@@ -267,6 +268,46 @@ static Expr *promote_variadic_arg(Expr *e)
     else if (et->kind == TYPE_FLOAT)
         e = convert_to_kind(e, TYPE_DOUBLE);
     return e;
+}
+
+// Check the arguments of a call against function type `fn_type` (C11 §6.5.2.2): their
+// number, then each converted as by assignment to its parameter's type, or promoted
+// past the last one of a variadic function.  Returns the new argument list.
+Expr *typecheck_call_args(const Type *fn_type, Expr *args)
+{
+    const Param *params = params_for_call(fn_type);
+    const bool variadic = fn_type->u.function.variadic;
+    int param_count = 0, arg_count = 0;
+    for (const Param *p = params; p; p = p->next)
+        param_count++;
+    for (const Expr *a = args; a; a = a->next)
+        arg_count++;
+    if (variadic) {
+        if (arg_count < param_count)
+            fatal_error("Function called with wrong number of arguments");
+    } else if (param_count != arg_count) {
+        fatal_error("Function called with wrong number of arguments");
+    }
+    Expr *arg = args, *prev = NULL, *new_args = NULL;
+    const Param *p = params;
+    while (arg) {
+        Expr *arg_next = arg->next;
+        arg->next      = NULL;
+        Expr *new_arg;
+        if (p) {
+            new_arg = coerce_for_assignment(typecheck_and_decay(arg), p->type);
+            p       = p->next;
+        } else {
+            new_arg = promote_variadic_arg(arg);
+        }
+        if (!new_args)
+            new_args = new_arg;
+        if (prev)
+            prev->next = new_arg;
+        prev = new_arg;
+        arg  = arg_next;
+    }
+    return new_args;
 }
 
 static Expr *typecheck_expr(Expr *e)
@@ -706,6 +747,8 @@ static Expr *typecheck_expr(Expr *e)
         const Type *fn_type;
         if (func->kind == EXPR_VAR) {
             const Symbol *sym = symtab_get(func->u.var);
+            if (!coroutine_call_allowed(e))
+                check_coroutine_name(sym);
             // Type the callee node from its symbol.  A bare name is not decayed here (the
             // call names it directly), but it must still carry its type: a function
             // designator's is a function type and a function-pointer variable's is a
@@ -728,38 +771,7 @@ static Expr *typecheck_expr(Expr *e)
                 fatal_error("Expression is not a function or function pointer");
             e->u.call.func = func;
         }
-        const Param *params = params_for_call(fn_type);
-        const bool variadic = fn_type->u.function.variadic;
-        int param_count = 0, arg_count = 0;
-        for (const Param *p = params; p; p = p->next)
-            param_count++;
-        for (const Expr *a = e->u.call.args; a; a = a->next)
-            arg_count++;
-        if (variadic) {
-            if (arg_count < param_count)
-                fatal_error("Function called with wrong number of arguments");
-        } else if (param_count != arg_count) {
-            fatal_error("Function called with wrong number of arguments");
-        }
-        Expr *arg = e->u.call.args, *prev = NULL, *new_args = NULL;
-        const Param *p = params;
-        while (arg) {
-            Expr *arg_next = arg->next;
-            arg->next      = NULL;
-            Expr *new_arg;
-            if (p) {
-                new_arg = coerce_for_assignment(typecheck_and_decay(arg), p->type);
-                p       = p->next;
-            } else {
-                new_arg = promote_variadic_arg(arg);
-            }
-            if (!new_args)
-                new_args = new_arg;
-            if (prev)
-                prev->next = new_arg;
-            prev = new_arg;
-            arg  = arg_next;
-        }
+        Expr *new_args = typecheck_call_args(fn_type, e->u.call.args);
         // The intrinsics whose first argument the front end must constant-fold: an extracode's
         // opcode, a mode-word mask and a halt code are immediate fields of the instruction
         // word, not values.
@@ -835,6 +847,12 @@ static Expr *typecheck_expr(Expr *e)
         e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__);
         return e;
     }
+    case EXPR_YIELD:
+        return typecheck_yield(e);
+    case EXPR_AWAIT:
+        return typecheck_await(e);
+    case EXPR_CO_OP:
+        return typecheck_co_op(e);
     case EXPR_FIELD_ACCESS: {
         Expr *strct        = typecheck_and_decay(e->u.field_access.expr);
         const Type *strct_ty = unalias(strct->type);

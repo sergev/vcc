@@ -55,6 +55,11 @@ Type *resolve_typedef_names(Type *t)
         for (Param *p = t->u.function.params; p; p = p->next)
             p->type = resolve_typedef_names(p->type);
         break;
+    case TYPE_STRUCT:
+        // _Coro_frame(Y, T): a local typedef in Y or T is gone by the time it is lowered.
+        t->u.struct_t.frame_yield  = resolve_typedef_names(t->u.struct_t.frame_yield);
+        t->u.struct_t.frame_result = resolve_typedef_names(t->u.struct_t.frame_result);
+        break;
     default:
         break; // primitive, struct, union, enum — no child types
     }

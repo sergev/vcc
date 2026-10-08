@@ -41,6 +41,8 @@ typedef struct Symbol {
             bool defined;  // True if function body is defined
             bool global;   // True if function has global linkage
             bool noret;    // True if declared/defined _Noreturn
+            bool coro;     // True if declared _Coro(Y): a coroutine
+            Type *yield_type; // its Y (owned), void included; NULL for a function
         } func;            // For SYM_FUNC
 
         struct {
@@ -112,6 +114,9 @@ void static_locals_set_function(const char *fn);
 const char *static_locals_add(const char *source, const Type *type, Tac_StaticInit *init);
 // Head of the captured-static-local list (the translator iterates and filters by ->func).
 StaticLocalRec *static_locals_head(void);
+
+// Mark function `name`, just added, a coroutine yielding `yield_type` (copied).
+void symtab_set_coro(const char *name, const Type *yield_type);
 
 // Add a function
 void symtab_add_fun(const char *name, const Type *t, bool global, bool defined, bool noret);

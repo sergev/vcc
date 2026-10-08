@@ -120,6 +120,9 @@ typedef struct {
     // unnamed array of no bytes (RISC-V, whose FP calling convention, as clang has it,
     // counts every bit-field as a field of its own, and a `:0` ahead of the second).
     int bitfield_unit_per_field;
+    // Coroutines (_Coro, _Yield, _Await and the co_* operations) are implemented: the
+    // lowering is target-neutral, but it needs a runtime, which only wasm32 has.
+    int coroutines;
 } Target;
 
 // Active target.  Defaults to x86_64.  Set this before calling any

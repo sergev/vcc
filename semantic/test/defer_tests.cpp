@@ -96,13 +96,13 @@ TEST_F(PipelineTest, DeferCasePast_Neg)
 void g(void);
 void f(int x) { switch (x) { case 1: _Defer g(); case 2: g(); } }
 )"),
-                 "'case' label past a defer in its switch");
+                 "'case' label past a defer or co_alloca in its switch");
 }
 
 TEST_F(PipelineTest, DeferDefaultPast_Neg)
 {
     EXPECT_DEATH(RunPipeline("void g(void); void f(int x) { switch (x) { _Defer g(); default: g(); } }"),
-                 "'default' label past a defer in its switch");
+                 "'default' label past a defer or co_alloca in its switch");
 }
 
 TEST_F(PipelineTest, DeferCaseInside_Neg)

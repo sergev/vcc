@@ -2008,6 +2008,10 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
         }
         return gen_expr(ctx, e->u.compound_literal.init->init->u.expr);
     }
+    case EXPR_YIELD:
+    case EXPR_AWAIT:
+    case EXPR_CO_OP:
+        fatal_error("coroutines: not yet"); // phase C3 (backend/wasm/Plan.md §8)
     default:
         fatal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
     }

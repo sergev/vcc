@@ -326,7 +326,8 @@ static const Target targets[] = {
       0,        // little-endian
       BITFIELD_SYSV,
       0,        // bitfield_access_bits
-      1 },      // bitfield_unit_per_field: clang's single-element rule counts bit-fields
+      1,        // bitfield_unit_per_field: clang's single-element rule counts bit-fields
+      1 },      // coroutines
 };
 // clang-format on
 

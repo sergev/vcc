@@ -45,6 +45,9 @@ void free_symbol(Symbol *sym)
         break;
     case SYM_ENUM:
         break;
+    case SYM_FUNC:
+        free_type(sym->u.func.yield_type);
+        break;
     default:
         break;
     }
@@ -222,6 +225,13 @@ void symtab_add_fun(const char *name, const Type *t, bool global, bool defined, 
     sym->u.func.noret   = noret;
 
     map_insert_free(&symtab, name, (intptr_t)sym, 0, symtab_destroy_callback);
+}
+
+void symtab_set_coro(const char *name, const Type *yield_type)
+{
+    Symbol *sym           = symtab_get(name);
+    sym->u.func.coro      = true;
+    sym->u.func.yield_type = clone_type(yield_type, __func__, __FILE__, __LINE__);
 }
 
 //

@@ -86,7 +86,8 @@ static const struct target targets[] = {
     { "wasm32",  { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
                    "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
                    "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",
-                   "__wasm_reference_types__", "__wasm_sign_ext__" } },
+                   "__wasm_reference_types__", "__wasm_sign_ext__",
+                   "__vcc_coroutines__" } }, // _Coro, _Yield, _Await, __co_*
 };
 
 static const struct target *target;     // selected by -t; default riscv64, like lower

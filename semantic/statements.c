@@ -75,17 +75,22 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
         return s;
     }
     case STMT_WHILE: {
+        coro_loop_head_depth++;
         s->u.while_stmt.condition = typecheck_scalar(s->u.while_stmt.condition);
+        coro_loop_head_depth--;
         s->u.while_stmt.body      = typecheck_statement(ret_type, s->u.while_stmt.body);
         return s;
     }
     case STMT_DO_WHILE: {
         s->u.do_while.body      = typecheck_statement(ret_type, s->u.do_while.body);
+        coro_loop_head_depth++;
         s->u.do_while.condition = typecheck_scalar(s->u.do_while.condition);
+        coro_loop_head_depth--;
         return s;
     }
     case STMT_FOR: {
         scope_increment();
+        coro_loop_head_depth++;
         if (s->u.for_stmt.init->kind == FOR_INIT_DECL) {
             const Declaration *init_decl = s->u.for_stmt.init->u.decl;
             if (has_storage(init_decl->u.var.specifiers)) {
@@ -107,6 +112,7 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
             s->u.for_stmt.condition ? typecheck_scalar(s->u.for_stmt.condition) : NULL;
         s->u.for_stmt.update =
             s->u.for_stmt.update ? typecheck_and_decay(s->u.for_stmt.update) : NULL;
+        coro_loop_head_depth--;
         s->u.for_stmt.body = typecheck_statement(ret_type, s->u.for_stmt.body);
         scope_decrement();
         return s;
@@ -178,8 +184,11 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
     }
     case STMT_DEFER:
         // What a deferred statement may not do (leave it, or a jump past it) is
-        // checked by check_defers() once the function's labels are known.
+        // checked by check_defers() once the function's labels are known.  No yield
+        // or await may suspend inside it.
+        coro_defer_depth++;
         s->u.defer_stmt = typecheck_statement(ret_type, s->u.defer_stmt);
+        coro_defer_depth--;
         return s;
     default:
         fatal_error("Unsupported statement kind %d", s->kind);

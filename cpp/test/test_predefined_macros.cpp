@@ -236,18 +236,20 @@ TEST_F(Predefined, MmixTarget) {
                           "TARGET\n#endif\n", "TARGET", {"-t", "mmix"}));
 }
 
-// wasm32: clang's set with Braam's features, ILP32, signed plain char, no __ELF__.
+// wasm32: clang's set with Braam's features, ILP32, signed plain char, no __ELF__; and
+// vcc's coroutines, which only wasm32 has.
 TEST_F(Predefined, Wasm32Target) {
     EXPECT_TRUE(TokensAre("#if __wasm__ && __wasm && __wasm32__ && __wasm32 && __ILP32__ && "
                           "_ILP32 && __wasm_sign_ext__ && __wasm_bulk_memory__ && "
                           "__wasm_nontrapping_fptoint__ && !defined(__CHAR_UNSIGNED__) && "
-                          "!defined(__ELF__) && !defined(__riscv)\n"
+                          "!defined(__ELF__) && !defined(__riscv) && __vcc_coroutines__\n"
                           "TARGET\n#endif\n", "TARGET", {"-t", "wasm32"}));
 }
 
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
 TEST_F(Predefined, Besm6Target) {
-    EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv)\n"
+    EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv) && "
+                          "!defined(__vcc_coroutines__)\n"
                           "TARGET\n#endif\n", "TARGET", {"-tbesm6"}));
     EXPECT_TRUE(TokensAre("#ifdef besm6\nTARGET\n#endif\n", "TARGET", {"--target", "besm6"}));
 }

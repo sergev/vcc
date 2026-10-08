@@ -11,6 +11,11 @@
 // A goto may still leave blocks, or jump back over a defer of its own block: the
 // translator runs the defers it leaves behind.
 //
+// A co_alloca is a defer for this purpose: its frame is released at the end of its
+// block, ordered with the block's defers.  It is registered after the declaration or
+// expression statement holding it, or, in the head of an if or switch, before the
+// statement's body (none may be in a loop's head: expressions.c).
+//
 #include "defer.h"
 
 #include "semantic.h"
@@ -26,6 +31,89 @@ typedef struct {
 } Walk;
 
 static void walk_stmt(Walk *w, const Stmt *s);
+
+static int count_co_alloca(const Expr *e);
+
+static int count_co_alloca_list(const Expr *e)
+{
+    int n = 0;
+    for (; e; e = e->next)
+        n += count_co_alloca(e);
+    return n;
+}
+
+static int count_co_alloca_init(const Initializer *init)
+{
+    if (!init)
+        return 0;
+    if (init->kind == INITIALIZER_SINGLE)
+        return count_co_alloca(init->u.expr);
+    int n = 0;
+    for (const InitItem *item = init->u.items; item; item = item->next)
+        n += count_co_alloca_init(item->init);
+    return n;
+}
+
+// The co_alloca operations an expression evaluates (not those of a sizeof operand).
+static int count_co_alloca(const Expr *e)
+{
+    if (!e)
+        return 0;
+    switch (e->kind) {
+    case EXPR_UNARY_OP:
+        return count_co_alloca(e->u.unary_op.expr);
+    case EXPR_BINARY_OP:
+        return count_co_alloca(e->u.binary_op.left) + count_co_alloca(e->u.binary_op.right);
+    case EXPR_SUBSCRIPT:
+        return count_co_alloca(e->u.subscript.left) + count_co_alloca(e->u.subscript.right);
+    case EXPR_ASSIGN:
+        return count_co_alloca(e->u.assign.target) + count_co_alloca(e->u.assign.value);
+    case EXPR_COND:
+        return count_co_alloca(e->u.cond.condition) + count_co_alloca(e->u.cond.then_expr) +
+               count_co_alloca(e->u.cond.else_expr);
+    case EXPR_CAST:
+        return count_co_alloca(e->u.cast.expr);
+    case EXPR_CALL:
+        return count_co_alloca(e->u.call.func) + count_co_alloca_list(e->u.call.args);
+    case EXPR_COMPOUND: {
+        int n = 0;
+        for (const InitItem *item = e->u.compound_literal.init; item; item = item->next)
+            n += count_co_alloca_init(item->init);
+        return n;
+    }
+    case EXPR_FIELD_ACCESS:
+    case EXPR_PTR_ACCESS:
+        return count_co_alloca(e->u.field_access.expr);
+    case EXPR_POST_INC:
+    case EXPR_POST_DEC:
+        return count_co_alloca(e->u.post_inc);
+    case EXPR_GENERIC: {
+        int n = count_co_alloca(e->u.generic.controlling_expr);
+        for (const GenericAssoc *ga = e->u.generic.associations; ga; ga = ga->next)
+            n += count_co_alloca(ga->kind == GENERIC_ASSOC_TYPE ? ga->u.type_assoc.expr
+                                                                : ga->u.default_assoc);
+        return n;
+    }
+    case EXPR_YIELD:
+        return count_co_alloca(e->u.yield_expr);
+    case EXPR_AWAIT:
+        return count_co_alloca(e->u.await_expr);
+    case EXPR_CO_OP:
+        return (e->u.co_op.op == CO_OP_ALLOCA) + count_co_alloca_list(e->u.co_op.args);
+    default:
+        return 0; // a literal, a name, sizeof, _Alignof, __builtin_va_class
+    }
+}
+
+static int count_co_alloca_decl(const Declaration *d)
+{
+    int n = 0;
+    if (d && d->kind == DECL_VAR) {
+        for (const InitDeclarator *id = d->u.var.declarators; id; id = id->next)
+            n += count_co_alloca_init(id->init);
+    }
+    return n;
+}
 
 static void push(Walk *w, const Stmt *key)
 {
@@ -81,11 +169,18 @@ static void check_goto(const Walk *w, const char *name)
         k++;
     for (int i = k; i < to->depth; i++) {
         if (to->scopes[i].count > 0)
-            fatal_error("goto %s jumps into a block past a defer", name);
+            fatal_error("goto %s jumps into a block past a defer or co_alloca", name);
     }
     if (k > 0 && to->scopes[k - 1].count > w->stack[k - 1].count) {
-        fatal_error("goto %s jumps forward past a defer", name);
+        fatal_error("goto %s jumps forward past a defer or co_alloca", name);
     }
+}
+
+// Register n co_allocas, like as many defers, in the innermost block.
+static void register_co_alloca(Walk *w, int n)
+{
+    if (n > 0 && w->depth > 0)
+        w->stack[w->depth - 1].count += n;
 }
 
 static void check_case(const Walk *w, const char *what)
@@ -97,7 +192,7 @@ static void check_case(const Walk *w, const char *what)
     }
     for (int i = w->switch_base; i < w->depth; i++) {
         if (w->stack[i].count > 0)
-            fatal_error("'%s' label past a defer in its switch", what);
+            fatal_error("'%s' label past a defer or co_alloca in its switch", what);
     }
 }
 
@@ -111,10 +206,16 @@ static void walk_stmt(Walk *w, const Stmt *s)
         for (const DeclOrStmt *ds = s->u.compound; ds; ds = ds->next) {
             if (ds->kind == DECL_OR_STMT_STMT)
                 walk_stmt(w, ds->u.stmt);
+            else
+                register_co_alloca(w, count_co_alloca_decl(ds->u.decl));
         }
         w->depth--;
         break;
+    case STMT_EXPR:
+        register_co_alloca(w, count_co_alloca(s->u.expr));
+        break;
     case STMT_IF:
+        register_co_alloca(w, count_co_alloca(s->u.if_stmt.condition));
         walk_sub(w, s->u.if_stmt.then_stmt);
         walk_sub(w, s->u.if_stmt.else_stmt);
         break;
@@ -128,6 +229,7 @@ static void walk_stmt(Walk *w, const Stmt *s)
         walk_sub(w, s->u.for_stmt.body);
         break;
     case STMT_SWITCH: {
+        register_co_alloca(w, count_co_alloca(s->u.switch_stmt.expr));
         int base       = w->switch_base;
         w->switch_base = w->depth;
         walk_sub(w, s->u.switch_stmt.body);
@@ -191,7 +293,8 @@ void defer_free_labels(StringMap *labels)
     map_destroy_free(labels, free_pos);
 }
 
-// Does the statement hold a defer anywhere?  Most functions have none, and need no walk.
+// Does the statement hold a defer or a co_alloca anywhere?  Most functions have none,
+// and need no walk.
 static bool has_defer(const Stmt *s)
 {
     if (!s)
@@ -201,12 +304,16 @@ static bool has_defer(const Stmt *s)
         return true;
     case STMT_COMPOUND:
         for (const DeclOrStmt *ds = s->u.compound; ds; ds = ds->next) {
-            if (ds->kind == DECL_OR_STMT_STMT && has_defer(ds->u.stmt))
+            if (ds->kind == DECL_OR_STMT_STMT ? has_defer(ds->u.stmt)
+                                              : count_co_alloca_decl(ds->u.decl) > 0)
                 return true;
         }
         return false;
+    case STMT_EXPR:
+        return count_co_alloca(s->u.expr) > 0;
     case STMT_IF:
-        return has_defer(s->u.if_stmt.then_stmt) || has_defer(s->u.if_stmt.else_stmt);
+        return count_co_alloca(s->u.if_stmt.condition) > 0 ||
+               has_defer(s->u.if_stmt.then_stmt) || has_defer(s->u.if_stmt.else_stmt);
     case STMT_WHILE:
         return has_defer(s->u.while_stmt.body);
     case STMT_DO_WHILE:
@@ -214,7 +321,7 @@ static bool has_defer(const Stmt *s)
     case STMT_FOR:
         return has_defer(s->u.for_stmt.body);
     case STMT_SWITCH:
-        return has_defer(s->u.switch_stmt.body);
+        return count_co_alloca(s->u.switch_stmt.expr) > 0 || has_defer(s->u.switch_stmt.body);
     case STMT_LABELED:
         return has_defer(s->u.labeled.stmt);
     case STMT_CASE:
