@@ -65,7 +65,7 @@ build/cpp/cpp -t besm6 -nostdinc -Ilibc/besm6/include -Ilibc/common/include prog
 | `msp430` | `__MSP430__`, `__CHAR_UNSIGNED__`, `__ELF__` | `<prefix>/share/vcc/msp430/include` |
 | `mmix` | `__mmix__`, `__MMIX__`, `__MMIX_ABI_MMIXWARE__`, `__LP64__`, `_LP64` (GCC's; no `__ELF__`) | `<prefix>/share/vcc/mmix/include` |
 | `wasm32` | `__wasm__`, `__wasm`, `__wasm32__`, `__wasm32`, `__ILP32__`, `_ILP32`, and the feature macros `__wasm_bulk_memory__`, `__wasm_bulk_memory_opt__`, `__wasm_multivalue__`, `__wasm_mutable_globals__`, `__wasm_nontrapping_fptoint__`, `__wasm_reference_types__`, `__wasm_sign_ext__` (clang's with Braam's features; no `__ELF__`), and `__vcc_coroutines__` (vcc's coroutines, [docs/Coroutines_in_C.md](../docs/Coroutines_in_C.md)) | `<prefix>/share/vcc/wasm32/include` |
-| `wasm32-braam` | wasm32's, and `__braam__` (a process of Braam, [backend/wasm/Plan.md](../backend/wasm/Plan.md) §7) | `<prefix>/share/vcc/wasm32-braam/include` |
+| `wasm32-braam` | wasm32's, and `__braam__` (a process of Braam, [docs/Braam.md](../docs/Braam.md)) | `<prefix>/share/vcc/wasm32-braam/include` |
 | `besm6` | `besm6`, `__besm6__` | `<prefix>/share/vcc/besm6/include` |
 
 The RISC-V set is a subset of clang's, so a header written for clang takes the same

@@ -470,8 +470,8 @@ The signed `char` and the big-endian byte order come from the `mmix` descriptor 
 | `wasm_ir.h`, `wasm_ir.c` | IR: a function as one flat list of stack instructions, `block`/`loop`/`if`/`end` among them; each instruction's stack effect |
 | `frame.c` | Types, clang's signatures (`wasm_pass`, `wasm_sret`), which names are locals and which frame slots, the shadow-stack prologue and epilogue (none without slots) |
 | `instr.c` | Selection of stack code: push the operands, compute, pop into the destination; narrow values kept extended; `long double` through the runtime |
-| `call.c` | clang's calls: single-scalar structures by value, others by reference to a caller's copy, sret, `long double` as two `i64`, the variadic buffer and `__va_start`, `call_indirect` |
-| `structure.c` | Structured control flow by Ramsey's translation (reverse postorder, dominators, loop headers, merge nodes); an irreducible graph made reducible first by a dispatch node per region with several entries; the whole-function dispatch skeleton as the last fallback |
+| `call.c` | clang's calls: single-scalar structures by value, others by reference to a caller's copy, sret, `long double` as two `i64`, the variadic buffer and `__va_start`, `co_alloca`'s `__builtin_stack_save`/`__builtin_alloca`/`__builtin_stack_restore` in place, `call_indirect` |
+| `structure.c` | Structured control flow by Ramsey's translation (reverse postorder, dominators, loop headers, merge nodes; a `JUMP_TABLE` as a `br_table`); an irreducible graph made reducible first by a dispatch node per region with several entries; the whole-function dispatch skeleton as the last fallback |
 | `peephole.c` | Rewrites of the finished code: stackify, tees, dead values, tests, offsets folded into accesses, stores merged, dead code and branches removed |
 | `locals.c` | Local coalescing: liveness over the structured code, copy-related locals merged, groups coloured |
 | `data.c` | Static data, a section per variable |
@@ -534,8 +534,8 @@ instruction selection on its own.
 | `libc/avr/include/` | AVR's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`) |
 | `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
 | `libc/mmix/include/` | MMIX's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
-| `libc/wasm32/include/` | wasm32's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`); its runtime (`crt0.S`, `console.s`, `memory.s`, `sqrt.s`, `main.s`, `malloc.c`, `run.mjs`) is in `libc/wasm32/` |
-| `libc/wasm32/braam/` | the `wasm32-braam` runtime, a process of Braam ([backend/wasm/Plan.md](../backend/wasm/Plan.md) §7): `exports.s` (`crt0.o`), `rt.c`, `sys.c`, `stdio.c`, `malloc.c`, `strerror.c`, the fake kernel `run.mjs`, and `include/` (`braam.h`, `unistd.h`, `fcntl.h`, `errno.h`, `stdio.h`, `stdlib.h`, `signal.h`, `poll.h`, `sys/types.h`, `sys/stat.h`), searched ahead of wasm32's; `scripts/check_braam_abi.py` (the `braam-abi` ctest) compares its numbers with braam-core's; `backend/wasm/test/braam_system.mjs` (the `braam-system` ctest) runs programs on a built braam-core; `docs/examples/notes.c` is the worked example of [Braam_Example.md](Braam_Example.md) |
+| `libc/wasm32/include/` | wasm32's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`); its runtime (`crt0.S`, `console.s`, `memory.s`, `sqrt.s`, `main.s`, `malloc.c`, the coroutine runtime `co.c`, `run.mjs`) is in `libc/wasm32/` |
+| `libc/wasm32/braam/` | the `wasm32-braam` runtime, a process of Braam ([Braam.md](Braam.md)): `exports.s` (`crt0.o`), `rt.c`, `sys.c`, `stdio.c`, `malloc.c`, `strerror.c`, `taskbytes.c` (the default `__braam_task_bytes`), the fake kernel `run.mjs`, and `include/` (`braam.h`, `unistd.h`, `fcntl.h`, `errno.h`, `stdio.h`, `stdlib.h`, `signal.h`, `poll.h`, `sys/types.h`, `sys/stat.h`), searched ahead of wasm32's; `scripts/check_braam_abi.py` (the `braam-abi` ctest) compares its numbers with braam-core's; `backend/wasm/test/braam_system.mjs` (the `braam-system` ctest) runs programs on a built braam-core; `docs/examples/notes.c` is the worked example of [Braam_Example.md](Braam_Example.md) |
 | `libc/ip16/include/` | 16-bit data-model headers: `inttypes.h`, shared by avr and msp430, and avr's `stddef.h` and `stdint.h` (msp430 has its own, with a `long` `wchar_t`) |
 | `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too, and MSP430 |
 | `libc/common/float64.c` | binary64 soft-float (`__adddf3`, `__ltdf2`, `sqrt`, …), correctly rounded, for MSP430 |
@@ -916,6 +916,19 @@ when not the first member), and a NULL item means zero. It also sizes unsized ar
 A compound literal is an lvalue with its own frame slot; at file scope it becomes an
 anonymous static object `_clN`. An automatic aggregate with at least 8 zero stores is
 zeroed by a loop, then only its non-zero leaves are stored.
+
+### `defer` and coroutines
+
+Two extensions, spelled with reserved names so that no C program changes meaning:
+`_Defer stmt` runs `stmt` when its block is left, on every target; `_Coro(Y)`,
+`_Yield`, `_Await`, `_Coro_frame(Y, T)`, `_Coro_ptr(Y, T)` and the `__co_*` operations
+make stackless coroutines, on wasm32 only (`Target.coroutines`; `cpp` predefines
+`__vcc_coroutines__` there). `<coro.h>` gives the short names `defer`, `coro`,
+`yield`, `await`, `co_frame`, `coro_ptr` and `co_init` … `co_alignof`.
+[Coroutines_in_C.md](Coroutines_in_C.md) is the tutorial and has the frame ABI (§10);
+[backend/wasm/Plan.md](../backend/wasm/Plan.md) the design and the lowering. The
+target `wasm32-braam` builds processes of Braam with them
+([Braam.md](Braam.md)).
 
 ### `$` in identifiers
 

@@ -8,15 +8,13 @@ vcc extends C with two features:
 
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
-> **Status.** `defer` (section 1) is implemented and works on every target;
-> `<coro.h>` defines its short name. Coroutines (sections 2 to 7) work on wasm32
-> only. Section 8 works with `vcc -t wasm32-braam`, run under node by a fake kernel
-> (`share/vcc/wasm32-braam/lib/run.mjs`) and on Braam itself: the descriptor calls,
-> `stat` and the path calls, and `stdio.h` with input buffered too
-> ([Braam_Example.md](Braam_Example.md) works a program through), signals, tasks
-> and `poll`. Coroutines exist for
-> programs that run on [Braam](#8-coroutines-on-braam). The design and the work are in
-> [backend/wasm/Plan.md](../backend/wasm/Plan.md).
+> **Status.** `defer` (section 1) works on every target; `<coro.h>` defines its short
+> name. Coroutines (sections 2 to 7) work on wasm32 only, where the preprocessor
+> defines `__vcc_coroutines__`. They exist for programs that run on
+> [Braam](#8-coroutines-on-braam): section 8 is about `vcc -t wasm32-braam`,
+> [Braam.md](Braam.md) is that target's reference, and
+> [Braam_Example.md](Braam_Example.md) works a program through. Section 10 gives the
+> frame ABI. The design is in [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
 ## Contents
 
@@ -29,6 +27,7 @@ This is a tutorial. It assumes you know ordinary C and nothing else.
 7. [Rules, errors and traps](#7-rules-errors-and-traps)
 8. [Coroutines on Braam](#8-coroutines-on-braam)
 9. [Quick reference](#9-quick-reference)
+10. [The frame ABI](#10-the-frame-abi)
 
 ---
 
@@ -427,7 +426,7 @@ block: finishing the coroutine, or calling `co_destroy`, is your job.
 ### `co_sizeof` and `co_alignof`
 
 They are fixed when the coroutine is compiled, and read from a small table in its
-unit, so they cost one load. But the compiler does not know them when it compiles a
+unit (section 10), so they cost one load. But the compiler does not know them when it compiles a
 program that uses the coroutine, so you cannot use them as an array
 size: `char storage[co_sizeof(count_to)]` is an error. That is why `co_alloca`
 exists. With `co_init`, pick a size with room to spare, or check it:
@@ -511,7 +510,7 @@ typedef enum { CO_CONTINUE, CO_CANCEL } co_signal;     /* what yield returns */
 ```
 
 `co_alloca` and `co_init` check the arguments against the coroutine's parameters as an ordinary
-call does, and converts them the same way.
+call does, and convert them the same way.
 
 These operations look like function calls but are built into the compiler. You
 cannot take their address.
@@ -874,7 +873,9 @@ as ordinary C. Each blocking call is an `await`. The C runtime, not your code,
 returns to the kernel and continues where you stopped.
 
 Compile for Braam with `vcc -t wasm32-braam`. The output is a program Braam can
-install and run.
+install and run. This section shows how coroutines are used there;
+[Braam.md](Braam.md) is the full reference, with the library, a porting checklist and
+how to run a program by hand.
 
 ### `main`
 
@@ -1060,3 +1061,89 @@ T r = await p(arg);
 | `co_frame(Y, T)` | `_Coro_frame(Y, T)` |
 | `coro_ptr(Y, T)` | `_Coro_ptr(Y, T)` |
 | `co_alloca`, `co_init` … `co_alignof` | `__co_alloca`, `__co_init` … `__co_alignof` |
+
+---
+
+## 10. The frame ABI
+
+This section is for code that meets a coroutine without going through the compiler's
+operations: a scheduler written in assembly, a debugger, or another compiler's code
+linked with vcc's. A C program never needs it.
+
+### What a unit defines
+
+For `coro(Y) T f(A a, B b)`, the unit that defines `f` emits three symbols, global
+for a global `f` and local for a `static` one:
+
+| Symbol | C type | What |
+|---|---|---|
+| `f$resume` | `int (char *fp)` | the body, resumed: runs to the next suspension and returns `CO_SUSPENDED` (0), or to the end and returns `CO_DONE` (1) |
+| `f$init` | `void (char *fp, A a, B b)` | stores the arguments in a frame `__coro_setup` prepared |
+| `f$co` | `size_t[2]` | the descriptor: the frame's size (a multiple of its alignment) and its alignment (4 to 16) |
+
+A coroutine that takes `(void)` or `(void *)` has a four-word descriptor instead: the
+size, the alignment, an init function of type `void (char *fp, void *arg)` and
+`f$resume`. The init function is `f$init` for `(void *)`; for `(void)` it is a thunk
+`f$initp` that ignores `arg`. A `coro_ptr` is the address of this descriptor. The
+`$` in the names keeps them out of C's name space.
+
+Arguments and results follow wasm32's C calling convention (clang's), as for any
+function.
+
+### The frame
+
+A frame starts with a 24-byte header that the runtime and every unit agree on:
+
+| Offset | Type | Field |
+|---|---|---|
+| 0 | `unsigned` | state: 0 created; *k* ≥ 1 suspended at the *k*-th suspension point; `0xfffffffe` done; `0xffffffff` destroyed |
+| 4 | `unsigned` | flags: bit 0 running; bits 1–2 the signal of this resumption, 0 continue, 1 cancel, 2 destroy |
+| 8 | `int (*)(char *)` | `resume`: the coroutine's `f$resume` |
+| 12 | `char *` | `task`: the root frame of the task this frame belongs to |
+| 16 | `char *` | `top`: the next free byte of the task's arena (used in a root frame) |
+| 20 | `char *` | `limit`: the end of the arena (used in a root frame) |
+
+Then, at offsets that depend only on `Y` and `T`:
+
+- the **value** last yielded, at 24 rounded up to `Y`'s alignment, absent when `Y` is
+  `void`;
+- the **result**, after the value, rounded up to `T`'s alignment, absent when `T` is
+  `void`.
+
+Everything after that, the arguments and the locals that live across a suspension, is
+laid out by the defining unit and may change whenever the coroutine is recompiled. So
+a holder of a `co_frame(Y, T) *` can read the state, the value and the result without
+knowing which coroutine it is, and nothing more.
+
+### The runtime
+
+The operations are calls of these routines, in `libc.a` (`libc/wasm32/co.c`):
+
+```c
+void *__coro_setup(void *storage, size_t bytes, const unsigned *desc,
+                   int (*resume)(void *), void *parent);
+int   __coro_resume(void *frame, int signal);       /* 0 resume, 1 cancel, 2 destroy */
+int   __coro_done(void *frame);
+void *__coro_value(void *frame, unsigned offset);   /* checks the state, returns frame + offset */
+void *__coro_result(void *frame, unsigned offset);
+void *__coro_push(void *frame, size_t bytes, size_t align, const char *name);
+void  __coro_pop(void *frame, void *p);
+```
+
+- `co_init(mem, size, f, a, b)` is `__coro_setup(mem, size, f$co, f$resume, 0)`, then
+  `f$init(mem, a, b)`. With no parent the frame is the root of its own task, and the
+  bytes of `mem` past the frame are that task's arena.
+- `co_alloca(f, extra, ...)` does the same on `(size + extra)` rounded up to 16 bytes,
+  taken from the shadow stack in a function, or with `__coro_push` from the arena of
+  the task in a coroutine.
+- `co_resume`, `co_cancel` and `co_destroy` are `__coro_resume` with signal 0, 1 and 2.
+  It checks the state and the running bit, sets the flags, calls the frame's
+  `resume`, and clears the flags. A destroy of a frame that never started only marks
+  it destroyed.
+- `await g(args)` takes `g`'s frame with `__coro_push` (exactly `size` bytes), sets it
+  up with the awaiting frame as `parent`, so it joins the same task, and gives it back
+  with `__coro_pop` when `g` has finished or been destroyed.
+- A trap prints `coroutine trap: CO_TRAP_…` and ends the program with status 255.
+
+To run a coroutine from code of its own, a scheduler needs only `f$co`, `f$resume`,
+`f$init`, the header and these routines.

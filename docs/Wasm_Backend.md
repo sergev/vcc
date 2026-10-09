@@ -159,6 +159,8 @@ Relooper", ICFP 2022):
 6. A jump table is a `br_table`. Each of its targets counts as a merge node, so it has
    a block to leave.
 
+#### Irreducible graphs
+
 The method needs a **reducible** graph. A backward jump to a block that does not
 dominate its source (a `goto` into a loop, Duff's device, a coroutine resumed inside a
 loop it does not suspend at every turn) makes the graph irreducible. Such a graph is
@@ -185,11 +187,24 @@ entry cannot. That entry leaves a block of its own instead, a trampoline, after 
 serves every dispatch node, since each reads it right after the jump that set it. Code
 outside the irreducible regions keeps its structure.
 
+The dispatch nodes came with the coroutines, whose resume dispatch enters a loop in
+the middle when the loop does not suspend at every turn. Before them, such a function
+got the whole-function skeleton below. Code-section bytes, with every rewrite:
+
+| Program | Skeleton (`--no-regional`) | Dispatch nodes |
+|---|---|---|
+| a generator whose loop does not always suspend | 243 | 215 |
+| Duff's device and a `goto` into a loop | 484 | 470 |
+| a region nested in another, every jump redirected | 243 | 224 |
+| the 607 book programs (all reducible) | 137 384 | 137 384 |
+
 Should that fail (a region entered at the function's very start), the function gets
 the **dispatch skeleton**, which is correct for any graph: a `state` local, and `loop {
 block … block; br_table }` with a block per basic block. A jump sets `state` and
 branches to the loop; a fall-through runs straight on into the next block. The skeleton
 came first, and got every test running before the structured translation existed.
+
+#### An example
 
 For
 
@@ -231,6 +246,27 @@ the loop rotated by the translator, and its index strength-reduced to a pointer,
 	local.get	3
 	end_function
 ```
+
+### Coroutines
+
+The backend does not know what a coroutine is. The translator makes `coro(Y) T f(...)`
+an ordinary function `f$resume(fp)` over a frame in memory, a function `f$init` that
+stores the arguments, and a static array `f$co`, the descriptor
+([Coroutines_in_C.md](Coroutines_in_C.md) §10 has the ABI;
+[backend/wasm/Plan.md](../backend/wasm/Plan.md) §6 the lowering). What reaches the
+backend from it:
+
+- `f$resume` starts with a dispatch on the frame's state: a chain of comparisons for
+  one or two suspension points, a `JUMP_TABLE`, so a `br_table`, from three. A
+  suspension is a store of the state and a `return`.
+- The frame's members are loads and stores at constant offsets from `fp`, which the
+  peephole rules fold into the memargs.
+- A loop that does not suspend at every turn is entered in the middle by the dispatch,
+  and gets a dispatch node of its own (above).
+- `co_alloca` in a function uses three builtins that move `__stack_pointer` (the
+  stack frame, below).
+- `co_resume` and the rest are calls of `libc/wasm32/co.c`; `__coro_resume` calls the
+  frame's `f$resume` through `call_indirect`, so `f$resume` is in the table.
 
 ### Stackify and the peephole rules
 
@@ -433,7 +469,7 @@ allocator and `strerror`. Its headers come first: `braam.h`, `unistd.h`, `fcntl.
 kernel for node, which checks the process ABI before it runs a program; the ctest
 `braam-system` runs programs on Braam itself when a built braam-core is at hand.
 [Braam_Example.md](Braam_Example.md) works a program through, built and run both
-ways.
+ways, and [Braam.md](Braam.md) is the target's reference.
 
 ## Costs against clang
 
@@ -551,8 +587,10 @@ In phases, each ending with the wasm32 tests green and a commit:
 7. stackify, the peephole rules and coalescing, with the default-pipeline goldens and the
    size comparison with clang;
 8. this document;
-9. later, for the coroutines (phase C5 of [backend/wasm/Plan.md](../backend/wasm/Plan.md)),
-   a dispatch node per irreducible region in place of the whole-function skeleton.
+9. later, for the coroutines (phases C3 to C9 of
+   [backend/wasm/Plan.md](../backend/wasm/Plan.md)): `co_alloca`'s builtins (C4), a
+   dispatch node per irreducible region in place of the whole-function skeleton (C5),
+   the target `wasm32-braam` (C6), and `JUMP_TABLE` as a `br_table` (C9).
 
 `git log --grep=wasm` shows each phase.
 
@@ -576,7 +614,10 @@ node:
   - recursion and frames, pointers, statics, structures by value and by reference,
     function pointers and variadics;
   - the libc (`printf`, `<string.h>`, the `mem*` functions, `malloc`, math);
-  - binary128 against exact results, and the rewrites.
+  - binary128 against exact results, and the rewrites;
+  - `defer` (`defer_tests.cpp`) and coroutines (`coro_tests.cpp`: generators, `await`,
+    `co_alloca`, `coro_ptr`, cancel and destroy, each trap);
+  - `wasm32-braam` programs on the fake kernel (`braam_tests.cpp`).
 - **Against clang:**
   - our code is linked with clang's both ways, over a table of signatures, structures
     of each class, `long double`, variadics and bit-fields;

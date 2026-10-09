@@ -19,6 +19,7 @@ optimizer stay as they are.
 | `arm32`          | ARMv7-A, AAPCS-VFP hard float                                            | clang's objects |
 | `x86_64`         | System V psABI, x87 `long double`                                        | clang's objects |
 | `wasm32`         | WebAssembly, clang's wasm32 C ABI, a module run under node               | clang's objects |
+| `wasm32-braam`   | a process of [Braam](docs/Braam.md), an OS in a browser tab             | clang's objects |
 | `avr`            | 8-bit ATmega1280, avr-gcc ABI, 16-bit `int`, binary32 `double`           | clang's objects |
 | `msp430`         | 16-bit classic MSP430, GCC's EABI, soft binary64 `double`                | GCC's objects   |
 | `mmix`           | Knuth's 64-bit big-endian RISC, GCC's MMIXware ABI, register stack       | GCC's objects   |
@@ -28,6 +29,19 @@ All are complete. `vcc` builds for the machine it runs on by default (one of the
 hosted targets, else `riscv64`); the rest are bare metal, run under a simulator, or for
 WebAssembly under node. Targets
 this far apart keep the front end honest: nothing in it may assume one kind of machine.
+
+## Two extensions of C
+
+- **`defer`** runs a statement when its block is left, whichever way: `defer
+  free(p);` next to the `malloc`. It works on every target.
+- **Coroutines**: functions that stop at `yield`, return to their caller and continue
+  later, with `await` to call one from another. They work on wasm32, where they let a
+  program for [Braam](docs/Braam.md), which may never wait inside a call, be written
+  as ordinary C: `n = await read(fd, buf, len);`.
+
+[docs/Coroutines_in_C.md](docs/Coroutines_in_C.md) is the tutorial for both. They
+use reserved spellings (`_Defer`, `_Coro`, `_Yield`, `_Await`, …), and the short
+names come from `<coro.h>`, so no existing program changes meaning.
 
 ## How it works
 
@@ -147,6 +161,7 @@ For a bare-metal target, add `-t` and run the result under its simulator:
 | `msp430`  | `vcc -t msp430 -o hello.elf hello.c`   | `mspsim hello.elf`                                                                                        |
 | `mmix`    | `vcc -t mmix -o hello.mmo hello.c`     | `mmix hello.mmo`                                                                                          |
 | `wasm32`  | `vcc -t wasm32 -o hello.wasm hello.c`  | `node ~/.local/share/vcc/wasm32/lib/run.mjs hello.wasm`                                                   |
+| `wasm32-braam` | `vcc -t wasm32-braam -o cat.wasm cat.c` | `node ~/.local/share/vcc/wasm32-braam/lib/run.mjs cat.wasm`, or `fimport` it into Braam |
 
 Most exit with `main`'s result. x86-64 qemu exits with `(result << 1) | 1`; the AVR's
 result is the byte in the file `status`, and its qemu must be stopped with Ctrl-C.
@@ -176,7 +191,8 @@ and run by hand.
 - `share/vcc/<target>/include/` and `lib/` — each target's C headers and runtime.
 
 A bare-metal target gets `crt0.o`, `libc.a` and, for qemu and mspsim, a linker script;
-WebAssembly gets `run.mjs`, the node host its programs run under. A
+WebAssembly gets `run.mjs`, the node host its programs run under, and `wasm32-braam`
+a stand-in for Braam's kernel by the same name. A
 hosted one gets headers matching the system's C library (our parser cannot read the
 system's own) and, on Linux, a small `libvcc.a`. BESM-6,
 whose C library belongs to the [v7besm](https://github.com/besm6/v7besm) Unix port, gets
@@ -200,6 +216,9 @@ the rest in a directory per target under [libc/](libc/).
   layout, every component, the build system, the tests
 - [docs/Tests_From_The_Book.md](docs/Tests_From_The_Book.md) — how the test suite is organized
 - [docs/C_Grammar.md](docs/C_Grammar.md) — the C grammar and the hand-written parser
+- [docs/Coroutines_in_C.md](docs/Coroutines_in_C.md) — `defer` and coroutines, a tutorial
+- [docs/Braam.md](docs/Braam.md), [docs/Braam_Example.md](docs/Braam_Example.md) — C
+  programs for Braam
 - [docs/Type_Coercion.md](docs/Type_Coercion.md),
   [docs/Type_Sizes_Alignment.md](docs/Type_Sizes_Alignment.md) — types
 - [docs/TAC_Optimization.md](docs/TAC_Optimization.md) — the optimizer

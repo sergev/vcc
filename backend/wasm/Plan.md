@@ -1,12 +1,13 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C9 are built — `defer`, the coroutines' front end, generators,
+Status: every phase, C1–C10, is built — `defer`, the coroutines' front end, generators,
 delegation (`await` in both forms, the arena, `co_alloca` in functions and
 coroutines, every operation), a dispatch per irreducible region in the wasm backend,
 and the target `wasm32-braam` with its runtime, `stdio.h` on files and stdin, a fake
 kernel for node, a system test on Braam itself, signals, tasks and `poll`, and
-`coro_ptr`, the jump-table dispatch, shared cleanups and the lint; §8 lists what
-remains, the docs. The document defines two extensions of C — a `defer`
+`coro_ptr`, the jump-table dispatch, shared cleanups and the lint, and the
+documentation: [docs/Coroutines_in_C.md](../../docs/Coroutines_in_C.md) (the tutorial
+and the frame ABI) and [docs/Braam.md](../../docs/Braam.md) (the target). The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -513,6 +514,8 @@ void   f$init(char *fp, A a, B b)      stores the arguments in the frame
 size_t f$co[2] = { size, align }       the frame's size and alignment
 ```
 
+(four words, `{ size, align, init, resume }`, for a coroutine with a `coro_ptr`, §2.4)
+
 and the frame it runs in, laid out by the compiler (the *header* is a fixed ABI; the
 rest is the unit's business):
 
@@ -711,7 +714,7 @@ machine is acyclic and Ramsey's translation structures it as is.
 
 §6.1 lists the routines. Compiled by `wasm32_compile_libc_c`, in `libc.a`, so a program
 that uses no coroutine carries nothing. A trap prints `coroutine trap: <name>` through
-`putbyte` and exits with status 255; on Braam it will be `unreachable`. The header is
+`putbyte` and exits with status 255; on Braam `exit` reports the status and traps (§7.2). The header is
 private to `co.c` and the translator (`coro.c`'s offsets); `<coro.h>` has the
 user-facing macros and enums only.
 
@@ -998,11 +1001,12 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C10. Docs.** `docs/Coroutines_in_C.md` (the tutorial, written ahead of the code)
-    brought up to date with what was built, and the frame ABI added, `docs/Braam.md` (the target, the runtime, porting a
-    program, running one by hand), a section in `docs/Wasm_Backend.md` for §6.5,
-    `CLAUDE.md`, `README.md`, `docs/Technical_Reference.md`, `cc/README.md`,
-    `cpp/README.md`, `docs/C_Grammar.md`.
+Every phase, C1 to C10, is built; `git log --grep=coroutines` and `git log
+--grep=defer` show each. C10 brought the tutorial up to date and added its §10, the
+frame ABI; wrote [docs/Braam.md](../../docs/Braam.md), the target's reference; gave
+the irreducible regions and the coroutines sections of their own in
+[docs/Wasm_Backend.md](../../docs/Wasm_Backend.md); and updated `CLAUDE.md`,
+`README.md`, `docs/Technical_Reference.md`, `cc/README.md` and `cpp/README.md`.
 
 ## 9. Alternatives considered
 

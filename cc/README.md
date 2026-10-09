@@ -37,7 +37,7 @@ linker       link          .o   -> a.out
 | AVR (ATmega1280, avr-gcc ABI) | `avr` | `vgenavr` | `avr-as -mmcu=atmega1280` | `avr-ld -m avr51 -T link.ld` |
 | MSP430 (classic, MSPABI) | `msp430` | `vgenmsp430` | `msp430-elf-as -mcpu=msp430` | `msp430-elf-ld --gc-sections -T link.ld` |
 | WebAssembly (clang's wasm32 C ABI) | `wasm32` | `vgenwasm` | `clang --target=wasm32 --no-default-config <features> -c` | `wasm-ld --stack-first -z stack-size=1048576` |
-| A process of Braam (wasm32, [backend/wasm/Plan.md](../backend/wasm/Plan.md) §7) | `wasm32-braam` | `vgenwasm` | the same | `wasm-ld --no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections --initial-memory=<pages * 64 KiB>`, then the `braam` section |
+| A process of Braam (wasm32, [docs/Braam.md](../docs/Braam.md)) | `wasm32-braam` | `vgenwasm` | the same | `wasm-ld --no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections --initial-memory=<pages * 64 KiB>`, then the `braam` section |
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
@@ -321,7 +321,7 @@ skip when they are missing.
 
 ## A process of Braam
 
-`-t wasm32-braam` builds a process for [Braam](../backend/wasm/Plan.md#7-braam-target-runtime-and-libc):
+`-t wasm32-braam` builds a process for [Braam](../docs/Braam.md):
 the same code generator as `wasm32`, `lower` with Braam's process model (`main` is
 `coro(braam_call *) int main(int, char **)`), the headers and runtime of
 `share/vcc/wasm32-braam`, and a link with the memory imported and no entry, the five
@@ -330,4 +330,5 @@ exports coming from `crt0.o`. After the link the driver appends the custom secti
 braam-core's `tools/stamp.py` does for its own programs, replacing an earlier one.
 `node share/vcc/wasm32-braam/lib/run.mjs prog [args...]` runs the result on a fake
 kernel, and `fimport` in a Braam tab brings it to Braam itself;
+[docs/Braam.md](../docs/Braam.md) is the target's reference, and
 [docs/Braam_Example.md](../docs/Braam_Example.md) works a program through.

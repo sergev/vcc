@@ -9,7 +9,8 @@ coroutine, and its callers `await` it.
 
 This document follows one program from the source to a running process, in two
 places: under node with a stand-in kernel, and on Braam itself. The program is
-[examples/notes.c](examples/notes.c), a notebook kept in a file:
+[examples/notes.c](examples/notes.c), a notebook kept in a file. [Braam.md](Braam.md)
+is the reference for the target.
 
 ```
 notes                list the notes, numbered
@@ -167,27 +168,6 @@ input.
 
 ## 6. What the library offers
 
-| Header | Calls that wait (`await` them) | Calls that do not |
-|---|---|---|
-| `<stdio.h>` | `fflush`, `fgetc`, `getc`, `getchar`, `fgets`, `fread`, `fopen`, `fclose`, `fseek`, `ftell`, `rewind`, `remove`, `rename` | `printf`, `fprintf`, `vfprintf`, `vprintf`, `sprintf`, `snprintf`, `puts`, `putchar`, `fputs`, `fputc`, `putc`, `fwrite`, `ungetc`, `feof`, `ferror`, `clearerr`, `fileno`, `perror` |
-| `<unistd.h>` | `read`, `write`, `close`, `lseek`, `unlink`, `rmdir`, `chdir`, `getcwd` | `getpid` |
-| `<fcntl.h>` | `open`: the flags are Braam's own bits, so `O_RDONLY` is 1, not 0 | |
-| `<sys/stat.h>` | `stat`, `lstat`, `fstat`, `mkdir` | `S_ISDIR`, `S_ISREG`, `S_ISLNK` |
-| `<poll.h>` | `poll` | |
-| `<braam.h>` | `braam_sys` (any system call), `sleep_ms`, `braam_yield`, `sig_catch` | `braam_now`, `braam_sys_sync`, `braam_spawn`, `sig_take`, `sig_pending` |
-
-- **The rest of the C library:** `<string.h>`, `<ctype.h>`, `malloc` and the rest are
-  the same as on every other target. This `malloc` reuses freed memory.
-- **`errno`:** a failed call returns -1 (`NULL` or `EOF` for stdio) and sets
-  `errno`. Braam's errors are numbered from 33 up (`ENOENT`, `EEXIST`, `ENOTEMPTY`,
-  ...), and `strerror` knows them.
-- **`stat`:** Braam keeps a kind, a size and a modification time for each file. A
-  file always reports mode 0644 and a directory 0755.
-- **Signals:** `^C` ends a program unless it asked with `await sig_catch(SIGINT, 1)`.
-  Then the call it waits in gives up with `EINTR`, and `sig_take(SIGINT)` says so;
-  there are no handlers. A loop that computes for long calls `await braam_yield()` now
-  and then, so that `^C` can reach it.
-- **Tasks:** `braam_spawn` runs a second coroutine beside `main`, up to 8 in all, each
-  resumed when its own call is answered. [Coroutines_in_C.md](Coroutines_in_C.md) §8
-  shows both.
-- **Not available:** `scanf`, `signal()` and `raise()`, and directory listing.
+[Braam.md](Braam.md) §3 lists the library: which calls wait and must be awaited,
+which do not, and where it differs from Unix (`open`'s flags, `errno`'s numbers,
+`stat`, signals, tasks). §4 there is a checklist for porting a program.

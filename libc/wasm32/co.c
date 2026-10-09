@@ -1,7 +1,8 @@
 /*
  * The coroutine runtime (docs/Coroutines_in_C.md; backend/wasm/Plan.md §6).  The
  * compiler lowers a coroutine f to f$resume, the body as a state machine over a frame,
- * f$init, which stores its arguments there, and f$co, its frame size and alignment.
+ * f$init, which stores its arguments there, and f$co, its frame size and alignment
+ * (then its init and resume too, for a coroutine with a coro_ptr).
  * An await and a co_alloca in a coroutine take their frames off the arena of the task,
  * the storage of its root frame after the frame itself, in LIFO order.
  * The frame starts with this header; the rest is the defining unit's business.
