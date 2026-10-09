@@ -238,22 +238,45 @@ ret
 
 // A byte loaded and extended the other way is loaded that way; an extension before a
 // narrow store goes.
-EXPECT_PEEPHOLE(PeepholeLoadExtend, "ldrb w0, [x0]\nret\n",
+EXPECT_PEEPHOLE(PeepholeLoadExtend, R"(ldrb w0, [x0]
+ret
+)",
                 "int f(signed char *p) { return (unsigned char)*p; }")
-EXPECT_PEEPHOLE(PeepholeLoadSignExtendLong, "ldrsb x0, [x0]\nret\n",
+EXPECT_PEEPHOLE(PeepholeLoadSignExtendLong, R"(ldrsb x0, [x0]
+ret
+)",
                 "long f(signed char *p) { return *p; }")
-EXPECT_PEEPHOLE(PeepholeStoreNarrowed, "add w2, w1, #1\nstrb w2, [x0, w1, sxtw]\nret\n",
+EXPECT_PEEPHOLE(PeepholeStoreNarrowed, R"(add w2, w1, #1
+strb w2, [x0, w1, sxtw]
+ret
+)",
                 "void f(signed char *p, int x) { signed char c = (signed char)(x + 1); p[x] = c; }")
 
 // The flags: a 0/1 added is cinc, a 0/1 tested again is the first test, a single bit
 // tested is tbz, the old value of `n--` compared ahead of the decrement.
-EXPECT_PEEPHOLE(PeepholeCinc, "cmp w0, w1\ncinc w0, w2, ne\nret\n",
+EXPECT_PEEPHOLE(PeepholeCinc, R"(cmp w0, w1
+cinc w0, w2, ne
+ret
+)",
                 "int f(int a, int b, int c) { return c + (a != b); }")
-EXPECT_PEEPHOLE(PeepholeCsetTestedAgain, "cmp w0, w1\ncset w0, lt\nret\n",
+EXPECT_PEEPHOLE(PeepholeCsetTestedAgain, R"(cmp w0, w1
+cset w0, lt
+ret
+)",
                 "int f(int a, int b) { return !(a < b) == 0; }")
-EXPECT_PEEPHOLE(PeepholeTbz, "tbz w0, #3, .L2\nmov w0, w1\nret\nmov w0, #0\nret\n",
+EXPECT_PEEPHOLE(PeepholeTbz, R"(tbz w0, #3, .L2
+mov w0, w1
+ret
+mov w0, #0
+ret
+)",
                 "int f(unsigned x, int y) { if (x & 8) return y; return 0; }")
-EXPECT_PEEPHOLE(PeepholeTbzHighBit, "tbz x0, #40, .L2\nmov x0, #1\nret\nmov x0, #2\nret\n",
+EXPECT_PEEPHOLE(PeepholeTbzHighBit, R"(tbz x0, #40, .L2
+mov x0, #1
+ret
+mov x0, #2
+ret
+)",
                 "long f(long x) { if (x & (1L << 40)) return 1; return 2; }")
 EXPECT_PEEPHOLE(PeepholeCompareBeforeDecrement, R"(mov w2, #0
 cmp w0, #0
