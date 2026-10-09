@@ -1873,8 +1873,8 @@ static bool fold_copy_run(A64_Instr **link)
     // The offsets must fit, chunk by chunk.
     for (int64_t i = 0; i < bytes;) {
         if (bytes - i >= 32) {
-            bool pair = fits_q(s0 + i, true) && fits_q(d0 + i, true);
-            if (!pair && !(fits_q(s0 + i, false) && fits_q(s0 + i + 16, false) &&
+            bool paired = fits_q(s0 + i, true) && fits_q(d0 + i, true);
+            if (!paired && !(fits_q(s0 + i, false) && fits_q(s0 + i + 16, false) &&
                            fits_q(d0 + i, false) && fits_q(d0 + i + 16, false)))
                 return false;
             i += 32;

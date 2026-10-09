@@ -725,14 +725,14 @@ static bool sp_folds(const Frame *fr, const Save *s, int n)
 }
 
 // A pair beyond ldp/stp's reach (504) is two ldr/str.
-static void sp_save(Gen *g, const Save *sv, bool restore, A64_Operand mem)
+static void sp_save(Gen *g, const Save *sv, bool restore, A64_Operand m)
 {
-    if (sv->r2 && (mem.sub != A64_MEM_OFFSET || mem.imm <= 504))
-        emit3(g, restore ? A64_LDP : A64_STP, a64_reg(sv->r1, sv->w), a64_reg(sv->r2, sv->w), mem);
+    if (sv->r2 && (m.sub != A64_MEM_OFFSET || m.imm <= 504))
+        emit3(g, restore ? A64_LDP : A64_STP, a64_reg(sv->r1, sv->w), a64_reg(sv->r2, sv->w), m);
     else
-        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r1, sv->w), mem);
-    if (sv->r2 && mem.sub == A64_MEM_OFFSET && mem.imm > 504)
-        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r2, sv->w), a64_mem(A64_SP, mem.imm + 8));
+        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r1, sv->w), m);
+    if (sv->r2 && m.sub == A64_MEM_OFFSET && m.imm > 504)
+        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r2, sv->w), a64_mem(A64_SP, m.imm + 8));
 }
 
 // The setup and teardown of an sp-addressed frame.

@@ -39,15 +39,34 @@ For each function, in this order (`codegen.c`):
    comparison whose only use is the conditional jump after it becomes `cmp` (or `fcmp`)
    and a `b.cond`, without a 0/1 value.
 3. **Prologue and epilogue** (`frame.c`), once the frame size is known.
-4. **Peephole** (`peephole.c`). Immediate operands (`add w0, w0, #100`, bitmask
-   immediates for `and`/`orr`/`eor`, `cmn` for a negative compare), `wzr` for a stored
-   zero, copies followed into their uses, no reload of a value just stored, addresses
-   folded into loads and stores (`ldr x2, [x0, w3, sxtw #3]`), `madd`/`msub`,
-   `ldp`/`stp` for adjacent slots, `cbz`, and no jump to the next line. The shifts and
-   masks of a bit-field access (or the same written by hand) become `ubfx`/`sbfx` for a
-   read, `bfi` for a store and `ubfiz` for a value shifted into place, a `movz`/`movk`
-   mask that is a bitmask immediate becomes one, and a `uxtb`/`uxth` after an
-   `ldrb`/`ldrh` or before an `strb`/`strh` goes:
+4. **Peephole** (`peephole.c`), to a fixed point. Whether a register is read again is
+   decided by its liveness over the function's blocks, computed afresh each round (a
+   call reads only its own argument registers, which `call.c` records on the `bl`); a
+   scratch register (x9–x17, v16–v31) never lives past its block. The rewrites:
+   - immediate operands (`add w0, w0, #100`, bitmask immediates for `and`/`orr`/`eor`,
+     `cmn` for a negative compare), `wzr` for a stored zero;
+   - copies followed into their uses, a result computed where it is moved, a copy
+     moved back deleted, a value never read deleted, no reload of a value just stored;
+   - addresses folded into loads and stores (`ldr x2, [x0, w3, sxtw #3]`), past
+     instructions that do not touch them; a pointer step into the access as a post- or
+     pre-index (`ldrb w3, [x1], #1`, `ldrb w1, [x0, #1]!`);
+   - a byte or halfword load takes the extension after it (`ldrb` for a `uxtb` of an
+     `ldrsb`), an extension before a narrow store goes;
+   - `madd`/`msub`; `ldp`/`stp` for adjacent slots; a run of 8-byte copies 32 bytes at a
+     time by `ldp`/`stp` of q registers;
+   - the flags: `cbz`, `tbz`/`tbnz` for a single bit, a `cset` tested again by `cmp #0`
+     or `cbz` replaced by the condition itself, `cinc` for a 0/1 added, a repeated
+     compare deleted, the compare of `n-- > 0` moved ahead of the decrement;
+   - a diamond setting two constants one apart is `cset` or `mov` + `cinc`;
+   - jump threading: a jump to a jump, a test of a 0/1 just set or of a constant goes
+     where it leads (so `&&` and `||` left as values by the translator become branches),
+     unreachable code and jumps to the next line go;
+   - blocks ending alike through a `ret` or a jump share one tail, the others jumping
+     into it (one epilogue for several returns).
+
+   The shifts and masks of a bit-field access (or the same written by hand) become
+   `ubfx`/`sbfx` for a read, `bfi` for a store and `ubfiz` for a value shifted into
+   place, and a `movz`/`movk` mask that is a bitmask immediate becomes one:
 
    ```
    ldrb    w0, [x3]            // p->b = v, b a 5-bit field at bit 3
@@ -56,6 +75,15 @@ For each function, in this order (`codegen.c`):
    ```
 
    A `ret` reads only the registers the function's result is in.
+
+   The size against the system compiler is measured by `scripts/bench_aarch64.sh` (text
+   bytes of `bench/msp430/*.c` and `libc/common/*.c`, ours with and without this pass,
+   against `cc -Os -fno-inline` and `-O2`). On macOS on Apple silicon, October 2026:
+
+   | | ours | no peephole | `cc -Os -fno-inline` | `cc -O2` |
+   |---|---|---|---|---|
+   | `bench/msp430` (4 files) | 684 | 1236 | 744 | 1496 |
+   | `libc/common` (28 files) | 15460 | 27200 | 12136 | 13124 |
 
 A register holds an integer in a fixed form: a type of 32 bits or less in the W view
 with the upper half zero, `char` and `short` also extended to 32 bits by their type.
@@ -85,7 +113,18 @@ sp + 0 ...      arguments for the functions this one calls
 
 A function that makes no call, saves no register and needs no memory gets no frame at
 all: its body, then `ret`. Any other function is addressed from `sp` without x29 when
-every offset fits its instruction; then x30 is saved only if the function makes calls.
+every offset fits its instruction (an `ldp`/`stp` beyond its reach becomes two
+`ldr`/`str`); then x30 is saved only if the function makes calls, where the record
+would keep x29, with the lone general register of an odd number saved beside it. The
+saved registers pair within their file, and the save at `sp + 0` moves `sp` itself:
+
+```
+stp     x30, x19, [sp, #-16]!
+...
+ldp     x30, x19, [sp], #16
+ret
+```
+
 A larger frame, or any frame under `--frame-pointer`, keeps the frame record.
 
 ## Function calls
