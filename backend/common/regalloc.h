@@ -59,6 +59,9 @@ typedef struct {
     void (*call_hints)(void *arg, const Flow *f, const Tac_Instruction *in, int *hint);
     // Variable `name` gets register `reg`, and its high word `hi` (else 0).
     void (*assign)(void *arg, const char *name, int reg, int hi);
+    // Optional: whether FUN_CALL `in` is expanded in place (a stack builtin), so it
+    // clobbers nothing and takes no argument registers.
+    bool (*inline_call)(void *arg, const Tac_Instruction *in);
     // Optional: parameter `name`, just assigned, is dead on entry.  Its register may
     // then hold another parameter on entry, so its incoming value must not be moved or
     // loaded there.  Without this hook every parameter interferes with what is live on

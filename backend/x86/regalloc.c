@@ -54,6 +54,13 @@ static bool makes_clobber(void *arg, const Flow *f, const Tac_Instruction *in,
     return clobbers_regs(in, operand_type, t, res);
 }
 
+// alloca and the other stack builtins: in place, through rax alone (call.c).
+static bool inline_call(void *arg, const Tac_Instruction *in)
+{
+    (void)arg;
+    return x86_stack_builtin(in);
+}
+
 static void get_param_hints(void *arg, StringMap *hints, StringMap *hints_hi)
 {
     (void)hints_hi;
@@ -84,7 +91,7 @@ void gen_regalloc(Gen *g)
     Target target        = { .g = g };
     RegAlloc_Target desc = {
         .int_pool     = int_pool,
-        .nint         = x86_frame_pointer ? NINT - 1 : NINT, // rbp last
+        .nint         = g->frame_pointer ? NINT - 1 : NINT, // rbp last
         .int_narg     = 6,
         .fp_pool      = fp_pool,
         .nfp          = NFP,
@@ -98,6 +105,7 @@ void gen_regalloc(Gen *g)
         .call_hints   = get_call_hints,
         .assign       = assign,
         .dead_param   = dead_param,
+        .inline_call  = inline_call,
     };
     regalloc(&desc, g->tl);
 

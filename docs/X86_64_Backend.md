@@ -116,6 +116,31 @@ frame at all. With `--frame-pointer` every function with a frame starts
 `push %rbp; mov %rsp, %rbp`, addresses its frame from `rbp`, and `rbp` is never
 allocated.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack. The translator passes them on as calls of `__builtin_alloca`,
+`__builtin_stack_save` and `__builtin_stack_restore`, which `gen_call` expands in place,
+through `rax` alone. A function that calls any of them always has the `rbp` frame
+(`--frame-pointer` or not, a leaf too), and `rbp` is not allocated in it:
+
+```
+movq   n, %rax
+addq   $15, %rax
+andq   $-16, %rax
+subq   %rax, %rsp            # rsp stays 16-byte aligned
+leaq   OUT(%rsp), %rax       # the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area rounded up to 16. It must be known when the first
+`alloca` is selected, so for such a function `reserve_outgoing` takes it from every call
+in the body before selection, and the frame reserves it apart from the slots: below the
+slots there is room for the rounded area, which is where the memory starts. Later calls
+store their stack arguments at `rsp`, below the memory. The epilogue finds `rsp` from
+`rbp` (`leave`, or `lea -8*nsaved(%rbp), %rsp` before the pops), and a `longjmp` resets
+it with the rest. The register allocator does not count the builtins as calls (its
+`inline_call` hook).
+
 ## Function calls
 
 - Integers and pointers go in `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`; `float` and

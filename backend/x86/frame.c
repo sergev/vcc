@@ -631,7 +631,7 @@ static X86_Block *redirect(Gen *g, X86_Block *b)
 }
 
 // The frame teardown: rsp back to the pushed registers, which are popped (`leave`
-// when there are none but rbp).
+// when there are none but rbp).  Where alloca moved rsp, it is found from rbp.
 static void epilogue(Gen *g, const Frame *fr)
 {
     if (fr->kind == FRAME_NONE || fr->kind == FRAME_RED_ZONE)
@@ -640,7 +640,9 @@ static void epilogue(Gen *g, const Frame *fr)
         emit0(g, X86_LEAVE, X86_Q);
         return;
     }
-    if (fr->rest)
+    if (g->moves_sp)
+        emit2(g, X86_LEA, X86_Q, x86_mem(X86_RBP, -8 * g->nsaved), x86_reg(X86_RSP, X86_Q));
+    else if (fr->rest)
         emit2(g, X86_ADD, X86_Q, x86_imm(fr->rest), x86_reg(X86_RSP, X86_Q));
     for (int i = g->nsaved - 1; i >= 0; i--)
         emit1(g, X86_POP, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
@@ -696,12 +698,16 @@ void gen_prologue(Gen *g)
     Frame fr   = { FRAME_RBP, 0, 0 };
     bool calls = has_calls(g);
     int area   = (g->locals_size + g->outgoing + 15) / 16 * 16;
-    if (!calls && g->nsaved == 0 && !body_uses(g, X86_FRAME) && !body_uses(g, X86_RSP))
+    // alloca's memory starts at the outgoing area rounded to 16, below the slots.
+    if (g->moves_sp)
+        area = (g->locals_size + 15) / 16 * 16 + (g->outgoing + 15) / 16 * 16;
+    if (!g->moves_sp && !calls && g->nsaved == 0 && !body_uses(g, X86_FRAME) &&
+        !body_uses(g, X86_RSP))
         fr.kind = FRAME_NONE;
-    else if (!x86_frame_pointer && !calls && g->nsaved == 0 && g->outgoing == 0 &&
+    else if (!g->frame_pointer && !calls && g->nsaved == 0 && g->outgoing == 0 &&
              g->locals_size + 8 <= 128)
         fr.kind = FRAME_RED_ZONE;
-    else if (!x86_frame_pointer)
+    else if (!g->frame_pointer)
         fr.kind = FRAME_RSP;
     if (fr.kind == FRAME_RBP) {
         fr.rest = area - 8 * g->nsaved;

@@ -21,6 +21,8 @@
 //   base + 0         saved rbp, or (no frame pointer) the first callee-saved register
 //   base - ...       the other callee-saved registers in use, pushed, then slots
 //   rsp + 0 ...      outgoing stack arguments
+// alloca lowers rsp (the frame then addressed from rbp) by its size rounded to 16, and
+// returns rsp plus the outgoing area rounded to 16, which stays below it.
 // gen_prologue resolves the base to rbp with --frame-pointer, else to rsp plus the
 // frame's size, or in a leaf whose slots fit the red zone to rsp - 8, with no frame.
 //
@@ -66,6 +68,8 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int locals_size;   // bytes of slots below the saved rbp
     int outgoing;      // bytes of the outgoing argument area
+    bool moves_sp;     // calls a stack builtin (alloca): rsp moves in the body
+    bool frame_pointer; // the frame is addressed from rbp: --frame-pointer, or moves_sp
     int x87_tmp;       // the x87 scratch slot, or 0 (x87.c)
     int ret_ptr;       // the slot of the result address that came in rdi, or 0
     struct {
@@ -199,6 +203,12 @@ void param_hints(const Gen *g, StringMap *hints);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool x86_stack_builtin(const Tac_Instruction *in);
+// The outgoing area of every call in the body, ahead of it: what alloca's result is
+// above.  After layout_frame, which gives every name its type.
+void reserve_outgoing(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v);
 // Bit r for each register r that carries the function's result at ret; in *wide,
 // for each general register all 64 bits of which do.

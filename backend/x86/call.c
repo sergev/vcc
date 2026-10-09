@@ -420,10 +420,71 @@ static bool arg_move(const Gen *g, const Arg *a, Move *m)
     return true;
 }
 
+bool x86_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+// The bytes call `in` stores into the outgoing area, as gen_call places them.
+static int stack_bytes(const Gen *g, const Tac_Instruction *in)
+{
+    ArgState s = { .next_int = struct_result(ret_type(in->u.fun_call.fun_type)) };
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next)
+        classify(&s, val_type(g, v));
+    return s.stack;
+}
+
+void reserve_outgoing(Gen *g)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+            x86_stack_builtin(in))
+            continue;
+        int n = stack_bytes(g, in);
+        if (n > g->outgoing)
+            g->outgoing = n;
+    }
+}
+
+// save: dst = rsp; restore: rsp = arg; alloca: rsp -= (arg + 15) & -16, dst = rsp plus
+// the outgoing area rounded to 16, known already (reserve_outgoing).  rsp stays 16-byte
+// aligned, and the epilogue resets it from rbp.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    static const Tac_Type t_ptr = { .kind = TAC_TYPE_ULONG };
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    if (strcmp(name, "__builtin_stack_save") == 0) {
+        if (dst)
+            emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(T0, X86_Q));
+    } else if (strcmp(name, "__builtin_stack_restore") == 0) {
+        load_int_as(g, T0, in->u.fun_call.args, &t_ptr);
+        emit2(g, X86_MOV, X86_Q, x86_reg(T0, X86_Q), x86_reg(X86_RSP, X86_Q));
+        return;
+    } else {
+        load_int_as(g, T0, in->u.fun_call.args, &t_ptr);
+        emit2(g, X86_ADD, X86_Q, x86_imm(15), x86_reg(T0, X86_Q));
+        emit2(g, X86_AND, X86_Q, x86_imm(-16), x86_reg(T0, X86_Q));
+        emit2(g, X86_SUB, X86_Q, x86_reg(T0, X86_Q), x86_reg(X86_RSP, X86_Q));
+        if (dst)
+            emit2(g, X86_LEA, X86_Q, x86_mem(X86_RSP, (g->outgoing + 15) & -16),
+                  x86_reg(T0, X86_Q));
+    }
+    if (dst)
+        store_val(g, T0, dst);
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     if (!in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0) {
         gen_va_start(g, in);
+        return;
+    }
+    if (x86_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
         return;
     }
     const Tac_Type *ft = in->u.fun_call.fun_type;
@@ -451,8 +512,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             want = want->next;
         arg_to_stack(g, a);
     }
-    if (s.stack > g->outgoing)
+    if (s.stack > g->outgoing) {
+        if (g->moves_sp)
+            fatal_error("x86: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
+    }
     if (in->u.fun_call.indirect) {
         Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
         load_val(g, T2, &fp);

@@ -8,6 +8,8 @@
 //
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "coro_test.h"
 
 class AllocaTest : public CoroTest {};
@@ -235,4 +237,45 @@ int main(void)
 }
 )"));
     EXPECT_EQ(255, exit_status);
+}
+
+// longjmp out of a function that took memory gives it back with the stack: twenty
+// thousand times 200 bytes would not fit otherwise.  Not on the arena, which only a
+// return gives back, nor on wasm32, which has no setjmp.
+TEST_F(AllocaTest, AllocaLongjmp)
+{
+    if (!target_config->stack_alloca || strcmp(target_config->name, "wasm32") == 0)
+        GTEST_SKIP() << "alloca on the arena, or no setjmp";
+    EXPECT_EQ("20000\n", CompileAndRunCoro(R"(
+#include <alloca.h>
+#include <setjmp.h>
+#include <stdio.h>
+
+static jmp_buf env;
+
+static void deep(int n)
+{
+    char *p = alloca(200);
+    p[0]   = 1;
+    p[199] = (char)n;
+    if (p[0] + p[199] == 1 + (char)n)
+        longjmp(env, 1);
+}
+
+int main(void)
+{
+    int count = 0;
+    for (int i = 0; i < 20000; i++) {
+        volatile int jumped = 0;
+        if (setjmp(env) == 0)
+            deep(i);
+        else
+            jumped = 1;
+        count += jumped;
+    }
+    printf("%d\n", count);
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
 }

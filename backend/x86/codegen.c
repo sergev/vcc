@@ -20,7 +20,7 @@ bool x86_linux         = false;
 // alignment than the type.
 static void layout_frame(Gen *g)
 {
-    for (int i = x86_frame_pointer ? 0 : 1; i < g->nsaved; i++)
+    for (int i = g->frame_pointer ? 0 : 1; i < g->nsaved; i++)
         alloc_slot(g, NULL, NULL, 8, 8);
     gen_params(g);
     StringMap allocs;
@@ -61,9 +61,15 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && x86_stack_builtin(in))
+            g.moves_sp = true;
+    g.frame_pointer = x86_frame_pointer || g.moves_sp;
     if (x86_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);
+    if (g.moves_sp)
+        reserve_outgoing(&g);
     if (x86_peephole) {
         g.flow = flow_build(tl);
         g.uses = xalloc((g.flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);

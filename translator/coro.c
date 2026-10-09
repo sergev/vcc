@@ -530,8 +530,8 @@ static void emit_pop(TacCtx *ctx, Tac_Val *p)
     emit_call(ctx, "__coro_pop", tac_kind(TAC_TYPE_VOID), 2, args, params);
 }
 
-// co_alloca's memory in a function: the shadow stack where the backend expands the
-// builtins in place, else the runtime's LIFO arena (libc/common/costack.c).
+// co_alloca's and alloca's memory in a function: the stack where the backend expands
+// the builtins in place, else the runtime's LIFO arena (libc/common/costack.c).
 static const char *stack_builtin(const char *what)
 {
     if (strcmp(what, "stack_save") == 0)

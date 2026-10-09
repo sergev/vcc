@@ -193,7 +193,7 @@ void f(int n)
 }
 )";
 
-TEST_F(TranslateTestX86, AllocaOnArena)
+TEST_F(TranslateTestMmix, AllocaOnArena)
 {
     std::string yaml = CompileToYaml(alloca_fn);
     EXPECT_FALSE(Has(yaml, "__builtin_alloca")) << yaml;
@@ -208,11 +208,20 @@ TEST_F(TranslateTestX86, AllocaOnArena)
 }
 
 // Where the backend has the builtins, the epilogue gives the memory back.
-TEST_F(TranslateTestWasm32, AllocaOnStack)
+static void ExpectOnStack(const std::string &yaml)
 {
-    std::string yaml = CompileToYaml(alloca_fn);
     EXPECT_EQ(1, Count(yaml, "fun_name: __builtin_alloca")) << yaml;
     EXPECT_FALSE(Has(yaml, "stack_save")) << yaml;
     EXPECT_FALSE(Has(yaml, "stack_restore")) << yaml;
     EXPECT_FALSE(Has(yaml, "__coro_alloca")) << yaml;
+}
+
+TEST_F(TranslateTestWasm32, AllocaOnStack)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
+}
+
+TEST_F(TranslateTestX86, AllocaOnStack)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
 }

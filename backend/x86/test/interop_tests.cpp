@@ -349,3 +349,51 @@ TEST_F(X86Test, RunBitfieldsClangCallsUs)
     EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
     EXPECT_EQ(0, exit_status);
 }
+
+// alloca both ways: ours called by clang's code, which keeps values in callee-saved
+// registers across the call, and clang's called by ours; eight arguments each, two on
+// the stack beside the memory.  (clang has __builtin_alloca built in, we declare it.)
+TEST_F(X86Test, RunAllocaWithClang)
+{
+    SKIP_IF_NO_X86_TOOLS();
+    SKIP_IF_NO_X86_CLANG();
+    const char *sum = R"(
+long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    for (int i = 0; i < n; i++)
+        p[i] = i + a;
+    long s = 0;
+    for (int i = 0; i < n; i++)
+        s += p[i];
+    return s + b + c + d + e + f + g + h;
+}
+)";
+    std::string ours = std::string(R"(
+void *__builtin_alloca(unsigned long);
+long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h);
+int their_check(void);
+)") + Subst(sum, "our", "") + R"(
+int main(void)
+{
+    long *q = __builtin_alloca(64);
+    q[0]    = 5;
+    long r  = their_sum(10, 1, 2, 3, 4, 5, 6, 7, 8);
+    return (r == 90) + 2 * their_check() + 4 * (q[0] == 5);
+}
+)";
+    std::string theirs = std::string(R"(
+long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h);
+volatile long seed = 7;
+)") + Subst(sum, "their", "") + R"(
+int their_check(void)
+{
+    long s = seed;
+    long v0 = s * 3, v1 = s * 5, v2 = s * 11, v3 = s * 13, v4 = s * 17, v5 = s * 19;
+    long r = our_sum(10, 1, 2, 3, 4, 5, 6, 7, 8);
+    return r == 90 && v0 + v1 + v2 + v3 + v4 + v5 == s * 68 && v0 == 21 && v5 == 133;
+}
+)";
+    EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
+    EXPECT_EQ(7, exit_status);
+}

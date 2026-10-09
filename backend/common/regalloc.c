@@ -185,7 +185,7 @@ static bool makes_call(const Alloc *a, const Tac_Instruction *in, const Tac_Val 
 {
     if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
         *res = in->u.fun_call.dst;
-        return true;
+        return !a->t->inline_call || !a->t->inline_call(a->t->arg, in);
     }
     return a->t->runtime_call(a->t->arg, a->flow, in, res);
 }
@@ -402,7 +402,8 @@ static void find_hints(Alloc *a)
     map_destroy(&params);
     for (int i = 0; i < f->ninstrs; i++) {
         const Tac_Instruction *in = f->instrs[i];
-        if (in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN)
+        if ((in->kind == TAC_INSTRUCTION_FUN_CALL || in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) &&
+            (!a->t->inline_call || !a->t->inline_call(a->t->arg, in)))
             a->t->call_hints(a->t->arg, f, in, a->hint);
         if (in->kind == TAC_INSTRUCTION_RETURN && in->u.return_.src &&
             in->u.return_.src->kind == TAC_VAL_VAR) {

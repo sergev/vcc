@@ -157,7 +157,16 @@ static const Target targets[] = {
       NULL,     // immediate_args
       tac_sysv64_class, // va_class
       64,       // ldouble_mant_dig: the x87 extended format
-      1 },      // hw_sqrt: sqrtsd
+      1,        // hw_sqrt: sqrtsd
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from rbp
 
     { "riscv32",
       1, 1,   // _Bool

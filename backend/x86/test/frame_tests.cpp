@@ -144,6 +144,78 @@ int six(void)
     EXPECT_NE(std::string::npos, code.find(", %ebp\n")) << code;
 }
 
+// alloca: the frame from rbp, rsp lowered by the size rounded to 16, and the epilogue
+// that finds rsp from rbp (leave, with no register saved).  A leaf is no exception.
+TEST_F(X86Test, AllocaLeaf)
+{
+    EXPECT_EQ(R"(pushq %rbp
+movq %rsp, %rbp
+movslq %edi, %rax
+addq $15, %rax
+andq $-16, %rax
+subq %rax, %rsp
+subl $1, %edi
+movslq %edi, %rdi
+leaq (%rsp,%rdi,1), %rdi
+movb $7, (%rdi)
+movsbl (%rdi), %edi
+movsbl %dil, %edi
+movsbl %dil, %edi
+movl %edi, %eax
+leave
+ret
+)",
+              Code(CompileToX86(R"(
+void *__builtin_alloca(unsigned long);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[n - 1] = 7;
+    return p[n - 1];
+}
+)")));
+}
+
+// The memory starts above the outgoing area, rounded to 16, which the frame reserves
+// apart from the slots; the saved registers are found from rbp.
+TEST_F(X86Test, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToX86(R"(
+void *__builtin_alloca(unsigned long);
+long g(long, long, long, long, long, long, long, long);
+long f(long n, long k)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    p[0] = k;
+    return g(1, 2, 3, 4, 5, 6, p[0], k) + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find("pushq %rbp\nmovq %rsp, %rbp\npushq %rbx\nsubq $24, %rsp\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("subq %rax, %rsp\nleaq 16(%rsp), %rax\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("movq %rsi, (%rsp)\nmovq %rsi, 8(%rsp)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("leaq -8(%rbp), %rsp\npopq %rbx\npopq %rbp\nret\n"))
+        << code;
+}
+
+// In a function that calls alloca rbp is the frame pointer, never allocated.
+TEST_F(X86Test, AllocaKeepsRbp)
+{
+    std::string code = Code(CompileToX86(R"(
+void *__builtin_alloca(unsigned long);
+int g(int);
+int six(int n)
+{
+    char *p = __builtin_alloca(n);
+    int a = g(1), b = g(2), c = g(3), d = g(4), e = g(5), f = g(6);
+    p[0] = (char)g(0);
+    return a + b + c + d + e + f + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find("pushq %rbp\nmovq %rsp, %rbp\n")) << code;
+    EXPECT_EQ(std::string::npos, code.find("%ebp")) << code;
+    EXPECT_NE(std::string::npos, code.find("popq %rbp\nret\n")) << code;
+}
+
 // rsp is 16-byte aligned at every call from a frame addressed from rsp, with 0, 1 or 6
 // registers pushed: clang's code finds its 16-byte aligned local aligned.
 TEST_F(X86Test, RunRspFrameAlignment)
