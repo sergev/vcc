@@ -266,7 +266,9 @@ void gen_finish(TacCtx *ctx, unsigned state);
 //
 // Coroutines (coro.c; docs/Coroutines_Internals.md §5)
 //
-enum { CO_HEADER = 24 }; // state, flags, resume, task, top, limit
+// The frame header, the runtime's struct co_header: unsigned state and flags, then the
+// resume function and the task, top and limit pointers (24 bytes on ILP32, 40 on LP64).
+int co_header_size(void);
 // Where the value yielded and the result lie in a frame of co_frame(Y, T), and the
 // end of the two, from which the split pass lays out the rest; the frame's alignment so far.
 void coro_layout(const Type *yield, const Type *result, int *value_off, int *result_off, int *end,
@@ -289,7 +291,8 @@ typedef struct {
     bool with_ptr;    // takes (void) or (void *): f$co holds init and resume too
 } CoroSplit;
 Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info);
-extern int coro_table_min; // suspension points from which the dispatch is a jump table
+extern int coro_table_min; // suspension points from which the dispatch is a jump table,
+                           // on a target with jump_tables
 Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type); // a coroutine's name as a value
 
 //

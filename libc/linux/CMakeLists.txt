@@ -2,7 +2,7 @@
 # Hosted Linux targets, x86_64-linux and aarch64-linux: programs assembled and linked by
 # the system C compiler against glibc, which supplies the C library and the startup.
 # Ours are the headers, glibc-compatible, and libvcc.a: the helpers our code generators
-# call that glibc lacks (__va_arg).  The data model and the code are those of the
+# call that glibc lacks (__va_arg) and the coroutine runtime (co, costack).  The data model and the code are those of the
 # bare-metal x86_64 and aarch64; the code generator only adds .note.GNU-stack (--linux).
 #
 # The C compiler is the host's, VCC_HOST_CC (the one building vcc, but the system cc
@@ -74,15 +74,19 @@ function(vcc_linux_target name var arch triple gen helper_dir cpu_regex)
         list(APPEND deps ${files})
     endforeach()
     set(objs "")
-    foreach(src va_arg)
+    foreach(src va_arg co costack)
+        set(dir ${helper_dir})
+        if(NOT src STREQUAL "va_arg")
+            set(dir ${LIBC_COMMON_DIR})
+        endif()
         add_custom_command(OUTPUT ${out}/${src}.o
-            COMMAND ${SystemCpp} -E -nostdinc ${includes} ${helper_dir}/${src}.c
+            COMMAND ${SystemCpp} -E -nostdinc ${includes} ${dir}/${src}.c
                     -o ${out}/${src}.i
             COMMAND parse ${out}/${src}.i ${out}/${src}.ast
             COMMAND lower -t ${name} ${out}/${src}.ast ${out}/${src}.tac
             COMMAND ${gen} --linux ${out}/${src}.tac ${out}/${src}.s
             COMMAND ${cc} -c -o ${out}/${src}.o ${out}/${src}.s
-            DEPENDS ${helper_dir}/${src}.c ${deps} parse lower ${gen}
+            DEPENDS ${dir}/${src}.c ${deps} parse lower ${gen}
             COMMENT "Compiling ${src}.c -> ${src}.o (${name})")
         list(APPEND objs ${out}/${src}.o)
     endforeach()

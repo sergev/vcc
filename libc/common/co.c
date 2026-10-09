@@ -7,8 +7,10 @@
  * the storage of its root frame after the frame itself, in LIFO order.
  * The frame starts with this header; the rest is the defining unit's business.
  *
- * A trap prints its name and ends the program with status 255.
+ * The header's layout follows the target's unsigned and pointers (translator/coro.c,
+ * co_header_size).  A trap prints its name and ends the program with status 255.
  */
+#include <limits.h>
 #include <stddef.h>
 
 struct co_header {
@@ -20,23 +22,23 @@ struct co_header {
 };
 
 enum {
-    STATE_DONE      = 0xfffffffeu,
-    STATE_DESTROYED = 0xffffffffu,
-    RUNNING         = 1,
-    SIGNAL_DESTROY  = 2,
+    RUNNING        = 1,
+    SIGNAL_DESTROY = 2,
 };
+#define STATE_DONE      (UINT_MAX - 1)
+#define STATE_DESTROYED UINT_MAX
 
-void putbyte(int c);
+int putchar(int c);
 _Noreturn void exit(int status);
 
 static void print(const char *s)
 {
     for (; *s; s++)
-        putbyte(*s);
+        putchar(*s);
 }
 
-/* The trap `name`, and the coroutine it concerns when there is one. */
-_Noreturn static void trap_of(const char *name, const char *coroutine)
+/* The trap `name`, and the coroutine it concerns when there is one (costack.c too). */
+_Noreturn void __coro_trap(const char *name, const char *coroutine)
 {
     print("coroutine trap: ");
     print(name);
@@ -44,13 +46,13 @@ _Noreturn static void trap_of(const char *name, const char *coroutine)
         print(": ");
         print(coroutine);
     }
-    putbyte('\n');
+    putchar('\n');
     exit(255);
 }
 
 _Noreturn static void trap(const char *name)
 {
-    trap_of(name, 0);
+    __coro_trap(name, 0);
 }
 
 /* co_init, co_alloca and an arena await: a frame of desc[0] bytes aligned to desc[1] at
@@ -119,7 +121,7 @@ void *__coro_push(void *fp, size_t bytes, size_t align, const char *name)
     struct co_header *t = ((struct co_header *)fp)->task;
     char *p             = (char *)(((size_t)t->top + align - 1) & -align);
     if (p > t->limit || bytes > (size_t)(t->limit - p))
-        trap_of("CO_TRAP_NO_SPACE", name);
+        __coro_trap("CO_TRAP_NO_SPACE", name);
     t->top = p + bytes;
     return p;
 }

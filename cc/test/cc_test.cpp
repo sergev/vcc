@@ -172,6 +172,8 @@ std::string HostCc()
 
 std::string HostLibDir()
 {
+    if (HostIsDarwin())
+        return AARCH64_DARWIN_LIB_DIR;
     return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_LIB_DIR
                                                        : X86_64_LINUX_LIB_DIR;
 }
@@ -179,14 +181,13 @@ std::string HostLibDir()
 bool HaveHostedRun()
 {
     return *HOST_TARGET && HaveTool(HostCc()) &&
-           (HostIsDarwin() || access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0);
+           access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0;
 }
 
-// Link the build's libvcc.a into a staged installation for the host, where it has one.
+// Link the build's libvcc.a into a staged installation for the host.
 void StageLibvcc(const std::string &prefix)
 {
-    if (!HostIsDarwin())
-        fs::create_symlink(HostLibDir() + "/libvcc.a",
+    fs::create_symlink(HostLibDir() + "/libvcc.a",
                            prefix + "/share/vcc/" + HOST_TARGET + "/lib/libvcc.a");
 }
 
@@ -1455,15 +1456,17 @@ TEST_F(CcDriver, HostedLinkLine)
     EXPECT_EQ(Stdout(), "true -no-pie -nostdlib -o a.out t.o \n");
 }
 
-// macOS: a position-independent executable, and no libvcc.a.
+// macOS: a position-independent executable.
 TEST_F(CcDriver, DarwinLinkLine)
 {
     std::string prefix = StagePrefix("aarch64-darwin");
+    std::string lib    = prefix + "/share/vcc/aarch64-darwin/lib";
+    WriteSource(lib.substr(dir.size() + 1) + "/libvcc.a", "");
     WriteSource("t.o", "");
     setenv("VCC_LD", "true", 1);
     ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64-darwin", "-v", "-o", "t", "t.o", "-lm" }), 0)
         << Stderr();
-    EXPECT_EQ(Stdout(), "true -o t t.o -lm \n");
+    EXPECT_EQ(Stdout(), "true -o t t.o -lm -L" + lib + " -lvcc \n");
 
     ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64-darwin", "-v", "-nostdlib", "t.o" }), 0)
         << Stderr();
@@ -1546,12 +1549,11 @@ TEST_F(CcDriver, StagedPrefixHost)
     if (HostIsDarwin()) {
         EXPECT_NE(echo.find(" --darwin "), std::string::npos) << echo;
         EXPECT_EQ(echo.find(" -no-pie "), std::string::npos) << echo;
-        EXPECT_NE(echo.find(" twice.o -lm \n"), std::string::npos) << echo;
     } else {
         EXPECT_NE(echo.find(" --linux "), std::string::npos) << echo;
         EXPECT_NE(echo.find(" -no-pie -o t "), std::string::npos) << echo;
-        EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
     }
+    EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
 }
 
 // The hosted headers agree with the system's on what the ABI fixes: the layouts and the

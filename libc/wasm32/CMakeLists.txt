@@ -147,9 +147,10 @@ macro(wasm32_compile_libc_c name srcdir)
 endmacro()
 
 # The common sources but for those the bulk memory instructions replace (memory.s), and
-# the IEEE ones: the printf engine and the binary128 long double runtime.
+# the IEEE ones: the printf engine and the binary128 long double runtime.  No costack:
+# co_alloca takes the shadow stack here.
 set(WASM32_LIBC_C ${LIBC_C_COMMON} ${LIBC_C_IEEE})
-list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset)
+list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset costack)
 foreach(name ${WASM32_LIBC_C})
     wasm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()
@@ -158,7 +159,6 @@ foreach(name frexp ldexp modf)
     wasm32_compile_libc_c(${name} ${LIBC_ILP32_DIR})
 endforeach()
 wasm32_compile_libc_c(malloc ${src})
-wasm32_compile_libc_c(co ${src})
 
 add_custom_command(OUTPUT ${out}/libc.a
     COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libc.a

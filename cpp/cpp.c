@@ -44,8 +44,8 @@ struct symtab *paint_stack[SYMSIZ];
 // The targets the compiler supports, and the macros each predefines.  The
 // RISC-V, AArch64, ARM32, x86-64, AVR, MSP430 and wasm32 sets are clang's, so a
 // header written for clang selects the same branches here; MMIX's is GCC's, since LLVM has no MMIX; `besm6' is what the v7besm
-// sources key on.  Ordinary macros, freely #undef'able (§6.10.8.4 covers only the
-// standard ones).
+// sources key on.  Every target but BESM-6 has the coroutines: __vcc_coroutines__.
+// Ordinary macros, freely #undef'able (§6.10.8.4 covers only the standard ones).
 //
 struct target {
     const char *name;
@@ -58,31 +58,42 @@ struct target {
 static const struct target targets[] = {
     { "besm6",   { "besm6", "__besm6__" } },
     { "riscv64", { "__riscv", "__riscv_xlen=64", "__LP64__", "_LP64",
-                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div" } },
+                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div",
+                   "__vcc_coroutines__" } },
     { "riscv32", { "__riscv", "__riscv_xlen=32", "__ILP32__", "_ILP32",
-                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div" } },
+                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div",
+                   "__vcc_coroutines__" } },
     { "aarch64", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
-                   "__CHAR_UNSIGNED__", "__ELF__" } },
+                   "__CHAR_UNSIGNED__", "__ELF__",
+                   "__vcc_coroutines__" } },
     { "arm32",   { "__arm__", "__ARM_ARCH=7", "__ARM_ARCH_7A__", "__ARM_ARCH_PROFILE='A'",
                    "__ARM_32BIT_STATE", "__ARM_EABI__", "__ARMEL__", "__ARM_PCS_VFP",
                    "__VFP_FP__", "__ARM_FP=0xe", "__ARM_FEATURE_IDIV", "__ILP32__", "_ILP32",
-                   "__CHAR_UNSIGNED__", "__WCHAR_UNSIGNED__", "__ELF__" } },
+                   "__CHAR_UNSIGNED__", "__WCHAR_UNSIGNED__", "__ELF__",
+                   "__vcc_coroutines__" } },
     { "x86_64",  { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
                    "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
-                   "__code_model_small__", "__ELF__" } },
+                   "__code_model_small__", "__ELF__",
+                   "__vcc_coroutines__" } },
     { "x86_64-linux", { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
                    "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
-                   "__code_model_small__", "__ELF__", LINUX_MACROS } },
+                   "__code_model_small__", "__ELF__", LINUX_MACROS,
+                   "__vcc_coroutines__" } },
     { "aarch64-linux", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
-                   "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS } },
+                   "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS,
+                   "__vcc_coroutines__" } },
     { "aarch64-darwin", { "__aarch64__", "__arm64__", "__arm64", "__ARM_ARCH=8",
-                   "__ARM_64BIT_STATE", "__LP64__", "_LP64", "__APPLE__", "__MACH__" } },
+                   "__ARM_64BIT_STATE", "__LP64__", "_LP64", "__APPLE__", "__MACH__",
+                   "__vcc_coroutines__" } },
     { "avr",    { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__",
                    "__AVR_HAVE_MUL__", "__AVR_HAVE_MOVW__", "__AVR_HAVE_LPMX__",
                    "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__", "__AVR_HAVE_JMP_CALL__",
-                   "__AVR_2_BYTE_PC__", "__ELF__" } },
-    { "msp430",  { "__MSP430__", "__CHAR_UNSIGNED__", "__ELF__" } },
-    { "mmix",    { "__mmix__", "__MMIX__", "__MMIX_ABI_MMIXWARE__", "__LP64__", "_LP64" } },
+                   "__AVR_2_BYTE_PC__", "__ELF__",
+                   "__vcc_coroutines__" } },
+    { "msp430",  { "__MSP430__", "__CHAR_UNSIGNED__", "__ELF__",
+                   "__vcc_coroutines__" } },
+    { "mmix",    { "__mmix__", "__MMIX__", "__MMIX_ABI_MMIXWARE__", "__LP64__", "_LP64",
+                   "__vcc_coroutines__" } },
     { "wasm32",  { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
                    "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
                    "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",

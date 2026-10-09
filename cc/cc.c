@@ -207,7 +207,6 @@ struct target {
     bool no_script;               // the linker's default script, unless -T names one
     const char *gen_flag;         // code generator flag, or NULL
     bool pie;                     // hosted: a position-independent executable, no -no-pie
-    bool no_runtime;              // hosted: no libvcc.a
     const char *llvm_ld;          // the LLVM linker, when not ld.lld
     const char *llvm_ld_flags;    // its flags, blank-separated, or NULL
     bool braam;                   // a Braam process: --initial-memory, then the braam section
@@ -257,7 +256,7 @@ static const struct target targets[] = {
     { .name = "aarch64-darwin", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
       .as_default = AARCH64_DARWIN_CC, .ld_default = AARCH64_DARWIN_CC,
       .prefixes = "aarch64-apple-darwin", .triple = "arm64-apple-macos", .gen_flag = "--darwin",
-      .pie = true, .no_runtime = true },
+      .pie = true },
 };
 
 static const struct target *target; // set by -t, else the default
@@ -1003,7 +1002,7 @@ static int compile_one(const char *src)
 // independent on Linux: our code takes a function's address PC-relative, which a PIE
 // cannot do for one in a shared library.  -nostdlib is passed on, and drops libvcc.a.
 // On macOS, where every arm64 executable is a PIE, the code reaches what it does not
-// define through the GOT, and there is no libvcc.a.
+// define through the GOT.
 //
 static int link_hosted(const char *libdir)
 {
@@ -1024,7 +1023,7 @@ static int link_hosted(const char *libdir)
         vec_push(&av, objects.data[i]);
     for (size_t i = 0; i < ldflags.len; i++)
         vec_push(&av, ldflags.data[i]);
-    if (!opt_nostdlib && !target->no_runtime) {
+    if (!opt_nostdlib) {
         char *lib = concat(libdir, "/libvcc.a");
         if (access(lib, R_OK) != 0) {
             error("%s not found; or use -nostdlib", lib);

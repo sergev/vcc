@@ -237,7 +237,7 @@ TEST_F(Predefined, MmixTarget) {
 }
 
 // wasm32: clang's set with Braam's features, ILP32, signed plain char, no __ELF__; and
-// vcc's coroutines, which only wasm32 has.
+// vcc's coroutines.
 TEST_F(Predefined, Wasm32Target) {
     EXPECT_TRUE(TokensAre("#if __wasm__ && __wasm && __wasm32__ && __wasm32 && __ILP32__ && "
                           "_ILP32 && __wasm_sign_ext__ && __wasm_bulk_memory__ && "
@@ -259,6 +259,16 @@ TEST_F(Predefined, Besm6Target) {
                           "!defined(__vcc_coroutines__)\n"
                           "TARGET\n#endif\n", "TARGET", {"-tbesm6"}));
     EXPECT_TRUE(TokensAre("#ifdef besm6\nTARGET\n#endif\n", "TARGET", {"--target", "besm6"}));
+}
+
+// vcc's coroutines: on every target but BESM-6.
+TEST_F(Predefined, CoroutinesTargets) {
+    for (const char *t : {"riscv64", "riscv32", "aarch64", "arm32", "x86_64", "x86_64-linux",
+                          "aarch64-linux", "aarch64-darwin", "avr", "msp430", "mmix", "wasm32",
+                          "wasm32-braam"})
+        EXPECT_TRUE(TokensAre("#ifdef __vcc_coroutines__\nTARGET\n#endif\n", "TARGET",
+                              {"-t", t}))
+            << t;
 }
 
 TEST_F(Predefined, UnknownTargetFails) {

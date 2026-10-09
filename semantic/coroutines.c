@@ -37,7 +37,7 @@ static const Expr *arena_call;
 
 static void require_target(void)
 {
-    if (!target_config->coroutines)
+    if (target_config->no_coroutines)
         fatal_error("coroutines are not supported on target %s", target_config->name);
 }
 

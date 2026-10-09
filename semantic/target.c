@@ -271,8 +271,9 @@ static const Target targets[] = {
       0,    // hw_sqrt
       0,    // double_mant_dig
       1,    // no_loop_opt
-      1 },  // big-endian: chars are packed from the most significant end of the word,
+      1,    // big-endian: chars are packed from the most significant end of the word,
             // and so are bit-fields
+      .no_coroutines = 1 },
 
     // AArch64 on macOS: Apple's arm64 ABI.  As AArch64 but for a signed plain char and a
     // long double that is double; va_arg walks the stack, where every variadic argument is.
@@ -327,7 +328,9 @@ static const Target targets[] = {
       BITFIELD_SYSV,
       0,        // bitfield_access_bits
       1,        // bitfield_unit_per_field: clang's single-element rule counts bit-fields
-      1 },      // coroutines
+      1,        // jump_tables: br_table
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the shadow stack
 };
 // clang-format on
 

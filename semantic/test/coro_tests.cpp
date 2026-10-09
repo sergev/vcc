@@ -129,16 +129,30 @@ int run(void)
 
 // --- the target -------------------------------------------------------------
 
+// Every target but BESM-6 has them.
 TEST_F(PipelineTest, CoroutinesNotOnTarget_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Coro(int) void f(void) { _Yield 1; }"),
-                 "coroutines are not supported on target");
+    EXPECT_DEATH(
+        {
+            target_config = target_lookup("besm6");
+            RunPipeline("_Coro(int) void f(void) { _Yield 1; }");
+        },
+        "coroutines are not supported on target besm6");
 }
 
 TEST_F(PipelineTest, CoOpNotOnTarget_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int f(_Coro_frame(int, void) *p) { return __co_done(p); }"),
-                 "coroutines are not supported on target");
+    EXPECT_DEATH(
+        {
+            target_config = target_lookup("besm6");
+            RunPipeline("int f(_Coro_frame(int, void) *p) { return __co_done(p); }");
+        },
+        "coroutines are not supported on target besm6");
+}
+
+TEST_F(PipelineTest, CoroutinesOnTarget)
+{
+    RunPipeline("_Coro(int) void f(void) { _Yield 1; }");
 }
 
 // --- declarations -----------------------------------------------------------

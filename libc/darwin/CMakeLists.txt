@@ -1,9 +1,9 @@
 #
 # The hosted macOS target aarch64-darwin: programs assembled and linked by the system C
 # compiler against libSystem, which supplies the C library and the startup.  Ours are
-# the headers, libSystem-compatible; no library, since Apple's va_list is a pointer
-# walked in the header and long double is double.  The code generator is genaarch64
-# --darwin: Mach-O, the GOT and Apple's arm64 calling convention.
+# the headers, libSystem-compatible, and libvcc.a: the coroutine runtime (co, costack).
+# No __va_arg: Apple's va_list is a pointer walked in the header.  The code generator is
+# genaarch64 --darwin: Mach-O, the GOT and Apple's arm64 calling convention.
 #
 # The C compiler is the host's, VCC_HOST_CC (the one building vcc, but the system cc
 # when that is vcc), when the host is macOS on Apple silicon.  It is AARCH64_DARWIN_CC,
@@ -51,3 +51,37 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND
     set(cc ${VCC_HOST_CC})
 endif()
 set(AARCH64_DARWIN_CC "${cc}" CACHE INTERNAL "")
+if(NOT cc)
+    message(STATUS "Not macOS on Apple silicon: the aarch64-darwin runtime is not built")
+    return()
+endif()
+
+set(out ${CMAKE_CURRENT_BINARY_DIR}/lib)
+file(MAKE_DIRECTORY ${out})
+set(AARCH64_DARWIN_LIB_DIR ${out} CACHE INTERNAL "")
+set(includes "")
+set(deps "")
+foreach(dir ${dirs})
+    list(APPEND includes -I${dir})
+    file(GLOB files ${dir}/*.h)
+    list(APPEND deps ${files})
+endforeach()
+set(objs "")
+foreach(src co costack)
+    add_custom_command(OUTPUT ${out}/${src}.o
+        COMMAND ${SystemCpp} -E -nostdinc ${includes} ${LIBC_COMMON_DIR}/${src}.c
+                -o ${out}/${src}.i
+        COMMAND parse ${out}/${src}.i ${out}/${src}.ast
+        COMMAND lower -t aarch64-darwin ${out}/${src}.ast ${out}/${src}.tac
+        COMMAND genaarch64 --darwin ${out}/${src}.tac ${out}/${src}.s
+        COMMAND ${cc} -c -o ${out}/${src}.o ${out}/${src}.s
+        DEPENDS ${LIBC_COMMON_DIR}/${src}.c ${deps} parse lower genaarch64
+        COMMENT "Compiling ${src}.c -> ${src}.o (aarch64-darwin)")
+    list(APPEND objs ${out}/${src}.o)
+endforeach()
+add_custom_command(OUTPUT ${out}/libvcc.a
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${out}/libvcc.a
+    COMMAND ${CMAKE_AR} rcs ${out}/libvcc.a ${objs}
+    DEPENDS ${objs})
+add_custom_target(aarch64-darwin-libc ALL DEPENDS ${out}/libvcc.a)
+install(FILES ${out}/libvcc.a DESTINATION share/vcc/aarch64-darwin/lib)

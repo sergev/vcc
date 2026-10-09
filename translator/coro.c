@@ -26,13 +26,12 @@
 #include "typecheck.h"
 #include "xalloc.h"
 
-enum {
-    CO_STATE  = 0,
-    CO_FLAGS  = 4,
-    CO_RESUME = 8,
-};
-#define CO_STATE_DONE      0xfffffffeu
-#define CO_STATE_DESTROYED 0xffffffffu
+// The header (libc/common/co.c): state and flags of the target's unsigned, then four
+// pointers.  The state's two highest values are DONE and DESTROYED.
+enum { CO_STATE = 0 };
+#define CO_FLAGS           ((int)target_config->int_size)
+#define CO_STATE_DONE      (co_state_max() - 1)
+#define CO_STATE_DESTROYED co_state_max()
 #define CO_SIGNAL_DESTROY  2
 
 static int align_up(int n, int a)
@@ -40,10 +39,27 @@ static int align_up(int n, int a)
     return (n + a - 1) / a * a;
 }
 
+static unsigned co_state_max(void)
+{
+    return target_config->int_size >= 4 ? 0xffffffffu : (1u << (8 * target_config->int_size)) - 1;
+}
+
+int co_header_size(void)
+{
+    return align_up(2 * (int)target_config->int_size, (int)target_config->pointer_align) +
+           4 * (int)target_config->pointer_size;
+}
+
+static int co_header_align(void)
+{
+    int a = (int)target_config->int_align, p = (int)target_config->pointer_align;
+    return a > p ? a : p;
+}
+
 void coro_layout(const Type *yield, const Type *result, int *value_off, int *result_off, int *end,
                  int *align)
 {
-    int off = CO_HEADER, a = 4;
+    int off = co_header_size(), a = co_header_align();
     *value_off = *result_off = off;
     if (unalias(yield)->kind != TYPE_VOID) {
         int ya = (int)get_alignment(yield);
@@ -486,6 +502,17 @@ static void emit_pop(TacCtx *ctx, Tac_Val *p)
     emit_call(ctx, "__coro_pop", tac_kind(TAC_TYPE_VOID), 2, args, params);
 }
 
+// co_alloca's memory in a function: the shadow stack where the backend expands the
+// builtins in place, else the runtime's LIFO arena (libc/common/costack.c).
+static const char *stack_builtin(const char *what)
+{
+    if (strcmp(what, "stack_save") == 0)
+        return target_config->stack_alloca ? "__builtin_stack_save" : "__coro_stack_save";
+    if (strcmp(what, "alloca") == 0)
+        return target_config->stack_alloca ? "__builtin_alloca" : "__coro_alloca";
+    return target_config->stack_alloca ? "__builtin_stack_restore" : "__coro_stack_restore";
+}
+
 static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
 {
     Expr *a = e->u.co_op.args;
@@ -509,7 +536,7 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
     // and off the task's arena in a coroutine, whose shadow stack goes at each suspension.
     Expr *g       = a;
     bool by_ptr   = is_coro_ptr(g);
-    Tac_Val *sp   = ctx->coro ? NULL : emit_call(ctx, "__builtin_stack_save", void_ptr(), 0, NULL, NULL);
+    Tac_Val *sp   = ctx->coro ? NULL : emit_call(ctx, stack_builtin("stack_save"), void_ptr(), 0, NULL, NULL);
     Tac_Val *desc = by_ptr ? in_variable(ctx, gen_expr(ctx, g), tac_type_ptr(size_type()))
                            : coro_desc(ctx, g->u.var);
     Tac_Val *size = emit_load(ctx, dup_val(desc), size_type());
@@ -542,7 +569,7 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
     } else {
         Tac_Val *aargs[]    = { dup_val(bytes) };
         Tac_Type *aparams[] = { size_type() };
-        mem = emit_call(ctx, "__builtin_alloca", void_ptr(), 1, aargs, aparams);
+        mem = emit_call(ctx, stack_builtin("alloca"), void_ptr(), 1, aargs, aparams);
     }
     Tac_Val *p = in_variable(ctx, mem, ast_type_to_tac_type(e->type));
     if (by_ptr) {
@@ -580,7 +607,7 @@ void gen_co_release(TacCtx *ctx, const ExitAction *a)
     if (a->sp) {
         Tac_Val *sargs[]    = { val_var(a->sp) };
         Tac_Type *sparams[] = { void_ptr() };
-        emit_call(ctx, "__builtin_stack_restore", tac_kind(TAC_TYPE_VOID), 1, sargs, sparams);
+        emit_call(ctx, stack_builtin("stack_restore"), tac_kind(TAC_TYPE_VOID), 1, sargs, sparams);
     } else {
         emit_pop(ctx, val_var(a->frame));
     }
@@ -1382,7 +1409,7 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     for (const Tac_Instruction *in = body; in; in = in->next)
         if (is_suspend(in))
             k++;
-    if (k >= coro_table_min) {
+    if (target_config->jump_tables && k >= coro_table_min) {
         // A jump table on the state: 0 and anything else into the body's start.
         char *a  = put_offset(&s, CO_STATE, &(Tac_Type){ .kind = TAC_TYPE_UINT });
         char *st = split_temp(&s, tac_new_type(TAC_TYPE_UINT));

@@ -5,10 +5,11 @@
 #
 
 # Target-neutral C sources in libc/common, compiled by our own toolchain for each
-# target.  printf/sprintf/snprintf wrap a target's own __doprnt.
+# target.  printf/sprintf/snprintf wrap a target's own __doprnt; co and costack are the
+# coroutine runtime.
 set(LIBC_COMMON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/common)
 set(LIBC_C_COMMON
-    atoi fabs fma fmax fmin
+    atoi co costack fabs fma fmax fmin
     memchr memcmp memcpy memmove memset
     printf puts putchar snprintf sprintf
     strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy
