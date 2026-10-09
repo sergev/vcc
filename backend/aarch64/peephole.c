@@ -138,7 +138,7 @@ static bool reads_as_address(const A64_Instr *in, int r)
 
 static bool reads(const A64_Instr *in, int r)
 {
-    if (is_call(in->op) && is_arg(r))
+    if (is_call(in->op) && (in->args_known ? (in->args & a64_reg_bit(r)) != 0 : is_arg(r)))
         return true;
     if (in->op == A64_RET)
         return r == A64_LR || (r == A64_X0 && (result & 1)) || (r == A64_X(1) && (result & 2)) ||
@@ -194,19 +194,9 @@ typedef uint64_t Regs;
 #define CALL_WRITES   (GPRS(0, 18) | GPRS(30, 30) | VREGS(0, 7) | VREGS(16, 31))
 #define CALLEE_SAVED  (GPRS(19, 29) | VREGS(8, 15))
 
-static int reg_bit(int r)
-{
-    if (r >= A64_X0 && r <= A64_LR)
-        return r - A64_X0;
-    if (r >= A64_V0 && r < A64_VREG)
-        return 31 + (r - A64_V0);
-    return -1;
-}
-
 static Regs bit_of(int r)
 {
-    int b = reg_bit(r);
-    return b < 0 ? 0 : 1ull << b;
+    return a64_reg_bit(r);
 }
 
 // The registers `in` reads, or writes: of the registers its operands name, those
@@ -244,7 +234,9 @@ static Regs uses(const A64_Instr *in)
 {
     if (in->op == A64_RET)
         return ret_regs();
-    return regs_of(in, reads) | (is_call(in->op) ? CALL_READS : 0);
+    if (is_call(in->op))
+        return regs_of(in, reads) | (in->args_known ? in->args : CALL_READS);
+    return regs_of(in, reads);
 }
 
 static Regs defs(const A64_Instr *in)

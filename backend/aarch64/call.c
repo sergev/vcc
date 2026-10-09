@@ -479,6 +479,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         if (!arg_move(g, &args[i], &m))
             arg_to_regs(g, &args[i]);
     }
+    uint64_t used = 0;
+    for (i = 0; i < nargs; i++)
+        for (int k = 0; k < args[i].loc.nregs; k++)
+            used |= a64_reg_bit(args[i].loc.reg[k]);
     xfree(args);
     if (s.stack > g->outgoing)
         g->outgoing = s.stack;
@@ -493,13 +497,13 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             off  = alloc_slot(g, NULL, NULL, a64_size(ret), a64_align(ret));
         }
         gen_addr(g, A64_X8, base, off);
+        used |= a64_reg_bit(A64_X8);
     }
 
-    if (in->u.fun_call.indirect) {
-        emit1(g, A64_BLR, a64_reg(T4, A64_X));
-    } else {
-        emit1(g, A64_BL, a64_sym(in->u.fun_call.fun_name, 0));
-    }
+    A64_Instr *call = in->u.fun_call.indirect ? emit1(g, A64_BLR, a64_reg(T4, A64_X))
+                                              : emit1(g, A64_BL, a64_sym(in->u.fun_call.fun_name, 0));
+    call->args_known = true;
+    call->args       = used;
     if (!dst || indirect_result(ret))
         return;
     const Tac_Type *t = val_type(g, dst);

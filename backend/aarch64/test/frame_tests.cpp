@@ -81,3 +81,71 @@ TEST_F(Aarch64Test, RunLargeFrame)
     EXPECT_EQ("", CompileAndRunAarch64(src));
     EXPECT_EQ(1199 & 255, exit_status);
 }
+
+// Addressed from sp, x30 takes the record's place, a lone saved register goes beside
+// it, and the save at sp + 0 lowers sp itself (its restore raising it): no sub, no add.
+TEST_F(Aarch64Test, FrameSpX30Alone)
+{
+    EXPECT_EQ(R"(str x30, [sp, #-16]!
+mov w0, w0
+bl g
+add w0, w0, #1
+ldr x30, [sp], #16
+ret
+)",
+              Code(CompileToAarch64("int g(int); int f(int a) { return g(a) + 1; }")));
+}
+TEST_F(Aarch64Test, FrameSpX30Paired)
+{
+    EXPECT_EQ(R"(stp x30, x19, [sp, #-16]!
+mov w0, w0
+mov w19, w1
+bl g
+add w0, w0, w19
+ldp x30, x19, [sp], #16
+ret
+)",
+              Code(CompileToAarch64("int g(int); int f(int a, int b) { int x = g(a); return x + b; }")));
+}
+TEST_F(Aarch64Test, FrameSpWithSlots)
+{
+    EXPECT_EQ(R"(sub sp, sp, #32
+str x30, [sp, #16]
+str w0, [sp]
+add x0, sp, #0
+bl h
+ldr w0, [sp, #4]
+ldr x30, [sp, #16]
+add sp, sp, #32
+ret
+)",
+              Code(CompileToAarch64(
+                  "void h(int *); int f(int a) { int v[4]; v[0] = a; h(v); return v[1]; }")));
+}
+
+// The frame layouts run: x30 alone, beside a lone register, with pairs, with slots,
+// with a saved d register.
+TEST_F(Aarch64Test, RunFrameLayouts)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    EXPECT_EQ("", CompileAndRunAarch64(R"(
+long id(long x) { return x; }
+double did(double x) { return x; }
+void fill(int *v) { v[1] = 5; }
+long one(long a) { return id(a) + 1; }
+long lone(long a, long b) { long x = id(a); return x + b; }
+long many(long a, long b, long c, long d)
+{
+    long x = id(a), y = id(b);
+    return x * 1000 + y * 100 + c * 10 + d + id(c);
+}
+int slots(int a) { int v[4]; v[0] = a; fill(v); return v[0] + v[1]; }
+double dsum(double a) { return did(a) + a; }
+int main(void)
+{
+    int ok = one(1) == 2 && lone(3, 4) == 7 && many(1, 2, 3, 4) == 1237 && slots(9) == 14 &&
+             dsum(1.5) == 3.0;
+    return ok ? 42 : 1;
+})"));
+    EXPECT_EQ(42, exit_status);
+}

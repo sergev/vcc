@@ -26,7 +26,8 @@ add x2, x2, x1
 }
 
 // A value live across a call takes a callee-saved register, saved in the prologue and
-// restored in the epilogue; the frame, addressed from sp, keeps x30 above the slots.
+// restored in the epilogue; the frame, addressed from sp, keeps x30 in the record's
+// place with the lone register beside it, sp lowered and raised by that pair.
 TEST_F(Aarch64Test, CalleeSavedAcrossCall)
 {
     aarch64_peephole = false;
@@ -34,16 +35,12 @@ TEST_F(Aarch64Test, CalleeSavedAcrossCall)
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
 )"));
-    EXPECT_EQ(R"(sub sp, sp, #32
-str x30, [sp, #24]
-str x19, [sp]
+    EXPECT_EQ(R"(stp x30, x19, [sp, #-16]!
 mov w0, w0
 mov w19, w1
 bl g
 add w0, w0, w19
-ldr x19, [sp]
-ldr x30, [sp, #24]
-add sp, sp, #32
+ldp x30, x19, [sp], #16
 ret
 )",
               code);

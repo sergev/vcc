@@ -591,7 +591,9 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
         fatal_error("aarch64: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
     load_val(g, A64_V(0), in->u.binary.src1);
     load_val(g, A64_V(1), in->u.binary.src2);
-    emit1(g, A64_BL, a64_sym(ops[i].name, 0));
+    A64_Instr *call  = emit1(g, A64_BL, a64_sym(ops[i].name, 0));
+    call->args_known = true;
+    call->args       = a64_reg_bit(A64_V(0)) | a64_reg_bit(A64_V(1));
     if (ops[i].cond < 0) {
         store_val(g, A64_V(0), in->u.binary.dst);
         return;
@@ -684,8 +686,11 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
         else
             name = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
     }
-    load_val(g, a64_is_ld(st) || fp ? A64_V(0) : A64_X(0), src);
-    emit1(g, A64_BL, a64_sym(name, 0));
+    int arg = a64_is_ld(st) || fp ? A64_V(0) : A64_X(0);
+    load_val(g, arg, src);
+    A64_Instr *call  = emit1(g, A64_BL, a64_sym(name, 0));
+    call->args_known = true;
+    call->args       = a64_reg_bit(arg);
     if (a64_is_ld(dt) || fp)
         store_val(g, A64_V(0), dst);
     else

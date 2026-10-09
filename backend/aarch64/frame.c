@@ -631,6 +631,7 @@ typedef struct {
     int size;   // FRAME_SP: the bytes below the caller's sp
     int rest;   // the slots and outgoing area, below where x29 would point
     bool calls; // x30 must be saved
+    int lone;   // FRAME_SP: the saved register beside x30 in the record (an index), or -1
 } Frame;
 
 // The sp offset of x29 offset `off`.  x29 would be at sp + rest: a slot is below it,
@@ -665,18 +666,90 @@ static void save_regs(Gen *g, const Frame *fr, bool restore)
     }
 }
 
+// A save of an sp-addressed frame: a register, or a pair (r2 not 0), at sp + off.
+typedef struct {
+    int r1, r2;
+    A64_Width w;
+    int64_t off;
+} Save;
+
+// The saves of an sp-addressed frame, lowest address first: the callee-saved
+// registers in use, in pairs where layout_frame made them adjacent; with calls, x30
+// where the record would hold x29, and beside it a lone general register.
+static int sp_saves(const Gen *g, const Frame *fr, Save *s)
+{
+    int n = 0;
+    for (int i = 0; i < g->nsaved;) {
+        int r       = g->saved_reg[i];
+        A64_Width w = a64_is_fpreg(r) ? A64_D : A64_X;
+        if (i == fr->lone) {
+            i++;
+        } else if (i + 1 < g->nsaved && g->saved_off[i + 1] == g->saved_off[i] + 8) {
+            s[n++] = (Save){ r, g->saved_reg[i + 1], w, sp_offset(fr, g->saved_off[i]) };
+            i += 2;
+        } else {
+            s[n++] = (Save){ r, 0, w, sp_offset(fr, g->saved_off[i]) };
+            i++;
+        }
+    }
+    if (fr->calls)
+        s[n++] = (Save){ A64_LR, fr->lone >= 0 ? g->saved_reg[fr->lone] : 0, A64_X, fr->rest };
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0 && s[j].off < s[j - 1].off; j--) {
+            Save t   = s[j];
+            s[j]     = s[j - 1];
+            s[j - 1] = t;
+        }
+    return n;
+}
+
+// Whether the lowest save, at sp + 0, takes the change of sp as a pre-index (and the
+// restore a post-index): of 16-byte multiples, up to 504 for a pair, 255 for one.
+static bool sp_folds(const Frame *fr, const Save *s, int n)
+{
+    return n > 0 && s[0].off == 0 && fr->size <= (s[0].r2 ? 504 : 255);
+}
+
+static void sp_save(Gen *g, const Save *sv, bool restore, A64_Operand mem)
+{
+    if (sv->r2)
+        emit3(g, restore ? A64_LDP : A64_STP, a64_reg(sv->r1, sv->w), a64_reg(sv->r2, sv->w), mem);
+    else
+        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r1, sv->w), mem);
+}
+
+// The setup and teardown of an sp-addressed frame.
+static void sp_frame(Gen *g, const Frame *fr, bool restore)
+{
+    Save s[34];
+    int n     = sp_saves(g, fr, s);
+    bool fold = sp_folds(fr, s, n);
+    if (!restore) {
+        if (!fold)
+            gen_addr(g, A64_SP, A64_SP, -fr->size);
+        for (int i = 0; i < n; i++)
+            sp_save(g, &s[i], false,
+                    i == 0 && fold ? a64_mem_pre(A64_SP, -fr->size) : a64_mem(A64_SP, s[i].off));
+        return;
+    }
+    for (int i = fold ? 1 : 0; i < n; i++)
+        sp_save(g, &s[i], true, a64_mem(A64_SP, s[i].off));
+    if (fold)
+        sp_save(g, &s[0], true, a64_mem_post(A64_SP, fr->size));
+    else
+        gen_addr(g, A64_SP, A64_SP, fr->size);
+}
+
 // The frame teardown: the saved registers back, then sp (and x29, x30) as on entry.
 static void epilogue(Gen *g, const Frame *fr)
 {
     if (fr->kind == FRAME_NONE)
         return;
-    save_regs(g, fr, true);
     if (fr->kind == FRAME_SP) {
-        if (fr->calls)
-            emit2(g, A64_LDR, a64_reg(A64_LR, A64_X), frame_mem(fr, 8));
-        gen_addr(g, A64_SP, A64_SP, fr->size);
+        sp_frame(g, fr, true);
         return;
     }
+    save_regs(g, fr, true);
     emit2(g, A64_MOV, a64_reg(A64_SP, A64_X), a64_reg(A64_FP, A64_X));
     emit3(g, A64_LDP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_post(A64_SP, 16));
 }
@@ -834,34 +907,44 @@ static bool rebase_to_sp(const Gen *g, const Frame *fr)
     return true;
 }
 
-// Whether the save slots of the callee-saved registers fit their stp/str from sp.
+// Whether the saves fit their stp/str from sp.
 static bool saves_fit(const Gen *g, const Frame *fr)
 {
-    for (int i = 0; i < g->nsaved; i++) {
-        int64_t off = sp_offset(fr, g->saved_off[i]);
-        if (off % 8 != 0 || off > 504)
+    Save s[34];
+    int n = sp_saves(g, fr, s);
+    for (int i = 0; i < n; i++)
+        if (s[i].off % 8 != 0 || s[i].off > 504)
             return false;
-    }
     return true;
 }
 
 // Fill the prologue and the epilogues, now that the frame is known.  A leaf function
 // that needs no stack has none; otherwise, unless asked for a frame record, the frame
 // is addressed from sp when every x29 offset can be, and x30 saved only with calls.
+// Addressed from sp, x30 takes the place of x29 in the record, and the lone general
+// register of an odd number saved goes beside it, its own slot given up when it is the
+// lowest.
 void gen_prologue(Gen *g)
 {
-    Frame fr        = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, has_calls(g) };
+    bool calls      = has_calls(g);
+    Frame fr        = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, calls, -1 };
+    Frame sp        = fr;
     A64_Block *tail = redirect(g, g->prologue);
-    fr.size         = fr.rest + (fr.calls ? 16 : 0);
+    fr.size         = fr.rest + (calls ? 16 : 0);
+    if (calls && g->nsaved % 2 == 1 && !a64_is_fpreg(g->saved_reg[g->nsaved - 1]) &&
+        (g->nsaved == 1 || g->saved_off[g->nsaved - 1] != g->saved_off[g->nsaved - 2] + 8)) {
+        sp.lone = g->nsaved - 1;
+        if (g->saved_off[sp.lone] == -g->locals_size)
+            sp.rest = (g->locals_size - 16 + g->outgoing + 15) / 16 * 16;
+    }
+    sp.size = sp.rest + (calls ? 16 : 0);
     if (!aarch64_frame_pointer && is_leaf(g)) {
         // nothing
-    } else if (!aarch64_frame_pointer && fr.size <= 4095 && saves_fit(g, &fr) &&
-               rebase_to_sp(g, &fr)) {
+    } else if (!aarch64_frame_pointer && sp.size <= 4095 && saves_fit(g, &sp) &&
+               rebase_to_sp(g, &sp)) {
+        fr      = sp;
         fr.kind = FRAME_SP;
-        gen_addr(g, A64_SP, A64_SP, -fr.size);
-        if (fr.calls)
-            emit2(g, A64_STR, a64_reg(A64_LR, A64_X), frame_mem(&fr, 8));
-        save_regs(g, &fr, false);
+        sp_frame(g, &fr, false);
     } else {
         fr.kind = FRAME_FP;
         emit3(g, A64_STP, a64_reg(A64_FP, A64_X), a64_reg(A64_LR, A64_X), a64_mem_pre(A64_SP, -16));

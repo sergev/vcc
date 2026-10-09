@@ -148,7 +148,20 @@ typedef struct A64_Instr {
     A64_Op op;
     A64_Operand opnd[A64_MAX_OPERANDS];
     bool is_volatile; // selected for a volatile access: the peephole keeps it as it is
+    bool args_known;  // bl/blr: `args` holds the argument registers the call reads
+    uint64_t args;    // a64_reg_bit of each
 } A64_Instr;
+
+// A register as one bit of a set: bit n for xn (x0-x30), 31 + n for vn; 0 for sp, the
+// zero register or a virtual register.
+static inline uint64_t a64_reg_bit(int reg)
+{
+    if (reg >= A64_X0 && reg <= A64_LR)
+        return 1ull << (reg - A64_X0);
+    if (reg >= A64_V0 && reg < A64_VREG)
+        return 1ull << (31 + reg - A64_V0);
+    return 0;
+}
 
 typedef struct A64_Block {
     struct A64_Block *next;
