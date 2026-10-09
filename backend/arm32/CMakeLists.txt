@@ -22,6 +22,7 @@ target_link_libraries(arm32 backend_common tac libutil)
 # book suite.  Run tests skip themselves when the ARM32 tools are absent.
 #
 add_executable(arm32-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp

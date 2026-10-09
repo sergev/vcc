@@ -7,8 +7,8 @@
 
 #include "avr_ir.h"
 
-// A symbol; quoted when it has a `$` (a static local's name$N), which GNU avr-as takes
-// only so.
+// A symbol; quoted when it has a `$` (a static local's name$N, a coroutine's f$resume),
+// which GNU avr-as takes only so.
 void avr_put_sym(FILE *out, const char *sym)
 {
     if (strchr(sym, '$'))
@@ -64,7 +64,7 @@ static void emit_operand(FILE *out, const AVR_Operand *o)
         fprintf(out, "%s+%" PRId64, ptr_name[o->reg], o->imm);
         break;
     case AVR_OPND_LABEL:
-        fputs(o->sym, out);
+        avr_put_sym(out, o->sym); // a call's callee may be f$resume
         break;
     }
 }
@@ -100,16 +100,26 @@ void avr_emit_header(FILE *out)
 void avr_emit_func(FILE *out, const AVR_Func *fn)
 {
     fprintf(out, "    .text\n");
-    if (fn->global)
-        fprintf(out, "    %-7s %s\n", ".globl", fn->name);
+    if (fn->global) {
+        fprintf(out, "    %-7s ", ".globl");
+        avr_put_sym(out, fn->name);
+        fputc('\n', out);
+    }
     fprintf(out, "    .p2align 1\n");
-    fprintf(out, "    %-7s %s, @function\n", ".type", fn->name);
-    fprintf(out, "%s:\n", fn->name);
+    fprintf(out, "    %-7s ", ".type");
+    avr_put_sym(out, fn->name);
+    fprintf(out, ", @function\n");
+    avr_put_sym(out, fn->name);
+    fprintf(out, ":\n");
     for (const AVR_Block *b = fn->blocks; b; b = b->next) {
         if (b->label)
             fprintf(out, "%s:\n", b->label);
         for (const AVR_Instr *in = b->head; in; in = in->next)
             avr_emit_instr(out, in);
     }
-    fprintf(out, "    %-7s %s, .-%s\n", ".size", fn->name, fn->name);
+    fprintf(out, "    %-7s ", ".size");
+    avr_put_sym(out, fn->name);
+    fputs(", .-", out);
+    avr_put_sym(out, fn->name);
+    fputc('\n', out);
 }

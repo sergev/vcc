@@ -21,6 +21,7 @@ target_link_libraries(riscv backend_common tac libutil)
 # book suite.  Run tests skip themselves when the RISC-V tools are absent.
 #
 add_executable(riscv-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
@@ -66,6 +67,7 @@ gtest_discover_tests(riscv-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOUT 
 # and qemu.  Golden assembly stays rv64 only.
 #
 add_executable(riscv32-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/rv32_tests.cpp
     test/llong_tests.cpp
     test/interop_tests.cpp

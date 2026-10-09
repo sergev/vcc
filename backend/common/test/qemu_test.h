@@ -213,4 +213,26 @@ protected:
         }
         return ReadFile(out_path);
     }
+
+    // Assemble `asm_text`, another unit of the program, and link it into every run of
+    // the test from here on.  `tag` names its scratch files.
+    void AddUnit(const std::string &asm_text, const char *tag)
+    {
+        std::string base   = QemuScratchPath(tag);
+        std::string s_path = base + ".s", o_path = base + ".o", log_path = base + ".log";
+        {
+            std::ofstream s(s_path);
+            s << asm_text;
+        }
+        std::vector<std::string> as = config.assembler;
+        if (as.empty()) {
+            as.push_back(config.clang);
+            as.insert(as.end(), config.target_flags.begin(), config.target_flags.end());
+            as.push_back("-c");
+        }
+        as.insert(as.end(), { "-o", o_path, s_path });
+        int rc = RunTool(as, log_path);
+        EXPECT_EQ(0, rc) << "assembler failed on " << s_path << ":\n" << ReadFile(log_path);
+        config.extra_libs.push_back(o_path);
+    }
 };

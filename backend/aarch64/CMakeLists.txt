@@ -24,6 +24,7 @@ set(AARCH64_BOOK_SOURCES ${BOOK_TEST_SOURCES})
 list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter[0-9]+_tests[0-9]*\\.cpp$")
 
 add_executable(aarch64-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
@@ -80,6 +81,7 @@ gtest_discover_tests(aarch64-tests EXTRA_ARGS --gtest_repeat=1 PROPERTIES TIMEOU
 set(darwin_dir ${CMAKE_CURRENT_BINARY_DIR}/darwin)
 file(MAKE_DIRECTORY ${darwin_dir})
 add_executable(aarch64-darwin-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/darwin_tests.cpp
     test/interop_tests.cpp
     test/printf_tests.cpp
@@ -108,7 +110,8 @@ target_compile_definitions(aarch64-darwin-tests PRIVATE
     TEST_INCLUDE_DIR="${AARCH64_INCLUDE_DIR}"
     TEST_MODEL_INCLUDE_DIR="${LP64_INCLUDE_DIR}"
     TEST_COMMON_INCLUDE_DIR="${LIBC_COMMON_INCLUDE_DIR}"
-    AARCH64_DARWIN_CC="${AARCH64_DARWIN_CC}")
+    AARCH64_DARWIN_CC="${AARCH64_DARWIN_CC}"
+    AARCH64_DARWIN_LIB_DIR="${AARCH64_DARWIN_LIB_DIR}")
 target_include_directories(aarch64-darwin-tests PRIVATE test)
 test_chdir_to_bindir(aarch64-darwin-tests)
 gtest_discover_tests(aarch64-darwin-tests TEST_PREFIX darwin. EXTRA_ARGS --gtest_repeat=1

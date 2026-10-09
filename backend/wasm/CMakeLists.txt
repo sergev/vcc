@@ -21,6 +21,7 @@ target_link_libraries(wasm backend_common tac libutil)
 # suite.  Run tests skip themselves when clang, wasm-ld or node is absent.
 #
 add_executable(wasm32-tests
+    ../common/test/coro/coro_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/int_tests.cpp

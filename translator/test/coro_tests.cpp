@@ -141,3 +141,25 @@ TEST_F(TranslateTestWasm32, CoroutineDispatchTable)
     for (const char *s : { "kind: jump_table", "- %co.start", "- %co.resume3", "default: %co.start" })
         EXPECT_TRUE(Has(three, s)) << s << "\n" << three;
 }
+
+// Elsewhere the backend has no jump table, and the dispatch is a chain of compares
+// however many points there are.  The labels carry the coroutine's name, since two
+// coroutines of a unit share the assembler's namespace.
+TEST_F(TranslateTestX86, CoroutineDispatchChainOnly)
+{
+    std::string yaml = CompileToYaml("_Coro(int) void h(void) { _Yield 1; _Yield 2; _Yield 3; }\n"
+                                     "_Coro(int) void k(void) { _Yield 1; }");
+    EXPECT_FALSE(Has(yaml, "kind: jump_table")) << yaml;
+    for (const char *s : { "name: %co.resume3.h", "name: %co.resume1.k" })
+        EXPECT_TRUE(Has(yaml, s)) << s << "\n" << yaml;
+}
+
+// The frame header follows the target: 2 unsigned and 4 pointers, 40 bytes on LP64,
+// so the value is read 40 bytes into the frame.
+TEST_F(TranslateTestX86, CoroutineHeaderLp64)
+{
+    std::string yaml = CompileToYaml("int r(_Coro_frame(int, void) *f) { return __co_value(f); }");
+    size_t at        = yaml.find("fun_name: __coro_value");
+    ASSERT_NE(std::string::npos, at) << yaml;
+    EXPECT_TRUE(Has(yaml.substr(at, 400), "value: 40")) << yaml.substr(at, 400);
+}

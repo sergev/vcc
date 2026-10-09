@@ -124,6 +124,26 @@ static Tac_Type *desc_type(bool with_ptr)
 // The words of a descriptor.
 enum { DESC_SIZE, DESC_ALIGN, DESC_INIT, DESC_RESUME };
 
+// A word of a descriptor holding `n`: a size_t.
+static Tac_StaticInit *size_init(unsigned n)
+{
+    Tac_StaticInit *w;
+    switch (target_config->pointer_size) {
+    case 2:
+        w               = tac_new_static_init(TAC_STATIC_INIT_U16);
+        w->u.ushort_val = (uint16_t)n;
+        break;
+    case 8:
+        w              = tac_new_static_init(TAC_STATIC_INIT_U64);
+        w->u.ulong_val = n;
+        break;
+    default:
+        w             = tac_new_static_init(TAC_STATIC_INIT_U32);
+        w->u.uint_val = n;
+    }
+    return w;
+}
+
 // The type every init function a descriptor holds has: void (char *, void *).
 static Tac_Type *ptr_init_type(void)
 {
@@ -826,6 +846,21 @@ typedef struct {
     Tac_Instruction *head, *tail; // the rewritten body
 } Split;
 
+// The label of the dispatch's entry `k` (0: the start), with the coroutine's name (f of
+// f$resume): the labels of a unit share one namespace in most assemblers, and `$` is
+// a separator in some (avr-as).
+static char *entry_label(const Split *s, int k)
+{
+    const char *f = s->fn->u.function.name;
+    int n         = (int)strcspn(f, "$");
+    char *l       = xalloc(strlen(f) + 32, __func__, __FILE__, __LINE__);
+    if (k == 0)
+        sprintf(l, "%%co.start.%.*s", n, f);
+    else
+        sprintf(l, "%%co.resume%d.%.*s", k, n, f);
+    return l;
+}
+
 static int type_size(const Tac_Type *t)
 {
     Tac_Layout layout;
@@ -852,10 +887,29 @@ static int type_align(const Tac_Type *t)
         return type_align(t->u.array.elem_type);
     case TAC_TYPE_STRUCTURE:
         return t->u.structure.alignment > 0 ? t->u.structure.alignment : 1;
-    default: {
-        int s = type_size(t);
-        return s > 16 ? 16 : s;
-    }
+    case TAC_TYPE_SHORT:
+    case TAC_TYPE_USHORT:
+        return (int)target_config->short_align;
+    case TAC_TYPE_INT:
+    case TAC_TYPE_UINT:
+        return (int)target_config->int_align;
+    case TAC_TYPE_LONG:
+    case TAC_TYPE_ULONG:
+        return (int)target_config->long_align;
+    case TAC_TYPE_LONG_LONG:
+    case TAC_TYPE_ULONG_LONG:
+        return (int)target_config->llong_align;
+    case TAC_TYPE_FLOAT:
+        return (int)target_config->float_align;
+    case TAC_TYPE_DOUBLE:
+        return (int)target_config->double_align;
+    case TAC_TYPE_LONG_DOUBLE:
+        return (int)target_config->ldouble_align;
+    case TAC_TYPE_POINTER:
+    case TAC_TYPE_FUN_TYPE:
+        return (int)target_config->pointer_align;
+    default:
+        return 1; // the chars
     }
 }
 
@@ -1312,10 +1366,8 @@ static void put_suspension(Split *s, Tac_Instruction *call, int k)
     Tac_Instruction *ret = tac_new_instruction(TAC_INSTRUCTION_RETURN);
     ret->u.return_.src   = val_int(0);
     put(s, ret);
-    char label[32];
-    snprintf(label, sizeof label, "%%co.resume%d", k);
     Tac_Instruction *lab = tac_new_instruction(TAC_INSTRUCTION_LABEL);
-    lab->u.label.name    = xstrdup(label);
+    lab->u.label.name    = entry_label(s, k);
     put(s, lab);
     if (call->u.fun_call.dst) {
         char *f  = put_offset(s, CO_FLAGS, &(Tac_Type){ .kind = TAC_TYPE_INT });
@@ -1419,16 +1471,13 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
         jt->u.jump_table.index     = val_var(st);
         jt->u.jump_table.count     = k + 1;
         jt->u.jump_table.targets   = xalloc((k + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
-        jt->u.jump_table.targets[0] = xstrdup("%co.start");
-        for (int i = 1; i <= k; i++) {
-            char label[32];
-            snprintf(label, sizeof label, "%%co.resume%d", i);
-            jt->u.jump_table.targets[i] = xstrdup(label);
-        }
-        jt->u.jump_table.default_target = xstrdup("%co.start");
+        jt->u.jump_table.targets[0] = entry_label(&s, 0);
+        for (int i = 1; i <= k; i++)
+            jt->u.jump_table.targets[i] = entry_label(&s, i);
+        jt->u.jump_table.default_target = entry_label(&s, 0);
         put(&s, jt);
         Tac_Instruction *start = tac_new_instruction(TAC_INSTRUCTION_LABEL);
-        start->u.label.name    = xstrdup("%co.start");
+        start->u.label.name    = entry_label(&s, 0);
         put(&s, start);
         xfree(st);
     } else if (k > 0) {
@@ -1444,11 +1493,9 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
             eq->u.binary.src2   = val_uint((unsigned)i);
             eq->u.binary.dst    = val_var(c);
             put(&s, eq);
-            char label[32];
-            snprintf(label, sizeof label, "%%co.resume%d", i);
             Tac_Instruction *j          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
             j->u.jump_if_not_zero.condition = val_var(c);
-            j->u.jump_if_not_zero.target    = xstrdup(label);
+            j->u.jump_if_not_zero.target    = entry_label(&s, i);
             put(&s, j);
             xfree(c);
         }
@@ -1540,10 +1587,8 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     desc->u.static_variable.name   = suffixed(info->name, "$co");
     desc->u.static_variable.global = info->global;
     desc->u.static_variable.type   = desc_type(info->with_ptr);
-    Tac_StaticInit *size           = tac_new_static_init(TAC_STATIC_INIT_U32);
-    size->u.uint_val               = (uint32_t)end;
-    Tac_StaticInit *al             = tac_new_static_init(TAC_STATIC_INIT_U32);
-    al->u.uint_val                 = (uint32_t)align;
+    Tac_StaticInit *size           = size_init((unsigned)end);
+    Tac_StaticInit *al             = size_init((unsigned)align);
     size->next                     = al;
     desc->u.static_variable.init_list = size;
     init->next                     = desc;

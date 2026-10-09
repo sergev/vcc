@@ -58,7 +58,7 @@ _Noreturn static void trap(const char *name)
 /* co_init, co_alloca and an arena await: a frame of desc[0] bytes aligned to desc[1] at
    the front of `bytes` of storage, the rest its arena.  With no parent it is the root of
    a task of its own; an arena await's belongs to the task of its parent, the awaiter. */
-void *__coro_setup(void *storage, size_t bytes, const unsigned *desc, int (*resume)(void *),
+void *__coro_setup(void *storage, size_t bytes, const size_t *desc, int (*resume)(void *),
                    void *parent)
 {
     struct co_header *h = storage;
