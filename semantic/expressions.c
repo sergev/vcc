@@ -97,7 +97,8 @@ static Expr *typecheck_var(Expr *e)
         printf("--- %s()\n", __func__);
     }
     const Symbol *sym = symtab_get(e->u.var);
-    check_coroutine_name(sym);
+    if (coroutine_value(e, sym))
+        return e; // a coroutine's name as a value: its coro_ptr
 
     // A block-scope static is keyed in the symtab by its source name but carries a distinct
     // backend name (so sibling-block repeats stay unique); rewrite the reference to it so the
@@ -758,6 +759,12 @@ static Expr *typecheck_expr(Expr *e)
             free_type(func->type);
             func->type = clone_type(sym->type, __func__, __FILE__, __LINE__);
             fn_type    = unalias(func->type);
+            if (coro_desc_target(fn_type)) {
+                free_type(e->type);
+                e->type = clone_type(typecheck_coro_ptr_call(e, coro_desc_target(fn_type)),
+                                     __func__, __FILE__, __LINE__);
+                return e;
+            }
             if (fn_type->kind == TYPE_POINTER)
                 fn_type = unalias(fn_type->u.pointer.target); // function pointer decay
             if (fn_type->kind != TYPE_FUNCTION)
@@ -765,6 +772,13 @@ static Expr *typecheck_expr(Expr *e)
         } else {
             func    = typecheck_and_decay(func);
             fn_type = unalias(func->type);
+            if (coro_desc_target(fn_type)) {
+                e->u.call.func = func;
+                free_type(e->type);
+                e->type = clone_type(typecheck_coro_ptr_call(e, coro_desc_target(fn_type)),
+                                     __func__, __FILE__, __LINE__);
+                return e;
+            }
             if (fn_type->kind == TYPE_POINTER)
                 fn_type = unalias(fn_type->u.pointer.target);
             if (fn_type->kind != TYPE_FUNCTION)

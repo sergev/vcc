@@ -140,8 +140,8 @@ void validate_type(const Type *t)
         break;
     case TYPE_STRUCT:
     case TYPE_UNION: {
-        if (is_frame_type(t)) {
-            check_frame_type(t); // _Coro_frame(Y, T): never defined, nothing to cache
+        if (is_coro_struct(t)) {
+            check_frame_type(t); // _Coro_frame(Y, T), _Coro_ptr(Y, T): never defined
             break;
         }
         // A reference such as `union x foo;` must agree with the tag's declared keyword.
@@ -290,7 +290,7 @@ Type *common_pointer_type(const Expr *e1, const Expr *e2)
         const Type *t1 = unalias(p1->u.pointer.target), *t2 = unalias(p2->u.pointer.target);
         if ((t1->kind == TYPE_STRUCT || t1->kind == TYPE_UNION) &&
             (strcmp(t1->u.struct_t.name, t2->u.struct_t.name) != 0 ||
-             (is_frame_type(t1) && !same_frame_type(t1, t2))))
+             (is_coro_struct(t1) && !same_frame_type(t1, t2))))
             fatal_error("Incompatible pointer types");
         return e1->type;
     }
@@ -373,8 +373,8 @@ bool compatible_type(const Type *target, const Type *src)
         return compatible_type(target->u.atomic.base, src->u.atomic.base);
     case TYPE_STRUCT:
     case TYPE_UNION:
-        if (is_frame_type(target) || is_frame_type(src))
-            return is_frame_type(target) && is_frame_type(src) && same_frame_type(target, src);
+        if (is_coro_struct(target) || is_coro_struct(src))
+            return is_coro_struct(target) && is_coro_struct(src) && same_frame_type(target, src);
         return strcmp(target->u.struct_t.name, src->u.struct_t.name) == 0;
     default:
         // Leaf types (scalars, enum, void, typedef name): the kind equality

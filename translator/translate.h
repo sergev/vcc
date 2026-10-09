@@ -251,8 +251,10 @@ typedef struct {
     bool global;
     int frame_start;  // the end of the value and the result: where the rest goes
     int frame_align;
+    bool with_ptr;    // takes (void) or (void *): f$co holds init and resume too
 } CoroSplit;
 Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info);
+Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type); // a coroutine's name as a value
 
 //
 // Convert one external declaration to TAC and optimize each function it yields.

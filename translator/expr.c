@@ -1404,6 +1404,9 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
                 tac_append(ctx, in);
                 return val_var(dst->u.var_name);
             }
+            // A coroutine's name used as a value is its coro_ptr: the descriptor's address.
+            if (sym && sym->kind == SYM_FUNC && sym->u.func.coro)
+                return gen_coro_ptr(ctx, e->u.var, e->type);
             // A function designator used as a value decays to a pointer-to-function
             // (C11 §6.3.2.1p4).  Its symbol has function type while a function-pointer
             // *variable*'s symbol has pointer type, so the symbol kind disambiguates.

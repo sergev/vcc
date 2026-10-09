@@ -718,3 +718,125 @@ int main(void)
 }
 )"));
 }
+
+// coro_ptr (phase C9): a table of coroutines of one type that take (void) or
+// (void *), set up, measured and started through the pointers; await of a coro_ptr in a
+// coroutine; co_alloca through one; pointers compared.
+TEST_F(WasmTest, CoroPtr)
+{
+    EXPECT_EQ("task 0: header 1 align 4\ntask 1: header 1 align 4\ntask 2: header 1 align 4\n"
+              "  0 yields 1\n  1 yields 100\n  2 yields 1\n  0 yields 2\n  1 yields 200\n"
+              "  2 yields 2\n  0 yields 3\n  1 returns 7\n  2 returns 21\n  0 returns 30\n"
+              "alloca'd: 100, same 1, null 1\n",
+              CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+
+static coro(int) int count(void *arg)
+{
+    int n = *(int *)arg;
+    for (int i = 1; i <= n; i++)
+        yield i;
+    return n * 10;
+}
+
+static coro(int) int twice(void)
+{
+    yield 100;
+    yield 200;
+    return 7;
+}
+
+static coro(int) int chain(void *arg)
+{
+    coro_ptr(int, int) p = count;
+    int r = await p(arg);
+    return r + 1;
+}
+
+coro_ptr(int, int) table[] = { count, twice, chain };
+
+int main(void)
+{
+    int three = 3, two = 2;
+    void *args[] = { &three, 0, &two };
+    static char storage[3][1024];
+    co_frame(int, int) *f[3];
+    for (int i = 0; i < 3; i++) {
+        printf("task %d: header %d align %d\n", i, co_sizeof(table[i]) > 24, (int)co_alignof(table[i]));
+        f[i] = co_init(storage[i], sizeof storage[i], table[i], args[i]);
+    }
+    int live = 3;
+    while (live) {
+        live = 0;
+        for (int i = 0; i < 3; i++) {
+            if (co_done(f[i]))
+                continue;
+            if (co_resume(f[i]) == CO_SUSPENDED) {
+                printf("  %d yields %d\n", i, co_value(f[i]));
+                live++;
+            } else {
+                printf("  %d returns %d\n", i, co_result(f[i]));
+            }
+        }
+    }
+    coro_ptr(int, int) q = twice;
+    co_frame(int, int) *g = co_alloca(q, 0);
+    co_resume(g);
+    printf("alloca'd: %d, same %d, null %d\n", co_value(g), q == table[1], q != 0);
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// coro_ptr across units: the descriptors are defined where the coroutines are, and a
+// static table in another unit points at them.
+TEST_F(WasmTest, CoroPtrTwoUnits)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    std::string gens = CompileToWasm(R"(
+#include <coro.h>
+coro(int) int upto(void *arg)
+{
+    for (int i = 1; i <= *(int *)arg; i++)
+        yield i;
+    return -1;
+}
+coro(int) int once(void)
+{
+    yield 42;
+    return 0;
+}
+)");
+    NextUnit();
+    std::string s_path = ScratchPath("-gens.s"), o_path = ScratchPath("-gens.o");
+    FILE *f            = fopen(s_path.c_str(), "w");
+    ASSERT_NE(nullptr, f);
+    fputs(gens.c_str(), f);
+    fclose(f);
+    std::vector<std::string> as = Config().assembler;
+    as.insert(as.end(), { "-o", o_path, s_path });
+    ASSERT_EQ(0, RunTool(as, ScratchPath("-gens.log")));
+    Config().extra_libs.push_back(o_path);
+
+    EXPECT_EQ("1 2 3 (-1) 42 (0) \n", CompileAndRunWasm(R"(
+#include <coro.h>
+#include <stdio.h>
+coro(int) int upto(void *arg);
+coro(int) int once(void);
+static coro_ptr(int, int) table[] = { upto, once };
+int main(void)
+{
+    int three = 3;
+    for (int i = 0; i < 2; i++) {
+        co_frame(int, int) *p = co_alloca(table[i], 0, &three);
+        while (co_resume(p) == CO_SUSPENDED)
+            printf("%d ", co_value(p));
+        printf("(%d) ", co_result(p));
+    }
+    printf("\n");
+    return 0;
+}
+)"));
+}

@@ -242,7 +242,7 @@ void f(void) { char buf[64]; __co_init(buf, sizeof buf, g, 1); }
 TEST_F(CoroTest, SizeofExpression_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("unsigned long f(void) { return co_sizeof(range + 1); }").c_str()),
-                 "co_sizeof needs the name of a coroutine");
+                 "Coroutine 'range' may only be named in");
 }
 
 TEST_F(CoroTest, AllocaArguments_Neg)
@@ -449,4 +449,90 @@ TEST_F(BraamMainTest, VoidResult)
                               "_Coro(braam_call *) void main(int c, char **v) { }")
                                  .c_str()),
                  "it does not return int");
+}
+
+// --- coro_ptr (phase C9) ---------------------------------------------------
+
+static const char *const tasks = R"(
+#include <coro.h>
+coro(int) int a(void *arg) { yield 1; return 0; }
+coro(int) int b(void) { yield 2; return 1; }
+)";
+
+// A coroutine that takes (void) or (void *) converts to its coro_ptr: in a static table,
+// an assignment, an argument, a comparison; the operations take the pointer.
+TEST_F(CoroTest, CoroPtr)
+{
+    RunPipeline((std::string(tasks) + R"(
+static coro_ptr(int, int) table[] = { a, b, 0 };
+static int run(coro_ptr(int, int) p, void *arg)
+{
+    co_frame(int, int) *f = co_alloca(p, 0, arg);
+    co_resume(f);
+    return co_value(f) + (int)co_sizeof(p) + (int)co_alignof(p);
+}
+coro(int) int c(void *arg)
+{
+    coro_ptr(int, int) p = arg ? a : b;
+    return await p(arg) + await table[1]();
+}
+int main(void)
+{
+    static char storage[256];
+    coro_ptr(int, int) p = b;
+    co_frame(int, int) *f = co_init(storage, sizeof storage, table[0]);
+    return run(a, 0) + (p == table[1]) + (p != 0) + co_done(f);
+}
+)").c_str());
+}
+
+TEST_F(CoroTest, CoroPtrParams_Neg)
+{
+    EXPECT_DEATH(RunPipeline(With("coro_ptr(int, void) p = range;").c_str()),
+                 "may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or "
+                 "used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
+}
+
+TEST_F(CoroTest, CoroPtrTypes_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) + "coro_ptr(char, int) p = a;").c_str()),
+                 "Incompatible types");
+}
+
+TEST_F(CoroTest, CoroPtrAssign_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) +
+                              "void f(coro_ptr(int, int) p, co_frame(int, int) *q) { q = p; }")
+                                 .c_str()),
+                 "");
+}
+
+TEST_F(CoroTest, CoroPtrCall_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) +
+                              "void f(coro_ptr(int, int) p) { p(0); }").c_str()),
+                 "A coro_ptr can only be called by await");
+}
+
+TEST_F(CoroTest, CoroPtrArguments_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) +
+                              "coro(int) int g(coro_ptr(int, int) p) { return await p(0, 0); }")
+                                 .c_str()),
+                 "at most one argument");
+}
+
+TEST_F(CoroTest, CoroPtrYield_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) +
+                              "coro(char) int g(coro_ptr(int, int) p) { return await p(0); }")
+                                 .c_str()),
+                 "another yield type");
+}
+
+TEST_F(CoroTest, CoroPtrSizeof_Neg)
+{
+    EXPECT_DEATH(RunPipeline((std::string(tasks) +
+                              "int f(int *p) { return (int)co_sizeof(p + 1); }").c_str()),
+                 "needs the name of a coroutine or a coro_ptr");
 }

@@ -5,7 +5,9 @@
 // stays `T f(params)`, so calls through co_init, co_alloca and an arena await check
 // their arguments as any call does.  A frame type _Coro_frame(Y, T) is a struct tagged
 // __co_frame that is never defined (the parser builds it); two are the same type when
-// their Y and T are.  Every compile-time rule of §2.4 is here, but for the jumps past
+// their Y and T are.  _Coro_ptr(Y, T) is a pointer to another such struct, tagged
+// __co_desc: the descriptor f$co of a coroutine that takes (void) or (void *), which is
+// what the coroutine's name converts to when it is used as a value.  Every compile-time rule of §2.4 is here, but for the jumps past
 // a co_alloca, which semantic/defer.c checks with those past a defer.
 //
 #include <string.h>
@@ -39,10 +41,25 @@ static const char *op_name(CoOp op)
     return co_op_name[op] + 2;
 }
 
-bool is_frame_type(const Type *t)
+bool is_coro_struct(const Type *t)
 {
     t = unalias(t);
     return t && t->kind == TYPE_STRUCT && t->u.struct_t.frame_yield;
+}
+
+bool is_frame_type(const Type *t)
+{
+    return is_coro_struct(t) && strcmp(unalias(t)->u.struct_t.name, "__co_frame") == 0;
+}
+
+// The descriptor type a coro_ptr(Y, T) points to, or NULL for any other type.
+const Type *coro_desc_target(const Type *t)
+{
+    t = unalias(t);
+    if (!t || t->kind != TYPE_POINTER)
+        return NULL;
+    const Type *d = unalias(t->u.pointer.target);
+    return is_coro_struct(d) && strcmp(d->u.struct_t.name, "__co_desc") == 0 ? d : NULL;
 }
 
 // The frame type a co_frame(Y, T) * points to, or NULL for any other type.
@@ -57,15 +74,16 @@ static const Type *frame_target(const Type *t)
 
 bool same_frame_type(const Type *a, const Type *b)
 {
-    return compatible_type(a->u.struct_t.frame_yield, b->u.struct_t.frame_yield) &&
+    return strcmp(a->u.struct_t.name, b->u.struct_t.name) == 0 &&
+           compatible_type(a->u.struct_t.frame_yield, b->u.struct_t.frame_yield) &&
            compatible_type(a->u.struct_t.frame_result, b->u.struct_t.frame_result);
 }
 
-// A new co_frame(Y, T) *.
-static Type *new_frame_pointer(const Type *y, const Type *t)
+// A new co_frame(Y, T) *, or with `tag` __co_desc a coro_ptr(Y, T).
+static Type *new_coro_pointer(const char *tag, const Type *y, const Type *t)
 {
     Type *frame                    = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
-    frame->u.struct_t.name         = xstrdup("__co_frame");
+    frame->u.struct_t.name         = xstrdup(tag);
     frame->u.struct_t.frame_yield  = clone_type(y, __func__, __FILE__, __LINE__);
     frame->u.struct_t.frame_result = clone_type(t, __func__, __FILE__, __LINE__);
     Type *ptr                      = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
@@ -85,10 +103,25 @@ static void check_value_type(const Type *t, const char *what)
 
 void check_frame_type(const Type *t)
 {
+    const char *what = strcmp(t->u.struct_t.name, "__co_desc") == 0 ? "coro_ptr" : "co_frame";
+    char msg[64];
     validate_type(t->u.struct_t.frame_yield);
     validate_type(t->u.struct_t.frame_result);
-    check_value_type(t->u.struct_t.frame_yield, "The yield type of a co_frame");
-    check_value_type(t->u.struct_t.frame_result, "The result type of a co_frame");
+    snprintf(msg, sizeof msg, "The yield type of a %s", what);
+    check_value_type(t->u.struct_t.frame_yield, msg);
+    snprintf(msg, sizeof msg, "The result type of a %s", what);
+    check_value_type(t->u.struct_t.frame_result, msg);
+}
+
+bool coroutine_has_coro_ptr(const Type *fn_type)
+{
+    const Param *p = unalias(fn_type)->u.function.params;
+    if (!p)
+        return true; // (void), its sentinel stripped: a coroutine always has a prototype
+    const Type *t = unalias(p->type);
+    if (t->kind == TYPE_VOID && !p->name && !p->next)
+        return true; // (void)
+    return !p->next && t->kind == TYPE_POINTER && unalias(t->u.pointer.target)->kind == TYPE_VOID;
 }
 
 static FunctionSpec *coro_spec(const DeclSpec *spec)
@@ -212,8 +245,62 @@ void check_coroutine_name(const Symbol *sym)
 {
     if (sym->kind == SYM_FUNC && sym->u.func.coro)
         fatal_error("Coroutine '%s' may only be named in co_init, co_alloca, co_sizeof, "
-                    "co_alignof or await",
+                    "co_alignof or await, or used as a coro_ptr when it takes (void) or "
+                    "(void *)",
                     sym->name);
+}
+
+bool coroutine_value(Expr *e, const Symbol *sym)
+{
+    if (sym->kind != SYM_FUNC || !sym->u.func.coro)
+        return false;
+    if (!coroutine_has_coro_ptr(sym->type))
+        check_coroutine_name(sym);
+    free_type(e->type);
+    e->type = new_coro_pointer("__co_desc", sym->u.func.yield_type,
+                               unalias(sym->type)->u.function.return_type);
+    return true;
+}
+
+// The argument a coro_ptr's coroutine is started with: none, or one converted to void *.
+static Expr *coro_ptr_args(Expr *args, const char *what)
+{
+    if (!args)
+        return NULL;
+    if (args->next)
+        fatal_error("%s: a coro_ptr takes at most one argument, a void *", what);
+    static const Type void_type = { .kind = TYPE_VOID };
+    Type *void_ptr              = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
+    void_ptr->u.pointer.target  = clone_type(&void_type, __func__, __FILE__, __LINE__);
+    Expr *a                     = coerce_for_assignment(typecheck_and_decay(args), void_ptr);
+    free_type(void_ptr);
+    return a;
+}
+
+const Type *typecheck_coro_ptr_call(Expr *call, const Type *desc)
+{
+    if (!coroutine_call_allowed(call))
+        fatal_error("A coro_ptr can only be called by await");
+    call->u.call.args = coro_ptr_args(call->u.call.args, "await");
+    return desc->u.struct_t.frame_result;
+}
+
+// The coroutine a co_* operation names, or the coro_ptr it is given: an expression
+// typechecked in place, whose descriptor type is returned (NULL for a name).
+static const Type *named_or_pointer(Expr **e, const char *what)
+{
+    if ((*e)->kind == EXPR_VAR) { // a name: a coroutine's, unless a coro_ptr object's
+        const Symbol *sym = symtab_get_opt((*e)->u.var);
+        if (!sym || sym->kind == SYM_FUNC || !coro_desc_target(sym->type)) {
+            named_coroutine(*e, what);
+            return NULL;
+        }
+    }
+    *e               = typecheck_and_decay(*e);
+    const Type *desc = coro_desc_target((*e)->type);
+    if (!desc)
+        fatal_error("%s needs the name of a coroutine or a coro_ptr", what);
+    return desc;
 }
 
 static void check_suspension(const char *what)
@@ -269,9 +356,23 @@ Expr *typecheck_await(Expr *e)
             return e;
         }
     }
-    // The explicit form: a frame the program made.
-    op                = typecheck_and_decay(op);
-    e->u.await_expr   = op;
+    // The explicit form: a frame the program made; or the arena form of a coro_ptr's
+    // coroutine, a call of the coro_ptr.
+    const Expr *outer = arena_call;
+    if (op->kind == EXPR_CALL)
+        arena_call = op;
+    op              = typecheck_and_decay(op);
+    arena_call      = outer;
+    e->u.await_expr = op;
+    if (op->kind == EXPR_CALL) {
+        const Type *desc = coro_desc_target(op->u.call.func->type);
+        if (desc) {
+            check_same_yield(desc->u.struct_t.frame_yield);
+            free_type(e->type);
+            e->type = clone_type(op->type, __func__, __FILE__, __LINE__);
+            return e;
+        }
+    }
     const Type *frame = frame_target(op->type);
     if (!frame)
         fatal_error("await needs a call of a coroutine or a co_frame pointer");
@@ -292,8 +393,9 @@ static Expr *size_argument(Expr *e, const char *what)
 }
 
 // co_init(storage, bytes, f, args...) and co_alloca(f, extra, args...): the arguments
-// before f's own, then f's checked against its parameters.  Returns f's symbol.
-static const Symbol *typecheck_start(Expr *e)
+// before f's own, then f's checked against its parameters, or a coro_ptr's one void *.
+// Sets f's yield and result types.
+static void typecheck_start(Expr *e, const Type **yield, const Type **result)
 {
     CoOp op    = e->u.co_op.op;
     Expr *args = e->u.co_op.args;
@@ -324,13 +426,29 @@ static const Symbol *typecheck_start(Expr *e)
         name->next = size_argument(size, "co_alloca: the extra size");
         args       = name;
     }
-    const Symbol *sym = named_coroutine(name, op_name(op));
-    Expr *tail        = name;
+    Expr *next       = name->next;
+    name->next       = NULL;
+    Expr *orig       = name;
+    const Type *desc = named_or_pointer(&name, op_name(op));
+    name->next       = next;
+    if (args == orig)
+        args = name;
+    else
+        args->next->next = name; // co_init: storage, bytes, then the coroutine
+    Expr *tail = name;
     while (tail->next)
         tail = tail->next;
-    tail->next       = typecheck_call_args(unalias(sym->type), rest);
-    e->u.co_op.args  = args;
-    return sym;
+    if (desc) {
+        tail->next = coro_ptr_args(rest, op_name(op));
+        *yield     = desc->u.struct_t.frame_yield;
+        *result    = desc->u.struct_t.frame_result;
+    } else {
+        const Symbol *sym = symtab_get(name->u.var);
+        tail->next        = typecheck_call_args(unalias(sym->type), rest);
+        *yield            = sym->u.func.yield_type;
+        *result           = result_of(sym);
+    }
+    e->u.co_op.args = args;
 }
 
 Expr *typecheck_co_op(Expr *e)
@@ -341,13 +459,14 @@ Expr *typecheck_co_op(Expr *e)
     switch (op) {
     case CO_OP_INIT:
     case CO_OP_ALLOCA: {
-        const Symbol *sym = typecheck_start(e);
-        type              = new_frame_pointer(sym->u.func.yield_type, result_of(sym));
+        const Type *y, *t;
+        typecheck_start(e, &y, &t);
+        type = new_coro_pointer("__co_frame", y, t);
         break;
     }
     case CO_OP_SIZEOF:
     case CO_OP_ALIGNOF:
-        named_coroutine(e->u.co_op.args, op_name(op));
+        named_or_pointer(&e->u.co_op.args, op_name(op));
         type = new_type(size_kind(), __func__, __FILE__, __LINE__);
         break;
     default: {

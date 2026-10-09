@@ -11,6 +11,7 @@
 #include "string_map.h"
 #include "structtab.h"
 #include "target.h"
+#include "typecheck.h"
 #include "xalloc.h"
 
 // Enable debug output
@@ -880,7 +881,7 @@ static void emit_referenced_string_constants(const Tac_StaticInit *inits, Tac_To
         if (init->kind != TAC_STATIC_INIT_POINTER && init->kind != TAC_STATIC_INIT_FAT_POINTER)
             continue;
         const char *sname = init->u.pointer.name;
-        Symbol *sym       = symtab_get(sname);
+        Symbol *sym       = symtab_get_opt(sname); // f$co has none
         if (sym && sym->kind == SYM_STATIC && sym->u.static_var.literal &&
             sym->u.static_var.init_list) {
             Tac_TopLevel *sv                = tac_new_toplevel(TAC_TOPLEVEL_STATIC_VARIABLE);
@@ -953,7 +954,8 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         tac_free_type(ft->u.fun_type.ret_type);
         ft->u.fun_type.ret_type = tac_new_type(TAC_TYPE_INT);
         coro_pending_fn         = tl;
-        coro_pending            = (CoroSplit){ name, sym->u.func.global, end, align };
+        coro_pending            = (CoroSplit){ name, sym->u.func.global, end, align,
+                                               coroutine_has_coro_ptr(sym->type) };
     }
 
     // A struct return too wide to return by value (type_is_byval_sret) uses the

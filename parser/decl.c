@@ -697,6 +697,9 @@ TypeSpec *parse_type_specifier()
     } else if (current_token == TOKEN_CORO_FRAME) {
         ts                = new_type_spec(TYPE_SPEC_CORO_FRAME);
         ts->u.atomic.type = parse_coro_frame_specifier();
+    } else if (current_token == TOKEN_CORO_PTR) {
+        ts                = new_type_spec(TYPE_SPEC_CORO_FRAME);
+        ts->u.atomic.type = parse_coro_ptr_specifier();
     } else if (current_token == TOKEN_STRUCT || current_token == TOKEN_UNION) {
         ts = parse_struct_or_union_specifier();
     } else if (current_token == TOKEN_ENUM) {
@@ -1064,6 +1067,32 @@ Type *parse_coro_frame_specifier()
     frame->u.struct_t.frame_result = parse_type_name();
     expect_token(TOKEN_RPAREN);
     return frame;
+}
+
+//
+// coro_ptr_specifier (vcc extension)
+//     : CORO_PTR '(' type_name ',' type_name ')'
+//     ;
+// A pointer to a coroutine yielding Y and returning T that takes (void) or (void *):
+// a pointer to a struct tagged __co_desc, never defined, which holds Y and T as a frame
+// type does.  It points at the coroutine's descriptor.
+//
+Type *parse_coro_ptr_specifier()
+{
+    if (parser_debug) {
+        printf("--- %s()\n", __func__);
+    }
+    expect_token(TOKEN_CORO_PTR);
+    expect_token(TOKEN_LPAREN);
+    Type *desc                    = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
+    desc->u.struct_t.name         = xstrdup("__co_desc");
+    desc->u.struct_t.frame_yield  = parse_type_name();
+    expect_token(TOKEN_COMMA);
+    desc->u.struct_t.frame_result = parse_type_name();
+    expect_token(TOKEN_RPAREN);
+    Type *ptr             = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
+    ptr->u.pointer.target = desc;
+    return ptr;
 }
 
 //

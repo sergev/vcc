@@ -12,7 +12,10 @@
 // the frame; each __coro_suspend becomes a return with the state set, and a label the
 // dispatch at the top jumps to.  f$init stores the arguments, and f$co holds the frame's
 // size and alignment for co_sizeof, co_alignof and co_alloca: clang's wasm assembler
-// cannot make the absolute symbols f$size and f$align the plan first meant to use.
+// cannot make the absolute symbols f$size and f$align the plan first meant to use.  A
+// coroutine that takes (void) or (void *) has a coro_ptr, the address of its f$co, which
+// then also holds f$init (or for (void), f$initp, which takes the void * and ignores it)
+// and f$resume, so a frame can be set up and started through the pointer alone.
 //
 #include <string.h>
 
@@ -20,6 +23,7 @@
 #include "liveness.h"
 #include "target.h"
 #include "translate.h"
+#include "typecheck.h"
 #include "xalloc.h"
 
 enum {
@@ -91,13 +95,27 @@ static Tac_Type *resume_type(void)
     return ft;
 }
 
-// The type of f$co: two size_t, the frame's size and alignment.
-static Tac_Type *desc_type(void)
+// The type of f$co: the frame's size and alignment, then for a coroutine with a coro_ptr
+// its init and resume functions, four words in all.
+static Tac_Type *desc_type(bool with_ptr)
 {
     Tac_Type *t          = tac_kind(TAC_TYPE_ARRAY);
     t->u.array.elem_type = size_type();
-    t->u.array.size      = 2;
+    t->u.array.size      = with_ptr ? 4 : 2;
     return t;
+}
+
+// The words of a descriptor.
+enum { DESC_SIZE, DESC_ALIGN, DESC_INIT, DESC_RESUME };
+
+// The type every init function a descriptor holds has: void (char *, void *).
+static Tac_Type *ptr_init_type(void)
+{
+    Tac_Type *ft                    = tac_kind(TAC_TYPE_FUN_TYPE);
+    ft->u.fun_type.param_types      = char_ptr();
+    ft->u.fun_type.param_types->next = void_ptr();
+    ft->u.fun_type.ret_type         = tac_kind(TAC_TYPE_VOID);
+    return ft;
 }
 
 // The type of f$init: void (char *, params...), for coroutine type `fn`.
@@ -274,11 +292,18 @@ void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type)
     emit_return_int(ctx, 1); // CO_DONE
 }
 
+// Does coroutine `g` have a coro_ptr, and so a descriptor of four words?
+static bool has_coro_ptr(const char *g)
+{
+    const Symbol *sym = symtab_get_opt(g);
+    return sym && sym->kind == SYM_FUNC && coroutine_has_coro_ptr(sym->type);
+}
+
 // The descriptor and f$resume of coroutine `g`, declared by EXTERNs.
 static Tac_Val *coro_desc(TacCtx *ctx, const char *g)
 {
     char *name = suffixed(g, "$co");
-    tac_record_extern_tac(ctx, name, desc_type());
+    tac_record_extern_tac(ctx, name, desc_type(has_coro_ptr(g)));
     Tac_Val *v = emit_address(ctx, name, size_type());
     xfree(name);
     return v;
@@ -320,6 +345,56 @@ static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *b
     append(ctx, in);
     tac_record_extern_tac(ctx, init, it);
     xfree(init);
+}
+
+// A coroutine's name used as a value: its coro_ptr, the address of its descriptor.
+Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type)
+{
+    char *name = suffixed(g, "$co");
+    tac_record_extern_tac(ctx, name, desc_type(true));
+    Tac_Val *dst          = new_var_val(ctx, ast_type_to_tac_type(type));
+    Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_GET_ADDRESS);
+    in->u.get_address.src = val_var(name);
+    in->u.get_address.dst = dst;
+    append(ctx, in);
+    xfree(name);
+    return val_var(dst->u.var_name);
+}
+
+// Word `k` of the descriptor at variable `desc`, of type `type` (owned).
+static Tac_Val *desc_word(TacCtx *ctx, const char *desc, int k, Tac_Type *type)
+{
+    Tac_Val *at = emit_offset(ctx, desc, k * (int)target_config->pointer_size, tac_clone_type(type));
+    return emit_load(ctx, at, type);
+}
+
+// Is `e`, a co_* operation's coroutine, a coro_ptr rather than a coroutine's name?
+static bool is_coro_ptr(const Expr *e)
+{
+    return coro_desc_target(e->type) != NULL;
+}
+
+// Like setup_frame, for the coroutine a coro_ptr's descriptor `desc` (a variable)
+// describes: its resume and init functions read from the descriptor, init called
+// through the pointer with the one argument `arg` (NULL: a null pointer).
+static void setup_frame_by_ptr(TacCtx *ctx, const char *desc, Tac_Val *storage, Tac_Val *bytes,
+                               Tac_Val *parent, Expr *arg)
+{
+    Tac_Val *resume     = desc_word(ctx, desc, DESC_RESUME, tac_type_ptr(resume_type()));
+    Tac_Val *sargs[]    = { storage, bytes, val_var(desc), resume, parent ? parent : val_int(0) };
+    Tac_Type *sparams[] = { void_ptr(), size_type(), tac_type_ptr(size_type()),
+                            tac_type_ptr(resume_type()), void_ptr() };
+    tac_free_val(emit_call(ctx, "__coro_setup", void_ptr(), 5, sargs, sparams));
+
+    Tac_Val *init           = desc_word(ctx, desc, DESC_INIT, tac_type_ptr(ptr_init_type()));
+    Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    in->u.fun_call.fun_name = xstrdup(init->u.var_name);
+    in->u.fun_call.indirect = true;
+    in->u.fun_call.fun_type = ptr_init_type();
+    in->u.fun_call.args     = dup_val(storage);
+    in->u.fun_call.args->next = arg ? gen_expr(ctx, arg) : val_int(0);
+    append(ctx, in);
+    tac_free_val(init);
 }
 
 // The frame of the coroutine being lowered.
@@ -416,15 +491,23 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
         Expr *g          = a->next->next;
         // Into a variable: the setup and g$init both take it.
         Tac_Val *p = in_variable(ctx, storage, ast_type_to_tac_type(e->type));
-        setup_frame(ctx, g, dup_val(p), bytes, coro_desc(ctx, g->u.var), NULL, g->next);
+        if (is_coro_ptr(g)) {
+            Tac_Val *desc = in_variable(ctx, gen_expr(ctx, g), ast_type_to_tac_type(g->type));
+            setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(p), bytes, NULL, g->next);
+            tac_free_val(desc);
+        } else {
+            setup_frame(ctx, g, dup_val(p), bytes, coro_desc(ctx, g->u.var), NULL, g->next);
+        }
         return p;
     }
 
     // co_alloca: memory until the end of the block, off the shadow stack in a function
     // and off the task's arena in a coroutine, whose shadow stack goes at each suspension.
     Expr *g       = a;
+    bool by_ptr   = is_coro_ptr(g);
     Tac_Val *sp   = ctx->coro ? NULL : emit_call(ctx, "__builtin_stack_save", void_ptr(), 0, NULL, NULL);
-    Tac_Val *desc = coro_desc(ctx, g->u.var);
+    Tac_Val *desc = by_ptr ? in_variable(ctx, gen_expr(ctx, g), tac_type_ptr(size_type()))
+                           : coro_desc(ctx, g->u.var);
     Tac_Val *size = emit_load(ctx, dup_val(desc), size_type());
     Tac_Val *extra = gen_expr(ctx, a->next);
 
@@ -451,14 +534,19 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
 
     Tac_Val *mem;
     if (ctx->coro) {
-        mem = emit_push(ctx, dup_val(bytes), val_size(16), g->u.var);
+        mem = emit_push(ctx, dup_val(bytes), val_size(16), by_ptr ? "(coro_ptr)" : g->u.var);
     } else {
         Tac_Val *aargs[]    = { dup_val(bytes) };
         Tac_Type *aparams[] = { size_type() };
         mem = emit_call(ctx, "__builtin_alloca", void_ptr(), 1, aargs, aparams);
     }
     Tac_Val *p = in_variable(ctx, mem, ast_type_to_tac_type(e->type));
-    setup_frame(ctx, g, dup_val(p), bytes, desc, NULL, g->next->next);
+    if (by_ptr) {
+        setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(p), bytes, NULL, g->next->next);
+        tac_free_val(desc);
+    } else {
+        setup_frame(ctx, g, dup_val(p), bytes, desc, NULL, g->next->next);
+    }
 
     // The frame is null until the co_alloca runs, so a release that finds it null does
     // nothing: one that ran on another path, or the block entered again.
@@ -527,6 +615,12 @@ static bool is_coroutine_call(const Expr *e)
     return sym && sym->kind == SYM_FUNC && sym->u.func.coro;
 }
 
+// Is `e` a call of a coro_ptr, the arena await of the coroutine it points to?
+static bool is_coro_ptr_call(const Expr *e)
+{
+    return e->kind == EXPR_CALL && is_coro_ptr(e->u.call.func);
+}
+
 // await (docs/Coroutines_in_C.md, section 5): resume the sub-coroutine; while it
 // suspends, suspend too, its value forwarded to our resumer and the signal we are
 // resumed with forwarded into it; its result is the value.  The arena form takes the
@@ -535,9 +629,17 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
 {
     const TacCoro *co = ctx->coro;
     Expr *op          = e->u.await_expr;
-    bool arena        = is_coroutine_call(op);
+    bool by_ptr       = is_coro_ptr_call(op);
+    bool arena        = by_ptr || is_coroutine_call(op);
     Tac_Val *sub;
-    if (arena) {
+    if (by_ptr) {
+        Tac_Val *desc  = in_variable(ctx, gen_expr(ctx, op->u.call.func), tac_type_ptr(size_type()));
+        Tac_Val *size  = desc_word(ctx, desc->u.var_name, DESC_SIZE, size_type());
+        Tac_Val *align = desc_word(ctx, desc->u.var_name, DESC_ALIGN, size_type());
+        sub = in_variable(ctx, emit_push(ctx, dup_val(size), align, "(coro_ptr)"), void_ptr());
+        setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(sub), size, own_frame(ctx), op->u.call.args);
+        tac_free_val(desc);
+    } else if (arena) {
         Expr *g        = op->u.call.func;
         Tac_Val *desc  = coro_desc(ctx, g->u.var);
         Tac_Val *size  = emit_load(ctx, dup_val(desc), size_type());
@@ -556,10 +658,10 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
     char *loop   = new_temp(ctx);
     char *done   = new_temp(ctx);
     emit_label(ctx, loop);
-    const char *g = arena ? op->u.call.func->u.var : NULL;
+    const char *g = arena && !by_ptr ? op->u.call.func->u.var : NULL;
     emit_jump_if(ctx, true,
-                 arena ? emit_direct_resume(ctx, g, dup_val(sub), dup_val(sig))
-                       : emit_resume(ctx, dup_val(sub), dup_val(sig)),
+                 g ? emit_direct_resume(ctx, g, dup_val(sub), dup_val(sig))
+                   : emit_resume(ctx, dup_val(sub), dup_val(sig)),
                  done);
 
     // Suspended: its value is ours, and so is the suspension.
@@ -587,8 +689,8 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
                  emit_binary(ctx, TAC_BINARY_EQUAL, dup_val(signal), val_int(CO_SIGNAL_DESTROY),
                              tac_kind(TAC_TYPE_INT)),
                  over);
-    tac_free_val(arena ? emit_direct_resume(ctx, g, dup_val(sub), val_int(CO_SIGNAL_DESTROY))
-                       : emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
+    tac_free_val(g ? emit_direct_resume(ctx, g, dup_val(sub), val_int(CO_SIGNAL_DESTROY))
+                   : emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
     if (arena)
         emit_pop(ctx, dup_val(sub));
     gen_exits_all(ctx);
@@ -658,14 +760,15 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e)
         return read_frame(ctx, e);
     case CO_OP_SIZEOF:
     case CO_OP_ALIGNOF: {
-        Tac_Val *desc = coro_desc(ctx, e->u.co_op.args->u.var);
-        if (e->u.co_op.op == CO_OP_ALIGNOF) {
-            int word      = (int)target_config->pointer_size;
-            Tac_Val *base = desc;
-            desc          = emit_offset(ctx, base->u.var_name, word, size_type());
-            tac_free_val(base);
-        }
-        return emit_load(ctx, desc, size_type());
+        const Expr *g = e->u.co_op.args;
+        Tac_Val *desc = is_coro_ptr(g) ? in_variable(ctx, gen_expr(ctx, (Expr *)g),
+                                                     tac_type_ptr(size_type()))
+                                       : coro_desc(ctx, g->u.var);
+        Tac_Val *v    = desc_word(ctx, desc->u.var_name,
+                                  e->u.co_op.op == CO_OP_ALIGNOF ? DESC_ALIGN : DESC_SIZE,
+                                  size_type());
+        tac_free_val(desc);
+        return v;
     }
     }
     fatal_error("coroutines: unknown operation %d", (int)e->u.co_op.op);
@@ -1376,19 +1479,48 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     tac_free_type(fn->u.function.type);
     fn->u.function.type     = resume_type();
 
-    // f$co: the frame's size and alignment.
+    // f$co: the frame's size and alignment, and for a coroutine with a coro_ptr its init
+    // and resume functions.
     Tac_TopLevel *desc             = tac_new_toplevel(TAC_TOPLEVEL_STATIC_VARIABLE);
     desc->u.static_variable.name   = suffixed(info->name, "$co");
     desc->u.static_variable.global = info->global;
-    desc->u.static_variable.type   = desc_type();
+    desc->u.static_variable.type   = desc_type(info->with_ptr);
     Tac_StaticInit *size           = tac_new_static_init(TAC_STATIC_INIT_U32);
     size->u.uint_val               = (uint32_t)end;
     Tac_StaticInit *al             = tac_new_static_init(TAC_STATIC_INIT_U32);
     al->u.uint_val                 = (uint32_t)align;
     size->next                     = al;
     desc->u.static_variable.init_list = size;
+    init->next                     = desc;
 
-    init->next = desc;
+    if (info->with_ptr) {
+        // (void): an init that takes the void * as every descriptor's does, and stores
+        // nothing; (void *): f$init itself has that type.
+        const char *init_name = init->u.function.name;
+        if (!init->u.function.params->next) {
+            Tac_TopLevel *initp      = tac_new_toplevel(TAC_TOPLEVEL_FUNCTION);
+            initp->u.function.name   = suffixed(info->name, "$initp");
+            initp->u.function.global = info->global;
+            Tac_Param *pf            = tac_new_param();
+            pf->name                 = xstrdup(s.fp);
+            pf->type                 = char_ptr();
+            pf->next                 = tac_new_param();
+            pf->next->name           = xstrdup("%.arg");
+            pf->next->type           = void_ptr();
+            initp->u.function.params = pf;
+            initp->u.function.type   = ptr_init_type();
+            initp->u.function.body   = tac_new_instruction(TAC_INSTRUCTION_RETURN);
+            desc->next               = initp;
+            init_name                = initp->u.function.name;
+        }
+        Tac_StaticInit *ip       = tac_new_static_init(TAC_STATIC_INIT_POINTER);
+        ip->u.pointer.name       = xstrdup(init_name);
+        Tac_StaticInit *rp       = tac_new_static_init(TAC_STATIC_INIT_POINTER);
+        rp->u.pointer.name       = xstrdup(fn->u.function.name);
+        al->next                 = ip;
+        ip->next                 = rp;
+    }
+
     free_split(&s);
     return init;
 }

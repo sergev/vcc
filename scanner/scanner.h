@@ -53,6 +53,7 @@ enum {
     TOKEN_COMPLEX,              // _Complex
     TOKEN_CORO,                 // _Coro (vcc extension)
     TOKEN_CORO_FRAME,           // _Coro_frame (vcc extension)
+    TOKEN_CORO_PTR,             // _Coro_ptr (vcc extension)
     TOKEN_DEFER,                // _Defer (vcc extension)
     TOKEN_GENERIC,              // _Generic
     TOKEN_IMAGINARY,            // _Imaginary

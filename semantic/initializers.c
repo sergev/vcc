@@ -473,6 +473,26 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
         return pointer_init;
     }
 
+    // A coro_ptr initialized with a coroutine's name: the address of its descriptor.
+    if (var_type->kind == TYPE_POINTER && init->kind == INITIALIZER_SINGLE &&
+        init->u.expr->kind == EXPR_VAR && coro_desc_target(var_type)) {
+        const Symbol *sym = symtab_get(init->u.expr->u.var);
+        if (sym->kind == SYM_FUNC && sym->u.func.coro) {
+            Expr probe = { .kind = EXPR_VAR, .u.var = init->u.expr->u.var };
+            coroutine_value(&probe, sym); // checks it has a coro_ptr, and types it
+            bool same = compatible_type(var_type, probe.type);
+            free_type(probe.type);
+            if (!same)
+                fatal_error("Incompatible types in static pointer initialization");
+            size_t n                     = strlen(sym->name);
+            Tac_StaticInit *pointer_init = tac_new_static_init(TAC_STATIC_INIT_POINTER);
+            pointer_init->u.pointer.name = xalloc(n + sizeof "$co", __func__, __FILE__, __LINE__);
+            memcpy(pointer_init->u.pointer.name, sym->name, n);
+            memcpy(pointer_init->u.pointer.name + n, "$co", sizeof "$co");
+            return pointer_init;
+        }
+    }
+
     // Handle a pointer initialized with a constant address expression (C11 §6.6): an array or
     // function name (decay), &lvalue, and constant pointer arithmetic, composed in any order —
     // e.g. `arr + 2`, `&arr[1] + 1`, `&s.v[2]`, `&o.in.y`, `&arr[1].b`.  eval_addr_const folds

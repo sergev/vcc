@@ -2,7 +2,8 @@
  * <coro.h> — short names for vcc's extensions of C: `defer` on every target, and
  * coroutines on wasm32, where the compiler predefines __vcc_coroutines__
  * (docs/Coroutines_in_C.md).  Without this header the reserved spellings still work:
- * _Defer, _Coro(Y), _Yield, _Await, _Coro_frame(Y, T) and __co_init ... __co_alignof.
+ * _Defer, _Coro(Y), _Yield, _Await, _Coro_frame(Y, T), _Coro_ptr(Y, T) and
+ * __co_init ... __co_alignof.
  */
 #ifndef _CORO_H
 #define _CORO_H
@@ -13,6 +14,7 @@
 #define yield          _Yield
 #define await          _Await
 #define co_frame(Y, T) _Coro_frame(Y, T)
+#define coro_ptr(Y, T) _Coro_ptr(Y, T)
 
 #define co_init    __co_init
 #define co_alloca  __co_alloca

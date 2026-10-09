@@ -165,6 +165,7 @@ static int is_keyword(const char *str)
         { "_Complex", TOKEN_COMPLEX },
         { "_Coro", TOKEN_CORO },
         { "_Coro_frame", TOKEN_CORO_FRAME },
+        { "_Coro_ptr", TOKEN_CORO_PTR },
         { "_Defer", TOKEN_DEFER },
         { "_Generic", TOKEN_GENERIC },
         { "_Imaginary", TOKEN_IMAGINARY },
@@ -819,6 +820,7 @@ const char *token_name(int token)
     case TOKEN_COMPLEX:              return "'_Complex'";
     case TOKEN_CORO:                 return "'_Coro'";
     case TOKEN_CORO_FRAME:           return "'_Coro_frame'";
+    case TOKEN_CORO_PTR:             return "'_Coro_ptr'";
     case TOKEN_DEFER:                return "'_Defer'";
     case TOKEN_GENERIC:              return "'_Generic'";
     case TOKEN_IMAGINARY:            return "'_Imaginary'";

@@ -84,6 +84,11 @@ struct Symbol;
 extern int coro_defer_depth;     // deferred statements around the expression checked
 extern int coro_loop_head_depth; // loop heads around it: no co_alloca there
 bool is_frame_type(const Type *t);                  // _Coro_frame(Y, T)
+bool is_coro_struct(const Type *t);                 // _Coro_frame(Y, T) or the struct of _Coro_ptr(Y, T)
+const Type *coro_desc_target(const Type *t);        // a _Coro_ptr(Y, T)'s struct, else NULL
+bool coroutine_has_coro_ptr(const Type *fn_type);   // takes (void) or (void *)
+bool coroutine_value(Expr *e, const struct Symbol *sym); // a coroutine's name as a value: its coro_ptr
+const Type *typecheck_coro_ptr_call(Expr *call, const Type *desc); // await p(arg): the result type
 bool same_frame_type(const Type *a, const Type *b); // two frame types: Y and T agree
 void check_frame_type(const Type *t);
 void reject_coro_spec(const DeclSpec *spec, const char *name);
