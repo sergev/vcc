@@ -158,7 +158,7 @@ Stage 2 rebuilt by itself gives identical objects.
 runtime (the passes, the driver and every target's libraries), which is all `make install`
 needs. The top-level `CMakeLists.txt` walks every directory at the end and marks each
 `*-tests` target `EXCLUDE_FROM_ALL`, making it a dependency of the custom target `tests`
-(not `test`, which CMake reserves for ctest); GoogleTest itself is fetched
+(not `test`, which CMake reserves for ctest); GoogleTest itself (vendored in `third_party/googletest`) is added
 `EXCLUDE_FROM_ALL`, so it is built only for them. `make test` builds `all tests`; `make run`
 depends on `make test` and then runs `ctest --test-dir build --progress`. A new test
 executable needs nothing more than a name ending in `-tests`.

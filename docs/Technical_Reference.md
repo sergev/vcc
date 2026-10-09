@@ -43,6 +43,7 @@ vcc/
 ├── scripts/        # check_headers.sh, googletest.xml (cppcheck), validate_asdl.py
 ├── semantic/       # symtab, structtab, typetab, typecheck, label_loops, resolve_labels, defer, coroutines, const_convert, target
 ├── tac/            # TAC IR: alloc, print, free, compare, walk, verify, export/import, YAML, Graphviz
+├── third_party/    # googletest/: GoogleTest v1.18.0, vendored
 ├── translator/     # AST→TAC lowering (translate, expr, stmt); lower driver
 ├── CMakeLists.txt  # Root CMake project (project name: c-scanner)
 ├── Makefile        # Convenience: configure, build, test, install
@@ -973,7 +974,7 @@ converted to `int` (C11 §6.4.4.4p10): −1 where plain `char` is signed (x86-64
 - **CMake** minimum 3.10; root project name: `c-scanner`.
 - **C** standard: C11; **C++** for tests: C++17.
 - **Compiler flags:** `-Wall -Werror -Wshadow` for C and C++, and `-Wno-dangling-else` for C++ (GCC 16 flags an unbraced `if` around a GoogleTest `EXPECT_*`; see root `CMakeLists.txt`).
-- **GoogleTest:** FetchContent, tag `v1.15.2`, `BUILD_GMOCK=OFF`.
+- **GoogleTest:** v1.18.0 vendored in `third_party/googletest` (the release's `googletest/` directory only, no googlemock), added `EXCLUDE_FROM_ALL`.
 - **cppcheck:** If `cppcheck` is found, it is attached to C and C++ targets with project-specific suppressions, `scripts/googletest.xml` for tests and `scripts/cppcheck-c11.xml` for C (cppcheck 2.21 ignores `_Noreturn`, so it is mapped to GCC's attribute).
 - **Cross tools:** `scripts/CrossTools.cmake` (`vcc_find_cross`, called by each `libc/<target>/CMakeLists.txt`) looks for the target's GNU binutils by a list of prefixes (`riscv64-unknown-elf`, `aarch64-none-elf`, `arm-none-eabi`, `x86_64-elf` or the host's, `avr`, `msp430-elf`, …) in `PATH`, `~/.local/bin` and Homebrew's directories, and else for a `clang` (also `clang-NN`) that lists the target, `ld.lld` and `llvm-ar`; `-DVCC_CROSS_TOOLS=gnu|llvm` forces one. It sets `<T>_AS` (the assembler command with its flags), `<T>_LD`, `<T>_LDFLAGS`, `<T>_AR` and `<T>_TOOLS_FOUND`, and separately `<T>_CLANG_FOUND`, the tests' reference compiler. `vcc_assemble_crt0` preprocesses `crt0.S` with the C compiler and assembles it. qemu is looked up per target.
 - **Makefile:** Creates `build/`, runs `cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo`, delegates `all` to `$(MAKE) -C build`. Targets: `make` (compiler, runtimes, and all test executables), `make test` (builds `all`, but does not run the tests), `make run` (builds `all`, then runs every test via `ctest --test-dir build` — including the textbook chapter tests), `make install` (see [Installation](#installation)), `make clean`, `make debug` (cmake Debug build into `build`).

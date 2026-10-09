@@ -71,8 +71,8 @@ it takes the usual `-c`, `-S`, `-E`, `-o`, `-D`, `-I`, `-L` and `-l`. `cpp`
 ### Prerequisites
 
 CMake 3.10 or newer and a C11 compiler build the compiler; the hosted targets use that
-same system compiler to assemble and link. The tests also need a C++17 compiler and, at
-the first configure, network access for GoogleTest. Each bare-metal target needs its own
+same system compiler to assemble and link. The tests also need a C++17 compiler
+(GoogleTest is vendored in `third_party/`). Each bare-metal target needs its own
 tools; without them its runtime is not built and its run tests are skipped.
 
 | Target | Assembler and linker | Simulator | Optional reference compiler |

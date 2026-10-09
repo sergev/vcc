@@ -46,7 +46,7 @@ if(NOT (Cppcheck MATCHES "NOTFOUND"))
         "--quiet" # No progress report messages
         "--suppress=badBitmaskCheck" # Allow redundant zero operands
         "--suppress=uninitMemberVarNoCtor" # Allow member variables without initializer
-        "--suppress=*:*/_deps/*" # Ignore issues in Googletest
+        "--suppress=*:*/third_party/*" # Ignore issues in Googletest
         "--library=${CMAKE_SOURCE_DIR}/scripts/googletest.xml" # Parse TEST() macro properly
     )
     set(CMAKE_C_CPPCHECK "${Cppcheck}"
@@ -117,17 +117,10 @@ set(ILP32_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/ilp32/include)
 set(IP16_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/ip16/include)
 set(LIBC_COMMON_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/libc/common/include)
 
-# Download GoogleTest
-include(FetchContent)
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.15.2
-    EXCLUDE_FROM_ALL
-)
-set(BUILD_GMOCK OFF CACHE BOOL "Builds the googlemock subproject" FORCE)
+# GoogleTest v1.18.0, vendored: the googletest/ directory of the release, no googlemock
+set(GOOGLETEST_VERSION 1.18.0)
 set(INSTALL_GTEST OFF CACHE BOOL "Enable installation of googletest" FORCE)
-FetchContent_MakeAvailable(googletest)
+add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 include(GoogleTest)
 enable_testing()
 
