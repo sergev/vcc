@@ -120,12 +120,12 @@ typedef struct {
     X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn")                             \
     X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr")                                           \
     X(UBFX, "ubfx") X(SBFX, "sbfx") X(BFI, "bfi") X(UBFIZ, "ubfiz")                     \
-    X(CMP, "cmp") X(CMN, "cmn") X(CSET, "cset")                                         \
+    X(CMP, "cmp") X(CMN, "cmn") X(CSET, "cset") X(CINC, "cinc")                         \
     X(SXTB, "sxtb") X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth")     \
     X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")   \
     X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb") X(STRH, "strh")                     \
     X(LDP, "ldp") X(STP, "stp") X(ADRP, "adrp")                                         \
-    X(B, "b") X(BCOND, "b.") X(CBZ, "cbz") X(CBNZ, "cbnz")                              \
+    X(B, "b") X(BCOND, "b.") X(CBZ, "cbz") X(CBNZ, "cbnz") X(TBZ, "tbz") X(TBNZ, "tbnz") \
     X(BL, "bl") X(BLR, "blr") X(RET, "ret")                                             \
     X(FMOV, "fmov") X(FADD, "fadd") X(FSUB, "fsub") X(FMUL, "fmul") X(FDIV, "fdiv")     \
     X(FNEG, "fneg") X(FSQRT, "fsqrt") X(FCMP, "fcmp")                                   \
@@ -164,7 +164,8 @@ typedef struct {
 } A64_Func;
 
 // A conditional branch is `b.<cond> label`: BCOND with the condition as its first
-// operand, printed as part of the mnemonic.
+// operand, printed as part of the mnemonic.  A test-bit branch is `tbz reg, #bit, label`,
+// its label the third operand; `cinc d, s, cond` is d = s + 1 when cond holds, else s.
 
 extern const char *const a64_mnemonic[A64_NUM_OPS];
 

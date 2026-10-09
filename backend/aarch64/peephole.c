@@ -39,7 +39,13 @@ static bool is_call(A64_Op op)
 
 static bool is_branch(A64_Op op)
 {
-    return op == A64_BCOND || op == A64_CBZ || op == A64_CBNZ;
+    return op == A64_BCOND || op == A64_CBZ || op == A64_CBNZ || op == A64_TBZ || op == A64_TBNZ;
+}
+
+// The operand that is the label of branch or jump `op`.
+static int label_slot(A64_Op op)
+{
+    return op == A64_B ? 0 : op == A64_TBZ || op == A64_TBNZ ? 2 : 1;
 }
 
 // Operand 0 is read, not written.
@@ -55,6 +61,8 @@ static bool no_dest(A64_Op op)
     case A64_FCMP:
     case A64_CBZ:
     case A64_CBNZ:
+    case A64_TBZ:
+    case A64_TBNZ:
     case A64_B:
     case A64_BCOND:
     case A64_BL:
@@ -263,7 +271,7 @@ static Regs live_at(const char *l)
 
 static const char *branch_target(const A64_Instr *in)
 {
-    return in->opnd[in->op == A64_B ? 0 : 1].sym;
+    return in->opnd[label_slot(in->op)].sym;
 }
 
 // The registers live before `in`, given those live after it.
@@ -1575,6 +1583,158 @@ static bool fold_bitfields(A64_Block *b)
     return false;
 }
 
+static A64_Op invert_branch(A64_Op op)
+{
+    switch (op) {
+    case A64_CBZ:
+        return A64_CBNZ;
+    case A64_CBNZ:
+        return A64_CBZ;
+    case A64_TBZ:
+        return A64_TBNZ;
+    default:
+        return A64_TBZ;
+    }
+}
+
+// The condition operand of an instruction that reads the flags, or NULL.
+static A64_Operand *flag_cond(A64_Instr *in)
+{
+    switch (in->op) {
+    case A64_BCOND:
+        return &in->opnd[0];
+    case A64_CSET:
+        return &in->opnd[1];
+    case A64_CINC:
+        return &in->opnd[2];
+    default:
+        return NULL;
+    }
+}
+
+static bool sets_flags(const A64_Instr *in)
+{
+    return in->op == A64_CMP || in->op == A64_CMN || in->op == A64_FCMP || is_call(in->op);
+}
+
+// The flags `in` leaves are not read: set again first, or the block left.  Code
+// selection never keeps the flags past a branch or a label.
+static bool flags_dead_after(A64_Instr *in)
+{
+    for (A64_Instr *n = in->next; n; n = n->next) {
+        if (flag_cond(n))
+            return false;
+        if (sets_flags(n) || n->op == A64_B || n->op == A64_RET)
+            return true;
+    }
+    return true;
+}
+
+// Whether the value of register w is not read once conditional branch `br` (which
+// reads it) has been passed, on either way.
+static bool dead_past_branch(const A64_Instr *br, int w)
+{
+    return (is_scratch(w) || !live_at_target(br, w)) && dies_after(br, w);
+}
+
+// Whether `in` is `cmp r, #0` at any width.
+static bool is_cmp_zero(const A64_Instr *in)
+{
+    return in->op == A64_CMP && in->opnd[0].kind == A64_OPND_REG && in->opnd[1].kind == A64_OPND_IMM &&
+           in->opnd[1].imm == 0 && in->opnd[2].kind == A64_OPND_NONE;
+}
+
+static int instr_count; // of the function: a tbz/tbnz reaches 32 KiB only
+
+// Rewrites on the flags and the 0/1 of a cset at *link, and the single-bit test:
+//   `cset w, c` + `cmp w, #0` + a read of the flags for eq/ne: the read of c or not c;
+//   `cset w, c` + `cbz`/`cbnz w` at its last read: `b.<not c>`/`b.c`;
+//   `cset w, c` + `add d, a, w` at its last read: `cinc d, a, c`;
+//   `and t, x, #(1 << k)` + `cbz`/`cbnz t` at its last read: `tbz`/`tbnz x, #k`;
+//   `mov t, r` + an instruction writing r + `cmp t, …` at t's last read: the compare of r
+//   ahead of that instruction (the test of `n-- > 0`).
+static bool fold_flags(A64_Instr **link)
+{
+    A64_Instr *in = *link, *n = in->next;
+    if (!n)
+        return false;
+    const A64_Operand *o = in->opnd;
+    if (in->op == A64_CSET && o[0].kind == A64_OPND_REG) {
+        int w      = o[0].reg;
+        A64_Cond c = (A64_Cond)o[1].sub;
+        A64_Instr *r = n->next;
+        A64_Operand *rc;
+        if (is_cmp_zero(n) && n->opnd[0].reg == w && r && (rc = flag_cond(r)) &&
+            (rc->sub == A64_EQ || rc->sub == A64_NE) && flags_dead_after(r)) {
+            rc->sub = rc->sub == A64_NE ? (int)c : (int)(c ^ 1);
+            delete_at(&in->next);
+            if (!reads(r, w) && (is_branch(r->op) ? dead_past_branch(r, w) : last_read(r, w)))
+                delete_at(link);
+            return true;
+        }
+        if ((n->op == A64_CBZ || n->op == A64_CBNZ) && n->opnd[0].reg == w && dead_past_branch(n, w)) {
+            n->opnd[0] = a64_cond(n->op == A64_CBNZ ? c : (A64_Cond)(c ^ 1));
+            n->op      = A64_BCOND;
+            delete_at(link);
+            return true;
+        }
+        A64_Operand *no = n->opnd;
+        if (n->op == A64_ADD && no[0].kind == A64_OPND_REG && no[1].kind == A64_OPND_REG &&
+            no[2].kind == A64_OPND_REG && no[3].kind == A64_OPND_NONE && no[1].width == no[2].width &&
+            (no[1].reg == w) != (no[2].reg == w) && no[1].reg != A64_SP && no[2].reg != A64_SP &&
+            last_read(n, w)) {
+            A64_Operand a = no[1].reg == w ? no[2] : no[1];
+            if (a.reg == A64_ZR)
+                return false;
+            n->op    = A64_CINC;
+            no[1]    = a;
+            no[2]    = a64_cond(c);
+            delete_at(link);
+            return true;
+        }
+        return false;
+    }
+    if (in->op == A64_AND && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_REG &&
+        o[2].kind == A64_OPND_IMM && o[3].kind == A64_OPND_NONE && (n->op == A64_CBZ || n->op == A64_CBNZ) &&
+        n->opnd[0].reg == o[0].reg && instr_count < 8000) {
+        uint64_t m = (uint64_t)o[2].imm & (o[0].width == A64_W ? 0xffffffffull : ~0ull);
+        if (m == 0 || (m & (m - 1)) != 0 || !dead_past_branch(n, o[0].reg))
+            return false;
+        int k      = 0;
+        while (!(m >> k & 1))
+            k++;
+        n->op      = n->op == A64_CBZ ? A64_TBZ : A64_TBNZ;
+        n->opnd[2] = n->opnd[1];
+        n->opnd[1] = a64_imm(k);
+        n->opnd[0] = a64_reg(o[1].reg, k < 32 ? A64_W : A64_X);
+        delete_at(link);
+        return true;
+    }
+    A64_Instr *cmp = n->next;
+    if (in->op == A64_MOV && is_move(in) && !a64_is_fpreg(o[0].reg) && cmp && cmp->op == A64_CMP &&
+        cmp->opnd[0].kind == A64_OPND_REG && cmp->opnd[0].reg == o[0].reg &&
+        (o[0].width == A64_X || cmp->opnd[0].width == A64_W)) {
+        int t = o[0].reg, r = o[1].reg;
+        if (r == A64_SP || r == A64_ZR || t == r || !writes(n, r) || reads(n, t) || writes(n, t) ||
+            sets_flags(n) || flag_cond(n) || is_branch(n->op) || n->op == A64_B || n->op == A64_RET ||
+            reads(cmp, r) || reads_operand(cmp, 1, t) || reads_operand(cmp, 2, t) || !dies_after(cmp, t))
+            return false;
+        for (int i = 1; i < A64_MAX_OPERANDS; i++)
+            if (cmp->opnd[i].kind != A64_OPND_IMM && cmp->opnd[i].reg && writes(n, cmp->opnd[i].reg))
+                return false;
+        // The compare, of r, takes the move's place; r's write follows it.
+        in->op      = A64_CMP;
+        in->opnd[0] = a64_reg(r, cmp->opnd[0].width);
+        for (int i = 1; i < A64_MAX_OPERANDS; i++) {
+            in->opnd[i]  = cmp->opnd[i];
+            cmp->opnd[i] = (A64_Operand){ 0 };
+        }
+        delete_at(&n->next);
+        return true;
+    }
+    return false;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(A64_Instr **link)
 {
@@ -1592,7 +1752,7 @@ static bool rewrite(A64_Instr **link)
     if (in->op == A64_MOV && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_IMM &&
         fold_constant(link))
         return true;
-    if (fold_index(link))
+    if (fold_index(link) || fold_flags(link))
         return true;
     if (is_move(in) && forward_move(link))
         return true;
@@ -1621,7 +1781,7 @@ static bool rewrite(A64_Instr **link)
 // The label a branch or jump goes to.
 static A64_Operand *target(A64_Instr *in)
 {
-    return &in->opnd[in->op == A64_B ? 0 : 1];
+    return &in->opnd[label_slot(in->op)];
 }
 
 // Whether label `l` is on `b` or on an empty block between `b` and the next code.
@@ -1669,7 +1829,7 @@ static bool rewrite_block_end(A64_Block *b)
         if (br->op == A64_BCOND)
             br->opnd[0].sub ^= 1;
         else
-            br->op = br->op == A64_CBZ ? A64_CBNZ : A64_CBZ;
+            br->op = invert_branch(br->op);
         xfree(target(br)->sym);
         *target(br)          = (*jl)->opnd[0];
         (*jl)->opnd[0].sym   = NULL;
@@ -1689,6 +1849,10 @@ static bool rewrite_block_end(A64_Block *b)
 void a64_peephole(A64_Func *fn, unsigned result_in)
 {
     result       = result_in;
+    instr_count  = 0;
+    for (const A64_Block *b = fn->blocks; b; b = b->next)
+        for (const A64_Instr *in = b->head; in; in = in->next)
+            instr_count++;
     bool changed = true;
     while (changed) {
         changed = false;

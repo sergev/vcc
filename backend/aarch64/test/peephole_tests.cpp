@@ -245,6 +245,29 @@ EXPECT_PEEPHOLE(PeepholeLoadSignExtendLong, "ldrsb x0, [x0]\nret\n",
 EXPECT_PEEPHOLE(PeepholeStoreNarrowed, "add w2, w1, #1\nstrb w2, [x0, w1, sxtw]\nret\n",
                 "void f(signed char *p, int x) { signed char c = (signed char)(x + 1); p[x] = c; }")
 
+// The flags: a 0/1 added is cinc, a 0/1 tested again is the first test, a single bit
+// tested is tbz, the old value of `n--` compared ahead of the decrement.
+EXPECT_PEEPHOLE(PeepholeCinc, "cmp w0, w1\ncinc w0, w2, ne\nret\n",
+                "int f(int a, int b, int c) { return c + (a != b); }")
+EXPECT_PEEPHOLE(PeepholeCsetTestedAgain, "cmp w0, w1\ncset w0, lt\nret\n",
+                "int f(int a, int b) { return !(a < b) == 0; }")
+EXPECT_PEEPHOLE(PeepholeTbz, "tbz w0, #3, .L2\nmov w0, w1\nret\nmov w0, #0\nret\n",
+                "int f(unsigned x, int y) { if (x & 8) return y; return 0; }")
+EXPECT_PEEPHOLE(PeepholeTbzHighBit, "tbz x0, #40, .L2\nmov x0, #1\nret\nmov x0, #2\nret\n",
+                "long f(long x) { if (x & (1L << 40)) return 1; return 2; }")
+EXPECT_PEEPHOLE(PeepholeCompareBeforeDecrement, R"(mov w2, #0
+cmp w0, #0
+sub w0, w0, #1
+b.le .LL0
+add w2, w2, w0
+cmp w0, #0
+sub w0, w0, #1
+b.gt .L5
+mov w0, w2
+ret
+)",
+                "int f(int n) { int s = 0; while (n-- > 0) s += n; return s; }")
+
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.
 TEST_F(Aarch64Test, RunPeepholeSize)
@@ -288,8 +311,27 @@ void fill(unsigned *p, int n, unsigned v)
     while (n-- > 0)
         *p++ = v--;
 }
+int bits(unsigned long x)
+{
+    int n = 0;
+    for (int k = 0; k < 64; k++)
+        if (x & (1UL << k))
+            n++;
+    return n;
+}
+int count_ne(const int *a, const int *b, int n)
+{
+    int c = 0;
+    while (n-- > 0)
+        c += *a++ != *b++;
+    return c;
+}
 int main(void)
 {
+    check(bits(0x8000000100000005UL), 4);
+    int x[4] = { 1, 2, 3, 4 }, y[4] = { 1, 0, 3, 0 };
+    check(count_ne(x, y, 4), 2);
+    check(!(x[0] < y[1]) == 0, 0);
     char buf[8];
     copy(buf, "abcdef");
     check(buf[0] + buf[5], 'a' + 'f');
@@ -306,5 +348,5 @@ int main(void)
     return ok ? bit : 100 + bit;
 }
 )");
-    EXPECT_EQ(6, exit_status);
+    EXPECT_EQ(9, exit_status);
 }
