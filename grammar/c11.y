@@ -56,7 +56,7 @@
 %token  ALIGNAS ALIGNOF ATOMIC GENERIC NORETURN STATIC_ASSERT THREAD_LOCAL
 
 /* vcc extension (docs/Coroutines_in_C.md) */
-%token  DEFER CORO CORO_FRAME YIELD AWAIT
+%token  DEFER CORO CORO_FRAME CORO_PTR YIELD AWAIT
 %token  CO_INIT CO_ALLOCA CO_RESUME CO_CANCEL CO_DESTROY CO_DONE CO_VALUE CO_RESULT
 %token  CO_SIZEOF CO_ALIGNOF
 
@@ -307,6 +307,7 @@ type_specifier
     | enum_specifier
     | TYPEDEF_NAME      /* after it has been defined as such */
     | coro_frame_specifier  /* vcc extension */
+    | coro_ptr_specifier    /* vcc extension */
     ;
 
 struct_or_union_specifier
@@ -374,6 +375,12 @@ atomic_type_specifier
 /* vcc extension: the frame of a coroutine yielding the first type, returning the second */
 coro_frame_specifier
     : CORO_FRAME '(' type_name ',' type_name ')'
+    ;
+
+/* vcc extension: a pointer to a coroutine yielding the first type, returning the second,
+   that takes (void) or (void *) */
+coro_ptr_specifier
+    : CORO_PTR '(' type_name ',' type_name ')'
     ;
 
 type_qualifier

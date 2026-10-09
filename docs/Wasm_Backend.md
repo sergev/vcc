@@ -135,8 +135,9 @@ declared by a `.functype` just before the function that uses it.
 
 ### Structured control flow
 
-TAC has labels, `JUMP` and `JUMP_IF_[NOT_]ZERO`, and nothing else: no jump tables
-(`switch` is a chain of comparisons), and no block with more than two successors. Wasm
+TAC has labels, `JUMP` and `JUMP_IF_[NOT_]ZERO`, and one multiway jump: `JUMP_TABLE`,
+which only the coroutine split makes, for the dispatch of a coroutine with three
+suspension points or more. (`switch` is a chain of comparisons.) Wasm
 has no `goto`, only `block`, `loop` and `if`, and branches out of them by depth.
 `structure.c` translates one into the other by Norman Ramsey's method ("Beyond
 Relooper", ICFP 2022):
@@ -155,6 +156,8 @@ Relooper", ICFP 2022):
    follows. Otherwise it is an `if`/`else` with a way in each arm. When both ways go to
    one block it is a plain jump. Falling off the last block returns from a `void`
    function, and is `unreachable` in any other.
+6. A jump table is a `br_table`. Each of its targets counts as a merge node, so it has
+   a block to leave.
 
 The method needs a **reducible** graph. A backward jump to a block that does not
 dominate its source (a `goto` into a loop, Duff's device, a coroutine resumed inside a
@@ -175,7 +178,10 @@ first made reducible, as LLVM's `FixIrreducibleControlFlow` does:
    node in two ways), every jump to an entry is redirected and the work starts again.
 
 Ramsey's translation then runs over that graph; each entry of a dispatch node counts as
-a merge node, so the `br_table` leaves the block in front of it. One `state` local
+a merge node, so the `br_table` leaves the block in front of it. A jump table whose
+entry goes to such a dispatch node must set `state` on the way, which a `br_table`
+entry cannot. That entry leaves a block of its own instead, a trampoline, after which
+`state` is set and the jump made. One `state` local
 serves every dispatch node, since each reads it right after the jump that set it. Code
 outside the irreducible regions keeps its structure.
 

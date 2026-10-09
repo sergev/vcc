@@ -756,6 +756,7 @@ for arithmetic and copies (a constant carries its value over), one floating kind
 | `jump_if_zero` | `condition:` `target: label` |
 | `jump_if_not_zero` | `condition:` `target: label` |
 | `label` | `name: label` |
+| `jump_table` | `index:` `targets:` list of `- label` (index i jumps to the i-th) `default: label` (any other index); made only by the coroutine split, for a dispatch of three suspension points or more (wasm32) |
 | `fun_call` | `fun_name: f` `indirect: true` (omitted when false) `args:` list of `- val:` (omitted when none) `dst:` (omitted for void) `fun_type:` the callee's type |
 | `fun_call_noreturn` | same fields as `fun_call`; a direct call to a `_Noreturn` function |
 

@@ -42,6 +42,7 @@ module C {
          | Function(Type returnType, ParamList params, bool variadic)
          | Struct(Ident? name, Field* fields)
          | CoroFrame(Type yield, Type result)               # vcc extension: _Coro_frame(Y, T)
+         | CoroPtr(Type yield, Type result)                 # vcc extension: _Coro_ptr(Y, T)
          | Union(Ident? name, Field* fields)
          | Enum(Ident? name, Enumerator* enumerators)
          | TypedefName(Ident name)

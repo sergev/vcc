@@ -211,8 +211,11 @@ case 2:
 
 ### The cost
 
-None at run time. The compiler copies the deferred statements onto each exit path.
-Nothing is allocated and no list is kept while the program runs.
+Almost none at run time. The compiler copies the deferred statements onto each exit
+path. When they are long and a block has several exits, the exits share one copy
+instead: each records where it goes next in a hidden variable and jumps to the copy,
+which costs a store and a jump or two. Nothing is allocated and no list is kept while
+the program runs.
 
 ---
 
@@ -322,7 +325,8 @@ Any function except:
 
 A coroutine is not an ordinary function. You cannot call it as `count_to(3)`, and
 you cannot take its address as a function pointer. You use its name only in
-`co_alloca`, `co_init`, `co_sizeof`, `co_alignof` and `await` (section 5).
+`co_alloca`, `co_init`, `co_sizeof`, `co_alignof` and `await` (section 5), or, when it
+takes `(void)` or `(void *)`, as a `coro_ptr` (section 4).
 
 A coroutine may call ordinary functions as usual. An ordinary function may run a
 coroutine with `co_alloca` or `co_init` and `co_resume`, but it cannot `yield` or
@@ -496,6 +500,9 @@ All of them take a frame pointer `f`, except `co_alloca`, `co_init`, `co_sizeof`
 | `co_sizeof(g)` | Bytes of memory a frame of `g` needs. Known when the program runs; not usable as an array size. |
 | `co_alignof(g)` | Alignment a frame of `g` needs. At most 16. Known when the program runs. |
 
+In `co_alloca`, `co_init`, `co_sizeof` and `co_alignof`, `g` may also be a `coro_ptr`
+(below).
+
 The types:
 
 ```c
@@ -508,6 +515,34 @@ call does, and converts them the same way.
 
 These operations look like function calls but are built into the compiler. You
 cannot take their address.
+
+### Pointers to coroutines: `coro_ptr`
+
+A scheduler often keeps a list of coroutines to start, of different code but of one
+shape. `coro_ptr(Y, T)` points to a coroutine that yields `Y`, returns `T`, and takes
+either nothing, `(void)`, or one `void *`. Such a coroutine's name converts to one,
+the way a function's name converts to a function pointer:
+
+```c
+coro(int) int count(void *arg);   /* counts up to *(int *)arg */
+coro(int) int ticks(void);
+
+coro_ptr(int, int) table[] = { count, ticks };
+
+    int n = 3;
+    co_frame(int, int) *f = co_alloca(table[0], 0, &n);   /* runs count(&n) */
+```
+
+`co_alloca`, `co_init`, `co_sizeof`, `co_alignof` and `await` take a `coro_ptr` where
+they take a coroutine's name. The argument is optional and becomes a `void *`; a
+coroutine that takes `(void)` ignores it. A `coro_ptr` can be stored, compared, passed
+and returned like any pointer, and be null. The one thing you cannot do with it is
+call it: `p(arg)` is only allowed after `await`, where it runs the coroutine to its
+end as `await g(args)` does (section 5).
+
+A coroutine with any other parameters has no `coro_ptr`. To put one in a table,
+write a small coroutine that takes a `void *`, unpacks the arguments from it, and
+awaits the real one.
 
 ---
 
@@ -766,7 +801,11 @@ end without stopping.
   function.
 - A coroutine whose return type is not `void` that may run off its end.
 - A coroutine name used other than in `co_alloca`, `co_init`, `co_sizeof`, `co_alignof` or
-  `await`: called directly, assigned, or converted to a function pointer.
+  `await`: called directly, assigned, or converted to a function pointer. The one
+  exception is a coroutine taking `(void)` or `(void *)`, whose name converts to a
+  `coro_ptr`.
+- A `coro_ptr` called other than after `await`, or with more than one argument; a
+  `coro_ptr` given a coroutine of another `Y` or `T`.
 - A jump into a block past one of its `defer`s or `co_alloca`s, including a `case`
   label.
 - A `co_alloca` in the head of a loop (the condition of a `while` or `do`, or a clause
@@ -793,17 +832,36 @@ and exit status 255 under node), in every build:
 A `co_alloca` in an ordinary function that runs out of stack stops the program as any
 stack overflow does.
 
+### Warnings
+
+Two mistakes with memory given to `co_init` are common enough that the compiler warns
+about the plain cases. A warning is printed and compilation goes on.
+
+- **The frame outlives its memory.** The memory is a local array, or `&x` of a local,
+  and the frame pointer is stored where it lives on after the block: in a global or
+  static variable, a variable of an outer block, through a pointer, or returned.
+
+  ```
+  warning: f: the frame of 'gen' outlives its storage 'buf', an automatic object: use static or allocated storage
+  ```
+
+- **The frame may be left stopped.** Such a frame is resumed by a statement that
+  ignores what `co_resume` returns. Nothing in the block destroys the frame, asks
+  `co_done`, reads `co_result` or `await`s it. If the coroutine is still stopped at the
+  end of the block, its `defer`s never run.
+
+  ```
+  warning: f: the frame of 'gen' in 'buf' may be left suspended at the end of the block, its defers never run: co_destroy it, or use co_alloca
+  ```
+
 ### What the language does not catch
 
-- Memory given to `co_init` that goes away while the coroutine is stopped. Finish or
-  `co_destroy` the coroutine first. (A `co_alloca` frame cannot be left behind: the
-  end of its block destroys it.)
+- Memory given to `co_init` that goes away while the coroutine is stopped, beyond the
+  cases warned about above. Finish or `co_destroy` the coroutine first. (A `co_alloca`
+  frame cannot be left behind: the end of its block destroys it.)
 - A `co_alloca` frame pointer used after its block has ended.
 - Copying or moving a frame's memory.
 - Two threads resuming one frame. (wasm32 has no threads.)
-
-Not yet available: pointers to coroutines, for a scheduler that keeps a list of
-different coroutines. They are planned for later.
 
 ---
 
@@ -987,6 +1045,10 @@ int done = co_done(f);
 Y v = co_value(f);                       /* after CO_SUSPENDED */
 T r = co_result(f);                      /* after CO_DONE */
 size_t n = co_sizeof(g), a = co_alignof(g);   /* not constants */
+
+coro_ptr(Y, T) p = g;                    /* g takes (void) or (void *) */
+co_frame(Y, T) *f = co_alloca(p, extra, arg);    /* any operation above, through p */
+T r = await p(arg);
 ```
 
 | Short name | Long name |
@@ -996,4 +1058,5 @@ size_t n = co_sizeof(g), a = co_alignof(g);   /* not constants */
 | `await` | `_Await` |
 | `defer` | `_Defer` |
 | `co_frame(Y, T)` | `_Coro_frame(Y, T)` |
+| `coro_ptr(Y, T)` | `_Coro_ptr(Y, T)` |
 | `co_alloca`, `co_init` … `co_alignof` | `__co_alloca`, `__co_init` … `__co_alignof` |

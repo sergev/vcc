@@ -585,14 +585,16 @@ Stmt = ExprStmt(Expr? expr)
 — [Coroutines_in_C.md](Coroutines_in_C.md) section 1 is the manual.
 
 The coroutines are vcc's extension too, also marked in all three files: the keywords `_Coro`,
-`_Coro_frame`, `_Yield`, `_Await` and the ten operations `__co_init` … `__co_alignof` (short
-names from `<coro.h>`); in `c11.y`, a function specifier `CORO '(' type_name ')'`, a type
-specifier `CORO_FRAME '(' type_name ',' type_name ')'`, and four `unary_expression`
+`_Coro_frame`, `_Coro_ptr`, `_Yield`, `_Await` and the ten operations `__co_init` …
+`__co_alignof` (short names from `<coro.h>`); in `c11.y`, a function specifier `CORO '('
+type_name ')'`, type specifiers `CORO_FRAME '(' type_name ',' type_name ')'` and `CORO_PTR '('
+type_name ',' type_name ')'`, and four `unary_expression`
 alternatives: `YIELD relational_expression`, a bare `YIELD`, `AWAIT cast_expression`, and an
-operation applied to an argument list; in `c11.asdl`, `FunctionSpec.Coro`, `Type.CoroFrame`
-and `Expr.Yield`/`Await`/`CoOp`. `_Yield`'s operand is a relational expression, so
+operation applied to an argument list; in `c11.asdl`, `FunctionSpec.Coro`, `Type.CoroFrame`,
+`Type.CoroPtr` and `Expr.Yield`/`Await`/`CoOp`. `_Yield`'s operand is a relational expression, so
 `yield i == CO_CANCEL` means `(yield i) == CO_CANCEL`. The compiler builds a frame type as a
-`struct __co_frame` that carries its two types and is never defined.
+`struct __co_frame` that carries its two types and is never defined, and a `coro_ptr` as a
+pointer to a `struct __co_desc` built the same way.
 
 `Compound` contains `DeclOrStmt*` — a list of items that can be either declarations or
 statements, reflecting C99's rule that declarations and statements can be freely mixed within

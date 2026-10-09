@@ -123,6 +123,7 @@ static int check_type(void);
 "_Complex"                          { return COMPLEX; }
 "_Coro"                             { return CORO; }    /* vcc extension */
 "_Coro_frame"                       { return CORO_FRAME; }  /* vcc extension */
+"_Coro_ptr"                         { return CORO_PTR; }    /* vcc extension */
 "_Defer"                            { return DEFER; }   /* vcc extension */
 "_Generic"                          { return GENERIC; }
 "_Imaginary"                        { return IMAGINARY; }

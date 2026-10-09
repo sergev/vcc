@@ -1,11 +1,12 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C8 are built — `defer`, the coroutines' front end, generators,
+Status: phases C1–C9 are built — `defer`, the coroutines' front end, generators,
 delegation (`await` in both forms, the arena, `co_alloca` in functions and
 coroutines, every operation), a dispatch per irreducible region in the wasm backend,
 and the target `wasm32-braam` with its runtime, `stdio.h` on files and stdin, a fake
-kernel for node, a system test on Braam itself, signals, tasks and `poll`; §8 lists
-what remains. The document defines two extensions of C — a `defer`
+kernel for node, a system test on Braam itself, signals, tasks and `poll`, and
+`coro_ptr`, the jump-table dispatch, shared cleanups and the lint; §8 lists what
+remains, the docs. The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -305,13 +306,36 @@ will be `unreachable`, which the kernel reports as a crash.
 
 Not covered: letting storage given to `co_init` go out of scope while its frame is
 suspended; that leaks whatever the coroutine owned, and the language cannot detect it
-without ownership tracking. `co_destroy` is the tool, and a later lint can flag the
-pattern. A `co_alloca` frame cannot be left behind: its block's end destroys it.
+without ownership tracking. `co_destroy` is the tool. A `co_alloca` frame cannot be
+left behind: its block's end destroys it.
 
-A function pointer to a coroutine (`coro_ptr(Y, T)`, a pointer plus the coroutine's
-descriptor, so a scheduler can hold a heterogeneous list of tasks) is deferred to
-phase C9: Braam's runtime does not need it (`main` is known), and its init thunk needs
-a uniform argument list, which the plan proposes as "one `void *`" there.
+**The lint** (built in C9; `semantic/coroutines.c`) flags the two plain cases. Each is
+reported as `warning: <function>: …` on stderr, and compilation goes on. Storage
+counts as automatic when it is a local array, decayed, or `&x` of a local; a local
+pointer's value is memory from elsewhere.
+- **The frame outlives its storage.** The storage given to `co_init` is automatic, and
+  the frame is stored where it outlives it: a global, a static, a variable of an
+  outer block, through a pointer or into a member. Returning it counts too.
+- **The frame may be left suspended.** Such a frame was resumed by a statement that
+  drops the status (`co_resume(p);` or `co_cancel(p);`). Nothing in the block
+  destroys it, asks `co_done`, reads `co_result` or awaits it.
+
+**`coro_ptr(Y, T)`** (built in C9) points to a coroutine that takes `(void)` or
+`(void *)`, so a scheduler can hold a list of coroutines of different code, and a
+table can name them.
+- **The type** is `_Coro_ptr(Y, T)`, `coro_ptr` in `<coro.h>`: a pointer to a struct
+  tagged `__co_desc`. Like a frame type's struct it is never defined, and two are the
+  same when their Y and T are.
+- **Conversion.** The name of such a coroutine, used as a value, converts to its
+  `coro_ptr`, in a static initializer too. The value is the address of its descriptor
+  `f$co`, which then holds four words: size, alignment, init and resume. For `(void)`
+  the init is a thunk `f$initp` that takes the `void *` and ignores it, so every
+  descriptor's init has the type `void (char *, void *)`.
+- **The operations.** `co_init`, `co_alloca`, `co_sizeof`, `co_alignof` and an arena
+  `await p(arg)` take a `coro_ptr` where they take a coroutine's name, with zero or
+  one argument, converted to `void *`. A `coro_ptr` cannot be called otherwise.
+- **The "init thunk's argument list"** that kept this phase open is "one `void *`":
+  a coroutine with other parameters has no `coro_ptr`, and the error says so.
 
 ## 3. Where each part lives
 
@@ -442,10 +466,26 @@ those scopes, innermost first.
   its label. The label's scope path comes from the semantic pass (§4.2), kept on the
   AST like `branch_target_label` is.
 - The deferred statement is lowered once per exit edge. That duplicates code in a
-  scope with many exits; a later version can emit one cleanup block per scope with a
-  "where next" temporary, the way C++ compilers share landing pads. The optimizer
-  sees plain code either way, and a `defer` whose scope has one exit costs nothing
-  extra.
+  scope with many exits, so since C9 (`translator/stmt.c`) an exit whose cleanup is
+  large shares one copy per block, the way C++ compilers share landing pads:
+  - **The test.** A size estimate, three per statement in the deferred statements and
+    twelve per `co_alloca` release, at least 12. A coroutine's destroy paths, one per
+    suspension point, share from 6.
+  - **The chain.** The block's actions are lowered once more at its end, after a jump,
+    with an entry label in front of each. Then come tests of a "where next" variable
+    for the exits that end there (a label, a return of the one return variable, a
+    coroutine's end), then a jump into the chain of the next block out.
+  - **The exit** sets the variable and jumps into the chain of the innermost block it
+    leaves, at the action it has reached.
+  - **Why the chain is static.** An exit from inside a block always goes on into the
+    same place outside it: an enclosing block's actions cannot change while the inner
+    block is open.
+  - **The fall-through** keeps its own copy, so the common path pays nothing.
+  - **Off** on BESM-6, whose code must not change, and with `lower --no-shared-cleanup`.
+    A `goto` back over a defer of the common block keeps its own copy, and so does a
+    return of an aggregate or a `long double`.
+  - **Measured.** A test program with large cleanups is 10% smaller; programs whose
+    cleanups are one call, the Braam libc for one, do not change.
 - Lowering a deferred statement at several points re-walks the same AST subtree;
   `gen_stmt` is already re-entrant (loop bodies are walked once, but string
   constants and temporaries are minted per emission, which is what we want).
@@ -513,8 +553,11 @@ because `__co_*` are the operations' keywords):
   2. Traps on DONE/DESTROYED (`CO_TRAP_FINISHED`) and on RUNNING
   (`CO_TRAP_REENTRANT`); a destroy of a frame never started marks it DESTROYED, there
   being no `defer` to run; otherwise sets `flags = RUNNING | signal << 1`, calls
-  `p->resume(p)` through `call_indirect`, clears `flags` and returns the status. (A
-  direct call when `p` comes from a visible `co_init` is a later peephole.)
+  `p->resume(p)` through `call_indirect`, clears `flags` and returns the status. An
+  arena `await` of a named coroutine does not call it (C9): it sets `flags` itself and
+  calls `g$resume` directly. Its frame is private to the await, which never resumes it
+  once it is done or while it runs, and destroys it only after it has suspended, so the
+  checks cannot fail.
 - `__coro_done(p)`: the state is DONE or DESTROYED.
 - `__coro_value(p, off)` and `__coro_result(p, off)`: check the state
   (`CO_TRAP_NO_VALUE` unless suspended; `CO_TRAP_NOT_DONE` unless DONE) and return
@@ -612,9 +655,15 @@ pass** finishes the job — LLVM's CoroSplit, scaled to this compiler.
 4. Suspension points: the k-th `__coro_suspend` becomes `STORE k → state; RETURN 0;
    LABEL %co.resumek; %s = LOAD flags >> 1` (the signal). The dispatch goes in front of
    the body: `%st = LOAD state; JUMP_IF (%st == k) %co.resumek; …` — a compare chain,
-   as `switch` lowers today; a `JUMP_TABLE` instruction is a later improvement if
-   coroutines with many points turn up. State 0 falls into the body's first
-   instruction; RUNNING and the signal are the runtime's.
+   as `switch` lowers today. From three suspension points on (C9) it is a
+   `JUMP_TABLE` instead. That instruction is `JumpTable(Val index, identifier*
+   targets, identifier default_target)`, made only by this pass: `%co.start` for 0
+   and the default, `%co.resumek` for k. The optimizer and the shared CFG
+   (`backend/common/flow.c`, whose blocks now hold any number of successors) take it,
+   and a constant index folds to a `JUMP`. The wasm backend makes it a `br_table`
+   (§6.3), and BESM-6 and MSP430 reject it. Measured on the Braam programs, it saves
+   0.4% of the code, and 1% on the files with the most suspension points. State 0
+   falls into the body's first instruction; RUNNING and the signal are the runtime's.
 5. Parameters: dropped from `f$resume`'s list; `f$init(%.fp, %a, %b)` is made as a
    function toplevel storing each at its offset (an aggregate in chunks), and `f$co`
    as a static variable; both follow `f$resume` in the chain `translate()` returns.
@@ -640,6 +689,12 @@ machine is acyclic and Ramsey's translation structures it as is.
   gets a dispatch of its own (§6.5); the rest stays structured.
 - Frame accesses are `i32.load off`/`i32.store off` on the parameter: the constant
   addends fold into memarg offsets (`peephole.c`) where the address is not shared.
+- **A `JUMP_TABLE` dispatch** (C9) becomes a `br_table` in `structure.c`. Every target
+  of a jump table counts as a merge node, as a dispatch node's entries do, so each has
+  a block to leave. A target the regional dispatch reroutes through a dispatch node
+  must set the state on the way, which a `br_table` entry cannot. That entry leaves a
+  block of its own, a trampoline, after which the state is set and the jump made.
+  Under the skeleton (`--no-structure`) the table is a chain of compares and `br_if`s.
 - `call_indirect (i32) -> (i32)` for `__coro_resume`'s dispatch is an indirect call
   in the runtime; `f$resume` gets a table slot because `co_init` and `co_alloca` pass
   its address.
@@ -943,14 +998,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C9. Later, as needed.** `coro_ptr(Y, T)` with a `void *` init thunk and a
-   descriptor (size, alignment, init, resume) for it; a direct call
-   in `__coro_resume` when the callee is visible; a `JUMP_TABLE` for wide dispatches;
-   shared cleanup blocks for `defer` — one block per scope and a "where next"
-   temporary instead of a copy of the cleanup on every exit edge, which matters most
-   in coroutines: each suspension point has a destroy path carrying every active
-   cleanup, so code grows with suspension points × cleanup size; a lint for a
-   suspended frame going out of scope.
 - **C10. Docs.** `docs/Coroutines_in_C.md` (the tutorial, written ahead of the code)
     brought up to date with what was built, and the frame ABI added, `docs/Braam.md` (the target, the runtime, porting a
     program, running one by hand), a section in `docs/Wasm_Backend.md` for §6.5,
@@ -966,7 +1013,8 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 | `co_alloca` scoped to the function, as C's `alloca`, and banned in coroutines (whose shadow stack unwinds at each suspension) | Scoped to the block, usable everywhere: shadow stack in a function, the task's arena in a coroutine | A coroutine that starts coroutines needs it; a function-scoped allocation would grow without bound in a loop; and the end of a block is where an unfinished sub-coroutine can be destroyed, which closes the "storage goes away while suspended" hole for these frames. |
 | Frames never nested: every `await` on a frame the awaiter declared as a local | Also `await f(args)`: the callee's frame from the task's arena, LIFO | Without compile-time sizes a sub-frame cannot be a local. An await chain is a stack, so a bump pointer per task costs nothing and permits recursion and separate compilation. Storage is still the program's: the root's block. |
 | Cancellation only through `co_cancel`, cleanup entirely the coroutine's | `co_destroy` as well | It runs the `defer`s active at the suspension point and nothing else, so a scheduler can drop a suspended task without the task's cooperation, and a resource registered with `defer` is released exactly once however the scope ends: by completion, return, cancellation or destruction. |
-| `coro_ptr(Y, T)` in the first version | Phase C9 | Braam needs none; the init thunk's argument list is the unresolved part. |
+| `coro_ptr(Y, T)` in the first version | Phase C9, for coroutines that take `(void)` or `(void *)` | Braam needs none. The init thunk's argument list was the open part, and the answer is one `void *`, through which a program passes whatever it likes. A thunk for any parameter list would need the arguments packed by the caller in the coroutine's own layout. |
+| A direct `co_resume` when the frame comes from a visible `co_init` | Only an arena `await` calls `g$resume` directly | An await knows its callee and owns its frame, so its checks cannot fail. A `co_resume` would need the frame traced through variables, and its checks are what catch a misused frame. |
 | `yield` at the precedence of a unary operator, with parentheses required around `yield e == …` | `_Yield` takes an assignment-expression and binds above `==` | So `if (yield i == CO_CANCEL)` means what it looks like. |
 | The whole frame layout part of the ABI | The header is ABI; the rest is the defining unit's | Only the header crosses units. The rest may change with the optimizer. |
 | A trap for resuming an uninitialised frame | None | A frame comes only from `co_init` or `co_alloca`; storage that was never initialised is garbage the language cannot recognise. The reentrancy and finished checks stay. |
@@ -981,8 +1029,8 @@ the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
   `co_sizeof`/`co_alignof` absolute symbols `f$size`/`f$align` from `.set`, costing no
   load. clang 23's wasm assembler stops on one ("absolute addressing not
   supported"), so the fallback was taken: the descriptor `f$co`, one load each.
-- **Code size of the dispatch.** A compare chain per resume and a `LOAD`/`STORE`
-  per frame access. The second optimizer round and the memarg folding should keep a
+- **Code size of the dispatch.** A compare chain per resume (a `br_table` from three
+  suspension points, C9) and a `LOAD`/`STORE` per frame access. The second optimizer round and the memarg folding should keep a
   generator within 1.5× of the hand-written `cat.s` shape; §6.5 is the lever if not.
 - **The `defer`-past-`case` rule** may surprise; the alternative (a run-time active
   flag per `defer` that a jump may skip) is implementable later without changing
