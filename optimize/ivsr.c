@@ -251,7 +251,7 @@ static void insert_at_end(OptBlock *b, Tac_Instruction *in)
     const Tac_Val *cond = last->kind == TAC_INSTRUCTION_JUMP_IF_ZERO   ? last->u.jump_if_zero.condition
                           : last->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO ? last->u.jump_if_not_zero.condition
                                                                          : NULL;
-    if (!cond && last->kind != TAC_INSTRUCTION_JUMP) {
+    if (!cond && last->kind != TAC_INSTRUCTION_JUMP && last->kind != TAC_INSTRUCTION_JUMP_TABLE) {
         insert_after(b, last, in);
         return;
     }

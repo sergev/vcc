@@ -460,6 +460,10 @@ static void check_instruction(Verifier *v, const Tac_Instruction *in)
         if (val_type(v, in->u.jump_if_zero.condition, &a))
             expect_class(v, "condition", &a, M_SCALAR);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        if (val_type(v, in->u.jump_table.index, &a))
+            expect_class(v, "index", &a, M_SCALAR);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN: {
         const Tac_Type *ft = in->u.fun_call.fun_type;

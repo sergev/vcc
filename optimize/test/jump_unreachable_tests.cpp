@@ -172,3 +172,67 @@ TEST_F(OptimizerTest, CondJumpEndsFunction)
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(result->kind, TAC_INSTRUCTION_LABEL);
 }
+
+// A jump table on index `k`, to targets A, B, C, default D.
+static Tac_Instruction *make_table(Tac_Val *k)
+{
+    Tac_Instruction *jt              = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+    jt->u.jump_table.index           = k;
+    jt->u.jump_table.count           = 3;
+    jt->u.jump_table.targets         = (char **)xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__);
+    jt->u.jump_table.targets[0]      = xstrdup("A");
+    jt->u.jump_table.targets[1]      = xstrdup("B");
+    jt->u.jump_table.targets[2]      = xstrdup("C");
+    jt->u.jump_table.default_target  = xstrdup("D");
+    return jt;
+}
+
+// JumpTable(1) → Jump(B); JumpTable(7) → Jump(D), the default; on a variable, unchanged.
+TEST_F(OptimizerTest, JumpTableFold)
+{
+    Tac_Instruction *body = constant_fold(make_table(make_const_int(1)));
+    ASSERT_NE(body, nullptr);
+    EXPECT_EQ(body->kind, TAC_INSTRUCTION_JUMP);
+    EXPECT_STREQ(body->u.jump.target, "B");
+    tac_free_instruction(body);
+
+    body = constant_fold(make_table(make_const_int(7)));
+    ASSERT_NE(body, nullptr);
+    EXPECT_EQ(body->kind, TAC_INSTRUCTION_JUMP);
+    EXPECT_STREQ(body->u.jump.target, "D");
+    tac_free_instruction(body);
+
+    body = constant_fold(make_table(make_var("k")));
+    ASSERT_NE(body, nullptr);
+    EXPECT_EQ(body->kind, TAC_INSTRUCTION_JUMP_TABLE);
+    tac_free_instruction(body);
+}
+
+// The labels a jump table names are kept, and the code it leads to with them; the
+// return right after the table, which nothing reaches, goes.
+TEST_F(OptimizerTest, JumpTableKeepsLabels)
+{
+    Tac_Instruction *body = make_table(make_var("k"));
+    Tac_Instruction *t    = body;
+    t->next               = make_return(make_const_int(0)); // unreachable
+    t                     = t->next;
+    for (const char *l : { "A", "B", "C", "D" }) {
+        t->next       = make_label(l);
+        t->next->next = make_return(make_const_int(l[0]));
+        t             = t->next->next;
+    }
+    OptCfg *cfg = cfg_build(body);
+    eliminate_unreachable(cfg);
+    body = cfg_flatten(cfg);
+    cfg_free(cfg);
+    std::string names;
+    int returns = 0;
+    for (Tac_Instruction *in = body; in; in = in->next) {
+        if (in->kind == TAC_INSTRUCTION_LABEL)
+            names += in->u.label.name;
+        returns += in->kind == TAC_INSTRUCTION_RETURN;
+    }
+    EXPECT_EQ("ABCD", names);
+    EXPECT_EQ(4, returns);
+    tac_free_instruction(body);
+}

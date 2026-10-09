@@ -24,7 +24,8 @@
 static bool is_terminal(Tac_InstructionKind k)
 {
     return k == TAC_INSTRUCTION_JUMP || k == TAC_INSTRUCTION_JUMP_IF_ZERO ||
-           k == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO || k == TAC_INSTRUCTION_RETURN;
+           k == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO || k == TAC_INSTRUCTION_RETURN ||
+           k == TAC_INSTRUCTION_JUMP_TABLE;
 }
 
 // Count the basic blocks in `body` so cfg_build can size its array up front.
@@ -118,6 +119,23 @@ OptCfg *cfg_build(Tac_Instruction *body)
                 cfg->blocks[i]->succs[1] = cfg->blocks[i + 1];
                 cfg->blocks[i]->nsucc    = 2;
                 OPT_TRACE("[cfg] block %d -[cond-fallthru]-> block %d\n", i, i + 1);
+            }
+        } else if (term->kind == TAC_INSTRUCTION_JUMP_TABLE) {
+            // A jump table: an edge to each distinct target, the default among them.
+            int n = term->u.jump_table.count + 1;
+            cfg->blocks[i]->succs = xalloc(n * sizeof(OptBlock *), __func__, __FILE__, __LINE__);
+            cfg->blocks[i]->nsucc = 0;
+            for (int k = 0; k < n; k++) {
+                const char *t = k < n - 1 ? term->u.jump_table.targets[k]
+                                          : term->u.jump_table.default_target;
+                intptr_t target_id;
+                map_get(&label_map, t, &target_id);
+                OptBlock *to = cfg->blocks[target_id];
+                bool seen    = false;
+                for (int j = 0; j < cfg->blocks[i]->nsucc; j++)
+                    seen |= cfg->blocks[i]->succs[j] == to;
+                if (!seen)
+                    cfg->blocks[i]->succs[cfg->blocks[i]->nsucc++] = to;
             }
         } else if (term->kind == TAC_INSTRUCTION_RETURN) {
             // Return: no successors — this is an edge to the implicit Exit.

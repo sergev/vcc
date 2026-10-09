@@ -130,6 +130,13 @@ void tac_free_instruction(Tac_Instruction *instr)
             xfree(instr->u.jump_if_zero.target);
         }
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        tac_free_val(instr->u.jump_table.index);
+        for (int i = 0; i < instr->u.jump_table.count; i++)
+            xfree(instr->u.jump_table.targets[i]);
+        xfree(instr->u.jump_table.targets);
+        xfree(instr->u.jump_table.default_target);
+        break;
     case TAC_INSTRUCTION_LABEL:
         if (instr->u.label.name) {
             xfree(instr->u.label.name);

@@ -511,6 +511,9 @@ static void subst_instruction(Tac_Instruction *ins, const StringMap *cs)
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         subst_val(&ins->u.jump_if_not_zero.condition, cs);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        subst_val(&ins->u.jump_table.index, cs);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         subst_args(&ins->u.fun_call.args, cs);

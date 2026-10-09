@@ -31,6 +31,7 @@
 #include "optimize.h"
 #include "tac.h"
 #include "target.h"
+#include "xalloc.h"
 
 // Forward declarations: fold_unary_const (defined first below) negates and
 // complements the wide integer kinds through these helpers, which are defined
@@ -41,6 +42,34 @@ static int target_signed_bits(Tac_ConstKind kind);
 
 // Truthiness test: is this constant equal to zero? Used both to fold the logical
 // NOT operator and to resolve conditional jumps. Covers all 11 scalar kinds.
+// An integer constant as a jump table's index; false for any other.  A negative one
+// is out of every table, as its unsigned value is.
+static bool const_to_index(const Tac_Const *c, uint64_t *k)
+{
+    switch (c->kind) {
+    case TAC_CONST_INT:
+        *k = (uint32_t)c->u.int_val;
+        return true;
+    case TAC_CONST_UINT:
+        *k = c->u.uint_val;
+        return true;
+    case TAC_CONST_LONG:
+        *k = (uint64_t)c->u.long_val;
+        return true;
+    case TAC_CONST_ULONG:
+        *k = c->u.ulong_val;
+        return true;
+    case TAC_CONST_LONG_LONG:
+        *k = (uint64_t)c->u.long_long_val;
+        return true;
+    case TAC_CONST_ULONG_LONG:
+        *k = c->u.ulong_long_val;
+        return true;
+    default:
+        return false;
+    }
+}
+
 static bool const_is_zero(const Tac_Const *c)
 {
     switch (c->kind) {
@@ -1309,6 +1338,34 @@ Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *
                 tac_free_instruction(cur);
             }
             cur = next;
+            continue;
+        }
+
+        // A jump table with a constant index → a Jump to the one target it picks.
+        if (cur->kind == TAC_INSTRUCTION_JUMP_TABLE &&
+            cur->u.jump_table.index->kind == TAC_VAL_CONSTANT) {
+            uint64_t k         = 0;
+            const Tac_Const *c = cur->u.jump_table.index->u.constant;
+            if (!const_to_index(c, &k)) {
+                prev = cur;
+                cur  = next;
+                continue;
+            }
+            char **slot = k < (uint64_t)cur->u.jump_table.count ? &cur->u.jump_table.targets[k]
+                                                                 : &cur->u.jump_table.default_target;
+            opt_trace_instr("[const-fold] jump table on a constant:", cur);
+            Tac_Instruction *jmp = tac_new_instruction(TAC_INSTRUCTION_JUMP);
+            jmp->u.jump.target   = *slot; // steal
+            *slot                = xstrdup("");
+            jmp->next            = next;
+            cur->next            = NULL;
+            tac_free_instruction(cur);
+            if (prev)
+                prev->next = jmp;
+            else
+                body = jmp;
+            prev = jmp;
+            cur  = next;
             continue;
         }
 

@@ -1315,6 +1315,10 @@ static void free_split(Split *s)
     map_destroy(&s->index);
 }
 
+// The suspension points from which the dispatch is a jump table rather than a chain of
+// compares.
+int coro_table_min = 3;
+
 Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
 {
     Split s = { 0 };
@@ -1376,7 +1380,29 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     for (const Tac_Instruction *in = body; in; in = in->next)
         if (is_suspend(in))
             k++;
-    if (k > 0) {
+    if (k >= coro_table_min) {
+        // A jump table on the state: 0 and anything else into the body's start.
+        char *a  = put_offset(&s, CO_STATE, &(Tac_Type){ .kind = TAC_TYPE_UINT });
+        char *st = split_temp(&s, tac_new_type(TAC_TYPE_UINT));
+        put_load(&s, a, st);
+        xfree(a);
+        Tac_Instruction *jt        = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+        jt->u.jump_table.index     = val_var(st);
+        jt->u.jump_table.count     = k + 1;
+        jt->u.jump_table.targets   = xalloc((k + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+        jt->u.jump_table.targets[0] = xstrdup("%co.start");
+        for (int i = 1; i <= k; i++) {
+            char label[32];
+            snprintf(label, sizeof label, "%%co.resume%d", i);
+            jt->u.jump_table.targets[i] = xstrdup(label);
+        }
+        jt->u.jump_table.default_target = xstrdup("%co.start");
+        put(&s, jt);
+        Tac_Instruction *start = tac_new_instruction(TAC_INSTRUCTION_LABEL);
+        start->u.label.name    = xstrdup("%co.start");
+        put(&s, start);
+        xfree(st);
+    } else if (k > 0) {
         char *a  = put_offset(&s, CO_STATE, &(Tac_Type){ .kind = TAC_TYPE_UINT });
         char *st = split_temp(&s, tac_new_type(TAC_TYPE_UINT));
         put_load(&s, a, st);

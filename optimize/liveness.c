@@ -274,6 +274,9 @@ void opt_live_transfer(StringMap *ls, const Tac_Instruction *ins,
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         opt_live_add_val(ls, ins->u.jump_if_not_zero.condition);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        opt_live_add_val(ls, ins->u.jump_table.index);
+        break;
     default:
         break;
     }

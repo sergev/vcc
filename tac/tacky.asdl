@@ -67,6 +67,7 @@ module TAC {
                 | FunCall(identifier fun_name, bool indirect, Val* args, Val? dst, Type? fun_type) -- indirect: fun_name is an object holding the callee's address
                 | FunCallNoreturn(identifier fun_name, Val* args, Val? dst, Type? fun_type) -- call to a _Noreturn function; always direct
                 | AllocateLocal(identifier name, int size, int alignment) -- size/alignment in target bytes
+                | JumpTable(Val index, identifier* targets, identifier default_target) -- index i < count to targets[i], else the default
 
     Val = Constant(Const val)
         | Var(identifier name)

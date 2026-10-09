@@ -337,6 +337,14 @@ bool tac_compare_instruction(const Tac_Instruction *a, const Tac_Instruction *b)
             strcmp(a->u.jump_if_zero.target, b->u.jump_if_zero.target) != 0)
             return false;
         return tac_compare_val(a->u.jump_if_zero.condition, b->u.jump_if_zero.condition);
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        if (a->u.jump_table.count != b->u.jump_table.count ||
+            strcmp(a->u.jump_table.default_target, b->u.jump_table.default_target) != 0)
+            return false;
+        for (int i = 0; i < a->u.jump_table.count; i++)
+            if (strcmp(a->u.jump_table.targets[i], b->u.jump_table.targets[i]) != 0)
+                return false;
+        return tac_compare_val(a->u.jump_table.index, b->u.jump_table.index);
     case TAC_INSTRUCTION_LABEL:
         if ((a->u.label.name == NULL) != (b->u.label.name == NULL))
             return false;

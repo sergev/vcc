@@ -616,6 +616,9 @@ void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth)
     case TAC_INSTRUCTION_LABEL:
         fprintf(fd, "label\n");
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        fprintf(fd, "jump_table\n");
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
         fprintf(fd, "fun_call\n");
         break;
@@ -775,6 +778,17 @@ void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth)
         print_indent(fd, depth + 1);
         fprintf(fd, "Target: %s\n",
                 instr->u.jump_if_zero.target ? instr->u.jump_if_zero.target : "(null)");
+        break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        print_indent(fd, depth + 1);
+        fprintf(fd, "Index:\n");
+        tac_print_val(fd, instr->u.jump_table.index, depth + 2);
+        for (int i = 0; i < instr->u.jump_table.count; i++) {
+            print_indent(fd, depth + 1);
+            fprintf(fd, "Target %d: %s\n", i, instr->u.jump_table.targets[i]);
+        }
+        print_indent(fd, depth + 1);
+        fprintf(fd, "Default: %s\n", instr->u.jump_table.default_target);
         break;
     case TAC_INSTRUCTION_LABEL:
         print_indent(fd, depth + 1);

@@ -489,6 +489,10 @@ static void emit_instruction(FILE *fd, const Tac_Instruction *instr, int parent_
         fprintf(fd, "JumpIfNotZero: ");
         emit_string(fd, instr->u.jump_if_not_zero.target);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        fprintf(fd, "JumpTable: %d targets, default ", instr->u.jump_table.count);
+        emit_string(fd, instr->u.jump_table.default_target);
+        break;
     case TAC_INSTRUCTION_LABEL:
         fprintf(fd, "Label: ");
         emit_string(fd, instr->u.label.name);
@@ -662,6 +666,9 @@ static void emit_instruction(FILE *fd, const Tac_Instruction *instr, int parent_
         break;
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         emit_val(fd, instr->u.jump_if_not_zero.condition, id, "cond");
+        break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        emit_val(fd, instr->u.jump_table.index, id, "index");
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

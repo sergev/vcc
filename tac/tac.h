@@ -150,7 +150,8 @@ typedef enum {
     TAC_INSTRUCTION_LABEL,
     TAC_INSTRUCTION_FUN_CALL,
     TAC_INSTRUCTION_FUN_CALL_NORETURN, // call to a _Noreturn function (shares u.fun_call)
-    TAC_INSTRUCTION_ALLOCATE_LOCAL
+    TAC_INSTRUCTION_ALLOCATE_LOCAL,
+    TAC_INSTRUCTION_JUMP_TABLE // a multiway jump on an unsigned index (the coroutine dispatch)
 } Tac_InstructionKind;
 
 typedef enum {
@@ -384,6 +385,12 @@ typedef struct Tac_Instruction {
         struct {
             char *name;
         } label;
+        struct {
+            Tac_Val *index;       // an unsigned int
+            char **targets;       // index i jumps to targets[i], for i < count
+            int count;
+            char *default_target; // any other index
+        } jump_table;
         struct {
             char *fun_name;
             // How to read fun_name.  False: it names the callee itself — a direct call to

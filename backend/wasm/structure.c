@@ -280,11 +280,15 @@ static bool analyze(Structure *s)
             }
         }
     }
-    // The entries of a dispatch node are left by its br_table, as merge nodes are.
-    for (int d = s->n; d < n; d++)
+    // The entries of a dispatch node are left by its br_table, as merge nodes are, and
+    // so are the targets of a jump table.
+    for (int d = 0; d < n; d++) {
+        if (d < s->n && s->f->instrs[s->f->blocks[d].last]->kind != TAC_INSTRUCTION_JUMP_TABLE)
+            continue;
         for (int k = 0; k < s->nsucc[d]; k++)
             if (s->nfwd[s->succ[d][k]] < 2)
                 s->nfwd[s->succ[d][k]] = 2;
+    }
     return true;
 }
 
@@ -355,9 +359,9 @@ static void strongconnect(Scc *c, int v)
 static bool fix_region(Structure *s, const bool *in, int header);
 
 // The jumps of region `scc` that a depth-first walk from node v finds going back:
-// back[u * 2 + j] for the j-th successor of block u (a block of the region has two at
-// most, the dispatch node walked from is outside the array's use).
-static void find_back(const Structure *s, const bool *scc, int v, char *mark, bool *back)
+// back[base[u] + j] for the j-th successor of node u.
+static void find_back(const Structure *s, const bool *scc, int v, char *mark, const int *base,
+                      bool *back)
 {
     mark[v] = 1;
     for (int j = 0; j < s->nsucc[v]; j++) {
@@ -365,9 +369,9 @@ static void find_back(const Structure *s, const bool *scc, int v, char *mark, bo
         if (!scc[w])
             continue;
         if (mark[w] == 1)
-            back[v * 2 + j] = true;
+            back[base[v] + j] = true;
         else if (mark[w] == 0)
-            find_back(s, scc, w, mark, back);
+            find_back(s, scc, w, mark, base, back);
     }
     mark[v] = 2;
 }
@@ -389,12 +393,16 @@ static bool add_dispatch(Structure *s, const bool *region, bool *scc, const int 
         s->succ[d][i] = es[i];
     scc[d]     = true;
     char *mark = xalloc(s->cap, __func__, __FILE__, __LINE__);
-    bool *back = xalloc((size_t)s->cap * 2 * sizeof(bool), __func__, __FILE__, __LINE__);
+    int *base  = xalloc((s->N + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+    base[0]    = 0;
+    for (int v = 0; v < s->N; v++)
+        base[v + 1] = base[v] + s->nsucc[v];
+    bool *back = xalloc((base[s->N] + 1) * sizeof(bool), __func__, __FILE__, __LINE__);
     for (int v = 0; v < s->cap; v++)
         mark[v] = 0;
-    for (int j = 0; j < s->cap * 2; j++)
+    for (int j = 0; j < base[s->N]; j++)
         back[j] = false;
-    find_back(s, scc, d, mark, back);
+    find_back(s, scc, d, mark, base, back);
     xfree(mark);
     bool ok = true;
     for (int i = 0; i < k && ok; i++) {
@@ -408,7 +416,7 @@ static bool add_dispatch(Structure *s, const bool *region, bool *scc, const int 
                 continue;
             bool found = false;
             for (int j = 0; j < s->nsucc[u]; j++)
-                if (s->succ[u][j] == e && (!scc[u] || s->every || back[u * 2 + j])) {
+                if (s->succ[u][j] == e && (!scc[u] || s->every || back[base[u] + j])) {
                     s->succ[u][j] = d;
                     found         = true;
                 }
@@ -430,6 +438,7 @@ static bool add_dispatch(Structure *s, const bool *region, bool *scc, const int 
         }
     }
     xfree(back);
+    xfree(base);
     return ok && fix_region(s, scc, d);
 }
 
@@ -600,6 +609,53 @@ static int target_of(const Gen *g, const char *label)
     return (int)b;
 }
 
+// Block x's jump table: a br_table, each of whose targets is a merge node (analyze).  A
+// target that goes through a dispatch node needs the state set on the way, which a
+// br_table cannot do: it leaves a block of its own instead, after which the state is
+// set and the jump made.
+static void jump_table(Structure *s, int x, const Tac_Instruction *in)
+{
+    Wasm_Func *fn = s->g->fn;
+    int count     = in->u.jump_table.count;
+    int *tr       = xalloc((count + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+    int ntr       = 0;
+    for (int i = 0; i <= count; i++) {
+        int t = target_of(s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
+        bool seen = false;
+        for (int j = 0; j < ntr; j++)
+            seen |= tr[j] == t;
+        if (!seen && redirect_of(s, x, t))
+            tr[ntr++] = t;
+    }
+    for (int j = 0; j < ntr; j++) {
+        wasm_append(fn, WASM_BLOCK);
+        push_ctx(s, CTX_IF, x); // a trampoline: no jump looks for it by name
+    }
+    push_val(s->g, in->u.jump_table.index, WASM_I32);
+    Wasm_Instr *bt = wasm_append(fn, WASM_BR_TABLE);
+    bt->ntable     = count + 1;
+    bt->table      = xalloc(bt->ntable * sizeof(int), __func__, __FILE__, __LINE__);
+    for (int i = 0; i <= count; i++) {
+        int t = target_of(s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
+        int j = 0;
+        while (j < ntr && tr[j] != t)
+            j++;
+        if (j < ntr) {
+            bt->table[i] = ntr - 1 - j;
+        } else {
+            int to       = effective(s, x, t);
+            bt->table[i] = s->rpo[to] <= s->rpo[x] ? ctx_depth(s, CTX_LOOP, to)
+                                                   : ctx_depth(s, CTX_BLOCK, to);
+        }
+    }
+    for (int j = ntr - 1; j >= 0; j--) {
+        wasm_append(fn, WASM_END_BLOCK);
+        s->nctx--;
+        do_jump(s, x, tr[j]);
+    }
+    xfree(tr);
+}
+
 // Block x's code and its jumps, inside the blocks of merge nodes ys[0..k-1] (in
 // reverse postorder, the last outermost).
 static void node_within(Structure *s, int x, const int *ys, int k)
@@ -630,7 +686,8 @@ static void node_within(Structure *s, int x, const int *ys, int k)
     const Flow_Block *blk     = &s->f->blocks[x];
     const Tac_Instruction *in = s->f->instrs[blk->last];
     bool jump = in->kind == TAC_INSTRUCTION_JUMP || in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ||
-                in->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO;
+                in->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO ||
+                in->kind == TAC_INSTRUCTION_JUMP_TABLE;
     g->cur = x;
     for (int i = blk->first; i <= blk->last - (jump ? 1 : 0); i++)
         gen_instr(g, s->f->instrs[i]);
@@ -672,6 +729,9 @@ static void node_within(Structure *s, int x, const int *ys, int k)
         wasm_append(fn, WASM_END_IF);
         return;
     }
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        jump_table(s, x, in);
+        return;
     case TAC_INSTRUCTION_RETURN:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         return;
@@ -723,7 +783,8 @@ static bool gen_structured(Gen *g)
     s.succ        = xalloc(n * sizeof(int *), __func__, __FILE__, __LINE__);
     for (int b = 0; b < s.n; b++) {
         s.nsucc[b] = f->blocks[b].nsucc;
-        s.succ[b]  = xalloc(2 * sizeof(int), __func__, __FILE__, __LINE__);
+        s.succ[b]  = xalloc((s.nsucc[b] > 2 ? s.nsucc[b] : 2) * sizeof(int), __func__, __FILE__,
+                            __LINE__);
         for (int k = 0; k < f->blocks[b].nsucc; k++)
             s.succ[b][k] = f->blocks[b].succ[k];
     }

@@ -26,7 +26,7 @@ typedef uint64_t Flow_Set;
 typedef struct {
     int first, last; // indices into Flow.instrs, inclusive
     int nsucc;
-    int succ[2];
+    int *succ;          // nsucc of them: two at most, but for a jump table
     Flow_Set *use;      // read before any write in the block
     Flow_Set *def;      // written in the block
     Flow_Set *live_in;  // live on entry

@@ -685,6 +685,29 @@ TEST_F(TacBinaryTest, JumpInstructions)
         tac_free_program(copy);
     }
     {
+        // A jump table: the index, three targets, the default; and one that differs in a
+        // target is not the same.
+        Tac_Program *orig                = tac_new_program();
+        orig->decls                      = make_empty_function("f", true);
+        Tac_Instruction *instr           = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+        instr->u.jump_table.index        = make_var("state");
+        instr->u.jump_table.count        = 3;
+        instr->u.jump_table.targets      = (char **)xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__);
+        instr->u.jump_table.targets[0]   = xstrdup("start");
+        instr->u.jump_table.targets[1]   = xstrdup("one");
+        instr->u.jump_table.targets[2]   = xstrdup("two");
+        instr->u.jump_table.default_target = xstrdup("start");
+        orig->decls->u.function.body     = instr;
+
+        Tac_Program *copy = roundtrip(orig);
+        EXPECT_TRUE(tac_compare_program(orig, copy));
+        xfree(copy->decls->u.function.body->u.jump_table.targets[2]);
+        copy->decls->u.function.body->u.jump_table.targets[2] = xstrdup("three");
+        EXPECT_FALSE(tac_compare_program(orig, copy));
+        tac_free_program(orig);
+        tac_free_program(copy);
+    }
+    {
         Tac_Program *orig            = tac_new_program();
         orig->decls                  = make_empty_function("f", true);
         Tac_Instruction *instr       = tac_new_instruction(TAC_INSTRUCTION_LABEL);

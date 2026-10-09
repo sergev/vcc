@@ -126,3 +126,18 @@ TEST_F(TranslateTestWasm32, CoroutinePrototype)
     EXPECT_NE(std::string::npos, yaml.find("name: f")) << yaml;
     EXPECT_EQ(std::string::npos, yaml.find("name: g")) << yaml;
 }
+
+// The dispatch: two suspension points are a chain of compares, three a jump table on
+// the state, whose entry 0 and default are the body's start (phase C9).
+TEST_F(TranslateTestWasm32, CoroutineDispatchChain)
+{
+    std::string two = CompileToYaml("_Coro(int) void g(void) { _Yield 1; _Yield 2; }");
+    EXPECT_FALSE(Has(two, "kind: jump_table")) << two;
+}
+
+TEST_F(TranslateTestWasm32, CoroutineDispatchTable)
+{
+    std::string three = CompileToYaml("_Coro(int) void h(void) { _Yield 1; _Yield 2; _Yield 3; }");
+    for (const char *s : { "kind: jump_table", "- %co.start", "- %co.resume3", "default: %co.start" })
+        EXPECT_TRUE(Has(three, s)) << s << "\n" << three;
+}

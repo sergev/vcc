@@ -282,7 +282,7 @@ static Tac_Instruction *import_instr(WFILE *in)
     check_input(in, "instr tag");
     bool is_volatile = (tag & TAG_INSTR_VOLATILE) != 0;
     tag &= ~TAG_INSTR_VOLATILE;
-    if (tag < TAG_TAC_INSTR || tag > TAG_TAC_INSTR + TAC_INSTRUCTION_ALLOCATE_LOCAL)
+    if (tag < TAG_TAC_INSTR || tag > TAG_TAC_INSTR + TAC_INSTRUCTION_JUMP_TABLE)
         return NULL;
     Tac_Instruction *instr = tac_new_instruction((Tac_InstructionKind)(tag - TAG_TAC_INSTR));
     instr->is_volatile     = is_volatile;
@@ -390,6 +390,17 @@ static Tac_Instruction *import_instr(WFILE *in)
     case TAC_INSTRUCTION_LABEL:
         instr->u.label.name = wgetstr(in);
         check_input(in, "label name");
+        break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        instr->u.jump_table.index = import_val(in);
+        instr->u.jump_table.count = (int)wgetw(in);
+        check_input(in, "jump_table count");
+        instr->u.jump_table.targets =
+            xalloc((instr->u.jump_table.count + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+        for (int i = 0; i < instr->u.jump_table.count; i++)
+            instr->u.jump_table.targets[i] = wgetstr(in);
+        instr->u.jump_table.default_target = wgetstr(in);
+        check_input(in, "jump_table targets");
         break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:

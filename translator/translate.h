@@ -254,6 +254,7 @@ typedef struct {
     bool with_ptr;    // takes (void) or (void *): f$co holds init and resume too
 } CoroSplit;
 Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info);
+extern int coro_table_min; // suspension points from which the dispatch is a jump table
 Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type); // a coroutine's name as a value
 
 //

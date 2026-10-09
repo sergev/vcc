@@ -94,6 +94,9 @@ void tac_visit_names(const Tac_Instruction *in, Tac_NameVisitor fn, void *arg)
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         visit_vals(in->u.jump_if_zero.condition, fn, arg);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        visit_vals(in->u.jump_table.index, fn, arg);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         visit_name(in->u.fun_call.fun_name, fn, arg);

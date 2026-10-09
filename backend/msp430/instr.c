@@ -1127,6 +1127,8 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         gen_cond_jump(g, in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO, in->u.jump_if_zero.condition,
                       in->u.jump_if_zero.target);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        fatal_error("msp430: a jump table, which only coroutines make (wasm32)");
     case TAC_INSTRUCTION_GET_ADDRESS:
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:

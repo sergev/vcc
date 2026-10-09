@@ -869,6 +869,20 @@ static void export_yaml_instruction(FILE *fd, const Tac_Instruction *instr, int 
         fprintf(fd, "target: %s\n",
                 instr->u.jump_if_zero.target ? instr->u.jump_if_zero.target : "");
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        fprintf(fd, "jump_table\n");
+        print_indent(fd, level);
+        fprintf(fd, "index:\n");
+        export_yaml_val(fd, instr->u.jump_table.index, level + 1);
+        print_indent(fd, level);
+        fprintf(fd, "targets:\n");
+        for (int i = 0; i < instr->u.jump_table.count; i++) {
+            print_indent(fd, level + 1);
+            fprintf(fd, "- %s\n", instr->u.jump_table.targets[i]);
+        }
+        print_indent(fd, level);
+        fprintf(fd, "default: %s\n", instr->u.jump_table.default_target);
+        break;
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         fprintf(fd, "jump_if_not_zero\n");
         print_indent(fd, level);

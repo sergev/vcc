@@ -91,6 +91,11 @@ static void remove_unused_labels(OptCfg *cfg)
                 t = ins->u.jump_if_zero.target;
             else if (ins->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO)
                 t = ins->u.jump_if_not_zero.target;
+            else if (ins->kind == TAC_INSTRUCTION_JUMP_TABLE) {
+                for (int k = 0; k < ins->u.jump_table.count; k++)
+                    map_insert(&targets, ins->u.jump_table.targets[k], 1, 0);
+                t = ins->u.jump_table.default_target;
+            }
             if (t) {
                 intptr_t dummy;
                 if (!map_get(&targets, t, &dummy))

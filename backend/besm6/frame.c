@@ -218,6 +218,9 @@ static void collect_instr(Frame *f, const Tac_Instruction *instr, int *auto_coun
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         collect_vals(f, instr->u.jump_if_not_zero.condition, auto_count);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE: // only coroutines make one, and BESM-6 has none
+        collect_vals(f, instr->u.jump_table.index, auto_count);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         collect_vals(f, instr->u.fun_call.args, auto_count);

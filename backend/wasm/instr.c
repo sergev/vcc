@@ -1214,6 +1214,18 @@ static void select_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         gen_cond_jump(g, in->u.jump_if_not_zero.condition, in->u.jump_if_not_zero.target, false);
         return;
+    case TAC_INSTRUCTION_JUMP_TABLE: // the dispatch skeleton's: compares, then the default
+        for (int i = 0; i < in->u.jump_table.count; i++) {
+            const char *t = in->u.jump_table.targets[i];
+            gen_branch_setup(g, t);
+            push_val(g, in->u.jump_table.index, WASM_I32);
+            emit_imm(g, WASM_I32_CONST, i);
+            emit(g, WASM_I32_EQ);
+            gen_branch(g, t, true);
+        }
+        gen_branch_setup(g, in->u.jump_table.default_target);
+        gen_branch(g, in->u.jump_table.default_target, false);
+        return;
     case TAC_INSTRUCTION_FUN_CALL:
         gen_call(g, in, false);
         return;

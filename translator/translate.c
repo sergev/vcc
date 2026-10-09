@@ -1300,6 +1300,9 @@ static void percent_instr(Tac_Instruction *in, const StringMap *autos)
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
         percent_vals(in->u.jump_if_not_zero.condition, autos);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE: // made by the coroutine split, after this
+        percent_vals(in->u.jump_table.index, autos);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         // An indirect call's callee is a frame-resident pointer (param/local/temp); rename

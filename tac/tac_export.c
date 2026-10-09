@@ -177,6 +177,13 @@ static void export_instr(WFILE *out, const Tac_Instruction *instr)
     case TAC_INSTRUCTION_LABEL:
         wputstr(instr->u.label.name ? instr->u.label.name : "", out);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        export_val(out, instr->u.jump_table.index);
+        wputw((size_t)instr->u.jump_table.count, out);
+        for (int i = 0; i < instr->u.jump_table.count; i++)
+            wputstr(instr->u.jump_table.targets[i], out);
+        wputstr(instr->u.jump_table.default_target, out);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         wputstr(instr->u.fun_call.fun_name ? instr->u.fun_call.fun_name : "", out);

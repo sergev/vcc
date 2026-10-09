@@ -106,6 +106,10 @@ static void operands(const Flow *f, const Tac_Instruction *in, bool defs, NameVi
         if (!defs)
             visit_val(f, in->u.jump_if_zero.condition, fn, arg);
         break;
+    case TAC_INSTRUCTION_JUMP_TABLE:
+        if (!defs)
+            visit_val(f, in->u.jump_table.index, fn, arg);
+        break;
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         if (defs) {
@@ -212,6 +216,7 @@ static bool ends_block(const Tac_Instruction *in)
     case TAC_INSTRUCTION_JUMP:
     case TAC_INSTRUCTION_JUMP_IF_ZERO:
     case TAC_INSTRUCTION_JUMP_IF_NOT_ZERO:
+    case TAC_INSTRUCTION_JUMP_TABLE:
     case TAC_INSTRUCTION_RETURN:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
         return true;
@@ -300,7 +305,27 @@ static void build_blocks(Flow *f)
         const Tac_Instruction *in = f->instrs[blk->last];
         const char *target        = NULL;
         bool falls                = true;
+        blk->succ                 = xalloc(2 * sizeof(int), __func__, __FILE__, __LINE__);
         switch (in->kind) {
+        case TAC_INSTRUCTION_JUMP_TABLE: {
+            // An edge to each distinct target, the default among them.
+            int k = in->u.jump_table.count + 1;
+            xfree(blk->succ);
+            blk->succ = xalloc(k * sizeof(int), __func__, __FILE__, __LINE__);
+            for (int j = 0; j < k; j++) {
+                const char *l = j < k - 1 ? in->u.jump_table.targets[j] : in->u.jump_table.default_target;
+                intptr_t t;
+                if (!map_get(&labels, l, &t))
+                    fatal_error("flow: %s: no label %s", f->fn->u.function.name, l);
+                bool seen = false;
+                for (int m = 0; m < blk->nsucc; m++)
+                    seen |= blk->succ[m] == (int)t;
+                if (!seen)
+                    blk->succ[blk->nsucc++] = (int)t;
+            }
+            falls = false;
+            break;
+        }
         case TAC_INSTRUCTION_JUMP:
             target = in->u.jump.target;
             falls  = false;
@@ -382,6 +407,7 @@ Flow *flow_build(const Tac_TopLevel *fn)
 void flow_free(Flow *f)
 {
     for (int b = 0; b < f->nblocks; b++) {
+        xfree(f->blocks[b].succ);
         xfree(f->blocks[b].use);
         xfree(f->blocks[b].def);
         xfree(f->blocks[b].live_in);
