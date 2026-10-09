@@ -411,6 +411,15 @@ static void free_instr(A64_Instr *in)
     xfree(in);
 }
 
+static A64_Instr *new_instr(A64_Op op, A64_Instr *next)
+{
+    A64_Instr *in = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
+    memset(in, 0, sizeof(*in));
+    in->op   = op;
+    in->next = next;
+    return in;
+}
+
 // Unlink and free *link.
 static void delete_at(A64_Instr **link)
 {
@@ -1800,6 +1809,126 @@ static bool delete_compare_again(A64_Instr *in)
     return false;
 }
 
+// Whether a q-register access at base + off fits: paired (ldp/stp, a multiple of 16
+// within imm7) or alone (ldr/str).
+static bool fits_q(int64_t off, bool paired)
+{
+    return paired ? off % 16 == 0 && off >= -1024 && off <= 1008 : fits_ldst(off, 16);
+}
+
+static A64_Instr *mem_instr(A64_Op op, A64_Operand r1, A64_Operand r2, A64_Operand m, A64_Instr *next)
+{
+    A64_Instr *in = new_instr(op, next);
+    in->opnd[0]   = r1;
+    if (op == A64_LDP || op == A64_STP) {
+        in->opnd[1] = r2;
+        in->opnd[2] = m;
+    } else {
+        in->opnd[1] = m;
+    }
+    return in;
+}
+
+// A run of 8-byte copies, `ldr x, [b, #s + 8k]` and `str x, [b, #d + 8k]` with x dead
+// after each, the two ranges of one base apart: 32 bytes at a time by ldp/stp of two q
+// scratch registers, 16 by ldr/str of one, 8 as it was.
+static bool fold_copy_run(A64_Instr **link)
+{
+    A64_Instr *in = *link;
+    if (in->op != A64_LDR || in->is_volatile || in->opnd[0].kind != A64_OPND_REG ||
+        in->opnd[0].width != A64_X || in->opnd[1].kind != A64_OPND_MEM ||
+        in->opnd[1].sub != A64_MEM_OFFSET)
+        return false;
+    int base = in->opnd[1].reg;
+    int64_t s0 = in->opnd[1].imm, d0 = 0;
+    int n = 0;
+    A64_Instr *ld = in, *last = NULL;
+    for (;;) {
+        A64_Instr *st = ld->next;
+        const A64_Operand *lm = &ld->opnd[1];
+        if (ld->op != A64_LDR || ld->is_volatile || ld->opnd[0].kind != A64_OPND_REG ||
+            ld->opnd[0].width != A64_X || a64_is_fpreg(ld->opnd[0].reg) || lm->kind != A64_OPND_MEM ||
+            lm->sub != A64_MEM_OFFSET || lm->reg != base || lm->imm != s0 + 8 * n || !st ||
+            st->op != A64_STR || st->is_volatile || st->opnd[0].kind != A64_OPND_REG ||
+            st->opnd[0].reg != ld->opnd[0].reg || st->opnd[0].width != A64_X ||
+            st->opnd[1].kind != A64_OPND_MEM || st->opnd[1].sub != A64_MEM_OFFSET ||
+            st->opnd[1].reg != base || ld->opnd[0].reg == base)
+            break;
+        if (n == 0)
+            d0 = st->opnd[1].imm;
+        else if (st->opnd[1].imm != d0 + 8 * n)
+            break;
+        if (!dies_after(st, ld->opnd[0].reg))
+            break;
+        last = st;
+        n++;
+        ld   = st->next;
+        if (!ld)
+            break;
+    }
+    int64_t bytes = 8 * (int64_t)n;
+    if (n < 2 || (s0 < d0 + bytes && d0 < s0 + bytes) || !dead_after(last, F1) ||
+        !dead_after(last, F2))
+        return false;
+    // The offsets must fit, chunk by chunk.
+    for (int64_t i = 0; i < bytes;) {
+        if (bytes - i >= 32) {
+            bool pair = fits_q(s0 + i, true) && fits_q(d0 + i, true);
+            if (!pair && !(fits_q(s0 + i, false) && fits_q(s0 + i + 16, false) &&
+                           fits_q(d0 + i, false) && fits_q(d0 + i + 16, false)))
+                return false;
+            i += 32;
+        } else if (bytes - i >= 16) {
+            if (!fits_q(s0 + i, false) || !fits_q(d0 + i, false))
+                return false;
+            i += 16;
+        } else {
+            i += 8;
+        }
+    }
+    // The new code, in place of the run; an 8-byte rest keeps its last pair.
+    A64_Instr *after = last->next, *head = NULL, **tail = &head;
+    A64_Instr *keep  = NULL;
+    if (n % 2) { // the last pair stays: its ldr is the one before `last`
+        for (A64_Instr *x = in; x->next; x = x->next)
+            if (x->next->next == last)
+                keep = x->next;
+    }
+    A64_Operand q1 = a64_reg(F1, A64_Q), q2 = a64_reg(F2, A64_Q);
+    for (int64_t i = 0; i + 16 <= bytes; ) {
+        if (bytes - i >= 32 && fits_q(s0 + i, true) && fits_q(d0 + i, true)) {
+            *tail = mem_instr(A64_LDP, q1, q2, a64_mem(base, s0 + i), NULL);
+            tail  = &(*tail)->next;
+            *tail = mem_instr(A64_STP, q1, q2, a64_mem(base, d0 + i), NULL);
+            tail  = &(*tail)->next;
+            i += 32;
+        } else {
+            *tail = mem_instr(A64_LDR, q1, (A64_Operand){ 0 }, a64_mem(base, s0 + i), NULL);
+            tail  = &(*tail)->next;
+            *tail = mem_instr(A64_STR, q1, (A64_Operand){ 0 }, a64_mem(base, d0 + i), NULL);
+            tail  = &(*tail)->next;
+            i += 16;
+        }
+    }
+    // Free the run, but for the kept pair.
+    for (A64_Instr *x = in; x != after;) {
+        A64_Instr *nx = x->next;
+        if (x != keep && x != last)
+            free_instr(x);
+        x = nx;
+    }
+    if (keep) {
+        keep->next = last;
+        last->next = after;
+        *tail      = keep;
+    } else {
+        free_instr(last);
+        *tail = after;
+    }
+    *link = head;
+    return true;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(A64_Instr **link)
 {
@@ -1822,7 +1951,8 @@ static bool rewrite(A64_Instr **link)
     if (in->op == A64_MOV && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_IMM &&
         fold_constant(link))
         return true;
-    if (fold_index(link) || fold_flags(link) || delete_move_back(in) || delete_compare_again(in))
+    if (fold_index(link) || fold_flags(link) || delete_move_back(in) || delete_compare_again(in) ||
+        fold_copy_run(link))
         return true;
     if (is_move(in) && forward_move(link))
         return true;
@@ -1938,15 +2068,6 @@ static A64_Block *block_of(const A64_Func *fn, const char *l)
 static A64_Cond taken_cond(const A64_Instr *br)
 {
     return br->op == A64_BCOND ? (A64_Cond)br->opnd[0].sub : br->op == A64_CBZ ? A64_EQ : A64_NE;
-}
-
-static A64_Instr *new_instr(A64_Op op, A64_Instr *next)
-{
-    A64_Instr *in = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
-    memset(in, 0, sizeof(*in));
-    in->op   = op;
-    in->next = next;
-    return in;
 }
 
 // Whether the instructions from x on and from y on are the same, ending in a return.

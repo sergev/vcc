@@ -563,12 +563,26 @@ void store_int(Gen *g, int reg, const Tac_Val *v)
         store_val(g, reg, v);
 }
 
+// A copy of `size` bytes: 16 at a time through q registers (two loads, then two stores,
+// for the peephole pass to pair), then in pieces of the alignment.
 void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int size, int align)
 {
     static const A64_Op loads[]  = { [1] = A64_LDRB, [2] = A64_LDRH, [4] = A64_LDR, [8] = A64_LDR };
     static const A64_Op stores[] = { [1] = A64_STRB, [2] = A64_STRH, [4] = A64_STR, [8] = A64_STR };
     int chunk                    = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
-    for (int i = 0; i < size;) {
+    int i                        = 0;
+    for (; size - i >= 32; i += 32) {
+        emit2(g, A64_LDR, a64_reg(F1, A64_Q), mem(g, src, src_off + i, 16));
+        emit2(g, A64_LDR, a64_reg(F2, A64_Q), mem(g, src, src_off + i + 16, 16));
+        emit2(g, A64_STR, a64_reg(F1, A64_Q), mem(g, dst, dst_off + i, 16));
+        emit2(g, A64_STR, a64_reg(F2, A64_Q), mem(g, dst, dst_off + i + 16, 16));
+    }
+    if (size - i >= 16) {
+        emit2(g, A64_LDR, a64_reg(F1, A64_Q), mem(g, src, src_off + i, 16));
+        emit2(g, A64_STR, a64_reg(F1, A64_Q), mem(g, dst, dst_off + i, 16));
+        i += 16;
+    }
+    while (i < size) {
         while (chunk > size - i)
             chunk /= 2;
         A64_Operand r = a64_reg(T2, chunk == 8 ? A64_X : A64_W);
@@ -710,12 +724,15 @@ static bool sp_folds(const Frame *fr, const Save *s, int n)
     return n > 0 && s[0].off == 0 && fr->size <= (s[0].r2 ? 504 : 255);
 }
 
+// A pair beyond ldp/stp's reach (504) is two ldr/str.
 static void sp_save(Gen *g, const Save *sv, bool restore, A64_Operand mem)
 {
-    if (sv->r2)
+    if (sv->r2 && (mem.sub != A64_MEM_OFFSET || mem.imm <= 504))
         emit3(g, restore ? A64_LDP : A64_STP, a64_reg(sv->r1, sv->w), a64_reg(sv->r2, sv->w), mem);
     else
         emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r1, sv->w), mem);
+    if (sv->r2 && mem.sub == A64_MEM_OFFSET && mem.imm > 504)
+        emit2(g, restore ? A64_LDR : A64_STR, a64_reg(sv->r2, sv->w), a64_mem(A64_SP, mem.imm + 8));
 }
 
 // The setup and teardown of an sp-addressed frame.
@@ -839,20 +856,40 @@ static int access_size(const A64_Instr *in)
 }
 
 // Whether x29-relative operand `i` of `in` can be rebased onto sp, at sp offset `off`;
-// with `apply`, do it.  A memory operand must still fit its instruction; an address
-// computation is `add`/`sub rd, x29, #imm` or `mov rd, x29`, which become `add rd, sp,
-// #off`.
+// with `apply`, do it.  A memory operand must still fit its instruction (an ldp/stp
+// that does not becomes two ldr/str); an address computation is `add`/`sub rd, x29,
+// #imm` or `mov rd, x29`, which become `add rd, sp, #off`.
 static bool rebase(A64_Instr *in, int i, int64_t off, bool apply)
 {
     A64_Operand *o = &in->opnd[i];
     if (o->kind == A64_OPND_MEM) {
         if (o->sub != A64_MEM_OFFSET)
             return false;
-        bool ok;
-        if (in->op == A64_LDP || in->op == A64_STP)
-            ok = off % 8 == 0 && off >= -512 && off <= 504;
-        else
-            ok = fits_ldst(off, access_size(in));
+        if (in->op == A64_LDP || in->op == A64_STP) {
+            // A pair out of ldp/stp's reach is two ldr/str.
+            int size  = access_size(in);
+            bool pair = off % size == 0 && off >= -64 * size && off <= 63 * size;
+            if (!pair && !(fits_ldst(off, size) && fits_ldst(off + size, size)))
+                return false;
+            if (!apply)
+                return true;
+            o->reg = A64_SP;
+            o->imm = off;
+            if (!pair) {
+                A64_Instr *second = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
+                *second           = *in;
+                in->op = second->op = in->op == A64_LDP ? A64_LDR : A64_STR;
+                second->opnd[0]     = in->opnd[1];
+                second->opnd[1]     = a64_mem(A64_SP, off + size);
+                second->opnd[2]     = (A64_Operand){ 0 };
+                in->opnd[2]         = (A64_Operand){ 0 };
+                in->opnd[1]         = a64_mem(A64_SP, off);
+                second->next        = in->next;
+                in->next            = second;
+            }
+            return true;
+        }
+        bool ok = fits_ldst(off, access_size(in));
         if (ok && apply) {
             o->reg = A64_SP;
             o->imm = off;
@@ -907,13 +944,13 @@ static bool rebase_to_sp(const Gen *g, const Frame *fr)
     return true;
 }
 
-// Whether the saves fit their stp/str from sp.
+// Whether the saves fit their stp, or ldr/str, from sp.
 static bool saves_fit(const Gen *g, const Frame *fr)
 {
     Save s[34];
     int n = sp_saves(g, fr, s);
     for (int i = 0; i < n; i++)
-        if (s[i].off % 8 != 0 || s[i].off > 504)
+        if (s[i].off % 8 != 0 || s[i].off + 8 > 32760)
             return false;
     return true;
 }

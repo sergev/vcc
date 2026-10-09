@@ -197,3 +197,42 @@ ldr d10, [sp], #64
 ret
 )")) << code;
 }
+
+// Structures of every size copied in a frame beyond ldp/stp's reach of the saves.
+TEST_F(Aarch64Test, RunStructCopies)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    EXPECT_EQ("", CompileAndRunAarch64(R"(
+typedef struct { long v[2]; } S16;
+typedef struct { long v[3]; } S24;
+typedef struct { long v[5]; } S40;
+typedef struct { long v[6]; } S48;
+typedef struct { long v[8]; } S64;
+typedef struct { char c[13]; } S13;
+S16 m16(long x) { S16 s = { { x, x + 1 } }; return s; }
+S24 m24(long x) { S24 s = { { x, x + 1, x + 2 } }; return s; }
+S40 m40(long x) { S40 s; for (int i = 0; i < 5; i++) s.v[i] = x + i; return s; }
+S48 m48(long x) { S48 s; for (int i = 0; i < 6; i++) s.v[i] = x + i; return s; }
+S64 m64(long x) { S64 s; for (int i = 0; i < 8; i++) s.v[i] = x + i; return s; }
+S13 m13(char x) { S13 s; for (int i = 0; i < 13; i++) s.c[i] = (char)(x + i); return s; }
+long id(long x) { return x; }
+long all(long x)
+{
+    long big[80];
+    for (int i = 0; i < 80; i++)
+        big[i] = id(i);
+    S16 a = m16(x);
+    S24 b = m24(x);
+    S40 c = m40(x);
+    S48 d = m48(x);
+    S64 e = m64(x);
+    S13 f = m13((char)x);
+    S48 g = d;
+    return a.v[1] + b.v[2] + c.v[4] + d.v[5] + e.v[7] + f.c[12] + g.v[0] + big[79];
+}
+int main(void)
+{
+    return all(1) == 2 + 3 + 5 + 6 + 8 + 13 + 1 + 79 ? 42 : 1;
+})"));
+    EXPECT_EQ(42, exit_status);
+}

@@ -452,6 +452,41 @@ int f(int *p, int n)
 }
 )")
 
+// A structure copied a word at a time goes 32 bytes by ldp/stp of q registers, 16 by
+// ldr/str of one.
+EXPECT_PEEPHOLE(PeepholeCopyRun, R"(sub sp, sp, #224
+stp x30, x19, [sp, #208]
+mov x19, x0
+add x8, sp, #96
+bl mk
+ldp q17, q18, [sp, #96]
+stp q17, q18, [sp, #144]
+ldr q17, [sp, #128]
+str q17, [sp, #176]
+add x0, x19, #1
+add x8, sp, #0
+bl mk
+ldp q17, q18, [sp]
+stp q17, q18, [sp, #48]
+ldr q17, [sp, #32]
+str q17, [sp, #80]
+ldr x1, [sp, #144]
+ldr x0, [sp, #88]
+add x0, x1, x0
+ldp x30, x19, [sp, #208]
+add sp, sp, #224
+ret
+)",
+                R"(typedef struct { long a, b, c, d, e, f; } S;
+S mk(long);
+long g(long x)
+{
+    S s = mk(x);
+    S t = mk(x + 1);
+    return s.a + t.f;
+}
+)")
+
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.
 TEST_F(Aarch64Test, RunPeepholeSize)
