@@ -370,6 +370,58 @@ ret
 )",
                 "int f(int n) { int s = 0; while (n-- > 0) s += n; return s; }")
 
+// A diamond setting 0 or 1, or two constants one apart, is cset or cinc, whether its
+// arms meet or each returns.
+EXPECT_PEEPHOLE(PeepholeDiamondCset, R"(cmp w0, #0
+cset w0, eq
+ret
+)",
+                "int f(int x) { return x == 0 ? 1 : 0; }")
+EXPECT_PEEPHOLE(PeepholeDiamondCinc, R"(cmp w0, w1
+mov w0, #4
+cinc w0, w0, lt
+ret
+)",
+                "int f(int a, int b) { if (a < b) return 5; return 4; }")
+
+// A test of a 0/1 just set, or of a constant, branches where it would go: && and || as
+// branches.
+EXPECT_PEEPHOLE(PeepholeThreadAnd, R"(ldrb w3, [x0]
+cbz w3, .LL0
+ldrb w2, [x1]
+cmp w3, w2
+b.ne .LL0
+add x1, x1, #1
+ldrb w3, [x0, #1]!
+cbz w3, .LL0
+ldrb w2, [x1]
+cmp w3, w2
+b.eq .L13
+ldrb w2, [x0]
+ldrb w0, [x1]
+sub w0, w2, w0
+ret
+)",
+                R"(int f(const unsigned char *a, const unsigned char *b)
+{
+    while (*a != 0 && *a == *b) {
+        a++;
+        b++;
+    }
+    return *a - *b;
+}
+)")
+EXPECT_PEEPHOLE(PeepholeThreadOr, R"(cmp w0, #0
+b.gt .L1
+cmp w1, #0
+b.le .L5
+mov w0, #7
+ret
+mov w0, #3
+ret
+)",
+                "int f(int a, int b) { if (a > 0 || b > 0) return 7; return 3; }")
+
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.
 TEST_F(Aarch64Test, RunPeepholeSize)
@@ -428,8 +480,19 @@ int count_ne(const int *a, const int *b, int n)
         c += *a++ != *b++;
     return c;
 }
+int both(int a, int b) { return a > 0 && b > 0; }
+int either(long a, long b)
+{
+    if (a < 0 || b == 3)
+        return 10;
+    return 20;
+}
+int pick(unsigned x) { return x > 9 ? 6 : 5; }
 int main(void)
 {
+    check(both(1, 2) * 4 + both(1, 0) * 2 + both(0, 1), 4);
+    check(either(-1, 0) + either(0, 3) + either(0, 0), 40);
+    check(pick(10) * 10 + pick(9), 65);
     check(bits(0x8000000100000005UL), 4);
     int x[4] = { 1, 2, 3, 4 }, y[4] = { 1, 0, 3, 0 };
     check(count_ne(x, y, 4), 2);
@@ -450,5 +513,5 @@ int main(void)
     return ok ? bit : 100 + bit;
 }
 )");
-    EXPECT_EQ(9, exit_status);
+    EXPECT_EQ(12, exit_status);
 }

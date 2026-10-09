@@ -1747,6 +1747,11 @@ static bool rewrite(A64_Instr **link)
         delete_at(link);
         return true;
     }
+    // A value never read: its computation goes (not a volatile access).
+    if (computes(in) && !in->is_volatile && bit_of(o[0].reg) && dies_after(in, o[0].reg)) {
+        delete_at(link);
+        return true;
+    }
     if (!next)
         return false;
     if (in->op == A64_MOV && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_IMM &&
@@ -1844,6 +1849,283 @@ static bool rewrite_block_end(A64_Block *b)
     return false;
 }
 
+// The number of branches and jumps of function `fn` to label `l`.
+static int label_refs(const A64_Func *fn, const char *l)
+{
+    int n = 0;
+    for (const A64_Block *b = fn->blocks; b; b = b->next)
+        for (const A64_Instr *in = b->head; in; in = in->next)
+            if ((is_branch(in->op) || in->op == A64_B) && strcmp(branch_target(in), l) == 0)
+                n++;
+    return n;
+}
+
+static A64_Block *block_of(const A64_Func *fn, const char *l)
+{
+    for (A64_Block *b = fn->blocks; b; b = b->next)
+        if (b->label && strcmp(b->label, l) == 0)
+            return b;
+    return NULL;
+}
+
+// The condition under which conditional branch `br` is taken, after `cmp r, #0` for
+// cbz/cbnz.
+static A64_Cond taken_cond(const A64_Instr *br)
+{
+    return br->op == A64_BCOND ? (A64_Cond)br->opnd[0].sub : br->op == A64_CBZ ? A64_EQ : A64_NE;
+}
+
+static A64_Instr *new_instr(A64_Op op, A64_Instr *next)
+{
+    A64_Instr *in = xalloc(sizeof(A64_Instr), __func__, __FILE__, __LINE__);
+    memset(in, 0, sizeof(*in));
+    in->op   = op;
+    in->next = next;
+    return in;
+}
+
+static bool same_operand(const A64_Operand *x, const A64_Operand *y)
+{
+    return x->kind == y->kind && x->reg == y->reg && x->width == y->width && x->imm == y->imm &&
+           x->sub == y->sub && x->reloc == y->reloc && x->index == y->index &&
+           x->index_width == y->index_width && x->ext == y->ext &&
+           (x->sym == y->sym || (x->sym && y->sym && strcmp(x->sym, y->sym) == 0));
+}
+
+static bool same_instr(const A64_Instr *x, const A64_Instr *y)
+{
+    if (x->op != y->op || x->is_volatile != y->is_volatile)
+        return false;
+    for (int i = 0; i < A64_MAX_OPERANDS; i++)
+        if (!same_operand(&x->opnd[i], &y->opnd[i]))
+            return false;
+    return true;
+}
+
+// Whether the instructions from x on and from y on are the same, ending in a return.
+static bool same_return_tail(const A64_Instr *x, const A64_Instr *y)
+{
+    for (; x && y; x = x->next, y = y->next)
+        if (!same_instr(x, y))
+            return false;
+        else if (x->op == A64_RET)
+            return !x->next && !y->next;
+    return false;
+}
+
+// A constant diamond, ending block b: `br …, L; mov d, #a`, then `b M` with
+// `L: mov d, #c` falling into M, or the same code ending in a return after either
+// move; L reached by that branch alone: d set by the condition, as `cset d, cond` for
+// 0 and 1, `mov d, #lo; cinc d, d, cond` for constants one apart; cbz/cbnz test their
+// register by a compare first.
+static bool fold_diamond_at(A64_Func *fn, A64_Block *b, A64_Instr **brl)
+{
+    A64_Instr *br = *brl;
+    if ((br->op != A64_BCOND && br->op != A64_CBZ && br->op != A64_CBNZ) || !br->next ||
+        !br->next->next)
+        return false;
+    A64_Instr *mv = br->next, *rest = mv->next;
+    if (mv->op != A64_MOV || mv->opnd[0].kind != A64_OPND_REG || mv->opnd[1].kind != A64_OPND_IMM ||
+        a64_is_fpreg(mv->opnd[0].reg))
+        return false;
+    const char *l = branch_target(br);
+    A64_Block *lb = block_of(fn, l);
+    if (!lb || lb != b->next || !lb->head || label_refs(fn, l) != 1)
+        return false;
+    const A64_Instr *mc = lb->head;
+    bool jump = rest->op == A64_B && !rest->next;
+    if (jump ? mc->next || !falls_to(lb->next, rest->opnd[0].sym) : !same_return_tail(rest, mc->next))
+        return false;
+    A64_Operand d = mv->opnd[0];
+    if (mc->op != A64_MOV || mc->opnd[0].kind != A64_OPND_REG || mc->opnd[0].reg != d.reg ||
+        mc->opnd[0].width != d.width || mc->opnd[1].kind != A64_OPND_IMM)
+        return false;
+    int bits  = width_bits(d.width);
+    int64_t a = mv->opnd[1].imm, c = mc->opnd[1].imm; // not taken, taken
+    if (bits == 32) {
+        a = (int32_t)a;
+        c = (int32_t)c;
+    }
+    A64_Cond cond = taken_cond(br);
+    int64_t lo;
+    if (c == a + 1) {
+        lo = a;
+    } else if (a == c + 1) {
+        lo   = c;
+        cond = (A64_Cond)(cond ^ 1);
+    } else {
+        return false;
+    }
+    // The new code, in place of br and mv (and the jump).
+    A64_Instr *tail = new_instr(A64_CSET, jump ? NULL : rest);
+    tail->opnd[0]   = d;
+    tail->opnd[1]   = a64_cond(cond);
+    if (lo != 0) {
+        tail->op      = A64_CINC;
+        tail->opnd[1] = d;
+        tail->opnd[2] = a64_cond(cond);
+        tail          = new_instr(A64_MOV, tail);
+        tail->opnd[0] = d;
+        tail->opnd[1] = a64_imm(lo);
+    }
+    if (br->op != A64_BCOND) {
+        tail          = new_instr(A64_CMP, tail);
+        tail->opnd[0] = br->opnd[0];
+        tail->opnd[1] = a64_imm(0);
+    }
+    *brl = tail;
+    if (jump)
+        free_instr(rest);
+    free_instr(mv);
+    free_instr(br);
+    while (lb->head)
+        delete_at(&lb->head);
+    return true;
+}
+
+static bool fold_diamond(A64_Func *fn, A64_Block *b)
+{
+    for (A64_Instr **brl = &b->head; *brl; brl = &(*brl)->next)
+        if (is_branch((*brl)->op) && fold_diamond_at(fn, b, brl))
+            return true;
+    return false;
+}
+
+// The first block from b on with code, or NULL.
+static A64_Block *first_code(A64_Block *b)
+{
+    while (b && !b->head)
+        b = b->next;
+    return b;
+}
+
+// Replace the label of branch or jump `in` by `l`.
+static void retarget(A64_Instr *in, const char *l)
+{
+    A64_Operand *t = target(in);
+    xfree(t->sym);
+    t->sym = xstrdup(l);
+}
+
+// The registers live out of block m.
+static Regs block_out(const A64_Block *m)
+{
+    for (int i = 0; i < live_info.n; i++)
+        if (live_info.blocks[i] == m)
+            return live_info.out[i];
+    return ~0ull;
+}
+
+// The registers live before the instructions from `in` on to the end of block m.
+static Regs live_from(const A64_Block *m, const A64_Instr *in)
+{
+    A64_Block rest = { .head = (A64_Instr *)in };
+    return live_before(&rest, block_out(m));
+}
+
+static int split_count; // labels made by splitting a block
+
+// Block m starts with `cbz`/`cbnz w, X`: the test, and where control goes when it is
+// not taken: the next block when the test is all of m, else (split) the rest of m moved
+// into a new block of its own label.  Sets *after to the registers live there.
+static A64_Block *test_block(A64_Block *m, A64_Instr **test, bool split, Regs *after)
+{
+    A64_Instr *br = m ? m->head : NULL;
+    if (!br || (br->op != A64_CBZ && br->op != A64_CBNZ))
+        return NULL;
+    *test = br;
+    if (!br->next) {
+        if (!m->next || !m->next->label)
+            return NULL;
+        *after = live_at(m->next->label);
+        return m->next;
+    }
+    *after = live_from(m, br->next);
+    if (!split)
+        return m; // not to be used as a target
+    char l[32];
+    snprintf(l, sizeof(l), "%sP%d", a64_local_prefix(), ++split_count);
+    A64_Block *n = xalloc(sizeof(A64_Block), __func__, __FILE__, __LINE__);
+    memset(n, 0, sizeof(*n));
+    n->label = xstrdup(l);
+    n->head  = br->next;
+    n->next  = m->next;
+    m->next  = n;
+    br->next = NULL;
+    return n;
+}
+
+// Jump threading in block b of fn:
+//   a branch or jump to a jump goes where that one does;
+//   `cset w, c; b M`, M a lone test of w: the test itself, then a jump past it, so that
+//   the test fuses with the cset (w dead either way);
+//   `mov w, #k` falling or jumping into a lone test of w: a jump where the test goes;
+//   code no branch reaches and nothing falls into goes.
+static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
+{
+    for (A64_Instr *in = b->head; in; in = in->next) {
+        if (!is_branch(in->op) && in->op != A64_B)
+            continue;
+        A64_Block *t = first_code(block_of(fn, branch_target(in)));
+        if (t && t->head->op == A64_B && strcmp(t->head->opnd[0].sym, branch_target(in)) != 0 &&
+            !(t->label && strcmp(t->label, t->head->opnd[0].sym) == 0)) {
+            retarget(in, t->head->opnd[0].sym);
+            return true;
+        }
+    }
+    A64_Instr **jl = last_link(b, 0), **sl = last_link(b, 1);
+    A64_Instr *test;
+    if (jl && sl && (*jl)->op == A64_B && (*sl)->op == A64_CSET) {
+        A64_Block *m = block_of(fn, (*jl)->opnd[0].sym);
+        int w        = (*sl)->opnd[0].reg;
+        Regs after;
+        if (test_block(m, &test, false, &after) && test->opnd[0].reg == w &&
+            !((live_at(branch_target(test)) | after) & bit_of(w))) {
+            A64_Block *n = test_block(m, &test, true, &after);
+            A64_Instr *jmp  = *jl;
+            A64_Instr *copy = new_instr(test->op, jmp);
+            copy->opnd[0]   = test->opnd[0];
+            copy->opnd[1]   = a64_label(branch_target(test));
+            (*sl)->next     = copy;
+            retarget(jmp, n->label);
+            return true;
+        }
+    }
+    // A constant tested: the jump, or the fall, into the test goes where it goes.
+    A64_Instr **ml = jl && (*jl)->op == A64_B ? sl : jl;
+    A64_Block *m   = jl && (*jl)->op == A64_B ? block_of(fn, (*jl)->opnd[0].sym)
+                     : jl && (*jl)->op != A64_RET ? b->next : NULL;
+    Regs after;
+    m = first_code(m);
+    if (ml && test_block(m, &test, false, &after) && (*ml)->op == A64_MOV &&
+        (*ml)->opnd[0].kind == A64_OPND_REG && (*ml)->opnd[1].kind == A64_OPND_IMM &&
+        (*ml)->opnd[0].reg == test->opnd[0].reg && !a64_is_fpreg(test->opnd[0].reg)) {
+        A64_Block *n  = test_block(m, &test, true, &after);
+        A64_Instr *mv = *ml;
+        uint64_t k    = (uint64_t)mv->opnd[1].imm;
+        if (test->opnd[0].width == A64_W)
+            k = (uint32_t)k;
+        if (mv->opnd[0].width == A64_W && test->opnd[0].width == A64_X)
+            k = (uint32_t)k;
+        const char *to = (k == 0) == (test->op == A64_CBZ) ? branch_target(test) : n->label;
+        if (mv->next) // the jump to the test
+            retarget(mv->next, to);
+        else
+            mv->next = new_instr(A64_B, NULL), mv->next->opnd[0] = a64_label(to);
+        Regs live = to == n->label ? after : live_at(to);
+        if (!(live & bit_of(mv->opnd[0].reg)) && bit_of(mv->opnd[0].reg))
+            delete_at(ml);
+        return true;
+    }
+    // Unreachable: no branch to it, nothing falling into it.
+    if (b->head && !fall_in && (!b->label || label_refs(fn, b->label) == 0)) {
+        while (b->head)
+            delete_at(&b->head);
+        return true;
+    }
+    return false;
+}
+
 // The rewrites to a fixed point, then the pairing of loads and stores, which would
 // hide a store from the deletion of its reload.
 void a64_peephole(A64_Func *fn, unsigned result_in)
@@ -1857,6 +2139,7 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
     while (changed) {
         changed = false;
         compute_liveness(fn);
+        bool fall_in = false;
         for (A64_Block *b = fn->blocks; b; b = b->next) {
             cur_block = b;
             while (fold_bitfields(b))
@@ -1869,6 +2152,13 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
             }
             while (rewrite_block_end(b))
                 changed = true;
+            if (fold_diamond(fn, b))
+                changed = true;
+            if (b != fn->blocks && thread_jumps(fn, b, fall_in))
+                changed = true;
+            // Whether control reaches the next block by falling out of this one.
+            bool reached = b == fn->blocks || fall_in || (b->label && label_refs(fn, b->label));
+            fall_in      = reached && falls_through(b);
         }
     }
     free_liveness();
