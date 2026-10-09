@@ -412,7 +412,7 @@ ret
 }
 )")
 EXPECT_PEEPHOLE(PeepholeThreadOr, R"(cmp w0, #0
-b.gt .L1
+b.gt .LP1_f
 cmp w1, #0
 b.le .L5
 mov w0, #7
@@ -421,6 +421,36 @@ mov w0, #3
 ret
 )",
                 "int f(int a, int b) { if (a > 0 || b > 0) return 7; return 3; }")
+
+// Two returns ending alike share one epilogue: the first jumps into the second.
+EXPECT_PEEPHOLE(PeepholeTailMerge, R"(stp x19, x20, [sp, #-32]!
+str x30, [sp, #16]
+mov x19, x0
+add x20, x19, w1, sxtw #2
+cmp w1, #0
+b.le .LL0
+ldr w0, [x19]
+bl g
+cbz w0, .L8
+mov w0, #1
+b .LP1_f
+add x19, x19, #4
+cmp x19, x20
+b.lo .L3
+mov w0, #0
+ldr x30, [sp, #16]
+ldp x19, x20, [sp], #32
+ret
+)",
+                R"(int g(int);
+int f(int *p, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (g(p[i]))
+            return 1;
+    return 0;
+}
+)")
 
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.

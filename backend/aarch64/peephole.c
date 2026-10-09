@@ -251,10 +251,21 @@ static struct {
 } live_info;
 
 static A64_Block *cur_block; // the block being swept
+static A64_Func *cur_fn;     // the function being rewritten
+static bool live_stale;      // the blocks changed shape: liveness to be computed again
+
+static void compute_liveness(A64_Func *fn);
+
+static void fresh_liveness(void)
+{
+    if (live_stale)
+        compute_liveness(cur_fn);
+}
 
 // The registers live at label `l`: all, for one not in the function.
 static Regs live_at(const char *l)
 {
+    fresh_liveness();
     for (int i = 0; i < live_info.n; i++)
         if (live_info.blocks[i]->label && strcmp(live_info.blocks[i]->label, l) == 0)
             return live_info.in[i];
@@ -314,6 +325,7 @@ static void free_liveness(void)
 // Liveness over the blocks, to a fixed point, backwards.
 static void compute_liveness(A64_Func *fn)
 {
+    live_stale = false;
     free_liveness();
     for (const A64_Block *b = fn->blocks; b; b = b->next)
         live_info.n++;
@@ -344,6 +356,7 @@ static void compute_liveness(A64_Func *fn)
 // The registers live out of the block being rewritten.
 static Regs live_out(void)
 {
+    fresh_liveness();
     for (int i = 0; i < live_info.n; i++)
         if (live_info.blocks[i] == cur_block)
             return live_info.out[i];
@@ -2002,6 +2015,7 @@ static void retarget(A64_Instr *in, const char *l)
 // The registers live out of block m.
 static Regs block_out(const A64_Block *m)
 {
+    fresh_liveness();
     for (int i = 0; i < live_info.n; i++)
         if (live_info.blocks[i] == m)
             return live_info.out[i];
@@ -2015,7 +2029,35 @@ static Regs live_from(const A64_Block *m, const A64_Instr *in)
     return live_before(&rest, block_out(m));
 }
 
-static int split_count; // labels made by splitting a block
+// Whether the instructions from `in` on read a scratch register they have not written
+// first: they cannot begin a block of their own, a scratch value never living past its
+// block.
+static bool reads_scratch_in(const A64_Instr *in)
+{
+    Regs written = 0;
+    for (; in; in = in->next) {
+        for (int r = A64_X(9); r <= A64_X(17); r++)
+            if (reads(in, r) && !(written & bit_of(r)))
+                return true;
+        for (int r = A64_V(16); r < A64_VREG; r++)
+            if (reads(in, r) && !(written & bit_of(r)))
+                return true;
+        written |= defs(in);
+    }
+    return false;
+}
+
+static int split_count; // labels made by splitting a block of the function
+
+// A new label: `<prefix>P<n>_<function>`, apart from those of the TAC and of other
+// functions.
+static char *split_label(void)
+{
+    size_t len = strlen(cur_fn->name) + 32;
+    char *l    = xalloc(len, __func__, __FILE__, __LINE__);
+    snprintf(l, len, "%sP%d_%s", a64_local_prefix(), ++split_count, cur_fn->name);
+    return l;
+}
 
 // Block m starts with `cbz`/`cbnz w, X`: the test, and where control goes when it is
 // not taken: the next block when the test is all of m, else (split) the rest of m moved
@@ -2032,18 +2074,19 @@ static A64_Block *test_block(A64_Block *m, A64_Instr **test, bool split, Regs *a
         *after = live_at(m->next->label);
         return m->next;
     }
+    if (reads_scratch_in(br->next))
+        return NULL;
     *after = live_from(m, br->next);
     if (!split)
         return m; // not to be used as a target
-    char l[32];
-    snprintf(l, sizeof(l), "%sP%d", a64_local_prefix(), ++split_count);
     A64_Block *n = xalloc(sizeof(A64_Block), __func__, __FILE__, __LINE__);
     memset(n, 0, sizeof(*n));
-    n->label = xstrdup(l);
-    n->head  = br->next;
-    n->next  = m->next;
-    m->next  = n;
-    br->next = NULL;
+    n->label   = split_label();
+    n->head    = br->next;
+    n->next    = m->next;
+    m->next    = n;
+    br->next   = NULL;
+    live_stale = true;
     return n;
 }
 
@@ -2118,11 +2161,92 @@ static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
     return false;
 }
 
+// The instructions of block b, into *list (allocated); their number.
+static int block_list(const A64_Block *b, A64_Instr ***list)
+{
+    int n = 0;
+    for (const A64_Instr *in = b->head; in; in = in->next)
+        n++;
+    *list = xalloc((n ? n : 1) * sizeof(A64_Instr *), __func__, __FILE__, __LINE__);
+    n     = 0;
+    for (A64_Instr *in = b->head; in; in = in->next)
+        (*list)[n++] = in;
+    return n;
+}
+
+// Whether block b ends in a return or a jump.
+static bool ends_out(const A64_Block *b)
+{
+    const A64_Instr *last = NULL;
+    for (const A64_Instr *in = b->head; in; in = in->next)
+        last = in;
+    return last && (last->op == A64_RET || last->op == A64_B);
+}
+
+// Tail merging: of two blocks ending in the same instructions, through a return or a
+// jump, one keeps them and the other jumps there, when that saves an instruction.  The
+// one kept is split where they begin, unless they are all of it and it has a label.
+static bool merge_tails(A64_Func *fn)
+{
+    for (A64_Block *y = fn->blocks; y; y = y->next) {
+        if (!ends_out(y))
+            continue;
+        A64_Instr **ly;
+        int ny = block_list(y, &ly);
+        for (A64_Block *x = fn->blocks; x; x = x->next) {
+            if (x == y || !ends_out(x))
+                continue;
+            A64_Instr **lx;
+            int nx = block_list(x, &lx), k = 0;
+            while (k < nx && k < ny && same_instr(lx[nx - 1 - k], ly[ny - 1 - k]))
+                k++;
+            if (k < 2 || reads_scratch_in(lx[nx - k])) {
+                xfree(lx);
+                continue;
+            }
+            // The shared code: in x from index nx - k on.
+            const char *l;
+            if (k == nx && x->label) {
+                l = x->label;
+            } else {
+                A64_Block *n = xalloc(sizeof(A64_Block), __func__, __FILE__, __LINE__);
+                memset(n, 0, sizeof(*n));
+                n->label = split_label();
+                n->head  = lx[nx - k];
+                n->next  = x->next;
+                x->next  = n;
+                if (k == nx)
+                    x->head = NULL;
+                else
+                    lx[nx - k - 1]->next = NULL;
+                l = n->label;
+            }
+            // y jumps there instead.
+            A64_Instr *jmp = new_instr(A64_B, NULL);
+            jmp->opnd[0]   = a64_label(l);
+            if (k == ny)
+                y->head = jmp;
+            else
+                ly[ny - k - 1]->next = jmp;
+            for (int i = ny - k; i < ny; i++)
+                free_instr(ly[i]);
+            xfree(lx);
+            xfree(ly);
+            live_stale = true;
+            return true;
+        }
+        xfree(ly);
+    }
+    return false;
+}
+
 // The rewrites to a fixed point, then the pairing of loads and stores, which would
 // hide a store from the deletion of its reload.
 void a64_peephole(A64_Func *fn, unsigned result_in)
 {
     result       = result_in;
+    cur_fn       = fn;
+    split_count  = 0;
     instr_count  = 0;
     for (const A64_Block *b = fn->blocks; b; b = b->next)
         for (const A64_Instr *in = b->head; in; in = in->next)
@@ -2152,6 +2276,8 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
             bool reached = b == fn->blocks || fall_in || (b->label && label_refs(fn, b->label));
             fall_in      = reached && falls_through(b);
         }
+        if (!changed && merge_tails(fn))
+            changed = true;
     }
     free_liveness();
     cur_block = NULL;
