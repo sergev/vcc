@@ -136,7 +136,7 @@ int target(void) {
     return 0;  // success
 }
 )SRC")),
-              "binary=92 copy=50 fun_call=5 jump=43 jump_if_not_zero=35 jump_if_zero=19 label=97 return=17 unary=4");
+              "binary=57 copy=15 fun_call=5 jump=8 jump_if_not_zero=39 jump_if_zero=15 label=34 return=17");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_PropagateIntoComplexExpressions)
@@ -2083,7 +2083,7 @@ int target(int flag) {
 
 }
 )SRC")),
-              "binary=14 copy=14 jump=10 jump_if_zero=13 label=23 return=4");
+              "binary=8 copy=8 jump=4 jump_if_zero=13 label=11 return=4");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_DontPropagate_SwitchFallthrough)

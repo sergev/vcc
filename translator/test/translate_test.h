@@ -22,6 +22,14 @@ class TranslateTest : public ::testing::Test {
 
 protected:
     Program *program{};
+    bool rotate = false; // lower loops rotated, as lower does by default
+
+    OptFlags Flags() const
+    {
+        OptFlags f{};
+        f.loop_rotate = rotate;
+        return f;
+    }
 
     void SetUp() override
     {
@@ -78,7 +86,7 @@ protected:
             // counter feeds both label_loops and translate.
             int label_seq = 0;
             typecheck_decl(decls, &label_seq);
-            Tac_TopLevel *tac = translate(decls, OptFlags{}, &label_seq);
+            Tac_TopLevel *tac = translate(decls, Flags(), &label_seq);
             free_external_decl(decls);
             if (tac) {
                 result += Yaml(tac);
@@ -113,7 +121,7 @@ protected:
             ExternalDecl *next = decls->next;
             decls->next        = nullptr;
             typecheck_decl(decls, &label_seq);
-            *tail = translate(decls, OptFlags{}, &label_seq);
+            *tail = translate(decls, Flags(), &label_seq);
             free_external_decl(decls);
             while (*tail)
                 tail = &(*tail)->next;

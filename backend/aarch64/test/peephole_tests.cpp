@@ -296,21 +296,17 @@ TEST_F(Aarch64Test, RunPeepholeBitfields)
 }
 
 // Pointer steps: a load or store at the old pointer post-indexed, at the new one
-// pre-indexed.
+// pre-indexed; a loop with an empty body and a condition with side effects is entered
+// at its test, its loaded value reused for the return.
 EXPECT_PEEPHOLE(PeepholePostIndex, R"(ldrb w3, [x1], #1
 strb w3, [x0], #1
-cbz w3, .LL0
-ldrb w3, [x1], #1
-strb w3, [x0], #1
-cbnz w3, .L9
+cbnz w3, .L2
 ret
 )",
                 "void f(char *d, const char *s) { while ((*d++ = *s++) != 0) ; }")
 EXPECT_PEEPHOLE(PeepholePreIndex, R"(ldrb w1, [x0, #1]!
-cbz w1, .LL0
-ldrb w1, [x0, #1]!
-cbnz w1, .L4
-ldrb w0, [x0]
+cbnz w1, .L2
+mov w0, w1
 ret
 )",
                 "int f(const char *p) { while (*++p) ; return *p; }")
@@ -357,14 +353,13 @@ mov x0, #2
 ret
 )",
                 "long f(long x) { if (x & (1L << 40)) return 1; return 2; }")
-EXPECT_PEEPHOLE(PeepholeCompareBeforeDecrement, R"(mov w2, #0
-cmp w0, #0
-sub w0, w0, #1
-b.le .LL0
+EXPECT_PEEPHOLE(PeepholeCompareBeforeDecrement, R"(mov w0, w0
+mov w2, #0
+b .LL1
 add w2, w2, w0
 cmp w0, #0
 sub w0, w0, #1
-b.gt .L5
+b.gt .L2
 mov w0, w2
 ret
 )",
@@ -384,22 +379,19 @@ ret
 )",
                 "int f(int a, int b) { if (a < b) return 5; return 4; }")
 
-// A test of a 0/1 just set, or of a constant, branches where it would go: && and || as
-// branches.
-EXPECT_PEEPHOLE(PeepholeThreadAnd, R"(ldrb w3, [x0]
-cbz w3, .LL0
-ldrb w2, [x1]
-cmp w3, w2
-b.ne .LL0
+// && and || in a condition are branches (the translator's jumps, and the peephole
+// threads what is left: a test of a 0/1 just set, or of a constant); a loop on such a
+// condition is entered at its test.
+EXPECT_PEEPHOLE(PeepholeThreadAnd, R"(b .LL1
+add x0, x0, #1
 add x1, x1, #1
-ldrb w3, [x0, #1]!
-cbz w3, .LL0
+ldrb w3, [x0]
+cbz w3, .L7
 ldrb w2, [x1]
 cmp w3, w2
-b.eq .L13
-ldrb w2, [x0]
+b.eq .L2
 ldrb w0, [x1]
-sub w0, w2, w0
+sub w0, w3, w0
 ret
 )",
                 R"(int f(const unsigned char *a, const unsigned char *b)
@@ -412,9 +404,9 @@ ret
 }
 )")
 EXPECT_PEEPHOLE(PeepholeThreadOr, R"(cmp w0, #0
-b.gt .LP1_f
+b.gt .L2
 cmp w1, #0
-b.le .L5
+b.le .L0
 mov w0, #7
 ret
 mov w0, #3

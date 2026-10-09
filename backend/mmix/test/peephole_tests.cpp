@@ -54,7 +54,7 @@ pop 1, 0
            "long f(double a, double b) { if (a < b) return 1; return 2; }")
 
 EXPECT_OPT(NotBranch,
-           R"(bnz $0, L:1
+           R"(bnz $0, L:0
 setl $0, #1
 pop 1, 0
 setl $0, #2
@@ -74,18 +74,14 @@ EXPECT_OPT(ConstantFirstOperand, R"(addu $0, $0, 5
 pop 1, 0
 )", "long f(long a) { return 5 + a; }")
 
-// *d++ = *s++: each pointer read, then stepped; the loop rotated, its back edge pbnz.
+// *d++ = *s++: each pointer read, then stepped; the loop entered at its test, the body
+// empty, its back edge pbnz.
 EXPECT_OPT(PostIncrement,
            R"(ldb $4, $1, 0
 addu $1, $1, 1
 stbu $4, $0, 0
 addu $0, $0, 1
-bz $4, L:L0
-ldb $4, $1, 0
-addu $1, $1, 1
-stbu $4, $0, 0
-addu $0, $0, 1
-pbnz $4, L:7
+pbnz $4, L:2
 pop 1, 0
 )",
            "char *f(char *d, const char *s) { while ((*d++ = *s++)); return d; }")

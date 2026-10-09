@@ -2448,7 +2448,7 @@ int target(void) {
     return y;                // should become return 4
 }
 )SRC")),
-              "binary=6 copy=7 fun_call=1 jump=2 jump_if_not_zero=1 jump_if_zero=4 label=7 return=4");
+              "binary=4 copy=5 fun_call=1 jump_if_not_zero=1 jump_if_zero=4 label=3 return=4");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_InitAllCopies)

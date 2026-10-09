@@ -129,6 +129,7 @@ extern int translator_debug;
 // problem.  Always on in a build without NDEBUG.
 extern int translate_verify;
 extern int translate_rotate_loops; // set by translate() from OptFlags.loop_rotate
+extern bool translate_cond_jumps;     // && || ! in a condition as jumps (expr.c); --no-cond-jumps
 extern bool translate_shared_cleanup; // an exit may share a large cleanup (stmt.c); --no-shared-cleanup
 extern int import_debug;
 extern int export_debug;
@@ -245,6 +246,10 @@ Tac_Val *gen_string_constant(TacCtx *ctx, const char *s, size_t len); // its add
 void gen_bitfield_init(TacCtx *ctx, const char *var, int offset, const BitField *bf,
                        const Type *type, Tac_Val *v);
 Tac_Val *gen_cond_val(TacCtx *ctx, Expr *cond);
+bool cond_jumps(void);
+void gen_cond_jump(TacCtx *ctx, Expr *cond, bool if_true, const char *target);
+bool is_simple_cond(const Expr *e);
+bool is_logical(const Expr *e);
 void gen_stmt(TacCtx *ctx, Stmt *stmt);
 void gen_compound_init(TacCtx *ctx, const char *var_name, int base_offset, const Initializer *init);
 void gen_aggregate_init(TacCtx *ctx, const char *var_name, const Initializer *init, int bytes);

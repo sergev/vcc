@@ -328,3 +328,58 @@ TEST_F(TranslateTest, StaticFunctionGlobalFalse)
           value: 0
 )");
 }
+
+// ---------------------------------------------------------------------------
+// && || ! in a condition: jumps, not a 0/1 value tested again; a loop whose
+// condition is not simple entered by a jump to its test, not by a copy of it.
+// BESM-6 keeps the value and the copy, its code unchanged.
+// ---------------------------------------------------------------------------
+
+static int count(const std::string &s, const std::string &what)
+{
+    int n = 0;
+    for (size_t at = s.find(what); at != std::string::npos; at = s.find(what, at + 1))
+        n++;
+    return n;
+}
+
+TEST_F(TranslateTestRiscv, IfAndOrAsJumps)
+{
+    std::string yaml = CompileToYaml("int f(int a, int b, int c) { if ((a && b) || !c) return 1; return 2; }");
+    EXPECT_EQ(0, count(yaml, "kind: copy")) << yaml;
+    EXPECT_EQ(0, count(yaml, "op: not_equal")) << yaml;
+    EXPECT_EQ(0, count(yaml, "op: not\n")) << yaml;
+    EXPECT_EQ(3, count(yaml, "kind: jump_if_zero") + count(yaml, "kind: jump_if_not_zero")) << yaml;
+}
+
+TEST_F(TranslateTestRiscv, LoopEnteredAtItsTest)
+{
+    rotate           = true;
+    std::string yaml = CompileToYaml(R"(int g(int);
+int f(int *p)
+{
+    int n = 0;
+    while (*p && g(*p))
+        n++, p++;
+    return n;
+}
+)");
+    // One copy of the test, at the bottom: a single call of g.
+    EXPECT_EQ(1, count(yaml, "fun_name: g")) << yaml;
+    EXPECT_NE(std::string::npos, yaml.find("kind: jump\n")) << yaml;
+}
+
+TEST_F(TranslateTestRiscv, SimpleLoopKeepsItsGuard)
+{
+    rotate           = true;
+    std::string yaml = CompileToYaml("int f(int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }");
+    EXPECT_EQ(2, count(yaml, "op: less_than")) << yaml;
+    EXPECT_EQ(0, count(yaml, "kind: jump\n")) << yaml;
+}
+
+TEST_F(TranslateTest, Besm6KeepsLogicalValues)
+{
+    std::string yaml = CompileToYaml("int f(int a, int b) { if (a && b) return 1; return 2; }");
+    EXPECT_EQ(1, count(yaml, "kind: copy")) << yaml;
+    EXPECT_EQ(1, count(yaml, "op: not_equal")) << yaml;
+}

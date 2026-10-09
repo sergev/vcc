@@ -50,6 +50,7 @@ typedef struct {
     int no_loop_rotate;      // --no-loop-rotate
     int no_ivsr;             // --no-ivsr
     int no_shared_cleanup;   // --no-shared-cleanup
+    int no_cond_jumps;       // --no-cond-jumps
     int opt_debug;           // --opt-debug
     int verify;              // --verify
 } Args;
@@ -76,6 +77,8 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-loop-rotate    Disable loop rotation (a loop tested at its bottom)\n");
     fprintf(stderr, "    --no-ivsr           Disable induction-variable strength reduction\n");
     fprintf(stderr, "    --no-shared-cleanup Lower a defer on every way out, never sharing one copy\n");
+    fprintf(stderr, "    --no-cond-jumps     Lower && || ! in a condition as a 0/1 value, and copy\n");
+    fprintf(stderr, "                        any loop condition into the guard\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
     fprintf(stderr, "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
@@ -107,6 +110,7 @@ static void init_args(Args *args)
     args->no_loop_rotate = 0;
     args->no_ivsr        = 0;
     args->no_shared_cleanup = 0;
+    args->no_cond_jumps     = 0;
     args->verify         = 0;
     args->opt_debug      = 0;
 }
@@ -160,6 +164,7 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "no-loop-rotate", no_argument, 0, 263 }, //
         { "no-ivsr", no_argument, 0, 264 },        //
         { "no-shared-cleanup", no_argument, 0, 265 }, //
+        { "no-cond-jumps", no_argument, 0, 266 },     //
         {},                                        //
     };
 
@@ -224,6 +229,9 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 265:
             args->no_shared_cleanup = 1;
+            break;
+        case 266:
+            args->no_cond_jumps = 1;
             break;
         case '?': // Unknown option
             return -1;
@@ -330,6 +338,7 @@ void process_file(const Args *args)
     flags.loop_rotate      = !args->no_loop_rotate;
     flags.ivsr             = !args->no_ivsr;
     translate_shared_cleanup = !args->no_shared_cleanup;
+    translate_cond_jumps     = !args->no_cond_jumps;
     if (args->verify)
         translate_verify = 1;
     flags.debug            = args->opt_debug;

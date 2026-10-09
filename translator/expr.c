@@ -757,6 +757,97 @@ Tac_Val *gen_cond_val(TacCtx *ctx, Expr *cond)
     return v;
 }
 
+bool translate_cond_jumps = true;
+
+// Whether a condition's `&&`, `||` and `!` are jumps: not on BESM-6, whose code must not
+// change.
+bool cond_jumps(void)
+{
+    return translate_cond_jumps && !target_config->no_loop_opt;
+}
+
+// Jump to `target` when `cond` is true (`if_true`) or false, else fall through.  `&&`,
+// `||` and `!` become jumps, never a 0/1 value tested again (when cond_jumps()).
+void gen_cond_jump(TacCtx *ctx, Expr *cond, bool if_true, const char *target)
+{
+    if (cond_jumps()) {
+        if (cond->kind == EXPR_UNARY_OP && cond->u.unary_op.op == UNARY_LOG_NOT) {
+            gen_cond_jump(ctx, cond->u.unary_op.expr, !if_true, target);
+            return;
+        }
+        if (cond->kind == EXPR_BINARY_OP &&
+            (cond->u.binary_op.op == BINARY_LOG_AND || cond->u.binary_op.op == BINARY_LOG_OR)) {
+            bool is_and = cond->u.binary_op.op == BINARY_LOG_AND;
+            Expr *l = cond->u.binary_op.left, *r = cond->u.binary_op.right;
+            if (is_and != if_true) {
+                // && jumping when false, || when true: either operand decides alone.
+                gen_cond_jump(ctx, l, if_true, target);
+                gen_cond_jump(ctx, r, if_true, target);
+            } else {
+                // && jumping when true, || when false: the left operand can only skip
+                // the right one.
+                char *skip = new_temp(ctx);
+                gen_cond_jump(ctx, l, !if_true, skip);
+                gen_cond_jump(ctx, r, if_true, target);
+                emit_label(ctx, skip);
+                xfree(skip);
+            }
+            return;
+        }
+    }
+    Tac_Val *v = gen_cond_val(ctx, cond);
+    Tac_Instruction *j;
+    if (if_true) {
+        j                               = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
+        j->u.jump_if_not_zero.condition = v;
+        j->u.jump_if_not_zero.target    = xstrdup(target);
+    } else {
+        j                           = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
+        j->u.jump_if_zero.condition = v;
+        j->u.jump_if_zero.target    = xstrdup(target);
+    }
+    tac_append(ctx, j);
+}
+
+// Whether `e` is `&&`, `||` or `!`, which gen_cond_jump makes jumps.
+bool is_logical(const Expr *e)
+{
+    return (e->kind == EXPR_UNARY_OP && e->u.unary_op.op == UNARY_LOG_NOT) ||
+           (e->kind == EXPR_BINARY_OP &&
+            (e->u.binary_op.op == BINARY_LOG_AND || e->u.binary_op.op == BINARY_LOG_OR));
+}
+
+// Whether `e` is cheap to evaluate twice and has no side effects: names, constants and
+// operators on them, but no `&&`, `||`, `?:`, call or assignment.
+bool is_simple_cond(const Expr *e)
+{
+    switch (e->kind) {
+    case EXPR_LITERAL:
+    case EXPR_VAR:
+    case EXPR_SIZEOF_EXPR:
+    case EXPR_SIZEOF_TYPE:
+    case EXPR_ALIGNOF:
+        return true;
+    case EXPR_UNARY_OP:
+        return e->u.unary_op.op != UNARY_PRE_INC && e->u.unary_op.op != UNARY_PRE_DEC &&
+               is_simple_cond(e->u.unary_op.expr);
+    case EXPR_BINARY_OP:
+        return e->u.binary_op.op != BINARY_LOG_AND && e->u.binary_op.op != BINARY_LOG_OR &&
+               e->u.binary_op.op != BINARY_COMMA && is_simple_cond(e->u.binary_op.left) &&
+               is_simple_cond(e->u.binary_op.right);
+    case EXPR_SUBSCRIPT:
+        return is_simple_cond(e->u.subscript.left) && is_simple_cond(e->u.subscript.right);
+    case EXPR_CAST:
+        return is_simple_cond(e->u.cast.expr);
+    case EXPR_FIELD_ACCESS:
+        return is_simple_cond(e->u.field_access.expr);
+    case EXPR_PTR_ACCESS:
+        return is_simple_cond(e->u.ptr_access.expr);
+    default:
+        return false;
+    }
+}
+
 static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Type *type)
 {
     // char*/void* arithmetic: pointer ± integer adjusts the 3-bit byte offset of a fat

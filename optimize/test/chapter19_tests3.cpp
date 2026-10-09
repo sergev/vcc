@@ -268,7 +268,7 @@ int target(int *ptr, int *ptr2) {
     return callee(ptr, ptr2);
 }
 )SRC")),
-              "binary=8 copy=2 fun_call=6 jump=6 jump_if_not_zero=2 jump_if_zero=4 label=12 load=3 return=3 store=1");
+              "binary=6 fun_call=6 jump=4 jump_if_not_zero=2 jump_if_zero=4 label=10 load=3 return=3 store=1");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_AllTypes_DontPropagate_CopyToOffset)
