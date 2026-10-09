@@ -392,7 +392,7 @@ static void emit_loop_test(TacCtx *ctx, Expr *cond, bool if_true, const char *ta
 // The entry of a rotated loop: a copy of the test as a guard, or, for a condition that
 // is not simple (`&&`, `||`, a call, a side effect), a jump to the test at the bottom,
 // labelled `test`, smaller than the copy.  BESM-6 keeps the guard.
-static bool jump_to_test(Expr *cond)
+static bool jump_to_test(const Expr *cond)
 {
     return cond_jumps() && !is_simple_cond(cond);
 }
@@ -751,7 +751,7 @@ static void emit_chain(TacCtx *ctx)
         ExitAction a = ctx->scopes[i].actions[j];
         run_action(ctx, &a);
     }
-    TacScope *sc    = &ctx->scopes[i];
+    const TacScope *sc = &ctx->scopes[i];
     int nd          = sc->ndests;
     bool cont       = sc->continues;
     char **handlers = xalloc((nd + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
@@ -796,7 +796,7 @@ static void emit_chain(TacCtx *ctx)
 // The end of the innermost block, reached by falling through: its own actions.
 static void end_scope(TacCtx *ctx)
 {
-    TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
+    const TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
     if (sc->count > 0) {
         // Not after a jump or return: what follows one is unreachable.
         bool reachable = !ctx->tail || (ctx->tail->kind != TAC_INSTRUCTION_RETURN &&

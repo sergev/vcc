@@ -886,7 +886,7 @@ static A64_Instr *next_use(const A64_Instr *in, int t, int a, int b)
 // instruction instead.
 static bool fold_address(A64_Instr **link)
 {
-    A64_Instr *add = *link;
+    const A64_Instr *add = *link;
     const A64_Operand *o = add->opnd;
     if (o[0].kind != A64_OPND_REG || o[0].width != A64_X || o[1].kind != A64_OPND_REG ||
         o[1].reg == A64_ZR)
@@ -965,7 +965,7 @@ static bool fold_index(A64_Instr **link)
     int64_t k;
     if (is_move(in) && in->op == A64_MOV && in->opnd[0].width == A64_X && in->next) {
         int t = in->opnd[0].reg, p = in->opnd[1].reg;
-        A64_Instr *add = in->next;
+        const A64_Instr *add = in->next;
         if (t == p || p == A64_SP || p == A64_ZR || !step_of(add, p, &k))
             return false;
         n = next_touch(add, t);
@@ -1831,7 +1831,7 @@ static bool delete_move_back(A64_Instr *in)
         t == A64_ZR || r == A64_ZR)
         return false;
     for (A64_Instr **link = &in->next; *link; link = &(*link)->next) {
-        A64_Instr *n = *link;
+        const A64_Instr *n = *link;
         if (is_move(n) && n->op == in->op && n->opnd[0].reg == r && n->opnd[1].reg == t &&
             n->opnd[0].width == o[0].width) {
             delete_at(link);
@@ -1851,7 +1851,7 @@ static bool delete_compare_again(A64_Instr *in)
         return false;
     Regs src = uses(in);
     for (A64_Instr **link = &in->next; *link; link = &(*link)->next) {
-        A64_Instr *n = *link;
+        const A64_Instr *n = *link;
         if (same_instr(n, in)) {
             delete_at(link);
             return true;
@@ -1972,7 +1972,6 @@ static bool fold_copy_run(A64_Instr **link)
     }
     if (keep) {
         keep->next = last;
-        last->next = after;
         *tail      = keep;
     } else {
         free_instr(last);
@@ -2139,7 +2138,7 @@ static bool same_return_tail(const A64_Instr *x, const A64_Instr *y)
 // move; L reached by that branch alone: d set by the condition, as `cset d, cond` for
 // 0 and 1, `mov d, #lo; cinc d, d, cond` for constants one apart; cbz/cbnz test their
 // register by a compare first.
-static bool fold_diamond_at(A64_Func *fn, A64_Block *b, A64_Instr **brl)
+static bool fold_diamond_at(const A64_Func *fn, const A64_Block *b, A64_Instr **brl)
 {
     A64_Instr *br = *brl;
     if ((br->op != A64_BCOND && br->op != A64_CBZ && br->op != A64_CBNZ) || !br->next ||
@@ -2204,7 +2203,7 @@ static bool fold_diamond_at(A64_Func *fn, A64_Block *b, A64_Instr **brl)
     return true;
 }
 
-static bool fold_diamond(A64_Func *fn, A64_Block *b)
+static bool fold_diamond(const A64_Func *fn, A64_Block *b)
 {
     for (A64_Instr **brl = &b->head; *brl; brl = &(*brl)->next)
         if (is_branch((*brl)->op) && fold_diamond_at(fn, b, brl))
@@ -2312,12 +2311,12 @@ static A64_Block *test_block(A64_Block *m, A64_Instr **test, bool split, Regs *a
 //   the test fuses with the cset (w dead either way);
 //   `mov w, #k` falling or jumping into a lone test of w: a jump where the test goes;
 //   code no branch reaches and nothing falls into goes.
-static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
+static bool thread_jumps(const A64_Func *fn, A64_Block *b, bool fall_in)
 {
     for (A64_Instr *in = b->head; in; in = in->next) {
         if (!is_branch(in->op) && in->op != A64_B)
             continue;
-        A64_Block *t = first_code(block_of(fn, branch_target(in)));
+        const A64_Block *t = first_code(block_of(fn, branch_target(in)));
         if (t && t->head->op == A64_B && strcmp(t->head->opnd[0].sym, branch_target(in)) != 0 &&
             !(t->label && strcmp(t->label, t->head->opnd[0].sym) == 0)) {
             retarget(in, t->head->opnd[0].sym);
@@ -2332,7 +2331,7 @@ static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
         Regs after;
         if (test_block(m, &test, false, &after) && test->opnd[0].reg == w &&
             !((live_at(branch_target(test)) | after) & bit_of(w))) {
-            A64_Block *n = test_block(m, &test, true, &after);
+            const A64_Block *n = test_block(m, &test, true, &after);
             A64_Instr *jmp  = *jl;
             A64_Instr *copy = new_instr(test->op, jmp);
             copy->opnd[0]   = test->opnd[0];
@@ -2371,11 +2370,11 @@ static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
     // Falling into a lone jump, through labels nothing branches to: the jump itself,
     // here (that one then unreachable), which tail merging may share.
     A64_Instr *lastin = jl ? *jl : NULL;
-    A64_Block *jb     = first_code(b->next);
+    const A64_Block *jb = first_code(b->next);
     if (lastin && lastin->op != A64_B && lastin->op != A64_RET && jb && jb->head->op == A64_B &&
         !jb->head->next) {
         bool alone = true;
-        for (A64_Block *e = b->next; alone; e = e->next) {
+        for (const A64_Block *e = b->next; alone; e = e->next) {
             if (e->label && (label_refs(fn, e->label) || strcmp(e->label, jb->head->opnd[0].sym) == 0))
                 alone = false;
             if (e == jb)
@@ -2638,7 +2637,7 @@ static bool fold_range(A64_Instr **link, const A64_Block *b)
 // then `neg d, d` (or `add d, d, #1`), l the next label and reached by that branch
 // alone: `cneg d, d, cond` (cinc) under the condition the branch is not taken, after
 // `cmp r, #0` for cbz/cbnz.
-static bool fold_cond_op(A64_Func *fn, A64_Block *b)
+static bool fold_cond_op(const A64_Func *fn, A64_Block *b)
 {
     A64_Instr **brl = last_link(b, 1);
     if (!brl)

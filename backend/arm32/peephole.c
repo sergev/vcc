@@ -827,7 +827,7 @@ static void group_source(Group *g, int reg, const A32_Instr *reader)
 
 // The last instruction of the current block before `at` to write core register `reg`,
 // when it writes that alone, always, and sets no flags; NULL otherwise.
-static A32_Instr *last_def(A32_Instr *at, int reg)
+static A32_Instr *last_def(const A32_Instr *at, int reg)
 {
     A32_Instr *d = NULL;
     for (A32_Instr *in = live_info.cur->head; in && in != at; in = in->next)
@@ -841,7 +841,7 @@ static A32_Instr *last_def(A32_Instr *at, int reg)
 
 // The value of operand `o` of an instruction of `g` (or `at`): an immediate, or a core
 // register `at` sees loaded with a constant by movw[+movt], mov or mvn, added to `g`.
-static bool operand_value(A32_Instr *at, const A32_Operand *o, uint32_t *v, Group *g)
+static bool operand_value(const A32_Instr *at, const A32_Operand *o, uint32_t *v, Group *g)
 {
     if (o->kind == A32_OPND_IMM) {
         *v = (uint32_t)o->imm;
@@ -1079,7 +1079,8 @@ static bool fold_extract(A32_Instr *at)
 // The field value `v` placed at bit `p` as operand `o` of `at`: `lsl y, z, #p` of a mask
 // `and z, v, #(2^w - 1)`, or the mask alone (p = 0), or the shift alone when it drops
 // the bits above the field (w = 32 - p).  Its instructions join `g`.
-static bool placed_field(A32_Instr *at, const A32_Operand *o, int *v, int *p, int *w, Group *g)
+static bool placed_field(const A32_Instr *at, const A32_Operand *o, int *v, int *p, int *w,
+                         Group *g)
 {
     int z                   = -1;
     *p                      = 0;
@@ -1485,7 +1486,7 @@ static void drop_lr_save(A32_Func *fn)
     A32_Instr **push = NULL;
     for (A32_Block *b = fn->blocks; b; b = b->next) {
         for (A32_Instr **link = &b->head; *link; link = &(*link)->next) {
-            A32_Instr *in = *link;
+            const A32_Instr *in = *link;
             if (in->op == A32_PUSH && in->opnd[0].kind == A32_OPND_REGLIST &&
                 in->opnd[0].width == A32_CORE && in->opnd[0].imm == 1 << A32_LR && !push &&
                 in->cond == A32_AL) {

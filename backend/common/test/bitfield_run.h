@@ -16,6 +16,7 @@
     }
 
 // clang-format off
+// cppcheck-suppress unreadVariable ; the bit-fields are read, cppcheck misses it inside the macro
 BITFIELD_RUN_SOURCE(
 struct bfr_u8 { unsigned char a : 1, b : 3, c : 4; };
 struct bfr_s16 { short a : 5; unsigned short b : 7; short c : 4; };

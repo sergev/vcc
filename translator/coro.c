@@ -438,7 +438,7 @@ static void setup_frame_by_ptr(TacCtx *ctx, const char *desc, Tac_Val *storage, 
 }
 
 // The frame of the coroutine being lowered.
-static Tac_Val *own_frame(TacCtx *ctx)
+static Tac_Val *own_frame(const TacCtx *ctx)
 {
     return val_var(ctx->coro->fp);
 }
@@ -691,7 +691,7 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
         setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(sub), size, own_frame(ctx), op->u.call.args);
         tac_free_val(desc);
     } else if (arena) {
-        Expr *g        = op->u.call.func;
+        const Expr *g  = op->u.call.func;
         Tac_Val *desc  = coro_desc(ctx, g->u.var);
         Tac_Val *size  = emit_load(ctx, dup_val(desc), size_type());
         Tac_Val *alp   = emit_offset(ctx, desc->u.var_name, (int)target_config->pointer_size,
@@ -1000,7 +1000,7 @@ static Tac_Instruction *find_live_across(Split *s, Tac_Instruction *body)
     opt_live_solve(cfg, &none, &none, false, in_sets, out_sets);
     for (int i = 0; i < n; i++) {
         int cnt = 0;
-        for (Tac_Instruction *in = cfg->blocks[i]->first; in; in = in->next)
+        for (const Tac_Instruction *in = cfg->blocks[i]->first; in; in = in->next)
             cnt++;
         if (!cnt)
             continue;
@@ -1175,7 +1175,7 @@ static Home *def_val(Split *s, Tac_Val *v, char **renamed)
     return h;
 }
 
-static void write_back(Split *s, Home *h, const char *renamed)
+static void write_back(Split *s, const Home *h, const char *renamed)
 {
     if (!h)
         return;
@@ -1351,7 +1351,7 @@ static void rewrite(Split *s, Tac_Instruction *in)
         break;
     }
     char *renamed = NULL;
-    Home *dh      = def_val(s, def, &renamed);
+    const Home *dh = def_val(s, def, &renamed);
     put(s, in);
     write_back(s, dh, renamed);
 }

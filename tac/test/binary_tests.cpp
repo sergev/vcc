@@ -692,7 +692,8 @@ TEST_F(TacBinaryTest, JumpInstructions)
         Tac_Instruction *instr           = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
         instr->u.jump_table.index        = make_var("state");
         instr->u.jump_table.count        = 3;
-        instr->u.jump_table.targets      = (char **)xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__);
+        instr->u.jump_table.targets =
+            static_cast<char **>(xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__));
         instr->u.jump_table.targets[0]   = xstrdup("start");
         instr->u.jump_table.targets[1]   = xstrdup("one");
         instr->u.jump_table.targets[2]   = xstrdup("two");

@@ -39,6 +39,7 @@ int main(void)
 
 TEST_F(WasmTest, CoroWideDispatch)
 {
+    SKIP_IF_NO_WASM32_TOOLS();
     const char *want = "-1 0 3 6 9 -2 45 -> 90\n";
     EXPECT_EQ(want, CompileAndRunWasm(wide_src));
     NextUnit();

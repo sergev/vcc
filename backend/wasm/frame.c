@@ -219,7 +219,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
         }
     }
     if (tl->u.function.variadic)
-        g->va_param = index++;
+        g->va_param = index;
 
     // Every other frame-resident name: an automatic local or a temporary.
     for (const Tac_Param *p = tl->u.function.locals; p; p = p->next) {

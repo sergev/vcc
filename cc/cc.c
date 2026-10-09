@@ -1093,7 +1093,7 @@ static int braam_stamp(const char *path)
     }
 
     // The section: id 0, its size, the name, five words.
-    unsigned long meta[5] = { 0x6d617262, 21, 0, braam_pages, 1600 };
+    const unsigned long meta[5] = { 0x6d617262, 21, 0, braam_pages, 1600 };
     out[n++] = 0;
     out[n++] = 1 + 5 + 20;
     out[n++] = 5;

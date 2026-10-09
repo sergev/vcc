@@ -430,8 +430,7 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
         Expr *size = args->next;
         rest       = size->next;
         name->next = size->next = NULL;
-        name->next = size_argument(size, "co_alloca: the extra size");
-        args       = name;
+        name->next              = size_argument(size, "co_alloca: the extra size");
     }
     Expr *next       = name->next;
     name->next       = NULL;

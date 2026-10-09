@@ -108,6 +108,9 @@ endforeach()
 # the Madlen libc.bin copy): that binary chdir()s into build/backend/besm6 at startup
 # and the run harnesses name the archives by relative path.
 macro(besm6_unix_archive name objs)
+    # A directory of its own: b6ranlib writes its scratch __.SYMDEF into the cwd, and
+    # two archives indexed in parallel in one directory swap symbol tables.
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${name}.dir)
     add_custom_command(
         OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/${name}.a
         # Rebuild from scratch so a replaced member never leaves a stale copy behind.
@@ -119,7 +122,7 @@ macro(besm6_unix_archive name objs)
                 ${CMAKE_CURRENT_BINARY_DIR}/${name}.a
                 ${CMAKE_BINARY_DIR}/backend/besm6/${name}.a
         DEPENDS ${objs}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${name}.dir
         COMMENT "Archiving BESM-6 Unix ${name}.a")
 endmacro()
 

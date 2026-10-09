@@ -429,9 +429,9 @@ static int layout_bitfield(const Field *f, int start, int *alignment)
 static void access_units(FieldDef *members, FieldDef *unnamed, int max_bits)
 {
     int count = 0;
-    for (FieldDef *m = members; m; m = m->next)
+    for (const FieldDef *m = members; m; m = m->next)
         count++;
-    for (FieldDef *m = unnamed; m; m = m->next)
+    for (const FieldDef *m = unnamed; m; m = m->next)
         count++;
     FieldDef **field = xalloc((count + 1) * sizeof(*field), __func__, __FILE__, __LINE__);
     FieldDef *a = members, *b = unnamed;

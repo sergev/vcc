@@ -371,10 +371,10 @@ static bool unnamed_constructs(Wasm_Func *fn)
 // Whether br `in` goes where control would run on to from it: through the ends of the
 // constructs that follow, and from an if's then-arm to its end, to the end of the
 // block or if it names.
-static bool falls_to_target(Wasm_Instr *in)
+static bool falls_to_target(const Wasm_Instr *in)
 {
     int k = 0;
-    for (Wasm_Instr *x = in->next; x; x = x->next) {
+    for (const Wasm_Instr *x = in->next; x; x = x->next) {
         if (x->op == WASM_ELSE) { // the then-arm runs on to the end of the if
             int depth = 0;
             for (x = x->next; x && !(depth == 0 && x->op == WASM_END_IF); x = x->next)

@@ -349,15 +349,14 @@ TEST_F(CoroTest, CoroTraps)
 {
     struct {
         const char *body, *trap;
-    } cases[] = {
+    } const cases[] = {
         // Misaligned, where a frame needs more than a byte's alignment (not on AVR, where
         // the storage is then too small instead).
         { "f = co_init(buf + (co_alignof(g) > 1), co_alignof(g) > 1 ? 120 : 4, g, 1);",
           "CO_TRAP_STORAGE" },
         { "f = co_init(buf, 8, g, 1);", "CO_TRAP_STORAGE" },
         { "self = f = co_init(buf, sizeof buf, g, 9); co_resume(f);", "CO_TRAP_REENTRANT" },
-        { "f = co_alloca(g, 0, 1); co_resume(f); co_resume(f); co_resume(f);",
-          "CO_TRAP_FINISHED" },
+        { "f = co_alloca(g, 0, 1); co_resume(f); co_resume(f); co_resume(f);", "CO_TRAP_FINISHED" },
         { "f = co_alloca(g, 0, 1); co_value(f);", "CO_TRAP_NO_VALUE" },
         { "f = co_alloca(g, 0, 1); co_resume(f); co_result(f);", "CO_TRAP_NOT_DONE" },
         { "f = co_alloca(g, 0, 1); co_destroy(f); co_result(f);", "CO_TRAP_NOT_DONE" },

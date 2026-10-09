@@ -80,7 +80,7 @@ void gen_branch(Gen *g, const char *target, bool conditional)
 // The dispatch skeleton.
 static void gen_dispatch(Gen *g)
 {
-    Flow *f    = g->flow;
+    const Flow *f = g->flow;
     g->nblocks = f->nblocks;
     map_init(&g->labels);
     for (int b = 0; b < f->nblocks; b++)
@@ -148,7 +148,6 @@ typedef struct {
     int *idom;    // block → its immediate dominator
     int *nfwd;    // block → forward jumps into it
     bool *header; // block → a backward jump into it: a loop header
-    int *kids;    // scratch for merge children
     struct {
         int kind, block;
     } *ctx;

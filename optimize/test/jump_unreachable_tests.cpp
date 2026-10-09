@@ -179,7 +179,8 @@ static Tac_Instruction *make_table(Tac_Val *k)
     Tac_Instruction *jt              = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
     jt->u.jump_table.index           = k;
     jt->u.jump_table.count           = 3;
-    jt->u.jump_table.targets         = (char **)xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__);
+    jt->u.jump_table.targets =
+        static_cast<char **>(xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__));
     jt->u.jump_table.targets[0]      = xstrdup("A");
     jt->u.jump_table.targets[1]      = xstrdup("B");
     jt->u.jump_table.targets[2]      = xstrdup("C");
