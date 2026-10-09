@@ -91,9 +91,14 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && rv_stack_builtin(in))
+            g.moves_sp = true;
     if (riscv_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);
+    if (g.moves_sp)
+        reserve_outgoing(&g);
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
         g.fn->volatile_access = in->is_volatile;

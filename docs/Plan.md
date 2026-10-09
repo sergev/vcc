@@ -32,6 +32,8 @@ stack, release on `longjmp`, and no runtime call.
 - **AArch64 is done** ([Aarch64_Backend.md](Aarch64_Backend.md#alloca)), with
   `aarch64-linux` and `aarch64-darwin`, on the same pieces (`a64_stack_builtin`,
   `Gen.moves_sp` forcing the frame record, `reserve_outgoing`, the `inline_call` hook).
+- **RISC-V is done** ([Riscv_Backend.md](Riscv_Backend.md#alloca)), RV64 and RV32, the
+  same way (`rv_stack_builtin`, the frame from s0).
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
@@ -86,15 +88,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A4. RISC-V, RV64 and RV32
-
-- Intercept the builtins in `gen_call` (`backend/riscv/call.c:658`).
-- `has_alloca` forces `FRAME_FP` (`frame.c:879`; no `rebase_to_sp`) and disables `is_leaf`
-  (`frame.c:823`).
-- Selection: `sub t0, sp, n; andi t0, t0, -16; mv sp, t0; addi dst, sp, outgoing`.
-- Epilogue: the FP path's `addi sp, s0, -header` (`frame.c:757`) is already right.
-- **Tests:** `riscv-tests` and `riscv32-tests`, with interop with clang both ways.
 
 ### A5. ARM32
 
@@ -211,7 +204,7 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A4–A6 are independent and of similar size.
+- A5 and A6 are independent and of similar size.
 - A7 and A8 are the largest, because of the new frame-pointer modes. Their "a" halves are
   worth doing separately, validated by the whole suite.
 - A10 is optional.

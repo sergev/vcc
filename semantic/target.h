@@ -127,9 +127,9 @@ typedef struct {
     // the lowering is target-neutral, but BESM-6 has no runtime for them.
     int no_coroutines;
     // The backend expands __builtin_stack_save, __builtin_alloca and
-    // __builtin_stack_restore in place (wasm32's shadow stack, x86-64's and AArch64's stack);
-    // elsewhere alloca, and co_alloca in a function, take the runtime's LIFO arena,
-    // __coro_stack_save and the rest (libc/common/costack.c).
+    // __builtin_stack_restore in place (wasm32's shadow stack, the stack of x86-64,
+    // AArch64 and RISC-V); elsewhere alloca, and co_alloca in a function, take the
+    // runtime's LIFO arena, __coro_stack_save and the rest (libc/common/costack.c).
     int stack_alloca;
     // Braam's process model (wasm32-braam, docs/Braam.md §7): main is a coroutine
     // the runtime awaits.  Set on the alias, not in the table.

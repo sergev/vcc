@@ -13,6 +13,8 @@
 //   s0 - H           saved s0
 //   s0 - H - ...     saved s1-s11/fs0-fs11 in use, then slots
 //   sp + 0 ...       outgoing stack arguments
+// alloca lowers sp (the frame then always from s0) by its size rounded to 16, and
+// returns sp plus the outgoing area rounded to 16, which stays below it.
 //
 // A leaf function that never touches s0 or sp, and saves no register, has no frame.
 // Otherwise, when the frame is small enough, every s0-relative operand is rewritten
@@ -51,6 +53,7 @@ typedef struct {
     int locals_size;   // bytes of slots below the saved registers
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
+    bool moves_sp;     // calls a stack builtin (alloca): sp moves in the body
     StringMap regs;    // name → allocated register
     StringMap regs_hi; // name → register of a long long's high word
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)
@@ -175,6 +178,12 @@ void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool rv_stack_builtin(const Tac_Instruction *in);
+// The outgoing area of every call in the body, ahead of it: what alloca's result is
+// above.  After layout_frame, which gives every name its type.
+void reserve_outgoing(Gen *g);
 // A call to runtime routine `name` with arguments `args`, of `types` (or their own when
 // NULL), by the calling convention; the result, of type `ret`, into `dst` (or left in
 // a0/fa0).

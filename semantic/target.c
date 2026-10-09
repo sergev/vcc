@@ -199,7 +199,10 @@ static const Target targets[] = {
       0,        // little-endian
       BITFIELD_SYSV,
       0,        // bitfield_access_bits
-      1 },      // bitfield_unit_per_field: the FP calling convention counts bit-fields
+      1,        // bitfield_unit_per_field: the FP calling convention counts bit-fields
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from s0
 
     { "riscv64",
       1, 1,   // _Bool
@@ -226,7 +229,10 @@ static const Target targets[] = {
       0,        // little-endian
       BITFIELD_SYSV,
       0,        // bitfield_access_bits
-      1 },      // bitfield_unit_per_field: the FP calling convention counts bit-fields
+      1,        // bitfield_unit_per_field: the FP calling convention counts bit-fields
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from s0
 
     { "mmix",
       1, 1,   // _Bool

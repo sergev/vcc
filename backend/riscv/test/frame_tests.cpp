@@ -123,6 +123,62 @@ ret
               Code(CompileToRiscv("long g(long);\nlong f(long a) { return g(g(a) + 1); }")));
 }
 
+// alloca: the frame from s0 whatever else (a leaf too), sp lowered by the size rounded
+// to 16, and the epilogue that puts sp back from s0.
+TEST_F(RiscvTest, AllocaLeaf)
+{
+    EXPECT_EQ(R"(addi sp, sp, -16
+sd ra, 8(sp)
+sd s0, 0(sp)
+addi s0, sp, 16
+addi t0, a0, 15
+andi t0, t0, -16
+sub sp, sp, t0
+mv a1, sp
+addiw a0, a0, -1
+add a0, a1, a0
+li t0, 7
+sb t0, 0(a0)
+lbu a0, 0(a0)
+addi sp, s0, -16
+ld ra, 8(sp)
+ld s0, 0(sp)
+addi sp, sp, 16
+ret
+)",
+              Code(CompileToRiscv(R"(
+void *__builtin_alloca(unsigned long);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[n - 1] = 7;
+    return p[n - 1];
+}
+)")));
+}
+
+// The memory starts above the outgoing area, rounded to 16, which the frame reserves
+// apart from the slots; the saved registers are found from s0.
+TEST_F(RiscvTest, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToRiscv(R"(
+void *__builtin_alloca(unsigned long);
+long g(long, long, long, long, long, long, long, long, long, long);
+long f(long n, long k)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    p[0] = k;
+    return g(1, 2, 3, 4, 5, 6, 7, 8, p[0], k) + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find("addi sp, sp, -16\nsd ra, 8(sp)\nsd s0, 0(sp)\naddi s0, sp, 16\n"
+                            "addi sp, sp, -32\nsd s1, -24(s0)\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, t0\naddi s1, sp, 16\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sd a1, 0(sp)\nsd a1, 8(sp)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ld s1, -24(s0)\naddi sp, s0, -16\n")) << code;
+}
+
 // An _Alignas local keeps its alignment; the slots then move up into the unused
 // header only as far as that alignment allows.  Statics are aligned too.
 TEST_F(RiscvTest, FrameAlignedSlot)

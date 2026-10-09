@@ -249,3 +249,57 @@ TEST_F(RiscvTest, RunBitfieldsClangCallsUs)
     EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
     EXPECT_EQ(0, exit_status);
 }
+
+// alloca both ways: ours called by clang's code, which keeps values in callee-saved
+// registers across the call, and clang's called by ours; ten arguments each, two on the
+// stack beside the memory.  (clang has __builtin_alloca built in, we declare it.)
+static std::string AllocaSum(const char *name)
+{
+    return std::string("long ") + name + R"((int n, long a, long b, long c, long d, long e, long f,
+            long g, long h, long i, long j)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    for (int k = 0; k < n; k++)
+        p[k] = k + a;
+    long s = 0;
+    for (int k = 0; k < n; k++)
+        s += p[k];
+    return s + b + c + d + e + f + g + h + i + j;
+}
+)";
+}
+
+TEST_F(RiscvTest, RunAllocaWithClang)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    SKIP_IF_NO_RISCV_CLANG();
+    std::string ours = std::string(R"(
+void *__builtin_alloca(unsigned long);
+long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
+               long j);
+int their_check(void);
+)") + AllocaSum("our_sum") + R"(
+int main(void)
+{
+    long *q = __builtin_alloca(64);
+    q[0]    = 5;
+    long r  = their_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    return (r == 109) + 2 * their_check() + 4 * (q[0] == 5);
+}
+)";
+    std::string theirs = std::string(R"(
+long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
+             long j);
+volatile long seed = 7;
+)") + AllocaSum("their_sum") + R"(
+int their_check(void)
+{
+    long s = seed;
+    long v0 = s * 3, v1 = s * 5, v2 = s * 11, v3 = s * 13, v4 = s * 17, v5 = s * 19;
+    long r = our_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    return r == 109 && v0 + v1 + v2 + v3 + v4 + v5 == s * 68 && v0 == 21 && v5 == 133;
+}
+)";
+    EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
+    EXPECT_EQ(7, exit_status);
+}

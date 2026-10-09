@@ -225,3 +225,8 @@ TEST_F(TranslateTestX86, AllocaOnStack)
 {
     ExpectOnStack(CompileToYaml(alloca_fn));
 }
+
+TEST_F(TranslateTestRiscv, AllocaOnStack)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
+}

@@ -324,6 +324,24 @@ int main(void)
               CompileAndRunRiscv(src));
 }
 
+// alloca on rv32: the memory above two 4-byte stack arguments, rounded to 16.
+TEST_F(Rv32Test, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToRiscv(R"(
+void *__builtin_alloca(unsigned int);
+long g(long, long, long, long, long, long, long, long, long, long);
+long f(long n, long k)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    p[0] = k;
+    return g(1, 2, 3, 4, 5, 6, 7, 8, p[0], k) + p[0];
+}
+)"));
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, t0\naddi s1, sp, 16\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sw a1, 0(sp)\nsw a1, 4(sp)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("lw s1, -24(s0)\naddi sp, s0, -16\n")) << code;
+}
+
 TEST_F(Rv32Test, LargeFrameAndSavedRegisters)
 {
     SKIP_IF_NO_RISCV_TOOLS();

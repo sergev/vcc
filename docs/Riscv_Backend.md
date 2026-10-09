@@ -75,6 +75,28 @@ sp + 0 ...      arguments for the functions this one calls
 A small function that needs no memory gets no frame at all. When the frame is small,
 it is addressed from `sp` and `s0` is not used.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack, on RV64 and RV32 alike, as on x86-64
+([X86_64_Backend.md](X86_64_Backend.md#alloca)). The translator passes them on as calls
+of `__builtin_alloca`, `__builtin_stack_save` and `__builtin_stack_restore`, which
+`gen_call` expands in place, through t0 alone. A function that calls any of them always
+has the frame from `s0` (a leaf too, and without `--frame-pointer`):
+
+```
+addi    t0, a0, 15
+andi    t0, t0, -16
+sub     sp, sp, t0          # sp stays 16-byte aligned
+addi    a0, sp, OUT         # the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area rounded up to 16, taken by `reserve_outgoing` from
+every call in the body before selection, and reserved by the frame apart from the slots.
+The epilogue's `addi sp, s0, -H` gives the memory back. The register allocator does not
+count the builtins as calls (its `inline_call` hook), so a value may stay in an argument
+register across one.
+
 ## Function calls
 
 - Arguments go in a0–a7 (integers, pointers) and fa0–fa7 (`float`, `double`); the rest

@@ -863,12 +863,16 @@ static bool rebase_to_sp(const Gen *g, const Frame *fr)
 void gen_prologue(Gen *g)
 {
     Frame fr = { FRAME_NONE, 0, has_calls(g), g->header, 0 };
-    if (is_leaf(g)) {
+    if (!g->moves_sp && is_leaf(g)) {
         expand_epilogues(g, &fr);
         return;
     }
     Rv_Block *b = g->prologue;
     int rest    = (g->locals_size + g->outgoing + 15) / 16 * 16;
+    // alloca's memory starts at the outgoing area rounded to 16, below the slots; the
+    // frame is from s0, which the epilogue puts sp back from.
+    if (g->moves_sp)
+        rest = (g->locals_size + 15) / 16 * 16 + (g->outgoing + 15) / 16 * 16;
 
     // Without s0 its save slot is free, and ra's too when there are no calls: the
     // slots move up by as much as their alignment allows.
@@ -876,7 +880,8 @@ void gen_prologue(Gen *g)
     if (g->max_align > 8 && fr.gap % g->max_align != 0)
         fr.gap = 0;
     fr.size = (g->header - fr.gap + g->locals_size + g->outgoing + 15) / 16 * 16;
-    if (!riscv_frame_pointer && fits12(-fr.size) && fits12(fr.size) && rebase_to_sp(g, &fr)) {
+    if (!riscv_frame_pointer && !g->moves_sp && fits12(-fr.size) && fits12(fr.size) &&
+        rebase_to_sp(g, &fr)) {
         fr.kind = FRAME_SP;
         append3(b, RV_ADDI, rv_reg(RV_SP), rv_reg(RV_SP), rv_imm(-fr.size));
         if (fr.calls)
