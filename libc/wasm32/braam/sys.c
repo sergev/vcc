@@ -6,6 +6,7 @@
 #include <braam.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -246,4 +247,40 @@ coro(braam_call *) int fstat(int fd, struct stat *st)
     unsigned got;
     int s = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_FSTAT, fd), NULL, 0, r, 20, &got);
     return s < 0 ? failed(s) : fill(st, r, got, NULL);
+}
+
+coro(braam_call *) int braam_yield(void)
+{
+    return await sleep_ms(0);
+}
+
+coro(braam_call *) int sig_catch(int sig, int on)
+{
+    static unsigned caught; /* the kernel's mask, shadowed so one bit can move alone */
+    unsigned want = on ? caught | 1u << (sig & 31) : caught & ~(1u << (sig & 31));
+    int st        = await braam_sys(BRAAM_SYS_SIGACT, &want, 4, NULL, 0, NULL);
+    if (st < 0)
+        return failed(st);
+    caught = want;
+    return 0;
+}
+
+coro(braam_call *) int poll(struct pollfd *fds, nfds_t n, int timeout)
+{
+    if (n > BRAAM_POLL_MAX) {
+        errno = EINVAL;
+        return -1;
+    }
+    unsigned req[1 + 2 * BRAAM_POLL_MAX], got[BRAAM_POLL_MAX], len;
+    req[0] = timeout < 0 ? BRAAM_POLL_FOREVER : (unsigned)timeout;
+    for (nfds_t i = 0; i < n; i++) {
+        req[1 + 2 * i] = (unsigned)fds[i].fd;
+        req[2 + 2 * i] = (unsigned)fds[i].events;
+    }
+    int st = await braam_sys(BRAAM_SYS_POLL, req, 4 + 8 * n, got, 4 * n, &len);
+    if (st < 0)
+        return failed(st);
+    for (nfds_t i = 0; i < n; i++)
+        fds[i].revents = 4 * i + 4 <= len ? (short)got[i] : 0;
+    return st;
 }

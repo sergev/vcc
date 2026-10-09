@@ -57,7 +57,8 @@ typedef struct braam_call {
 #define BRAAM_SYS_TRUNCATE 31
 #define BRAAM_SYS_SLEEP    32 /* payload u32 milliseconds */
 #define BRAAM_SYS_FSTAT    33 /* arg fd; data as Stat's */
-#define BRAAM_SYS_POLL     86
+#define BRAAM_SYS_SIGACT   85 /* payload u32 mask, or empty to ask; data u32 the mask before */
+#define BRAAM_SYS_POLL     86 /* payload u32 timeout, then u32 fd, u32 events pairs */
 
 #define BRAAM_SYS_OP(op, arg) ((unsigned)(op) | (unsigned)(arg) << 8)
 
@@ -74,6 +75,21 @@ typedef struct braam_call {
 #define BRAAM_KIND_DIR      1
 #define BRAAM_KIND_LINK     2
 #define BRAAM_STAT_NOFOLLOW 1
+
+/* Signals, Unix's numbers; only INT, TERM and WINCH may be caught. */
+#define BRAAM_SIG_INT   2
+#define BRAAM_SIG_KILL  9
+#define BRAAM_SIG_TERM  15
+#define BRAAM_SIG_CONT  18
+#define BRAAM_SIG_TSTP  20
+#define BRAAM_SIG_WINCH 28
+
+/* Poll's events, and its timeout that waits for ever; the most descriptors it takes. */
+#define BRAAM_POLL_IN      1
+#define BRAAM_POLL_OUT     2
+#define BRAAM_POLL_HUP     4
+#define BRAAM_POLL_FOREVER 0xffffffff
+#define BRAAM_POLL_MAX     64
 
 /* A read with no length; the most one may ask for. */
 #define BRAAM_CHUNK    512
@@ -95,5 +111,33 @@ coro(braam_call *) int sleep_ms(unsigned ms);
 
 /* Milliseconds since boot. */
 unsigned braam_now(void);
+
+/* Park once, so a signal can reach a program that computes for long (as sleep_ms(0)). */
+coro(braam_call *) int braam_yield(void);
+
+/*
+ * Tasks.  A process has up to BRAAM_TASKS of them, each a coroutine of this type with
+ * one call outstanding; main runs in task 0, and the process ends when main returns,
+ * whatever the others are doing.  braam_spawn takes a frame made by co_init (or
+ * co_alloca, in a block that outlives the task), runs it to its first suspension, and
+ * from then on resumes it whenever its call is answered.  It returns the task's
+ * number, or 0 when the table is full.  A task that returns leaves the table; its
+ * result is in its frame.  A task destroyed while it waits leaves the table too.
+ */
+#define BRAAM_TASKS 8
+typedef co_frame(braam_call *, int) braam_task;
+int braam_spawn(braam_task *frame);
+
+/*
+ * Signals.  A process is told only of the signals it asked for; any other one runs
+ * its default action, which ends the process with status 130.  A signal asked for is
+ * recorded, and the calls the process is parked on that can wait for ever (read of a
+ * terminal or a pipe, sleep_ms, braam_yield, poll) give up with EINTR.  sig_take then
+ * says whether `sig` came, and forgets it.  A signal reaches a process only while it
+ * is parked: a loop that awaits nothing cannot be interrupted.
+ */
+coro(braam_call *) int sig_catch(int sig, int on);  /* 0, or -1 with errno set */
+int sig_take(int sig);
+unsigned sig_pending(void);                          /* the bits 1 << sig not taken */
 
 #endif /* _BRAAM_H */

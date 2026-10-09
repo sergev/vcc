@@ -580,3 +580,178 @@ TEST_F(BraamTest, NotesExample)
     EXPECT_NE(std::string::npos, log.find("usage: notes")) << log;
     std::remove("notes.txt");
 }
+
+// Signals and tasks (phase C8).  A ^C on standard input, as the fake kernel reads a
+// byte 0x03, reaches a process that asked for SIGINT: the read parked on it and the
+// sleep a second task is parked on both give up with EINTR, sig_take collects it, and
+// the program goes on reading.
+TEST_F(BraamTest, SignalCaught)
+{
+    EXPECT_EQ("spawned 1\nread 3\nticker: Interrupted\ninterrupted, took 1, pending 0\n"
+              "read 4\nticker done 1 result 42\n",
+              BuildAndRun(R"(
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+static coro(braam_call *) int ticker(int n)
+{
+    while (await sleep_ms(5) == 0)
+        ;
+    printf("ticker: %s\n", strerror(errno));
+    return n + 1;
+}
+
+coro(braam_call *) int main(int argc, char **argv)
+{
+    static char storage[4096];
+    braam_task *t = co_init(storage, sizeof storage, ticker, 41);
+    printf("spawned %d\n", braam_spawn(t));
+    if (await sig_catch(SIGINT, 1) < 0)
+        return 1;
+    char buf[64];
+    for (;;) {
+        ssize_t n = await read(0, buf, sizeof buf);
+        if (n < 0 && errno == EINTR) {
+            printf("interrupted, took %d, pending %u\n", sig_take(SIGINT), sig_pending());
+            continue;
+        }
+        if (n <= 0)
+            break;
+        printf("read %d\n", (int)n);
+    }
+    printf("ticker done %d result %d\n", co_done(t), co_done(t) ? co_result(t) : -1);
+    return 0;
+}
+)",
+                          {}, "abc\003def\n"));
+    EXPECT_EQ(0, status) << log;
+}
+
+// A signal the process did not ask for runs the default action: the process ends with
+// status 130 and its buffered output is lost.  SIGKILL cannot be asked for.
+TEST_F(BraamTest, SignalDefault)
+{
+    EXPECT_EQ("waiting\n", BuildAndRun(R"(
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    if (await sig_catch(SIGKILL, 1) != -1 || errno != EINVAL)
+        return 1;
+    printf("waiting\n");
+    await fflush(stdout);
+    char buf[8];
+    await read(0, buf, sizeof buf);
+    printf("not reached\n");
+    return 0;
+}
+)",
+                                       {}, "\003"));
+    EXPECT_EQ(130, status);
+    EXPECT_NE(std::string::npos, log.find("[exit 130] (signal 2)")) << log;
+}
+
+// The task table: seven tasks besides main, the eighth refused; each resumed when its
+// own sleep is answered, so they finish in the order of their sleeps, not of their
+// spawns; a task destroyed while it sleeps leaves its slot, which a new one then takes.
+TEST_F(BraamTest, Tasks)
+{
+    EXPECT_EQ("spawned 1 2 3 4 5 6 7, then 0\n"
+              "done 7\ndone 6\ndone 5\ndone 4\ndone 3\ndone 2\ndone 1\n"
+              "after destroy: 1\ndone 9\n",
+              BuildAndRun(R"(
+#include <stdio.h>
+#include <stdlib.h>
+
+static coro(braam_call *) int nap(int k)
+{
+    await sleep_ms(10 * (8 - k));
+    printf("done %d\n", k);
+    return k;
+}
+
+coro(braam_call *) int main(int argc, char **argv)
+{
+    static char storage[9][2048];
+    braam_task *t[9];
+    printf("spawned");
+    for (int k = 1; k <= 7; k++)
+        printf(" %d", braam_spawn(t[k] = co_init(storage[k], 2048, nap, k)));
+    printf(", then %d\n", braam_spawn(co_init(storage[8], 2048, nap, 8)));
+    while (await sleep_ms(10) == 0) {
+        int busy = 0;
+        for (int k = 1; k <= 7; k++)
+            busy += !co_done(t[k]);
+        if (!busy)
+            break;
+    }
+    braam_task *gone = co_init(storage[1], 2048, nap, 0);
+    braam_spawn(gone);
+    co_destroy(gone);
+    printf("after destroy: %d\n", braam_spawn(co_init(storage[2], 2048, nap, 9)));
+    await sleep_ms(200);
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, status) << log;
+}
+
+// braam_yield parks once: a task that counts while main yields gets its turns.
+TEST_F(BraamTest, Yield)
+{
+    EXPECT_EQ("yields 0, counter 5\n", BuildAndRun(R"(
+#include <stdio.h>
+static int counter;
+static coro(braam_call *) int count(void)
+{
+    for (int i = 0; i < 5; i++) {
+        await braam_yield();
+        counter++;
+    }
+    return 0;
+}
+coro(braam_call *) int main(int argc, char **argv)
+{
+    static char storage[2048];
+    braam_task *t = co_init(storage, sizeof storage, count);
+    braam_spawn(t);
+    int bad = 0;
+    while (!co_done(t))
+        bad |= await braam_yield();
+    printf("yields %d, counter %d\n", bad, counter);
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, status) << log;
+}
+
+// poll: standard input from a file is ready to read, standard output to write, a
+// timeout of 0 with nothing ready answers 0, a descriptor not open is EINVAL.
+TEST_F(BraamTest, Poll)
+{
+    EXPECT_EQ("2: 1 2\n0: 0\n-1 1\n", BuildAndRun(R"(
+#include <errno.h>
+#include <poll.h>
+#include <stdio.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    struct pollfd p[2] = { { 0, POLLIN, 0 }, { 1, POLLOUT | POLLIN, 0 } };
+    int n = await poll(p, 2, -1);
+    printf("%d: %d %d\n", n, p[0].revents, p[1].revents);
+    struct pollfd q = { 1, POLLIN, 0 };
+    n = await poll(&q, 1, 0);
+    printf("%d: %d\n", n, q.revents);
+    struct pollfd r = { 9, POLLIN, 0 };
+    n = await poll(&r, 1, 0);
+    printf("%d %d\n", n, errno == EINVAL);
+    return 0;
+}
+)",
+                                           {}, "x"));
+    EXPECT_EQ(0, status) << log;
+}

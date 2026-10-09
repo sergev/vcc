@@ -6,22 +6,32 @@
 // It serves kernel.sys (Exit, GetPid, Now, Random) and kernel.sys_async for Write (fd 1
 // and 2 to stdout and stderr), Read (fd 0 from stdin, in 512-byte chunks), Open, Close,
 // Read, Write, Seek and FStat on files, Stat, Remove, MkDir, Chdir and Rename on paths
-// (relative to the current directory), and Sleep.  Each reply goes
+// (relative to the current directory), Sleep, SigAct and Poll.  Each reply goes
 // through _resume from a later macrotask, never from inside sys_async, so a step that
 // forgets to return is caught.  The end reports "[exit N]" on stderr and exits with N;
 // a trap reports itself and exits with 255, a process that waits on nothing with 254.
+//
+// Signals: a byte 0x03 on standard input is a ^C, as a terminal makes one (the read
+// that reaches it parks, and SIG_INT finds it parked), and node's own SIGINT and
+// SIGTERM are passed on.  A signal the process asked for (SigAct) goes to _sig, and
+// every call parked on a Read of stdin, a Sleep or a Poll answers Err(Intr); any other
+// one ends the process with status 130, as Braam's default action does.
 import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, renameSync,
          rmdirSync, rmSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
+import { isatty } from 'node:tty';
 
 const PROC_MAGIC = 0x6d617262;
 const PROC_ABI = 21;
 const PROC_MAX_PAGES = 1600;
 const SYS = { Exit: 1, GetPid: 2, Now: 3, Random: 5, Write: 16, Read: 17, Open: 18,
               Close: 19, Stat: 20, MkDir: 22, Remove: 23, Chdir: 25, Rename: 29, Seek: 30,
-              Sleep: 32, FStat: 33 };
-const ERR = { Invalid: 1, NotFound: 3, Exists: 4, NotDir: 5, IsDir: 6, Perm: 7, Io: 8,
+              Sleep: 32, FStat: 33, SigAct: 85, Poll: 86 };
+const SIG = { INT: 2, TERM: 15, CONT: 18, WINCH: 28 };
+const CATCHABLE = (1 << SIG.INT) | (1 << SIG.TERM) | (1 << SIG.WINCH);
+const POLL = { IN: 1, OUT: 2, MAX: 64, FOREVER: 0xffffffff };
+const ERR = { Intr: 15, Invalid: 1, NotFound: 3, Exists: 4, NotDir: 5, IsDir: 6, Perm: 7, Io: 8,
               Unsupported: 11, NotEmpty: 13 };
 const O = { Read: 1, Write: 2, Create: 4, Trunc: 8, Append: 16, Excl: 32 };
 const CHUNK = 512;
@@ -63,6 +73,9 @@ const start = Date.now();
 let status = null;      // what Sys::Exit said
 let finished = false;
 let outstanding = 0;    // calls not answered yet
+const waiting = new Map(); // token -> cancel(): the parked calls a signal abandons
+let caught = 0;         // the signals the process asked for, as bits
+let input = new Uint8Array(0); // standard input read and not yet served
 const files = new Map(); // descriptor -> { fd: node's, pos, append }
 let next_fd = 3;
 let x;                  // the instance's exports
@@ -143,6 +156,97 @@ function onPath(token, fn) {
     }
 }
 
+function park(token, cancel) {
+    outstanding++;
+    waiting.set(token, cancel);
+}
+
+function unpark(token) {
+    if (waiting.delete(token))
+        outstanding--;
+}
+
+const word = (v) => {
+    const out = new DataView(new ArrayBuffer(4));
+    out.setUint32(0, v >>> 0, true);
+    return new Uint8Array(out.buffer);
+};
+
+// A signal: told to the process if it asked, else the default action.
+function raise(sig) {
+    if (finished)
+        return;
+    if (caught & (1 << sig)) {
+        try {
+            x._sig(sig);
+        } catch (e) {
+            trap(e);
+        }
+        for (const [token, cancel] of [...waiting]) {
+            cancel();
+            unpark(token);
+            reply(token, -ERR.Intr);
+        }
+        return;
+    }
+    if (sig === SIG.WINCH || sig === SIG.CONT)
+        return;
+    finished = true;
+    process.stderr.write(`[exit 130] (signal ${sig})\n`);
+    process.exit(130);
+}
+process.on('SIGINT', () => raise(SIG.INT));
+process.on('SIGTERM', () => raise(SIG.TERM));
+
+// A read of standard input: what is buffered up to the next ^C, else a chunk more.
+function readInput(token, max) {
+    if (input.length === 0) {
+        const buf = new Uint8Array(CHUNK);
+        let n = 0;
+        try {
+            n = readSync(0, buf, 0, CHUNK, null);
+        } catch (e) {
+            if (e.code === 'EAGAIN') { // a terminal or pipe with nothing yet
+                const t = setTimeout(() => {
+                    unpark(token);
+                    readInput(token, max);
+                }, 10);
+                return park(token, () => clearTimeout(t));
+            }
+            if (e.code !== 'EOF')
+                return reply(token, errorOf(e));
+        }
+        if (n === 0)
+            return reply(token, 0);
+        input = buf.subarray(0, n);
+    }
+    if (input[0] === 3) {
+        input = input.subarray(1);
+        park(token, () => {});
+        return setImmediate(() => {
+            raise(SIG.INT);
+            if (waiting.has(token)) {
+                unpark(token);
+                readInput(token, max);
+            }
+        });
+    }
+    let n = input.indexOf(3);
+    n = Math.min(n < 0 ? input.length : n, max);
+    const data = input.slice(0, n);
+    input = input.subarray(n);
+    return reply(token, 0, data);
+}
+
+// Poll's revents for one descriptor, or null for one that is not open.
+function ready(fd, events) {
+    if (fd === 0)
+        return input.length || !isatty(0) ? events & POLL.IN : 0;
+    if (fd === 1 || fd === 2)
+        return events & POLL.OUT;
+    return files.has(fd) ? events & (POLL.IN | POLL.OUT) : null;
+}
+
 const kernel = {
     sys(op, a0, a1, a2) {
         switch (op & 0xff) {
@@ -173,10 +277,12 @@ const kernel = {
             }
         }
         case SYS.Read: {
-            const f = arg === 0 ? { fd: 0, pos: null } : files.get(arg);
+            if (arg === 0)
+                return readInput(token, Math.min(len >= 4 ? u32(0) : CHUNK, CHUNK));
+            const f = files.get(arg);
             if (f === undefined)
                 return reply(token, -ERR.Invalid);
-            const max = Math.min(len >= 4 ? u32(0) : CHUNK, f.fd === 0 ? CHUNK : READ_MAX);
+            const max = Math.min(len >= 4 ? u32(0) : CHUNK, READ_MAX);
             const buf = new Uint8Array(max);
             try {
                 const n = readSync(f.fd, buf, 0, max, f.pos);
@@ -184,8 +290,6 @@ const kernel = {
                     f.pos += n;
                 return reply(token, 0, buf.subarray(0, n));
             } catch (e) {
-                if (e.code === 'EAGAIN') // a terminal or pipe with nothing yet
-                    return setTimeout(() => kernel.sys_async(op, token, ptr, len), 10);
                 return reply(token, e.code === 'EOF' ? 0 : errorOf(e));
             }
         }
@@ -257,12 +361,61 @@ const kernel = {
             } catch (e) {
                 return reply(token, errorOf(e));
             }
-        case SYS.Sleep:
-            outstanding++;
-            return setTimeout(() => {
-                outstanding--;
+        case SYS.Sleep: {
+            const t = setTimeout(() => {
+                unpark(token);
                 reply(token, 0);
             }, len >= 4 ? u32(0) : 0);
+            return park(token, () => clearTimeout(t));
+        }
+        case SYS.SigAct: {
+            const before = caught;
+            if (len >= 4) {
+                if (u32(0) & ~CATCHABLE)
+                    return reply(token, -ERR.Invalid);
+                caught = u32(0);
+            }
+            return reply(token, 0, word(before));
+        }
+        case SYS.Poll: {
+            const n = (len - 4) >>> 3;
+            if (len < 4 || n > POLL.MAX)
+                return reply(token, -ERR.Invalid);
+            const timeout = u32(0), start = Date.now();
+            const answer = () => {
+                const out = new Uint8Array(4 * n);
+                let count = 0;
+                for (let i = 0; i < n; i++) {
+                    const r = ready(u32(4 + 8 * i), u32(8 + 8 * i));
+                    if (r === null)
+                        return -ERR.Invalid;
+                    out.set(word(r), 4 * i);
+                    count += r !== 0;
+                }
+                if (count === 0 && timeout !== POLL.FOREVER && Date.now() - start < timeout)
+                    return null;
+                if (count === 0 && timeout === POLL.FOREVER)
+                    return null;
+                return [count, out];
+            };
+            const first = answer();
+            if (typeof first === 'number')
+                return reply(token, first);
+            if (first)
+                return reply(token, first[0], first[1]);
+            const t = setInterval(() => {
+                const a = answer();
+                if (a === null)
+                    return;
+                clearInterval(t);
+                unpark(token);
+                if (typeof a === 'number')
+                    reply(token, a);
+                else
+                    reply(token, a[0], a[1]);
+            }, 10);
+            return park(token, () => clearInterval(t));
+        }
         default:
             return reply(token, -ERR.Unsupported);
         }
