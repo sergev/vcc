@@ -188,8 +188,8 @@ sum:                          ; for (i = 0; i < n; i++) s += p[i];
 
 ## Stack frame
 
-The frame is addressed from SP (`x(r1)`), with no frame pointer; a 16-bit offset has no
-range problem.
+The frame is addressed from SP (`x(r1)`), with no frame pointer unless asked for one; a
+16-bit offset has no range problem.
 
 ```
 SP + frame + 2*saved + 2 ...  arguments passed on the stack
@@ -211,6 +211,29 @@ add:
 
 The operands that address incoming stack arguments get their final offsets only once the
 prologue is known.
+
+With `--frame-pointer` the slots and the incoming arguments are addressed from r4
+instead, at the same offsets: the prologue pushes r4 with the others, reserves the frame
+and then sets `mov r1, r4`, and the epilogue begins with `mov r4, r1`. r4 is then never
+allocated. Outgoing arguments stay at `x(r1)`, and the pushes in the body no longer shift
+any slot's offset. The peephole pass keeps what it knows of `x(r4)` words across a push,
+but leaves the dead stores to them alone.
+
+```
+f:
+    push    r4
+    sub     #8, r1
+    mov     r1, r4
+    ...
+    mov     12(r4), r12     ; the fifth argument
+    mov     r4, r1
+    add     #8, r1
+    pop     r4
+    ret
+```
+
+The test fixture's `VCC_MSP430_FRAME_POINTER` runs every MSP430 test in this mode; the
+goldens then differ, every program runs the same.
 
 ## Branch relaxation
 

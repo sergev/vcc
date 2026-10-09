@@ -575,10 +575,15 @@ static void kill_set(Facts *f, Set s)
             kill(f, r);
 }
 
+// The function being rewritten addresses its slots from r4 (Msp_Func.fp): x(r4) is a
+// slot there, and a pointer's target elsewhere.
+static bool fp_frame;
+
 // Whether `o` is a word of a slot or a global, whose facts can be kept.
 static bool is_mem_word(const Msp_Operand *o)
 {
-    return (o->kind == MSP_OPND_INDEXED && o->reg == MSP_SP) || o->kind == MSP_OPND_ABS;
+    return (o->kind == MSP_OPND_INDEXED && (o->reg == MSP_SP || (fp_frame && o->reg == MSP_FP))) ||
+           o->kind == MSP_OPND_ABS;
 }
 
 static int mem_find(const Facts *f, const Msp_Operand *o)
@@ -609,11 +614,11 @@ static void mem_forget(Facts *f, const Msp_Operand *o)
     }
 }
 
-// Forget the slots: SP has moved.
+// Forget the words at x(r1): SP has moved (those at x(r4) stay).
 static void forget_slots(Facts *f)
 {
     for (int i = 0; i < f->nm;) {
-        if (f->m[i].loc.kind == MSP_OPND_INDEXED)
+        if (f->m[i].loc.kind == MSP_OPND_INDEXED && f->m[i].loc.reg == MSP_SP)
             f->m[i] = f->m[--f->nm];
         else
             i++;
@@ -658,14 +663,14 @@ static void set_src_reg(Msp_Instr *in, int reg)
 // The facts after `in`, which no rule rewrote.
 static void step(Facts *f, const Msp_Instr *in, unsigned result)
 {
+    const Msp_Operand *wr = written(in);
     if (in->op == MSP_CALL) {
         f->nm = 0;
-    } else if (in->op == MSP_PUSH || in->op == MSP_POP) {
+    } else if (in->op == MSP_PUSH || in->op == MSP_POP ||
+               (wr && is_reg(wr) && wr->reg == MSP_SP)) {
         forget_slots(f);
-    } else {
-        const Msp_Operand *w = written(in);
-        if (w && !is_reg(w))
-            mem_forget(f, w);
+    } else if (wr && !is_reg(wr)) {
+        mem_forget(f, wr);
     }
     Set def, use;
     def_use(in, result, &def, &use);
@@ -891,7 +896,7 @@ static bool writes_memory(const Msp_Instr *in)
     if (in->op == MSP_CALL || in->op == MSP_PUSH || in->op == MSP_POP)
         return true;
     const Msp_Operand *w = written(in);
-    return w && !is_reg(w);
+    return w && (!is_reg(w) || w->reg == MSP_SP);
 }
 
 // The `mov s, t` in block k before instruction i whose s the read of t at i can take
@@ -1388,6 +1393,7 @@ static bool dead_slot_stores(Cfg *c, int out)
 
 void msp_peephole_pass(Msp_Func *fn, unsigned result, int out)
 {
+    fp_frame     = fn->fp;
     bool changed = true;
     while (changed) {
         Cfg c;
@@ -1403,7 +1409,7 @@ void msp_peephole_pass(Msp_Func *fn, unsigned result, int out)
     }
 }
 
-bool msp_frame_referenced(const Msp_Func *fn)
+bool msp_frame_referenced(const Msp_Func *fn, bool fp)
 {
     for (const Msp_Block *b = fn->blocks; b; b = b->next)
         for (const Msp_Instr *in = b->head; in; in = in->next)
@@ -1411,7 +1417,7 @@ bool msp_frame_referenced(const Msp_Func *fn)
                 const Msp_Operand *o = &in->opnd[i];
                 if (o->kind != MSP_OPND_NONE && o->kind != MSP_OPND_IMM &&
                     o->kind != MSP_OPND_ABS && o->kind != MSP_OPND_LABEL &&
-                    o->reg == MSP_SP && !o->incoming)
+                    (o->reg == MSP_SP || (fp && o->reg == MSP_FP)) && !o->incoming)
                     return true;
             }
     return false;

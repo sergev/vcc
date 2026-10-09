@@ -139,7 +139,7 @@ void store_params(Gen *g)
             continue;
         }
         for (int j = 0; j < l->parts; j++) {
-            Msp_Operand src = l->reg[j] ? msp_reg(l->reg[j]) : incoming_at(l->stack[j]);
+            Msp_Operand src = l->reg[j] ? msp_reg(l->reg[j]) : incoming_at(g, l->stack[j]);
             if (in_reg)
                 m[k++] = (Move){ mem_at(g, p->name, 2 * j), src, false };
             else
@@ -152,7 +152,7 @@ void store_params(Gen *g)
         const ArgLoc *l = &locs[i];
         if (!l->agg || is_byref(g, p->name))
             continue;
-        emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(l->stack[0]),
+        emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(g, l->stack[0]),
               msp_reg(MSP_SCRATCH));
         copy_ptr(g, true, MSP_SCRATCH, p->name, 0, msp_type_size(p->type),
                  msp_type_align(p->type));

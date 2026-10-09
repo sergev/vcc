@@ -8,8 +8,9 @@
 #include "internal.h"
 #include "xalloc.h"
 
-bool msp430_regalloc = true;
-bool msp430_peephole = true;
+bool msp430_regalloc      = true;
+bool msp430_peephole      = true;
+bool msp430_frame_pointer = false;
 
 static void count_use(int var, void *arg)
 {
@@ -33,6 +34,8 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    g.fp     = msp430_frame_pointer;
+    g.fn->fp = g.fp;
     if (msp430_regalloc)
         gen_regalloc(&g);
     if (msp430_peephole)
@@ -60,7 +63,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     if (msp430_peephole) {
         msp_peephole_pass(g.fn, result, g.out_size);
         // The peephole pass may have removed every access to the slots.
-        if (!msp_frame_referenced(g.fn))
+        if (!msp_frame_referenced(g.fn, g.fp))
             g.frame_size = 0;
     }
     gen_frame(&g);

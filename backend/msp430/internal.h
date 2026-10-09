@@ -24,14 +24,17 @@
 // overwritten before it is read; an instruction with a helper counts as a call for the
 // allocator.
 //
-// Frame (SP is constant in the body; every offset is from it):
+// Frame (every offset is from the frame base: SP, constant in the body, or with
+// --frame-pointer r4, which the prologue sets to SP after it):
 //   frame + 2*saved + 2 ...  incoming stack arguments
 //   frame + 2*saved          return address
 //   frame ...                the call-saved registers in use, pushed by the prologue
 //   out ... frame - 1        slots: each aligned to its type
-//   0 ... out - 1            outgoing stack arguments, for the call that needs most
+//   0 ... out - 1            outgoing stack arguments, for the call that needs most,
+//                            always from SP
 // The saved registers are known only once the body is selected, so an operand into the
-// incoming arguments is marked and completed by gen_frame.
+// incoming arguments is marked and completed by gen_frame.  From r4, the slots stay
+// where they are while SP moves, r4 is never allocated, and it is always saved.
 //
 #ifndef MSP_INTERNAL_H
 #define MSP_INTERNAL_H
@@ -62,6 +65,7 @@ typedef struct {
     StringMap dead;    // parameters dead on entry: left where they arrive
     StringMap byref;   // structure parameters read through their pointer, uncopied
     bool no_r8;        // a helper takes r8-r11: no variable there
+    bool fp;           // the frame from r4 (--frame-pointer): x(r4) for a slot
     int out_size;      // bytes of outgoing stack arguments
     int frame_size;    // bytes of the outgoing area and the slots, even
     int sp_bias;       // bytes pushed for the moment: added to every x(r1)
@@ -119,7 +123,7 @@ Msp_Operand mem_at(const Gen *g, const char *name, int off);
 // read through its pointer included (whose slot holds the pointer).
 Msp_Operand slot_at(const Gen *g, const char *name, int off);
 // Byte `off` of the incoming stack arguments.
-Msp_Operand incoming_at(int off);
+Msp_Operand incoming_at(const Gen *g, int off);
 // Word `i` of scalar `v` (its byte, for a char): an immediate for a constant.
 Msp_Operand val_word(const Gen *g, const Tac_Val *v, int i);
 // Whether two operands are the same register or the same memory word.
@@ -259,8 +263,9 @@ void gen_regalloc(Gen *g);
 // The body, before the frame: jumps, known register contents, liveness.
 // `out` is the size of the outgoing argument area at the bottom of the frame.
 void msp_peephole_pass(Msp_Func *fn, unsigned result, int out);
-// Whether the body still addresses the frame: an x(r1) slot, or r1 as a value.
-bool msp_frame_referenced(const Msp_Func *fn);
+// Whether the body still addresses the frame: an x(r1) slot (x(r4) in a frame from r4,
+// `fp`), or r1 as a value.
+bool msp_frame_referenced(const Msp_Func *fn, bool fp);
 // After the frame: the jumps again, and tail calls of a frameless function.
 void msp_peephole_frame(Msp_Func *fn, unsigned result);
 

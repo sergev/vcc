@@ -9,6 +9,7 @@
 static const BackendFlag flags[] = {
     { "no-regalloc", "keep every variable in memory" },
     { "no-peephole", "skip the peephole pass" },
+    { "frame-pointer", "address the frame from r4" },
     { NULL, NULL },
 };
 
@@ -16,8 +17,10 @@ static void flag(int index)
 {
     if (index == 0)
         msp430_regalloc = false;
-    else
+    else if (index == 1)
         msp430_peephole = false;
+    else
+        msp430_frame_pointer = true;
 }
 
 static const char *output_ext(void)

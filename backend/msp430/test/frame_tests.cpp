@@ -63,6 +63,29 @@ TEST_F(Msp430Test, StackParamAboveSlots)
     EXPECT_NE(std::string::npos, code.find("mov 10(r1), r12\n")) << code;
 }
 
+// --frame-pointer: the slots and the incoming arguments from r4, set after the frame is
+// reserved, r4 saved; the epilogue puts SP back from it.
+TEST_F(Msp430Test, FramePointerOption)
+{
+    NaiveSelection();
+    msp430_frame_pointer = true;
+    EXPECT_EQ(R"(push r4
+sub #8, r1
+mov r1, r4
+mov r12, 0(r4)
+mov r13, 2(r4)
+mov r14, 4(r4)
+mov r15, 6(r4)
+mov 12(r4), r12
+mov r4, r1
+add #8, r1
+pop r4
+ret
+)",
+              Code(CompileToMsp430("int f(int a, int b, int c, int d, int e) { return e; }")));
+    msp430_frame_pointer = false;
+}
+
 // A long with only r15 left: its low word in r15, its high word on the stack, taken
 // into registers, or copied into the slot.
 EXPECT_CODE(SplitLongParam, R"(mov r15, r12

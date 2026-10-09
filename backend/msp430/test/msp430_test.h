@@ -115,9 +115,11 @@ class Msp430Test : public QemuTest {
 protected:
     Msp430Test() : QemuTest("msp430", msp430_gcc_config())
     {
-        // The defaults; a test may change them.
-        msp430_regalloc = true;
-        msp430_peephole = true;
+        // The defaults; a test may change them.  VCC_MSP430_FRAME_POINTER set runs every
+        // test with the frame from r4, a check of that mode (the goldens then differ).
+        msp430_regalloc      = true;
+        msp430_peephole      = true;
+        msp430_frame_pointer = getenv("VCC_MSP430_FRAME_POINTER") != nullptr;
     }
 
     // Pin instruction selection itself: every variable in its slot, no peephole pass.

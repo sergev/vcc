@@ -23,6 +23,7 @@ enum {
     MSP_SP   = 1,
     MSP_SR   = 2, // the status register, and constant generator 1
     MSP_CG   = 3, // constant generator 2
+    MSP_FP   = 4, // the frame pointer, in a frame from it (--frame-pointer)
     MSP_VREG = 16, // first virtual register
 };
 
@@ -130,6 +131,7 @@ typedef struct Msp_Block {
 typedef struct {
     char *name; // owned
     bool global;
+    bool fp; // the slots are x(r4), the frame pointer; else x(r1)
     Msp_Block *blocks, *tail;
 } Msp_Func;
 

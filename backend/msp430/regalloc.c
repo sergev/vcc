@@ -70,7 +70,8 @@ void gen_regalloc(Gen *g)
     Target target        = { .g = g };
     RegAlloc_Target desc = {
         .int_pool     = g->no_r8 ? int_pool_r8 : int_pool,
-        .nint         = g->no_r8 ? NPOOL(int_pool_r8) : NPOOL(int_pool),
+        // r4, the last of either pool, is the frame pointer in a frame from it.
+        .nint         = (g->no_r8 ? NPOOL(int_pool_r8) : NPOOL(int_pool)) - (g->fp ? 1 : 0),
         .int_narg     = 4,
         .ret_int      = 12,
         .ret_int_hi   = 13,

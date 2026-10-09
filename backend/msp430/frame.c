@@ -362,11 +362,23 @@ int var_reg(const Gen *g, const char *name, int word)
     return word == 0 ? (int)(v & 0xff) : word == 1 ? (int)(v >> 8) : 0;
 }
 
+// The register slots and incoming arguments are addressed from: r4 or SP, and the bytes
+// pushed for the moment, which move SP alone.
+static int frame_base(const Gen *g)
+{
+    return g->fp ? MSP_FP : MSP_SP;
+}
+
+static int frame_bias(const Gen *g)
+{
+    return g->fp ? 0 : g->sp_bias;
+}
+
 Msp_Operand slot_at(const Gen *g, const char *name, int off)
 {
     const Slot *s = find_slot(g, name);
     if (s) {
-        Msp_Operand o = msp_indexed(MSP_SP, NULL, s->off + off + g->sp_bias);
+        Msp_Operand o = msp_indexed(frame_base(g), NULL, s->off + off + frame_bias(g));
         o.incoming    = s->incoming;
         return o;
     }
@@ -397,9 +409,9 @@ Msp_Operand mem_at(const Gen *g, const char *name, int off)
     return slot_at(g, name, off);
 }
 
-Msp_Operand incoming_at(int off)
+Msp_Operand incoming_at(const Gen *g, int off)
 {
-    Msp_Operand o = msp_indexed(MSP_SP, NULL, off);
+    Msp_Operand o = msp_indexed(frame_base(g), NULL, off);
     o.incoming    = true;
     return o;
 }
@@ -470,8 +482,8 @@ void address_of(Gen *g, Msp_Operand dst, const char *name, int off)
     }
     const Slot *s = find_slot(g, name);
     if (s) {
-        emit2(g, MSP_MOV, msp_reg(MSP_SP), dst);
-        Msp_Operand k = msp_imm(s->off + off + g->sp_bias);
+        emit2(g, MSP_MOV, msp_reg(frame_base(g)), dst);
+        Msp_Operand k = msp_imm(s->off + off + frame_bias(g));
         k.incoming    = s->incoming;
         if (k.imm != 0 || k.incoming)
             emit2(g, MSP_ADD, k, msp_copy(&dst));
@@ -739,7 +751,7 @@ static void complete_incoming(const Gen *g, int base)
 
 void gen_frame(Gen *g)
 {
-    unsigned saved = saved_regs(g);
+    unsigned saved = saved_regs(g) | (g->fp ? 1u << MSP_FP : 0);
     int nsaved     = 0;
     for (int r = 4; r <= 10; r++)
         if (saved & (1u << r)) {
@@ -750,6 +762,11 @@ void gen_frame(Gen *g)
         Msp_Instr *in = msp_append_to(g->prologue, MSP_SUB);
         in->opnd[0]   = msp_imm(g->frame_size);
         in->opnd[1]   = msp_reg(MSP_SP);
+    }
+    if (g->fp) {
+        Msp_Instr *in = msp_append_to(g->prologue, MSP_MOV);
+        in->opnd[0]   = msp_reg(MSP_SP);
+        in->opnd[1]   = msp_reg(MSP_FP);
     }
     complete_incoming(g, g->frame_size + 2 * nsaved + 2);
 
@@ -763,8 +780,10 @@ void gen_frame(Gen *g)
                     in->opnd[0] = (Msp_Operand){ 0 };
                 }
 
-    // Epilogue, the reverse.
+    // Epilogue, the reverse; from r4, SP first back where the prologue left it.
     msp_new_block(g->fn, g->exit);
+    if (g->fp)
+        emit2(g, MSP_MOV, msp_reg(MSP_FP), msp_reg(MSP_SP));
     if (g->frame_size)
         emit2(g, MSP_ADD, msp_imm(g->frame_size), msp_reg(MSP_SP));
     for (int r = 10; r >= 4; r--)
