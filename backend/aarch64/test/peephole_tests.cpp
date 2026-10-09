@@ -44,8 +44,7 @@ EXPECT_PEEPHOLE(PeepholeNegativeOffset, "sub x0, x0, #12\nret\n",
 
 // A compare and branch, the index sign-extended and scaled in the load, a zero test as
 // cbz, the increment an immediate.
-EXPECT_PEEPHOLE(PeepholeLoop, R"(mov w1, w1
-mov w2, #0
+EXPECT_PEEPHOLE(PeepholeLoop, R"(mov w2, #0
 add x3, x0, w1, sxtw #2
 cmp w1, #0
 b.le .LL0

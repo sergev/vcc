@@ -170,31 +170,225 @@ static bool dead_after(const A64_Instr *in, int r)
     return true;
 }
 
-// The value `in` leaves in register r is never read: as dead_after, and for any other
-// register, written again before a branch, or an argument register at a return that
-// does not read it.
+//
+// Liveness of the registers over the function's blocks, computed afresh before each
+// round of rewrites.  Within a round a rewrite never makes a register live across a
+// block boundary where it was not (it deletes reads, or moves them within the block),
+// so the sets stay a safe over-estimate until the next round.
+//
+// A set of registers: bit r - x0 for x0-x30, bit 31 + k for v<k>; sp and xzr are not
+// tracked.
+typedef uint64_t Regs;
+
+#define GPRS(lo, hi)  ((~0ull >> (63 - (hi))) & (~0ull << (lo)))
+#define VREGS(lo, hi) (GPRS(lo, hi) << 31)
+#define CALL_READS    (GPRS(0, 8) | VREGS(0, 7))
+#define CALL_WRITES   (GPRS(0, 18) | GPRS(30, 30) | VREGS(0, 7) | VREGS(16, 31))
+#define CALLEE_SAVED  (GPRS(19, 29) | VREGS(8, 15))
+
+static int reg_bit(int r)
+{
+    if (r >= A64_X0 && r <= A64_LR)
+        return r - A64_X0;
+    if (r >= A64_V0 && r < A64_VREG)
+        return 31 + (r - A64_V0);
+    return -1;
+}
+
+static Regs bit_of(int r)
+{
+    int b = reg_bit(r);
+    return b < 0 ? 0 : 1ull << b;
+}
+
+// The registers `in` reads, or writes: of the registers its operands name, those
+// reads() (writes()) says; a call reads the argument registers and writes those it
+// does not keep, a return reads the result, x30 and the callee-saved registers.
+static Regs regs_of(const A64_Instr *in, bool (*pred)(const A64_Instr *, int))
+{
+    Regs s = 0;
+    for (int i = 0; i < A64_MAX_OPERANDS; i++) {
+        const A64_Operand *o = &in->opnd[i];
+        if (o->kind == A64_OPND_NONE || o->kind == A64_OPND_IMM || o->kind == A64_OPND_COND)
+            continue;
+        if (o->reg && pred(in, o->reg))
+            s |= bit_of(o->reg);
+        if (o->kind == A64_OPND_MEM && o->sub == A64_MEM_INDEX && pred(in, o->index))
+            s |= bit_of(o->index);
+    }
+    return s;
+}
+
+static Regs ret_regs(void)
+{
+    Regs s = bit_of(A64_LR) | CALLEE_SAVED;
+    if (result & 1)
+        s |= bit_of(A64_X0);
+    if (result & 2)
+        s |= bit_of(A64_X(1));
+    for (int k = 0; k < 4; k++)
+        if (result & (4u << k))
+            s |= bit_of(A64_V(k));
+    return s;
+}
+
+static Regs uses(const A64_Instr *in)
+{
+    if (in->op == A64_RET)
+        return ret_regs();
+    return regs_of(in, reads) | (is_call(in->op) ? CALL_READS : 0);
+}
+
+static Regs defs(const A64_Instr *in)
+{
+    return is_call(in->op) ? CALL_WRITES : regs_of(in, writes);
+}
+
+static struct {
+    int n;
+    A64_Block **blocks;
+    Regs *in, *out;
+} live_info;
+
+static A64_Block *cur_block; // the block being swept
+
+// The registers live at label `l`: all, for one not in the function.
+static Regs live_at(const char *l)
+{
+    for (int i = 0; i < live_info.n; i++)
+        if (live_info.blocks[i]->label && strcmp(live_info.blocks[i]->label, l) == 0)
+            return live_info.in[i];
+    return ~0ull;
+}
+
+static const char *branch_target(const A64_Instr *in)
+{
+    return in->opnd[in->op == A64_B ? 0 : 1].sym;
+}
+
+// The registers live before `in`, given those live after it.
+static Regs live_through(const A64_Instr *in, Regs live)
+{
+    if (in->op == A64_RET)
+        return uses(in);
+    if (in->op == A64_B)
+        return live_at(branch_target(in));
+    if (is_branch(in->op))
+        return live | live_at(branch_target(in)) | uses(in);
+    return (live & ~defs(in)) | uses(in);
+}
+
+static Regs live_before(const A64_Block *b, Regs live)
+{
+    int n = 0;
+    for (const A64_Instr *in = b->head; in; in = in->next)
+        n++;
+    const A64_Instr **list = xalloc((n ? n : 1) * sizeof(A64_Instr *), __func__, __FILE__, __LINE__);
+    n                      = 0;
+    for (const A64_Instr *in = b->head; in; in = in->next)
+        list[n++] = in;
+    while (n > 0)
+        live = live_through(list[--n], live);
+    xfree(list);
+    return live;
+}
+
+static bool falls_through(const A64_Block *b)
+{
+    const A64_Instr *last = NULL;
+    for (const A64_Instr *in = b->head; in; in = in->next)
+        last = in;
+    return !last || (last->op != A64_B && last->op != A64_RET);
+}
+
+static void free_liveness(void)
+{
+    xfree(live_info.blocks);
+    xfree(live_info.in);
+    xfree(live_info.out);
+    live_info.blocks = NULL;
+    live_info.in = live_info.out = NULL;
+    live_info.n                  = 0;
+}
+
+// Liveness over the blocks, to a fixed point, backwards.
+static void compute_liveness(A64_Func *fn)
+{
+    free_liveness();
+    for (const A64_Block *b = fn->blocks; b; b = b->next)
+        live_info.n++;
+    size_t n         = live_info.n ? live_info.n : 1;
+    live_info.blocks = xalloc(n * sizeof(A64_Block *), __func__, __FILE__, __LINE__);
+    live_info.in     = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
+    live_info.out    = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
+    int i            = 0;
+    for (A64_Block *b = fn->blocks; b; b = b->next, i++) {
+        live_info.blocks[i] = b;
+        live_info.in[i] = live_info.out[i] = 0;
+    }
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (i = live_info.n - 1; i >= 0; i--) {
+            const A64_Block *b = live_info.blocks[i];
+            Regs out = falls_through(b) ? (i + 1 < live_info.n ? live_info.in[i + 1] : ~0ull) : 0;
+            Regs in  = live_before(b, out);
+            if (in != live_info.in[i] || out != live_info.out[i])
+                changed = true;
+            live_info.in[i]  = in;
+            live_info.out[i] = out;
+        }
+    }
+}
+
+// The registers live out of the block being rewritten.
+static Regs live_out(void)
+{
+    for (int i = 0; i < live_info.n; i++)
+        if (live_info.blocks[i] == cur_block)
+            return live_info.out[i];
+    return ~0ull;
+}
+
+// The registers in `live` are not read after `in`, an instruction of the block being
+// rewritten: written first, or not live where control goes.
+static bool dead_from(const A64_Instr *in, Regs live)
+{
+    for (const A64_Instr *n = in->next; n && live; n = n->next) {
+        if (uses(n) & live)
+            return false;
+        if (n->op == A64_RET)
+            return true;
+        if (n->op == A64_B)
+            return !(live & live_at(branch_target(n)));
+        if (is_branch(n->op) && (live & live_at(branch_target(n))))
+            return false;
+        live &= ~defs(n);
+    }
+    return !(live & live_out());
+}
+
+// The value `in` leaves in register r is never read: a scratch register is not read
+// again in the block, any other is written first or dead where control goes.
 static bool dies_after(const A64_Instr *in, int r)
 {
     if (is_scratch(r))
         return dead_after(in, r);
-    for (const A64_Instr *n = in->next; n; n = n->next) {
-        if (reads(n, r))
-            return false;
-        if (writes(n, r))
-            return true;
-        if (n->op == A64_RET)
-            return is_arg(r);
-        if (is_branch(n->op) || n->op == A64_B)
-            return false;
-    }
-    return false;
+    Regs b = bit_of(r);
+    return b && dead_from(in, b);
 }
 
-// The value r holds before `in` is not read after it: `in` writes r, or r is a scratch
-// register not read again.
+// The value r holds before `in` is not read after it: `in` writes r, or it dies.
 static bool last_read(const A64_Instr *in, int r)
 {
-    return writes(in, r) || dead_after(in, r);
+    return writes(in, r) || dies_after(in, r);
+}
+
+// Whether register r may be read where branch or jump `in` goes.
+static bool live_at_target(const A64_Instr *in, int r)
+{
+    Regs b = bit_of(r);
+    return !b || (live_at(branch_target(in)) & b);
 }
 
 static void free_instr(A64_Instr *in)
@@ -505,7 +699,7 @@ static void substitute(A64_Instr *in, int t, int r)
 
 // `mov t, r`: the reads of t up to its next write read r instead, if r is not written
 // before the last of them and each can.  A t other than a scratch register must be
-// written before any branch, or reach a return that does not read it.
+// dead where any branch passed goes, and out of the block when it is not written in it.
 static bool forward_move(A64_Instr **link)
 {
     A64_Instr *mv = *link;
@@ -514,7 +708,7 @@ static bool forward_move(A64_Instr **link)
     bool scratch = is_scratch(t);
     if (t == r || t == A64_SP || t == A64_ZR || r == A64_SP || r == A64_ZR)
         return false;
-    bool clobbered = false, done = scratch;
+    bool clobbered = false, done = false;
     const A64_Instr *end = NULL;
     for (const A64_Instr *n = mv->next; n; n = n->next) {
         if (reads(n, t) &&
@@ -525,16 +719,16 @@ static bool forward_move(A64_Instr **link)
             done = true;
             break;
         }
-        if (!scratch && n->op == A64_RET) {
+        if (n->op == A64_RET) {
             done = true;
             break;
         }
-        if (!scratch && (is_branch(n->op) || n->op == A64_B))
+        if (!scratch && (is_branch(n->op) || n->op == A64_B) && live_at_target(n, t))
             return false;
         if (writes(n, r))
             clobbered = true;
     }
-    if (!done)
+    if (!done && !scratch && (live_out() & bit_of(t)))
         return false;
     for (A64_Instr *n = mv->next; n != end; n = n->next)
         substitute(n, t, r);
@@ -557,8 +751,9 @@ static bool computes(const A64_Instr *in)
 }
 
 // `in` computes into t, and a later `mov d, t` is the last read of it: compute into d,
-// when d is neither read nor written in between, nor (t not scratch) a branch passed.  The reads of t in between read d.  A
-// W move zeroes the upper half, so it takes a W result only.
+// when d is neither read nor written in between, nor live where a branch passed goes
+// (nor t, unless a scratch register).  The reads of t in between read d.  A W move
+// zeroes the upper half, so it takes a W result only.
 static bool compute_in_place(A64_Instr *in)
 {
     int t       = in->opnd[0].reg;
@@ -570,7 +765,9 @@ static bool compute_in_place(A64_Instr *in)
             n->opnd[0].reg != A64_SP && n->opnd[0].reg != A64_ZR && dies_after(n, t)) {
             int d = n->opnd[0].reg;
             for (const A64_Instr *m = in->next; m != n; m = m->next)
-                if (reads(m, d) || writes(m, d) || !can_substitute(m, t, A64_X))
+                if (reads(m, d) || writes(m, d) || !can_substitute(m, t, A64_X) ||
+                    ((is_branch(m->op) || m->op == A64_B) &&
+                     (live_at_target(m, d) || (!is_scratch(t) && live_at_target(m, t)))))
                     return false;
             for (A64_Instr *m = in->next; m != n; m = m->next)
                 substitute(m, t, d);
@@ -578,9 +775,7 @@ static bool compute_in_place(A64_Instr *in)
             delete_at(link);
             return true;
         }
-        // Beyond a branch, a register other than a scratch one may still be read.
-        if (writes(n, t) || is_call(n->op) ||
-            (!is_scratch(t) && (is_branch(n->op) || n->op == A64_B)))
+        if (writes(n, t) || is_call(n->op) || n->op == A64_B)
             return false;
     }
     return false;
@@ -632,17 +827,34 @@ static int log2_of(int n)
     return s;
 }
 
+// The first instruction after `in` that reads or writes register t, when none before
+// it writes register a or b (0 for none) or is a branch, call or return.
+static A64_Instr *next_use(const A64_Instr *in, int t, int a, int b)
+{
+    for (A64_Instr *n = in->next; n; n = n->next) {
+        if (reads(n, t) || writes(n, t))
+            return n;
+        if (is_branch(n->op) || n->op == A64_B || is_call(n->op) || n->op == A64_RET ||
+            (a && writes(n, a)) || (b && writes(n, b)))
+            return NULL;
+    }
+    return NULL;
+}
+
 // `add t, b, #imm` (or sub), or `add t, a, index, lsl/sxtw #s`, feeding the address of
-// the load or store after it, at its last read: the address computed by that
+// the next load or store to use t, at its last read: the address computed by that
 // instruction instead.
 static bool fold_address(A64_Instr **link)
 {
-    A64_Instr *add = *link, *n = add->next;
+    A64_Instr *add = *link;
     const A64_Operand *o = add->opnd;
-    if (!n || !is_mem_op(n->op) || o[0].kind != A64_OPND_REG || o[0].width != A64_X ||
-        o[1].kind != A64_OPND_REG || o[1].reg == A64_ZR)
+    if (o[0].kind != A64_OPND_REG || o[0].width != A64_X || o[1].kind != A64_OPND_REG ||
+        o[1].reg == A64_ZR)
         return false;
-    int t          = o[0].reg;
+    int t        = o[0].reg;
+    A64_Instr *n = next_use(add, t, o[1].reg, o[2].kind == A64_OPND_IMM ? 0 : o[2].reg);
+    if (!n || !is_mem_op(n->op))
+        return false;
     A64_Operand *m = &n->opnd[1];
     if (m->kind != A64_OPND_MEM || m->sub != A64_MEM_OFFSET || m->reg != t ||
         (n->opnd[0].kind == A64_OPND_REG && n->opnd[0].reg == t && no_dest(n->op)) ||
@@ -756,21 +968,28 @@ static bool pair(A64_Instr **link)
 }
 
 // `mov w, w` of register r: it clears the upper half, which goes when every read of r
-// up to its next write, within the block, is of the lower half (a W register operand).
+// up to its next write is of the lower half (a W register operand), and r is dead
+// where control leaves the block.
 static bool upper_unread(const A64_Instr *in, int r)
 {
+    if (!bit_of(r))
+        return false;
     for (const A64_Instr *n = in->next; n; n = n->next) {
         if (n->op == A64_RET)
             return !reads(n, r);
-        if (is_call(n->op) || is_branch(n->op) || n->op == A64_B || reads_as_address(n, r))
+        if (is_call(n->op) || reads_as_address(n, r))
             return false;
         for (int i = 0; i < A64_MAX_OPERANDS; i++)
             if (reads_operand(n, i, r) && (n->opnd[i].kind != A64_OPND_REG || n->opnd[i].width != A64_W))
                 return false;
         if (writes(n, r))
             return true;
+        if (n->op == A64_B)
+            return !live_at_target(n, r);
+        if (is_branch(n->op) && live_at_target(n, r))
+            return false;
     }
-    return false;
+    return !(live_out() & bit_of(r));
 }
 
 // Bit-field instructions.  A rule rewrites a consumer `at` into ubfx/sbfx/bfi/ubfiz and
@@ -790,8 +1009,6 @@ typedef struct {
     } src[MAX_SOURCES];
     int nsrc;
 } Group;
-
-static A64_Block *cur_block; // the block being swept
 
 static bool in_group(const Group *g, const A64_Instr *in)
 {
@@ -1371,7 +1588,9 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
     bool changed = true;
     while (changed) {
         changed = false;
+        compute_liveness(fn);
         for (A64_Block *b = fn->blocks; b; b = b->next) {
+            cur_block = b;
             while (fold_bitfields(b))
                 changed = true;
             for (A64_Instr **link = &b->head; *link;) {
@@ -1384,6 +1603,8 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
                 changed = true;
         }
     }
+    free_liveness();
+    cur_block = NULL;
     for (A64_Block *b = fn->blocks; b; b = b->next) {
         for (A64_Instr **link = &b->head; *link; link = &(*link)->next)
             pair(link);
