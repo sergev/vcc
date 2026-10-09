@@ -144,6 +144,35 @@ below Y             the call-saved registers in use, pushed after Y is set up
   scratch-free selection reaches slots only as `Y+q`, so a function whose scalar slots
   would lie past `Y+63` is compiled with the naive form and every variable in memory.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack. The translator passes them on as calls of `__builtin_alloca`,
+`__builtin_stack_save` and `__builtin_stack_restore`, which `gen_call` expands in place
+through X, Z and r0 alone. A function that calls any of them always has a frame (Y set
+up and saved, never a variable), slots or not:
+
+```
+movw    r26, <n>        ; X = the size
+in      r30, __SP_L__
+in      r31, __SP_H__
+sub     r30, r26
+sbc     r31, r27
+in      r0, __SREG__    ; SP = Z, interrupts held off between the halves
+cli
+out     __SP_H__, r31
+out     __SREG__, r0
+out     __SP_L__, r30
+adiw    r30, 1          ; the memory: SP points below the last byte
+```
+
+Nothing is aligned (alignment is 1), and nothing lies between SP and the memory, since
+arguments are pushed. The call-saved registers, though, are pushed below Y after the
+frame is set up, and SP is no longer just below them: the epilogue first puts it back
+there from Y (`sbiw r28, k`, the same SP write, `adiw r28, k`), then pops them and
+releases the frame as before (by `pop r0` for a small one). The register allocator does
+not count the builtins as calls (its `inline_call` hook).
+
 ## Function calls
 
 - **Arguments** are allocated left to right from `r25` down. Each takes the registers

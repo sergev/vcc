@@ -7,6 +7,8 @@
 // its members first (split_arg).  A variadic callee takes them all on the stack.
 // Stack arguments lie in order above the return address, unaligned.
 //
+#include <string.h>
+
 #include "internal.h"
 #include "xalloc.h"
 
@@ -199,6 +201,24 @@ static int result_reg(int size)
     return size <= 2 ? 24 : size <= 4 ? 22 : 18;
 }
 
+// SP = Z, with interrupts held off between the halves (the I flag is restored before
+// the low half, which the next instruction still completes).
+static void write_sp_z(Gen *g)
+{
+    emit2(g, AVR_IN, avr_reg(AVR_TMP), avr_sym(AVR_MOD_NONE, "__SREG__", 0));
+    emit0(g, AVR_CLI);
+    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SP_H__", 0), avr_reg(AVR_Z + 1));
+    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SREG__", 0), avr_reg(AVR_TMP));
+    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SP_L__", 0), avr_reg(AVR_Z));
+}
+
+// Z = SP.
+static void read_sp_z(Gen *g)
+{
+    emit2(g, AVR_IN, avr_reg(AVR_Z), avr_sym(AVR_MOD_NONE, "__SP_L__", 0));
+    emit2(g, AVR_IN, avr_reg(AVR_Z + 1), avr_sym(AVR_MOD_NONE, "__SP_H__", 0));
+}
+
 // SP += n, after a call: pop r0 for a few bytes, else through Z (the result registers
 // are r18-r25).
 static void release_stack(Gen *g, int n)
@@ -208,23 +228,63 @@ static void release_stack(Gen *g, int n)
             emit1(g, AVR_POP, avr_reg(AVR_TMP));
         return;
     }
-    emit2(g, AVR_IN, avr_reg(AVR_Z), avr_sym(AVR_MOD_NONE, "__SP_L__", 0));
-    emit2(g, AVR_IN, avr_reg(AVR_Z + 1), avr_sym(AVR_MOD_NONE, "__SP_H__", 0));
+    read_sp_z(g);
     if (n <= Y_MAX) {
         emit2(g, AVR_ADIW, avr_reg(AVR_Z), avr_imm(n));
     } else {
         emit2(g, AVR_SUBI, avr_reg(AVR_Z), avr_imm(-n & 0xff));
         emit2(g, AVR_SBCI, avr_reg(AVR_Z + 1), avr_imm(((unsigned)-n >> 8) & 0xff));
     }
-    emit2(g, AVR_IN, avr_reg(AVR_TMP), avr_sym(AVR_MOD_NONE, "__SREG__", 0));
-    emit0(g, AVR_CLI);
-    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SP_H__", 0), avr_reg(AVR_Z + 1));
-    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SREG__", 0), avr_reg(AVR_TMP));
-    emit2(g, AVR_OUT, avr_sym(AVR_MOD_NONE, "__SP_L__", 0), avr_reg(AVR_Z));
+    write_sp_z(g);
+}
+
+bool avr_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+bool avr_moves_sp(const Tac_TopLevel *tl)
+{
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && avr_stack_builtin(in))
+            return true;
+    return false;
+}
+
+// save: dst = SP; restore: SP = arg; alloca: SP -= arg, dst = SP + 1 (SP points below
+// the last byte).  Arguments are pushed, so there is no outgoing area to keep below
+// the memory.  Through X, Z and r0 alone; the epilogue resets SP from Y.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    if (strcmp(name, "__builtin_stack_save") == 0) {
+        read_sp_z(g);
+    } else if (strcmp(name, "__builtin_stack_restore") == 0) {
+        load_val(g, in->u.fun_call.args, AVR_Z, 2, EXT_TYPE);
+        write_sp_z(g);
+        return;
+    } else {
+        load_val(g, in->u.fun_call.args, AVR_X, 2, EXT_TYPE);
+        read_sp_z(g);
+        emit2(g, AVR_SUB, avr_reg(AVR_Z), avr_reg(AVR_X));
+        emit2(g, AVR_SBC, avr_reg(AVR_Z + 1), avr_reg(AVR_X + 1));
+        write_sp_z(g);
+        emit2(g, AVR_ADIW, avr_reg(AVR_Z), avr_imm(1));
+    }
+    if (dst)
+        store_val(g, dst, AVR_Z, 2);
 }
 
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (avr_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
+        return;
+    }
     const Tac_Type *ft = in->u.fun_call.fun_type;
     int n              = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next)

@@ -123,6 +123,72 @@ ret
         << s;
 }
 
+// alloca: a frame from Y always (here without slots), SP lowered by the size through Z
+// with interrupts held off, the memory at SP + 1; the epilogue puts SP back from Y.
+TEST_F(AvrTest, AllocaLeaf)
+{
+    std::string s = Code(CompileToAvr(R"(
+void *__builtin_alloca(unsigned int);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[n - 1] = 7;
+    return p[n - 1];
+}
+)"));
+    EXPECT_EQ(0u, s.find("push r28\npush r29\nin r28, __SP_L__\nin r29, __SP_H__\n")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(in r30, __SP_L__
+in r31, __SP_H__
+sub r30, r26
+sbc r31, r27
+in r0, __SREG__
+cli
+out __SP_H__, r31
+out __SREG__, r0
+out __SP_L__, r30
+adiw r30, 1
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(out __SP_H__, r29
+out __SREG__, r0
+out __SP_L__, r28
+pop r29
+pop r28
+ret
+)")) << s;
+}
+
+// With registers pushed below Y, the epilogue puts SP just below them before it pops
+// them, then releases the frame as ever.
+TEST_F(AvrTest, AllocaSavedRegisters)
+{
+    std::string s = Code(CompileToAvr(R"(
+void *__builtin_alloca(unsigned int);
+int g(int);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[0] = 3;
+    int x = g(n);
+    return x + p[0] + n;
+}
+)"));
+    EXPECT_NE(std::string::npos, s.find(R"(sbiw r28, 4
+in r0, __SREG__
+cli
+out __SP_H__, r29
+out __SREG__, r0
+out __SP_L__, r28
+adiw r28, 4
+pop r17
+pop r16
+pop r15
+pop r14
+pop r29
+pop r28
+ret
+)")) << s;
+}
+
 // No slots and no stack arguments: no frame, Y neither saved nor set up.
 TEST_F(AvrTest, Frameless)
 {

@@ -58,7 +58,11 @@ static const Target targets[] = {
       0,        // no_loop_opt
       0,        // little-endian
       BITFIELD_SYSV,
-      16 },     // bitfield_access_bits: clang's access units, at most an int
+      16,       // bitfield_access_bits: clang's access units, at most an int
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from Y
 
     { "msp430",
       1, 1,   // _Bool

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "bitops.h"
 #include "float128.h"
 #include "internal.h"
 #include "xalloc.h"
@@ -99,6 +100,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool 
     g->program  = program;
     g->tl       = tl;
     g->alloc    = alloc;
+    g->moves_sp = avr_moves_sp(tl);
     g->fn       = avr_new_func(tl->u.function.name, tl->u.function.global);
     g->prologue = g->fn->tail;
     avr_new_block(g->fn, NULL); // the body
@@ -867,8 +869,17 @@ void gen_frame(Gen *g)
         if (saved & (1u << r))
             pro1(g, AVR_PUSH, avr_reg(r));
 
-    // Epilogue, the reverse.
+    // Epilogue, the reverse; where alloca moved SP, it goes back below the pushed
+    // registers first, from Y.
     avr_new_block(g->fn, g->exit);
+    if (g->moves_sp) {
+        int pushed = popcount32(saved);
+        if (pushed)
+            adjust_y(g, false, -pushed);
+        write_sp(g, false);
+        if (pushed)
+            adjust_y(g, false, pushed);
+    }
     for (int r = 31; r >= 2; r--)
         if (saved & (1u << r))
             emit1(g, AVR_POP, avr_reg(r));

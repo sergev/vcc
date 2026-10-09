@@ -36,6 +36,9 @@ stack, release on `longjmp`, and no runtime call.
   same way (`rv_stack_builtin`, the frame from s0).
 - **ARM32 is done** ([Arm32_Backend.md](Arm32_Backend.md#alloca)): the body generated
   with r11 from the start, and 4 bytes more below the saves when r10 is one of them.
+- **AVR is done** ([Avr_Backend.md](Avr_Backend.md#alloca)): SP written through Z with
+  interrupts held off, the memory at SP + 1, and the epilogue's SP put back below the
+  registers pushed under Y before it pops them.
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
@@ -90,19 +93,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A6. AVR
-
-- Intercept the builtins in `gen_call` (`backend/avr/call.c:226`).
-- `has_alloca` makes `needs_frame` true (`codegen.c:47`): Y is reserved and the frame is not
-  frameless.
-- Selection: read SPL/SPH, subtract `n`, write SP with interrupts held off (`write_sp`,
-  `frame.c:815`). `dst = SP + 1`, since there is no outgoing area: arguments are pushed.
-- Epilogue (`frame.c:875-884`):
-  - Do not pop the frame with `pop r0`; use `adiw Y` + `write_sp`.
-  - The saved registers lie below Y, so first set SP from Y minus their count, then pop.
-- Classify the builtins at `instr.c:1443`.
-- **Tests:** `avr-tests`, with interop with avr-gcc or clang.
 
 ### A7. MSP430: a frame-pointer mode, then alloca
 

@@ -28,6 +28,8 @@
 //   Y + frame + 1       saved Y
 //   Y + 1 ...           slots: scalars first, then aggregates
 //   below Y             the call-saved registers in use, pushed after Y is set up
+// alloca lowers SP by its size and returns SP + 1, the memory below everything else;
+// the epilogue then first puts SP back below the pushed registers, from Y.
 // A slot is reached as Y+q while its last byte is within Y+63, else through a pointer
 // register loaded with its address (access_bytes).
 //
@@ -69,6 +71,7 @@ typedef struct {
     bool y_free;       // Y may hold variables: the function is to have no frame
     bool stack_args;   // some parameter (or part of one) comes on the stack
     bool frameless;    // no slots and no stack arguments: Y is not set up
+    bool moves_sp;     // calls a stack builtin (alloca): SP moves in the body
     bool vol;          // the TAC instruction being selected is a volatile access
     const Flow *flow;  // with the peephole pass: for compare-and-branch fusion
     int *uses;         // the reads of each flow variable
@@ -234,6 +237,11 @@ void store_params(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool avr_stack_builtin(const Tac_Instruction *in);
+// Whether function `tl` calls one: it then always has a frame, and SP moves in it.
+bool avr_moves_sp(const Tac_TopLevel *tl);
 // Register allocation hints: the registers the parameters arrive in, and those of a
 // call's arguments and result.
 void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);

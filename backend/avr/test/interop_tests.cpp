@@ -168,21 +168,10 @@ int main(void)
     EXPECT_EQ("0fff 0fff", CompileAndRunWithClang(ours, theirs));
 }
 
-// r2-r17 and Y survive our calls and r1 is zero after them: a hand-written caller
-// fills them, calls our code, which uses r10-r17, mul and the helpers, and checks.
-TEST_F(AvrTest, RunPreservedRegisters)
+// A hand-written `check`: fills r2-r17 and Y, calls `work(123, 45)`, and returns in r24
+// a bit per register that did not survive (r1 must be zero too), 0 if all did.
+static std::string PreservedCheck()
 {
-    SKIP_IF_NO_AVR_TOOLS();
-    SKIP_IF_NO_AVR_CLANG();
-    std::string ours = CompileToAvr(R"(
-int work(int a, int b)
-{
-    volatile long long x = a;
-    long long y = x * x + (x << 40);
-    long q = (long)a * b / 7;
-    return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000);
-}
-)");
     std::string check = R"(
     .text
     .globl  check
@@ -208,7 +197,10 @@ check:
     for (int r = 17; r >= 2; r--)
         check += "    pop     r" + std::to_string(r) + "\n";
     check += "    ret\n";
-    std::string clang_src = R"(
+    return check;
+}
+
+static const char *const kPreservedMain = R"(
 void putbyte(int c);
 int check(void);
 int main(void)
@@ -217,6 +209,24 @@ int main(void)
     return 0;
 }
 )";
+
+// r2-r17 and Y survive our calls and r1 is zero after them: a hand-written caller
+// fills them, calls our code, which uses r10-r17, mul and the helpers, and checks.
+TEST_F(AvrTest, RunPreservedRegisters)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
+    std::string ours = CompileToAvr(R"(
+int work(int a, int b)
+{
+    volatile long long x = a;
+    long long y = x * x + (x << 40);
+    long q = (long)a * b / 7;
+    return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000);
+}
+)");
+    std::string check = PreservedCheck();
+    std::string clang_src = kPreservedMain;
     EXPECT_EQ("0", Run(ours + check, "crt0.o", &clang_src, { "-O1" }, ".clang"));
 }
 
@@ -351,4 +361,85 @@ TEST_F(AvrTest, RunBitfieldsClangCallsUs)
     SKIP_IF_NO_AVR_CLANG();
     EXPECT_EQ("", CompileAndRunWithClang(kBitfieldCallee, kBitfieldCaller));
     EXPECT_EQ(0, exit_status);
+}
+
+// The same with alloca: SP moved below the registers pushed, which the epilogue still
+// finds, and a call with arguments on the stack below the memory.
+TEST_F(AvrTest, RunPreservedRegistersAlloca)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
+    std::string ours = CompileToAvr(R"(
+void *__builtin_alloca(unsigned int);
+int sum10(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
+{
+    return a + b + c + d + e + f + g + h + i + j;
+}
+int work(int a, int b)
+{
+    int *p = __builtin_alloca(a * sizeof(int));
+    long q = 0;
+    for (int i = 0; i < a; i++)
+        p[i] = i * b;
+    for (int i = 0; i < a; i++)
+        q += p[i] % 7;
+    return (int)q + sum10(a, b, 1, 2, 3, 4, 5, 6, p[1], p[2]);
+}
+)");
+    std::string clang_src = kPreservedMain;
+    EXPECT_EQ("0", Run(ours + PreservedCheck(), "crt0.o", &clang_src, { "-O1" }, ".clang"));
+}
+
+// alloca both ways: ours called by clang's code and clang's called by ours; ten int
+// arguments, the last on the stack beside the memory.  (clang has __builtin_alloca
+// built in, we declare it.)
+TEST_F(AvrTest, RunAllocaWithClang)
+{
+    SKIP_IF_NO_AVR_TOOLS();
+    SKIP_IF_NO_AVR_CLANG();
+    const char *sum = R"(
+int NAME(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i)
+{
+    int *p = __builtin_alloca(n * sizeof(int));
+    for (int k = 0; k < n; k++)
+        p[k] = k + a;
+    int s = 0;
+    for (int k = 0; k < n; k++)
+        s += p[k];
+    return s + b + c + d + e + f + g + h + i;
+}
+)";
+    auto named = [&](const char *name) {
+        std::string t = sum;
+        t.replace(t.find("NAME"), 4, name);
+        return t;
+    };
+    std::string ours = std::string(R"(
+void *__builtin_alloca(unsigned int);
+int their_sum(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i);
+int their_check(void);
+void putbyte(int c);
+)") + named("our_sum") + R"(
+int main(void)
+{
+    int *q = __builtin_alloca(16);
+    q[0]   = 5;
+    int r  = their_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+    putbyte('0' + (r == 99) + 2 * their_check() + 4 * (q[0] == 5));
+    return 0;
+}
+)";
+    std::string theirs = std::string(R"(
+int our_sum(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i);
+volatile int seed = 7;
+)") + named("their_sum") + R"(
+int their_check(void)
+{
+    int s = seed;
+    int v0 = s * 3, v1 = s * 5, v2 = s * 11, v3 = s * 13, v4 = s * 17, v5 = s * 19;
+    int r = our_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+    return r == 99 && v0 + v1 + v2 + v3 + v4 + v5 == s * 68 && v0 == 21 && v5 == 133;
+}
+)";
+    EXPECT_EQ("7", CompileAndRunWithClang(ours, theirs));
 }

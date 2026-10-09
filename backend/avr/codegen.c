@@ -46,13 +46,13 @@ static uint32_t result_regs(const Tac_TopLevel *tl)
 
 static bool needs_frame(const Gen *g)
 {
-    return g->frame_size > 0 || g->stack_args;
+    return g->frame_size > 0 || g->stack_args || g->moves_sp;
 }
 
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
-    prepare(&g, program, tl, avr_regalloc, avr_regalloc);
+    prepare(&g, program, tl, avr_regalloc, avr_regalloc && !avr_moves_sp(tl));
     if (g.alloc && needs_frame(&g) && (g.var_regs >> AVR_Y & 3)) {
         // Y is the frame pointer after all.
         gen_done(&g);
