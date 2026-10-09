@@ -76,19 +76,33 @@ void f(void)
 }
 
 // An arena await: the sub-coroutine's frame pushed on the task's arena and set up in
-// the awaiter's task, resumed until done, then popped; one suspension of its own.
+// the awaiter's task, resumed until done by a direct call of range$resume (not through
+// the runtime's __coro_resume), then popped; one suspension of its own.
 TEST_F(TranslateTestWasm32, CoroutineAwait)
 {
     std::string yaml = CompileToYaml((std::string(range) +
                                       "_Coro(int) void g(void) { _Await range(0, 1); }")
                                          .c_str());
     for (const char *call : { "fun_name: __coro_push", "fun_name: __coro_setup",
-                              "fun_name: range$init", "fun_name: __coro_resume",
+                              "fun_name: range$init", "fun_name: range$resume",
                               "fun_name: __coro_pop", "name: %co.resume1" })
         EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
     size_t at = yaml.find("name: g$resume");
     ASSERT_NE(std::string::npos, at) << yaml;
     EXPECT_FALSE(Has(yaml.substr(at), "name: %co.resume2")) << yaml.substr(at);
+    EXPECT_FALSE(Has(yaml.substr(at), "fun_name: __coro_resume")) << yaml.substr(at);
+}
+
+// An await of a frame pointer does not know the coroutine: it resumes through the
+// runtime.
+TEST_F(TranslateTestWasm32, CoroutineAwaitFrame)
+{
+    std::string yaml = CompileToYaml((std::string(range) +
+                                      "_Coro(int) void g(_Coro_frame(int, void) *p) { _Await p; }")
+                                         .c_str());
+    size_t at = yaml.find("name: g$resume");
+    ASSERT_NE(std::string::npos, at) << yaml;
+    EXPECT_TRUE(Has(yaml.substr(at), "fun_name: __coro_resume")) << yaml.substr(at);
 }
 
 // co_alloca in a coroutine takes the arena, not the shadow stack.

@@ -372,6 +372,25 @@ static Tac_Val *emit_resume(TacCtx *ctx, Tac_Val *p, Tac_Val *signal)
     return emit_call(ctx, "__coro_resume", tac_kind(TAC_TYPE_INT), 2, args, params);
 }
 
+// An arena await's resume of its own sub-frame `sub`, a frame of coroutine `g`: what
+// __coro_resume does, without its checks or its indirect call.  They cannot fail here:
+// the frame is private to the await, which never resumes it once it is done or while it
+// runs, and destroys it only after it has suspended.
+static Tac_Val *emit_direct_resume(TacCtx *ctx, const char *g, Tac_Val *sub, Tac_Val *signal)
+{
+    Tac_Val *flags = emit_binary(ctx, TAC_BINARY_LEFT_SHIFT, signal, val_int(1), tac_kind(TAC_TYPE_INT));
+    flags          = emit_binary(ctx, TAC_BINARY_BITWISE_OR, flags, val_int(1), tac_kind(TAC_TYPE_INT));
+    emit_store(ctx, flags, emit_offset(ctx, sub->u.var_name, CO_FLAGS, tac_kind(TAC_TYPE_INT)));
+    char *name         = suffixed(g, "$resume");
+    Tac_Val *args[]    = { dup_val(sub) };
+    Tac_Type *params[] = { char_ptr() };
+    Tac_Val *status    = emit_call(ctx, name, tac_kind(TAC_TYPE_INT), 1, args, params);
+    xfree(name);
+    emit_store(ctx, val_int(0), emit_offset(ctx, sub->u.var_name, CO_FLAGS, tac_kind(TAC_TYPE_INT)));
+    tac_free_val(sub);
+    return status;
+}
+
 // Memory off the arena of the task the coroutine being lowered belongs to, for a frame
 // of coroutine `g`, which a trap names when it does not fit.
 static Tac_Val *emit_push(TacCtx *ctx, Tac_Val *bytes, Tac_Val *align, const char *g)
@@ -537,7 +556,11 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
     char *loop   = new_temp(ctx);
     char *done   = new_temp(ctx);
     emit_label(ctx, loop);
-    emit_jump_if(ctx, true, emit_resume(ctx, dup_val(sub), dup_val(sig)), done);
+    const char *g = arena ? op->u.call.func->u.var : NULL;
+    emit_jump_if(ctx, true,
+                 arena ? emit_direct_resume(ctx, g, dup_val(sub), dup_val(sig))
+                       : emit_resume(ctx, dup_val(sub), dup_val(sig)),
+                 done);
 
     // Suspended: its value is ours, and so is the suspension.
     if (unalias(co->yield)->kind != TYPE_VOID) {
@@ -564,7 +587,8 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
                  emit_binary(ctx, TAC_BINARY_EQUAL, dup_val(signal), val_int(CO_SIGNAL_DESTROY),
                              tac_kind(TAC_TYPE_INT)),
                  over);
-    tac_free_val(emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
+    tac_free_val(arena ? emit_direct_resume(ctx, g, dup_val(sub), val_int(CO_SIGNAL_DESTROY))
+                       : emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
     if (arena)
         emit_pop(ctx, dup_val(sub));
     gen_exits_all(ctx);
