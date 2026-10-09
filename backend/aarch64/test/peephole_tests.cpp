@@ -13,33 +13,62 @@
     }
 
 // Immediate operands, the parameter's own `mov w0, w0` gone with them.
-EXPECT_PEEPHOLE(PeepholeAddImmediate, "add w0, w0, #100\nret\n",
+EXPECT_PEEPHOLE(PeepholeAddImmediate, R"(add w0, w0, #100
+ret
+)",
                 "int f(int a) { return a + 100; }")
-EXPECT_PEEPHOLE(PeepholeSubShiftedImmediate, "sub x0, x0, #5, lsl #12\nret\n",
+EXPECT_PEEPHOLE(PeepholeSubShiftedImmediate, R"(sub x0, x0, #5, lsl #12
+ret
+)",
                 "long f(long a) { return a - 0x5000; }")
-EXPECT_PEEPHOLE(PeepholeCompareNegative, "cmn w0, #5\ncset w0, eq\nret\n",
+EXPECT_PEEPHOLE(PeepholeCompareNegative, R"(cmn w0, #5
+cset w0, eq
+ret
+)",
                 "int f(int a) { return a == -5; }")
-EXPECT_PEEPHOLE(PeepholeBitmaskImmediate, "and w0, w0, #65280\nret\n",
+EXPECT_PEEPHOLE(PeepholeBitmaskImmediate, R"(and w0, w0, #65280
+ret
+)",
                 "unsigned f(unsigned a) { return a & 0xff00; }")
-EXPECT_PEEPHOLE(PeepholeNoBitmaskImmediate, "mov x10, #12345\nand x0, x0, x10\nret\n",
+EXPECT_PEEPHOLE(PeepholeNoBitmaskImmediate, R"(mov x10, #12345
+and x0, x0, x10
+ret
+)",
                 "long f(long a) { return a & 12345; }")
-EXPECT_PEEPHOLE(PeepholeShiftImmediate, "lsl w0, w0, #3\nret\n", "int f(int a) { return a << 3; }")
-EXPECT_PEEPHOLE(PeepholeStoreZero, "str wzr, [x0]\nret\n", "void f(int *p) { *p = 0; }")
+EXPECT_PEEPHOLE(PeepholeShiftImmediate, R"(lsl w0, w0, #3
+ret
+)", "int f(int a) { return a << 3; }")
+EXPECT_PEEPHOLE(PeepholeStoreZero, R"(str wzr, [x0]
+ret
+)", "void f(int *p) { *p = 0; }")
 
 // mul + add/sub.
-EXPECT_PEEPHOLE(PeepholeMadd, "madd x0, x0, x1, x2\nret\n",
+EXPECT_PEEPHOLE(PeepholeMadd, R"(madd x0, x0, x1, x2
+ret
+)",
                 "long f(long a, long b, long c) { return a * b + c; }")
-EXPECT_PEEPHOLE(PeepholeMsub, "msub x0, x0, x1, x2\nret\n",
+EXPECT_PEEPHOLE(PeepholeMsub, R"(msub x0, x0, x1, x2
+ret
+)",
                 "long f(long a, long b, long c) { return c - a * b; }")
 
 // Addresses: a constant index is an offset, a variable one is scaled in the load.
-EXPECT_PEEPHOLE(PeepholeConstantIndex, "ldr x0, [x0, #16]\nret\n",
+EXPECT_PEEPHOLE(PeepholeConstantIndex, R"(ldr x0, [x0, #16]
+ret
+)",
                 "long f(long *p) { return p[2]; }")
 // A constant offset added extended or shifted (a member, a pointer step) is an
 // immediate, a negative one subtracted.
-EXPECT_PEEPHOLE(PeepholeMemberOffset, "add x1, x0, #4\nldrh w0, [x1]\nadd w0, w0, #1\nstrh w0, [x1]\nret\n",
+EXPECT_PEEPHOLE(PeepholeMemberOffset, R"(add x1, x0, #4
+ldrh w0, [x1]
+add w0, w0, #1
+strh w0, [x1]
+ret
+)",
                 "struct T { int a; unsigned short h; }; void f(struct T *p) { p->h++; }")
-EXPECT_PEEPHOLE(PeepholeNegativeOffset, "sub x0, x0, #12\nret\n",
+EXPECT_PEEPHOLE(PeepholeNegativeOffset, R"(sub x0, x0, #12
+ret
+)",
                 "int *f(int *p) { return p - 3; }")
 
 // A compare and branch, the index sign-extended and scaled in the load, a zero test as
@@ -68,7 +97,12 @@ ret
 )")
 
 // A floating-point compare and branch: the inverse condition is true for a NaN.
-EXPECT_PEEPHOLE(PeepholeFloatBranch, "fcmp d0, d1\nb.pl .L1\nret\nfmov d0, d1\nret\n",
+EXPECT_PEEPHOLE(PeepholeFloatBranch, R"(fcmp d0, d1
+b.pl .L1
+ret
+fmov d0, d1
+ret
+)",
                 "double f(double x, double y) { if (x < y) return x; return y; }")
 
 // Stores of adjacent slots pair, either order; the stored registers are not reloaded.
@@ -79,7 +113,9 @@ TEST_F(Aarch64Test, PeepholePairsAndReloads)
 long double f(long double a, long double b);
 long double g(long double a, long double b) { return f(a, b); }
 )"));
-    EXPECT_NE(std::string::npos, code.find("stp q1, q0, [x29, #-32]\nbl f\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(stp q1, q0, [x29, #-32]
+bl f
+)")) << code;
 }
 
 // The corners of each rewrite, run: immediates of every kind and sign, at both widths;
@@ -146,7 +182,12 @@ TEST_F(Aarch64Test, PeepholeKeepsVolatileReload)
 {
     EXPECT_NE(std::string::npos,
               Code(CompileToAarch64("int f(int a) { volatile int x = a; return x; }"))
-                  .find("sub sp, sp, #16\nstr w0, [sp, #12]\nldr w0, [sp, #12]\nadd sp, sp, #16\nret\n"));
+                  .find(R"(sub sp, sp, #16
+str w0, [sp, #12]
+ldr w0, [sp, #12]
+add sp, sp, #16
+ret
+)"));
 }
 TEST_F(Aarch64Test, PeepholeKeepsVolatileUnpaired)
 {
@@ -158,23 +199,43 @@ TEST_F(Aarch64Test, PeepholeKeepsVolatileUnpaired)
 
 // Shifts and masks: ubfx, sbfx, bfi and ubfiz, at either width; and what they are not:
 // a mask with a hole, a shifted value read again.
-EXPECT_PEEPHOLE(PeepholeUbfx, "ubfx w0, w0, #13, #11\nret\n",
+EXPECT_PEEPHOLE(PeepholeUbfx, R"(ubfx w0, w0, #13, #11
+ret
+)",
                 "unsigned f(unsigned x) { return (x >> 13) & 0x7ff; }")
-EXPECT_PEEPHOLE(PeepholeUbfxX, "ubfx x0, x0, #40, #16\nret\n",
+EXPECT_PEEPHOLE(PeepholeUbfxX, R"(ubfx x0, x0, #40, #16
+ret
+)",
                 "unsigned long f(unsigned long x) { return (x >> 40) & 0xffff; }")
-EXPECT_PEEPHOLE(PeepholeSbfx, "sbfx w0, w0, #13, #12\nret\n",
+EXPECT_PEEPHOLE(PeepholeSbfx, R"(sbfx w0, w0, #13, #12
+ret
+)",
                 "int f(int x) { return (x << 7) >> 20; }")
 EXPECT_PEEPHOLE(
-    PeepholeBfi, "bfi w0, w1, #8, #12\nret\n",
+    PeepholeBfi, R"(bfi w0, w1, #8, #12
+ret
+)",
     "unsigned f(unsigned x, unsigned v) { return (x & 0xfff000ff) | (v & 0xfff) << 8; }")
-EXPECT_PEEPHOLE(PeepholeBfiX, "bfi x0, x1, #20, #30\nret\n",
+EXPECT_PEEPHOLE(PeepholeBfiX, R"(bfi x0, x1, #20, #30
+ret
+)",
                 "unsigned long f(unsigned long x, unsigned long v) "
                 "{ return (x & ~(0x3ffffffful << 20)) | (v & 0x3ffffffful) << 20; }")
-EXPECT_PEEPHOLE(PeepholeUbfiz, "ubfiz w0, w0, #8, #12\nret\n",
+EXPECT_PEEPHOLE(PeepholeUbfiz, R"(ubfiz w0, w0, #8, #12
+ret
+)",
                 "unsigned f(unsigned v) { return (v & 0xfff) << 8; }")
-EXPECT_PEEPHOLE(PeepholeMaskWithHole, "lsr w0, w0, #4\nmov w10, #1285\nand w0, w0, w10\nret\n",
+EXPECT_PEEPHOLE(PeepholeMaskWithHole, R"(lsr w0, w0, #4
+mov w10, #1285
+and w0, w0, w10
+ret
+)",
                 "unsigned f(unsigned x) { return (x >> 4) & 0x505; }")
-EXPECT_PEEPHOLE(PeepholeShiftReadAgain, "lsr w1, w0, #4\nand w0, w1, #4095\nadd w0, w0, w1\nret\n",
+EXPECT_PEEPHOLE(PeepholeShiftReadAgain, R"(lsr w1, w0, #4
+and w0, w1, #4095
+add w0, w0, w1
+ret
+)",
                 "unsigned f(unsigned x) { unsigned t = x >> 4; return (t & 0xfff) + t; }")
 
 // Bit-fields: a read is ubfx or sbfx, a store bfi, a store of zero an and with the
@@ -191,18 +252,36 @@ void set_b(struct S *p, int v) { p->b = v; }
 void clear_c(struct S *p) { p->c = 0; }
 void bump_d(struct S *p) { p->d++; }
 )"));
-    EXPECT_NE(std::string::npos, code.find("ldr w0, [x0]\nubfx w0, w0, #8, #12\nret\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("ldrb w0, [x0]\nsbfx w0, w0, #3, #5\nret\n")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldr w0, [x0]
+ubfx w0, w0, #8, #12
+ret
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldrb w0, [x0]
+sbfx w0, w0, #3, #5
+ret
+)")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("ldr w0, [x2]\nbfi w0, w1, #8, #12\nstr w0, [x2]\nret\n"))
+              code.find(R"(ldr w0, [x2]
+bfi w0, w1, #8, #12
+str w0, [x2]
+ret
+)"))
         << code;
     EXPECT_NE(std::string::npos,
-              code.find("ldrb w0, [x3]\nbfi w0, w1, #3, #5\nstrb w0, [x3]\nret\n"))
+              code.find(R"(ldrb w0, [x3]
+bfi w0, w1, #3, #5
+strb w0, [x3]
+ret
+)"))
         << code;
     EXPECT_NE(std::string::npos, code.find("and w0, w0, #-1048321\n")) << code;
     EXPECT_NE(std::string::npos,
-              code.find("ubfx w0, w2, #4, #12\nadd w0, w0, #1\nbfi w2, w0, #4, #12\n"
-                        "strh w2, [x3]\nret\n"))
+              code.find(R"(ubfx w0, w2, #4, #12
+add w0, w0, #1
+bfi w2, w0, #4, #12
+strh w2, [x3]
+ret
+)"))
         << code;
     EXPECT_EQ(std::string::npos, code.find("orr")) << code;
     EXPECT_EQ(std::string::npos, code.find("movk")) << code;
