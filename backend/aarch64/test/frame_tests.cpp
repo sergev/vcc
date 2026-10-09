@@ -139,13 +139,61 @@ long many(long a, long b, long c, long d)
     long x = id(a), y = id(b);
     return x * 1000 + y * 100 + c * 10 + d + id(c);
 }
+double mixed(double a, double b, long c, long d, long e)
+{
+    double x = did(a);
+    long y = id(c);
+    return x + b + a + (double)(y + d + e + c);
+}
 int slots(int a) { int v[4]; v[0] = a; fill(v); return v[0] + v[1]; }
 double dsum(double a) { return did(a) + a; }
 int main(void)
 {
     int ok = one(1) == 2 && lone(3, 4) == 7 && many(1, 2, 3, 4) == 1237 && slots(9) == 14 &&
-             dsum(1.5) == 3.0;
+             dsum(1.5) == 3.0 && mixed(1, 2, 3, 4, 5) == 19.0;
     return ok ? 42 : 1;
 })"));
     EXPECT_EQ(42, exit_status);
+}
+
+// Saved registers pair within their file, a lone general one beside x30; a value
+// copied away before a call and back is not copied back.
+TEST_F(Aarch64Test, FrameSpFpPairs)
+{
+    EXPECT_EQ(R"(stp d8, d9, [sp, #-32]!
+str x30, [sp, #16]
+fmov d9, d0
+fmov d8, d1
+bl g
+fadd d0, d0, d8
+fadd d0, d0, d9
+ldr x30, [sp, #16]
+ldp d8, d9, [sp], #32
+ret
+)",
+              Code(CompileToAarch64(
+                  "double g(double); double f(double a, double b) { double x = g(a); return x + b + a; }")));
+}
+TEST_F(Aarch64Test, FrameSpMixedSaves)
+{
+    std::string code = Code(CompileToAarch64(R"(double g(double);
+long h(long);
+double f(double a, double b, long c, long d, long e)
+{
+    double x = g(a);
+    long y = h(c);
+    return x + b + a + (double)(y + d + e + c);
+}
+)"));
+    EXPECT_NE(std::string::npos, code.find(R"(str d10, [sp, #-64]!
+stp d8, d9, [sp, #16]
+stp x19, x20, [sp, #32]
+stp x30, x21, [sp, #48]
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldp d8, d9, [sp, #16]
+ldp x19, x20, [sp, #32]
+ldp x30, x21, [sp, #48]
+ldr d10, [sp], #64
+ret
+)")) << code;
 }

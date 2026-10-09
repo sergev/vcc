@@ -15,22 +15,29 @@ bool aarch64_frame_pointer = false;
 bool aarch64_linux         = false;
 bool aarch64_darwin        = false;
 
-// Save slots for the callee-saved registers in use, a pair in 16 bytes; then a
-// register or a slot for every parameter and local.  An ALLOCATE_LOCAL may ask for
-// more room or alignment than the type.
+// Save slots for the callee-saved registers in use (the general ones first), a pair of
+// one file in 16 bytes, a lone one in the first half: the general pairs, the FP pairs, a
+// lone FP register, a lone general one last, the lowest (an sp-addressed frame keeps it
+// beside x30 instead); then a register or a slot for every parameter and local.  An
+// ALLOCATE_LOCAL may ask for more room or alignment than the type.
 static void layout_frame(Gen *g)
 {
-    for (int i = 0; i < g->nsaved; i += 2) {
-        int off = alloc_slot(g, NULL, NULL, 16, 16);
-        // A pair is two registers of one file; a lone one takes the first half.
-        g->saved_off[i] = off;
-        if (i + 1 < g->nsaved) {
-            if (a64_is_fpreg(g->saved_reg[i]) == a64_is_fpreg(g->saved_reg[i + 1]))
-                g->saved_off[i + 1] = off + 8;
-            else
-                g->saved_off[i + 1] = alloc_slot(g, NULL, NULL, 16, 16);
-        }
+    int ngpr = 0;
+    while (ngpr < g->nsaved && !a64_is_fpreg(g->saved_reg[ngpr]))
+        ngpr++;
+    for (int i = 0; i + 1 < ngpr; i += 2) {
+        g->saved_off[i]     = alloc_slot(g, NULL, NULL, 16, 16);
+        g->saved_off[i + 1] = g->saved_off[i] + 8;
     }
+    int i = ngpr;
+    for (; i + 1 < g->nsaved; i += 2) {
+        g->saved_off[i]     = alloc_slot(g, NULL, NULL, 16, 16);
+        g->saved_off[i + 1] = g->saved_off[i] + 8;
+    }
+    if (i < g->nsaved)
+        g->saved_off[i] = alloc_slot(g, NULL, NULL, 16, 16);
+    if (ngpr % 2)
+        g->saved_off[ngpr - 1] = alloc_slot(g, NULL, NULL, 16, 16);
     gen_params(g);
     StringMap allocs;
     map_init(&allocs);

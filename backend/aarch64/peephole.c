@@ -1740,6 +1740,66 @@ static bool fold_flags(A64_Instr **link)
     return false;
 }
 
+static bool same_operand(const A64_Operand *x, const A64_Operand *y)
+{
+    return x->kind == y->kind && x->reg == y->reg && x->width == y->width && x->imm == y->imm &&
+           x->sub == y->sub && x->reloc == y->reloc && x->index == y->index &&
+           x->index_width == y->index_width && x->ext == y->ext &&
+           (x->sym == y->sym || (x->sym && y->sym && strcmp(x->sym, y->sym) == 0));
+}
+
+static bool same_instr(const A64_Instr *x, const A64_Instr *y)
+{
+    if (x->op != y->op || x->is_volatile != y->is_volatile)
+        return false;
+    for (int i = 0; i < A64_MAX_OPERANDS; i++)
+        if (!same_operand(&x->opnd[i], &y->opnd[i]))
+            return false;
+    return true;
+}
+
+// `mov t, r` (an X, S or D one), and a later `mov r, t` in the block with neither
+// written in between: r still holds t's value, and the second move goes.  Not a W move:
+// it would clear an upper half the first did not.
+static bool delete_move_back(A64_Instr *in)
+{
+    const A64_Operand *o = in->opnd;
+    int t = o[0].reg, r = o[1].reg;
+    if (!is_move(in) || o[0].width == A64_W || t == r || t == A64_SP || r == A64_SP ||
+        t == A64_ZR || r == A64_ZR)
+        return false;
+    for (A64_Instr **link = &in->next; *link; link = &(*link)->next) {
+        A64_Instr *n = *link;
+        if (is_move(n) && n->op == in->op && n->opnd[0].reg == r && n->opnd[1].reg == t &&
+            n->opnd[0].width == o[0].width) {
+            delete_at(link);
+            return true;
+        }
+        if (writes(n, t) || writes(n, r) || n->op == A64_B || n->op == A64_RET)
+            return false;
+    }
+    return false;
+}
+
+// A compare that the flags already hold: the same compare earlier in the block, with
+// neither its registers nor the flags changed since.
+static bool delete_compare_again(A64_Instr *in)
+{
+    if (in->op != A64_CMP && in->op != A64_CMN && in->op != A64_FCMP)
+        return false;
+    Regs src = uses(in);
+    for (A64_Instr **link = &in->next; *link; link = &(*link)->next) {
+        A64_Instr *n = *link;
+        if (same_instr(n, in)) {
+            delete_at(link);
+            return true;
+        }
+        if (sets_flags(n) || (defs(n) & src) || n->op == A64_B || n->op == A64_RET)
+            return false;
+    }
+    return false;
+}
+
 // One rewrite at *link; true when something changed.
 static bool rewrite(A64_Instr **link)
 {
@@ -1762,7 +1822,7 @@ static bool rewrite(A64_Instr **link)
     if (in->op == A64_MOV && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_IMM &&
         fold_constant(link))
         return true;
-    if (fold_index(link) || fold_flags(link))
+    if (fold_index(link) || fold_flags(link) || delete_move_back(in) || delete_compare_again(in))
         return true;
     if (is_move(in) && forward_move(link))
         return true;
@@ -1887,24 +1947,6 @@ static A64_Instr *new_instr(A64_Op op, A64_Instr *next)
     in->op   = op;
     in->next = next;
     return in;
-}
-
-static bool same_operand(const A64_Operand *x, const A64_Operand *y)
-{
-    return x->kind == y->kind && x->reg == y->reg && x->width == y->width && x->imm == y->imm &&
-           x->sub == y->sub && x->reloc == y->reloc && x->index == y->index &&
-           x->index_width == y->index_width && x->ext == y->ext &&
-           (x->sym == y->sym || (x->sym && y->sym && strcmp(x->sym, y->sym) == 0));
-}
-
-static bool same_instr(const A64_Instr *x, const A64_Instr *y)
-{
-    if (x->op != y->op || x->is_volatile != y->is_volatile)
-        return false;
-    for (int i = 0; i < A64_MAX_OPERANDS; i++)
-        if (!same_operand(&x->opnd[i], &y->opnd[i]))
-            return false;
-    return true;
 }
 
 // Whether the instructions from x on and from y on are the same, ending in a return.

@@ -931,9 +931,11 @@ void gen_prologue(Gen *g)
     Frame sp        = fr;
     A64_Block *tail = redirect(g, g->prologue);
     fr.size         = fr.rest + (calls ? 16 : 0);
-    if (calls && g->nsaved % 2 == 1 && !a64_is_fpreg(g->saved_reg[g->nsaved - 1]) &&
-        (g->nsaved == 1 || g->saved_off[g->nsaved - 1] != g->saved_off[g->nsaved - 2] + 8)) {
-        sp.lone = g->nsaved - 1;
+    int ngpr = 0;
+    while (ngpr < g->nsaved && !a64_is_fpreg(g->saved_reg[ngpr]))
+        ngpr++;
+    if (calls && ngpr % 2 == 1) {
+        sp.lone = ngpr - 1;
         if (g->saved_off[sp.lone] == -g->locals_size)
             sp.rest = (g->locals_size - 16 + g->outgoing + 15) / 16 * 16;
     }
