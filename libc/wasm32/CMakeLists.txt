@@ -209,6 +209,9 @@ add_custom_command(OUTPUT ${BRAAM_SHARE}/lib/crt0.o ${BRAAM_SHARE}/lib/libc.a
     DEPENDS ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs)
 add_custom_target(braam-libc ALL
     DEPENDS ${BRAAM_SHARE}/lib/crt0.o ${BRAAM_SHARE}/lib/libc.a ${BRAAM_SHARE}/lib/run.mjs)
+# The objects shared with wasm32's libc.a are built by wasm32-libc alone: a Makefile
+# generator gives each target its own copy of their rules, which would race in parallel.
+add_dependencies(braam-libc wasm32-libc)
 install(FILES ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs
         DESTINATION share/vcc/wasm32-braam/lib)
 
