@@ -215,3 +215,96 @@ TEST_F(Aarch64Test, RunPeepholeBitfields)
     SKIP_IF_NO_AARCH64_TOOLS();
     EXPECT_EQ(BitfieldRunExpected(), CompileAndRunAarch64(kBitfieldRunProgram));
 }
+
+// Pointer steps: a load or store at the old pointer post-indexed, at the new one
+// pre-indexed.
+EXPECT_PEEPHOLE(PeepholePostIndex, R"(ldrb w3, [x1], #1
+strb w3, [x0], #1
+cbz w3, .LL0
+ldrb w3, [x1], #1
+strb w3, [x0], #1
+cbnz w3, .L9
+ret
+)",
+                "void f(char *d, const char *s) { while ((*d++ = *s++) != 0) ; }")
+EXPECT_PEEPHOLE(PeepholePreIndex, R"(ldrb w1, [x0, #1]!
+cbz w1, .LL0
+ldrb w1, [x0, #1]!
+cbnz w1, .L4
+ldrb w0, [x0]
+ret
+)",
+                "int f(const char *p) { while (*++p) ; return *p; }")
+
+// A byte loaded and extended the other way is loaded that way; an extension before a
+// narrow store goes.
+EXPECT_PEEPHOLE(PeepholeLoadExtend, "ldrb w0, [x0]\nret\n",
+                "int f(signed char *p) { return (unsigned char)*p; }")
+EXPECT_PEEPHOLE(PeepholeLoadSignExtendLong, "ldrsb x0, [x0]\nret\n",
+                "long f(signed char *p) { return *p; }")
+EXPECT_PEEPHOLE(PeepholeStoreNarrowed, "add w2, w1, #1\nstrb w2, [x0, w1, sxtw]\nret\n",
+                "void f(signed char *p, int x) { signed char c = (signed char)(x + 1); p[x] = c; }")
+
+// The size rewrites, run: steps of every access size and sign, the loaded register
+// also the old pointer, loads extended either way.
+TEST_F(Aarch64Test, RunPeepholeSize)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    CompileAndRunAarch64(R"(
+int ok = 1, bit = 0;
+void check(long got, long want)
+{
+    if (got != want)
+        ok = 0;
+    bit++;
+}
+void copy(char *d, const char *s)
+{
+    while ((*d++ = *s++) != 0)
+        ;
+}
+long sum_shorts(const short *p, int n)
+{
+    long s = 0;
+    while (n-- > 0)
+        s += *p++;
+    return s;
+}
+long sum_longs(const long *p, const long *end)
+{
+    long s = 0;
+    for (; p < end; p++)
+        s += *p;
+    return s;
+}
+int last(const signed char *p)
+{
+    while (*++p)
+        ;
+    return (unsigned char)p[-1];
+}
+void fill(unsigned *p, int n, unsigned v)
+{
+    while (n-- > 0)
+        *p++ = v--;
+}
+int main(void)
+{
+    char buf[8];
+    copy(buf, "abcdef");
+    check(buf[0] + buf[5], 'a' + 'f');
+    check(buf[6], 0);
+    short s[4] = { -1, -200, 300, -4 };
+    check(sum_shorts(s, 4), 95);
+    long l[3] = { 1L << 40, -5, 7 };
+    check(sum_longs(l, l + 3), (1L << 40) + 2);
+    signed char c[4] = { 1, -2, -3, 0 };
+    check(last(c), 253);
+    unsigned u[3];
+    fill(u, 3, 10);
+    check(u[0] * 100 + u[1] * 10 + u[2], 1098);
+    return ok ? bit : 100 + bit;
+}
+)");
+    EXPECT_EQ(6, exit_status);
+}

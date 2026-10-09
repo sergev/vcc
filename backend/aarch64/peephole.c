@@ -885,6 +885,88 @@ static bool fold_address(A64_Instr **link)
     return true;
 }
 
+// The signed step of `add p, p, #k` (or sub) on X register p, when it is one.
+static bool step_of(const A64_Instr *in, int p, int64_t *k)
+{
+    const A64_Operand *o = in->opnd;
+    if ((in->op != A64_ADD && in->op != A64_SUB) || o[0].kind != A64_OPND_REG ||
+        o[0].reg != p || o[0].width != A64_X || o[1].kind != A64_OPND_REG || o[1].reg != p ||
+        o[2].kind != A64_OPND_IMM || o[3].kind != A64_OPND_NONE)
+        return false;
+    *k = in->op == A64_SUB ? -o[2].imm : o[2].imm;
+    return *k >= -256 && *k <= 255;
+}
+
+// A load or store at [base] that may write register wb back: not volatile, its data
+// not wb.
+static bool may_index(const A64_Instr *n, int base, int wb)
+{
+    if (!n || !is_mem_op(n->op) || n->is_volatile)
+        return false;
+    const A64_Operand *m = &n->opnd[1];
+    return m->kind == A64_OPND_MEM && m->sub == A64_MEM_OFFSET && m->reg == base && m->imm == 0 &&
+           !(n->opnd[0].kind == A64_OPND_REG && n->opnd[0].reg == wb);
+}
+
+// The first instruction after `in` to read or write register r, with no branch, call
+// or return before it.
+static A64_Instr *next_touch(const A64_Instr *in, int r)
+{
+    return next_use(in, r, 0, 0);
+}
+
+// Post- and pre-indexed addressing:
+//   `mov t, p` + `add p, p, #k` + an access at [t], t's last read: [p], #k;
+//   an access at [p], and `add p, p, #k` the next use of p: [p], #k;
+//   `add p, p, #k`, and an access at [p] the next use of p: [p, #k]!.
+static bool fold_index(A64_Instr **link)
+{
+    A64_Instr *in = *link, *n;
+    int64_t k;
+    if (is_move(in) && in->op == A64_MOV && in->opnd[0].width == A64_X && in->next) {
+        int t = in->opnd[0].reg, p = in->opnd[1].reg;
+        A64_Instr *add = in->next;
+        if (t == p || p == A64_SP || p == A64_ZR || !step_of(add, p, &k))
+            return false;
+        n = next_touch(add, t);
+        if (!may_index(n, t, p) || !last_read(n, t))
+            return false;
+        for (const A64_Instr *m = add->next; m != n; m = m->next)
+            if (reads(m, p) || writes(m, p))
+                return false;
+        if (is_store(n->op) && n->opnd[0].reg == t)
+            return false;
+        n->opnd[1] = a64_mem_post(p, k);
+        delete_at(&in->next);
+        delete_at(link);
+        return true;
+    }
+    if (is_mem_op(in->op) && in->opnd[1].kind == A64_OPND_MEM) {
+        int p = in->opnd[1].reg;
+        if (!may_index(in, p, p) || p == A64_SP)
+            return false;
+        n = next_touch(in, p);
+        A64_Instr **nl = &in->next;
+        while (*nl && *nl != n)
+            nl = &(*nl)->next;
+        if (!n || !step_of(n, p, &k))
+            return false;
+        in->opnd[1] = a64_mem_post(p, k);
+        delete_at(nl);
+        return true;
+    }
+    if (step_of(in, in->opnd[0].reg, &k) && in->opnd[0].reg != A64_SP) {
+        int p = in->opnd[0].reg;
+        n     = next_touch(in, p);
+        if (!may_index(n, p, p))
+            return false;
+        n->opnd[1] = a64_mem_pre(p, k);
+        delete_at(link);
+        return true;
+    }
+    return false;
+}
+
 // `sxtw t, w` and `add d, a, t, lsl #s` at its last read: `add d, a, w, sxtw #s`.
 static bool fold_extend(A64_Instr **link)
 {
@@ -1419,6 +1501,12 @@ static bool fold_wide_constant(A64_Instr *at)
 // `uxtb`/`uxth t, a` stored by `strb`/`strh t` at its last read: a stored instead.  And
 // a uxtb/uxth (or uxtb of a halfword) of what an ldrb/ldrh just loaded, already zero
 // extended: gone, or a move.
+// The bytes an extension keeps: 1 for uxtb/sxtb, 2 for uxth/sxth, else 0.
+static int ext_bytes(A64_Op op)
+{
+    return op == A64_UXTB || op == A64_SXTB ? 1 : op == A64_UXTH || op == A64_SXTH ? 2 : 0;
+}
+
 static bool fold_narrow(A64_Instr **link)
 {
     A64_Instr *at = *link;
@@ -1431,8 +1519,8 @@ static bool fold_narrow(A64_Instr **link)
         for (A64_Instr *in = cur_block->head; in != at; in = in->next)
             if (writes(in, t))
                 x = in;
-        if (!x || x->op != (at->op == A64_STRB ? A64_UXTB : A64_UXTH) ||
-            !is_gpr(&x->opnd[1], A64_W) || reads_as_address(at, t))
+        if (!x || ext_bytes(x->op) < access_size(at) || !is_gpr(&x->opnd[1], A64_W) ||
+            reads_as_address(at, t))
             return false;
         Group g = { 0 };
         group_add(&g, x);
@@ -1443,18 +1531,32 @@ static bool fold_narrow(A64_Instr **link)
         group_delete(&g);
         return true;
     }
+    // A byte or halfword load, and an extension of what it loaded after it.
     A64_Instr *ext = at->next;
-    if ((at->op != A64_LDRB && at->op != A64_LDRH) || !ext ||
-        (ext->op != A64_UXTB && ext->op != A64_UXTH) || ext->is_volatile ||
-        (at->op == A64_LDRH && ext->op == A64_UXTB) || !is_gpr(&at->opnd[0], A64_W) ||
-        !is_gpr(&ext->opnd[0], A64_W) || !is_gpr(&ext->opnd[1], A64_W) ||
-        ext->opnd[1].reg != at->opnd[0].reg)
+    int size       = at->op == A64_LDRB || at->op == A64_LDRSB ? 1 : at->op == A64_LDRH || at->op == A64_LDRSH ? 2 : 0;
+    int esize      = ext ? ext_bytes(ext->op) : 0;
+    if (!size || !esize || ext->is_volatile || !is_gpr(&at->opnd[0], A64_W) ||
+        !is_gpr(&ext->opnd[1], A64_W) || ext->opnd[1].reg != at->opnd[0].reg ||
+        ext->opnd[0].kind != A64_OPND_REG)
         return false;
-    if (ext->opnd[0].reg == ext->opnd[1].reg) {
-        delete_at(&at->next);
-    } else {
+    bool lsigned = at->op == A64_LDRSB || at->op == A64_LDRSH;
+    bool esigned = ext->op == A64_SXTB || ext->op == A64_SXTH;
+    int t = at->opnd[0].reg, d = ext->opnd[0].reg;
+    if (esize > size && !(lsigned && !esigned) && ext->opnd[0].width == A64_W) {
+        // A byte is unchanged by a halfword extension of its own kind, or a signed one
+        // of a byte loaded zero-extended: a move.
         ext->op = A64_MOV;
+        return true;
     }
+    if (esize != size || (ext->opnd[0].width == A64_X && !esigned) ||
+        (d != t && !dies_after(ext, t)) ||
+        (at->opnd[1].sub != A64_MEM_OFFSET && at->opnd[1].sub != A64_MEM_INDEX &&
+         at->opnd[1].reg == d))
+        return false;
+    // The load extends as the extension does, into its register.
+    at->op           = size == 1 ? (esigned ? A64_LDRSB : A64_LDRB) : (esigned ? A64_LDRSH : A64_LDRH);
+    at->opnd[0]      = ext->opnd[0];
+    delete_at(&at->next);
     return true;
 }
 
@@ -1489,6 +1591,8 @@ static bool rewrite(A64_Instr **link)
         return false;
     if (in->op == A64_MOV && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_IMM &&
         fold_constant(link))
+        return true;
+    if (fold_index(link))
         return true;
     if (is_move(in) && forward_move(link))
         return true;
