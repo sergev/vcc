@@ -6,8 +6,10 @@
 // <braam-core> is a built checkout (build/kernel.wasm, build/web/rootfs.zip); <vcc> is
 // the driver, run with -t wasm32-braam, and the environment it is run in (VCC_* for an
 // in-tree build).  It runs test/system/abi.mjs over the binaries, then each program:
-// hello's arguments and status, cat and wc on a file and through a redirection, and
-// the worked example, notes, with a session typed at the terminal.  Prints a line for
+// hello's arguments and status, cat and wc on a file and through a redirection, the
+// worked example, notes, with a session typed at the terminal, and ^C: caught by a read
+// of the terminal with a second task sleeping, not caught, and caught by a loop that
+// parks with braam_yield.  Prints a line for
 // each case and exits 1 at the first failure.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -72,6 +74,58 @@ coro(braam_call *) int main(int argc, char **argv)
         }
     }
     printf("%d %d %d\\n", lines, words, chars);
+    return 0;
+}
+`,
+    intr: `#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+static coro(braam_call *) int ticker(void)
+{
+    while (await sleep_ms(5) == 0)
+        ;
+    printf("ticker: %s\\n", strerror(errno));
+    return 0;
+}
+coro(braam_call *) int main(int argc, char **argv)
+{
+    static char storage[4096];
+    braam_spawn(co_init(storage, sizeof storage, ticker));
+    if (await sig_catch(SIGINT, 1) < 0)
+        return 1;
+    char buf[64];
+    ssize_t n = await read(0, buf, sizeof buf);
+    printf("read %d, %s, took %d\\n", (int)n, strerror(errno), sig_take(SIGINT));
+    n = await read(0, buf, sizeof buf);
+    printf("then read %d\\n", (int)n);
+    return 0;
+}
+`,
+    nocatch: `#include <stdio.h>
+#include <unistd.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    char buf[8];
+    await read(0, buf, sizeof buf);
+    printf("not reached\\n");
+    return 0;
+}
+`,
+    spin: `#include <signal.h>
+#include <stdio.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    if (await sig_catch(SIGINT, 1) < 0)
+        return 1;
+    unsigned n = 0;
+    while (!sig_take(SIGINT)) {
+        for (int i = 0; i < 100000; i++)
+            n++;
+        await braam_yield();
+    }
+    printf("spin stopped %d\\n", n > 0);
     return 0;
 }
 `,
@@ -173,3 +227,38 @@ expect("notes", run("notes"),
        "  1  buy milk\n  2  water plants\n  3  write letter\n(3 notes, 35 bytes)\n");
 expect("notes.txt", text("/tmp/notes.txt"), "buy milk\nwater plants\nwrite letter\n");
 print("ok notes");
+
+// ^C at the terminal.  Caught: the read and the second task's sleep give up with EINTR,
+// and the program reads on.  Not caught: the process ends with 130.
+const ctrlC = () => H.press("c".codePointAt(0), H.CTRL);
+const screenText = () => H.rows(H.screen()).join("\n");
+H.submit("intr", now++);
+ctrlC();
+H.run(now++);
+H.submit("more", now++);
+if (H.run(now++) !== -1)
+    die("intr did not settle");
+if (!/ticker: Interrupted\nread -1, Interrupted, took 1\nmore\nthen read 5\n/.test(screenText()))
+    die("intr's session:\n" + screenText());
+H.submit("nocatch; echo $? >/tmp/s", now++);
+ctrlC();
+if (H.run(now++) !== -1)
+    die("nocatch did not settle");
+expect("nocatch's status", screenText().includes("[130]"), true);
+
+// A loop that never waits on anything still parks once a burst, in braam_yield, which
+// is where the ^C reaches it.  The kernel always has work then, so it is pumped a
+// fixed number of ticks rather than until it settles.
+H.type("spin");
+H.press(H.KEY.ENTER);
+for (let i = 0; i < 30; i++, now++) {
+    H.kernel().tick(now);
+    while (H.net.drain())
+        H.kernel().tick(now);
+}
+ctrlC();
+if (H.run(now++) !== -1)
+    die("spin did not stop at ^C");
+if (!screenText().includes("spin stopped 1"))
+    die("spin's session:\n" + screenText());
+print("ok signals");
