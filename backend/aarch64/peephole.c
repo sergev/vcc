@@ -13,17 +13,23 @@
 //     it, a pointer step into the access as a post- or pre-index;
 //   - a byte or halfword load takes the extension after it, an extension before a
 //     narrow store goes;
-//   - mul + add is madd (mul + sub, msub); a run of 8-byte copies is ldp/stp of q
+//   - mul + add is madd (mul + sub, msub), also past an instruction between that can
+//     compute into the product's register; a run of 8-byte copies is ldp/stp of q
 //     registers; adjacent ldr/str of one base are ldp/stp, last;
 //   - the flags: cmp #0 + b.eq/b.ne is cbz/cbnz, and + a single-bit and, tbz/tbnz; a
 //     cset tested again (cmp #0, cbz) is the condition itself, a cset added is cinc; a
 //     compare the flags already hold goes; the compare of `n-- > 0` goes ahead of the
 //     decrement;
-//   - a diamond setting two constants one apart is cset, or mov + cinc;
+//   - equality tests of consecutive constants branching alike, and a range check, are
+//     one unsigned compare of the value less the low bound;
+//   - a diamond setting two constants one apart is cset, or mov + cinc; a negation or
+//     increment skipped by a branch is cneg or cinc;
 //   - jump threading: a jump to a jump, a test of a cset or of a constant just set goes
-//     where it leads; a jump to the next label goes, a branch over a jump branches the
-//     other way, code after a jump or return and code nothing reaches go;
-//   - blocks ending alike through a return or a jump share their tail;
+//     where it leads; a fall into a lone jump is that jump; a jump to the next label
+//     goes, a branch over a jump branches the other way, code after a jump or return
+//     and code nothing reaches go;
+//   - blocks ending alike through a return or a jump share their tail; a block whose
+//     label nothing branches to joins the one falling into it;
 //   - the shifts and masks of a bit-field are ubfx/sbfx (a read), bfi (a store) and
 //     ubfiz (a value shifted into place); a movz/movk mask that is a bitmask immediate
 //     is one, and a zero added or or-ed in is a move.
@@ -1019,6 +1025,40 @@ static bool fold_extend(A64_Instr **link)
     return true;
 }
 
+// `mul t, a, b`, `op u, …` and `add d, t, u` (or `add d, u, t`), t and u read last:
+// op computes into t instead, and the add is `madd d, a, b, t`; op reads neither t nor,
+// unless it is u, writes a or b, and neither factor is t (op now overwrites it).
+static bool fold_multiply_past(A64_Instr **link)
+{
+    A64_Instr *mul = *link, *op = mul->next, *n = op ? op->next : NULL;
+    if (!n || n->op != A64_ADD || !computes(op) || op->is_volatile)
+        return false;
+    int t = mul->opnd[0].reg, u = op->opnd[0].reg, a = mul->opnd[1].reg, b = mul->opnd[2].reg;
+    A64_Width w      = mul->opnd[0].width;
+    const A64_Operand *o = n->opnd;
+    if (mul->opnd[1].kind != A64_OPND_REG || mul->opnd[2].kind != A64_OPND_REG || u == t || a == t ||
+        b == t ||
+        op->opnd[0].width != w || reads(op, t) || o[0].kind != A64_OPND_REG ||
+        o[1].kind != A64_OPND_REG || o[2].kind != A64_OPND_REG || o[3].kind != A64_OPND_NONE ||
+        o[0].width != w || !((o[1].reg == t && o[2].reg == u) || (o[1].reg == u && o[2].reg == t)) ||
+        o[0].reg == A64_SP || !last_read(n, t) || !last_read(n, u))
+        return false;
+    // op may overwrite a or b only by being u, which now goes to t: a and b survive.
+    for (int i = 1; i < A64_MAX_OPERANDS; i++)
+        if (op->opnd[i].kind == A64_OPND_MEM && op->opnd[i].sub != A64_MEM_OFFSET &&
+            op->opnd[i].sub != A64_MEM_INDEX)
+            return false;
+    if ((writes(op, a) && a != u) || (writes(op, b) && b != u))
+        return false;
+    op->opnd[0].reg = t;
+    n->op           = A64_MADD;
+    n->opnd[1]      = mul->opnd[1];
+    n->opnd[2]      = mul->opnd[2];
+    n->opnd[3]      = a64_reg(t, w);
+    delete_at(link);
+    return true;
+}
+
 // `mul t, a, b` and `add d, c, t` (or `sub d, c, t`) at its last read: madd (msub).
 static bool fold_multiply(A64_Instr **link)
 {
@@ -1632,6 +1672,7 @@ static A64_Operand *flag_cond(A64_Instr *in)
     case A64_CSET:
         return &in->opnd[1];
     case A64_CINC:
+    case A64_CNEG:
         return &in->opnd[2];
     default:
         return NULL;
@@ -1974,7 +2015,7 @@ static bool rewrite(A64_Instr **link)
         return true;
     if (in->op == A64_SXTW && fold_extend(link))
         return true;
-    if (in->op == A64_MUL && fold_multiply(link))
+    if (in->op == A64_MUL && (fold_multiply(link) || fold_multiply_past(link)))
         return true;
     if (delete_reload(in))
         return true;
@@ -2327,6 +2368,25 @@ static bool thread_jumps(A64_Func *fn, A64_Block *b, bool fall_in)
             delete_at(ml);
         return true;
     }
+    // Falling into a lone jump, through labels nothing branches to: the jump itself,
+    // here (that one then unreachable), which tail merging may share.
+    A64_Instr *lastin = jl ? *jl : NULL;
+    A64_Block *jb     = first_code(b->next);
+    if (lastin && lastin->op != A64_B && lastin->op != A64_RET && jb && jb->head->op == A64_B &&
+        !jb->head->next) {
+        bool alone = true;
+        for (A64_Block *e = b->next; alone; e = e->next) {
+            if (e->label && (label_refs(fn, e->label) || strcmp(e->label, jb->head->opnd[0].sym) == 0))
+                alone = false;
+            if (e == jb)
+                break;
+        }
+        if (alone) {
+            lastin->next          = new_instr(A64_B, NULL);
+            lastin->next->opnd[0] = a64_label(jb->head->opnd[0].sym);
+            return true;
+        }
+    }
     // Unreachable: no branch to it, nothing falling into it.
     if (b->head && !fall_in && (!b->label || label_refs(fn, b->label) == 0)) {
         while (b->head)
@@ -2415,6 +2475,225 @@ static bool merge_tails(A64_Func *fn)
     return false;
 }
 
+// `cmp r, #k` at any width: r, its width and k.
+static bool is_cmp_imm(const A64_Instr *in, int *r, A64_Width *w, int64_t *k)
+{
+    if (in->op != A64_CMP || in->opnd[0].kind != A64_OPND_REG || in->opnd[1].kind != A64_OPND_IMM ||
+        in->opnd[2].kind != A64_OPND_NONE)
+        return false;
+    *r = in->opnd[0].reg;
+    *w = in->opnd[0].width;
+    *k = in->opnd[1].imm;
+    return true;
+}
+
+// A scratch register (x9-x15) that no instruction from `first` to `last` names and
+// that is not read after `last` before it is written; or 0.
+static int free_scratch(const A64_Instr *first, const A64_Instr *last)
+{
+    for (int r = A64_X(9); r <= A64_X(15); r++) {
+        bool used = false;
+        for (const A64_Instr *in = first;; in = in->next) {
+            if (reads(in, r) || writes(in, r)) {
+                used = true;
+                break;
+            }
+            if (in == last)
+                break;
+        }
+        if (!used && dead_after(last, r))
+            return r;
+    }
+    return 0;
+}
+
+// `sub t, r, #lo; cmp t, #(hi - lo); b.<cond> l`: r in [lo, hi] as one unsigned
+// compare, ahead of `next`.
+static A64_Instr *range_test(int t, int r, A64_Width w, int64_t lo, int64_t hi, A64_Cond cond,
+                             const char *l, A64_Instr *next)
+{
+    A64_Instr *br = new_instr(A64_BCOND, next);
+    br->opnd[0]   = a64_cond(cond);
+    br->opnd[1]   = a64_label(l);
+    A64_Instr *cm = new_instr(A64_CMP, br);
+    cm->opnd[0]   = a64_reg(t, w);
+    cm->opnd[1]   = a64_imm(hi - lo);
+    A64_Instr *sb = new_instr(A64_SUB, cm);
+    sb->opnd[0]   = a64_reg(t, w);
+    sb->opnd[1]   = a64_reg(r, w);
+    sb->opnd[2]   = a64_imm(lo);
+    return sb;
+}
+
+static bool fits_range(int64_t lo, int64_t hi)
+{
+    return lo >= 0 && lo <= 4095 && hi > lo && hi - lo <= 4095;
+}
+
+// Equality tests of one register, all branching to one label, `cmp r, #k; b.eq l`
+// each: those of consecutive constants (two or more) as one test of the range.
+static bool fold_eq_set(A64_Instr **link)
+{
+    int r, r2;
+    A64_Width w, w2;
+    int64_t k;
+    A64_Instr *in = *link;
+    if (!is_cmp_imm(in, &r, &w, &k) || !in->next || in->next->op != A64_BCOND ||
+        in->next->opnd[0].sub != A64_EQ)
+        return false;
+    const char *l = branch_target(in->next);
+    enum { MAX = 32 };
+    int64_t ks[MAX];
+    int n = 0;
+    A64_Instr *last = NULL;
+    for (A64_Instr *c = in; c && n < MAX && is_cmp_imm(c, &r2, &w2, &k) && r2 == r && w2 == w &&
+                            c->next && c->next->op == A64_BCOND && c->next->opnd[0].sub == A64_EQ &&
+                            strcmp(branch_target(c->next), l) == 0;
+         c = c->next->next) {
+        ks[n++] = k;
+        last    = c->next;
+    }
+    // The longest run of consecutive constants among them.
+    int64_t best_lo = 0, best_hi = -1;
+    for (int i = 0; i < n; i++) {
+        int64_t hi = ks[i];
+        for (bool grew = true; grew;) {
+            grew = false;
+            for (int j = 0; j < n; j++)
+                if (ks[j] == hi + 1) {
+                    hi++;
+                    grew = true;
+                }
+        }
+        if (hi - ks[i] > best_hi - best_lo && fits_range(ks[i], hi)) {
+            best_lo = ks[i];
+            best_hi = hi;
+        }
+    }
+    int t = best_hi > best_lo ? free_scratch(in, last) : 0;
+    if (!t)
+        return false;
+    // The tests left, then the range.
+    char *label      = xstrdup(l);
+    A64_Instr *after = last->next, *head = NULL, **tail = &head;
+    for (A64_Instr *c = in; c != after;) {
+        A64_Instr *b = c->next, *nx = b->next;
+        if (c->opnd[1].imm >= best_lo && c->opnd[1].imm <= best_hi) {
+            free_instr(c);
+            free_instr(b);
+        } else {
+            *tail = c;
+            tail  = &b->next;
+        }
+        c = nx;
+    }
+    *tail = range_test(t, r, w, best_lo, best_hi, A64_LS, label, after);
+    *link = head;
+    xfree(label);
+    return true;
+}
+
+// A range check, `cmp r, #a; b.lt x` and then `cmp r, #b; b.gt x` (or, x where control
+// falls after it, `b.le y`), unsigned alike (lo, hi, ls): one unsigned compare of
+// r - a.
+static bool fold_range(A64_Instr **link, const A64_Block *b)
+{
+    int r, r2;
+    A64_Width w, w2;
+    int64_t lo, hi;
+    A64_Instr *c1 = *link, *b1 = c1->next, *c2 = b1 ? b1->next : NULL, *b2 = c2 ? c2->next : NULL;
+    if (!b2 || !is_cmp_imm(c1, &r, &w, &lo) || !is_cmp_imm(c2, &r2, &w2, &hi) || r2 != r ||
+        w2 != w || b1->op != A64_BCOND || b2->op != A64_BCOND || !fits_range(lo, hi))
+        return false;
+    A64_Cond k1 = (A64_Cond)b1->opnd[0].sub, k2 = (A64_Cond)b2->opnd[0].sub;
+    bool sgn    = k1 == A64_LT;
+    if (k1 != A64_LT && k1 != A64_LO)
+        return false;
+    const char *x = branch_target(b1), *to;
+    A64_Cond cond;
+    if (k2 == (sgn ? A64_GT : A64_HI) && strcmp(branch_target(b2), x) == 0) {
+        cond = A64_HI; // out of range: to x
+        to   = x;
+    } else if (k2 == (sgn ? A64_LE : A64_LS) && !b2->next && falls_to(b->next, x)) {
+        cond = A64_LS; // in range: to y, else on to x
+        to   = branch_target(b2);
+    } else {
+        return false;
+    }
+    int t = free_scratch(c1, b2);
+    if (!t)
+        return false;
+    A64_Instr *after = b2->next;
+    char *l          = xstrdup(to);
+    free_instr(c1);
+    free_instr(b1);
+    free_instr(c2);
+    free_instr(b2);
+    *link = range_test(t, r, w, lo, hi, cond, l, after);
+    xfree(l);
+    return true;
+}
+
+// A conditional negation or increment ending block b: `cbz`/`cbnz r, l` or `b.<c> l`,
+// then `neg d, d` (or `add d, d, #1`), l the next label and reached by that branch
+// alone: `cneg d, d, cond` (cinc) under the condition the branch is not taken, after
+// `cmp r, #0` for cbz/cbnz.
+static bool fold_cond_op(A64_Func *fn, A64_Block *b)
+{
+    A64_Instr **brl = last_link(b, 1);
+    if (!brl)
+        return false;
+    A64_Instr *br = *brl, *op = br->next;
+    const A64_Operand *o = op->opnd;
+    bool neg = op->op == A64_NEG && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
+               o[1].width == o[0].width;
+    bool inc = op->op == A64_ADD && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
+               o[2].kind == A64_OPND_IMM && o[2].imm == 1 && o[3].kind == A64_OPND_NONE;
+    if ((br->op != A64_CBZ && br->op != A64_CBNZ && br->op != A64_BCOND) || (!neg && !inc) ||
+        o[0].reg == A64_SP || !falls_to(b->next, branch_target(br)) ||
+        label_refs(fn, branch_target(br)) != 1)
+        return false;
+    A64_Cond cond = (A64_Cond)(taken_cond(br) ^ 1);
+    A64_Operand d = o[0];
+    op->op        = neg ? A64_CNEG : A64_CINC;
+    op->opnd[1]   = d;
+    op->opnd[2]   = a64_cond(cond);
+    op->opnd[3]   = (A64_Operand){ 0 };
+    if (br->op == A64_BCOND) {
+        *brl = op;
+    } else {
+        A64_Instr *cm = new_instr(A64_CMP, op);
+        cm->opnd[0]   = br->opnd[0];
+        cm->opnd[1]   = a64_imm(0);
+        *brl          = cm;
+    }
+    free_instr(br);
+    return true;
+}
+
+// A block whose label nothing branches to, after one falling into it: one block, so
+// that the rewrites within a block see across the two.
+static bool merge_blocks(A64_Func *fn)
+{
+    for (A64_Block *b = fn->blocks; b && b->next; b = b->next) {
+        A64_Block *n = b->next;
+        if (!falls_through(b) || (n->label && label_refs(fn, n->label)))
+            continue;
+        A64_Instr **end = &b->head;
+        while (*end)
+            end = &(*end)->next;
+        *end    = n->head;
+        b->next = n->next;
+        if (fn->tail == n)
+            fn->tail = b;
+        xfree(n->label);
+        xfree(n);
+        live_stale = true;
+        return true;
+    }
+    return false;
+}
+
 // The rewrites to a fixed point, then the pairing of loads and stores, which would
 // hide a store from the deletion of its reload.
 void a64_peephole(A64_Func *fn, unsigned result_in)
@@ -2436,22 +2715,24 @@ void a64_peephole(A64_Func *fn, unsigned result_in)
             while (fold_bitfields(b))
                 changed = true;
             for (A64_Instr **link = &b->head; *link;) {
-                if (rewrite(link))
+                if (rewrite(link) || fold_eq_set(link) || fold_range(link, b))
                     changed = true;
                 else
                     link = &(*link)->next;
             }
             while (rewrite_block_end(b))
                 changed = true;
-            if (fold_diamond(fn, b))
+            if (fold_diamond(fn, b) || fold_cond_op(fn, b))
                 changed = true;
-            if (b != fn->blocks && thread_jumps(fn, b, fall_in))
+            if (thread_jumps(fn, b, fall_in || b == fn->blocks))
                 changed = true;
             // Whether control reaches the next block by falling out of this one.
             bool reached = b == fn->blocks || fall_in || (b->label && label_refs(fn, b->label));
             fall_in      = reached && falls_through(b);
         }
         if (!changed && merge_tails(fn))
+            changed = true;
+        while (merge_blocks(fn))
             changed = true;
     }
     free_liveness();

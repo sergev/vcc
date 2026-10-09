@@ -52,15 +52,22 @@ For each function, in this order (`codegen.c`):
      pre-index (`ldrb w3, [x1], #1`, `ldrb w1, [x0, #1]!`);
    - a byte or halfword load takes the extension after it (`ldrb` for a `uxtb` of an
      `ldrsb`), an extension before a narrow store goes;
-   - `madd`/`msub`; `ldp`/`stp` for adjacent slots; a run of 8-byte copies 32 bytes at a
-     time by `ldp`/`stp` of q registers;
+   - `madd`/`msub`, also past an instruction between that can compute into the
+     product's register; `ldp`/`stp` for adjacent slots; a run of 8-byte copies 32 bytes
+     at a time by `ldp`/`stp` of q registers;
    - the flags: `cbz`, `tbz`/`tbnz` for a single bit, a `cset` tested again by `cmp #0`
      or `cbz` replaced by the condition itself, `cinc` for a 0/1 added, a repeated
      compare deleted, the compare of `n-- > 0` moved ahead of the decrement;
-   - a diamond setting two constants one apart is `cset` or `mov` + `cinc`;
+   - equality tests of consecutive constants that branch alike (`c == '\t' || … ||
+     c == '\r'`), and a range check (`c >= '0' && c <= '9'`), are one unsigned compare:
+     `sub w9, w3, #48; cmp w9, #9; b.ls …`;
+   - a diamond setting two constants one apart is `cset` or `mov` + `cinc`; a negation
+     or increment a branch skips is `cneg` or `cinc` (`return neg ? -n : n` is
+     `cmp w4, #0; cneg w0, w1, ne`);
    - jump threading: a jump to a jump, a test of a 0/1 just set or of a constant goes
      where it leads (so `&&` and `||` left as values by the translator become branches),
-     unreachable code and jumps to the next line go;
+     a fall into a lone jump is that jump, unreachable code and jumps to the next line
+     go, and a block whose label nothing branches to joins the one before;
    - blocks ending alike through a `ret` or a jump share one tail, the others jumping
      into it (one epilogue for several returns).
 
@@ -82,8 +89,8 @@ For each function, in this order (`codegen.c`):
 
    | | ours | no peephole | `cc -Os -fno-inline` | `cc -O2` |
    |---|---|---|---|---|
-   | `bench/msp430` (4 files) | 656 | 1084 | 744 | 1496 |
-   | `libc/common` (28 files) | 15316 | 25276 | 12136 | 13124 |
+   | `bench/msp430` (4 files) | 652 | 1084 | 744 | 1496 |
+   | `libc/common` (28 files) | 15104 | 25276 | 12136 | 13124 |
 
 A register holds an integer in a fixed form: a type of 32 bits or less in the W view
 with the upper half zero, `char` and `short` also extended to 32 bits by their type.

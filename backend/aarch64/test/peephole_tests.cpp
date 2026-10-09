@@ -71,16 +71,15 @@ ret
 )",
                 "int *f(int *p) { return p - 3; }")
 
-// A compare and branch, the index sign-extended and scaled in the load, a zero test as
-// cbz, the increment an immediate.
+// A compare and branch, the index sign-extended and scaled in the load, the pointer
+// stepped by it, a conditional increment as cinc.
 EXPECT_PEEPHOLE(PeepholeLoop, R"(mov w2, #0
 add x3, x0, w1, sxtw #2
 cmp w1, #0
 b.le .LL0
-ldr w1, [x0]
-cbz w1, .L8
-add w2, w2, #1
-add x0, x0, #4
+ldr w1, [x0], #4
+cmp w1, #0
+cinc w2, w2, ne
 cmp x0, x3
 b.lo .L3
 mov w0, w2
@@ -479,6 +478,93 @@ long g(long x)
 }
 )")
 
+// Equality tests of consecutive constants, and a range check, as one unsigned compare
+// of the value less the low bound; a conditional negation as cneg; a multiply-add past
+// the instruction between: atoi, below clang -Os.
+EXPECT_PEEPHOLE(PeepholeEqualitySet, R"(sub w9, w0, #1
+cmp w9, #1
+b.ls .L9
+cmp w0, #3
+b.eq .L9
+cmp w0, #7
+cset w0, eq
+b .L10
+mov w0, #1
+ret
+)",
+                "int f(int c) { return c == 1 || c == 2 || c == 3 || c == 7; }")
+EXPECT_PEEPHOLE(PeepholeRangeOut, R"(sub w9, w0, #10
+cmp w9, #10
+b.ls .L0
+mov w0, w1
+ret
+mov w0, #0
+ret
+)",
+                "int f(int c, int d) { if (c < 10 || c > 20) return d; return 0; }")
+EXPECT_PEEPHOLE(PeepholeAtoi, R"(mov w4, #0
+mov w1, #0
+b .LL1
+add x0, x0, #1
+ldrb w3, [x0]
+cmp w3, #32
+b.eq .L4
+sub w9, w3, #9
+cmp w9, #4
+b.ls .L4
+cmp w3, #45
+b.ne .L28
+mov w4, #1
+b .LP1_atoi
+cmp w3, #43
+b.ne .LL3
+add x0, x0, #1
+b .LL3
+mov w10, #10
+sub w2, w3, #48
+madd w1, w1, w10, w2
+add x0, x0, #1
+ldrb w3, [x0]
+sub w9, w3, #48
+cmp w9, #9
+b.ls .L39
+cmp w4, #0
+cneg w0, w1, ne
+ret
+)",
+                R"(int atoi(const char *nptr)
+{
+    const char *p = nptr;
+    int neg = 0;
+    int n = 0;
+
+    while (*p == ' ' || *p == '\t' || *p == '\n' ||
+           *p == '\r' || *p == '\v' || *p == '\f') {
+        p++;
+    }
+    if (*p == '-') {
+        neg = 1;
+        p++;
+    } else if (*p == '+') {
+        p++;
+    }
+    while (*p >= '0' && *p <= '9') {
+        n = n * 10 + (*p - '0');
+        p++;
+    }
+    return neg ? -n : n;
+}
+)")
+
+// No madd past the load: the product overwrote a factor the load's new destination
+// would then hold.
+EXPECT_PEEPHOLE(PeepholeMaddFactorOverwritten, R"(mul w1, w0, w1
+ldr w0, [x2]
+add w0, w1, w0
+ret
+)",
+                "unsigned f(unsigned n, unsigned k, unsigned *p) { n = n * k; unsigned u = *p; return n + u; }")
+
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.
 TEST_F(Aarch64Test, RunPeepholeSize)
@@ -545,8 +631,27 @@ int either(long a, long b)
     return 20;
 }
 int pick(unsigned x) { return x > 9 ? 6 : 5; }
+int ws(int c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'; }
+int digit(signed char c) { return c >= '0' && c <= '9'; }
+int out(long c) { return c < 10 || c > 20; }
+int sign(int x, int neg) { return neg ? -x : x; }
+unsigned mulload(unsigned n, unsigned k, unsigned *p) { n = n * k; unsigned u = *p; return n + u; }
+int horner(const char *s) { int n = 0; while (*s >= '0' && *s <= '9') n = n * 10 + (*s++ - '0'); return n; }
 int main(void)
 {
+    int nws = 0, nd = 0, no = 0;
+    for (int c = -300; c < 300; c++) {
+        nws += ws(c);
+        nd += digit((signed char)c);
+        no += out(c);
+    }
+    check(nws, 6);
+    check(nd, 20);
+    check(no, 600 - 11);
+    check(sign(5, 1) + sign(7, 0), 2);
+    unsigned five = 5;
+    check(mulload(3, 4, &five), 17);
+    check(horner("40961x"), 40961);
     check(both(1, 2) * 4 + both(1, 0) * 2 + both(0, 1), 4);
     check(either(-1, 0) + either(0, 3) + either(0, 0), 40);
     check(pick(10) * 10 + pick(9), 65);
@@ -570,5 +675,5 @@ int main(void)
     return ok ? bit : 100 + bit;
 }
 )");
-    EXPECT_EQ(12, exit_status);
+    EXPECT_EQ(18, exit_status);
 }

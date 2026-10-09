@@ -120,7 +120,7 @@ typedef struct {
     X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(MVN, "mvn")                             \
     X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr")                                           \
     X(UBFX, "ubfx") X(SBFX, "sbfx") X(BFI, "bfi") X(UBFIZ, "ubfiz")                     \
-    X(CMP, "cmp") X(CMN, "cmn") X(CSET, "cset") X(CINC, "cinc")                         \
+    X(CMP, "cmp") X(CMN, "cmn") X(CSET, "cset") X(CINC, "cinc") X(CNEG, "cneg")         \
     X(SXTB, "sxtb") X(SXTH, "sxth") X(SXTW, "sxtw") X(UXTB, "uxtb") X(UXTH, "uxth")     \
     X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")   \
     X(LDRSW, "ldrsw") X(STR, "str") X(STRB, "strb") X(STRH, "strh")                     \
@@ -178,7 +178,8 @@ typedef struct {
 
 // A conditional branch is `b.<cond> label`: BCOND with the condition as its first
 // operand, printed as part of the mnemonic.  A test-bit branch is `tbz reg, #bit, label`,
-// its label the third operand; `cinc d, s, cond` is d = s + 1 when cond holds, else s.
+// its label the third operand; `cinc d, s, cond` is d = s + 1 when cond holds, else s;
+// `cneg d, s, cond` is d = -s when cond holds, else s.
 
 extern const char *const a64_mnemonic[A64_NUM_OPS];
 
