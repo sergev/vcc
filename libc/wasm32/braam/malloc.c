@@ -1,5 +1,5 @@
 /*
- * The allocator of a Braam process (backend/wasm/Plan.md §7.2): first fit over a free
+ * The allocator of a Braam process (docs/Braam.md §7.2): first fit over a free
  * list kept in address order, neighbours merged when a block is freed, the linear memory
  * grown when nothing fits.  Braam frees every reply block, so the bump allocator of
  * plain wasm32 would grow without end.

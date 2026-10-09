@@ -1,5 +1,5 @@
 /*
- * The Braam process runtime (backend/wasm/Plan.md §7.2), as braam-core's src/proc/rt.cpp
+ * The Braam process runtime (docs/Braam.md §7.2), as braam-core's src/proc/rt.cpp
  * is in C++: a handful of tasks, each a coroutine yielding braam_call *, and one
  * outstanding call each.  Task 0 is the root, which awaits main and then flushes what
  * main left buffered; braam_spawn adds the others.  When a task suspends, the

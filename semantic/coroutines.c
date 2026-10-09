@@ -1,5 +1,5 @@
 //
-// Type-checking for coroutines (docs/Coroutines_in_C.md; backend/wasm/Plan.md §2.4, §4.2).
+// Type-checking for coroutines (docs/Coroutines_in_C.md; docs/Coroutines_Internals.md §3.2, §6).
 //
 // A coroutine is a function symbol marked `coro` with its yield type Y; its C type
 // stays `T f(params)`, so calls through co_init, co_alloca and an arena await check
@@ -149,7 +149,7 @@ void reject_coro_spec(const DeclSpec *spec, const char *name)
         fatal_error("_Coro on '%s', which is not a function", name);
 }
 
-// On Braam (backend/wasm/Plan.md §7) the runtime awaits main: it is a coroutine yielding
+// On Braam (docs/Braam.md §7) the runtime awaits main: it is a coroutine yielding
 // the runtime's requests, and takes argc and argv.
 static void check_braam_main(const Type *yield, const Type *fn_type)
 {
@@ -506,7 +506,7 @@ Expr *typecheck_co_op(Expr *e)
 }
 
 //
-// The lint for frames in automatic storage (phase C9).  The language cannot catch
+// The lint for frames in automatic storage.  The language cannot catch
 // storage given to co_init going out of scope while its frame is suspended
 // (docs/Coroutines_in_C.md, section 7), so these warnings flag the two plain cases:
 // a frame whose storage is an automatic object stored where it outlives the object, or

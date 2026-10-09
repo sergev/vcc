@@ -10,7 +10,7 @@ This document is the reference for the target: what the compiler and the driver 
 how the runtime runs a program, what the library offers, how to port a program, and
 how to run one by hand. [Braam_Example.md](Braam_Example.md) works one program
 through from source to a session on Braam.
-[backend/wasm/Plan.md](../backend/wasm/Plan.md) §7 records the design.
+§7 describes how the target is built.
 
 ## 1. The target
 
@@ -239,3 +239,197 @@ braam-core's `test/system/abi.mjs` makes the checks `exec` makes.
   `build/web/rootfs.zip`) is at `../../Braam/braam-core` or where `-DBRAAM_CORE=`
   points.
 - The ctest `braam-abi` compares the ABI numbers with braam-core's.
+
+## 7. How it is built
+
+This section is for whoever works on the target. The design of the coroutines
+underneath is in [Coroutines_Internals.md](Coroutines_Internals.md).
+
+### 7.1 The process ABI
+
+A Braam process is a wasm module that the kernel steps. The facts it must meet, all
+from braam-core (`doc/Concept.md` §2.1 and §4.3, `doc/System_Calls.md` §6, §7.3 and
+§11, `src/proc/rt.cpp`, `src/kernel/sysabi.h`):
+
+- **Imports:** `env.memory`; `kernel.sys(op, a0, a1, a2) -> i32`, the five synchronous
+  calls (Exit, GetPid, Now, Stage, Random); `kernel.sys_async(op, token, ptr, len)`,
+  everything else, the answer coming later. The op word is `op | arg << 8`.
+- **Exports, exactly:** `_start(argv_ptr, len) -> i32`, `_resume(token, reply_ptr,
+  len) -> i32`, `_alloc(n) -> ptr`, `_free(ptr, n)`, `_sig(n)`. A step returns 0 when
+  the process has exited (after `sys(Exit, status)`) and 1 while a call is outstanding.
+  An answer is a block of `i32` status and then the data, placed by the host through
+  `_alloc` and freed by the process. The host writes argv (then the environment)
+  through `_alloc` before `_start`: a `u32` count, then each word's `u32` length and
+  bytes.
+- **The custom section `braam`:** five `u32`, the magic `0x6d617262`, `PROC_ABI` (21),
+  flags, the initial pages and the maximum (1600). braam-core's `tools/stamp.py`
+  appends it to its own programs; `exec` refuses a binary whose ABI is not the
+  kernel's.
+- **The link:** `--import-memory --initial-memory=N --no-entry --stack-first -z
+  stack-size=131072 --gc-sections`, and no `memory` export. braam-core's
+  `test/system/abi.mjs` checks all of this for every binary.
+- **Several calls** may be outstanding, one per task (`PROC_TASKS`, 8); an answer names
+  its token. There is no preemption, no Asyncify, no JSPI, no stack switching and no
+  tail calls.
+
+In vcc:
+
+- **`lower -t wasm32-braam`** is wasm32's descriptor with `braam = 1`
+  (`semantic/target.c`); on it `main` must be the coroutine of §1
+  (`semantic/coroutines.c`).
+- **The driver** (`cc/cc.c`) links as above, with `crt0.o` first and `-lc` last, and
+  then appends the `braam` section itself (`braam_stamp`, the work of `stamp.py`),
+  dropping an earlier one. `--initial-pages=N` sets the page count, 4 by default as
+  `BRAAM_BIN_INITIAL_PAGES` is in braam-core's `cmake/BraamProgram.cmake`.
+- **The exports and imports** come from `.export_name`, `.import_module` and
+  `.import_name` directives in `libc/wasm32/braam/exports.s`, which is `crt0.o`: vcc's
+  C has no way to spell them.
+- **The numbers** in `braam.h` (the ABI version, the call numbers, `BRAAM_O_*`,
+  `BRAAM_CHUNK`) and in `errno.h` (each Braam `Error` plus 32) are transcribed from
+  braam-core. The ctest `braam-abi` (`scripts/check_braam_abi.py`) compares them with
+  `src/kernel/sysabi.h` and `result.h`, counting the enums' implicit values, when that
+  tree is at `../../Braam/braam-core` or `-DBRAAM_CORE` names it.
+- **The headers and libraries** are staged by CMake in `build/share/vcc/wasm32-braam`
+  (`libc/wasm32/CMakeLists.txt`), where `build/cc/cc` finds them, so the tests run the
+  driver end to end.
+
+### 7.2 The runtime: `rt.c`
+
+Written in C with coroutines, as braam-core's `src/proc/rt.cpp` is written in C++ with
+them:
+
+```c
+static coro(braam_call *) int braam_root(int argc, char **argv)
+{
+    int status = await main(argc, argv);
+    await fflush(NULL);             /* what the program left buffered, then exit */
+    return status;
+}
+
+static void run(int k)              /* task k to its next suspension */
+{
+    if (co_resume(tasks[k].frame) == CO_DONE) {
+        if (k == 0) {                   /* the root: the process exits */
+            exited = 1;
+            braam_sys_sync(BRAAM_SYS_EXIT, co_result(tasks[0].frame), 0, 0);
+        } else {
+            tasks[k].frame = NULL;      /* the slot is free again */
+        }
+        return;
+    }
+    braam_call *c = co_value(tasks[k].frame);
+    c->token = ++token;  tasks[k].call = c;
+    __braam_sys_async(c->op, c->token, c->ptr, c->len);
+}
+```
+
+- **The table** has `BRAAM_TASKS` (8, braam-core's `PROC_TASKS`) entries, each a frame
+  and the call it waits on; task 0 is the root.
+- **`_start`** (`__braam_start`) copies argv out of the host's block, each word with a
+  NUL, makes the root with `co_init` on a block of `__braam_task_bytes` from `malloc`,
+  and runs it. The default size is a `libc.a` member of its own (`taskbytes.c`), which
+  the linker leaves out when the program defines the name: vcc has no weak symbols.
+- **`_resume(token, reply, len)`** gives the block to the task whose call has that
+  token and runs it, or frees the block (an answer to a call whose frame was
+  destroyed). Either returns 0 once the root has returned, 1 otherwise.
+- **`braam_sys`** (`sys.c`) yields a `braam_call` that is a local of its frame, so the
+  pointer stays good while it waits. Resumed, it reads the status, copies the data and
+  frees the block. A `defer` in it (`__braam_forget`) tells the runtime when the frame
+  goes before the answer comes: the task's slot is freed, so the table never points
+  into a dead frame. That is what makes `co_destroy` of a waiting task safe, and why a
+  task may suspend only in `braam_sys`.
+- **`braam_spawn`** puts a frame in a free slot and runs it to its first suspension, as
+  braam-core's `proc_spawn` does. Several tasks may park in one step, each with its
+  call outstanding.
+- **Signals.** `_sig(n)` records a bit, as braam-core's does. `sig_catch` is
+  Sys::SigAct with a shadow copy of the mask, as braam-core's `io.cpp` keeps.
+  `sig_take` and `sig_pending` read and clear the bits. The kernel does the rest: a
+  caught signal abandons the interruptible calls (Read, KeyRead, Sleep, Wait, ClipRead,
+  Poll), which answer `Err(Intr)`; an uncaught one cancels the process, status 130.
+  `braam_yield` is `await sleep_ms(0)`.
+- **`_alloc` and `_free`** are `malloc` and `free`. `malloc.c` is a first fit over an
+  address-ordered free list, merging neighbours and calling `memory.grow` when nothing
+  fits.
+- **`exit(n)`** (`exports.s`) calls `sys(Exit, n)` and traps, as Braam's own compat
+  layer does (`doc/Compat.md`: "C `exit()` and `abort()` trap"). A coroutine trap goes
+  through `exit` too, its message left in the stdout buffer.
+
+### 7.3 The library
+
+The C library splits as Braam's own does (`braam-apps/CLAUDE.md`, "Three groups"):
+what never waits is `libc/common`'s, and what waits keeps C's names and parameters
+with a coroutine specifier, so a port adds `await` and `coro(braam_call *)` and
+changes nothing else. Every call that waits is `await braam_sys(op, payload, len, …)`
+plus a copy into the caller's buffer. On an error they return -1 and set `errno`.
+
+- **Output** (`stdio.c`). `printf` and its kin are variadic, so they cannot be
+  coroutines: they format into the stream's buffer, which grows by `realloc` rather
+  than wait. `putbyte` writes to the stream of the `fprintf` running, stdout
+  otherwise. `write` writes all of its bytes, in chunks.
+- **Input.** Each stream has an input buffer of `BRAAM_CHUNK` bytes, with one byte in
+  front for `ungetc`; `fgetc`, `fgets` and `fread` take from it and refill it with
+  `read`. A `read` of standard input writes out standard output first, as a
+  line-buffered terminal does.
+- **Opening and closing.** `fopen` reads the mode as Braam's compat layer does; the
+  streams it makes join the list that `fflush(NULL)` and the root's last flush walk.
+  `fclose` writes the buffer out, closes the descriptor and frees the buffers, and for
+  a stream from `fopen` the `FILE`.
+- **Positioning.** `fseek` writes out pending output, moves the descriptor back past
+  what was read ahead and not taken, and drops the input buffer; `ftell` and `rewind`
+  go through it.
+- **Files** (`sys.c`). `stat`, `lstat` and `fstat` fill a `struct stat` as Braam's
+  `cstat.cpp` does: the mode from the kind, `st_ino` an FNV-1a hash of the path, the
+  time in seconds. `unlink`, `rmdir` and `remove` are all Sys::Remove. `<sys/types.h>`
+  makes `off_t` 64 bits, as Braam's answers carry it.
+
+### 7.4 The fake kernel: `run.mjs`
+
+`libc/wasm32/braam/run.mjs` lets the tests run without a Braam checkout.
+
+- It checks the module as braam-core's `test/system/abi.mjs` does: the imports a
+  subset of `env.memory`, `kernel.sys` and `kernel.sys_async`, exactly the five
+  exports, one `braam` section with the magic, the ABI version and 1600 pages.
+- It makes `env.memory` of the section's page counts, writes argv (the program's name
+  first) through `_alloc`, and calls `_start`.
+- It serves `kernel.sys` (Exit, GetPid, Now, Random) and, through `kernel.sys_async`:
+  Write (fd 1 and 2 to stdout and stderr), Read (fd 0 from stdin, in 512-byte
+  chunks), Open, Close, Read, Write, Seek and FStat on files, keeping each
+  descriptor's position itself since node has no `lseek`; Stat, Remove, MkDir, Chdir
+  and Rename on paths; Sleep by `setTimeout`; SigAct and Poll. Anything else is
+  `Err(Unsupported)`.
+- Each answer goes through `_resume` from a later macrotask, never from inside
+  `sys_async`, so a program that does not return from the step is caught.
+- **Signals.** A byte 0x03 on standard input is a `^C`: the read that reaches it parks,
+  and the signal finds it parked. Node's own SIGINT and SIGTERM are passed on. A caught
+  signal goes to `_sig`, and the parked calls (a Read of stdin, a Sleep, a Poll)
+  answer `Err(Intr)`; an uncaught one ends the run with status 130. Poll answers a file
+  and a redirected stdin as ready, and a terminal by what is buffered.
+
+### 7.5 The system test
+
+The ctest `braam-system` (`backend/wasm/test/braam_system.mjs`) is defined when
+`BRAAM_CORE` is a built checkout, with `build/kernel.wasm` and `build/web/rootfs.zip`.
+It:
+
+- builds `hello`, `cat`, `wc` and `docs/examples/notes.c` with the in-tree driver;
+- runs braam-core's `test/system/abi.mjs` over them;
+- plants them in `/bin` of a session of braam-core's harness (`test/system/harness.mjs`),
+  as `braam-apps/devel/c4/test/run.mjs` does;
+- types command lines at the shell, the output redirected to a file and the status
+  echoed to another: hello's arguments and status, `cat` and `wc` on a file and
+  through `<`, a missing file, the whole `notes` session with `notes ask` reading the
+  terminal up to `^D`, and `^C` three ways (caught by a read of the terminal while a
+  second task sleeps, both interrupted; not caught, status 130; caught by a loop that
+  parks in `braam_yield`). That last loop keeps the kernel busy, so the test runs a
+  fixed number of ticks instead of the harness's `run()`, which waits until the
+  kernel is idle.
+
+The fake kernel and Braam give the same output for the same programs, but for the
+pid.
+
+### 7.6 Not done
+
+- `scanf`, `tmpfile`, `setvbuf`, and Sys::List (reading directories).
+- A recipe like braam-core's `braam_add_package` for packing programs into a `.zip`.
+- [Coroutines_Internals.md](Coroutines_Internals.md) §8 has the open questions that
+  touch Braam: `exit()` as a trap, `main(void)`, and a `defer` that could `await`.

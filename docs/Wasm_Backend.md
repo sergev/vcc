@@ -253,7 +253,7 @@ The backend does not know what a coroutine is. The translator makes `coro(Y) T f
 an ordinary function `f$resume(fp)` over a frame in memory, a function `f$init` that
 stores the arguments, and a static array `f$co`, the descriptor
 ([Coroutines_in_C.md](Coroutines_in_C.md) §10 has the ABI;
-[backend/wasm/Plan.md](../backend/wasm/Plan.md) §6 the lowering). What reaches the
+[Coroutines_Internals.md](Coroutines_Internals.md) the lowering). What reaches the
 backend from it:
 
 - `f$resume` starts with a dispatch on the frame's state: a chain of comparisons for
@@ -359,7 +359,7 @@ lowers it by `n` rounded to 16 and yields it. A function that allocates always h
 frame, 16 bytes when it has no slots, so that its epilogue puts `__stack_pointer` back
 from the frame pointer. The coroutines themselves need nothing of the backend: the
 translator makes each an ordinary function `f$resume(fp)` over a frame in memory
-([backend/wasm/Plan.md](../backend/wasm/Plan.md) §6).
+([Coroutines_Internals.md](Coroutines_Internals.md) §5).
 
 ## Function calls
 
@@ -455,7 +455,7 @@ headers are `libc/wasm32/include` (`float.h` for binary128, `limits.h` for the s
 ### A process of Braam
 
 The target `wasm32-braam` uses this backend unchanged, with a runtime of its own in
-`libc/wasm32/braam` ([backend/wasm/Plan.md](../backend/wasm/Plan.md) §7): `exports.s`
+`libc/wasm32/braam` ([Braam.md](Braam.md) §7): `exports.s`
 (`crt0.o`: the five exports `_start`, `_resume`, `_alloc`, `_free`, `_sig`, and the
 imports `kernel.sys` and `kernel.sys_async`), `rt.c` (a table of tasks, the root a
 coroutine that awaits `main` and flushes, the others from `braam_spawn`, each run by
@@ -587,10 +587,9 @@ In phases, each ending with the wasm32 tests green and a commit:
 7. stackify, the peephole rules and coalescing, with the default-pipeline goldens and the
    size comparison with clang;
 8. this document;
-9. later, for the coroutines (phases C3 to C9 of
-   [backend/wasm/Plan.md](../backend/wasm/Plan.md)): `co_alloca`'s builtins (C4), a
-   dispatch node per irreducible region in place of the whole-function skeleton (C5),
-   the target `wasm32-braam` (C6), and `JUMP_TABLE` as a `br_table` (C9).
+9. later, for the coroutines ([Coroutines_Internals.md](Coroutines_Internals.md)): `co_alloca`'s builtins, a
+   dispatch node per irreducible region in place of the whole-function skeleton,
+   the target `wasm32-braam`, and `JUMP_TABLE` as a `br_table`.
 
 `git log --grep=wasm` shows each phase.
 

@@ -1,5 +1,5 @@
 /*
- * The asynchronous system calls of Braam (backend/wasm/Plan.md §7.3): braam_sys, the
+ * The asynchronous system calls of Braam (docs/Braam.md §7.3): braam_sys, the
  * one primitive, and the descriptor, file and directory calls on it, each a coroutine
  * yielding braam_call *.
  */

@@ -1,6 +1,6 @@
 /*
  * <unistd.h> for Braam: the descriptor calls, coroutines yielding braam_call *, so a
- * program calls them with await (backend/wasm/Plan.md §7.3).  On an error they return
+ * program calls them with await (docs/Braam.md §7.3).  On an error they return
  * -1 and set errno.
  */
 #ifndef _UNISTD_H

@@ -1,5 +1,5 @@
 //
-// Coroutines run under node (docs/Coroutines_in_C.md; backend/wasm/Plan.md §6): the
+// Coroutines run under node (docs/Coroutines_in_C.md; docs/Coroutines_Internals.md §5): the
 // split pass's state machines, the runtime of libc/wasm32/co.c, and co_alloca's
 // shadow-stack builtins.
 //
@@ -719,7 +719,7 @@ int main(void)
 )"));
 }
 
-// coro_ptr (phase C9): a table of coroutines of one type that take (void) or
+// coro_ptr: a table of coroutines of one type that take (void) or
 // (void *), set up, measured and started through the pointers; await of a coro_ptr in a
 // coroutine; co_alloca through one; pointers compared.
 TEST_F(WasmTest, CoroPtr)
@@ -841,7 +841,7 @@ int main(void)
 )"));
 }
 
-// A dispatch of more than two suspension points is a jump table (phase C9).  Here one
+// A dispatch of more than two suspension points is a jump table.  Here one
 // of them is inside a loop that runs some iterations without suspending, so the table
 // enters that loop in the middle: an irreducible region, whose dispatch node the
 // table's entry goes through (a trampoline sets the state).  The same output with the

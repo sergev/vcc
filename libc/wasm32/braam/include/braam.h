@@ -1,5 +1,5 @@
 /*
- * <braam.h> — the Braam process ABI (backend/wasm/Plan.md §7; braam-core's
+ * <braam.h> — the Braam process ABI (docs/Braam.md §7; braam-core's
  * src/kernel/sysabi.h and doc/System_Calls.md).
  *
  * A process makes a request by yielding a braam_call: the runtime (libc/wasm32/braam/

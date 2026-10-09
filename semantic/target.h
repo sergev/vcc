@@ -123,7 +123,7 @@ typedef struct {
     // Coroutines (_Coro, _Yield, _Await and the co_* operations) are implemented: the
     // lowering is target-neutral, but it needs a runtime, which only wasm32 has.
     int coroutines;
-    // Braam's process model (wasm32-braam, backend/wasm/Plan.md §7): main is a coroutine
+    // Braam's process model (wasm32-braam, docs/Braam.md §7): main is a coroutine
     // the runtime awaits.  Set on the alias, not in the table.
     int braam;
 } Target;

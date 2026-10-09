@@ -240,7 +240,7 @@ static const struct target targets[] = {
       .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
       .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
       .llvm_ld = "wasm-ld", .llvm_ld_flags = "--stack-first -z stack-size=1048576" },
-    // Braam's process ABI (backend/wasm/Plan.md §7.1): the memory imported, no entry (the
+    // Braam's process ABI (docs/Braam.md §7.1): the memory imported, no entry (the
     // exports are crt0.o's), the stack Braam's own programs have.
     { .name = "wasm32-braam", .arch = ARCH_CROSS, .codegen = "vgenwasm", .as_default = WASM32_AS,
       .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",

@@ -1,6 +1,6 @@
 //
 // The compile-time rules of coroutines (semantic/coroutines.c, and semantic/defer.c for
-// the jumps past a co_alloca; docs/Coroutines_in_C.md, backend/wasm/Plan.md §2.4).
+// the jumps past a co_alloca; docs/Coroutines_in_C.md, docs/Coroutines_Internals.md §3.2).
 //
 #include "target.h"
 #include "typecheck_fixture.h"
@@ -41,7 +41,7 @@ static std::string With(const char *body)
     return std::string(range) + body;
 }
 
-// --- allowed ---------------------------------------------------------------
+// --- allowed ----------------------------------------------------------------
 
 TEST_F(CoroTest, Generator)
 {
@@ -127,7 +127,7 @@ int run(void)
 )");
 }
 
-// --- the target ------------------------------------------------------------
+// --- the target -------------------------------------------------------------
 
 TEST_F(PipelineTest, CoroutinesNotOnTarget_Neg)
 {
@@ -141,7 +141,7 @@ TEST_F(PipelineTest, CoOpNotOnTarget_Neg)
                  "coroutines are not supported on target");
 }
 
-// --- declarations ----------------------------------------------------------
+// --- declarations -----------------------------------------------------------
 
 TEST_F(CoroTest, Variadic_Neg)
 {
@@ -210,7 +210,7 @@ TEST_F(CoroTest, CoroAndFunction_Neg)
                  "Conflicting declarations for function f");
 }
 
-// --- naming a coroutine ----------------------------------------------------
+// --- naming a coroutine -----------------------------------------------------
 
 TEST_F(CoroTest, DirectCall_Neg)
 {
@@ -251,7 +251,7 @@ TEST_F(CoroTest, AllocaArguments_Neg)
                  "wrong number of arguments");
 }
 
-// --- the operations --------------------------------------------------------
+// --- the operations ---------------------------------------------------------
 
 TEST_F(CoroTest, ResumeNotFrame_Neg)
 {
@@ -277,7 +277,7 @@ TEST_F(CoroTest, FrameTypes_Neg)
                  "Cannot convert type for assignment");
 }
 
-// --- yield and await -------------------------------------------------------
+// --- yield and await --------------------------------------------------------
 
 TEST_F(CoroTest, YieldOutside_Neg)
 {
@@ -332,7 +332,7 @@ TEST_F(CoroTest, AwaitFunction_Neg)
                  "await needs a call of a coroutine or a co_frame pointer");
 }
 
-// --- co_alloca in its block ------------------------------------------------
+// --- co_alloca in its block -------------------------------------------------
 
 TEST_F(CoroTest, AllocaInLoopHead_Neg)
 {
@@ -451,7 +451,7 @@ TEST_F(BraamMainTest, VoidResult)
                  "it does not return int");
 }
 
-// --- coro_ptr (phase C9) ---------------------------------------------------
+// --- coro_ptr ---------------------------------------------------------------
 
 static const char *const tasks = R"(
 #include <coro.h>
@@ -537,7 +537,7 @@ TEST_F(CoroTest, CoroPtrSizeof_Neg)
                  "needs the name of a coroutine or a coro_ptr");
 }
 
-// --- the lint for frames in automatic storage (phase C9) -------------------
+// --- the lint for frames in automatic storage -------------------------------
 
 static const char *const lint_gen = R"(
 #include <coro.h>

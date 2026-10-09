@@ -259,7 +259,7 @@ void gen_exits_all(TacCtx *ctx); // the exit actions of every open block, innerm
 void gen_finish(TacCtx *ctx, unsigned state);
 
 //
-// Coroutines (coro.c; backend/wasm/Plan.md §6)
+// Coroutines (coro.c; docs/Coroutines_Internals.md §5)
 //
 enum { CO_HEADER = 24 }; // state, flags, resume, task, top, limit
 // Where the value yielded and the result lie in a frame of co_frame(Y, T), and the

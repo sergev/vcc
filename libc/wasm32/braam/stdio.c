@@ -1,5 +1,5 @@
 /*
- * The streams of Braam's stdio (backend/wasm/Plan.md §7.3): an output buffer each,
+ * The streams of Braam's stdio (docs/Braam.md §7.3): an output buffer each,
  * which the formatting functions fill without blocking and fflush writes out, and an
  * input buffer, which the reading coroutines refill a chunk at a time.
  */

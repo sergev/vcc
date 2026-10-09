@@ -1,5 +1,5 @@
 /*
- * <stdio.h> for Braam (backend/wasm/Plan.md §7.3).  The output half never blocks:
+ * <stdio.h> for Braam (docs/Braam.md §7.3).  The output half never blocks:
  * printf, puts, putchar, fputs, fputc, putc and fwrite append to the stream's buffer,
  * which grows rather than waits.  What can wait is a coroutine yielding braam_call *,
  * called with await: fflush writes a buffer out, fgetc, getc, getchar, fgets and fread

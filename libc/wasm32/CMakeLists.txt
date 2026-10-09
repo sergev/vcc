@@ -59,7 +59,7 @@ file(GLOB WASM32_COMMON_HEADERS ${LIBC_COMMON_INCLUDE_DIR}/*.h)
 install(FILES ${WASM32_TARGET_HEADERS} ${WASM32_COMMON_HEADERS}
         DESTINATION share/vcc/wasm32/include)
 
-# wasm32-braam (backend/wasm/Plan.md §7): its own headers first, then wasm32's, the first
+# wasm32-braam (docs/Braam.md §7): its own headers first, then wasm32's, the first
 # of a name winning.  Staged in the build tree as an installation lays them out, so the
 # driver finds them from build/cc (the Braam tests run it).
 set(BRAAM_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/braam/include)
@@ -212,7 +212,7 @@ add_custom_target(braam-libc ALL
 install(FILES ${bout}/crt0.o ${bout}/libc.a ${bsrc}/run.mjs
         DESTINATION share/vcc/wasm32-braam/lib)
 
-# On Braam itself (backend/wasm/Plan.md §7.5): when BRAAM_CORE is a built checkout,
+# On Braam itself (docs/Braam.md §7.5): when BRAAM_CORE is a built checkout,
 # hello, cat, wc and docs/examples/notes.c built by the in-tree driver and run from
 # the shell of a session of its system harness, after its abi.mjs checks them.
 if(WASM32_NODE AND EXISTS ${BRAAM_CORE}/build/kernel.wasm

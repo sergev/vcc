@@ -1,5 +1,5 @@
 //
-// wasm32-braam (backend/wasm/Plan.md §7): programs built by the driver, `vcc -t
+// wasm32-braam (docs/Braam.md §7): programs built by the driver, `vcc -t
 // wasm32-braam` with the in-tree passes, against the runtime staged in
 // build/share/vcc/wasm32-braam, and run under node by its fake kernel, run.mjs, which
 // checks the process ABI before it starts one.
@@ -374,7 +374,7 @@ TEST_F(BraamTest, TaskBytes)
     EXPECT_EQ(0, status);
 }
 
-// The streams on files, and the file and directory calls (phase C7), inside a directory
+// The streams on files, and the file and directory calls, inside a directory
 // named by argv[1], so tests running side by side do not meet: fopen and fprintf,
 // stat, fgets to the end, rewind and ungetc, fseek from the end, ftell, fread, fstat,
 // append, mkdir, rename, rmdir refused on a full directory, chdir and getcwd, unlink.
@@ -581,7 +581,7 @@ TEST_F(BraamTest, NotesExample)
     std::remove("notes.txt");
 }
 
-// Signals and tasks (phase C8).  A ^C on standard input, as the fake kernel reads a
+// Signals and tasks.  A ^C on standard input, as the fake kernel reads a
 // byte 0x03, reaches a process that asked for SIGINT: the read parked on it and the
 // sleep a second task is parked on both give up with EINTR, sig_take collects it, and
 // the program goes on reading.

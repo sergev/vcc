@@ -1,4 +1,4 @@
-# The Braam process ABI (backend/wasm/Plan.md §7; braam-core test/system/abi.mjs): the
+# The Braam process ABI (docs/Braam.md §7; braam-core test/system/abi.mjs): the
 # five exports, which call the runtime in rt.c, and the two imports, kernel.sys and
 # kernel.sys_async.  The memory is imported (wasm-ld --import-memory).  In assembly
 # because the exports and imports need .export_name and .import_name, which vcc's C

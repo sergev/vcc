@@ -262,7 +262,7 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `label_loops.c` | Annotates loop/switch statements with break/continue jump targets |
 | `resolve_labels.c` | `goto`/label validation per function |
 | `defer.c` | `defer` checks: no jump into a block past a defer or a `co_alloca`, into or out of a deferred statement, no `return` inside one; label positions for the translator |
-| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; lowered by `translator/coro.c` (see [backend/wasm/Plan.md](../backend/wasm/Plan.md) §6) |
+| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; lowered by `translator/coro.c` (see [Coroutines_Internals.md](Coroutines_Internals.md)) |
 | `type_utils.c` | Type helpers: `get_size`, `get_alignment`, `is_integer`, etc. |
 | `const_convert.c` | Constant-expression evaluation and conversion |
 | `target.c`, `target.h` | Target descriptors: type sizes and alignment, plain-`char` signedness, shift semantics |
@@ -277,7 +277,7 @@ Tests: `symtab_tests.cpp`, `structtab_tests.cpp`, `typetab_tests.cpp`, `typechec
 | `translate.h`, `translate.c` | Shared helpers, type conversion, top-level entry points, unit begin/end |
 | `expr.c` | AST `Expr` → TAC instruction lowering |
 | `stmt.c` | AST `Stmt` → TAC instruction lowering; local declaration init |
-| `coro.c` | Coroutines: the operations lowered to calls of `libc/wasm32/co.c`, and the split pass that makes a coroutine a state machine over its frame after the optimizer ([backend/wasm/Plan.md](../backend/wasm/Plan.md) §6) |
+| `coro.c` | Coroutines: the operations lowered to calls of `libc/wasm32/co.c`, and the split pass that makes a coroutine a state machine over its frame after the optimizer ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
 | `main.c` | `lower` entry: import → semantic passes → translate → emit |
 | `test/translate_test.h` | Test fixture helpers shared across translator test files |
 
@@ -926,7 +926,7 @@ make stackless coroutines, on wasm32 only (`Target.coroutines`; `cpp` predefines
 `__vcc_coroutines__` there). `<coro.h>` gives the short names `defer`, `coro`,
 `yield`, `await`, `co_frame`, `coro_ptr` and `co_init` … `co_alignof`.
 [Coroutines_in_C.md](Coroutines_in_C.md) is the tutorial and has the frame ABI (§10);
-[backend/wasm/Plan.md](../backend/wasm/Plan.md) the design and the lowering. The
+[Coroutines_Internals.md](Coroutines_Internals.md) the implementation and the design decisions. The
 target `wasm32-braam` builds processes of Braam with them
 ([Braam.md](Braam.md)).
 

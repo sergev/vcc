@@ -156,7 +156,7 @@ int main(void)
 )"));
 }
 
-// Large cleanups shared by the exits that leave them (phase C9): break, continue, a
+// Large cleanups shared by the exits that leave them: break, continue, a
 // goto out of two blocks, returns of a value from three depths, each with a chain of
 // several statements in blocks inside one another; and a coroutine destroyed at each of
 // its suspension points.  The same output with every exit lowering its own copy.

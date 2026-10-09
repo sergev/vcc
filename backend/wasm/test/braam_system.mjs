@@ -1,4 +1,4 @@
-// wasm32-braam on Braam itself (backend/wasm/Plan.md §7.5): programs built by vcc,
+// wasm32-braam on Braam itself (docs/Braam.md §7.5): programs built by vcc,
 // planted in /bin of a session of braam-core's system harness and run from its shell.
 //
 //     node braam_system.mjs <braam-core> <work-dir> <vcc> <docs/examples>

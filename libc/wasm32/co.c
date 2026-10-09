@@ -1,5 +1,5 @@
 /*
- * The coroutine runtime (docs/Coroutines_in_C.md; backend/wasm/Plan.md §6).  The
+ * The coroutine runtime (docs/Coroutines_in_C.md; docs/Coroutines_Internals.md §5).  The
  * compiler lowers a coroutine f to f$resume, the body as a state machine over a frame,
  * f$init, which stores its arguments there, and f$co, its frame size and alignment
  * (then its init and resume too, for a coroutine with a coro_ptr).

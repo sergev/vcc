@@ -1,5 +1,5 @@
 //
-// Lowering coroutines (translator/coro.c; backend/wasm/Plan.md §6): the provisional
+// Lowering coroutines (translator/coro.c; docs/Coroutines_Internals.md §5): the provisional
 // function, split after the optimizer into f$resume, f$init and f$co.
 //
 #include "translate_test.h"
@@ -128,7 +128,7 @@ TEST_F(TranslateTestWasm32, CoroutinePrototype)
 }
 
 // The dispatch: two suspension points are a chain of compares, three a jump table on
-// the state, whose entry 0 and default are the body's start (phase C9).
+// the state, whose entry 0 and default are the body's start.
 TEST_F(TranslateTestWasm32, CoroutineDispatchChain)
 {
     std::string two = CompileToYaml("_Coro(int) void g(void) { _Yield 1; _Yield 2; }");

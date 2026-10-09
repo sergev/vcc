@@ -14,7 +14,8 @@ This is a tutorial. It assumes you know ordinary C and nothing else.
 > [Braam](#8-coroutines-on-braam): section 8 is about `vcc -t wasm32-braam`,
 > [Braam.md](Braam.md) is that target's reference, and
 > [Braam_Example.md](Braam_Example.md) works a program through. Section 10 gives the
-> frame ABI. The design is in [backend/wasm/Plan.md](../backend/wasm/Plan.md).
+> frame ABI. How they are implemented, and why so, is in
+> [Coroutines_Internals.md](Coroutines_Internals.md).
 
 ## Contents
 

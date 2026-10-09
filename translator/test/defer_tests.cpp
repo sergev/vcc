@@ -168,7 +168,7 @@ void f(int x)
 
 // A large cleanup that several exits leave by is lowered once more, at the end of its
 // block, and the exits share that copy: each sets the "where next" variable (a copy,
-// not traced) and jumps in; the chain runs the cleanup, then the return (phase C9).
+// not traced) and jumps in; the chain runs the cleanup, then the return.
 static const char *const shared_src = R"(
 void g(int);
 int f(int k) { _Defer { g(1); g(2); g(3); g(4); } if (k) return 5; return 6; }

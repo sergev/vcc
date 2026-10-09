@@ -1,5 +1,5 @@
 //
-// Coroutines (docs/Coroutines_in_C.md; backend/wasm/Plan.md §6), in two stages.
+// Coroutines (docs/Coroutines_in_C.md; docs/Coroutines_Internals.md §5), in two stages.
 //
 // Stage 1 lowers a coroutine `coro(Y) T f(params)` as an ordinary function
 // f$resume(fp, params) over a frame at fp, whose header is the runtime's
@@ -12,7 +12,7 @@
 // the frame; each __coro_suspend becomes a return with the state set, and a label the
 // dispatch at the top jumps to.  f$init stores the arguments, and f$co holds the frame's
 // size and alignment for co_sizeof, co_alignof and co_alloca: clang's wasm assembler
-// cannot make the absolute symbols f$size and f$align the plan first meant to use.  A
+// cannot make the absolute symbols f$size and f$align the first design meant to use.  A
 // coroutine that takes (void) or (void *) has a coro_ptr, the address of its f$co, which
 // then also holds f$init (or for (void), f$initp, which takes the void * and ignores it)
 // and f$resume, so a frame can be set up and started through the pointer alone.

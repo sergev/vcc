@@ -1,6 +1,6 @@
 // Run a Braam process vcc built, without Braam: node run.mjs prog [args...]
 //
-// A fake kernel (backend/wasm/Plan.md §7.4).  It checks the module as braam-core's
+// A fake kernel (docs/Braam.md §7.4).  It checks the module as braam-core's
 // test/system/abi.mjs does (the imports, the five exports, one braam section), gives it
 // env.memory of the section's page counts, writes argv through _alloc and calls _start.
 // It serves kernel.sys (Exit, GetPid, Now, Random) and kernel.sys_async for Write (fd 1
