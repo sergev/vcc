@@ -5,6 +5,27 @@
 //
 #include "aarch64_test.h"
 
+// alloca under Apple's ABI: the frame from x29 (which Apple wants anyway), the memory
+// above the outgoing area, where named int arguments on the stack take 4 bytes each:
+// two of them, 8 bytes, rounded to 16.
+TEST_F(Aarch64Test, DarwinAlloca)
+{
+    std::string code = Code(CompileToAarch64(R"(
+void *__builtin_alloca(unsigned long);
+int g(int, int, int, int, int, int, int, int, int, int);
+int f(int n)
+{
+    int *p = __builtin_alloca(n);
+    p[0] = n;
+    return g(1, 2, 3, 4, 5, 6, 7, 8, p[0], n) + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find("stp x29, x30, [sp, #-16]!\nmov x29, sp\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, x9\nadd x19, sp, #16\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov sp, x29\nldp x29, x30, [sp], #16\nret\n"))
+        << code;
+}
+
 // C names take a `_`, local labels an `L`; no ELF directives.
 TEST_F(Aarch64Test, DarwinNames)
 {

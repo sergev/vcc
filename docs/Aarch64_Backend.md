@@ -134,6 +134,29 @@ ret
 
 A larger frame, or any frame under `--frame-pointer`, keeps the frame record.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack, as on x86-64 ([X86_64_Backend.md](X86_64_Backend.md#alloca)).
+The translator passes them on as calls of `__builtin_alloca`, `__builtin_stack_save`
+and `__builtin_stack_restore`, which `gen_call` expands in place, through x9 alone. A
+function that calls any of them always keeps the frame record (a leaf too, and without
+`--frame-pointer`), its slots from x29:
+
+```
+sxtw    x9, w0
+add     x9, x9, #15
+and     x9, x9, #-16
+sub     sp, sp, x9          // sp stays 16-byte aligned
+add     x0, sp, #OUT        // the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area rounded up to 16, taken by `reserve_outgoing` from
+every call in the body before selection (by Apple's packing on macOS), and reserved by
+the frame apart from the slots. The epilogue's `mov sp, x29` gives the memory back, and
+a `longjmp` with the rest. The register allocator does not count the builtins as calls
+(its `inline_call` hook), so a value may stay in x0-x7 across one.
+
 ## Function calls
 
 - Arguments go in x0–x7 (integers, pointers) and v0–v7 (`float`, `double`,

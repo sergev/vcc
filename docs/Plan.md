@@ -15,8 +15,9 @@ stack, release on `longjmp`, and no runtime call.
   with the raw size, elsewhere to `__coro_alloca` on the arena, the mark saved at entry and
   restored before every `RETURN` by `gen_alloca_release`. The shared run suite
   `backend/common/test/alloca/alloca_run_tests.cpp` runs in every backend's test binary.
-  Its `AllocaLongjmp` case runs where alloca is on the stack (wasm32 aside, which has no
-  `setjmp`).
+  Its `AllocaLongjmp` case runs where alloca is on the stack and the runtime has
+  `setjmp`: not wasm32, nor the bare-metal AArch64, ARM32 and RISC-V runtimes (the list
+  in the test; adding a `setjmp.s` to one of those turns it on).
 - **x86-64 is done** ([X86_64_Backend.md](X86_64_Backend.md#alloca)), the hosted
   `x86_64-linux` with it. Its pieces are the model for the other backends:
   - `x86_stack_builtin` names the three builtins; `gen_call` expands them through rax.
@@ -28,6 +29,9 @@ stack, release on `longjmp`, and no runtime call.
     the slots.
   - The shared register allocator's optional `inline_call` hook
     (`backend/common/regalloc.h`) keeps the builtins from counting as calls.
+- **AArch64 is done** ([Aarch64_Backend.md](Aarch64_Backend.md#alloca)), with
+  `aarch64-linux` and `aarch64-darwin`, on the same pieces (`a64_stack_builtin`,
+  `Gen.moves_sp` forcing the frame record, `reserve_outgoing`, the `inline_call` hook).
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
@@ -75,21 +79,13 @@ stack, release on `longjmp`, and no runtime call.
 Each task leaves `ctest -j8` green on every target, and BESM-6 output unchanged except in A10.
 Commit after each.
 
-### A3. AArch64, with `aarch64-linux` and `aarch64-darwin`
-
-- Intercept the builtins in `gen_call` (`backend/aarch64/call.c:430`).
-- `has_alloca` forces `FRAME_FP` (`frame.c:982`) and disables `is_leaf` frameless
-  (`frame.c:826`).
-- Selection: sp cannot be an operand of `and`, so compute in x16 (or x17): `sub x16, sp, n;
-  and x16, x16, -16; mov sp, x16; add dst, sp, #outgoing`.
-- The epilogue's `mov sp, x29` already exists in FP mode (`frame.c:769`).
-- Peephole: make sure the "value never read" deletion (`peephole.c:1996`) and `delete_reload`
-  (`peephole.c:832`) treat a write to sp as a def.
-- Darwin: x29 is already kept, and sp stays 16-aligned.
-- **Tests:** as for x86-64: goldens of the frame and selection, the shared run suite
-  (qemu, and native on macOS and hosted Linux), the coroutine run suite again, an interop
-  test with clang both ways (`RunAllocaWithClang` in `backend/x86/test/interop_tests.cpp`),
-  the translator's `AllocaOnStack` for the target, and `darwin_tests.cpp` goldens.
+Every backend task has the tests x86-64 and AArch64 have: goldens of the frame and the
+selection (`AllocaLeaf`, `AllocaAboveOutgoing` in `frame_tests.cpp`); the shared run suite
+and the coroutine run suite, now on the stack; an interop test with the reference
+compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack` in
+`translator/test/coro_tests.cpp` where the translator tests have a fixture for the
+target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
+(`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
 
 ### A4. RISC-V, RV64 and RV32
 
@@ -215,8 +211,7 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A3–A6 are independent and of similar size. A3 comes first because it serves the hosted
-  targets.
+- A4–A6 are independent and of similar size.
 - A7 and A8 are the largest, because of the new frame-pointer modes. Their "a" halves are
   worth doing separately, validated by the whole suite.
 - A10 is optional.

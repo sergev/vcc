@@ -965,6 +965,10 @@ void gen_prologue(Gen *g)
 {
     bool calls      = has_calls(g);
     Frame fr        = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, calls, -1 };
+    // alloca's memory starts at the outgoing area rounded to 16, below the slots; the
+    // frame is from x29, which the epilogue puts sp back from.
+    if (g->moves_sp)
+        fr.rest = (g->locals_size + 15) / 16 * 16 + (g->outgoing + 15) / 16 * 16;
     Frame sp        = fr;
     A64_Block *tail = redirect(g, g->prologue);
     fr.size         = fr.rest + (calls ? 16 : 0);
@@ -977,9 +981,10 @@ void gen_prologue(Gen *g)
             sp.rest = (g->locals_size - 16 + g->outgoing + 15) / 16 * 16;
     }
     sp.size = sp.rest + (calls ? 16 : 0);
-    if (!aarch64_frame_pointer && is_leaf(g)) {
+    bool fp_frame = aarch64_frame_pointer || g->moves_sp;
+    if (!fp_frame && is_leaf(g)) {
         // nothing
-    } else if (!aarch64_frame_pointer && sp.size <= 4095 && saves_fit(g, &sp) &&
+    } else if (!fp_frame && sp.size <= 4095 && saves_fit(g, &sp) &&
                rebase_to_sp(g, &sp)) {
         fr      = sp;
         fr.kind = FRAME_SP;

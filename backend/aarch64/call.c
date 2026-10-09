@@ -425,10 +425,87 @@ static void arg_to_regs(Gen *g, const Arg *a)
     }
 }
 
+// The type an argument of type `type` is passed as: a constant takes the declared
+// parameter type `want`, when there is one.
+static const Tac_Type *arg_as(const Tac_Type *type, const Tac_Type *want)
+{
+    return want && !a64_is_fp(type) && !a64_is_ld(type) && !a64_is_fp(want) && !a64_is_ld(want) &&
+                   !a64_is_aggregate(want)
+               ? want
+               : type;
+}
+
+bool a64_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+// The bytes call `in` stores into the outgoing area, as gen_call places them.
+static int stack_bytes(const Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *ft   = in->u.fun_call.fun_type;
+    const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
+    ArgState s           = { 0 };
+    int i                = 0;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
+        classify(&s, arg_as(val_type(g, v), want), variadic_arg(ft, i));
+        if (want)
+            want = want->next;
+    }
+    return s.stack;
+}
+
+void reserve_outgoing(Gen *g)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+            a64_stack_builtin(in))
+            continue;
+        int n = stack_bytes(g, in);
+        if (n > g->outgoing)
+            g->outgoing = n;
+    }
+}
+
+// save: dst = sp; restore: sp = arg; alloca: sp -= (arg + 15) & -16, dst = sp plus the
+// outgoing area rounded to 16, known already (reserve_outgoing).  sp stays 16-byte
+// aligned, and the epilogue resets it from x29.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    static const Tac_Type t_ptr = { .kind = TAC_TYPE_ULONG };
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    A64_Operand t0     = a64_reg(T0, A64_X), sp = a64_reg(A64_SP, A64_X);
+    if (strcmp(name, "__builtin_stack_save") == 0) {
+        if (dst)
+            emit2(g, A64_MOV, t0, sp);
+    } else if (strcmp(name, "__builtin_stack_restore") == 0) {
+        load_int_as(g, T0, in->u.fun_call.args, &t_ptr);
+        emit2(g, A64_MOV, sp, t0);
+        return;
+    } else {
+        load_int_as(g, T0, in->u.fun_call.args, &t_ptr);
+        emit3(g, A64_ADD, t0, t0, a64_imm(15));
+        emit3(g, A64_AND, t0, t0, a64_imm(-16));
+        emit3(g, A64_SUB, sp, sp, t0);
+        if (dst)
+            gen_addr(g, T0, A64_SP, (g->outgoing + 15) & -16);
+    }
+    if (dst)
+        store_int(g, T0, dst);
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
     if (!in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0) {
         gen_va_start(g, in);
+        return;
+    }
+    if (a64_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
         return;
     }
     const Tac_Type *ft   = in->u.fun_call.fun_type;
@@ -456,11 +533,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         Arg *a  = &args[i];
         a->v    = v;
         a->type = val_type(g, v);
-        // A constant takes the declared parameter type, when there is one.
-        a->as   = want && !a64_is_fp(a->type) && !a64_is_ld(a->type) && !a64_is_fp(want) &&
-                          !a64_is_ld(want) && !a64_is_aggregate(want)
-                      ? want
-                      : a->type;
+        a->as   = arg_as(a->type, want);
         // Placed by its declared type, which a constant may differ from.
         a->loc  = classify(&s, a->as, variadic_arg(ft, i));
         a->copy = 0;
@@ -484,8 +557,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         for (int k = 0; k < args[i].loc.nregs; k++)
             used |= a64_reg_bit(args[i].loc.reg[k]);
     xfree(args);
-    if (s.stack > g->outgoing)
+    if (s.stack > g->outgoing) {
+        if (g->moves_sp)
+            fatal_error("aarch64: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
+    }
     if (indirect_result(ret)) {
         // The result's address in x8: the destination, or a slot for an unused one.
         int base;

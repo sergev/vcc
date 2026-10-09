@@ -17,6 +17,8 @@
 //   x29 + 0          saved x29
 //   x29 - ...        saved x19-x28/d8-d15 in use, in pairs, then slots
 //   sp + 0 ...       outgoing stack arguments
+// alloca lowers sp (the frame then always from x29) by its size rounded to 16, and
+// returns sp plus the outgoing area rounded to 16, which stays below it.
 //
 // A value in a register is in canonical form: a type of 32 bits or fewer in the W
 // view, the upper half zero (as every W write leaves it), a narrower one extended to
@@ -66,6 +68,7 @@ typedef struct {
     int locals_size;   // bytes of slots below the frame record
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
+    bool moves_sp;     // calls a stack builtin (alloca): sp moves in the body
     int ret_ptr;       // slot of the result address that came in x8, or 0
     StringMap regs;    // name → allocated register (regalloc.c)
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)
@@ -185,6 +188,12 @@ void param_hints(const Gen *g, StringMap *hints);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool a64_stack_builtin(const Tac_Instruction *in);
+// The outgoing area of every call in the body, ahead of it: what alloca's result is
+// above.  After layout_frame, which gives every name its type.
+void reserve_outgoing(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v);
 // The registers the function's result is returned in, for the peephole pass: bit 0 x0,
 // bit 1 x1, bit 2 + k v<k>.

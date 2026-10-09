@@ -134,7 +134,12 @@ static const Target targets[] = {
       0,        // double_mant_dig: binary64
       0,        // no_loop_opt
       0,        // little-endian
-      BITFIELD_AAPCS },
+      BITFIELD_AAPCS,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from x29
 
     { "x86_64",
       1, 1,   // _Bool
@@ -305,7 +310,16 @@ static const Target targets[] = {
       NULL,     // immediate_args
       tac_apple64_class, // va_class: by reference or in 8-byte stack slots
       0,        // ldouble_mant_dig: long double is double, binary64
-      1 },      // hw_sqrt: fsqrt
+      1,        // hw_sqrt: fsqrt
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from x29
 
     // WebAssembly, as clang's wasm32-unknown-unknown: ILP32 with a signed plain char and a
     // software binary128 long double.

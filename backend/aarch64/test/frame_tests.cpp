@@ -123,6 +123,61 @@ ret
                   "void h(int *); int f(int a) { int v[4]; v[0] = a; h(v); return v[1]; }")));
 }
 
+// alloca: the frame from x29 whatever else (a leaf too), sp lowered by the size rounded
+// to 16, and the epilogue that puts sp back from x29.
+TEST_F(Aarch64Test, AllocaLeaf)
+{
+    EXPECT_EQ(R"(stp x29, x30, [sp, #-16]!
+mov x29, sp
+sxtw x9, w0
+add x9, x9, #15
+and x9, x9, #-16
+sub sp, sp, x9
+mov x1, sp
+sub w0, w0, #1
+add x0, x1, w0, sxtw
+mov w9, #7
+strb w9, [x0]
+ldrb w0, [x0]
+mov sp, x29
+ldp x29, x30, [sp], #16
+ret
+)",
+              Code(CompileToAarch64(R"(
+void *__builtin_alloca(unsigned long);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[n - 1] = 7;
+    return p[n - 1];
+}
+)")));
+}
+
+// The memory starts above the outgoing area, rounded to 16, which the frame reserves
+// apart from the slots; the saved registers are found from x29.
+TEST_F(Aarch64Test, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToAarch64(R"(
+void *__builtin_alloca(unsigned long);
+long g(long, long, long, long, long, long, long, long, long, long);
+long f(long n, long k)
+{
+    long *p = __builtin_alloca(n * sizeof(long));
+    p[0] = k;
+    return g(1, 2, 3, 4, 5, 6, 7, 8, p[0], k) + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find("stp x29, x30, [sp, #-16]!\nmov x29, sp\nsub sp, sp, #32\n"
+                            "str x19, [x29, #-16]\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, x9\nadd x19, sp, #16\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("stp x1, x1, [sp]\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldr x19, [x29, #-16]\nmov sp, x29\n"
+                                           "ldp x29, x30, [sp], #16\nret\n"))
+        << code;
+}
+
 // The frame layouts run: x30 alone, beside a lone register, with pairs, with slots,
 // with a saved d register.
 TEST_F(Aarch64Test, RunFrameLayouts)

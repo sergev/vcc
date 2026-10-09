@@ -77,9 +77,14 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && a64_stack_builtin(in))
+            g.moves_sp = true;
     if (aarch64_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);
+    if (g.moves_sp)
+        reserve_outgoing(&g);
     if (aarch64_peephole) {
         g.flow = flow_build(tl);
         g.uses = xalloc((g.flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);

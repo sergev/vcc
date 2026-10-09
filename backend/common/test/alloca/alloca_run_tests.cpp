@@ -241,11 +241,16 @@ int main(void)
 
 // longjmp out of a function that took memory gives it back with the stack: twenty
 // thousand times 200 bytes would not fit otherwise.  Not on the arena, which only a
-// return gives back, nor on wasm32, which has no setjmp.
+// return gives back, nor where the runtime has no setjmp: wasm32, and the bare-metal
+// AArch64, ARM32 and RISC-V (aarch64-darwin has the system's).
 TEST_F(AllocaTest, AllocaLongjmp)
 {
-    if (!target_config->stack_alloca || strcmp(target_config->name, "wasm32") == 0)
-        GTEST_SKIP() << "alloca on the arena, or no setjmp";
+    static const char *const no_setjmp[] = { "wasm32", "aarch64", "arm32", "riscv32", "riscv64" };
+    if (!target_config->stack_alloca)
+        GTEST_SKIP() << "alloca on the arena";
+    for (const char *name : no_setjmp)
+        if (strcmp(target_config->name, name) == 0)
+            GTEST_SKIP() << "no setjmp in the runtime";
     EXPECT_EQ("20000\n", CompileAndRunCoro(R"(
 #include <alloca.h>
 #include <setjmp.h>
