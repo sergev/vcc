@@ -198,7 +198,8 @@ adds a `.note.GNU-stack` section in each unit.
 
 It links with the system's C compiler (`aarch64-linux-gnu-gcc` when cross compiling),
 `cc -no-pie … -lvcc`: glibc brings the startup files and the C library, libgcc the
-binary128 arithmetic (`__addtf3`, …), and `libvcc.a` only `__va_arg`. The headers are
+binary128 arithmetic (`__addtf3`, …), and `libvcc.a` `__va_arg` and the coroutine
+runtime. The headers are
 `libc/linux/aarch64/include` and `libc/linux/include` ahead of the bare-metal ones, as for
 [x86-64](X86_64_Backend.md#hosted-linux), with glibc's 312-byte `jmp_buf` and AArch64's
 `fenv.h`. It is built and tested where such a compiler exists; without one, only its
@@ -252,8 +253,9 @@ and `a64_is_ld` does not. A conversion to or from it becomes the `double` one, o
 (`gen_ld_as_double`). Constants are rounded to binary64. HFAs use `tac_apple64_hfa`, under
 which a `long double` member is a `double` one.
 
-It links with the system's C compiler: `cc -o a.out objects…`. There is no `-no-pie` and no
-`libvcc.a`, since this target needs no runtime of ours. The headers are
+It links with the system's C compiler: `cc -o a.out objects… -lvcc`. There is no
+`-no-pie`, and `libvcc.a` holds only the coroutine runtime (`libc/common/co.c` and
+`costack.c`), this target needing no other of ours. The headers are
 `libc/darwin/include` ahead of the bare-metal ones. They agree with libSystem's on what a
 program hands to it:
 - `errno` is `(*__error())`;

@@ -9,8 +9,8 @@ vcc extends C with two features:
 This is a tutorial. It assumes you know ordinary C and nothing else.
 
 > **Status.** `defer` (section 1) works on every target; `<coro.h>` defines its short
-> name. Coroutines (sections 2 to 7) work on wasm32 only, where the preprocessor
-> defines `__vcc_coroutines__`. They exist for programs that run on
+> name. Coroutines (sections 2 to 7) work on every target but BESM-6, where the
+> preprocessor defines `__vcc_coroutines__`. They were made for programs that run on
 > [Braam](#8-coroutines-on-braam): section 8 is about `vcc -t wasm32-braam`,
 > [Braam.md](Braam.md) is that target's reference, and
 > [Braam_Example.md](Braam_Example.md) works a program through. Section 10 gives the
@@ -813,12 +813,12 @@ end without stopping.
 - `co_sizeof` or `co_alignof` used where a constant is required: an array size, a
   `case` label, a `_Static_assert`.
 - `return`, `goto`, or a `break`/`continue` that leaves a deferred statement.
-- Coroutines on a target other than wasm32.
+- Coroutines on BESM-6, the one target without them.
 
 ### Traps
 
-These stop the program with a message naming the trap (`coroutine trap: CO_TRAP_…`,
-and exit status 255 under node), in every build:
+These stop the program with a message naming the trap (`coroutine trap: CO_TRAP_…` on
+standard output, and exit status 255), in every build:
 
 | Trap | Cause |
 |---|---|
@@ -829,8 +829,10 @@ and exit status 255 under node), in every build:
 | `CO_TRAP_NOT_DONE` | `co_result` before the coroutine finished, or after `co_destroy` |
 | `CO_TRAP_NO_SPACE` | an `await`, or a `co_alloca` inside a coroutine, found no spare room left (section 5) |
 
-A `co_alloca` in an ordinary function that runs out of stack stops the program as any
-stack overflow does.
+A `co_alloca` in an ordinary function takes its memory from the stack on wasm32, and
+running out stops the program as any stack overflow does. On the other targets it
+takes it from a fixed arena of the runtime (64 KiB, 1 KiB on AVR and MSP430), and
+running out is `CO_TRAP_NO_SPACE: co_alloca`.
 
 ### Warnings
 
@@ -861,7 +863,9 @@ about the plain cases. A warning is printed and compilation goes on.
   frame cannot be left behind: the end of its block destroys it.)
 - A `co_alloca` frame pointer used after its block has ended.
 - Copying or moving a frame's memory.
-- Two threads resuming one frame. (wasm32 has no threads.)
+- Two threads resuming one frame. (vcc's runtimes have no threads.)
+- A `longjmp` out of a block with a `co_alloca`: its frame is not destroyed, and off
+  wasm32 its memory stays taken until an enclosing block with a `co_alloca` ends.
 
 ---
 
@@ -1080,7 +1084,7 @@ for a global `f` and local for a `static` one:
 |---|---|---|
 | `f$resume` | `int (char *fp)` | the body, resumed: runs to the next suspension and returns `CO_SUSPENDED` (0), or to the end and returns `CO_DONE` (1) |
 | `f$init` | `void (char *fp, A a, B b)` | stores the arguments in a frame `__coro_setup` prepared |
-| `f$co` | `size_t[2]` | the descriptor: the frame's size (a multiple of its alignment) and its alignment (4 to 16) |
+| `f$co` | `size_t[2]` | the descriptor: the frame's size (a multiple of its alignment) and its alignment (up to 16) |
 
 A coroutine that takes `(void)` or `(void *)` has a four-word descriptor instead: the
 size, the alignment, an init function of type `void (char *fp, void *arg)` and
@@ -1088,26 +1092,31 @@ size, the alignment, an init function of type `void (char *fp, void *arg)` and
 `f$initp` that ignores `arg`. A `coro_ptr` is the address of this descriptor. The
 `$` in the names keeps them out of C's name space.
 
-Arguments and results follow wasm32's C calling convention (clang's), as for any
-function.
+Arguments and results follow the target's C calling convention, as for any function.
 
 ### The frame
 
-A frame starts with a 24-byte header that the runtime and every unit agree on:
+A frame starts with a header that the runtime and every unit agree on, the C structure
 
-| Offset | Type | Field |
-|---|---|---|
-| 0 | `unsigned` | state: 0 created; *k* ≥ 1 suspended at the *k*-th suspension point; `0xfffffffe` done; `0xffffffff` destroyed |
-| 4 | `unsigned` | flags: bit 0 running; bits 1–2 the signal of this resumption, 0 continue, 1 cancel, 2 destroy |
-| 8 | `int (*)(char *)` | `resume`: the coroutine's `f$resume` |
-| 12 | `char *` | `task`: the root frame of the task this frame belongs to |
-| 16 | `char *` | `top`: the next free byte of the task's arena (used in a root frame) |
-| 20 | `char *` | `limit`: the end of the arena (used in a root frame) |
+```c
+struct co_header {
+    unsigned state;          /* 0 created; k >= 1 suspended at the k-th point;
+                                UINT_MAX - 1 done; UINT_MAX destroyed */
+    unsigned flags;          /* bit 0 running; bits 1-2 the signal of this resumption,
+                                0 continue, 1 cancel, 2 destroy */
+    int (*resume)(char *);   /* the coroutine's f$resume */
+    char *task;              /* the root frame of the task this frame belongs to */
+    char *top;               /* the next free byte of the task's arena (in a root frame) */
+    char *limit;             /* the end of the arena (in a root frame) */
+};
+```
 
-Then, at offsets that depend only on `Y` and `T`:
+laid out as the target lays out structures: 24 bytes on wasm32 and the other ILP32
+targets (`resume` at 8), 40 on LP64 (`resume` at 8), 12 on AVR and MSP430 (`resume`
+at 4). Then, at offsets that depend only on `Y` and `T`:
 
-- the **value** last yielded, at 24 rounded up to `Y`'s alignment, absent when `Y` is
-  `void`;
+- the **value** last yielded, after the header, rounded up to `Y`'s alignment, absent
+  when `Y` is `void`;
 - the **result**, after the value, rounded up to `T`'s alignment, absent when `T` is
   `void`.
 
@@ -1118,10 +1127,11 @@ knowing which coroutine it is, and nothing more.
 
 ### The runtime
 
-The operations are calls of these routines, in `libc.a` (`libc/wasm32/co.c`):
+The operations are calls of these routines, in `libc.a` (`libc/common/co.c`; on the
+hosted targets, in `libvcc.a`):
 
 ```c
-void *__coro_setup(void *storage, size_t bytes, const unsigned *desc,
+void *__coro_setup(void *storage, size_t bytes, const size_t *desc,
                    int (*resume)(void *), void *parent);
 int   __coro_resume(void *frame, int signal);       /* 0 resume, 1 cancel, 2 destroy */
 int   __coro_done(void *frame);
@@ -1135,8 +1145,10 @@ void  __coro_pop(void *frame, void *p);
   `f$init(mem, a, b)`. With no parent the frame is the root of its own task, and the
   bytes of `mem` past the frame are that task's arena.
 - `co_alloca(f, extra, ...)` does the same on `(size + extra)` rounded up to 16 bytes,
-  taken from the shadow stack in a function, or with `__coro_push` from the arena of
-  the task in a coroutine.
+  taken in a function from the shadow stack on wasm32 and elsewhere with
+  `__coro_alloca` from the runtime's arena (`libc/common/costack.c`; given back by
+  `__coro_stack_restore` to what `__coro_stack_save` returned), or in a coroutine with
+  `__coro_push` from the arena of the task.
 - `co_resume`, `co_cancel` and `co_destroy` are `__coro_resume` with signal 0, 1 and 2.
   It checks the state and the running bit, sets the flags, calls the frame's
   `resume`, and clears the flags. A destroy of a frame that never started only marks

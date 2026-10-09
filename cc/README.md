@@ -152,7 +152,7 @@ cc -no-pie -o a.out objects... -L/-l flags... -L<lib> -lvcc
 ```
 
 The C compiler adds glibc's startup files, `-lc` and libgcc; `libvcc.a` holds the few
-helpers our code generator calls and glibc lacks (`__va_arg`). The math library is not
+helpers our code generator calls and glibc lacks (`__va_arg`), and the coroutine runtime. The math library is not
 implicit, as with GCC: add `-lm`. The executable is not position independent, because our
 code takes the address of a function PC-relative, which a PIE cannot do for one in a
 shared library. The headers are ours, not glibc's (which `vparse` cannot read), and agree
@@ -163,12 +163,12 @@ constants, `MB_LEN_MAX` (see `libc/linux/`). The run is plain `./a.out`.
 The hosted macOS target, `aarch64-darwin`:
 
 ```text
-cc -o a.out objects... -L/-l flags...
+cc -o a.out objects... -L/-l flags... -L<lib> -lvcc
 ```
 
 The C compiler adds the startup and libSystem, whose math library comes with it (`-lm`
-is accepted and links nothing more). There is no `libvcc.a`: Apple's `va_list` is a
-pointer walked in `<stdarg.h>`, and `long double` is `double`. The executable is position
+is accepted and links nothing more). `libvcc.a` holds only the coroutine runtime: Apple's
+`va_list` is a pointer walked in `<stdarg.h>`, and `long double` is `double`. The executable is position
 independent, as every arm64 macOS executable is: our code reaches what the unit does not
 define through the GOT. The headers are ours (`libc/darwin/`), and agree with libSystem's
 on every layout and value a program hands to it:

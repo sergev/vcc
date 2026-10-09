@@ -262,7 +262,7 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `label_loops.c` | Annotates loop/switch statements with break/continue jump targets |
 | `resolve_labels.c` | `goto`/label validation per function |
 | `defer.c` | `defer` checks: no jump into a block past a defer or a `co_alloca`, into or out of a deferred statement, no `return` inside one; label positions for the translator |
-| `coroutines.c` | coroutine checks (wasm32 only, `Target.coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; lowered by `translator/coro.c` (see [Coroutines_Internals.md](Coroutines_Internals.md)) |
+| `coroutines.c` | coroutine checks (every target but BESM-6, `Target.no_coroutines`): `_Coro(Y)` declarations, `yield` and `await` in their coroutine, the `co_*` operations, `_Coro_frame(Y, T)` types; lowered by `translator/coro.c` (see [Coroutines_Internals.md](Coroutines_Internals.md)) |
 | `type_utils.c` | Type helpers: `get_size`, `get_alignment`, `is_integer`, etc. |
 | `const_convert.c` | Constant-expression evaluation and conversion |
 | `target.c`, `target.h` | Target descriptors: type sizes and alignment, plain-`char` signedness, shift semantics |
@@ -277,7 +277,7 @@ Tests: `symtab_tests.cpp`, `structtab_tests.cpp`, `typetab_tests.cpp`, `typechec
 | `translate.h`, `translate.c` | Shared helpers, type conversion, top-level entry points, unit begin/end |
 | `expr.c` | AST `Expr` → TAC instruction lowering |
 | `stmt.c` | AST `Stmt` → TAC instruction lowering; local declaration init |
-| `coro.c` | Coroutines: the operations lowered to calls of `libc/wasm32/co.c`, and the split pass that makes a coroutine a state machine over its frame after the optimizer ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
+| `coro.c` | Coroutines: the operations lowered to calls of `libc/common/co.c`, and the split pass that makes a coroutine a state machine over its frame after the optimizer ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
 | `main.c` | `lower` entry: import → semantic passes → translate → emit |
 | `test/translate_test.h` | Test fixture helpers shared across translator test files |
 
@@ -522,6 +522,7 @@ instruction selection on its own.
 | `libc/riscv64/sqrt.s` | `sqrt` and `sqrtf` (`fsqrt.d`, `fsqrt.s`), for both widths; each other target has its own |
 | `libc/common/doprnt.c` | The `printf` engine for the byte-addressed IEEE-754 targets |
 | `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
+| `libc/common/co.c`, `costack.c` | The coroutine runtime, in every target's `libc.a` but BESM-6's and in the hosted targets' `libvcc.a`; `costack.c`, the arena `co_alloca` takes in a function, everywhere but wasm32 ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
 | `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |
 | `libc/ilp32/frexp.c`, `ldexp.c`, `modf.c`, `int64.c`, `int64conv.c` | Bit-level math, the `long long` division, and its conversions to and from floating point, for ILP32 targets |
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |
@@ -534,7 +535,7 @@ instruction selection on its own.
 | `libc/avr/include/` | AVR's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`) |
 | `libc/msp430/include/` | MSP430's own headers (`float.h`, `limits.h`, `math.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
 | `libc/mmix/include/` | MMIX's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`) |
-| `libc/wasm32/include/` | wasm32's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`); its runtime (`crt0.S`, `console.s`, `memory.s`, `sqrt.s`, `main.s`, `malloc.c`, the coroutine runtime `co.c`, `run.mjs`) is in `libc/wasm32/` |
+| `libc/wasm32/include/` | wasm32's own headers (`float.h`, `limits.h`, `setjmp.h`, `stdarg.h`, `stddef.h`, `stdint.h`); its runtime (`crt0.S`, `console.s`, `memory.s`, `sqrt.s`, `main.s`, `malloc.c`, `run.mjs`) is in `libc/wasm32/` |
 | `libc/wasm32/braam/` | the `wasm32-braam` runtime, a process of Braam ([Braam.md](Braam.md)): `exports.s` (`crt0.o`), `rt.c`, `sys.c`, `stdio.c`, `malloc.c`, `strerror.c`, `taskbytes.c` (the default `__braam_task_bytes`), the fake kernel `run.mjs`, and `include/` (`braam.h`, `unistd.h`, `fcntl.h`, `errno.h`, `stdio.h`, `stdlib.h`, `signal.h`, `poll.h`, `sys/types.h`, `sys/stat.h`), searched ahead of wasm32's; `scripts/check_braam_abi.py` (the `braam-abi` ctest) compares its numbers with braam-core's; `backend/wasm/test/braam_system.mjs` (the `braam-system` ctest) runs programs on a built braam-core; `docs/examples/notes.c` is the worked example of [Braam_Example.md](Braam_Example.md) |
 | `libc/ip16/include/` | 16-bit data-model headers: `inttypes.h`, shared by avr and msp430, and avr's `stddef.h` and `stdint.h` (msp430 has its own, with a `long` `wchar_t`) |
 | `libc/common/float32.c` | binary32 soft-float (`__addsf3`, `__ltsf2`, …) for AVR, where `double` is binary32 too, and MSP430 |
@@ -922,8 +923,8 @@ zeroed by a loop, then only its non-zero leaves are stored.
 Two extensions, spelled with reserved names so that no C program changes meaning:
 `_Defer stmt` runs `stmt` when its block is left, on every target; `_Coro(Y)`,
 `_Yield`, `_Await`, `_Coro_frame(Y, T)`, `_Coro_ptr(Y, T)` and the `__co_*` operations
-make stackless coroutines, on wasm32 only (`Target.coroutines`; `cpp` predefines
-`__vcc_coroutines__` there). `<coro.h>` gives the short names `defer`, `coro`,
+make stackless coroutines, on every target but BESM-6 (`Target.no_coroutines`; `cpp`
+predefines `__vcc_coroutines__` on the others). `<coro.h>` gives the short names `defer`, `coro`,
 `yield`, `await`, `co_frame`, `coro_ptr` and `co_init` … `co_alignof`.
 [Coroutines_in_C.md](Coroutines_in_C.md) is the tutorial and has the frame ABI (§10);
 [Coroutines_Internals.md](Coroutines_Internals.md) the implementation and the design decisions. The

@@ -186,7 +186,8 @@ unit, without which GNU `ld` makes the stack executable.
 
 - **Linking:** by the system's C compiler, `cc -no-pie … -lvcc`, which brings glibc's
   startup files, `-lc` and libgcc. Our `crt0`, `link.ld` and `libc.a` play no part.
-  `libvcc.a` holds only `__va_arg`, which `<stdarg.h>` calls and glibc does not have.
+  `libvcc.a` holds `__va_arg`, which `<stdarg.h>` calls and glibc does not have, and the
+  coroutine runtime.
 - **Not position independent:** a call to a function in `libc.so` goes through the PLT
   the linker makes for a plain `call`, and data is reached through copy relocations,
   but taking a function's address with `lea f(%rip)` cannot point into a shared library

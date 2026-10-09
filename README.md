@@ -35,9 +35,9 @@ this far apart keep the front end honest: nothing in it may assume one kind of m
 - **`defer`** runs a statement when its block is left, whichever way: `defer
   free(p);` next to the `malloc`. It works on every target.
 - **Coroutines**: functions that stop at `yield`, return to their caller and continue
-  later, with `await` to call one from another. They work on wasm32, where they let a
-  program for [Braam](docs/Braam.md), which may never wait inside a call, be written
-  as ordinary C: `n = await read(fd, buf, len);`.
+  later, with `await` to call one from another. They work on every target but BESM-6.
+  On wasm32 they let a program for [Braam](docs/Braam.md), which may never wait inside
+  a call, be written as ordinary C: `n = await read(fd, buf, len);`.
 
 [docs/Coroutines_in_C.md](docs/Coroutines_in_C.md) is the tutorial for both. They
 use reserved spellings (`_Defer`, `_Coro`, `_Yield`, `_Await`, …), and the short

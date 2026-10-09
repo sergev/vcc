@@ -265,7 +265,7 @@ backend from it:
   and gets a dispatch node of its own (above).
 - `co_alloca` in a function uses three builtins that move `__stack_pointer` (the
   stack frame, below).
-- `co_resume` and the rest are calls of `libc/wasm32/co.c`; `__coro_resume` calls the
+- `co_resume` and the rest are calls of `libc/common/co.c`; `__coro_resume` calls the
   frame's `f$resume` through `call_indirect`, so `f$resume` is in the table.
 
 ### Stackify and the peephole rules
@@ -561,7 +561,7 @@ The target needed little from the shared code:
   `tac_wasm32_class` (the answer of `__builtin_va_class`).
 - **`cpp/cpp.c`:** the target's predefined macros: `__wasm__`, `__wasm`, `__wasm32__`,
   `__wasm32`, `__ILP32__`, `_ILP32`, clang's `__wasm_<feature>__` for each feature, and
-  `__vcc_coroutines__`, since wasm32 alone has vcc's coroutines. They are checked in `cpp/test/test_predefined_macros.cpp`.
+  `__vcc_coroutines__`, as every target but BESM-6 has. They are checked in `cpp/test/test_predefined_macros.cpp`.
 - **`translator/test/wasm32_tests.cpp`:** sizes, layouts and bit-fields against clang's.
 - **`scripts/CrossTools.cmake`:** `vcc_find_cross` takes `LD` (a linker other than
   `ld.lld`) and `LLVM_ONLY` (no search for binutils), since there are no binutils for
