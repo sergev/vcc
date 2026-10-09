@@ -55,14 +55,26 @@ static void count_use(int var, void *arg)
     ((int *)arg)[var]++;
 }
 
+// Whether the function calls a stack builtin (alloca), which moves sp.
+static bool moves_sp(const Tac_TopLevel *tl)
+{
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && a32_stack_builtin(in))
+            return true;
+    return false;
+}
+
 // The function, its frame addressed from sp when it can be (`sp_frame`); false when not.
 static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl, bool sp_frame)
 {
     gen_init(g, program, tl);
     g->sp_frame = sp_frame;
+    g->moves_sp = moves_sp(tl);
     if (arm32_regalloc)
         gen_regalloc(g);
     layout_frame(g);
+    if (g->moves_sp)
+        reserve_outgoing(g);
     if (arm32_peephole) {
         g->flow = flow_build(tl);
         g->uses = xalloc((g->flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
@@ -95,12 +107,12 @@ static bool gen_body(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl
     return true;
 }
 
-// Addressed from sp unless asked for r11, or some offset does not fit from sp: then
-// again, with r11.
+// Addressed from sp unless asked for r11, sp moves (alloca), or some offset does not
+// fit from sp: then again, with r11.
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
-    if (!gen_body(&g, program, tl, !arm32_frame_pointer)) {
+    if (!gen_body(&g, program, tl, !arm32_frame_pointer && !moves_sp(tl))) {
         gen_done(&g);
         gen_body(&g, program, tl, false);
     }

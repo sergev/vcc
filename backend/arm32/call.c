@@ -477,8 +477,79 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         hint[dvar + f->nvars] = A32_R0 + 2;
 }
 
+bool a32_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+// The bytes call `in` stores into the outgoing area, as gen_call places them.
+static int stack_bytes(const Gen *g, const Tac_Instruction *in)
+{
+    const Tac_Type *ft   = in->u.fun_call.fun_type;
+    const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
+    const Tac_Type *ret  = ret_type(ft);
+    bool vfp             = !is_variadic(ft);
+    ArgState s           = arg_state(vfp);
+    if (!ret && in->u.fun_call.dst)
+        ret = val_type(g, in->u.fun_call.dst);
+    if (indirect_result(ret, vfp))
+        s.next_core = 1;
+    for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next) {
+        classify(&s, arg_type(g, v, want));
+        if (want)
+            want = want->next;
+    }
+    return s.stack;
+}
+
+void reserve_outgoing(Gen *g)
+{
+    for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+            a32_stack_builtin(in))
+            continue;
+        int n = stack_bytes(g, in);
+        if (n > g->outgoing)
+            g->outgoing = n;
+    }
+}
+
+// save: dst = sp; restore: sp = arg; alloca: sp -= (arg + 7) & -8, dst = sp plus the
+// outgoing area rounded to 8, known already (reserve_outgoing).  sp stays 8-byte
+// aligned, and the epilogue resets it from r11.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    A32_Operand t0 = a32_reg(T0), sp = a32_reg(A32_SP);
+    if (strcmp(name, "__builtin_stack_save") == 0) {
+        if (dst)
+            emit2(g, A32_MOV, t0, sp);
+    } else if (strcmp(name, "__builtin_stack_restore") == 0) {
+        load_val(g, T0, in->u.fun_call.args);
+        emit2(g, A32_MOV, sp, t0);
+        return;
+    } else {
+        load_val(g, T0, in->u.fun_call.args);
+        emit3(g, A32_ADD, t0, t0, a32_imm(7));
+        emit3(g, A32_BIC, t0, t0, a32_imm(7));
+        emit3(g, A32_SUB, sp, sp, t0);
+        if (dst)
+            gen_addr(g, T0, A32_SP, (g->outgoing + 7) & -8);
+    }
+    if (dst)
+        store_val(g, T0, dst);
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (a32_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
+        return;
+    }
     const Tac_Type *ft   = in->u.fun_call.fun_type;
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     const Tac_Val *dst   = in->u.fun_call.dst;
@@ -531,8 +602,11 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             gen_li(g, args[i].loc.reg + 1, 0); // an unsigned int widened
     }
     xfree(args);
-    if (s.stack > g->outgoing)
+    if (s.stack > g->outgoing) {
+        if (g->moves_sp)
+            fatal_error("arm32: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
+    }
     if (indirect_result(ret, vfp)) {
         // The result's address in r0: the destination, or a slot for an unused one.
         int base;

@@ -107,6 +107,29 @@ register, as clang does. When some offset does not fit its instruction from sp (
 halfword 300 bytes up, a frame over 4 KiB), the function is generated again with the
 frame record; `--frame-pointer` asks for it always.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack, as on x86-64 ([X86_64_Backend.md](X86_64_Backend.md#alloca)).
+The translator passes them on as calls of `__builtin_alloca`, `__builtin_stack_save`
+and `__builtin_stack_restore`, which `gen_call` expands in place, through r12 alone. A
+function that calls any of them is generated with r11 from the start (not tried from
+`sp` first), a leaf too:
+
+```
+add     r12, r0, #7
+bic     r12, r12, #7
+sub     sp, sp, r12         @ sp stays 8-byte aligned
+add     r0, sp, #OUT        @ the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area rounded up to 8, taken by `reserve_outgoing` from
+every call in the body before selection. The frame leaves that much between `sp` and
+the registers saved below the slots, plus 4 bytes when r10 is among them (its 4 bytes
+would otherwise leave the memory overlapping its slot). The epilogue computes `sp` from
+r11 before it pops anything, so it gives the memory back. The register allocator does
+not count the builtins as calls (its `inline_call` hook).
+
 ## Function calls
 
 - Integers and pointers go in r0–r3, a `long long` in an even pair (r0:r1 or r2:r3);

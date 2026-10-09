@@ -108,7 +108,12 @@ static const Target targets[] = {
       0,        // double_mant_dig: binary64
       0,        // no_loop_opt
       0,        // little-endian
-      BITFIELD_AAPCS },
+      BITFIELD_AAPCS,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from r11
 
     { "aarch64",
       1, 1,   // _Bool

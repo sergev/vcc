@@ -118,6 +118,93 @@ sub sp, sp, #4096
         << code;
 }
 
+// alloca: the frame from r11 whatever else (a leaf too), sp lowered by the size
+// rounded to 8, and the epilogue that puts sp back from r11.
+TEST_F(Arm32Test, AllocaLeaf)
+{
+    EXPECT_EQ(R"(push {r11, lr}
+mov r11, sp
+add r12, r0, #7
+bic r12, r12, #7
+sub sp, sp, r12
+mov r1, sp
+sub r0, r0, #1
+add r0, r1, r0
+mov r12, #7
+strb r12, [r0]
+ldrb r0, [r0]
+mov sp, r11
+pop {r11, pc}
+)",
+              Code(CompileToArm32(R"(
+void *__builtin_alloca(unsigned int);
+int f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[n - 1] = 7;
+    return p[n - 1];
+}
+)")));
+}
+
+// The memory starts above the outgoing area, rounded to 8, which lies just below the
+// VFP registers saved; the epilogue finds them, and the core ones, from r11.
+TEST_F(Arm32Test, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToArm32(R"(
+void *__builtin_alloca(unsigned int);
+double h(double, int, int, int, int, int);
+double f(int n, double x)
+{
+    double *p = __builtin_alloca(n * sizeof(double));
+    p[0] = x;
+    double y = h(x, 1, 2, 3, 4, n);
+    return y + p[0] + x;
+}
+)"));
+    EXPECT_EQ(0u, code.find("push {r4, r11, lr}\nadd r11, sp, #4\nsub sp, sp, #4\n"
+                            "vpush {d8}\nsub sp, sp, #8\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, r12\nadd r4, sp, #8\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("str r0, [sp]\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("sub sp, r11, #16\nvpop {d8}\nsub sp, r11, #4\npop {r4, r11, pc}\n"))
+        << code;
+}
+
+// With r10 saved the saves end 4 bytes off an 8-byte boundary: the outgoing area of 4
+// bytes takes 12, so the memory, at sp + 8, stops below r10's slot.  It runs, the
+// remainder's quotient in r10 all along.
+static const char *const kAllocaR10 = R"(
+void *__builtin_alloca(unsigned int);
+int g(int, int, int, int, int);
+int f(int n, int m)
+{
+    int *p = __builtin_alloca(n * sizeof(int));
+    p[0] = n % m;
+    return g(1, 2, 3, 4, p[0]) + n % m + p[0];
+}
+)";
+
+TEST_F(Arm32Test, AllocaBelowR10)
+{
+    std::string code = Code(CompileToArm32(kAllocaR10));
+    EXPECT_EQ(0u, code.find("push {r4, r5, r11, lr}\nadd r11, sp, #8\npush {r10}\n"
+                            "sub sp, sp, #12\n"))
+        << code;
+    EXPECT_NE(std::string::npos, code.find("sub sp, sp, r12\nadd r5, sp, #8\n")) << code;
+}
+
+TEST_F(Arm32Test, RunAllocaBelowR10)
+{
+    SKIP_IF_NO_ARM32_TOOLS();
+    EXPECT_EQ("", CompileAndRunArm32(std::string(kAllocaR10) + R"(
+int g(int a, int b, int c, int d, int e) { return a + b + c + d + e; }
+int main(void) { return f(23, 5) == 10 + 3 + 3 + 3 ? 0 : 1; }
+)"));
+    EXPECT_EQ(0, exit_status);
+}
+
 TEST_F(Arm32Test, RunLocals)
 {
     SKIP_IF_NO_ARM32_TOOLS();

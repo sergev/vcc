@@ -18,6 +18,8 @@
 //   r11 - ...        saved r4-r9 in use (pushed with r11 and lr), then slots
 //   below them       the callee-saved VFP registers in use, then r10
 //   sp + 0 ...       outgoing stack arguments
+// alloca lowers sp (the frame then always from r11) by its size rounded to 8, and
+// returns sp plus the outgoing area rounded to 8, which stays below it.
 // From sp, r11 is an ordinary callee-saved register; the core registers in use (r10
 // too) and lr are pushed with one push, the VFP ones with one vpush, then come the
 // slots and the outgoing area.  A function that needs none of it has no frame.
@@ -69,6 +71,7 @@ typedef struct {
     StringMap globals; // name → const Tac_Type *
     int locals_size;   // bytes of slots below the frame record
     int outgoing;      // bytes of the outgoing argument area
+    bool moves_sp;     // calls a stack builtin (alloca): sp moves in the body
     int ret_ptr;       // slot of the result address that came in r0, or 0
     StringMap regs;    // name → allocated register + 1 (regalloc.c)
     StringMap regs_hi; // name → its high word's register + 1
@@ -220,6 +223,12 @@ void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi);
 struct Flow;
 void call_hints(const Gen *g, const struct Flow *f, const Tac_Instruction *in, int *hint);
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool a32_stack_builtin(const Tac_Instruction *in);
+// The outgoing area of every call in the body, ahead of it: what alloca's result is
+// above.  After layout_frame, which gives every name its type.
+void reserve_outgoing(Gen *g);
 void gen_return(Gen *g, const Tac_Val *v);
 // The registers that carry the function's result back, a bit each of r0-r15 and s0-s31.
 uint64_t result_regs(const Gen *g);

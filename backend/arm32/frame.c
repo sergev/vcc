@@ -1051,6 +1051,10 @@ bool gen_prologue(Gen *g)
         if (fr.r10)
             emit1(g, A32_PUSH, a32_reglist(1u << T2));
         int rest = (fr.locals + fr.saves + g->outgoing + 7) / 8 * 8 - fr.locals - fr.saves;
+        // alloca's memory starts at the outgoing area rounded to 8: that much below the
+        // saves, sp still 8-byte aligned.
+        if (g->moves_sp)
+            rest = (g->outgoing + 7) / 8 * 8 + (fr.locals + fr.saves) % 8;
         if (rest)
             gen_addr(g, A32_SP, A32_SP, -rest);
     }

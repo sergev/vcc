@@ -34,6 +34,8 @@ stack, release on `longjmp`, and no runtime call.
   `Gen.moves_sp` forcing the frame record, `reserve_outgoing`, the `inline_call` hook).
 - **RISC-V is done** ([Riscv_Backend.md](Riscv_Backend.md#alloca)), RV64 and RV32, the
   same way (`rv_stack_builtin`, the frame from s0).
+- **ARM32 is done** ([Arm32_Backend.md](Arm32_Backend.md#alloca)): the body generated
+  with r11 from the start, and 4 bytes more below the saves when r10 is one of them.
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
@@ -88,18 +90,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A5. ARM32
-
-- Intercept the builtins in `gen_call` (`backend/arm32/call.c:480`).
-- `has_alloca` skips the sp-frame first attempt (`codegen.c:103`) and goes straight to r11.
-  r11 is then not allocatable (`regalloc.c:105`).
-- Alignment 8. Selection: `sub ip, sp, n; bic ip, ip, #7; mov sp, ip; add dst, sp,
-  #outgoing`.
-- Epilogue: the r11 path (`frame.c:956`) already derives sp from r11.
-- Peephole: check the special handling of `A32_SP` (`peephole.c:130-161`, `:1448`, `:1500`)
-  and the `ldrd` pairing.
-- **Tests:** `arm32-tests`, with interop.
 
 ### A6. AVR
 
@@ -204,7 +194,6 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A5 and A6 are independent and of similar size.
 - A7 and A8 are the largest, because of the new frame-pointer modes. Their "a" halves are
   worth doing separately, validated by the whole suite.
 - A10 is optional.

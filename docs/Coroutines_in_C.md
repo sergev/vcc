@@ -830,7 +830,7 @@ standard output, and exit status 255), in every build:
 | `CO_TRAP_NO_SPACE` | an `await`, or a `co_alloca` inside a coroutine, found no spare room left (section 5) |
 
 A `co_alloca` in an ordinary function takes its memory from the stack on wasm32,
-x86-64, AArch64 and RISC-V, and running out stops the program as any stack overflow does. On the other targets it
+x86-64, AArch64, RISC-V and ARM32, and running out stops the program as any stack overflow does. On the other targets it
 takes it from a fixed arena of the runtime (64 KiB, 1 KiB on AVR and MSP430), and
 running out is `CO_TRAP_NO_SPACE: co_alloca or alloca`.
 
@@ -1145,7 +1145,7 @@ void  __coro_pop(void *frame, void *p);
   `f$init(mem, a, b)`. With no parent the frame is the root of its own task, and the
   bytes of `mem` past the frame are that task's arena.
 - `co_alloca(f, extra, ...)` does the same on `(size + extra)` rounded up to 16 bytes,
-  taken in a function from the stack on wasm32, x86-64, AArch64 and RISC-V and elsewhere with
+  taken in a function from the stack on wasm32, x86-64, AArch64, RISC-V and ARM32 and elsewhere with
   `__coro_alloca` from the runtime's arena (`libc/common/costack.c`; given back by
   `__coro_stack_restore` to what `__coro_stack_save` returned), or in a coroutine with
   `__coro_push` from the arena of the task.
