@@ -99,6 +99,8 @@ static Expr *typecheck_var(Expr *e)
     const Symbol *sym = symtab_get(e->u.var);
     if (coroutine_value(e, sym))
         return e; // a coroutine's name as a value: its coro_ptr
+    if (strcmp(e->u.var, "__builtin_alloca") == 0)
+        fatal_error("__builtin_alloca may only be called");
 
     // A block-scope static is keyed in the symtab by its source name but carries a distinct
     // backend name (so sibling-block repeats stay unique); rewrite the reference to it so the
@@ -754,6 +756,8 @@ static Expr *typecheck_expr(Expr *e)
             const Symbol *sym = symtab_get(func->u.var);
             if (!coroutine_call_allowed(e))
                 check_coroutine_name(sym);
+            if (strcmp(func->u.var, "__builtin_alloca") == 0)
+                check_alloca_call();
             // Type the callee node from its symbol.  A bare name is not decayed here (the
             // call names it directly), but it must still carry its type: a function
             // designator's is a function type and a function-pointer variable's is a

@@ -106,6 +106,7 @@ typedef struct {
     char *where;          // the "where next" variable of the shared cleanups, made when needed
     char *ret_var;        // the value a return through a shared cleanup returns
     int ndest_ids;        // the values `where` has taken
+    char *alloca_sp;      // the arena mark at entry, when the function calls alloca there
 } TacCtx;
 
 //
@@ -278,6 +279,8 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e);
 Tac_Val *gen_await(TacCtx *ctx, Expr *e);
 void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type); // value may be NULL
 void gen_co_release(TacCtx *ctx, const ExitAction *a);
+Tac_Val *gen_alloca(TacCtx *ctx, Expr *e); // a call of __builtin_alloca
+void gen_alloca_release(TacCtx *ctx);      // the function lowered: the arena given back
 void gen_finish_code(TacCtx *ctx, unsigned state); // a coroutine's state set, and return 1
 
 // A coroutine after the optimizer: the split pass (stage 2) makes f$resume a state

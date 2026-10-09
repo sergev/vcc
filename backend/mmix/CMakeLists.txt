@@ -26,6 +26,7 @@ list(FILTER MMIX_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-8])_tests[0-9]*\
 
 add_executable(mmix-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp

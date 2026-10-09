@@ -24,6 +24,7 @@ target_link_libraries(x86 backend_common tac libutil)
 
 add_executable(x86-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp

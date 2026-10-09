@@ -27,6 +27,7 @@ list(FILTER MSP430_BOOK_SOURCES INCLUDE REGEX "/chapter([1-9]|1[0-9]|20)_tests[0
 
 add_executable(msp430-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp

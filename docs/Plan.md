@@ -37,8 +37,8 @@ stack, release on `longjmp`, and no runtime call.
    frame pointer, so a plain `alloca` needs no save or restore in TAC.
 
    On an arena target, during the transition, the translator saves the mark at function entry
-   and restores it on every exit. This uses a new function-level exit action
-   `EXIT_STACK_RESTORE` and the existing `TacScope` machinery in `translator/stmt.c`.
+   and restores it before every `RETURN` and at a reachable end (`gen_alloca_release` in
+   `translator/coro.c`, run on the finished body, after the defers of each exit).
 4. **Backend contract.** A backend that sets `stack_alloca` supports all three builtins inline.
    They are not calls: no clobbers, and they do not end a leaf. A function containing any of
    them:
@@ -58,7 +58,17 @@ stack, release on `longjmp`, and no runtime call.
 Each task leaves `ctest -j8` green on every target, and BESM-6 output unchanged except in A10.
 Commit after each.
 
-### A1. Front end and arena fallback (every target but BESM-6)
+### A1. Front end and arena fallback (every target but BESM-6) — done
+
+As built, it differs from the sketch below in two points:
+- **No exit action.** The release is a pass over the lowered body, a restore before every
+  `RETURN`, not a function-level `EXIT_STACK_RESTORE`. An action in the outermost block would
+  upset the counts the `goto` checks keep per block (`semantic/defer.c`).
+- **No flag on the symbol.** The translator notes the first call itself (`TacCtx.alloca_sp`).
+  On wasm32 the raw size goes to `__builtin_alloca`, whose expansion already rounds sp down to
+  16; A9 has nothing left to change there.
+
+The `setjmp`/`longjmp` run case waits for A2, the first target where it can pass.
 
 - **`libc/common/include/alloca.h`**, plus the hosted copies. `HostedHeadersAgreeWithSystem`
   covers the hosted ones.
@@ -101,7 +111,8 @@ Commit after each.
 - Epilogue: `lea rsp, [rbp - 8*nsaved]` before the pops (`frame.c:635`).
 - Peephole runs on `X86_FRAME` before the frame is laid out. The rsp liveness already in
   `peephole.c:202` must see the adjustment as a def of rsp.
-- Set `stack_alloca` for `x86_64` and `x86_64-linux`, and drop the A1 arena path there.
+- Set `stack_alloca` for `x86_64` and `x86_64-linux`; the A1 arena path then turns off by
+  itself.
 - **Tests:**
   - goldens in `call_tests.cpp`/`frame_tests.cpp`;
   - the shared run suite on qemu and hosted;
@@ -226,7 +237,7 @@ wasm already allocates on the shadow stack.
 ### A11. Retire the arena path
 
 Once every target sets `stack_alloca`:
-- Remove `EXIT_STACK_RESTORE` and the arena branch from the translator.
+- Remove `gen_alloca_release` and the arena branch of `gen_alloca` from the translator.
 - Mark `co_alloca`'s arena use outside coroutines as gone in
   `docs/Coroutines_Internals.md`.
 - Decide whether `costack.c`'s `__coro_stack_*` stay. They are still needed for coroutines'

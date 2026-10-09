@@ -1493,7 +1493,8 @@ TEST_F(CcDriver, StagedPrefixHost)
     std::string lib    = prefix + "/share/vcc/" + target + "/lib";
     StageLibvcc(prefix);
 
-    WriteSource("main.c", "#include <errno.h>\n"
+    WriteSource("main.c", "#include <alloca.h>\n"
+                          "#include <errno.h>\n"
                           "#include <math.h>\n"
                           "#include <setjmp.h>\n"
                           "#include <stdarg.h>\n"
@@ -1527,6 +1528,9 @@ TEST_F(CcDriver, StagedPrefixHost)
                           "    printf(\"%d %d%d%d\\n\", r, a[0], a[1], a[2]);\n"
                           "    int (*p)(const char *) = puts;\n"
                           "    p(\"puts\");\n"
+                          "    char *s = alloca(6);\n"
+                          "    strcpy(s, \"stack\");\n"
+                          "    p(s);\n"
                           "    ldiv_t d = ldiv(-17L, 5L);\n"
                           "    printf(\"%ld %ld %.4Lf %.4f\\n\", d.quot, d.rem, 1.0L / 3, sqrt(2.0));\n"
                           "    return 3;\n"
@@ -1539,6 +1543,7 @@ TEST_F(CcDriver, StagedPrefixHost)
                                        "1\n"
                                        "7 123\n"
                                        "puts\n"
+                                       "stack\n"
                                        "-3 -2 0.3333 1.4142\n");
 
     std::string echo = Stdout();

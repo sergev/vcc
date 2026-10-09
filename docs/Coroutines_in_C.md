@@ -832,7 +832,7 @@ standard output, and exit status 255), in every build:
 A `co_alloca` in an ordinary function takes its memory from the stack on wasm32, and
 running out stops the program as any stack overflow does. On the other targets it
 takes it from a fixed arena of the runtime (64 KiB, 1 KiB on AVR and MSP430), and
-running out is `CO_TRAP_NO_SPACE: co_alloca`.
+running out is `CO_TRAP_NO_SPACE: co_alloca or alloca`.
 
 ### Warnings
 

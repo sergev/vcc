@@ -258,7 +258,7 @@ what catch a misused frame.
   `stack_alloca` they are `__coro_stack_save`, `__coro_alloca` and
   `__coro_stack_restore`, calls of `libc/common/costack.c`: a static arena (64 KiB,
   1 KiB where `size_t` has 16 bits) taken and given back in LIFO order, its overflow
-  `CO_TRAP_NO_SPACE: co_alloca`. The stack would do as well, but the other backends
+  `CO_TRAP_NO_SPACE: co_alloca or alloca`. The stack would do as well, but the other backends
   address their frames from the stack pointer and have no dynamic allocation; the
   arena needs no backend at all. Its cost: a fixed size, and a `longjmp` out of the
   block leaves the memory taken until an enclosing block's release.

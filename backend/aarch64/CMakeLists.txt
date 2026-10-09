@@ -25,6 +25,7 @@ list(FILTER AARCH64_BOOK_SOURCES INCLUDE REGEX "/chapter[0-9]+_tests[0-9]*\\.cpp
 
 add_executable(aarch64-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/frame_tests.cpp
@@ -82,6 +83,7 @@ set(darwin_dir ${CMAKE_CURRENT_BINARY_DIR}/darwin)
 file(MAKE_DIRECTORY ${darwin_dir})
 add_executable(aarch64-darwin-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/darwin_tests.cpp
     test/interop_tests.cpp
     test/printf_tests.cpp

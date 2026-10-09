@@ -1,9 +1,10 @@
 /*
- * The memory co_alloca takes in an ordinary function, on a target whose backend does not
- * allocate on the stack itself (all but wasm32, which expands __builtin_alloca and the
- * rest on its shadow stack): a static arena, given back in LIFO order at the end of the
- * co_alloca's block (docs/Coroutines_Internals.md §5).  A longjmp out of such a block
- * leaves its memory taken until an enclosing block gives back its own.
+ * The memory co_alloca and alloca take in an ordinary function, on a target whose
+ * backend does not allocate on the stack itself (all but wasm32, which expands
+ * __builtin_alloca and the rest on its shadow stack): a static arena, given back in LIFO
+ * order at the end of the co_alloca's block, or at the return of the function that
+ * called alloca (docs/Coroutines_Internals.md §5).  A longjmp out of either leaves its
+ * memory taken until an enclosing block or function gives back its own.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -29,7 +30,7 @@ void *__coro_alloca(size_t bytes)
 {
     char *p = costack_top;
     if (bytes > (size_t)(costack + COSTACK_BYTES - p))
-        __coro_trap("CO_TRAP_NO_SPACE", "co_alloca");
+        __coro_trap("CO_TRAP_NO_SPACE", "co_alloca or alloca");
     costack_top = p + bytes;
     return p;
 }

@@ -22,6 +22,7 @@ target_link_libraries(wasm backend_common tac libutil)
 #
 add_executable(wasm32-tests
     ../common/test/coro/coro_run_tests.cpp
+    ../common/test/alloca/alloca_run_tests.cpp
     test/emit_tests.cpp
     test/codegen_tests.cpp
     test/int_tests.cpp

@@ -242,6 +242,16 @@ static const Type *result_of(const Symbol *sym)
     return unalias(sym->type)->u.function.return_type;
 }
 
+// alloca (<alloca.h>): memory on the stack of an ordinary function, which a
+// coroutine's frame outlives.  BESM-6 has neither the arena nor the builtin yet.
+void check_alloca_call(void)
+{
+    if (target_config->no_coroutines)
+        fatal_error("alloca is not supported on target %s", target_config->name);
+    if (in_coro)
+        fatal_error("alloca in a coroutine: its frame outlives the stack");
+}
+
 bool coroutine_call_allowed(const Expr *call)
 {
     return call == arena_call;

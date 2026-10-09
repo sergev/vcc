@@ -163,3 +163,56 @@ TEST_F(TranslateTestX86, CoroutineHeaderLp64)
     ASSERT_NE(std::string::npos, at) << yaml;
     EXPECT_TRUE(Has(yaml.substr(at, 400), "value: 40")) << yaml.substr(at, 400);
 }
+
+// alloca on the arena: the mark saved at the entry, restored before each return and at
+// the end.
+static int Count(const std::string &yaml, const std::string &what)
+{
+    int n = 0;
+    for (size_t at = yaml.find(what); at != std::string::npos; at = yaml.find(what, at + 1))
+        n++;
+    return n;
+}
+
+static const char *const alloca_fn = R"(
+void *__builtin_alloca(unsigned long);
+int g(int);
+void f(int n)
+{
+    char *p = __builtin_alloca(n);
+    p[0] = 3;
+    if (n > 10) {
+        g(p[0]);
+        return;
+    }
+    if (n > 5) {
+        g(n);
+        return;
+    }
+    g(0);
+}
+)";
+
+TEST_F(TranslateTestX86, AllocaOnArena)
+{
+    std::string yaml = CompileToYaml(alloca_fn);
+    EXPECT_FALSE(Has(yaml, "__builtin_alloca")) << yaml;
+    EXPECT_EQ(1, Count(yaml, "fun_name: __coro_stack_save")) << yaml;
+    EXPECT_EQ(1, Count(yaml, "fun_name: __coro_alloca")) << yaml;
+    EXPECT_EQ(3, Count(yaml, "fun_name: __coro_stack_restore")) << yaml;
+    size_t save = yaml.find("fun_name: __coro_stack_save");
+    EXPECT_LT(save, yaml.find("fun_name: __coro_alloca")) << yaml;
+    // Each return right after a restore.
+    for (size_t at = yaml.find("kind: return"); at != std::string::npos; at = yaml.find("kind: return", at + 1))
+        EXPECT_LT(yaml.rfind("fun_name: g", at), yaml.rfind("fun_name: __coro_stack_restore", at)) << yaml;
+}
+
+// Where the backend has the builtins, the epilogue gives the memory back.
+TEST_F(TranslateTestWasm32, AllocaOnStack)
+{
+    std::string yaml = CompileToYaml(alloca_fn);
+    EXPECT_EQ(1, Count(yaml, "fun_name: __builtin_alloca")) << yaml;
+    EXPECT_FALSE(Has(yaml, "stack_save")) << yaml;
+    EXPECT_FALSE(Has(yaml, "stack_restore")) << yaml;
+    EXPECT_FALSE(Has(yaml, "__coro_alloca")) << yaml;
+}

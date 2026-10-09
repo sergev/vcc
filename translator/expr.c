@@ -1833,6 +1833,8 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
             tac_append(ctx, in);
             return val_var(vd->u.var_name);
         }
+        if (e->u.call.func->kind == EXPR_VAR && strcmp(e->u.call.func->u.var, "__builtin_alloca") == 0)
+            return gen_alloca(ctx, e);
         Tac_Val *args_head  = NULL;
         Tac_Val **args_tail = &args_head;
         for (Expr *arg = e->u.call.args; arg; arg = arg->next) {

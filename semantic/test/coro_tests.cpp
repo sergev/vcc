@@ -683,3 +683,51 @@ void f(void)
 }
 )").find("outlives its storage 's'"));
 }
+
+// --- alloca ------------------------------------------------------------------
+
+TEST_F(CoroTest, Alloca)
+{
+    RunPipeline(R"(
+#include <alloca.h>
+int f(int n)
+{
+    char *p = alloca(n);
+    p[0] = 1;
+    return p[0];
+}
+)");
+}
+
+TEST_F(CoroTest, AllocaAsValue_Neg)
+{
+    EXPECT_DEATH(RunPipeline(R"(
+#include <alloca.h>
+void *(*get(void))(unsigned long) { return __builtin_alloca; }
+)"),
+                 "__builtin_alloca may only be called");
+}
+
+TEST_F(CoroTest, AllocaInCoroutine_Neg)
+{
+    EXPECT_DEATH(RunPipeline(R"(
+#include <alloca.h>
+#include <coro.h>
+coro(int) void g(int n)
+{
+    char *p = alloca(n);
+    yield p[0];
+}
+)"),
+                 "alloca in a coroutine");
+}
+
+TEST_F(PipelineTest, AllocaNotOnTarget_Neg)
+{
+    EXPECT_DEATH(
+        {
+            target_config = target_lookup("besm6");
+            RunPipeline("void *__builtin_alloca(unsigned long); void *f(void) { return __builtin_alloca(6); }");
+        },
+        "alloca is not supported on target besm6");
+}
