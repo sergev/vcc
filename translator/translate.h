@@ -30,12 +30,34 @@ typedef struct {
                  // NULL in a coroutine, whose co_alloca takes the arena
 } ExitAction;
 
-// A block being lowered, and the exit actions registered in it so far.
+// Where an exit that runs a block's shared cleanup goes when it is done: a label, a
+// return (of the function's one return variable, when it has a value), or the end of a
+// coroutine with its final state.
+typedef enum { DEST_LABEL, DEST_RETURN, DEST_FINISH } DestKind;
+
+typedef struct {
+    DestKind kind;
+    char *label;     // DEST_LABEL
+    bool value;      // DEST_RETURN: returns the return variable
+    unsigned state;  // DEST_FINISH
+    int id;          // the value of the "where next" variable that picks it
+} ExitDest;
+
+// A block being lowered, and the exit actions registered in it so far.  When an exit
+// shares its cleanup (stmt.c), the block's actions are also lowered once more at its end
+// as a chain: an entry label in front of each, then a test of the "where next" variable
+// for the exits that end here, then on to the next block out that has actions.
 typedef struct {
     const Stmt *key; // as in DeferScope (semantic/defer.h)
     ExitAction *actions;
     int count, cap;
     Tac_Instruction *entry; // the last instruction before the block, NULL at the start
+    bool chained;           // some exit goes through the chain
+    bool continues;         // and some goes on past this block
+    char **entries;         // entries[j]: the label in front of action j, or NULL
+    int nentries;
+    ExitDest *dests;        // the exits that end after this block's chain
+    int ndests, dests_cap;
 } TacScope;
 
 // The coroutine being lowered (translator/coro.c): its frame pointer parameter, and
@@ -81,6 +103,9 @@ typedef struct {
     Stmt *body;           // the function body, where label_pos comes from
     int defer_depth;      // deferred statements being lowered, one inside another
     const TacCoro *coro;  // the coroutine being lowered, or NULL
+    char *where;          // the "where next" variable of the shared cleanups, made when needed
+    char *ret_var;        // the value a return through a shared cleanup returns
+    int ndest_ids;        // the values `where` has taken
 } TacCtx;
 
 //
@@ -104,6 +129,7 @@ extern int translator_debug;
 // problem.  Always on in a build without NDEBUG.
 extern int translate_verify;
 extern int translate_rotate_loops; // set by translate() from OptFlags.loop_rotate
+extern bool translate_shared_cleanup; // an exit may share a large cleanup (stmt.c); --no-shared-cleanup
 extern int import_debug;
 extern int export_debug;
 extern int wio_debug;
@@ -228,6 +254,9 @@ void gen_string_array_init(TacCtx *ctx, const char *var_name, const Expr *str_ex
 void tac_scope_add(TacCtx *ctx, ExitAction action); // to the innermost block
 void tac_scope_entry(TacCtx *ctx, Tac_Instruction *in); // run on entering the innermost block
 void gen_exits_all(TacCtx *ctx); // the exit actions of every open block, innermost first
+// Leave every open block and end the coroutine with `state`, returning 1: its exit
+// actions run through the shared cleanup when there are any.
+void gen_finish(TacCtx *ctx, unsigned state);
 
 //
 // Coroutines (coro.c; backend/wasm/Plan.md §6)
@@ -242,6 +271,7 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e);
 Tac_Val *gen_await(TacCtx *ctx, Expr *e);
 void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type); // value may be NULL
 void gen_co_release(TacCtx *ctx, const ExitAction *a);
+void gen_finish_code(TacCtx *ctx, unsigned state); // a coroutine's state set, and return 1
 
 // A coroutine after the optimizer: the split pass (stage 2) makes f$resume a state
 // machine over the frame, the user's parameters and every name live across a

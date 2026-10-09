@@ -993,6 +993,8 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         tac_free_param(ctx.array_locals);
         free_user_labels(&ctx.user_labels);
         xfree(ctx.scopes);
+        xfree(ctx.where);
+        xfree(ctx.ret_var);
         xfree(ctx.breaks);
         if (ctx.label_pos_ready)
             defer_free_labels(&ctx.label_pos);

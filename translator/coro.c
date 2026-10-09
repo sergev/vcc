@@ -254,6 +254,14 @@ static void store_in_frame(TacCtx *ctx, Tac_Val *v, const Type *t, int off)
     }
 }
 
+// The end of a coroutine, its exit actions run: the final state, and CO_DONE or the
+// status of a destroy, which is 1 too.
+void gen_finish_code(TacCtx *ctx, unsigned state)
+{
+    emit_state(ctx, state);
+    emit_return_int(ctx, 1);
+}
+
 Tac_Val *gen_yield(TacCtx *ctx, Expr *e)
 {
     const TacCoro *co = ctx->coro;
@@ -276,9 +284,7 @@ Tac_Val *gen_yield(TacCtx *ctx, Expr *e)
     jz->u.jump_if_zero.condition = val_var(destroy->u.var_name);
     jz->u.jump_if_zero.target    = over;
     append(ctx, jz);
-    gen_exits_all(ctx);
-    emit_state(ctx, CO_STATE_DESTROYED);
-    emit_return_int(ctx, 1);
+    gen_finish(ctx, CO_STATE_DESTROYED);
     emit_label(ctx, over);
     return signal;
 }
@@ -287,9 +293,7 @@ void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type)
 {
     if (value)
         store_in_frame(ctx, value, type, ctx->coro->result_off);
-    gen_exits_all(ctx);
-    emit_state(ctx, CO_STATE_DONE);
-    emit_return_int(ctx, 1); // CO_DONE
+    gen_finish(ctx, CO_STATE_DONE); // CO_DONE
 }
 
 // Does coroutine `g` have a coro_ptr, and so a descriptor of four words?
@@ -693,9 +697,7 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
                    : emit_resume(ctx, dup_val(sub), val_int(CO_SIGNAL_DESTROY)));
     if (arena)
         emit_pop(ctx, dup_val(sub));
-    gen_exits_all(ctx);
-    emit_state(ctx, CO_STATE_DESTROYED);
-    emit_return_int(ctx, 1);
+    gen_finish(ctx, CO_STATE_DESTROYED);
     emit_label(ctx, over);
     emit_copy(ctx, signal, sig->u.var_name);
     emit_jump(ctx, loop);

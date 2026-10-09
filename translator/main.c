@@ -49,6 +49,7 @@ typedef struct {
     int no_dead_store;       // --no-dead-store
     int no_loop_rotate;      // --no-loop-rotate
     int no_ivsr;             // --no-ivsr
+    int no_shared_cleanup;   // --no-shared-cleanup
     int opt_debug;           // --opt-debug
     int verify;              // --verify
 } Args;
@@ -74,6 +75,7 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-dead-store     Disable dead store elimination\n");
     fprintf(stderr, "    --no-loop-rotate    Disable loop rotation (a loop tested at its bottom)\n");
     fprintf(stderr, "    --no-ivsr           Disable induction-variable strength reduction\n");
+    fprintf(stderr, "    --no-shared-cleanup Lower a defer on every way out, never sharing one copy\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
     fprintf(stderr, "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
@@ -104,6 +106,7 @@ static void init_args(Args *args)
     args->no_dead_store  = 0;
     args->no_loop_rotate = 0;
     args->no_ivsr        = 0;
+    args->no_shared_cleanup = 0;
     args->verify         = 0;
     args->opt_debug      = 0;
 }
@@ -156,6 +159,7 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "opt-max-iter", required_argument, 0, 262 }, //
         { "no-loop-rotate", no_argument, 0, 263 }, //
         { "no-ivsr", no_argument, 0, 264 },        //
+        { "no-shared-cleanup", no_argument, 0, 265 }, //
         {},                                        //
     };
 
@@ -217,6 +221,9 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 264:
             args->no_ivsr = 1;
+            break;
+        case 265:
+            args->no_shared_cleanup = 1;
             break;
         case '?': // Unknown option
             return -1;
@@ -322,6 +329,7 @@ void process_file(const Args *args)
     flags.dead_store_elim  = !args->no_dead_store;
     flags.loop_rotate      = !args->no_loop_rotate;
     flags.ivsr             = !args->no_ivsr;
+    translate_shared_cleanup = !args->no_shared_cleanup;
     if (args->verify)
         translate_verify = 1;
     flags.debug            = args->opt_debug;

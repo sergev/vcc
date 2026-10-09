@@ -165,3 +165,32 @@ void f(int x)
         return n;
     }());
 }
+
+// A large cleanup that several exits leave by is lowered once more, at the end of its
+// block, and the exits share that copy: each sets the "where next" variable (a copy,
+// not traced) and jumps in; the chain runs the cleanup, then the return (phase C9).
+static const char *const shared_src = R"(
+void g(int);
+int f(int k) { _Defer { g(1); g(2); g(3); g(4); } if (k) return 5; return 6; }
+)";
+
+TEST_F(TranslateTestX86, DeferShared)
+{
+    EXPECT_EQ("jump jump label label jump label g1 g2 g3 g4 jump label ret label",
+              Trace(CompileToYaml(shared_src)));
+}
+
+// With sharing off, each exit has its own copy; and BESM-6, whose code must not change,
+// never shares.
+TEST_F(TranslateTestX86, DeferSharedOff)
+{
+    translate_shared_cleanup = false;
+    std::string trace        = Trace(CompileToYaml(shared_src));
+    translate_shared_cleanup = true;
+    EXPECT_EQ("g1 g2 g3 g4 ret5 jump label label g1 g2 g3 g4 ret6", trace);
+}
+
+TEST_F(TranslateTest, DeferSharedNotOnBesm6)
+{
+    EXPECT_EQ("g1 g2 g3 g4 ret5 jump label label g1 g2 g3 g4 ret6", Trace(CompileToYaml(shared_src)));
+}

@@ -61,6 +61,7 @@ protected:
     {
         wasm_structure = true;
         wasm_regional  = true;
+        translate_shared_cleanup = true;
         wasm_peephole  = true;
         wasm_stackify  = true;
         wasm_coalesce  = true;

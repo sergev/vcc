@@ -155,3 +155,100 @@ int main(void)
 }
 )"));
 }
+
+// Large cleanups shared by the exits that leave them (phase C9): break, continue, a
+// goto out of two blocks, returns of a value from three depths, each with a chain of
+// several statements in blocks inside one another; and a coroutine destroyed at each of
+// its suspension points.  The same output with every exit lowering its own copy.
+static const char *const shared_src = R"(
+#include <coro.h>
+#include <stdio.h>
+
+static int trace[64], n;
+static void note(int x) { trace[n++] = x; }
+
+static int returns(int k)
+{
+    int total = 0;
+    defer { note(1); note(2); note(3); note(4); }
+    {
+        defer { note(10); note(11); note(12); note(13); }
+        if (k == 0)
+            return total + 100;
+        for (int i = 0; i < 3; i++) {
+            defer { note(20 + i); note(30 + i); note(40); note(41); }
+            if (i == k)
+                return total + i;
+            if (i == 1 && k == 9)
+                continue;
+            if (i == 2 && k == 8)
+                break;
+            total += 1000;
+        }
+        if (k == 7)
+            goto out;
+        total += 5;
+    }
+    note(99);
+out:
+    return total;
+}
+
+static coro(int) void gen(void)
+{
+    defer { note(50); note(51); note(52); note(53); }
+    for (int i = 0; i < 4; i++) {
+        defer { note(60 + i); note(70); note(71); note(72); }
+        yield i;
+    }
+}
+
+int main(void)
+{
+    int ks[] = { 0, 1, 2, 7, 8, 9, 5 };
+    for (int j = 0; j < 7; j++) {
+        n = 0;
+        int r = returns(ks[j]);
+        printf("%d:%d:", ks[j], r);
+        for (int i = 0; i < n; i++)
+            printf(" %d", trace[i]);
+        printf("\n");
+    }
+    for (int stop = 0; stop <= 4; stop++) {
+        n = 0;
+        static char storage[1024];
+        co_frame(int, void) *g = co_init(storage, sizeof storage, gen);
+        for (int i = 0; i < stop; i++)
+            co_resume(g);
+        if (!co_done(g))
+            co_destroy(g);
+        printf("destroy after %d:", stop);
+        for (int i = 0; i < n; i++)
+            printf(" %d", trace[i]);
+        printf("\n");
+    }
+    return 0;
+}
+)";
+
+TEST_F(WasmTest, DeferShared)
+{
+    SKIP_IF_NO_WASM32_TOOLS();
+    const char *want =
+        "0:100: 10 11 12 13 1 2 3 4\n"
+        "1:1001: 20 30 40 41 21 31 40 41 10 11 12 13 1 2 3 4\n"
+        "2:2002: 20 30 40 41 21 31 40 41 22 32 40 41 10 11 12 13 1 2 3 4\n"
+        "7:3000: 20 30 40 41 21 31 40 41 22 32 40 41 10 11 12 13 1 2 3 4\n"
+        "8:2005: 20 30 40 41 21 31 40 41 22 32 40 41 10 11 12 13 99 1 2 3 4\n"
+        "9:2005: 20 30 40 41 21 31 40 41 22 32 40 41 10 11 12 13 99 1 2 3 4\n"
+        "5:3005: 20 30 40 41 21 31 40 41 22 32 40 41 10 11 12 13 99 1 2 3 4\n"
+        "destroy after 0:\n"
+        "destroy after 1: 60 70 71 72 50 51 52 53\n"
+        "destroy after 2: 60 70 71 72 61 70 71 72 50 51 52 53\n"
+        "destroy after 3: 60 70 71 72 61 70 71 72 62 70 71 72 50 51 52 53\n"
+        "destroy after 4: 60 70 71 72 61 70 71 72 62 70 71 72 63 70 71 72 50 51 52 53\n";
+    EXPECT_EQ(want, CompileAndRunWasm(shared_src));
+    NextUnit();
+    translate_shared_cleanup = false;
+    EXPECT_EQ(want, CompileAndRunWasm(shared_src));
+}

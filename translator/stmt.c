@@ -408,6 +408,16 @@ static void emit_loop_test(TacCtx *ctx, Expr *cond, bool if_true, const char *ta
 // its loops and labels are renamed each time, and its own blocks and loops are a
 // stack of their own, since nothing leaves it (semantic/defer.c checks that).
 //
+// An exit whose cleanup is large (a coroutine's destroy paths, one per suspension
+// point, from a smaller size) shares it instead: it sets the "where next" variable and jumps
+// into the chain of the innermost block it leaves that has actions, the actions lowered
+// once more at that block's end.  The chain runs them from the exit's point on, then
+// tests the variable for the exits that end there and otherwise goes on into the chain
+// of the next block out.  This works because an exit from inside a block always goes
+// on into the same place outside it: the actions of an enclosing block cannot change
+// while the inner block is open.  The fall-through keeps its own copy, so the common
+// path pays nothing.  BESM-6, whose code must not change, keeps the copies.
+//
 
 static void scope_push(TacCtx *ctx, const Stmt *key)
 {
@@ -419,7 +429,7 @@ static void scope_push(TacCtx *ctx, const Stmt *key)
         xfree(ctx->scopes);
         ctx->scopes = s;
     }
-    ctx->scopes[ctx->nscopes++] = (TacScope){ key, NULL, 0, 0, ctx->tail };
+    ctx->scopes[ctx->nscopes++] = (TacScope){ .key = key, .entry = ctx->tail };
 }
 
 static void scope_pop(TacCtx *ctx)
@@ -430,6 +440,12 @@ static void scope_pop(TacCtx *ctx)
         xfree(sc->actions[i].sp);
     }
     xfree(sc->actions);
+    for (int i = 0; i < sc->nentries; i++)
+        xfree(sc->entries[i]);
+    xfree(sc->entries);
+    for (int i = 0; i < sc->ndests; i++)
+        xfree(sc->dests[i].label);
+    xfree(sc->dests);
 }
 
 void tac_scope_entry(TacCtx *ctx, Tac_Instruction *in)
@@ -495,10 +511,12 @@ static void gen_deferred(TacCtx *ctx, Stmt *body)
     int nbreaks       = ctx->nbreaks;
     int breaks_cap    = ctx->breaks_cap;
     StringMap labels  = ctx->user_labels;
+    char *where       = ctx->where;
     ctx->scopes       = NULL;
     ctx->nscopes      = ctx->scopes_cap = 0;
     ctx->breaks       = NULL;
     ctx->nbreaks      = ctx->breaks_cap = 0;
+    ctx->where        = NULL; // its own, should an exit inside it share a cleanup
     map_init(&ctx->user_labels);
 
     label_loops_stmt(body, &ctx->temp_id);
@@ -516,6 +534,8 @@ static void gen_deferred(TacCtx *ctx, Stmt *body)
     ctx->nbreaks     = nbreaks;
     ctx->breaks_cap  = breaks_cap;
     ctx->user_labels = labels;
+    xfree(ctx->where);
+    ctx->where = where;
 }
 
 static void run_action(TacCtx *ctx, const ExitAction *a)
@@ -552,6 +572,223 @@ void gen_exits_all(TacCtx *ctx)
     run_exits(ctx, 0);
 }
 
+// The cleanup an exit shares from this size on: a deferred statement weighs three per
+// statement in it, the release of a co_alloca as much as four.
+// A coroutine's destroy paths, one per suspension point, share from a smaller size.
+enum { CHAIN_MIN = 12, CHAIN_MIN_DESTROY = 6, RELEASE_SIZE = 12 };
+
+bool translate_shared_cleanup = true;
+
+// May an exit share its cleanup here?  Never on BESM-6, whose code must not change.
+static bool may_share(void)
+{
+    return translate_shared_cleanup && !target_config->no_loop_opt;
+}
+
+static int stmt_size(const Stmt *s)
+{
+    if (!s)
+        return 0;
+    switch (s->kind) {
+    case STMT_COMPOUND: {
+        int n = 0;
+        for (const DeclOrStmt *ds = s->u.compound; ds; ds = ds->next)
+            n += ds->kind == DECL_OR_STMT_STMT ? stmt_size(ds->u.stmt) : 3;
+        return n;
+    }
+    case STMT_IF:
+        return 3 + stmt_size(s->u.if_stmt.then_stmt) + stmt_size(s->u.if_stmt.else_stmt);
+    case STMT_SWITCH:
+        return 3 + stmt_size(s->u.switch_stmt.body);
+    case STMT_WHILE:
+        return 3 + stmt_size(s->u.while_stmt.body);
+    case STMT_DO_WHILE:
+        return 3 + stmt_size(s->u.do_while.body);
+    case STMT_FOR:
+        return 6 + stmt_size(s->u.for_stmt.body);
+    case STMT_LABELED:
+        return stmt_size(s->u.labeled.stmt);
+    case STMT_CASE:
+        return stmt_size(s->u.case_stmt.stmt);
+    case STMT_DEFAULT:
+        return stmt_size(s->u.default_stmt);
+    case STMT_DEFER:
+        return stmt_size(s->u.defer_stmt);
+    default:
+        return 3;
+    }
+}
+
+// The size of the cleanup of an exit out to block `depth`.
+static int exit_size(const TacCtx *ctx, int depth)
+{
+    int n = 0;
+    for (int i = depth; i < ctx->nscopes; i++)
+        for (int j = 0; j < ctx->scopes[i].count; j++)
+            n += ctx->scopes[i].actions[j].kind == EXIT_CO_RELEASE
+                     ? RELEASE_SIZE
+                     : stmt_size(ctx->scopes[i].actions[j].stmt);
+    return n;
+}
+
+// Where an exit goes once its cleanup has run.
+static void emit_dest(TacCtx *ctx, const ExitDest *d)
+{
+    switch (d->kind) {
+    case DEST_LABEL:
+        emit_jump(ctx, d->label);
+        break;
+    case DEST_RETURN: {
+        Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
+        in->u.return_.src   = d->value ? val_var(ctx->ret_var) : NULL;
+        tac_append(ctx, in);
+        break;
+    }
+    case DEST_FINISH:
+        gen_finish_code(ctx, d->state);
+        break;
+    }
+}
+
+// The label in front of action j in the chain of block m, made when first asked for.
+static const char *entry_label(TacCtx *ctx, int m, int j)
+{
+    TacScope *sc = &ctx->scopes[m];
+    sc->chained  = true;
+    if (j >= sc->nentries) {
+        char **e = xalloc((j + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+        for (int i = 0; i < sc->nentries; i++)
+            e[i] = sc->entries[i];
+        xfree(sc->entries);
+        sc->entries  = e;
+        sc->nentries = j + 1;
+    }
+    if (!sc->entries[j])
+        sc->entries[j] = new_temp(ctx);
+    return sc->entries[j];
+}
+
+static bool same_dest(const ExitDest *a, const ExitDest *b)
+{
+    return a->kind == b->kind && a->value == b->value && a->state == b->state &&
+           (a->kind != DEST_LABEL || strcmp(a->label, b->label) == 0);
+}
+
+// Leave the blocks from the innermost out to block `depth`, that one included, and go
+// to `d` (its label owned): the cleanup lowered here, or shared through the chains when
+// it is at least `min` large.  Shared, a return's value is in ret_var already.
+static void leave(TacCtx *ctx, int depth, ExitDest d, int min)
+{
+    int top = -1, low = -1;
+    for (int m = ctx->nscopes - 1; m >= depth; m--)
+        if (ctx->scopes[m].count > 0) {
+            if (top < 0)
+                top = m;
+            low = m;
+        }
+    bool share = top >= 0 && may_share() && exit_size(ctx, depth) >= min;
+    if (!share) {
+        run_exits(ctx, depth);
+        emit_dest(ctx, &d);
+        xfree(d.label);
+        return;
+    }
+    TacScope *sc = &ctx->scopes[low];
+    int k        = 0;
+    while (k < sc->ndests && !same_dest(&sc->dests[k], &d))
+        k++;
+    if (k == sc->ndests) {
+        if (sc->ndests == sc->dests_cap) {
+            sc->dests_cap = sc->dests_cap ? 2 * sc->dests_cap : 4;
+            ExitDest *n   = xalloc(sc->dests_cap * sizeof *n, __func__, __FILE__, __LINE__);
+            for (int i = 0; i < sc->ndests; i++)
+                n[i] = sc->dests[i];
+            xfree(sc->dests);
+            sc->dests = n;
+        }
+        d.id                  = ctx->ndest_ids++;
+        sc->dests[sc->ndests++] = d;
+    } else {
+        xfree(d.label);
+    }
+    if (!ctx->where)
+        ctx->where = new_typed_temp(ctx, tac_new_type(TAC_TYPE_INT));
+    Tac_Instruction *set = tac_new_instruction(TAC_INSTRUCTION_COPY);
+    set->u.copy.src      = val_int(sc->dests[k].id);
+    set->u.copy.dst      = val_var(ctx->where);
+    tac_append(ctx, set);
+    for (int m = low + 1; m <= top; m++)
+        if (ctx->scopes[m].count > 0)
+            ctx->scopes[m].continues = true;
+    emit_jump(ctx, entry_label(ctx, top, ctx->scopes[top].count - 1));
+}
+
+void gen_finish(TacCtx *ctx, unsigned state)
+{
+    leave(ctx, 0, (ExitDest){ .kind = DEST_FINISH, .state = state }, CHAIN_MIN_DESTROY);
+}
+
+// The chain of the innermost block, about to close (see above): after a jump, so the
+// fall-through does not run it.
+static void emit_chain(TacCtx *ctx)
+{
+    int i = ctx->nscopes - 1;
+    if (!ctx->scopes[i].chained)
+        return;
+    char *after    = new_temp(ctx);
+    bool reachable = !ctx->tail || (ctx->tail->kind != TAC_INSTRUCTION_RETURN &&
+                                    ctx->tail->kind != TAC_INSTRUCTION_JUMP);
+    if (reachable)
+        emit_jump(ctx, after);
+    for (int j = ctx->scopes[i].count - 1; j >= 0; j--) {
+        if (j < ctx->scopes[i].nentries && ctx->scopes[i].entries[j])
+            emit_label(ctx, ctx->scopes[i].entries[j]);
+        // The array may move while a deferred statement is lowered: index it anew.
+        ExitAction a = ctx->scopes[i].actions[j];
+        run_action(ctx, &a);
+    }
+    TacScope *sc    = &ctx->scopes[i];
+    int nd          = sc->ndests;
+    bool cont       = sc->continues;
+    char **handlers = xalloc((nd + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+    for (int k = 0; k < nd; k++) {
+        const ExitDest *d = &ctx->scopes[i].dests[k];
+        handlers[k]       = d->kind == DEST_LABEL ? NULL : new_temp(ctx);
+        const char *to    = handlers[k] ? handlers[k] : d->label;
+        if (k == nd - 1 && !cont) {
+            emit_jump(ctx, to);
+            break;
+        }
+        Tac_Val *c           = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
+        Tac_Instruction *eq  = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+        eq->u.binary.op      = TAC_BINARY_EQUAL;
+        eq->u.binary.src1    = val_var(ctx->where);
+        eq->u.binary.src2    = val_int(d->id);
+        eq->u.binary.dst     = c;
+        tac_append(ctx, eq);
+        Tac_Instruction *j              = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
+        j->u.jump_if_not_zero.condition = val_var(c->u.var_name);
+        j->u.jump_if_not_zero.target    = xstrdup(to);
+        tac_append(ctx, j);
+    }
+    if (cont) {
+        int m = i - 1;
+        while (ctx->scopes[m].count == 0)
+            m--;
+        emit_jump(ctx, entry_label(ctx, m, ctx->scopes[m].count - 1));
+    }
+    for (int k = 0; k < nd; k++) {
+        if (!handlers[k])
+            continue;
+        emit_label(ctx, handlers[k]);
+        emit_dest(ctx, &ctx->scopes[i].dests[k]);
+        xfree(handlers[k]);
+    }
+    xfree(handlers);
+    emit_label(ctx, after);
+    xfree(after);
+}
+
 // The end of the innermost block, reached by falling through: its own actions.
 static void end_scope(TacCtx *ctx)
 {
@@ -563,6 +800,7 @@ static void end_scope(TacCtx *ctx)
         if (reachable)
             run_scope(ctx, ctx->nscopes - 1, sc->count);
     }
+    emit_chain(ctx);
     scope_pop(ctx);
 }
 
@@ -584,8 +822,9 @@ static void emit_break(TacCtx *ctx, const char *target, bool is_continue)
     for (int i = ctx->nbreaks - 1; i >= 0; i--) {
         const char *l = is_continue ? ctx->breaks[i].cont_label : ctx->breaks[i].break_label;
         if (l && strcmp(l, target) == 0) {
-            run_exits(ctx, ctx->breaks[i].depth);
-            break;
+            leave(ctx, ctx->breaks[i].depth, (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(target) },
+                  CHAIN_MIN);
+            return;
         }
     }
     emit_jump(ctx, target);
@@ -608,7 +847,12 @@ static void emit_goto(TacCtx *ctx, const char *label)
         int k              = 0;
         while (k < ctx->nscopes && k < to->depth && ctx->scopes[k].key == to->scopes[k].key)
             k++;
-        run_exits(ctx, k);
+        if (k == 0 || ctx->scopes[k - 1].count <= to->scopes[k - 1].count) {
+            leave(ctx, k, (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(user_label_name(ctx, label)) },
+                  CHAIN_MIN);
+            return;
+        }
+        run_exits(ctx, k); // and back over defers of the common block: lowered here
         if (k > 0) {
             int have = ctx->scopes[k - 1].count;
             int keep = to->scopes[k - 1].count;
@@ -670,6 +914,22 @@ static void emit_return(TacCtx *ctx, Stmt *stmt)
             tac_append(ctx, cp);
             v = val_var(copy->u.var_name);
         }
+    }
+    // Through a shared cleanup, a scalar goes into the one return variable first.
+    const Type *rt = stmt->u.expr ? unalias(stmt->u.expr->type) : NULL;
+    bool scalar    = !rt || (rt->kind != TYPE_STRUCT && rt->kind != TYPE_UNION &&
+                          rt->kind != TYPE_ARRAY && rt->kind != TYPE_LONG_DOUBLE);
+    if (scalar && have_exits(ctx) && may_share() && exit_size(ctx, 0) >= CHAIN_MIN) {
+        if (v) {
+            if (!ctx->ret_var)
+                ctx->ret_var = new_typed_temp(ctx, ast_type_to_tac_type(rt));
+            Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
+            cp->u.copy.src      = v;
+            cp->u.copy.dst      = val_var(ctx->ret_var);
+            tac_append(ctx, cp);
+        }
+        leave(ctx, 0, (ExitDest){ .kind = DEST_RETURN, .value = v != NULL }, CHAIN_MIN);
+        return;
     }
     run_exits(ctx, 0);
     Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_RETURN);
