@@ -52,12 +52,14 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
                 fatal_error("Void function cannot return a value");
             }
             s->u.expr = coerce_for_assignment(typecheck_and_decay(s->u.expr), ret_type);
+            coro_lint_bind(NULL, -1, s->u.expr); // a frame returned outlives its storage
         } else if (unalias(ret_type)->kind != TYPE_VOID) {
             fatal_error("Non-void function must return a value");
         }
         return s;
     case STMT_EXPR: {
         s->u.expr = typecheck_and_decay(s->u.expr);
+        coro_lint_statement(s->u.expr);
         return s;
     }
     case STMT_IF: {

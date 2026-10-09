@@ -29,6 +29,7 @@ void scope_increment(void)
 
 void scope_decrement(void)
 {
+    coro_lint_scope_exit(scope_level);
     scope_level--;
     symtab_purge(scope_level);
     structtab_purge(scope_level);

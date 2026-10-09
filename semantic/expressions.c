@@ -639,6 +639,10 @@ static Expr *typecheck_expr(Expr *e)
         Expr *rhs = typecheck_and_decay(e->u.assign.value);
         if (e->u.assign.op == ASSIGN_SIMPLE) {
             rhs = coerce_for_assignment(rhs, lhs->type);
+            if (lhs->kind == EXPR_VAR)
+                coro_lint_bind(lhs->u.var, symtab_level(lhs->u.var), rhs);
+            else
+                coro_lint_bind(NULL, -1, rhs); // through a pointer or into a member
         } else if ((e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB) &&
                    is_complete_pointer(lhs->type)) {
             if (!is_integer(rhs->type))

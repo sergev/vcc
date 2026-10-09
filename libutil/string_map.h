@@ -73,6 +73,11 @@ void map_insert_free(StringMap *map, const char *key, intptr_t value, int level,
 bool map_get(const StringMap *map, const char *key, intptr_t *value);
 
 //
+// Get the level a key was inserted at: true if found.
+//
+bool map_get_level(const StringMap *map, const char *key, int *level);
+
+//
 // Remove: Handles three cases: leaf node, node with one child,
 // and node with two children (using the minimum key in the right
 // subtree as the successor), and balances the tree after deletion.

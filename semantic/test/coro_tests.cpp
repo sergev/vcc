@@ -536,3 +536,136 @@ TEST_F(CoroTest, CoroPtrSizeof_Neg)
                               "int f(int *p) { return (int)co_sizeof(p + 1); }").c_str()),
                  "needs the name of a coroutine or a coro_ptr");
 }
+
+// --- the lint for frames in automatic storage (phase C9) -------------------
+
+static const char *const lint_gen = R"(
+#include <coro.h>
+coro(int) void gen(int n) { defer n = 0; for (int i = 0; i < n; i++) yield i; }
+)";
+
+// The warnings `body` makes, after the generator (in a test: RunPipeline is the
+// fixture's).
+#define Warnings(t, body)                                              \
+    ([&]() {                                                           \
+        testing::internal::CaptureStderr();                            \
+        RunPipeline((std::string(lint_gen) + (body)).c_str());         \
+        return testing::internal::GetCapturedStderr();                 \
+    }())
+
+TEST_F(CoroTest, LintEscape)
+{
+    EXPECT_EQ("warning: f: the frame of 'gen' outlives its storage 'buf', an automatic object: "
+              "use static or allocated storage\n",
+              Warnings(this, R"(
+co_frame(int, void) *keep;
+void f(void)
+{
+    char buf[256];
+    keep = co_init(buf, sizeof buf, gen, 3);
+}
+)"));
+}
+
+TEST_F(CoroTest, LintReturned)
+{
+    EXPECT_NE(std::string::npos, Warnings(this, R"(
+co_frame(int, void) *f(void)
+{
+    char buf[256];
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    return p;
+}
+)").find("warning: f: the frame of 'gen' outlives its storage 'buf'"));
+}
+
+TEST_F(CoroTest, LintLeftSuspended)
+{
+    EXPECT_EQ("warning: f: the frame of 'gen' in 'buf' may be left suspended at the end of the "
+              "block, its defers never run: co_destroy it, or use co_alloca\n",
+              Warnings(this, R"(
+int f(void)
+{
+    char buf[256];
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    co_resume(p);
+    return co_value(p);
+}
+)"));
+}
+
+// No warning: run to the end, destroyed, in static storage, awaited, or in an inner
+// block whose frame variable is the outer block's but whose storage is the outer's too.
+TEST_F(CoroTest, LintQuiet)
+{
+    EXPECT_EQ("", Warnings(this, R"(
+int loop(void)
+{
+    char buf[256];
+    int s = 0;
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    while (co_resume(p) == CO_SUSPENDED)
+        s += co_value(p);
+    return s;
+}
+int destroyed(void)
+{
+    char buf[256];
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    co_resume(p);
+    int v = co_value(p);
+    co_destroy(p);
+    return v;
+}
+int kept(void)
+{
+    static char buf[256];
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    co_resume(p);
+    return co_value(p);
+}
+coro(int) void awaited(void)
+{
+    char buf[256];
+    co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
+    await p;
+}
+int inner(void)
+{
+    char buf[256];
+    co_frame(int, void) *p;
+    {
+        p = co_init(buf, sizeof buf, gen, 3);
+    }
+    while (!co_done(p))
+        co_resume(p);
+    return 0;
+}
+)"));
+}
+
+// A local pointer to memory from elsewhere is not automatic storage; &x of a local is.
+TEST_F(CoroTest, LintPointerStorage)
+{
+    EXPECT_EQ("", Warnings(this, R"(
+void *malloc(unsigned long);
+co_frame(int, void) *keep;
+void f(void)
+{
+    void *storage = malloc(256);
+    keep = co_init(storage, 256, gen, 3);
+}
+)"));
+}
+
+TEST_F(CoroTest, LintAddressOf)
+{
+    EXPECT_NE(std::string::npos, Warnings(this, R"(
+co_frame(int, void) *keep;
+void f(void)
+{
+    struct { _Alignas(16) char b[256]; } s;
+    keep = co_init(&s, sizeof s, gen, 3);
+}
+)").find("outlives its storage 's'"));
+}

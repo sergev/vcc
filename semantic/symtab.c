@@ -308,6 +308,12 @@ Symbol *symtab_get(const char *name)
 // Precondition: name is a non-null string.
 // Postcondition: Returns Symbol* if found, else NULL.
 //
+int symtab_level(const char *name)
+{
+    int level;
+    return map_get_level(&symtab, name, &level) ? level : -1;
+}
+
 Symbol *symtab_get_opt(const char *name)
 {
     intptr_t value = 0;

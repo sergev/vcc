@@ -100,6 +100,11 @@ void coro_begin_body(const Type *yield); // NULL for an ordinary function
 void coro_end_body(void);
 void check_coroutine_name(const struct Symbol *sym); // a coroutine named as a value
 bool coroutine_call_allowed(const Expr *call);       // the call an arena await makes
+// The lint for frames in automatic storage (coroutines.c).
+void coro_lint_function(const char *name);          // the function checked next
+void coro_lint_bind(const char *var, int level, const Expr *value); // var (NULL: wider) = value
+void coro_lint_statement(const Expr *e);            // an expression statement
+void coro_lint_scope_exit(int level);               // the block at `level` ends
 Expr *typecheck_yield(Expr *e);
 Expr *typecheck_await(Expr *e);
 Expr *typecheck_co_op(Expr *e);

@@ -10,6 +10,8 @@
 // what the coroutine's name converts to when it is used as a value.  Every compile-time rule of §2.4 is here, but for the jumps past
 // a co_alloca, which semantic/defer.c checks with those past a defer.
 //
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "semantic.h"
@@ -17,6 +19,10 @@
 #include "target.h"
 #include "typecheck.h"
 #include "xalloc.h"
+
+// The lint for frames in automatic storage, at the end of this file.
+static void lint_init(const Expr *e, const Expr *storage, const char *coro);
+static void lint_settled(const Expr *p);
 
 // The function being checked when it is a coroutine: its yield type, else NULL.
 static Type *coro_yield;
@@ -376,6 +382,7 @@ Expr *typecheck_await(Expr *e)
     const Type *frame = frame_target(op->type);
     if (!frame)
         fatal_error("await needs a call of a coroutine or a co_frame pointer");
+    lint_settled(op); // an await runs it to its end
     check_same_yield(frame->u.struct_t.frame_yield);
     result = frame->u.struct_t.frame_result;
     free_type(e->type);
@@ -438,6 +445,8 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
     Expr *tail = name;
     while (tail->next)
         tail = tail->next;
+    if (op == CO_OP_INIT)
+        lint_init(e, args, desc ? "(coro_ptr)" : name->u.var);
     if (desc) {
         tail->next = coro_ptr_args(rest, op_name(op));
         *yield     = desc->u.struct_t.frame_yield;
@@ -475,6 +484,8 @@ Expr *typecheck_co_op(Expr *e)
         const Type *frame = frame_target(p->type);
         if (!frame)
             fatal_error("%s needs a co_frame pointer", op_name(op));
+        if (op == CO_OP_DESTROY || op == CO_OP_DONE || op == CO_OP_RESULT)
+            lint_settled(p);
         if (op == CO_OP_VALUE) {
             if (unalias(frame->u.struct_t.frame_yield)->kind == TYPE_VOID)
                 fatal_error("co_value of a coroutine that yields void");
@@ -492,4 +503,154 @@ Expr *typecheck_co_op(Expr *e)
     free_type(e->type);
     e->type = type;
     return e;
+}
+
+//
+// The lint for frames in automatic storage (phase C9).  The language cannot catch
+// storage given to co_init going out of scope while its frame is suspended
+// (docs/Coroutines_in_C.md, section 7), so these warnings flag the two plain cases:
+// a frame whose storage is an automatic object stored where it outlives the object, or
+// returned; and such a frame resumed by a statement that drops the status, when nothing
+// in the block destroys it, asks co_done, reads its result or awaits it.  A warning
+// does not stop the compilation.
+//
+typedef struct {
+    char *storage; // the automatic object given to co_init
+    int level;     // its block's
+    char *frame;   // the variable holding the frame, or NULL
+    char *coro;    // the coroutine, for the message
+    bool resumed;  // by a statement that drops the status
+    bool settled;  // destroyed, asked co_done, its result read or awaited
+} AutoFrame;
+
+static AutoFrame *auto_frames;
+static int nauto, cap_auto;
+static const Expr *last_auto_init; // the co_init of auto_frames[nauto - 1], just checked
+static char *lint_fn;
+
+static void lint_warning(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "warning: %s: ", lint_fn ? lint_fn : "?");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+}
+
+void coro_lint_function(const char *name)
+{
+    xfree(lint_fn);
+    lint_fn = name ? xstrdup(name) : NULL;
+}
+
+static const Expr *strip_casts(const Expr *e)
+{
+    while (e && e->kind == EXPR_CAST)
+        e = e->u.cast.expr;
+    return e;
+}
+
+// The automatic object `e` is the address of, or NULL: a local array, decayed, or &x of
+// a local.  (A local pointer's value is memory from somewhere else.)
+static const char *auto_object(const Expr *e)
+{
+    e         = strip_casts(e);
+    bool addr = e && e->kind == EXPR_UNARY_OP && e->u.unary_op.op == UNARY_ADDRESS;
+    if (addr)
+        e = e->u.unary_op.expr;
+    if (!e || e->kind != EXPR_VAR)
+        return NULL;
+    const Symbol *sym = symtab_get_opt(e->u.var);
+    if (!sym || sym->kind != SYM_LOCAL || sym->has_linkage || symtab_level(e->u.var) < 0)
+        return NULL;
+    return addr || unalias(sym->type)->kind == TYPE_ARRAY ? e->u.var : NULL;
+}
+
+// A co_init on `storage` of coroutine `coro`, `e` the operation.
+static void lint_init(const Expr *e, const Expr *storage, const char *coro)
+{
+    const char *obj = auto_object(storage);
+    last_auto_init  = NULL;
+    if (!obj)
+        return;
+    if (nauto == cap_auto) {
+        cap_auto     = cap_auto ? 2 * cap_auto : 8;
+        AutoFrame *n = xalloc(cap_auto * sizeof *n, __func__, __FILE__, __LINE__);
+        for (int i = 0; i < nauto; i++)
+            n[i] = auto_frames[i];
+        xfree(auto_frames);
+        auto_frames = n;
+    }
+    auto_frames[nauto++] = (AutoFrame){ xstrdup(obj), symtab_level(obj), NULL, xstrdup(coro) };
+    last_auto_init       = e;
+}
+
+// The frame `e` names: the co_init just checked, or a variable holding a frame.
+static AutoFrame *frame_of(const Expr *e)
+{
+    e = strip_casts(e);
+    if (!e)
+        return NULL;
+    if (e == last_auto_init)
+        return &auto_frames[nauto - 1];
+    if (e->kind != EXPR_VAR)
+        return NULL;
+    for (int i = nauto - 1; i >= 0; i--)
+        if (auto_frames[i].frame && strcmp(auto_frames[i].frame, e->u.var) == 0)
+            return &auto_frames[i];
+    return NULL;
+}
+
+void coro_lint_bind(const char *var, int level, const Expr *value)
+{
+    AutoFrame *f = frame_of(value);
+    if (!f)
+        return;
+    if (!var || level < f->level) {
+        lint_warning("the frame of '%s' outlives its storage '%s', an automatic object: "
+                     "use static or allocated storage",
+                     f->coro, f->storage);
+        return;
+    }
+    xfree(f->frame);
+    f->frame = xstrdup(var);
+}
+
+static void lint_settled(const Expr *p)
+{
+    AutoFrame *f = frame_of(p);
+    if (f)
+        f->settled = true;
+}
+
+void coro_lint_statement(const Expr *e)
+{
+    e = strip_casts(e);
+    if (e && e->kind == EXPR_CO_OP &&
+        (e->u.co_op.op == CO_OP_RESUME || e->u.co_op.op == CO_OP_CANCEL)) {
+        AutoFrame *f = frame_of(e->u.co_op.args);
+        if (f)
+            f->resumed = true;
+    }
+}
+
+void coro_lint_scope_exit(int level)
+{
+    while (nauto > 0 && auto_frames[nauto - 1].level >= level) {
+        AutoFrame *f = &auto_frames[--nauto];
+        if (f->resumed && !f->settled)
+            lint_warning("the frame of '%s' in '%s' may be left suspended at the end of the "
+                         "block, its defers never run: co_destroy it, or use co_alloca",
+                         f->coro, f->storage);
+        xfree(f->storage);
+        xfree(f->frame);
+        xfree(f->coro);
+    }
+    if (nauto == 0) {
+        xfree(auto_frames);
+        auto_frames = NULL;
+        cap_auto    = 0;
+    }
+    last_auto_init = NULL;
 }

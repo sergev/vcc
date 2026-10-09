@@ -144,6 +144,9 @@ Symbol *symtab_get_opt(const char *name);
 // Precondition: name is a non-null string.
 // Postcondition: Returns Symbol* if found, else NULL.
 
+// The scope level a symbol was declared at, or -1 when there is none of that name.
+int symtab_level(const char *name);
+
 // Check if a symbol has global linkage
 bool symtab_is_global(const char *name);
 // Precondition: name is a non-null string, exists in symtab.

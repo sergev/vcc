@@ -845,6 +845,8 @@ static void typecheck_local_var_decl(const Declaration *d)
             sym->name = xstrdup(backend);
         }
         decl->init = typecheck_init(var_type, decl->init);
+        if (decl->init && decl->init->kind == INITIALIZER_SINGLE)
+            coro_lint_bind(sym->name, scope_level, decl->init->u.expr);
         if (unsized) {
             // The initializer gave the array its length; refresh the symbol's copy.
             free_type(sym->type);
@@ -1095,6 +1097,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
             symtab_add_automatic_var_type(p->name, p->type, scope_level);
         }
         static_locals_set_function(d->u.function.name);
+        coro_lint_function(d->u.function.name);
         coro_begin_body(yield);
         d->u.function.body =
             typecheck_statement(fun_type->u.function.return_type, d->u.function.body);
@@ -1130,6 +1133,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
         }
 
         static_locals_set_function(NULL);
+        coro_lint_function(NULL);
         auto_locals_clear();
         scope_decrement();
     }
