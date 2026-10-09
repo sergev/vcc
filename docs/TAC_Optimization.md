@@ -347,6 +347,12 @@ end:
 
 The loop body runs with one conditional jump per iteration instead of a conditional jump out and an unconditional one back. The condition is lowered twice from the AST. When the guard is always true, as in `for (i = 0; i < 10; i++)`, constant folding drops it. Rotation is an option of the translator, `OptFlags.loop_rotate` (`--no-loop-rotate`).
 
+A condition that is not simple — one with `&&`, `||`, `?:`, a call or a side effect (`is_simple_cond` in `translator/expr.c`) — is not copied: the loop is entered by a jump to its test (to the `continue` label of a `while`, past the update of a `for`), smaller than a second copy, and when the body is empty and there is no update the jump goes, the loop falling into its test. A simple comparison keeps its guard, which strength reduction needs as the loop's preheader.
+
+### Conditions as jumps
+
+In a condition — of an `if`, a loop, a guard — `&&`, `||` and `!` are lowered as jumps (`gen_cond_jump` in `translator/expr.c`), not as a 0/1 value tested again: `if (a && b)` is two `jump_if_zero` to the else part, `a || b` jumps to the body when `a` holds, `!a` tests `a` the other way. Elsewhere, as a value, `&&` and `||` still give 0 or 1. Neither this nor entering a loop at its test is done on BESM-6 (`Target.no_loop_opt`), whose code must not change; `lower --no-cond-jumps` turns both off.
+
 The guard of `for (i = 0; i < n; ...)` compares a constant with a variable once copy propagation has forwarded the 0. Constant folding mirrors such a comparison (`0 < n` → `n > 0`) so that the constant is second, where the code generators take an immediate.
 
 ### Induction variables
@@ -446,7 +452,7 @@ stay exactly the typed symbols of the optimized body.
 
 By default all five passes are enabled. Individual passes can be disabled for debugging, except constant folding.
 For each pass, a separate CLI option exists in the `lower` binary: `--no-unreachable`, `--no-cse`, `--no-copy-prop`,
-`--no-dead-store`, `--no-ivsr` and `--no-loop-rotate` (the translator's); `--opt-debug` traces the passes. `--opt-max-iter N` stops after N rounds (0, the
+`--no-dead-store`, `--no-ivsr`, and the translator's `--no-loop-rotate` and `--no-cond-jumps`; `--opt-debug` traces the passes. `--opt-max-iter N` stops after N rounds (0, the
 default, runs to a fixed point); the `VCC_OPT_MAX_ITER` environment variable sets it for a whole build, and the
 backend test fixtures read it as well, which is how a miscompile is bisected to the round that introduces it.
 The constant folding is always enabled, to simplify the subsequent code generation.

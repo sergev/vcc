@@ -82,8 +82,8 @@ For each function, in this order (`codegen.c`):
 
    | | ours | no peephole | `cc -Os -fno-inline` | `cc -O2` |
    |---|---|---|---|---|
-   | `bench/msp430` (4 files) | 684 | 1236 | 744 | 1496 |
-   | `libc/common` (28 files) | 15460 | 27200 | 12136 | 13124 |
+   | `bench/msp430` (4 files) | 656 | 1084 | 744 | 1496 |
+   | `libc/common` (28 files) | 15316 | 25276 | 12136 | 13124 |
 
 A register holds an integer in a fixed form: a type of 32 bits or less in the W view
 with the upper half zero, `char` and `short` also extended to 32 bits by their type.

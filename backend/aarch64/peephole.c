@@ -4,25 +4,37 @@
 //     12 bits, optionally shifted, the constant also when extended or shifted as an
 //     operand; and/orr/eor with a bitmask immediate; shifts), and a zero is stored from
 //     the zero register;
-//   - a move folds into its uses within the block, a result is computed where it is
-//     moved, a move to itself goes (a W one when the upper half it clears is not
-//     read), and so does the reload of what was just stored;
+//   - a move folds into its uses, a result is computed where it is moved, a move to
+//     itself goes (a W one when the upper half it clears is not read), and so do a
+//     copy moved back, a value never read and the reload of what was just stored;
 //   - a constant index register is an offset;
-//   - an address computation folds into the load or store it feeds ([base, #imm] or
-//     [base, index, lsl/sxtw #s]), and a sign extension into the add that scales it;
-//   - mul + add is madd (mul + sub, msub); adjacent ldr/str of one base are ldp/stp,
-//     last;
-//   - cmp #0 + b.eq/b.ne is cbz/cbnz; a jump to the next label goes, a branch over a
-//     jump branches the other way, and code after a jump or return goes;
+//   - an address computation folds into the load or store that next uses it ([base,
+//     #imm] or [base, index, lsl/sxtw #s]), a sign extension into the add that scales
+//     it, a pointer step into the access as a post- or pre-index;
+//   - a byte or halfword load takes the extension after it, an extension before a
+//     narrow store goes;
+//   - mul + add is madd (mul + sub, msub); a run of 8-byte copies is ldp/stp of q
+//     registers; adjacent ldr/str of one base are ldp/stp, last;
+//   - the flags: cmp #0 + b.eq/b.ne is cbz/cbnz, and + a single-bit and, tbz/tbnz; a
+//     cset tested again (cmp #0, cbz) is the condition itself, a cset added is cinc; a
+//     compare the flags already hold goes; the compare of `n-- > 0` goes ahead of the
+//     decrement;
+//   - a diamond setting two constants one apart is cset, or mov + cinc;
+//   - jump threading: a jump to a jump, a test of a cset or of a constant just set goes
+//     where it leads; a jump to the next label goes, a branch over a jump branches the
+//     other way, code after a jump or return and code nothing reaches go;
+//   - blocks ending alike through a return or a jump share their tail;
 //   - the shifts and masks of a bit-field are ubfx/sbfx (a read), bfi (a store) and
 //     ubfiz (a value shifted into place); a movz/movk mask that is a bitmask immediate
-//     is one, a zero added or or-ed in is a move, and a uxtb/uxth after an ldrb/ldrh or
-//     before an strb/strh goes.
-// A return reads only the registers the function's result is in.
-// Code selection never carries a scratch register (x9-x17, v16-v31) past its block, so
-// whether a scratch value is read again is decided by looking to the end of the block;
-// any register is dead once an instruction writes it.  A move or computation in the W
-// view zeroes the upper half, so one is folded only where that cannot matter.
+//     is one, and a zero added or or-ed in is a move.
+// Whether a register is read again is decided by its liveness over the blocks (see
+// compute_liveness); a return reads only the registers the function's result is in,
+// a call only the argument registers call.c recorded on it.  Code selection never
+// carries a scratch register (x9-x17, v16-v31) past its block, so a scratch value is
+// looked for to the end of the block only, and no block is split where one is live.
+// Any register is dead once an instruction writes it.  A move or computation in the W
+// view zeroes the upper half, so one is folded only where that cannot matter.  The
+// flags never live past a branch or a label.
 //
 #include <string.h>
 
