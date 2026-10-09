@@ -293,10 +293,11 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     A64_Width dw = int_width(dt);
     int s        = use_val(g, T0, src);
     int d        = def_reg(g, T0, dst);
+    bool sgn     = !a64_is_unsigned(st);
     A64_Op op    = A64_RET;
-    if (kind == TAC_INSTRUCTION_SIGN_EXTEND)
+    if (kind == TAC_INSTRUCTION_SIGN_EXTEND && !(sgn && ssize < 4 && dw == A64_W))
         op = ssize == 1 ? A64_SXTB : ssize == 2 ? A64_SXTH : ssize == 4 && dw == A64_X ? A64_SXTW : op;
-    else if (kind == TAC_INSTRUCTION_ZERO_EXTEND)
+    else if (kind == TAC_INSTRUCTION_ZERO_EXTEND && sgn)
         op = ssize == 1 ? A64_UXTB : ssize == 2 ? A64_UXTH : op; // a W value's upper half is zero
     if (op == A64_RET) {
         store_int(g, s, dst);
