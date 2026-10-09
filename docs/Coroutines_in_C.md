@@ -13,8 +13,8 @@ This is a tutorial. It assumes you know ordinary C and nothing else.
 > only. Section 8 works with `vcc -t wasm32-braam`, run under node by a fake kernel
 > (`share/vcc/wasm32-braam/lib/run.mjs`) and on Braam itself: the descriptor calls,
 > `stat` and the path calls, and `stdio.h` with input buffered too
-> ([Braam_Example.md](Braam_Example.md) works a program through); `braam_yield` and
-> signals are next. Coroutines exist for
+> ([Braam_Example.md](Braam_Example.md) works a program through), signals, tasks
+> and `poll`. Coroutines exist for
 > programs that run on [Braam](#8-coroutines-on-braam). The design and the work are in
 > [backend/wasm/Plan.md](../backend/wasm/Plan.md).
 
@@ -839,7 +839,7 @@ coro(braam_call *) int main(int argc, char **argv)
 ```
 
 That is `cat`. On Braam `main` must have this form: a `coro(braam_call *)` coroutine
-taking `argc` and `argv`. The runtime builds `main`'s frame in a static block. Every `await`
+taking `argc` and `argv`. The runtime builds `main`'s frame in a block from `malloc`. Every `await`
 inside `main` takes its frame from that block (section 5). If a program needs a
 bigger block, it defines its size:
 
@@ -883,11 +883,73 @@ Return from `main`. The return value is the exit status.
 `exit()` cannot return through the coroutines that are running. On Braam it records
 the status and stops the program as a crash. Return from `main` instead.
 
-### Letting `^C` in
+### `^C` and other signals
+
+By default `^C` ends the program, with exit status 130, and so does `kill`. A program
+that wants to be told instead asks once:
+
+```c
+#include <signal.h>
+
+if (await sig_catch(SIGINT, 1) < 0)
+    perror("sig_catch");
+```
+
+There are no signal handlers. A signal the program asked for is recorded, and each
+call the program is waiting in gives up with `-1` and `errno` set to `EINTR`. That
+covers a read of the terminal or of a pipe, `sleep_ms`, `braam_yield` and `poll`.
+`sig_take(SIGINT)` then says whether it was `^C`, and forgets it:
+
+```c
+n = await read(0, buf, sizeof buf);
+if (n < 0 && errno == EINTR && sig_take(SIGINT))
+    ...                     /* interrupted, and still running */
+```
+
+`SIGINT`, `SIGTERM` and `SIGWINCH` (the terminal changed shape) can be asked for;
+`SIGKILL` cannot.
 
 The kernel can deliver a signal only while the program waits for something. A long
 computation that never `await`s cannot be interrupted. Call `await braam_yield();`
-from time to time inside such a loop. It gives the kernel a turn.
+from time to time inside such a loop. It gives the kernel a turn:
+
+```c
+while (!sig_take(SIGINT)) {
+    work_a_little();
+    await braam_yield();
+}
+```
+
+### Two things at once
+
+`main` runs as one task. A program that must wait for two things at once, say the
+keyboard and a timer, starts a second task with `braam_spawn`. A task is a
+`coro(braam_call *) int` coroutine with a frame of its own, from `co_init`:
+
+```c
+static coro(braam_call *) int clock_task(void)
+{
+    while (await sleep_ms(1000) == 0) {
+        printf("tick\n");
+        await fflush(stdout);
+    }
+    return 0;
+}
+
+    static char storage[4096];                 /* the task's frame and arena */
+    braam_task *t = co_init(storage, sizeof storage, clock_task);
+    braam_spawn(t);                            /* runs it to its first wait */
+```
+
+From then on the runtime resumes each task when the call it waits for is answered,
+so the two run in turns. They share memory, but neither runs while the other does,
+so no locks are needed. A process has at most `BRAAM_TASKS` (8) tasks, `main`
+included; `braam_spawn` returns 0 when the table is full. A task that returns leaves
+the table, and `co_done(t)` and `co_result(t)` tell its result. `co_destroy(t)` stops
+a task that is waiting. The program ends when `main` returns, whatever the other
+tasks are doing.
+
+`poll` (`<poll.h>`) is the other way to wait for several descriptors at once.
 
 ### Cleanup on Braam
 

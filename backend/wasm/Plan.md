@@ -1,11 +1,11 @@
 # Plan: `defer` and stackless coroutines, for Braam
 
-Status: phases C1–C7 are built — `defer`, the coroutines' front end, generators,
+Status: phases C1–C8 are built — `defer`, the coroutines' front end, generators,
 delegation (`await` in both forms, the arena, `co_alloca` in functions and
 coroutines, every operation), a dispatch per irreducible region in the wasm backend,
 and the target `wasm32-braam` with its runtime, `stdio.h` on files and stdin, a fake
-kernel for node and a system test on Braam itself; §8 lists what remains, from
-signals and tasks on. The document defines two extensions of C — a `defer`
+kernel for node, a system test on Braam itself, signals, tasks and `poll`; §8 lists
+what remains. The document defines two extensions of C — a `defer`
 statement and stackless coroutines — measured against what Braam requires of a process
 and against how vcc is built, and lays out the work in phases. §9 records the
 alternatives that were considered and rejected.
@@ -753,47 +753,67 @@ static coro(braam_call *) int braam_root(int argc, char **argv)
     return status;
 }
 
-static int step(void)               /* 0 = exited, 1 = suspended */
+static void run(int k)              /* task k to its next suspension */
 {
-    if (co_resume(root) == CO_DONE) {
-        exited = 1;
-        braam_sys_sync(BRAAM_SYS_EXIT, co_result(root), 0, 0);
-        return 0;
+    if (co_resume(tasks[k].frame) == CO_DONE) {
+        if (k == 0) {                   /* the root: the process exits */
+            exited = 1;
+            braam_sys_sync(BRAAM_SYS_EXIT, co_result(tasks[0].frame), 0, 0);
+        } else {
+            tasks[k].frame = NULL;      /* the slot is free again */
+        }
+        return;
     }
-    braam_call *c = co_value(root);
-    c->token = ++token;  pending = c;
+    braam_call *c = co_value(tasks[k].frame);
+    c->token = ++token;  tasks[k].call = c;
     __braam_sys_async(c->op, c->token, c->ptr, c->len);
-    return 1;
 }
 ```
+
+Built in C6 with one task, the root, and in C8 with a table of `BRAAM_TASKS` (8, as
+braam-core's `PROC_TASKS`): a frame and the call it waits on per task, task 0 the
+root.
 
 - `_start(argv, len)` (`__braam_start`) copies argv out of the host's blob (u32 argc,
   then u32 length and the bytes of each word), each word with a NUL, sets up the root
   with `co_init` on a block of `__braam_task_bytes` (the root frame and the arena of
   everything `main` awaits; 64 KiB unless the program defines the name: the default is
   a `libc.a` member of its own, `taskbytes.c`, which the linker then leaves out, since
-  vcc has no weak symbols) from `malloc`, and steps.
-  `_resume(token, reply, len)` gives the block to the pending call if the token is
-  its, else frees it (an answer to a call whose frame was destroyed), and steps.
+  vcc has no weak symbols) from `malloc`, and runs it.
+  `_resume(token, reply, len)` gives the block to the task whose call has that
+  token and runs that task, else frees it (an answer to a call whose frame was
+  destroyed). Either returns 0 once the root has returned, 1 otherwise.
 - `braam_sys` (`sys.c`) yields a `braam_call` that is a local of its frame, so the
   pointer stays good while it waits; resumed, it reads the status, copies the data and
-  frees the block. A `defer` tells the runtime when the frame goes before the answer
-  comes, so `pending` never points into a dead frame.
+  frees the block. A `defer` (`__braam_forget`) tells the runtime when the frame goes
+  before the answer comes: the task's slot is freed, so the table never points into a
+  dead frame. That makes `co_destroy` of a waiting task safe, and it is why a task may
+  suspend only in `braam_sys`, whose `defer` this is.
 - `_alloc`/`_free` are `malloc`/`free`; `libc/wasm32/braam/malloc.c` is a first fit
   over an address-ordered free list with neighbours merged and `memory.grow` when
   nothing fits, since Braam frees every reply block (plain wasm32 keeps its bump
   allocator).
-- `_sig(n)` records a bit; `sig_catch`/`sig_take`, and `Err(Intr)` on a read, are
-  phase C8, with several tasks (`PROC_TASKS`, `braam_spawn`, a table of roots and
-  pending calls; `chat` is the only Braam program that needs it).
+- **Tasks** (C8). `braam_spawn(frame)` takes a `braam_task *`
+  (`co_frame(braam_call *, int)`) from `co_init`, puts it in a free slot, runs it to
+  its first suspension, as `proc_spawn` does, and returns the slot, or 0 when the
+  table is full. Several tasks may park in one step, each with its call outstanding.
+  A finished task leaves the table, and its frame keeps the result.
+- **Signals** (C8). `_sig(n)` records a bit, as braam-core's does. `sig_catch(sig,
+  on)` is Sys::SigAct with a shadow of the mask, as `io.cpp`'s is.
+  `sig_take`/`sig_pending` read and clear the bits. The kernel does the rest: a
+  caught signal abandons the interruptible calls (Read, KeyRead, Sleep, Wait, ClipRead,
+  Poll), which answer `Err(Intr)`, so `read` and the rest return -1 with `EINTR`. An
+  uncaught one cancels the process, status 130. `<signal.h>` for Braam has the numbers
+  and no `signal()`/`raise()`, since there are no handlers. `poll` (`<poll.h>`) is
+  Sys::Poll.
 - `exit(n)` (`exports.s`) does `sys(Exit, n)` and traps, as Braam's own compat layer
   does (`doc/Compat.md`: "C `exit()` and `abort()` trap"): nothing unwinds, so neither
   the coroutines' defers nor the stdio buffers run, and the kernel reports a crash. A
   program ends by returning from `main`. A coroutine trap (`co.c`) goes through
   `exit` too, its message left in the stdout buffer.
 - The step cannot be interrupted: a compute loop with no `await` in it never sees
-  `^C`. `braam_yield()` (C8) will be `await sleep_ms(0)`, the program's way to park,
-  as every interpreter on Braam does once per burst.
+  `^C`. `braam_yield()` (C8) is `await sleep_ms(0)`, the program's way to park, as
+  every interpreter on Braam does once per burst.
 
 ### 7.3 The libc for Braam
 
@@ -879,7 +899,14 @@ MkDir, Chdir and Rename on paths, and Sleep (`setTimeout`); anything else is
 from a later macrotask, never from inside `sys_async`, so a program that forgets to
 return from the step is caught. It prints `[exit N]` on stderr and exits with N; a trap
 is a crash, status 255, with what Sys::Exit said if anything (as after `exit()`); a
-process that waits while nothing is coming, 254. Poll waits for C8, which needs it.
+process that waits while nothing is coming, 254.
+
+Since C8 it also serves SigAct and Poll, and delivers signals. A byte 0x03 on
+standard input is a `^C`, as a terminal makes one: the read that reaches it parks,
+and SIG_INT finds it parked. Node's own SIGINT and SIGTERM are passed on. A caught
+signal goes to `_sig`, and the parked calls (a Read of stdin, a Sleep, a Poll) answer
+`Err(Intr)`; an uncaught one ends the run with status 130. Poll answers a file and
+a redirected stdin as ready and a terminal by what is buffered.
 
 ### 7.5 Running on Braam
 
@@ -899,7 +926,11 @@ without its tools. The test:
   - hello's arguments and status;
   - `cat` and `wc` on a file and through `<`;
   - a missing file;
-  - `notes`' whole session, `notes ask` reading the terminal up to `^D`.
+  - `notes`' whole session, `notes ask` reading the terminal up to `^D`;
+  - `^C` (C8): caught by a read of the terminal while a second task sleeps, both
+    interrupted; not caught, status 130; caught by a loop that parks in
+    `braam_yield`. That loop keeps the kernel busy, so the test runs a fixed number
+    of ticks instead of `run()`, which waits until the kernel is idle.
 
 Every program ran on the first try on the real kernel. The fake kernel and Braam
 gave the same output for the same programs, but for the pid.
@@ -912,8 +943,6 @@ Each phase ends green on `ctest -j8 -R 'wasm|translat|parser|semantic|ast'` (the
 whole suite after any shared-code change), with a commit. Per step, only the tests of
 the part touched. Goldens of the wasm backend stay under `NaiveSelection()`.
 
-- **C8. Signals and tasks.** `_sig`, `sig_catch`/`sig_take`, `Err(Intr)` on a read;
-   `braam_spawn` and the pending table; `braam_yield`.
 - **C9. Later, as needed.** `coro_ptr(Y, T)` with a `void *` init thunk and a
    descriptor (size, alignment, init, resume) for it; a direct call
    in `__coro_resume` when the callee is visible; a `JUMP_TABLE` for wide dispatches;

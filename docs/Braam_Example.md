@@ -173,7 +173,8 @@ input.
 | `<unistd.h>` | `read`, `write`, `close`, `lseek`, `unlink`, `rmdir`, `chdir`, `getcwd` | `getpid` |
 | `<fcntl.h>` | `open`: the flags are Braam's own bits, so `O_RDONLY` is 1, not 0 | |
 | `<sys/stat.h>` | `stat`, `lstat`, `fstat`, `mkdir` | `S_ISDIR`, `S_ISREG`, `S_ISLNK` |
-| `<braam.h>` | `braam_sys` (any system call), `sleep_ms` | `braam_now`, `braam_sys_sync` |
+| `<poll.h>` | `poll` | |
+| `<braam.h>` | `braam_sys` (any system call), `sleep_ms`, `braam_yield`, `sig_catch` | `braam_now`, `braam_sys_sync`, `braam_spawn`, `sig_take`, `sig_pending` |
 
 - **The rest of the C library:** `<string.h>`, `<ctype.h>`, `malloc` and the rest are
   the same as on every other target. This `malloc` reuses freed memory.
@@ -182,5 +183,11 @@ input.
   ...), and `strerror` knows them.
 - **`stat`:** Braam keeps a kind, a size and a modification time for each file. A
   file always reports mode 0644 and a directory 0755.
-- **Not yet available:** `scanf`, signals and `^C`, and running several tasks in one
-  process.
+- **Signals:** `^C` ends a program unless it asked with `await sig_catch(SIGINT, 1)`.
+  Then the call it waits in gives up with `EINTR`, and `sig_take(SIGINT)` says so;
+  there are no handlers. A loop that computes for long calls `await braam_yield()` now
+  and then, so that `^C` can reach it.
+- **Tasks:** `braam_spawn` runs a second coroutine beside `main`, up to 8 in all, each
+  resumed when its own call is answered. [Coroutines_in_C.md](Coroutines_in_C.md) §8
+  shows both.
+- **Not available:** `scanf`, `signal()` and `raise()`, and directory listing.
