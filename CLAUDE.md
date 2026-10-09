@@ -56,7 +56,9 @@ against `msp430-elf-gcc -O2`; `scripts/bench_mmix.sh` prints `mmix -s` instructi
 and mems of `bench/mmix/*.c`, ours against `mmix-knuth-mmixware-gcc -O2`;
 `scripts/bench_wasm.sh` prints the Code section bytes of C files (by default the book
 programs `wasm32-tests` leaves in `build/backend/wasm`), ours with and without the
-rewrites against clang `-O2` and `-Os`.
+rewrites against clang `-O2` and `-Os`; `scripts/bench_aarch64.sh` prints the text bytes
+of `bench/msp430/*.c` and `libc/common/*.c` on the hosted AArch64 (macOS or Linux), ours
+with and without the peephole pass against `cc -Os -fno-inline` and `-O2`.
 A shared-code
 change must keep every backend's tests green, and must not change BESM-6 output except
 to fix a bug.
