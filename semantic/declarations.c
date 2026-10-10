@@ -35,7 +35,7 @@ static _Noreturn void error_at_previous(const char *name, const char *fmt, ...)
     const Symbol *prev = symtab_get_opt(name);
     if (prev && prev->loc.line > 0)
         diag_note(prev->loc, "previous declaration of '%s' is here", name);
-    exit(1);
+    diag_unwind();
 }
 
 static _Noreturn void redeclared(const char *name)
@@ -603,7 +603,7 @@ static void register_struct_type(const Type *t)
             diag_error(diag_loc, "redefinition of '%s'", type_to_c(t));
             if (existing->loc.line > 0)
                 diag_note(existing->loc, "previous definition of '%s' is here", type_to_c(t));
-            exit(1);
+            diag_unwind();
         }
         if (existing->kind != kind)
             fatal_error("'%s' was declared as a different kind of tag", t->u.struct_t.name);

@@ -428,7 +428,7 @@ Expr *typecheck_call_args(const Type *fn_type, Expr *args, const char *name)
         const Symbol *sym = name ? symtab_get_opt(name) : NULL;
         if (sym && sym->loc.line > 0)
             diag_note(sym->loc, "'%s' declared here", name);
-        exit(1);
+        diag_unwind();
     }
     int arg_number = 0;
     Expr *arg = args, *prev = NULL, *new_args = NULL;

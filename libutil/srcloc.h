@@ -9,6 +9,7 @@
 //
 #pragma once
 
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -64,6 +65,40 @@ void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap);
 void diag_error(SrcLoc loc, const char *fmt, ...);
 void diag_warning(SrcLoc loc, const char *fmt, ...);
 void diag_note(SrcLoc loc, const char *fmt, ...);
+
+//
+// Error recovery. A pass that can go on after an error points diag_recover at a
+// jmp_buf of its own; diag_fatal() reports at diag_loc, counts the error and jumps
+// there. With no recovery point, or once diag_max_errors errors have been reported
+// (0 means no limit), it exits with status 1 instead.
+//
+extern int diag_errors;
+extern int diag_max_errors;
+extern jmp_buf *diag_recover;
+
+#ifdef __cplusplus
+[[noreturn]]
+#else
+_Noreturn
+#endif
+void diag_fatal_v(const char *fmt, va_list ap);
+
+//
+// The second half of diag_fatal_v(), for an error already reported (with its notes):
+// count it, then jump to the recovery point or exit.
+//
+#ifdef __cplusplus
+[[noreturn]]
+#else
+_Noreturn
+#endif
+void diag_unwind(void);
+
+//
+// Count an error that was reported without unwinding, and stop when there are
+// too many.
+//
+void diag_count_error(void);
 
 //
 // Report a broken invariant of the compiler itself, at diag_loc, and exit with

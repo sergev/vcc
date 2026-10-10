@@ -8,6 +8,9 @@
 
 SrcLoc diag_loc;
 const char *diag_progname;
+int diag_errors;
+int diag_max_errors;
+jmp_buf *diag_recover;
 
 SrcLoc diag_enter(SrcLoc loc)
 {
@@ -95,6 +98,31 @@ void diag_note(SrcLoc loc, const char *fmt, ...)
     va_start(ap, fmt);
     diag_vreport(loc, "note", fmt, ap);
     va_end(ap);
+}
+
+void diag_count_error(void)
+{
+    diag_errors++;
+    if (diag_max_errors > 0 && diag_errors >= diag_max_errors) {
+        diag_print_prefix(stderr, (SrcLoc){ 0 }, "error");
+        fprintf(stderr, "too many errors, stopping\n");
+        exit(1);
+    }
+}
+
+void diag_unwind(void)
+{
+    if (!diag_recover) {
+        exit(1);
+    }
+    diag_count_error();
+    longjmp(*diag_recover, 1);
+}
+
+void diag_fatal_v(const char *fmt, va_list ap)
+{
+    diag_vreport(diag_loc, "error", fmt, ap);
+    diag_unwind();
 }
 
 void internal_error(const char *fmt, ...)
