@@ -9,6 +9,7 @@
 //
 #pragma once
 
+#include <stdarg.h>
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -43,9 +44,36 @@ SrcLoc diag_enter(SrcLoc loc);
 const char *srcloc_intern(const char *name);
 
 //
-// Print "file:line:col: kind: ", leaving out what is unknown.
+// The name of the running program, for a diagnostic with no location; a main sets it
+// from argv[0]. NULL leaves the name out.
+//
+extern const char *diag_progname;
+
+//
+// Print "file:line:col: kind: ", leaving out what is unknown. With no location at
+// all, print "program: kind: " instead.
 //
 void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind);
+
+//
+// Print one diagnostic line: the prefix, the message and a newline. The kind is
+// "error", "warning", "note" or "internal compiler error". Every message follows the
+// style of docs/Technical_Reference.md, "Diagnostics".
+//
+void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap);
+void diag_warning(SrcLoc loc, const char *fmt, ...);
+void diag_note(SrcLoc loc, const char *fmt, ...);
+
+//
+// Report a broken invariant of the compiler itself, at diag_loc, and exit with
+// status 2 (a user error exits with 1), so the driver can tell the two apart.
+//
+#ifdef __cplusplus
+[[noreturn]]
+#else
+_Noreturn
+#endif
+void internal_error(const char *fmt, ...);
 
 #ifdef __cplusplus
 }

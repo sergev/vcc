@@ -1,16 +1,14 @@
 #include "typecheck_fixture.h"
 
 extern "C" {
+#include "srcloc.h"
+
 [[noreturn]] void fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Fatal error: ");
-
     va_list ap;
     va_start(ap, message);
-    vfprintf(stderr, message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
     va_end(ap);
-
-    fprintf(stderr, "\n");
     exit(1);
 }
 };

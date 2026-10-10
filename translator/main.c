@@ -440,14 +440,10 @@ void process_file(const Args *args)
 //
 void _Noreturn fatal_error(const char *message, ...)
 {
-    diag_print_prefix(stderr, diag_loc, "error");
-
     va_list ap;
     va_start(ap, message);
-    vfprintf(stderr, message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
     va_end(ap);
-
-    fprintf(stderr, "\n");
     exit(1);
 }
 
@@ -455,6 +451,7 @@ int main(int argc, char *argv[])
 {
     Args args;
     init_args(&args);
+    diag_progname = argv[0];
 
     if (parse_args(argc, argv, &args) != 0) {
         print_usage(argv[0]);

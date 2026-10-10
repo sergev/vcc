@@ -256,6 +256,7 @@ int main(int argc, char *argv[])
 {
     Args args;
     init_args(&args);
+    diag_progname = argv[0];
 
     if (parse_args(argc, argv, &args) != 0) {
         print_usage(argv[0]);

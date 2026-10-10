@@ -4,18 +4,18 @@
 #include <cstdio>
 
 extern "C" {
+#include "srcloc.h"
+
 //
 // The single definition of fatal_error for the optimizer-tests binary; the
 // shared PipelineTest fixture (and chapter19_tests.cpp) link against it.
 //
 [[noreturn]] void fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Fatal error: ");
     va_list ap;
     va_start(ap, message);
-    vfprintf(stderr, message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
     va_end(ap);
-    fprintf(stderr, "\n");
     exit(1);
 }
 }

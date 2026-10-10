@@ -7,6 +7,7 @@
 #include <string.h>
 
 SrcLoc diag_loc;
+const char *diag_progname;
 
 SrcLoc diag_enter(SrcLoc loc)
 {
@@ -58,6 +59,42 @@ void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind)
             fprintf(f, "%d:", loc.col);
         }
         fputc(' ', f);
+    } else if (diag_progname) {
+        const char *slash = strrchr(diag_progname, '/');
+        fprintf(f, "%s: ", slash ? slash + 1 : diag_progname);
     }
     fprintf(f, "%s: ", kind);
+}
+
+void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap)
+{
+    diag_print_prefix(stderr, loc, kind);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+}
+
+void diag_warning(SrcLoc loc, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_vreport(loc, "warning", fmt, ap);
+    va_end(ap);
+}
+
+void diag_note(SrcLoc loc, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_vreport(loc, "note", fmt, ap);
+    va_end(ap);
+}
+
+void internal_error(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_vreport(diag_loc, "internal compiler error", fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "please report this bug\n");
+    exit(2);
 }

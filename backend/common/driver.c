@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "srcloc.h"
 #include "tac.h"
 #include "wio.h"
 #include "xalloc.h"
@@ -221,14 +222,10 @@ static void process_file(const Args *args, const Backend *backend)
 //
 void _Noreturn fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Fatal error: ");
-
     va_list ap;
     va_start(ap, message);
-    vfprintf(stderr, message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
     va_end(ap);
-
-    fprintf(stderr, "\n");
     exit(1);
 }
 
@@ -236,6 +233,7 @@ int backend_main(int argc, char *argv[], const Backend *backend)
 {
     Args args = { 0 };
 
+    diag_progname = argv[0];
     if (parse_args(argc, argv, &args, backend) != 0) {
         print_usage(argv[0], backend);
         return 1;
