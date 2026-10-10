@@ -340,6 +340,7 @@ static bool opt_nostdinc;             // -nostdinc: skip the target's standard i
 static char *outfile;                 // -o NAME: explicit output name
 static char *linkscript;      // -T FILE: linker script (not besm6), instead of the standard one
 static char *max_errors_flag; // --max-errors=N for parse and lower, from -fmax-errors=N
+static int no_show_source;    // -fno-diagnostics-show-caret: no source line in diagnostics
 static char *codegen_dialect; // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
 
 static struct vec sources;  // input .c/.s files to compile
@@ -827,6 +828,8 @@ static int run_parse(const char *in, const char *out)
     vec_push(&av, tool);
     if (max_errors_flag)
         vec_push(&av, max_errors_flag);
+    if (no_show_source)
+        vec_push(&av, "--no-show-source");
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -850,6 +853,8 @@ static int run_lower(const char *in, const char *out)
     vec_push(&av, (char *)target->name);
     if (max_errors_flag)
         vec_push(&av, max_errors_flag);
+    if (no_show_source)
+        vec_push(&av, "--no-show-source");
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -1324,6 +1329,7 @@ static void usage(int status)
     printf("    --initial-pages=N  wasm32-braam: the process's initial memory, in 64 KiB pages\n");
     printf("                    (default 4)\n");
     printf("    -fmax-errors=N  Stop after N errors (0: no limit; default 20)\n");
+    printf("    -fno-diagnostics-show-caret  Don't show the source line under a diagnostic\n");
     printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
     printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf(
@@ -1422,6 +1428,14 @@ int main(int argc, char *argv[])
                 exit(1);
             }
             max_errors_flag = concat("--max-errors=", arg + 13);
+            continue;
+        }
+        if (strcmp(arg, "-fno-diagnostics-show-caret") == 0) {
+            no_show_source = 1;
+            continue;
+        }
+        if (strcmp(arg, "-fdiagnostics-show-caret") == 0) {
+            no_show_source = 0;
             continue;
         }
         if (arg[1] == 'W' || arg[1] == 'f' || arg[1] == 'w' || strncmp(arg, "-std=", 5) == 0 ||

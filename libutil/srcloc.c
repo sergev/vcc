@@ -10,6 +10,7 @@ SrcLoc diag_loc;
 const char *diag_progname;
 int diag_errors;
 int diag_max_errors;
+int diag_show_source = 1;
 jmp_buf *diag_recover;
 
 SrcLoc diag_enter(SrcLoc loc)
@@ -69,11 +70,60 @@ void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind)
     fprintf(f, "%s: ", kind);
 }
 
+//
+// Print the source line of loc and a caret under its column, as GCC does:
+//
+//          3 |     int x = 12abc;
+//            |             ^
+//
+// The file is read again by name; when it can't be, nothing is printed. The caret
+// line repeats each tab before the column, so the caret lines up whatever the tab
+// width. A column past the end of the line leaves the caret out.
+//
+void diag_print_source(FILE *f, SrcLoc loc)
+{
+    if (!diag_show_source || loc.line <= 0 || !loc.file || !loc.file[0]) {
+        return;
+    }
+    FILE *src = fopen(loc.file, "r");
+    if (!src) {
+        return;
+    }
+    int c = 0;
+    for (int line = 1; line < loc.line; line++) {
+        while ((c = getc(src)) != EOF && c != '\n')
+            ;
+        if (c == EOF) {
+            fclose(src);
+            return;
+        }
+    }
+    long start = ftell(src);
+    int len    = 0;
+    fprintf(f, "%5d | ", loc.line);
+    while ((c = getc(src)) != EOF && c != '\n') {
+        if (c != '\r') {
+            fputc(c, f);
+        }
+        len++;
+    }
+    fputc('\n', f);
+    if (loc.col > 0 && loc.col <= len + 1 && fseek(src, start, SEEK_SET) == 0) {
+        fprintf(f, "      | ");
+        for (int col = 1; col < loc.col; col++) {
+            fputc(getc(src) == '\t' ? '\t' : ' ', f);
+        }
+        fprintf(f, "^\n");
+    }
+    fclose(src);
+}
+
 void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap)
 {
     diag_print_prefix(stderr, loc, kind);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
+    diag_print_source(stderr, loc);
 }
 
 void diag_error(SrcLoc loc, const char *fmt, ...)

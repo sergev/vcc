@@ -62,6 +62,20 @@ void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind);
 // style of docs/Technical_Reference.md, "Diagnostics".
 //
 void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap);
+
+//
+// After the message, diag_vreport() shows the source line of loc with a caret under
+// the column, read back from loc.file:
+//
+//      file.c:12:7: error: message
+//         12 |     x = ;
+//            |       ^
+//
+// Nothing is shown when diag_show_source is 0 (1 by default) or the file can't be
+// read.
+//
+extern int diag_show_source;
+void diag_print_source(FILE *f, SrcLoc loc);
 void diag_error(SrcLoc loc, const char *fmt, ...);
 void diag_warning(SrcLoc loc, const char *fmt, ...);
 void diag_note(SrcLoc loc, const char *fmt, ...);

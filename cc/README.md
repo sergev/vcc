@@ -104,6 +104,7 @@ and removed on exit.
 | `--initial-pages=N` | `wasm32-braam`: the process's initial memory, 1 to 1600 pages of 64 KiB (default 4, braam-core's `BRAAM_BIN_INITIAL_PAGES`); the link's `--initial-memory` and the `braam` section both say it |
 | `-nostdlib` | No `crt0.o`, no standard library directory, no implicit libraries; a hosted target passes it to its C compiler and drops `libvcc.a` |
 | `-fmax-errors=N` | Stop after N errors (default 20, 0 for no limit); `vparse` and `vlower` take it as `--max-errors=N` |
+| `-fno-diagnostics-show-caret` | Don't show the source line and caret under a diagnostic; `vparse` and `vlower` take it as `--no-show-source` |
 | `-O`, `-g` | Accepted and ignored: `vlower` always optimizes, and there is no debug info yet |
 | `-W…`, other `-f…`, `-w`, `-std=…`, `-pedantic`, `-pipe`, `-arch A`, `-isysroot D` | Accepted and ignored, so that a build system written for GCC or clang (CMake among them) can drive `vcc` |
 

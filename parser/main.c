@@ -57,6 +57,7 @@ void print_usage(const char *prog_name)
     fprintf(stderr, "    --yaml           Emit YAML format\n");
     fprintf(stderr, "    --dot            Emit Graphviz DOT script\n");
     fprintf(stderr, "    --max-errors=N   Stop after N errors (0: no limit; default 20)\n");
+    fprintf(stderr, "    --no-show-source Don't show the source line under a diagnostic\n");
     fprintf(stderr, "    -v, --verbose    Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug      Print debug information\n");
     fprintf(stderr, "    -h, --help       Show this help message\n");
@@ -114,6 +115,7 @@ int parse_args(int argc, char *argv[], Args *args)
         { "yaml", no_argument, 0, 'y' },    //
         { "dot", no_argument, 0, 'd' },     //
         { "max-errors", required_argument, 0, 256 },
+        { "no-show-source", no_argument, 0, 257 },
         {}, //
     };
 
@@ -148,6 +150,9 @@ int parse_args(int argc, char *argv[], Args *args)
             break;
         case 256:
             diag_max_errors = atoi(optarg);
+            break;
+        case 257:
+            diag_show_source = 0;
             break;
         case '?': // Unknown option
             return -1;

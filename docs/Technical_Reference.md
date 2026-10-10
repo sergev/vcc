@@ -270,6 +270,24 @@ generators' errors have none; with no location the prefix names the program inst
 (`vgenx86: error: `, from `diag_progname`). `vcpp` prints `file:line: error: ` with the
 line of the directive.
 
+Under each message with a location, `diag_vreport` shows the source line and a caret
+under the column, as GCC does (`diag_print_source`):
+
+```
+t.c:3:12: error: invalid suffix on numeric constant '1x'
+    3 |     return 1x;
+      |            ^
+```
+
+The line is read back from the file the location names, the name `vcpp` wrote in its line
+marker, so a header's errors show the header. Nothing is shown when that file can't be
+read (standard input, a test's made-up name), nor with `--no-show-source`
+(`vcc -fno-diagnostics-show-caret`). The caret line repeats each tab before the column,
+and the caret is left out when the column is past the end of the line. `vcpp` keeps the
+columns the scanner counts: a dropped block comment becomes as many spaces as it is wide
+on its last line, and a line joined by backslash-newline is followed by the newline it
+lost. A macro expansion still shifts the columns after it on its line.
+
 Each tool's `fatal_error` prints through `diag_vreport` (`diag_fatal_v`), then
 unwinds to the innermost recovery point, `diag_recover`, or exits with status 1 when
 none is set. So `parse` and `lower` go on after an error and report every error they

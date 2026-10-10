@@ -21,7 +21,7 @@ add_library(test_util INTERFACE)
 target_include_directories(test_util INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/test)
 
 #
-# Tests for the escape decoder, string map, wio and xalloc
+# Tests for the escape decoder, string map, wio, xalloc and source excerpts
 #
 add_executable(libutil-tests
     test/c_escape_tests.cpp
@@ -29,6 +29,7 @@ add_executable(libutil-tests
     test/wio_tests.cpp
     test/xalloc_tests.cpp
     test/float128_tests.cpp
+    test/srcloc_tests.cpp
 )
 target_link_libraries(libutil-tests libutil GTest::gtest_main)
 test_chdir_to_bindir(libutil-tests)

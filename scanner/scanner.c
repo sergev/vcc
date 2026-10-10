@@ -75,9 +75,7 @@ static void lex_error(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    diag_print_prefix(stderr, scanner_token_loc, "error");
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
+    diag_vreport(scanner_token_loc, "error", fmt, ap);
     va_end(ap);
     if (!diag_recover) {
         exit(1);

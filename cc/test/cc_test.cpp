@@ -1020,16 +1020,79 @@ TEST_F(CcDriver, NoteAtPreviousDeclaration)
 {
     WriteSource("t.c", "int g;\ndouble g;\n");
     EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("t.c:2:8: error: conflicting types for 'g'\n"
-                            "t.c:1:5: note: previous declaration of 'g' is here\n"),
+    EXPECT_NE(Stderr().find(R"(t.c:2:8: error: conflicting types for 'g'
+    2 | double g;
+      |        ^
+t.c:1:5: note: previous declaration of 'g' is here
+    1 | int g;
+      |     ^
+)"),
               std::string::npos)
         << Stderr();
 
     WriteSource("t.c", "int f(int);\nint main(void)\n{\n    return f(1, 2);\n}\n");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_NE(Stderr().find("t.c:4:13: error: too many arguments to function 'f' "
                             "(expected 1, have 2)\n"
                             "t.c:1:5: note: 'f' declared here\n"),
+              std::string::npos)
+        << Stderr();
+}
+
+// A diagnostic shows its source line with a caret under the column. A tab before
+// the column is repeated in the caret line, so the caret lines up.
+TEST_F(CcDriver, SourceLineAndCaret)
+{
+    WriteSource("t.c", "int main(void)\n{\n\treturn 1x;\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:3:9: error: invalid suffix on numeric constant '1x'\n"
+                            "    3 | \treturn 1x;\n"
+                            "      | \t       ^\n"),
+              std::string::npos)
+        << Stderr();
+}
+
+// -fno-diagnostics-show-caret leaves out the source line.
+TEST_F(CcDriver, NoSourceLine)
+{
+    WriteSource("t.c", "int x = ;\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:1:9: error: "), std::string::npos) << Stderr();
+    EXPECT_EQ(Stderr().find(" | "), std::string::npos) << Stderr();
+}
+
+// The column after a block comment and the line after a backslash-newline are
+// those of the source, so the caret points at the right place.
+TEST_F(CcDriver, SourceLineAfterCommentAndSplice)
+{
+    WriteSource("t.c", R"(int a = /* c */ 1 +;
+int b = 1 + \
+  2;
+int c = ;
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find(R"(t.c:1:20: error: expected an expression before ';'
+    1 | int a = /* c */ 1 +;
+      |                    ^
+)"),
+              std::string::npos)
+        << Stderr();
+    EXPECT_NE(Stderr().find(R"(t.c:4:9: error: expected an expression before ';'
+    4 | int c = ;
+      |         ^
+)"),
+              std::string::npos)
+        << Stderr();
+}
+
+// An error in a header shows the line of the header.
+TEST_F(CcDriver, SourceLineInHeader)
+{
+    WriteSource("h.h", "struct s { int a } ;\n");
+    WriteSource("t.c", "#include \"h.h\"\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("    1 | struct s { int a } ;\n"
+                            "      |                  ^\n"),
               std::string::npos)
         << Stderr();
 }
@@ -1052,7 +1115,8 @@ TEST_F(CcDriver, ErrorLocationInHeader)
 }
 
 //
-// Error recovery: a pass reports every error it finds, not just the first.
+// Error recovery: a pass reports every error it finds, not just the first. These
+// tests leave out the source lines, to compare the messages alone.
 //
 TEST_F(CcDriver, SeveralSyntaxErrors)
 {
@@ -1067,7 +1131,7 @@ int k = ;
 int g(void) { return 1; }
 int h(void) { return 2 }
 )");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_EQ(Stderr(),
               "t.c:3:16: error: expected an expression before ';'\n"
               "t.c:5:5: error: expected ';' before 'return'\n"
@@ -1087,7 +1151,7 @@ TEST_F(CcDriver, SeveralLexicalErrors)
 }
 int g(void) { return 1e+; }
 )");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_NE(Stderr().find("t.c:3:13: error: invalid suffix on numeric constant '1foo'\n"
                             "t.c:4:15: error: invalid character '`'\n"),
               std::string::npos)
@@ -1109,7 +1173,7 @@ TEST_F(CcDriver, SyntaxErrorRecoveryInBlocks)
 }
 int g(void) { return 1;
 )");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_EQ(Stderr(),
               "t.c:4:18: error: expected an expression before ';'\n"
               "t.c:5:17: error: expected an expression before ';'\n"
@@ -1142,7 +1206,7 @@ int h(int a);
 int k(void) { return h(1, 2); }
 int m(void) { int q = 2; switch (q) { case 1: break; case 1: break; } return f(q) + g(); }
 )");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_EQ(Stderr(),
               "t.c:5:16: error: use of undeclared identifier 'y'\n"
               "t.c:14:11: error: cannot convert 'double' to 'int *' when assigning\n"
@@ -1160,7 +1224,7 @@ int k = 1.5 + "x";
 int a(void) { return t.x + k; }
 int b(void) { return w + 1; }
 )");
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_EQ(Stderr(),
               "t.c:1:10: error: variable 't' has incomplete type 'struct T'\n"
               "t.c:2:13: error: invalid operands to '+' ('double' and 'char *')\n"
@@ -1181,7 +1245,8 @@ TEST_F(CcDriver, MaxErrors)
         return n;
     };
 
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=2", "t.c" }), 0);
+    EXPECT_NE(
+        Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "-fmax-errors=2", "t.c" }), 0);
     EXPECT_EQ(Stderr().find("t.c:1:23: error: use of undeclared identifier 'x'\n"
                             "t.c:2:23: error: use of undeclared identifier 'x'\n"),
               0u)
@@ -1189,15 +1254,17 @@ TEST_F(CcDriver, MaxErrors)
     EXPECT_EQ(count("undeclared identifier"), 2u) << Stderr();
     EXPECT_NE(Stderr().find(": error: too many errors, stopping\n"), std::string::npos) << Stderr();
 
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "t.c" }), 0);
     EXPECT_EQ(count("undeclared identifier"), 20u) << Stderr();
     EXPECT_EQ(count("too many errors"), 1u) << Stderr();
 
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=0", "t.c" }), 0);
+    EXPECT_NE(
+        Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "-fmax-errors=0", "t.c" }), 0);
     EXPECT_EQ(count("undeclared identifier"), 25u) << Stderr();
     EXPECT_EQ(count("too many errors"), 0u) << Stderr();
 
-    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=x", "t.c" }), 0);
+    EXPECT_NE(
+        Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-show-caret", "-fmax-errors=x", "t.c" }), 0);
     EXPECT_NE(Stderr().find("invalid value in '-fmax-errors=x'"), std::string::npos) << Stderr();
 }
 
