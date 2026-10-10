@@ -476,7 +476,9 @@ void _Noreturn fatal_error(const char *message, ...)
 {
     va_list ap;
     va_start(ap, message);
-    diag_fatal_v(message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
+    va_end(ap);
+    diag_unwind();
 }
 
 int main(int argc, char *argv[])
