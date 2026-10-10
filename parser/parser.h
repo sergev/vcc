@@ -14,6 +14,9 @@ typedef struct Declarator Declarator;
 
 // Enable debug output
 extern int parser_debug;
+
+// Go on after a syntax error, to report several per run; set by the parse tool.
+extern bool parser_recovery;
 extern int import_debug;
 extern int export_debug;
 extern int wio_debug;

@@ -1,3 +1,4 @@
+#include <setjmp.h>
 #include <stdio.h>
 
 #include "parser_internal.h"
@@ -121,10 +122,31 @@ Stmt *parse_compound_statement()
     expect_token(TOKEN_LBRACE);
     scope_level++;
 
-    DeclOrStmt *items = NULL;
-    if (current_token_is_not(TOKEN_RBRACE)) {
-        items = parse_block_item_list();
+    // On a syntax error in an item, drop it and resume with the next one.
+    int level                 = scope_level;
+    int depth                 = brace_depth;
+    jmp_buf *outer            = diag_recover;
+    DeclOrStmt *volatile head = NULL;
+    DeclOrStmt *volatile last = NULL;
+    jmp_buf here;
+    if (outer) {
+        if (setjmp(here)) {
+            scope_level = level;
+            nametab_purge(level);
+            parser_sync(depth, false);
+        }
+        diag_recover = &here;
     }
+    while (current_token_is_not(TOKEN_RBRACE)) {
+        DeclOrStmt *item = parse_block_item();
+        if (last)
+            last->next = item;
+        else
+            head = item;
+        last = item;
+    }
+    diag_recover      = outer;
+    DeclOrStmt *items = head;
     expect_token(TOKEN_RBRACE);
     scope_level--;
     nametab_purge(scope_level);
@@ -133,24 +155,6 @@ Stmt *parse_compound_statement()
     stmt->loc        = loc;
     stmt->u.compound = items;
     return stmt;
-}
-
-//
-// block_item_list
-//     : block_item
-//     | block_item_list block_item
-//     ;
-//
-DeclOrStmt *parse_block_item_list()
-{
-    if (parser_debug) {
-        printf("--- %s()\n", __func__);
-    }
-    DeclOrStmt *item = parse_block_item();
-    if (current_token_is_not(TOKEN_RBRACE)) {
-        item->next = parse_block_item_list();
-    }
-    return item;
 }
 
 //

@@ -45,7 +45,7 @@ int main(void) {
     return x.0foo;
 }
 )SRC")),
-                 "invalid suffix on numeric constant '\\.0fo'");
+                 "invalid suffix on numeric constant '\\.0foo'");
 }
 
 // --- invalid_parse ---

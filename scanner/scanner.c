@@ -68,10 +68,10 @@ static SrcLoc current_loc(void)
     return (SrcLoc){ scanner_filename, scanner_lineno, scanner_col };
 }
 
-// Report a lexical error at the start of the token being scanned and abort.
-// The scanner is the first phase of the compiler, so a malformed token cannot
-// be recovered from here.
-static _Noreturn void lex_error(const char *fmt, ...)
+// Report a lexical error at the start of the token being scanned. With error
+// recovery on (diag_recover set), count it and return: the caller repairs the
+// token in place, so the parser never sees a broken one. Otherwise exit.
+static void lex_error(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -79,7 +79,10 @@ static _Noreturn void lex_error(const char *fmt, ...)
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
     va_end(ap);
-    exit(1);
+    if (!diag_recover) {
+        exit(1);
+    }
+    diag_count_error();
 }
 
 // Main lexer function
@@ -141,6 +144,9 @@ again:
         token = scan_char();
     } else {
         token = scan_operator();
+    }
+    if (token == TOKEN_UNKNOWN) {
+        goto again; // an invalid character, already reported
     }
     return token;
 }
@@ -519,8 +525,11 @@ static int scan_number(void)
     // second '.': '1foo' is a single invalid token, not '1f' followed by 'oo',
     // and '1.0e10.0' is one malformed preprocessing number, not '1.0e10' '.' '0'.
     if (isalpha(next_char) || next_char == '_' || next_char == '.') {
-        consume_char();
+        while (isalnum(next_char) || next_char == '_' || next_char == '.') {
+            consume_char();
+        }
         lex_error("invalid suffix on numeric constant '%s'", yytext);
+        return is_float ? TOKEN_F_CONSTANT : TOKEN_I_CONSTANT;
     }
 
     // Validate the suffix combination itself: an integer accepts an optional
@@ -645,10 +654,11 @@ static int scan_operator(void)
     // Multi-character operators
     if (c == '.' && c2 == '.') {
         consume_char();
-        if (next_char != '.') {
+        if (next_char == '.') {
+            consume_char();
+        } else {
             lex_error("expected '...'");
         }
-        consume_char();
         return TOKEN_ELLIPSIS;
     }
     if (c == '>' && c2 == '>') {
@@ -790,8 +800,10 @@ static int scan_operator(void)
         // Unknown character: not part of any C token outside a literal.
         if (isprint(c)) {
             lex_error("invalid character '%c'", c);
+        } else {
+            lex_error("invalid character '\\x%02x'", (unsigned char)c);
         }
-        lex_error("invalid character '\\x%02x'", (unsigned char)c);
+        return TOKEN_UNKNOWN;
     }
 }
 

@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +22,11 @@ const char *current_function_name;
 
 // Enable debug output
 int parser_debug;
+
+bool parser_recovery;
+
+// Braces consumed so far and not yet closed.
+int brace_depth;
 
 // Level of scope for nested compound operators, from semantic.
 extern int scope_level;
@@ -61,6 +67,11 @@ static int token_translation(int token)
 /* Token handling */
 void advance_token()
 {
+    if (current_token == TOKEN_LBRACE) {
+        brace_depth++;
+    } else if (current_token == TOKEN_RBRACE && brace_depth > 0) {
+        brace_depth--;
+    }
     if (peek_token > 0) {
         current_token = peek_token;
         peek_token    = 0;
@@ -99,6 +110,38 @@ int next_token()
         peek_loc   = scanner_token_loc;
     }
     return peek_token;
+}
+
+//
+// After a syntax error, skip to where parsing can resume at the given brace depth:
+// past a ';' at that depth, or past the '}' that brings it back there (and a ';'
+// right after, as in `struct S { ... };`). A '}' at that depth closes the enclosing
+// block, whose own parser consumes it; at the top level there is no enclosing block,
+// so a stray '}' is skipped. At the end of the file there is nothing left to find,
+// and further errors there would only echo the first one.
+//
+void parser_sync(int depth, bool top_level)
+{
+    for (;;) {
+        if (current_token == TOKEN_EOF) {
+            exit(1);
+        }
+        if (current_token == TOKEN_SEMICOLON && brace_depth <= depth) {
+            advance_token();
+            return;
+        }
+        if (current_token == TOKEN_RBRACE && brace_depth <= depth + 1) {
+            if (brace_depth <= depth && !top_level) {
+                return;
+            }
+            advance_token();
+            if (current_token == TOKEN_SEMICOLON) {
+                advance_token();
+            }
+            return;
+        }
+        advance_token();
+    }
 }
 
 const char *parser_where(void)
@@ -163,10 +206,22 @@ Program *parse_translation_unit()
         printf("--- %s()\n", __func__);
     }
     Program *program = new_program();
+    jmp_buf here;
+    if (parser_recovery) {
+        if (setjmp(here)) {
+            // Drop the declaration and what it opened.
+            scope_level = 0;
+            nametab_purge(0);
+            current_function_name = NULL;
+            parser_sync(0, true);
+        }
+        diag_recover = &here;
+    }
     while (current_token != TOKEN_EOF) {
         ExternalDecl *decl = parse_external_declaration();
         append_list(&program->decls, decl);
     }
+    diag_recover = NULL;
     return program;
 }
 
@@ -277,13 +332,18 @@ Program *parse(FILE *input)
         printf("--- %s()\n", __func__);
     }
     init_scanner(input);
-    peek_token = 0;
+    peek_token  = 0;
+    scope_level = 0;
+    brace_depth = 0;
     reset_anon_tag_counter(); // synthetic anonymous tags are numbered per translation unit
     current_function_name = NULL;
     advance_token();
     Program *program = parse_translation_unit();
     if (current_token != TOKEN_EOF) {
         internal_error("expected end of file");
+    }
+    if (diag_errors) {
+        exit(1); // all reported; no AST from a broken source
     }
     return program;
 }

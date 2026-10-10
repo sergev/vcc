@@ -20,6 +20,8 @@ extern int scope_level;
 extern const char *current_function_name;
 
 void advance_token(void);
+extern int brace_depth;
+void parser_sync(int depth, bool top_level);
 bool current_token_is_not(int token);
 int next_token(void);
 void expect_token(int expected);
@@ -108,7 +110,6 @@ Declaration *parse_static_assert_declaration(void);
 Stmt *parse_statement(void);
 Stmt *parse_labeled_statement(void);
 Stmt *parse_compound_statement(void);
-DeclOrStmt *parse_block_item_list(void);
 DeclOrStmt *parse_block_item(void);
 Stmt *parse_expression_statement(void);
 Stmt *parse_selection_statement(void);

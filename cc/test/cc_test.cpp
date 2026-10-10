@@ -1052,6 +1052,72 @@ TEST_F(CcDriver, ErrorLocationInHeader)
 }
 
 //
+// Error recovery: a pass reports every error it finds, not just the first.
+//
+TEST_F(CcDriver, SeveralSyntaxErrors)
+{
+    WriteSource("t.c", R"(int f(int x)
+{
+    int a = x +;
+    a = a * 2
+    return a;
+}
+struct S { int p q; int r; };
+int k = ;
+int g(void) { return 1; }
+int h(void) { return 2 }
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(Stderr(),
+              "t.c:3:16: error: expected an expression before ';'\n"
+              "t.c:5:5: error: expected ';' before 'return'\n"
+              "t.c:7:18: error: expected ',' before 'q'\n"
+              "t.c:8:9: error: expected an expression before ';'\n"
+              "t.c:10:24: error: expected ';' before '}'\n");
+    EXPECT_FALSE(fs::exists(Path("t.s")));
+}
+
+TEST_F(CcDriver, SeveralLexicalErrors)
+{
+    WriteSource("t.c", R"(int f(void)
+{
+    int a = 1foo;
+    int b = 2 ` 3;
+    return a + b;
+}
+int g(void) { return 1e+; }
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:3:13: error: invalid suffix on numeric constant '1foo'\n"
+                            "t.c:4:15: error: invalid character '`'\n"),
+              std::string::npos)
+        << Stderr();
+    EXPECT_NE(Stderr().find("t.c:7:22: error: missing exponent"), std::string::npos) << Stderr();
+}
+
+// An error in a nested block resumes in that block; an unterminated function ends it all.
+TEST_F(CcDriver, SyntaxErrorRecoveryInBlocks)
+{
+    WriteSource("t.c", R"(int f(int x)
+{
+    if (x) {
+        x = (x + ;
+        x = x * ;
+    } else
+        x = ;
+    return x;
+}
+int g(void) { return 1;
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(Stderr(),
+              "t.c:4:18: error: expected an expression before ';'\n"
+              "t.c:5:17: error: expected an expression before ';'\n"
+              "t.c:7:13: error: expected an expression before ';'\n"
+              "t.c:11:1: error: expected '}' at end of file\n");
+}
+
+//
 // Usage errors.
 //
 TEST_F(CcDriver, RejectsUnknownDialect)
