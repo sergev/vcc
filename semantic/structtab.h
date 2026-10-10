@@ -31,6 +31,7 @@ typedef struct StructDef {
     char *tag;         // Struct tag (Ident, owned copy)
     TypeKind kind;     // TYPE_STRUCT or TYPE_UNION
     bool complete;     // false for a forward declaration, true once defined
+    SrcLoc loc;        // where it was declared or defined, for a note
     int alignment;     // Alignment requirement (in bytes)
     int size;          // Total size of the struct (in bytes)
     FieldDef *members; // List of members, sorted by offset

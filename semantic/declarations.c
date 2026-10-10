@@ -1,7 +1,9 @@
 //
 // Type-checking for declarations.
 //
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "semantic.h"
@@ -21,6 +23,21 @@ const Type *typecheck_function;
 //
 static int param_scope_level = -1; // the scope of the parameters of the function checked
 
+//
+// Report an error about a declaration of name, then where name was declared before.
+//
+static _Noreturn void error_at_previous(const char *name, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_vreport(diag_loc, "error", fmt, ap);
+    va_end(ap);
+    const Symbol *prev = symtab_get_opt(name);
+    if (prev && prev->loc.line > 0)
+        diag_note(prev->loc, "previous declaration of '%s' is here", name);
+    exit(1);
+}
+
 static _Noreturn void redeclared(const char *name)
 {
     // The parameters and the outermost block of the body share a scope (C11 §6.2.1p4).
@@ -28,8 +45,9 @@ static _Noreturn void redeclared(const char *name)
     if (level == param_scope_level && scope_level == param_scope_level + 1)
         level = scope_level;
     if (level < scope_level)
-        fatal_error("declaration of '%s' shadows an earlier one, which is not allowed", name);
-    fatal_error("redefinition of '%s'", name);
+        error_at_previous(name, "declaration of '%s' shadows an earlier one, which is not allowed",
+                          name);
+    error_at_previous(name, "redefinition of '%s'", name);
 }
 
 // A bit-field, for a message: "bit-field 'x'", or "unnamed bit-field".
@@ -295,7 +313,7 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
             redeclared(decl->name);
         }
         if (!compatible_type(existing->type, adj)) {
-            fatal_error("conflicting types for '%s'", decl->name);
+            error_at_previous(decl->name, "conflicting types for '%s'", decl->name);
         }
         agree_coroutine(existing, yield, decl->name);
     }
@@ -582,8 +600,12 @@ static void register_struct_type(const Type *t)
     // now complete) or as a clash: a second full definition, or a different keyword.
     const StructDef *existing = structtab_find_opt(t->u.struct_t.name);
     if (existing) {
-        if (existing->complete)
-            fatal_error("redefinition of '%s'", type_to_c(t));
+        if (existing->complete) {
+            diag_error(diag_loc, "redefinition of '%s'", type_to_c(t));
+            if (existing->loc.line > 0)
+                diag_note(existing->loc, "previous definition of '%s' is here", type_to_c(t));
+            exit(1);
+        }
         if (existing->kind != kind)
             fatal_error("'%s' was declared as a different kind of tag", t->u.struct_t.name);
     }
@@ -806,10 +828,10 @@ static void typecheck_local_var_decl(const Declaration *d)
             if (existing && (existing->kind == SYM_LOCAL ||
                              (existing->kind == SYM_STATIC && existing->block_scope &&
                               !existing->u.static_var.global))) {
-                fatal_error("'%s' is declared both with and without linkage", decl->name);
+                error_at_previous(decl->name, "'%s' is declared both with and without linkage", decl->name);
             }
             if (existing && unalias(existing->type)->kind != unalias(var_type)->kind) {
-                fatal_error("conflicting types for '%s'", decl->name);
+                error_at_previous(decl->name, "conflicting types for '%s'", decl->name);
             }
             if (!existing) {
                 // Scope the synthesized symbol to this block so its identifier does
@@ -1092,18 +1114,19 @@ static void typecheck_fn_decl(ExternalDecl *d)
     bool defined     = has_body;
     if (existing) {
         if (unalias(existing->type)->kind != fun_type->kind) {
-            fatal_error("redefinition of '%s' as a different kind of symbol", d->u.function.name);
+            error_at_previous(d->u.function.name, "redefinition of '%s' as a different kind of symbol", d->u.function.name);
         }
         if (existing->kind == SYM_FUNC) {
             if (!compatible_type(existing->type, adjusted_type)) {
-                fatal_error("conflicting types for '%s'", d->u.function.name);
+                error_at_previous(d->u.function.name, "conflicting types for '%s'", d->u.function.name);
             }
             if (existing->u.func.defined && has_body) {
-                fatal_error("redefinition of '%s'", d->u.function.name);
+                error_at_previous(d->u.function.name, "redefinition of '%s'", d->u.function.name);
             }
             if (existing->u.func.global && is_static(d->u.function.specifiers)) {
-                fatal_error("static declaration of '%s' follows non-static declaration",
-                            d->u.function.name);
+                error_at_previous(d->u.function.name,
+                                  "static declaration of '%s' follows non-static declaration",
+                                  d->u.function.name);
             }
             agree_coroutine(existing, yield, d->u.function.name);
             defined = has_body || existing->u.func.defined;
@@ -1280,18 +1303,18 @@ static void typecheck_file_scope_var_decl(Declaration *d)
         Symbol *existing = symtab_get_opt(decl->name);
         if (existing) {
             if (unalias(existing->type)->kind != unalias(var_type)->kind) {
-                fatal_error("conflicting types for '%s'", decl->name);
+                error_at_previous(decl->name, "conflicting types for '%s'", decl->name);
             }
             if (!compatible_type(existing->type, var_type)) {
-                fatal_error("conflicting types for '%s'", decl->name);
+                error_at_previous(decl->name, "conflicting types for '%s'", decl->name);
             }
             if (existing->kind == SYM_STATIC) {
                 if (!is_extern(d->u.var.specifiers) && existing->u.static_var.global != global) {
-                    fatal_error("conflicting linkage for '%s'", decl->name);
+                    error_at_previous(decl->name, "conflicting linkage for '%s'", decl->name);
                 }
                 if (existing->u.static_var.init_kind == INIT_INITIALIZED &&
                     init_kind == INIT_INITIALIZED) {
-                    fatal_error("redefinition of '%s'", decl->name);
+                    error_at_previous(decl->name, "redefinition of '%s'", decl->name);
                 }
                 init_kind = existing->u.static_var.init_kind == INIT_INITIALIZED
                                 ? existing->u.static_var.init_kind

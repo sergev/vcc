@@ -36,6 +36,7 @@ typedef struct Symbol {
     SymbolKind kind;  // Kind of symbol (func, static, const, local)
     bool has_linkage; // When function or global/extern variable
     bool block_scope; // True for a static/extern declared inside a block (not at file scope)
+    SrcLoc loc;       // where it was declared, for a note after an error about it
     union {
         struct {
             bool defined;  // True if function body is defined

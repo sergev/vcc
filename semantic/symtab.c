@@ -26,6 +26,7 @@ Symbol *new_symbol(const char *name, Type *t, SymbolKind kind)
     sym->name   = xstrdup(name);
     sym->type   = t;
     sym->kind   = kind;
+    sym->loc    = diag_loc; // the declaration being checked
     return sym;
 }
 

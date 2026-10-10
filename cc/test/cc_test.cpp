@@ -987,7 +987,37 @@ TEST_F(CcDriver, TypeErrorLocation)
 {
     WriteSource("t.c", "int main(void)\n{\n    int *p;\n    p = 3.5;\n    return 0;\n}\n");
     EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("t.c:4:7: error: "), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("t.c:4:7: error: cannot convert 'double' to 'int *' when assigning"),
+              std::string::npos)
+        << Stderr();
+}
+
+// A redefinition or a wrong call is followed by a note at the earlier declaration.
+TEST_F(CcDriver, NoteAtPreviousDeclaration)
+{
+    WriteSource("t.c", "int g;\ndouble g;\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:2:8: error: conflicting types for 'g'\n"
+                            "t.c:1:5: note: previous declaration of 'g' is here\n"),
+              std::string::npos)
+        << Stderr();
+
+    WriteSource("t.c", "int f(int);\nint main(void)\n{\n    return f(1, 2);\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:4:13: error: too many arguments to function 'f' "
+                            "(expected 1, have 2)\n"
+                            "t.c:1:5: note: 'f' declared here\n"),
+              std::string::npos)
+        << Stderr();
+}
+
+// An undefined label is reported at the goto, not at the function.
+TEST_F(CcDriver, UndefinedLabelAtGoto)
+{
+    WriteSource("t.c", "int main(void)\n{\n    goto out;\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:3:5: error: use of undeclared label 'out'"), std::string::npos)
+        << Stderr();
 }
 
 TEST_F(CcDriver, ErrorLocationInHeader)

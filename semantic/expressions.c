@@ -3,6 +3,7 @@
 //
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "c_escape.h"
@@ -421,9 +422,13 @@ Expr *typecheck_call_args(const Type *fn_type, Expr *args, const char *name)
         char callee[256] = "";
         if (name)
             snprintf(callee, sizeof(callee), " '%s'", name);
-        fatal_error("too %s arguments to function%s (expected %s%d, have %d)",
-                    arg_count < param_count ? "few" : "many", callee,
-                    variadic ? "at least " : "", param_count, arg_count);
+        diag_error(diag_loc, "too %s arguments to function%s (expected %s%d, have %d)",
+                   arg_count < param_count ? "few" : "many", callee, variadic ? "at least " : "",
+                   param_count, arg_count);
+        const Symbol *sym = name ? symtab_get_opt(name) : NULL;
+        if (sym && sym->loc.line > 0)
+            diag_note(sym->loc, "'%s' declared here", name);
+        exit(1);
     }
     int arg_number = 0;
     Expr *arg = args, *prev = NULL, *new_args = NULL;

@@ -106,6 +106,7 @@ void structtab_add_struct(const char *tag, TypeKind kind, bool complete, int ali
     def->alignment = alignment;
     def->size      = size;
     def->members   = members;
+    def->loc       = diag_loc;
 
     map_insert_free(&structtab, tag, (intptr_t)def, level, structtab_retire_callback);
 }
