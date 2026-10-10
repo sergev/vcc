@@ -96,6 +96,7 @@ enum macro_mark {
 // buffer.c -- scan-buffer refill/spill and output
 void emit_line_marker(void);  // write a "# line file" marker to the output
 void flush_output(void);      // write finished text from the buffer to the output file
+void put_newlines(void);      // write the newlines owed for spliced lines
 char *refill_buffer(char *p); // top the buffer up from pushback or the input file
 char *spill_buffer(char *p);  // save part of the buffer aside to make room for pushback
 

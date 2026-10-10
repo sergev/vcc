@@ -18,6 +18,7 @@
 //
 void emit_line_marker()
 {
+    cpp.pending_nl = 0; // the marker resynchronizes the line number
     if (cpp.opt_no_lines == 0)
         fprintf(cpp.out_file, "# %d \"%s\"\n", cpp.line_no[cpp.inc_level],
                 cpp.inc_file[cpp.inc_level]);
@@ -93,9 +94,28 @@ void flush_output()
     if ((p1 = cpp.out_ptr) == cpp.tok_ptr || cpp.false_level != 0)
         return;
     f = cpp.out_file;
-    while (p1 < cpp.tok_ptr)
-        putc(*p1++, f);
+    if (cpp.pending_nl) {
+        while (p1 < cpp.tok_ptr) {
+            char c = *p1++;
+            putc(c, f);
+            if (c == '\n')
+                put_newlines();
+        }
+    } else {
+        while (p1 < cpp.tok_ptr)
+            putc(*p1++, f);
+    }
     cpp.out_ptr = p1;
+}
+
+//
+// Write the newlines owed for spliced lines (pending_nl), right after a newline
+// was written, so the following text keeps its source line number.
+//
+void put_newlines()
+{
+    for (; cpp.pending_nl > 0; --cpp.pending_nl)
+        putc('\n', cpp.out_file);
 }
 
 //

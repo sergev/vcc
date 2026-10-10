@@ -108,7 +108,9 @@ char *scan_token(char *p)
                     ++cpp.line_no[cpp.inc_level];
                     // Phase 2 (C11 §5.1.1.2): splice the two physical lines by
                     // deleting the backslash-newline from the output as well as
-                    // the token stream, so the surrounding characters join.
+                    // the token stream, so the surrounding characters join.  The
+                    // lost newline is owed, and written after the next one.
+                    ++cpp.pending_nl;
                     cpp.tok_ptr = p - 2; // the '\'
                     flush_output();
                     cpp.out_ptr = cpp.tok_ptr = p;
@@ -163,8 +165,10 @@ char *scan_token(char *p)
                             }
                         else if (p[-1] == '\n') {
                             ++cpp.line_no[cpp.inc_level];
-                            if (!cpp.opt_keep_comments)
+                            if (!cpp.opt_keep_comments) {
                                 putc('\n', cpp.out_file);
+                                put_newlines();
+                            }
                         } else if (AT_BUF_END(--p)) {
                             if (!cpp.opt_keep_comments) {
                                 cpp.tok_ptr = p;

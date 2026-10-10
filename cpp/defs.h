@@ -230,6 +230,11 @@ struct cppstate {
     // arrives before the closing '*/' can be diagnosed (see refill_buffer)
     int in_block_comment;
 
+    // physical lines joined by backslash-newline splices but not yet written out.
+    // The next newline written is followed by this many more, so the line after a
+    // spliced one comes out on its own line number (see put_newlines).
+    int pending_nl;
+
     // per-#if-group state so #elif/#else take at most one branch.  if_top is the
     // current #if/#ifdef/#ifndef nesting depth; if_taken[if_top] is nonzero once a
     // branch in that group has been taken (or the whole group is nested inside a
