@@ -121,5 +121,5 @@ TEST_F(ParserTest, LocationsSurviveExport)
 TEST_F(ParserTest, SyntaxErrorLocation)
 {
     EXPECT_DEATH(parse(CreateTempFile("# 1 \"bad.c\"\nint main(void)\n{\n    return 1 +;\n}\n")),
-                 "bad\\.c:3:15: error: Expected primary expression");
+                 "bad\\.c:3:15: error: expected an expression before ';'");
 }

@@ -69,7 +69,12 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
         printf("--- %s()\n", __func__);
     }
     if (!specs) {
-        fatal_error("Empty type specifier list");
+        // An identifier where a type belongs: a misspelled or undeclared type name if a
+        // declarator follows it, else a declaration with no type at all.
+        if (current_token == TOKEN_IDENTIFIER &&
+            (next_token() == TOKEN_IDENTIFIER || next_token() == TOKEN_STAR))
+            fatal_error("unknown type name '%s'", current_lexeme);
+        fatal_error("expected a type %s", parser_where());
     }
 
     enum { SIGNED_SIGNED, SIGNED_UNSIGNED };
@@ -91,39 +96,39 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
     for (const TypeSpec *s = specs; s; s = s->next) {
         if (s->kind == TYPE_SPEC_BASIC) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec) {
-                fatal_error("type specifier cannot combine with struct/union/enum/typedef");
+                fatal_error("cannot combine a type specifier with a struct, union, enum or typedef name");
             }
             switch (s->u.basic->kind) {
             case TYPE_VOID:
                 if (base_kind != -1) {
-                    fatal_error("void cannot combine with other types");
+                    fatal_error("cannot combine 'void' with another type");
                 }
                 base_kind = TYPE_VOID;
                 break;
             case TYPE_BOOL:
                 if (base_kind != -1) {
-                    fatal_error("_Bool cannot combine with other types");
+                    fatal_error("cannot combine '_Bool' with another type");
                 }
                 base_kind = TYPE_BOOL;
                 break;
             case TYPE_CHAR:
                 if (base_kind != -1) {
-                    fatal_error("char cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'char' with '%s'", type_kind_str[base_kind]);
                 }
                 base_kind = TYPE_CHAR;
                 break;
             case TYPE_SHORT:
                 if (base_kind != -1 && base_kind != TYPE_INT) {
-                    fatal_error("short cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'short' with '%s'", type_kind_str[base_kind]);
                 }
                 base_kind = TYPE_SHORT;
                 break;
             case TYPE_INT:
                 if (base_kind != -1 && base_kind != TYPE_SHORT && base_kind != TYPE_LONG) {
-                    fatal_error("int cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'int' with '%s'", type_kind_str[base_kind]);
                 }
                 if (int_count > 0) {
-                    fatal_error("multiple int specifiers");
+                    fatal_error("duplicate 'int'");
                 }
                 int_count++;
                 if (base_kind == -1) {
@@ -133,10 +138,10 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
             case TYPE_LONG:
                 if (base_kind != -1 && base_kind != TYPE_INT && base_kind != TYPE_LONG &&
                     base_kind != TYPE_DOUBLE) {
-                    fatal_error("long cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'long' with '%s'", type_kind_str[base_kind]);
                 }
                 if (long_count > 2) {
-                    fatal_error("too many long specifiers");
+                    fatal_error("'long long long' is too long");
                 }
                 long_count++;
                 if (base_kind == TYPE_DOUBLE) {
@@ -149,42 +154,42 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
                 break;
             case TYPE_FLOAT:
                 if (base_kind != -1 && base_kind != TYPE_COMPLEX && base_kind != TYPE_IMAGINARY) {
-                    fatal_error("float cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'float' with '%s'", type_kind_str[base_kind]);
                 }
                 base_kind = TYPE_FLOAT;
                 break;
             case TYPE_DOUBLE:
                 if (base_kind != -1 && base_kind != TYPE_LONG && base_kind != TYPE_COMPLEX &&
                     base_kind != TYPE_IMAGINARY) {
-                    fatal_error("double cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'double' with '%s'", type_kind_str[base_kind]);
                 }
                 base_kind = (base_kind == TYPE_LONG) ? TYPE_LONG_DOUBLE : TYPE_DOUBLE;
                 break;
             case TYPE_SIGNED:
                 if (base_kind != -1 && base_kind != TYPE_CHAR && base_kind != TYPE_SHORT &&
                     base_kind != TYPE_INT && base_kind != TYPE_LONG) {
-                    fatal_error("signed cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'signed' with '%s'", type_kind_str[base_kind]);
                 }
                 if (signedness == SIGNED_SIGNED)
-                    fatal_error("duplicate signed specifier");
+                    fatal_error("duplicate 'signed'");
                 if (signedness == SIGNED_UNSIGNED)
-                    fatal_error("signed cannot combine with unsigned");
+                    fatal_error("cannot combine 'signed' with 'unsigned'");
                 signedness = SIGNED_SIGNED;
                 break;
             case TYPE_UNSIGNED:
                 if (base_kind != -1 && base_kind != TYPE_CHAR && base_kind != TYPE_SHORT &&
                     base_kind != TYPE_INT && base_kind != TYPE_LONG) {
-                    fatal_error("unsigned cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine 'unsigned' with '%s'", type_kind_str[base_kind]);
                 }
                 if (signedness == SIGNED_UNSIGNED)
-                    fatal_error("duplicate unsigned specifier");
+                    fatal_error("duplicate 'unsigned'");
                 if (signedness == SIGNED_SIGNED)
-                    fatal_error("unsigned cannot combine with signed");
+                    fatal_error("cannot combine 'unsigned' with 'signed'");
                 signedness = SIGNED_UNSIGNED;
                 break;
             case TYPE_COMPLEX:
                 if (base_kind != -1 && base_kind != TYPE_FLOAT && base_kind != TYPE_DOUBLE) {
-                    fatal_error("_Complex cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine '_Complex' with '%s'", type_kind_str[base_kind]);
                 }
                 is_complex = true;
                 if (base_kind == -1)
@@ -192,7 +197,7 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
                 break;
             case TYPE_IMAGINARY:
                 if (base_kind != -1 && base_kind != TYPE_FLOAT && base_kind != TYPE_DOUBLE) {
-                    fatal_error("_Imaginary cannot combine with %s", type_kind_str[base_kind]);
+                    fatal_error("cannot combine '_Imaginary' with '%s'", type_kind_str[base_kind]);
                 }
                 is_imaginary = true;
                 if (base_kind == -1)
@@ -204,31 +209,31 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
         } else if (s->kind == TYPE_SPEC_STRUCT) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("struct cannot combine with other distinct types");
+                fatal_error("cannot combine 'struct' with another type");
             }
             struct_spec = s;
         } else if (s->kind == TYPE_SPEC_UNION) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("union cannot combine with other distinct types");
+                fatal_error("cannot combine 'union' with another type");
             }
             union_spec = s;
         } else if (s->kind == TYPE_SPEC_ENUM) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("enum cannot combine with other distinct types");
+                fatal_error("cannot combine 'enum' with another type");
             }
             enum_spec = s;
         } else if (s->kind == TYPE_SPEC_TYPEDEF_NAME) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("typedef name cannot combine with other distinct types");
+                fatal_error("cannot combine a typedef name with another type");
             }
             typedef_spec = s;
         } else if (s->kind == TYPE_SPEC_ATOMIC || s->kind == TYPE_SPEC_CORO_FRAME) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
                 base_kind != -1) {
-                fatal_error("%s cannot combine with other distinct types",
+                fatal_error("cannot combine '%s' with another type",
                             s->kind == TYPE_SPEC_ATOMIC ? "_Atomic(type)" : "_Coro_frame");
             }
             atomic_spec = s;
@@ -268,18 +273,18 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
             base_kind = (signedness == SIGNED_SIGNED) ? TYPE_INT : TYPE_UINT;
         }
         if (is_complex && is_imaginary) {
-            fatal_error("_Complex and _Imaginary cannot combine");
+            fatal_error("cannot combine '_Complex' with '_Imaginary'");
         }
         if ((is_complex || is_imaginary) && (base_kind != TYPE_FLOAT && base_kind != TYPE_DOUBLE)) {
-            fatal_error("_Complex/_Imaginary require float or double");
+            fatal_error("'_Complex' and '_Imaginary' require 'float' or 'double'");
         }
         if ((signedness == SIGNED_SIGNED || signedness == SIGNED_UNSIGNED || long_count > 0) &&
             (base_kind == TYPE_FLOAT || base_kind == TYPE_DOUBLE)) {
-            fatal_error("signed/unsigned/long cannot combine with float/double");
+            fatal_error("cannot combine 'signed', 'unsigned' or 'long' with 'float' or 'double'");
         }
         if (base_kind == TYPE_VOID || base_kind == TYPE_BOOL) {
             if (long_count > 0 || signedness == SIGNED_UNSIGNED || is_complex || is_imaginary) {
-                fatal_error("void/_Bool cannot combine with modifiers");
+                fatal_error("cannot combine 'void' or '_Bool' with another type specifier");
             }
         }
 
@@ -430,7 +435,7 @@ void define_typedef(InitDeclarator *decl)
         if (!token || token == TOKEN_TYPEDEF_NAME) {
             nametab_define(decl->name, TOKEN_TYPEDEF_NAME, scope_level);
         } else {
-            fatal_error("Typedef %s redefined", decl->name);
+            fatal_error("redefinition of typedef '%s'", decl->name);
         }
     }
 }
@@ -503,7 +508,7 @@ DeclSpec *parse_declaration_specifiers(Type **base_type_result)
             // A declaration may include at most one storage-class specifier
             // (C11 §6.7.1p2): reject "static extern", "static int extern", etc.
             if (ds->storage != STORAGE_CLASS_NONE) {
-                fatal_error("Multiple storage class specifiers");
+                fatal_error("more than one storage class in a declaration");
             }
             ds->storage = parse_storage_class_specifier();
         } else if (current_token == TOKEN_TYPEDEF_NAME && type_specs &&
@@ -715,7 +720,7 @@ TypeSpec *parse_type_specifier()
         ts->u.typedef_name.name = xstrdup(current_lexeme);
         advance_token();
     } else {
-        fatal_error("Expected type specifier");
+        fatal_error("expected a type %s", parser_where());
     }
     return ts;
 }
@@ -844,7 +849,7 @@ Field *parse_struct_declaration()
         if (!field->u.member.name && !field->u.member.bitfield &&
             field->u.member.type->kind != TYPE_STRUCT &&
             field->u.member.type->kind != TYPE_UNION) {
-            fatal_error("struct/union member requires a declarator");
+            fatal_error("member declaration does not declare anything");
         }
 
         *fields_tail = field;
@@ -896,7 +901,7 @@ TypeSpec *parse_specifier_qualifier_list(TypeQualifier **qualifiers, AlignmentSp
         }
     }
     if (!type_specs) {
-        fatal_error("Expected type specifier");
+        fatal_error("expected a type %s", parser_where());
     }
     return type_specs;
 }
@@ -972,7 +977,7 @@ Enumerator *parse_enumerator()
     if (!token) {
         nametab_define(name, TOKEN_ENUMERATION_CONSTANT, scope_level);
     } else {
-        fatal_error("Enumerator %s redefined", name);
+        fatal_error("redefinition of enumerator '%s'", name);
     }
     return new_enumerator(name, value);
 }
@@ -1112,7 +1117,7 @@ Type *parse_coro_ptr_specifier()
 void parse_one_alignment_specifier(AlignmentSpec **slot)
 {
     if (*slot)
-        fatal_error("More than one _Alignas in a declaration is not supported");
+        fatal_error("more than one '_Alignas' in a declaration is not supported");
     *slot = parse_alignment_specifier();
 }
 
@@ -1202,7 +1207,7 @@ Declarator *parse_direct_declarator()
             decl->suffixes                 = ptr_suffix;
         }
     } else {
-        fatal_error("Expected identifier or '('");
+        fatal_error("expected an identifier or '(' %s", parser_where());
     }
     while (1) {
         DeclaratorSuffix *suffix = NULL;
@@ -1326,7 +1331,7 @@ Param *parse_parameter_type_list(bool *variadic_flag)
         return NULL;
     }
     if (current_token == TOKEN_ELLIPSIS) {
-        fatal_error("Variadic function must have at least one parameter");
+        fatal_error("a variadic function needs a named parameter before '...'");
     }
     Param *params = parse_parameter_list();
     if (current_token == TOKEN_COMMA && next_token() == TOKEN_ELLIPSIS) {
@@ -1430,7 +1435,7 @@ DeclaratorSuffix *parse_direct_abstract_declarator(Ident *name_out)
                 *tail = new_suffix;
                 tail  = &new_suffix->next;
             } else if (current_token == TOKEN_ELLIPSIS) {
-                fatal_error("Variadic function must have at least one parameter");
+                fatal_error("a variadic function needs a named parameter before '...'");
             } else {
                 // Case: '(' parameter_type_list ')'
                 DeclaratorSuffix *new_suffix = new_declarator_suffix(SUFFIX_FUNCTION);
@@ -1469,7 +1474,7 @@ DeclaratorSuffix *parse_direct_abstract_declarator(Ident *name_out)
                 }
                 new_suffix->u.array.size = parse_assignment_expression();
                 if (!new_suffix->u.array.size) {
-                    fatal_error("Invalid array size");
+                    internal_error("invalid array size");
                 }
                 expect_token(TOKEN_RBRACKET); // Consume ']'
             } else if (current_token == TOKEN_CONST || current_token == TOKEN_RESTRICT ||
@@ -1482,7 +1487,7 @@ DeclaratorSuffix *parse_direct_abstract_declarator(Ident *name_out)
                     new_suffix->u.array.is_static = true;
                     new_suffix->u.array.size      = parse_assignment_expression();
                     if (!new_suffix->u.array.size) {
-                        fatal_error("Invalid array size");
+                        internal_error("invalid array size");
                     }
                 } else {
                     // Case: '[' type_qualifier_list assignment_expression ']'
@@ -1490,7 +1495,7 @@ DeclaratorSuffix *parse_direct_abstract_declarator(Ident *name_out)
                     if (current_token_is_not(TOKEN_RBRACKET)) {
                         new_suffix->u.array.size = parse_assignment_expression();
                         if (!new_suffix->u.array.size) {
-                            fatal_error("Invalid array size");
+                            internal_error("invalid array size");
                         }
                     }
                 }
@@ -1499,7 +1504,7 @@ DeclaratorSuffix *parse_direct_abstract_declarator(Ident *name_out)
                 // Case: '[' assignment_expression ']'
                 new_suffix->u.array.size = parse_assignment_expression();
                 if (!new_suffix->u.array.size) {
-                    fatal_error("Invalid array size");
+                    internal_error("invalid array size");
                 }
                 expect_token(TOKEN_RBRACKET); // Consume ']'
             }
@@ -1535,7 +1540,7 @@ Param *parse_parameter_declaration()
      * etc., but allow "f(register int i)". */
     if (param->specifiers && param->specifiers->storage != STORAGE_CLASS_NONE &&
         param->specifiers->storage != STORAGE_CLASS_REGISTER) {
-        fatal_error("A function parameter cannot have a storage class");
+        fatal_error("a parameter cannot have a storage class");
     }
 
     /* Check for declarator or abstract_declarator */
@@ -1705,7 +1710,7 @@ Designator *parse_designator()
         return d;
     }
     if (current_token != TOKEN_DOT) {
-        fatal_error("Expected designator");
+        fatal_error("expected a designator %s", parser_where());
     }
     advance_token();
     Ident name = xstrdup(current_lexeme);

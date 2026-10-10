@@ -43,7 +43,7 @@ TEST_F(ParserTest, Chapter14_MalformedDeclarator_Neg)
     return 0;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '\\)'");
 }
 
 // int foo((void)); — a parameter list cannot be wrapped in extra parentheses.
@@ -51,5 +51,5 @@ TEST_F(ParserTest, Chapter14_MalformedFunctionDeclarator2_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile(R"(int foo((void));
 )")),
-                 "Empty type specifier list");
+                 "expected a type before '\\('");
 }

@@ -14,7 +14,7 @@ TEST_F(ParserTest, Chapter17_BadSpecifier2_Neg)
 
 int main(void) { return 0; }
 )")),
-                 "char cannot combine with void");
+                 "cannot combine 'char' with 'void'");
 }
 
 // unsigned void *v; — void cannot combine with modifiers.
@@ -25,7 +25,7 @@ TEST_F(ParserTest, Chapter17_BadSpecifier_Neg)
   return 0;
 }
 )")),
-                 "void/_Bool cannot combine with modifiers");
+                 "cannot combine 'void' or '_Bool' with another type specifier");
 }
 
 // sizeof(char) 1 — sizeof applied directly to a cast expression.
@@ -45,5 +45,5 @@ TEST_F(ParserTest, Chapter17_SizeofTypeNoParens_Neg)
     return sizeof int;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }

@@ -30,7 +30,7 @@ int main(void) {
     return x.1l;
 }
 )SRC")),
-                 "expected ';', got floating constant");
+                 "expected ';' before '\\.1l'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidLexDotBadToken2_Neg)
@@ -64,7 +64,7 @@ int main(void) {
     return ptr->;  // arrow must be followed by a member name
 }
 )SRC")),
-                 "expected identifier, got ';'");
+                 "expected identifier before ';'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseDotInvalidMember_Neg)
@@ -81,7 +81,7 @@ int main(void) {
     return x.(y);
 }
 )SRC")),
-                 "expected identifier, got '\\('");
+                 "expected identifier before '\\('");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseDotNoLeftExpr_Neg)
@@ -91,7 +91,7 @@ int main(void) {
     return .a;  // a dot operator can only appear after an expression
 }
 )SRC")),
-                 "Expected primary expression");
+                 "expected an expression before '\\.'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseDotOperatorInDeclarator_Neg)
@@ -109,7 +109,7 @@ int main(void) {
     struct pair x.a = 10;
 }
 )SRC")),
-                 "expected ';', got '\\.'");
+                 "expected ';' before '\\.'");
 }
 
 // An empty initializer list `{}` is accepted (valid as of C23).
@@ -149,7 +149,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected primary expression");
+                 "expected an expression before 'struct'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditDefaultKwMemberName_Neg)
@@ -164,7 +164,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before 'default'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditGotoKwStructTag_Neg)
@@ -176,7 +176,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before 'goto'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditLabelInsideStructDecl_Neg)
@@ -195,7 +195,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before 'foo'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditLabeledStructDecl_Neg)
@@ -211,7 +211,7 @@ foo:
     return 0;
 }
 )SRC")),
-                 "Expected primary expression");
+                 "expected an expression before 'struct'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditStructUnion_Neg)
@@ -226,7 +226,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "struct cannot combine with other distinct types");
+                 "cannot combine 'struct' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditTwoUnionKws_Neg)
@@ -242,7 +242,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "union cannot combine with other distinct types");
+                 "cannot combine 'union' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionBadTypeSpec_Neg)
@@ -251,7 +251,7 @@ TEST_F(ParserTest, Chapter18_ExtraCreditUnionBadTypeSpec_Neg)
 // Can't combine union type specifier with other type specifier
 union x long a;
 )SRC")),
-                 "type specifier cannot combine with struct/union/enum/typedef");
+                 "cannot combine a type specifier with a struct, union, enum or typedef name");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionDeclBadTypeSpecifier_Neg)
@@ -266,7 +266,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "type specifier cannot combine with struct/union/enum/typedef");
+                 "cannot combine a type specifier with a struct, union, enum or typedef name");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionDeclEmptyMemberList_Neg)
@@ -280,7 +280,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before '\\}'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionDeclExtraSemicolon_Neg)
@@ -296,7 +296,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before ';'");
 }
 
 // An empty initializer list `{}` for a union is accepted (valid as of C23).
@@ -325,7 +325,7 @@ union a {
     int member = 1;
 };
 )SRC")),
-                 "expected ',', got '='");
+                 "expected ',' before '='");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionMemberNameKw_Neg)
@@ -337,7 +337,7 @@ union u {
     int struct;
 };
 )SRC")),
-                 "struct cannot combine with other distinct types");
+                 "cannot combine 'struct' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionMemberNoDeclarator_Neg)
@@ -352,7 +352,7 @@ union u {
     // structs/unions)
 };
 )SRC")),
-                 "struct/union member requires a declarator");
+                 "member declaration does not declare anything");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionMemberNoType_Neg)
@@ -362,7 +362,7 @@ union u {
     a;  // each union member declaration must specify a type
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before 'a'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionMemberStorageClass_Neg)
@@ -373,7 +373,7 @@ union y {
     static int a;
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before 'static'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionStructTag_Neg)
@@ -388,7 +388,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "struct cannot combine with other distinct types");
+                 "cannot combine 'struct' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionTwoTags_Neg)
@@ -400,7 +400,7 @@ union x y {
     int a;
 };
 )SRC")),
-                 "Empty type specifier list");
+                 "expected a type before ';'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionVarBadTag_Neg)
@@ -411,7 +411,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before '4'");
 }
 
 TEST_F(ParserTest, Chapter18_ExtraCreditUnionVarTagParen_Neg)
@@ -428,7 +428,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "expected ';', got identifier");
+                 "expected ';' before 'var'");
 }
 
 
@@ -444,7 +444,7 @@ struct s {
 // storage class specifier can't come between struct keyword and tag
 struct static s foo;
 )SRC")),
-                 "Empty type specifier list");
+                 "expected a type before 'foo'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclDoubleSemicolon_Neg)
@@ -455,7 +455,7 @@ struct s {
     ;  // extra semicolon that doesn't follow declaration is a syntax error
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before ';'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclEmptyMemberList_Neg)
@@ -469,7 +469,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before '\\}'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclExtraSemicolon_Neg)
@@ -480,7 +480,7 @@ struct s {
     int a;
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before ';'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclKwWrongOrder_Neg)
@@ -493,7 +493,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Empty type specifier list");
+                 "expected a type before 's'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclMissingEndSemicolon_Neg)
@@ -507,7 +507,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "type specifier cannot combine with struct/union/enum/typedef");
+                 "cannot combine a type specifier with a struct, union, enum or typedef name");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclTagKw_Neg)
@@ -518,7 +518,7 @@ struct for {
     int a;
 };
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before 'for'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructDeclTwoKws_Neg)
@@ -530,7 +530,7 @@ int main(void) {
     return 1;
 }
 )SRC")),
-                 "struct cannot combine with other distinct types");
+                 "cannot combine 'struct' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberInitializer_Neg)
@@ -541,7 +541,7 @@ struct a {
     int member = 1;
 };
 )SRC")),
-                 "expected ',', got '='");
+                 "expected ',' before '='");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberNameKw_Neg)
@@ -557,7 +557,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before 'return'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberNoDeclarator_Neg)
@@ -572,7 +572,7 @@ struct s {
     // structs/unions)
 };
 )SRC")),
-                 "struct/union member requires a declarator");
+                 "member declaration does not declare anything");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberNoSemicolon_Neg)
@@ -586,7 +586,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "expected ',', got '\\}'");
+                 "expected ',' before '\\}'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberNoType_Neg)
@@ -596,7 +596,7 @@ struct s {
     a;  // each structure member declaration must specify a type
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before 'a'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseStructMemberStorageClass_Neg)
@@ -607,7 +607,7 @@ struct y {
     static int a;
 };
 )SRC")),
-                 "Expected type specifier");
+                 "expected a type before 'static'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclBadTag1_Neg)
@@ -618,7 +618,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "Expected identifier or '\\('");
+                 "expected an identifier or '\\(' before '4'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclBadTag2_Neg)
@@ -635,7 +635,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "expected ';', got identifier");
+                 "expected ';' before 'var'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclBadTypeSpecifier_Neg)
@@ -650,7 +650,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "type specifier cannot combine with struct/union/enum/typedef");
+                 "cannot combine a type specifier with a struct, union, enum or typedef name");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclMissingStructKw_Neg)
@@ -663,7 +663,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "expected ';', got identifier");
+                 "expected ';' before 'y'");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclTwoStructKws_Neg)
@@ -679,7 +679,7 @@ int main(void) {
     return 0;
 }
 )SRC")),
-                 "struct cannot combine with other distinct types");
+                 "cannot combine 'struct' with another type");
 }
 
 TEST_F(ParserTest, Chapter18_InvalidParseVarDeclTwoTags_Neg)
@@ -691,5 +691,5 @@ struct x y {
     int a;
 };
 )SRC")),
-                 "Empty type specifier list");
+                 "expected a type before ';'");
 }

@@ -15,54 +15,54 @@
 TEST_F(ParserTest, Chapter3_DoubleOperation_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 * / 2;\n}\n")),
-                 "Expected primary expression");
+                 "expected an expression before '/'");
 }
 
 // return 1 + (2; — the '(' is never closed.
 TEST_F(ParserTest, Chapter3_ImbalancedParen_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 + (2;\n}\n")),
-                 "expected '\\)', got ';'");
+                 "expected '\\)' before ';'");
 }
 
 // return 1 + (2;) — ';' appears before the ')' that closes the group.
 TEST_F(ParserTest, Chapter3_MisplacedSemicolon_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 + (2;)\n}\n")),
-                 "expected '\\)', got ';'");
+                 "expected '\\)' before ';'");
 }
 
 // return /3; — '/' has no left operand.
 TEST_F(ParserTest, Chapter3_MissingFirstOp_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return /3;\n}\n")),
-                 "Expected primary expression");
+                 "expected an expression before '/'");
 }
 
 // return 1 + 2); — an extra ')' with no matching '('.
 TEST_F(ParserTest, Chapter3_MissingOpenParen_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 + 2);\n}\n")),
-                 "expected ';', got '\\)'");
+                 "expected ';' before '\\)'");
 }
 
 // return 1 + ; — the binary '+' has no right operand.
 TEST_F(ParserTest, Chapter3_MissingSecondOp_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 + ;\n}\n")),
-                 "Expected primary expression");
+                 "expected an expression before ';'");
 }
 
 // return 2*2 — missing semicolon after the value.
 TEST_F(ParserTest, Chapter3_NoSemicolon_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 2*2\n}\n")),
-                 "expected ';', got '\\}'");
+                 "expected ';' before '\\}'");
 }
 
 // return 1 | | 2; — two '|' tokens, not a single '||' (lexed as separate operators).
 TEST_F(ParserTest, Chapter3_BitwiseDoubleOperator_Neg)
 {
     EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    return 1 | | 2;\n}\n")),
-                 "Expected primary expression");
+                 "expected an expression before '\\|'");
 }

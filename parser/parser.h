@@ -26,6 +26,10 @@ Declarator *parse_declarator(void);
 int parser_get_token(void);
 const char *parser_get_lexeme(void);
 
+// Where the parser stands, for a message: "before ';'", "before 'foo'", or
+// "at end of file".
+const char *parser_where(void);
+
 //
 // Error reporting, provided by caller
 //

@@ -32,7 +32,7 @@ int main(void) {
     return f(1);
 }
 )")),
-                 "A function parameter cannot have a storage class");
+                 "a parameter cannot have a storage class");
 }
 
 // A function parameter cannot have a storage class (static).
@@ -46,7 +46,7 @@ int main(void) {
     return f(1);
 }
 )")),
-                 "A function parameter cannot have a storage class");
+                 "a parameter cannot have a storage class");
 }
 
 // A function declarator must have a parameter list.
@@ -60,7 +60,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "expected ';', got '}'");
+                 "expected ';' before '\\}'");
 }
 
 // A declaration must have at least one type specifier.
@@ -72,7 +72,7 @@ int main(void) {
     return var;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'var'");
 }
 
 // A function declaration can't have multiple storage-class keywords.
@@ -86,7 +86,7 @@ int main(void) {
     return foo();
 }
 )")),
-                 "Multiple storage class specifiers");
+                 "more than one storage class in a declaration");
 }
 
 // A variable can't have more than one storage class.
@@ -97,7 +97,7 @@ TEST_F(ParserTest, Chapter10_MultiStorageClassVar_Neg)
     return foo;
 }
 )")),
-                 "Multiple storage class specifiers");
+                 "more than one storage class in a declaration");
 }
 
 // A declaration cannot include both static and extern specifiers.
@@ -109,7 +109,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "Multiple storage class specifiers");
+                 "more than one storage class in a declaration");
 }
 
 // --- invalid_parse / extra_credit ------------------------------------------
@@ -122,7 +122,7 @@ TEST_F(ParserTest, Chapter10_ExternLabel_Neg)
     return 1;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'a'");
 }
 
 // Labels cannot appear at file scope.
@@ -135,7 +135,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'x'");
 }
 
 // The static specifier cannot be applied to labels.
@@ -146,7 +146,7 @@ TEST_F(ParserTest, Chapter10_StaticLabel_Neg)
     return 1;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'a'");
 }
 
 // --- reclassified from invalid_types/extra_credit ---------------------------
@@ -164,5 +164,5 @@ TEST_F(ParserTest, Chapter10_StaticVarCase_Neg)
     return 0;
 }
 )")),
-                 "Expected constant expression");
+                 "expected a constant expression");
 }

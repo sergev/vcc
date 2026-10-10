@@ -28,7 +28,7 @@ TEST_F(ParserTest, Chapter15_MalformedArrayDeclarator_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\['");
 }
 
 // int (*)(ptr_to_array[3]) = 0; — a parenthesized (*) is not a valid named declarator.
@@ -39,7 +39,7 @@ TEST_F(ParserTest, Chapter15_MalformedArrayDeclarator2_Neg)
     return 0;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '\\)'");
 }
 
 // int [3] arr = {1, 2, 3}; — an array size must follow the identifier, not precede it.
@@ -50,7 +50,7 @@ TEST_F(ParserTest, Chapter15_MalformedArrayDeclarator3_Neg)
     return 0;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '\\['");
 }
 
 // (int[3] *)0 — a pointer declarator cannot follow an array size in an abstract declarator.
@@ -73,7 +73,7 @@ TEST_F(ParserTest, Chapter15_MalformedTypeName_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\['");
 }
 
 // ([3](*)) ptr — invalid declarator and missing type specifier.
@@ -85,7 +85,7 @@ TEST_F(ParserTest, Chapter15_MalformedTypeName2_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\['");
 }
 
 // vals[indices[1]; — the outer subscript is never closed.

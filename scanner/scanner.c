@@ -579,7 +579,7 @@ static int scan_string(void)
     if (next_char == '"') {
         consume_char(); // Consume closing quote
     } else {
-        lex_error("unterminated string");
+        lex_error("unterminated string literal");
     }
     return TOKEN_STRING_LITERAL;
 }
@@ -646,7 +646,7 @@ static int scan_operator(void)
     if (c == '.' && c2 == '.') {
         consume_char();
         if (next_char != '.') {
-            lex_error("bad ellipsis");
+            lex_error("expected '...'");
         }
         consume_char();
         return TOKEN_ELLIPSIS;

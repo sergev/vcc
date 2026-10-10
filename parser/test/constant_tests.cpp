@@ -74,7 +74,7 @@ TEST_F(ParserTest, CastConstant_aggregateTarget_negative)
     EXPECT_DEATH(
         program =
             parse(CreateTempFile("struct S { int a; };\n_Static_assert((struct S)0, \"msg\");\n")),
-        "Expected constant expression");
+        "expected a constant expression");
 }
 
 // A plain decimal constant is a signed int.

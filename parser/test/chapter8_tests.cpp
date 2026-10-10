@@ -17,7 +17,7 @@ TEST_F(ParserTest, Chapter8_DeclAsLoopBody_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // A stray ';' after the do-body block — 'while' must follow immediately.
@@ -30,7 +30,7 @@ TEST_F(ParserTest, Chapter8_DoExtraSemicolon_Neg)
     return 0;
 }
 )")),
-                 "expected 'while', got ';'");
+                 "expected 'while' before ';'");
 }
 
 // do-while needs a terminating ';' after the condition.
@@ -43,7 +43,7 @@ TEST_F(ParserTest, Chapter8_DoMissingSemicolon_Neg)
     return 0;
 }
 )")),
-                 "expected ';', got 'return'");
+                 "expected ';' before 'return'");
 }
 
 // 'while ()' — the controlling expression cannot be empty.
@@ -56,7 +56,7 @@ TEST_F(ParserTest, Chapter8_DoWhileEmptyParens_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\)'");
 }
 
 // A for header has at most three clauses; the fourth ';' is rejected.
@@ -68,7 +68,7 @@ TEST_F(ParserTest, Chapter8_ExtraForHeaderClause_Neg)
     return 0;
 }
 )")),
-                 "got ';'");
+                 "expected '\\)' before ';'");
 }
 
 // A declaration is not allowed in the for header's *condition* clause.
@@ -80,7 +80,7 @@ TEST_F(ParserTest, Chapter8_InvalidForDeclaration_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // for header is truncated after the init clause.
@@ -92,7 +92,7 @@ TEST_F(ParserTest, Chapter8_MissingForHeaderClause_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\)'");
 }
 
 // Unbalanced parentheses in the for header.
@@ -103,7 +103,7 @@ TEST_F(ParserTest, Chapter8_ParenMismatch_Neg)
         int a = 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\)'");
 }
 
 // A declaration cannot appear as a while controlling expression.
@@ -115,7 +115,7 @@ TEST_F(ParserTest, Chapter8_StatementInCondition_Neg)
     }
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // 'while' must be followed by a parenthesized condition.
@@ -127,7 +127,7 @@ TEST_F(ParserTest, Chapter8_WhileMissingParen_Neg)
     }
 }
 )")),
-                 "got integer constant");
+                 "expected '\\(' before '1'");
 }
 
 // --- invalid_parse / extra_credit -------------------------------------------
@@ -141,7 +141,7 @@ TEST_F(ParserTest, Chapter8_CompoundAssignmentInvalidDecl_Neg)
     }
 }
 )")),
-                 "expected ';', got");
+                 "expected ';' before '\\+='");
 }
 
 // A label is not permitted inside a for header's condition clause.
@@ -154,7 +154,7 @@ TEST_F(ParserTest, Chapter8_LabelInLoopHeader_Neg)
     return 0;
 }
 )")),
-                 "expected ';', got ':'");
+                 "expected ';' before ':'");
 }
 
 // A label does not start a block, so 'do label: a; b;' is not a single body.
@@ -172,7 +172,7 @@ TEST_F(ParserTest, Chapter8_LabelIsNotBlock_Neg)
     return 0;
 }
 )")),
-                 "expected 'while', got identifier");
+                 "expected 'while' before 'b'");
 }
 
 // A declaration cannot directly follow a case label (it is not a statement).
@@ -187,7 +187,7 @@ TEST_F(ParserTest, Chapter8_SwitchCaseDeclaration_Neg)
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // 'goto' requires an identifier target, not an integer constant.
@@ -200,7 +200,7 @@ TEST_F(ParserTest, Chapter8_SwitchGotoCase_Neg)
     }
 }
 )")),
-                 "expected identifier, got integer constant");
+                 "expected identifier before '3'");
 }
 
 // 'case' requires a constant expression before the ':'.
@@ -212,7 +212,7 @@ TEST_F(ParserTest, Chapter8_SwitchMissingCaseValue_Neg)
     }
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before ':'");
 }
 
 // 'switch' must be followed by a parenthesized controlling expression.
@@ -224,7 +224,7 @@ TEST_F(ParserTest, Chapter8_SwitchMissingParen_Neg)
     }
 }
 )")),
-                 "got integer constant");
+                 "expected '\\(' before '3'");
 }
 
 // 'switch' with no controlling expression at all.
@@ -236,7 +236,7 @@ TEST_F(ParserTest, Chapter8_SwitchNoCondition_Neg)
     }
 }
 )")),
-                 "got '\\{'");
+                 "expected '\\(' before '\\{'");
 }
 
 // 'case a:' — the book lists non_constant_case under invalid_semantics, but our
@@ -253,5 +253,5 @@ TEST_F(ParserTest, Chapter8_NonConstantCase_Neg)
     }
 }
 )")),
-                 "Expected constant expression");
+                 "expected a constant expression");
 }

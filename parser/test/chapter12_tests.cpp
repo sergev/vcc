@@ -17,7 +17,7 @@ TEST_F(ParserTest, Chapter12_BadSpecifiers_Neg)
     return (signed unsigned) i;
 }
 )")),
-                 "unsigned cannot combine with signed");
+                 "cannot combine 'unsigned' with 'signed'");
 }
 
 // "unsigned long unsigned i" — the 'unsigned' specifier may not appear twice.
@@ -28,5 +28,5 @@ TEST_F(ParserTest, Chapter12_BadSpecifiers2_Neg)
     return 0;
 }
 )")),
-                 "duplicate unsigned specifier");
+                 "duplicate 'unsigned'");
 }

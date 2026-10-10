@@ -979,7 +979,7 @@ TEST_F(CcDriver, SyntaxErrorLocation)
 {
     WriteSource("t.c", "int main(void)\n{\n    int a = 1\n    return a;\n}\n");
     EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("t.c:4:5: error: expected ';', got 'return'"), std::string::npos)
+    EXPECT_NE(Stderr().find("t.c:4:5: error: expected ';' before 'return'"), std::string::npos)
         << Stderr();
 }
 

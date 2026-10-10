@@ -204,19 +204,19 @@ TEST_F(ParserTest, FuncNameOutsideFunction_negative)
 TEST_F(ParserTest, CoResumeArity_negative)
 {
     EXPECT_DEATH(parse(CreateTempFile("void f(void *p, void *q) { __co_resume(p, q); }")),
-                 "__co_resume takes 1 argument");
+                 "'__co_resume' takes 1 argument");
 }
 
 TEST_F(ParserTest, CoInitArity_negative)
 {
     EXPECT_DEATH(parse(CreateTempFile("void f(char *b) { __co_init(b, 8); }")),
-                 "__co_init takes at least 3 arguments");
+                 "'__co_init' takes at least 3 arguments");
 }
 
 TEST_F(ParserTest, CoAllocaArity_negative)
 {
     EXPECT_DEATH(parse(CreateTempFile("void f(void) { __co_alloca(g); }")),
-                 "__co_alloca takes at least 2 arguments");
+                 "'__co_alloca' takes at least 2 arguments");
 }
 
 TEST_F(ParserTest, CoroFrameOneType_negative)

@@ -16,7 +16,7 @@ TEST_F(ParserTest, Chapter6_DeclarationAsStatement_Neg)
         int i = 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // if (0) else return 0; — the then-branch is missing before 'else'.
@@ -26,7 +26,7 @@ TEST_F(ParserTest, Chapter6_EmptyIfBody_Neg)
     if (0) else return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'else'");
 }
 
 // int a = if (flag) 2; else 3; — an if statement is not an expression.
@@ -41,7 +41,7 @@ TEST_F(ParserTest, Chapter6_IfAssignment_Neg)
     return a;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'if'");
 }
 
 // if 0 return 1; — the controlling expression must be parenthesized.
@@ -97,7 +97,7 @@ TEST_F(ParserTest, Chapter6_MismatchedNesting_Neg)
         return 3;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'else'");
 }
 
 // return x ? 1 = 2; — the ternary's second delimiter must be ':' not '='.
@@ -132,7 +132,7 @@ TEST_F(ParserTest, Chapter6_KeywordLabel_Neg)
     return: return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before ':'");
 }
 
 // label: int a = 0; — in C17 a label cannot precede a declaration.
@@ -144,7 +144,7 @@ label:
     return 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // 1 && label: 2; — a label cannot appear in the middle of an expression.
@@ -165,7 +165,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'label'");
 }
 
 // foo: } — in C17 a label must be followed by a statement.
@@ -175,7 +175,7 @@ TEST_F(ParserTest, Chapter6_LabelWithoutStatement_Neg)
     foo:
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\}'");
 }
 
 // goto(a); — goto takes a bare identifier, not a parenthesized expression.

@@ -18,7 +18,7 @@ TEST_F(ParserTest, Chapter7_ExtraBrace_Neg)
     return 2;
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before 'return'");
 }
 
 // An unbalanced '{' leaves main's block open and parsing hits end of file.
@@ -30,7 +30,7 @@ TEST_F(ParserTest, Chapter7_MissingBrace_Neg)
     return 2;
 }
 )")),
-                 "expected '}', got end of file");
+                 "expected '\\}' at end of file");
 }
 
 // 'return a' with no terminating ';' before the closing brace.
@@ -44,7 +44,7 @@ TEST_F(ParserTest, Chapter7_MissingSemicolon_Neg)
     }
 }
 )")),
-                 "expected ';', got '}'");
+                 "expected ';' before '\\}'");
 }
 
 // '{' cannot start an expression, so the ternary branch fails to parse.
@@ -55,5 +55,5 @@ TEST_F(ParserTest, Chapter7_TernaryBlocks_Neg)
     return 1 ? { a = 2 } : a = 4;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\{'");
 }

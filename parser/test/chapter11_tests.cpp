@@ -16,7 +16,7 @@ TEST_F(ParserTest, Chapter11_BadSpecifiers_Neg)
     return i;
 }
 )")),
-                 "multiple int specifiers");
+                 "duplicate 'int'");
 }
 
 // "() 0" — a cast expression must include at least one type specifier.
@@ -26,7 +26,7 @@ TEST_F(ParserTest, Chapter11_EmptyCast_Neg)
     return () 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\)'");
 }
 
 // "int long(void)" — 'long' is a keyword and cannot name a function.
@@ -40,7 +40,7 @@ int main(void){
     return long();
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before 'void'");
 }
 
 // "(static int) 10" — a cast may only contain type specifiers, not a storage class.
@@ -50,7 +50,7 @@ TEST_F(ParserTest, Chapter11_InvalidCast_Neg)
     return (static int) 10;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'static'");
 }
 
 // "0 l" — a long suffix may not be separated from its constant by whitespace.
@@ -60,7 +60,7 @@ TEST_F(ParserTest, Chapter11_InvalidSuffix_Neg)
     return 0 l;
 }
 )")),
-                 "expected ';', got identifier");
+                 "expected ';' before 'l'");
 }
 
 // "int 10l;" — a long constant cannot stand where an identifier is required.
@@ -71,7 +71,7 @@ TEST_F(ParserTest, Chapter11_LongConstantAsVar_Neg)
     return 0;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '10l'");
 }
 
 // "return long 0;" — a cast's type specifier must be parenthesized.
@@ -81,7 +81,7 @@ TEST_F(ParserTest, Chapter11_MissingCastParentheses_Neg)
     return long 0;
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'long'");
 }
 
 // "int long = 5" — 'long' is a keyword and cannot name a variable.
@@ -92,5 +92,5 @@ TEST_F(ParserTest, Chapter11_VarNameLong_Neg)
     return long;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '='");
 }

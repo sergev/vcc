@@ -439,7 +439,7 @@ TEST_F(NormalizeTest, ArrayDesignatorOutOfBoundsDies)
 // The parser rejects a non-constant index.
 TEST_F(NormalizeTest, ArrayDesignatorNonConstantDies)
 {
-    EXPECT_DEATH(Normalize("int n; int a[4] = { [n] = 1 };"), "Expected constant expression");
+    EXPECT_DEATH(Normalize("int n; int a[4] = { [n] = 1 };"), "expected a constant expression");
 }
 
 TEST_F(NormalizeTest, ArrayDesignatorRealIndexDies)

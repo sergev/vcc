@@ -24,7 +24,7 @@ TEST_F(ParserTest, Chapter9_DeclWrongClosingDelim_Neg)
 
 int main(void) { return 0;}
 )")),
-                 "expected ')', got '}'");
+                 "expected '\\)' before '\\}'");
 }
 
 // An argument list must end with ')', not some other delimiter.
@@ -36,7 +36,7 @@ TEST_F(ParserTest, Chapter9_FuncallWrongClosingDelim_Neg)
 
 int main(void) { return foo(1, 2};}
 )")),
-                 "expected ')', got '}'");
+                 "expected '\\)' before '\\}'");
 }
 
 // A function argument must be an expression, not a declaration.
@@ -50,7 +50,7 @@ int main(void) {
     return foo(int a);
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before 'int'");
 }
 
 // A trailing comma is not permitted in a parameter list.
@@ -64,7 +64,7 @@ int main(void) {
     return foo(4);
 }
 )")),
-                 "Empty type specifier list");
+                 "expected a type before '\\)'");
 }
 
 // A trailing comma is not permitted in an argument list.
@@ -78,7 +78,7 @@ int main(void) {
     return foo(1, 2, 3,);
 }
 )")),
-                 "Expected primary expression");
+                 "expected an expression before '\\)'");
 }
 
 // An unbalanced '(' in a parameter list is rejected at the body's '{'.
@@ -92,7 +92,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "expected ')', got '\\{'");
+                 "expected '\\)' before '\\{'");
 }
 
 // A variable initializer is not permitted in a parameter list.
@@ -106,7 +106,7 @@ int main(void) {
     return 0;
 }
 )")),
-                 "expected ')', got '='");
+                 "expected '\\)' before '='");
 }
 
 // A nested function *definition* is rejected: after the inner declarator the
@@ -120,5 +120,5 @@ TEST_F(ParserTest, Chapter9_NestedFunctionDefinition_Neg)
     return foo();
 }
 )")),
-                 "expected ';', got '\\{'");
+                 "expected ';' before '\\{'");
 }

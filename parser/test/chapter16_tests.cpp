@@ -20,7 +20,7 @@ TEST_F(ParserTest, Chapter16_InvalidTypeSpecifier_Neg)
     return x;
 }
 )")),
-                 "char cannot combine with int");
+                 "cannot combine 'char' with 'int'");
 }
 
 // char static long x = 0; — char cannot combine with long.
@@ -31,7 +31,7 @@ TEST_F(ParserTest, Chapter16_InvalidTypeSpecifier2_Neg)
     return 0;
 }
 )")),
-                 "long cannot combine with char");
+                 "cannot combine 'long' with 'char'");
 }
 
 // return a'1'; — a character constant is not a postfix operator.
@@ -53,7 +53,7 @@ TEST_F(ParserTest, Chapter16_StringLiteralVarname_Neg)
     return 0;
 }
 )")),
-                 "Expected identifier or");
+                 "expected an identifier or '\\(' before '\"x\"'");
 }
 
 // --- invalid_parse/extra_credit ---------------------------------------------

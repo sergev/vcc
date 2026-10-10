@@ -90,7 +90,7 @@ static bool has_yytext(int token)
 int next_token()
 {
     if (peek_token == 0) {
-        if (has_yytext(current_token)) {
+        if (has_yytext(current_token) && current_lexeme != lexeme_buffer) {
             // Make a copy of current lexeme.
             strcpy(lexeme_buffer, current_lexeme);
             current_lexeme = lexeme_buffer;
@@ -101,16 +101,27 @@ int next_token()
     return peek_token;
 }
 
+const char *parser_where(void)
+{
+    static char buf[80];
+    if (current_token == TOKEN_EOF)
+        return "at end of file";
+    if (has_yytext(current_token) && current_lexeme && current_lexeme[0]) {
+        size_t len = strlen(current_lexeme);
+        if (len > 40)
+            snprintf(buf, sizeof(buf), "before '%.37s...'", current_lexeme);
+        else
+            snprintf(buf, sizeof(buf), "before '%s'", current_lexeme);
+    } else {
+        snprintf(buf, sizeof(buf), "before %s", token_name(current_token));
+    }
+    return buf;
+}
+
 void expect_token(int expected)
 {
     if (current_token != expected) {
-        diag_print_prefix(stderr, diag_loc, "error");
-        fprintf(stderr, "expected %s, got %s", token_name(expected), token_name(current_token));
-        if (current_lexeme && current_lexeme[0]) {
-            fprintf(stderr, " (lexeme: %s)", current_lexeme);
-        }
-        fputc('\n', stderr);
-        exit(1);
+        fatal_error("expected %s %s", token_name(expected), parser_where());
     }
     advance_token();
 }

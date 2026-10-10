@@ -658,7 +658,7 @@ TEST_F(TranslateTestRiscv, AlignasMemberLessStrict)
 
 TEST_F(TranslateTestRiscv, AlignasTwice)
 {
-    EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"), "More than one _Alignas");
+    EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"), "more than one '_Alignas' in a declaration is not supported");
 }
 
 // Sibling blocks may declare the same name.  A repeat of another type gets its own

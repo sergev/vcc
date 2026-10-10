@@ -191,7 +191,7 @@ Expr *parse_primary_expression()
     case TOKEN_FUNC_NAME: {
         // C11 §6.4.2.2: the function's name as a string; not concatenated, it is no literal.
         if (!current_function_name)
-            fatal_error("__func__ used outside a function");
+            fatal_error("'__func__' used outside a function");
         size_t len                    = strlen(current_function_name);
         char *quoted                  = xalloc(len + 3, __func__, __FILE__, __LINE__);
         quoted[0]                     = '"';
@@ -213,7 +213,7 @@ Expr *parse_primary_expression()
         expr = parse_generic_selection();
         break;
     default:
-        fatal_error("Expected primary expression");
+        fatal_error("expected an expression %s", parser_where());
     }
     return expr;
 }
@@ -706,7 +706,7 @@ static Expr *parse_co_op()
         n++;
     int min = op == CO_OP_INIT ? 3 : op == CO_OP_ALLOCA ? 2 : 1;
     if (n < min || (min == 1 && n > 1))
-        fatal_error("%s takes %s%d argument%s", co_op_name[op], min > 1 ? "at least " : "", min,
+        fatal_error("'%s' takes %s%d argument%s", co_op_name[op], min > 1 ? "at least " : "", min,
                     min > 1 ? "s" : "");
     return result;
 }
@@ -1244,7 +1244,7 @@ Expr *parse_constant_expression()
     }
     Expr *expression = parse_conditional_expression();
     if (!is_constant_expression(expression)) {
-        fatal_error("Expected constant expression");
+        fatal_error("expected a constant expression");
     }
     return expression;
 }

@@ -12,19 +12,10 @@ int scope_level;
 extern "C" {
 [[noreturn]] void fatal_error(const char *message, ...)
 {
-    diag_print_prefix(stderr, diag_loc, "error");
-
     va_list ap;
     va_start(ap, message);
-    vfprintf(stderr, message, ap);
+    diag_vreport(diag_loc, "error", message, ap);
     va_end(ap);
-
-    const char *lexeme = parser_get_lexeme();
-    if (lexeme && lexeme[0]) {
-        fprintf(stderr, " (at %s, lexeme: %s)\n", token_name(parser_get_token()), lexeme);
-    } else {
-        fprintf(stderr, " (at %s)\n", token_name(parser_get_token()));
-    }
     exit(1);
 }
 };

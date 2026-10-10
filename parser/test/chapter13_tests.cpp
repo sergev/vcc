@@ -17,7 +17,7 @@ TEST_F(ParserTest, Chapter13_DoubleDouble_Neg)
     return 0;
 }
 )")),
-                 "double cannot combine with double");
+                 "cannot combine 'double' with 'double'");
 }
 
 // "unsigned double d" — 'unsigned' may not combine with a floating type.
@@ -28,5 +28,5 @@ TEST_F(ParserTest, Chapter13_UnsignedDouble_Neg)
     return 0;
 }
 )")),
-                 "signed/unsigned/long cannot combine with float/double");
+                 "cannot combine 'signed', 'unsigned' or 'long' with 'float' or 'double'");
 }
