@@ -265,7 +265,7 @@ what catch a misused frame.
   Until they did, the other targets took the memory from a static arena of the
   runtime, `libc/common/costack.c` (64 KiB), taken and given back in LIFO order: a
   fixed size, and a `longjmp` past one left it taken. It went once every backend had
-  the builtins (docs/Plan.md).
+  the builtins.
 - **In a coroutine**: `%p = __coro_push(fp, n, 16, "f")`, from the arena of the task
   the coroutine belongs to; the release is the same with `__coro_pop(fp, %p)` in place
   of the restore. A coroutine's shadow stack is unwound at every suspension, and the

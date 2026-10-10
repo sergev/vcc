@@ -128,7 +128,8 @@ takes everything relative to it:
 | `crt0.o`, libraries, `link.ld` (hosted: `libvcc.a` alone; wasm32: no `link.ld`, and the host `run.mjs`) | `../share/vcc/<target>/lib` |
 
 `vcc` passes `-nostdinc -I<share>/include` to `vcpp`, so `vcpp`'s own compiled-in include
-directory plays no part. The assembler and linker belong to other projects. They are the
+directory plays no part. `<alloca.h>` is there on every target, BESM-6 included: `alloca`
+needs no library, the code generator expands it. The assembler and linker belong to other projects. They are the
 ones found when the build was configured (`scripts/CrossTools.cmake`: GNU binutils, else
 clang and `ld.lld`; clang and `wasm-ld` for WebAssembly; nothing for the BESM-6), or else the first binutils on `PATH` by the
 prefixes above, then `clang`/`ld.lld` (`b6as`/`b6ld` for the BESM-6). Which of the two a

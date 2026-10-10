@@ -551,7 +551,7 @@ static void emit_round16(TacCtx *ctx, const Tac_Val *bytes)
     append(ctx, msk);
 }
 
-// alloca(n) (docs/Plan.md): memory until the function returns.  The backend rounds n,
+// alloca(n) (<alloca.h>): memory until the function returns.  The backend rounds n,
 // and its epilogue gives the memory back.
 Tac_Val *gen_alloca(TacCtx *ctx, Expr *e)
 {

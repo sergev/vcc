@@ -2,7 +2,7 @@
  * <alloca.h> — alloca(n): n bytes, aligned for any object, that live until the
  * calling function returns.  The backend expands __builtin_alloca in place, on the
  * stack, and the function's return gives the memory back.  Not in a coroutine
- * (docs/Plan.md).
+ * (docs/Standard_Include_Files.md).
  */
 #ifndef _ALLOCA_H
 #define _ALLOCA_H

@@ -276,6 +276,53 @@ predefines `__vcc_coroutines__` where coroutines exist; elsewhere a coroutine is
 error. [Coroutines_in_C.md](Coroutines_in_C.md) is the manual. Like `<stdnoreturn.h>` it
 is only names, so it is installed with the compiler's own headers for BESM-6 too.
 
+### `<alloca.h>` — memory until the function returns (not C11)
+
+`alloca(n)`, as GCC and clang have it, returns `n` bytes, aligned for any object, that
+live until the function that called it returns. The header defines `alloca(n)` as
+`__builtin_alloca(n)` and declares that builtin, which the code generator expands in
+place on every target: there is no library routine. The memory is taken from the
+machine stack (on wasm32 the shadow stack), so there is no limit but the stack's, and a
+`longjmp` out of the function gives it back with the stack.
+
+```c
+#include <alloca.h>
+#include <string.h>
+
+int count_words(const char *line)
+{
+    char *copy = alloca(strlen(line) + 1);   /* freed when count_words returns */
+    strcpy(copy, line);
+    ...
+}
+```
+
+The rules:
+
+- **Call it directly.** `__builtin_alloca` has no address; using it as a value is an
+  error.
+- **Not in a coroutine** ([Coroutines_in_C.md](Coroutines_in_C.md)): a coroutine's
+  frame outlives the stack it runs on, so `alloca` there is the error "alloca in a
+  coroutine". A local array of a fixed size, which lives in the frame, or `malloc` does
+  instead. On `wasm32-braam`
+  `main` is a coroutine, so its `alloca`s go into an ordinary function it calls.
+- **Inside the block of a `co_alloca`**, the memory goes when that block ends, not when
+  the function returns: the block's end puts the stack pointer back to where it was
+  at the `co_alloca`, as GCC does for a variable-length array. Memory taken before the
+  `co_alloca` is not affected.
+- **A loop** that calls `alloca` keeps every piece until the function returns; call a
+  function that allocates from the loop instead, as with GCC.
+
+A function that calls `alloca` always has a frame pointer, whatever the options: rbp on
+x86-64, x29 on AArch64, s0 on RISC-V, r11 on ARM32, Y on AVR, r4 on MSP430 and `$253` on
+MMIX; wasm32 a frame pointer local. Each backend's manual has an "alloca" section
+([X86_64_Backend.md](X86_64_Backend.md#alloca) and the others). The size is rounded to
+the stack's alignment: 16 bytes on the 64-bit targets, wasm32 and RISC-V's RV32, 8 on
+ARM32 and MMIX, 2 on MSP430, 1 on AVR. BESM-6, which has no coroutines, has `alloca`
+alone: the size in whole words, the result a `char *`-style pointer to the first byte
+of a word ([Besm6_Calling_Conventions.md](../backend/besm6/Besm6_Calling_Conventions.md#alloca)).
+Like `<coro.h>`, the header is installed with the compiler's own headers for BESM-6.
+
 ---
 
 ## Hosted headers
@@ -565,6 +612,7 @@ hosted remainder; "Source" says whether a header is RISC-V-specific (`riscv`) or
 | `<wchar.h>` | hosted | common | wide characters and multibyte conversion |
 | `<wctype.h>` | hosted | common | wide character classification |
 | `<coro.h>` | vcc extension | common | `defer`, coroutines |
+| `<alloca.h>` | vcc extension | common | `alloca`, memory until the function returns |
 
 Full hosted conformance still excludes `<complex.h>`, `<stdatomic.h>`, and `<threads.h>`,
 which depend on language features the compiler does not provide. With those three

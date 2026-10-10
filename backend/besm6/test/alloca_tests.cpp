@@ -1,5 +1,5 @@
 //
-// alloca on BESM-6 (docs/Plan.md): the memory is the top of the stack, which grows
+// alloca on BESM-6 (Besm6_Calling_Conventions.md): the memory is the top of the stack, which grows
 // upward; the result r15 as a void * fat pointer, then r15 raised by the words of the
 // size; b/ret sets r15 back from r7, which gives the memory back.  Goldens in the three
 // dialects, and programs run on the Unix path (b6sim).

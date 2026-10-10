@@ -404,6 +404,12 @@ Whoever starts `report` must give it spare room for that frame:
 You may not jump with `goto` into a block past a `co_alloca` in it, nor put a `case`
 label after one; the same rule as for `defer`.
 
+In an ordinary function, `co_alloca` takes the stack as `alloca` (`<alloca.h>`) does,
+and the end of its block puts the stack pointer back to where it was. So memory that
+`alloca` took after the `co_alloca`, in the same block, goes then too, not when the
+function returns ([Standard_Include_Files.md](Standard_Include_Files.md), `<alloca.h>`).
+`alloca` itself is an error in a coroutine, whose frame outlives the stack.
+
 ### In memory you own: `co_init`
 
 ```c
