@@ -28,6 +28,50 @@ static _Noreturn void invalid_operands(const char *op, const Expr *e1, const Exp
     fatal_error("invalid operands to '%s' ('%s' and '%s')", op, type_of(e1), type_of(e2));
 }
 
+// Is type t const-qualified, directly or through its typedef?
+static bool is_const_type(const Type *t)
+{
+    while (t) {
+        for (const TypeQualifier *q = t->qualifiers; q; q = q->next)
+            if (q->kind == TYPE_QUALIFIER_CONST)
+                return true;
+        if (t->kind != TYPE_TYPEDEF_NAME || !typetab_exists(t->u.typedef_name.name))
+            return false;
+        t = typetab_resolve(t->u.typedef_name.name);
+    }
+    return false;
+}
+
+// Is lvalue e read-only (C11 §6.3.2.1p1): of a const-qualified type, or a member of a
+// const-qualified structure or union, however deep?
+static bool is_read_only(const Expr *e)
+{
+    if (is_const_type(e->type))
+        return true;
+    if (e->kind == EXPR_FIELD_ACCESS)
+        return is_read_only(e->u.field_access.expr);
+    if (e->kind == EXPR_PTR_ACCESS) {
+        const Type *p = unalias(e->u.ptr_access.expr->type);
+        return p->kind == TYPE_POINTER && is_const_type(p->u.pointer.target);
+    }
+    return false;
+}
+
+// Reject a change to read-only lvalue e by assignment, ++ or --.
+static void check_modifiable(const Expr *e)
+{
+    if (!is_read_only(e))
+        return;
+    if (e->kind == EXPR_VAR) {
+        // A local's backend name may carry a "$N" suffix; the user wrote the name before it.
+        const char *dollar = strchr(e->u.var, '$');
+        int len            = dollar ? (int)(dollar - e->u.var) : (int)strlen(e->u.var);
+        fatal_error("cannot assign to variable '%.*s' with const-qualified type '%s'", len,
+                    e->u.var, type_of(e));
+    }
+    fatal_error("cannot assign to a read-only location of type '%s'", type_of(e));
+}
+
 static const char *binary_op_text(BinaryOp op)
 {
     switch (op) {
@@ -532,6 +576,7 @@ static Expr *typecheck_expr_at(Expr *e)
             if (!is_lvalue(inner)) {
                 fatal_error("expression is not assignable");
             }
+            check_modifiable(inner);
             if (!is_scalar(inner->type)) {
                 fatal_error("cannot %s value of type '%s'", what, type_of(inner));
             }
@@ -739,6 +784,7 @@ static Expr *typecheck_expr_at(Expr *e)
         if (!is_lvalue(lhs)) {
             fatal_error("expression is not assignable");
         }
+        check_modifiable(lhs);
         Expr *rhs = typecheck_and_decay(e->u.assign.value);
         if (e->u.assign.op == ASSIGN_SIMPLE) {
             rhs = coerce_for_assignment(rhs, lhs->type, "assigning");
@@ -1068,6 +1114,7 @@ static Expr *typecheck_expr_at(Expr *e)
         if (!is_lvalue(inner)) {
             fatal_error("expression is not assignable");
         }
+        check_modifiable(inner);
         if (!is_scalar(inner->type)) {
             fatal_error("cannot increment value of type '%s'", type_of(inner));
         }
@@ -1091,6 +1138,7 @@ static Expr *typecheck_expr_at(Expr *e)
         if (!is_lvalue(inner)) {
             fatal_error("expression is not assignable");
         }
+        check_modifiable(inner);
         if (!is_scalar(inner->type)) {
             fatal_error("cannot decrement value of type '%s'", type_of(inner));
         }
