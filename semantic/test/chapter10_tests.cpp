@@ -17,7 +17,7 @@
 //
 // Reclassifications vs. the book (see parser/chapter10_tests.cpp for the other
 // direction):
-//   * static_var_case is rejected by our parser ("Expected constant
+//   * static_var_case is rejected by our parser ("expected a constant
 //     expression"), so it lives in the parser file.
 //   * conflicting_variable_linkage_2 is caught by our no-shadowing rule: the
 //     inner "extern int x" shadows the enclosing local "int x = 3" (an

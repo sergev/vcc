@@ -9,8 +9,8 @@
 //     checker instead (array-of-functions, return_array, the abstract cast-to-array
 //     declarators); they live in semantic/chapter15_tests.cpp.
 //   * cast_to_array_type_3 lives in the book's invalid_types, but a nested array
-//     abstract declarator like `long(([2])[3])` is a parse error for us ("Empty type
-//     specifier list"), so it is here.
+//     abstract declarator like `long(([2])[3])` is a parse error for us ("expected a
+//     type"), so it is here.
 //
 // One of the book's invalid_parse programs is accepted by our front end today and is
 // reclassified as a positive test: an empty brace initializer (int arr[1] = {}; valid

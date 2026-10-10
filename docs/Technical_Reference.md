@@ -266,7 +266,44 @@ the declaration, initializer, label and defer walkers, `gen_stmt`, `gen_expr`) p
 global `diag_loc` at their node on entry and restore it on exit (`diag_enter`), so an
 error found after the operands were checked names the node itself. The coroutine lint's
 warnings take the same prefix with `warning`. TAC carries no locations, so the code
-generators' errors have none.
+generators' errors have none; with no location the prefix names the program instead
+(`vgenx86: error: `, from `diag_progname`). `vcpp` prints `file:line: error: ` with the
+line of the directive.
+
+Each tool's `fatal_error` prints through `diag_vreport` and exits with status 1.
+`diag_note` adds a line after an error, at another place: a redefinition points at the
+earlier declaration (`Symbol.loc`, `StructDef.loc`), a call with the wrong number of
+arguments at the function's. A broken invariant of the compiler itself is reported by
+`internal_error`: `internal compiler error: ...`, then `please report this bug`, and exit
+status 2. The driver stays silent after a pass that exits with 1, 2 or 127, which has
+said why; it reports a pass killed by a signal.
+
+The messages follow one style, after Clang's:
+
+- They start in lower case and have no trailing period; `cannot`, never `can't`.
+- Every name, token and type is quoted: `'x'`, `';'`, `'const char *'`.
+- Types are written as C (`type_to_c`): `'int (*)(int)'`, `'struct S'`,
+  `'struct <anonymous>'` for an untagged one. No enum names or internal kind numbers.
+- A syntax error says what was expected and where: `expected ';' before 'return'`,
+  `expected '}' at end of file` (`parser_where`).
+- One wording per kind of error:
+
+| Error | Message |
+|---|---|
+| undeclared | `use of undeclared identifier 'x'`, `unknown type name 'T'`, `use of undeclared label 'L'` |
+| redefinition | `redefinition of 'x'` + `note: previous declaration of 'x' is here` |
+| shadowing, not allowed | `declaration of 'x' shadows an earlier one, which is not allowed` + note |
+| conflicting types | `conflicting types for 'f'` + note |
+| operands | `invalid operands to '+' ('int *' and 'float')`; also `'+='`, `'[]'` |
+| unary operand | `invalid argument type 'struct S' to unary '~'` |
+| not assignable | `expression is not assignable`, `cannot assign to variable 'a' with const-qualified type 'const int'` |
+| conversion | `cannot convert 'double' to 'char *' when passing argument 1 of 'f'` (or `assigning`, `initializing`, `returning`) |
+| member | `no member named 'b' in 'struct S'` |
+| arguments | `too many arguments to function 'f' (expected 1, have 2)` + `note: 'f' declared here` |
+| incomplete | `variable 'v' has incomplete type 'struct T'` |
+| misplaced | `'break' statement not in a loop or switch`, `'case' label not in a switch statement` |
+| not constant | `initializer element is not a constant expression` |
+| unsupported | `coroutines are not supported on target 'besm6'` |
 
 ### Semantic analysis (`semantic/`)
 
@@ -910,7 +947,7 @@ Reference grammars and notes. See [grammar/README.md](../grammar/README.md) for 
 | **string_map** | `string_map.c`, `string_map.h` | Map used in symbol and type tables |
 | **float128** | `float128.c`, `float128.h` | IEEE binary128 in software: the value of every long double constant, exact on any host (parsing, folding, conversion, formatting); also included by the RISC-V runtime |
 | **c_escape** | `c_escape.c`, `c_escape.h` | Decoding of backslash escapes in character and string literals |
-| **srcloc** | `srcloc.c`, `srcloc.h` | Source locations: `SrcLoc`, the current `diag_loc`, interned file names, the `file:line:col: error: ` prefix of a diagnostic |
+| **srcloc** | `srcloc.c`, `srcloc.h` | Source locations: `SrcLoc`, the current `diag_loc`, interned file names; diagnostics: `diag_vreport`, `diag_error`, `diag_warning`, `diag_note`, `internal_error` |
 
 Tests: `c_escape_tests.cpp`, `string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` → `libutil-tests`. `libutil/test/` also holds helpers shared by every test binary: `test_preprocess.h` (runs `cc -E` over test snippets with the target's headers) and `test_chdir.cpp` (each binary `chdir()`s into its build directory at startup).
 

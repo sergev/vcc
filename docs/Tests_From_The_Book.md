@@ -204,9 +204,9 @@ permissive than the book's, while our type checker is one unified pass. So progr
   meaning-checking stops them.
 - **Semantic → parser.** A `case` label whose value isn't constant (`non_constant_case`,
   ch8; `static_var_case`, ch10) is a *semantic* error in the book. For us a case label is
-  parsed as a *constant expression*, so the **parser** rejects it ("Expected constant
+  parsed as a *constant expression*, so the **parser** rejects it ("expected a constant
   expression") before semantics ever runs. `nested_function_definition` (ch9) and
-  `cast_to_array_type_3` (ch15, `long(([2])[3])` → "Empty type specifier list") move the
+  `cast_to_array_type_3` (ch15, `long(([2])[3])` → "expected a type") move the
   same way.
 - **Valid → negative.** This is the most surprising one. We made a permanent design
   decision: **no identifier shadowing** — an inner block may not redeclare a name visible

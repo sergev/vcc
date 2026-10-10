@@ -192,8 +192,8 @@ EXPR_ASSIGN handler in `expressions.c` dispatches directly on the operator and l
 **Key difference from simple assignment (§4)**: compound operators narrow the rhs directly
 to the lhs type without going through `coerce_for_assignment()`.  Pointer↔pointer and
 pointer↔integer combinations that `coerce_for_assignment()` would reject with
-"Cannot convert type for assignment" instead reach the arithmetic check above and are
-rejected with "Invalid operands for compound assignment".
+"cannot convert 'X' to 'Y' when assigning" instead reach the arithmetic check above and
+are rejected with "invalid operands to '+=' ('X' and 'Y')".
 
 ---
 
@@ -257,7 +257,7 @@ if e_type is pointer AND target_type is array
    AND pointer-element kind == array-element kind
     → return e unchanged  (C11 §6.7.6.3p7 array parameter adjustment)
 otherwise
-    → fatal_error("Cannot convert type for assignment")
+    → fatal_error("cannot convert '%s' to '%s' when %s", ..., context)
 ```
 
 ### EXPR_ASSIGN compound dispatch — `semantic/expressions.c:372`
