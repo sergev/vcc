@@ -1167,6 +1167,40 @@ int b(void) { return w + 1; }
               "t.c:4:22: error: use of undeclared identifier 'w'\n");
 }
 
+// -fmax-errors=N stops after N errors; 0 means no limit, the default is 20.
+TEST_F(CcDriver, MaxErrors)
+{
+    std::string src;
+    for (int i = 0; i < 25; i++)
+        src += "int f" + std::to_string(i) + "(void) { return x; }\n";
+    WriteSource("t.c", src);
+    auto count = [&](const char *what) {
+        size_t n = 0;
+        for (size_t pos = 0; (pos = Stderr().find(what, pos)) != std::string::npos; pos++)
+            n++;
+        return n;
+    };
+
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=2", "t.c" }), 0);
+    EXPECT_EQ(Stderr().find("t.c:1:23: error: use of undeclared identifier 'x'\n"
+                            "t.c:2:23: error: use of undeclared identifier 'x'\n"),
+              0u)
+        << Stderr();
+    EXPECT_EQ(count("undeclared identifier"), 2u) << Stderr();
+    EXPECT_NE(Stderr().find(": error: too many errors, stopping\n"), std::string::npos) << Stderr();
+
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(count("undeclared identifier"), 20u) << Stderr();
+    EXPECT_EQ(count("too many errors"), 1u) << Stderr();
+
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=0", "t.c" }), 0);
+    EXPECT_EQ(count("undeclared identifier"), 25u) << Stderr();
+    EXPECT_EQ(count("too many errors"), 0u) << Stderr();
+
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fmax-errors=x", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("invalid value in '-fmax-errors=x'"), std::string::npos) << Stderr();
+}
+
 //
 // Usage errors.
 //

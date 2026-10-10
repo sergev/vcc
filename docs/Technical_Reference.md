@@ -270,7 +270,29 @@ generators' errors have none; with no location the prefix names the program inst
 (`vgenx86: error: `, from `diag_progname`). `vcpp` prints `file:line: error: ` with the
 line of the directive.
 
-Each tool's `fatal_error` prints through `diag_vreport` and exits with status 1.
+Each tool's `fatal_error` prints through `diag_vreport` (`diag_fatal_v`), then
+unwinds to the innermost recovery point, `diag_recover`, or exits with status 1 when
+none is set. So `parse` and `lower` go on after an error and report every error they
+find, up to `--max-errors=N` (`vcc -fmax-errors=N`; default 20, 0 for no limit), after
+which they print `too many errors, stopping`. They write no output once an error is
+found, and exit with status 1 at the end.
+
+- The scanner repairs a bad token in place and returns it: an invalid character is
+  skipped, a literal ends at the end of its line, a bad suffix is taken into the token.
+  Only an error counts (`diag_count_error`); nothing unwinds.
+- The parser has a recovery point for each block item (`parse_compound_statement`) and
+  each external declaration (`parse_translation_unit`). After an error it drops what it
+  was parsing, restores the scope of typedef names, and skips (`parser_sync`) past a `;`
+  at the block's brace depth or past the `}` that closes a brace opened since. An error
+  at the end of the file ends the run.
+- `lower` has a recovery point for each external declaration. `semantic_recover` drops
+  the block scopes and the per-function state of the passes, and marks the names the
+  declaration failed to declare (`symtab_poison`): a later use of one ends the
+  declaration that uses it without a new message (`diag_abandon`).
+
+Test binaries define a `fatal_error` of their own that exits, and set no recovery point,
+so a death test sees the first error only.
+
 `diag_note` adds a line after an error, at another place: a redefinition points at the
 earlier declaration (`Symbol.loc`, `StructDef.loc`), a call with the wrong number of
 arguments at the function's. A broken invariant of the compiler itself is reported by

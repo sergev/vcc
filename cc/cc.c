@@ -339,6 +339,7 @@ static unsigned long braam_pages = 4; // --initial-pages: a Braam process's init
 static bool opt_nostdinc;             // -nostdinc: skip the target's standard include dir
 static char *outfile;                 // -o NAME: explicit output name
 static char *linkscript;      // -T FILE: linker script (not besm6), instead of the standard one
+static char *max_errors_flag; // --max-errors=N for parse and lower, from -fmax-errors=N
 static char *codegen_dialect; // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
 
 static struct vec sources;  // input .c/.s files to compile
@@ -822,8 +823,16 @@ static int run_parse(const char *in, const char *out)
     char *tool = find_pass("VCC_PARSE", "vparse");
     if (!tool)
         return 1;
-    char *av[] = { tool, (char *)in, (char *)out, NULL };
-    return run(tool, av);
+    struct vec av = { 0 };
+    vec_push(&av, tool);
+    if (max_errors_flag)
+        vec_push(&av, max_errors_flag);
+    vec_push(&av, (char *)in);
+    vec_push(&av, (char *)out);
+    vec_push(&av, NULL);
+    int rc = run(tool, av.data);
+    vec_free(&av);
+    return rc;
 }
 
 //
@@ -835,8 +844,18 @@ static int run_lower(const char *in, const char *out)
     char *tool = find_pass("VCC_LOWER", "vlower");
     if (!tool)
         return 1;
-    char *av[] = { tool, "-t", (char *)target->name, (char *)in, (char *)out, NULL };
-    return run(tool, av);
+    struct vec av = { 0 };
+    vec_push(&av, tool);
+    vec_push(&av, "-t");
+    vec_push(&av, (char *)target->name);
+    if (max_errors_flag)
+        vec_push(&av, max_errors_flag);
+    vec_push(&av, (char *)in);
+    vec_push(&av, (char *)out);
+    vec_push(&av, NULL);
+    int rc = run(tool, av.data);
+    vec_free(&av);
+    return rc;
 }
 
 //
@@ -1304,6 +1323,7 @@ static void usage(int status)
     printf("    -nostdinc       Do not add the standard include directory\n");
     printf("    --initial-pages=N  wasm32-braam: the process's initial memory, in 64 KiB pages\n");
     printf("                    (default 4)\n");
+    printf("    -fmax-errors=N  Stop after N errors (0: no limit; default 20)\n");
     printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
     printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf(
@@ -1392,6 +1412,16 @@ int main(int argc, char *argv[])
         }
         if (strcmp(arg, "-P") == 0) { // no line markers, for the preprocessor
             vec_push(&cppflags, arg);
+            continue;
+        }
+        if (strncmp(arg, "-fmax-errors=", 13) == 0) {
+            char *end;
+            (void)strtoul(arg + 13, &end, 10);
+            if (arg[13] == '\0' || *end) {
+                error("invalid value in '%s'", arg);
+                exit(1);
+            }
+            max_errors_flag = concat("--max-errors=", arg + 13);
             continue;
         }
         if (arg[1] == 'W' || arg[1] == 'f' || arg[1] == 'w' || strncmp(arg, "-std=", 5) == 0 ||

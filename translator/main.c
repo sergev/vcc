@@ -88,6 +88,7 @@ static void print_usage(const char *prog_name)
     fprintf(stderr,
             "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
+    fprintf(stderr, "    --max-errors=N      Stop after N errors (0: no limit; default 20)\n");
     fprintf(stderr, "    -t, --target NAME   Target architecture (default: riscv64)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug         Print debug information\n");
@@ -171,6 +172,7 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "no-ivsr", no_argument, 0, 264 },            //
         { "no-shared-cleanup", no_argument, 0, 265 },  //
         { "no-cond-jumps", no_argument, 0, 266 },      //
+        { "max-errors", required_argument, 0, 267 },   //
         {},                                            //
     };
 
@@ -238,6 +240,9 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 266:
             args->no_cond_jumps = 1;
+            break;
+        case 267:
+            diag_max_errors = atoi(optarg);
             break;
         case '?': // Unknown option
             return -1;
@@ -478,7 +483,8 @@ int main(int argc, char *argv[])
 {
     Args args;
     init_args(&args);
-    diag_progname = argv[0];
+    diag_progname   = argv[0];
+    diag_max_errors = 20;
 
     if (parse_args(argc, argv, &args) != 0) {
         print_usage(argv[0]);

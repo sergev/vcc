@@ -56,6 +56,7 @@ void print_usage(const char *prog_name)
     fprintf(stderr, "    --ast            Emit AST in binary format (default)\n");
     fprintf(stderr, "    --yaml           Emit YAML format\n");
     fprintf(stderr, "    --dot            Emit Graphviz DOT script\n");
+    fprintf(stderr, "    --max-errors=N   Stop after N errors (0: no limit; default 20)\n");
     fprintf(stderr, "    -v, --verbose    Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug      Print debug information\n");
     fprintf(stderr, "    -h, --help       Show this help message\n");
@@ -112,7 +113,8 @@ int parse_args(int argc, char *argv[], Args *args)
         { "ast", no_argument, 0, 'a' },     //
         { "yaml", no_argument, 0, 'y' },    //
         { "dot", no_argument, 0, 'd' },     //
-        {},                                 //
+        { "max-errors", required_argument, 0, 256 },
+        {}, //
     };
 
     int opt;
@@ -143,6 +145,9 @@ int parse_args(int argc, char *argv[], Args *args)
             break;
         case 'a':
             args->format = FORMAT_AST;
+            break;
+        case 256:
+            diag_max_errors = atoi(optarg);
             break;
         case '?': // Unknown option
             return -1;
