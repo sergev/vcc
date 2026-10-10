@@ -167,7 +167,7 @@ void store_params(Gen *g)
     // whether the caller passed it or not (a register above rL reads as 0).
     if (g->tl->u.function.variadic)
         for (int r = param_count(g); r < MAX_REG_ARGS; r++)
-            mem_op_at(g, MMIX_STO, r, MMIX_SP, g->va_off + 8 * (r - param_count(g)));
+            mem_op_at(g, MMIX_STO, r, frame_base(g), g->va_off + 8 * (r - param_count(g)));
     Move m[MAX_REG_ARGS];
     int n = 0, i = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p && i < MAX_REG_ARGS; p = p->next, i++) {
@@ -192,7 +192,7 @@ void store_params(Gen *g)
         if (i < MAX_REG_ARGS || r < 0 || map_get(&g->dead, p->name, &dead))
             continue;
         int size = mmix_type_size(p->type);
-        mem_op_at(g, load_op(p->type), r, MMIX_SP, stack_param_off(g, i) + 8 - size);
+        mem_op_at(g, load_op(p->type), r, frame_base(g), stack_param_off(g, i) + 8 - size);
     }
 }
 
@@ -205,7 +205,7 @@ void copy_byref_params(Gen *g)
         if (i < MAX_REG_ARGS)
             mem_op(g, MMIX_LDO, REG_B, p->name, 0);
         else
-            mem_op_at(g, MMIX_LDO, REG_B, MMIX_SP, stack_param_off(g, i));
+            mem_op_at(g, MMIX_LDO, REG_B, frame_base(g), stack_param_off(g, i));
         address_of(g, REG_C, p->name, 0);
         copy_bytes(g, mmix_type_size(p->type), mmix_type_align(p->type));
     }
@@ -268,7 +268,7 @@ static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type 
     else if (struct_in_reg(t))
         load_small_struct(g, a->u.var_name, t, reg, tmp);
     else
-        add_offset(g, reg, MMIX_SP, copy);
+        add_offset(g, reg, frame_base(g), copy);
 }
 
 // va_start(ap), a call of __va_start(&ap): ap = the first variable argument's slot.
@@ -279,7 +279,7 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
         fatal_error("mmix: %s: __va_start takes one argument", gen_name(g));
     load_val(g, in->u.fun_call.args, REG_A);
-    add_offset(g, REG_B, MMIX_SP, g->va_off);
+    add_offset(g, REG_B, frame_base(g), g->va_off);
     mem_op_at(g, MMIX_STO, REG_B, REG_A, 0);
 }
 
@@ -309,7 +309,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
             continue;
         copy[i] = cursor;
         address_of(g, REG_B, a->u.var_name, 0);
-        add_offset(g, REG_C, MMIX_SP, cursor);
+        add_offset(g, REG_C, frame_base(g), cursor);
         copy_bytes(g, mmix_type_size(t), mmix_type_align(t));
         cursor += (mmix_type_size(t) + 7) & ~7;
     }
@@ -346,7 +346,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         if (dst)
             address_of(g, MMIX_SRET, dst->u.var_name, 0);
         else
-            add_offset(g, MMIX_SRET, MMIX_SP, cursor);
+            add_offset(g, MMIX_SRET, frame_base(g), cursor);
     }
 
     if (in->u.fun_call.indirect)

@@ -29,6 +29,12 @@ static bool is_reg(const Mmix_Operand *o, int reg)
     return o->kind == MMIX_OPND_REG && o->reg == reg;
 }
 
+// Whether `o` is the register the frame is addressed from: $254, or $253.
+static bool is_frame_reg(const Mmix_Operand *o)
+{
+    return is_reg(o, MMIX_SP) || is_reg(o, MMIX_FP);
+}
+
 static bool is_scratch(int reg)
 {
     return reg == REG_A || reg == REG_B || reg == REG_C;
@@ -110,7 +116,7 @@ static bool pure(const Mmix_Instr *in)
     if (!writes_x(in) || in->op == MMIX_GET || in->op == MMIX_DIV || in->op == MMIX_DIVU)
         return false; // div and divu write rR too
     if (is_load(in->op)) // from the frame only: memory elsewhere may be volatile
-        return in->opnd[1].kind == MMIX_OPND_REG && in->opnd[1].reg == MMIX_SP;
+        return is_frame_reg(&in->opnd[1]);
     // Signed arithmetic and fix set overflow bits in rA, but not the ones we emit.
     return true;
 }
@@ -184,8 +190,8 @@ static bool rewrite_block(Mmix_Block *b, int fround_off)
         }
         // A float stored where it was just loaded from (rounded twice).
         if (in->op == MMIX_LDSF && next->op == MMIX_STSF &&
-            is_reg(&next->opnd[0], in->opnd[0].reg) && is_reg(&next->opnd[1], MMIX_SP) &&
-            is_reg(&in->opnd[1], MMIX_SP) && in->opnd[2].kind == MMIX_OPND_IMM &&
+            is_reg(&next->opnd[0], in->opnd[0].reg) && is_frame_reg(&in->opnd[1]) &&
+            is_reg(&next->opnd[1], in->opnd[1].reg) && in->opnd[2].kind == MMIX_OPND_IMM &&
             next->opnd[2].kind == MMIX_OPND_IMM && in->opnd[2].imm == fround_off &&
             next->opnd[2].imm == fround_off) {
             remove_after(b, in);

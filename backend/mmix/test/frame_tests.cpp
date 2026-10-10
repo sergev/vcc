@@ -1,6 +1,7 @@
 //
-// MMIX frames: slots off $254, parameters stored from their registers, stack parameters
-// left where they came in, and offsets past the 8-bit field through $255.
+// MMIX frames: slots off $254 (or $253 with a frame pointer), parameters stored from
+// their registers, stack parameters left where they came in, and offsets past the 8-bit
+// field through $255.
 //
 #include "mmix_test.h"
 
@@ -61,6 +62,27 @@ addu $254, $254, 16
 pop 1, 0
 )",
             "int f(char c, int i, long l) { return i; }")
+
+// --frame-pointer: the slots from $253, which the prologue saves in a slot of its own
+// and sets to $254; the epilogue sets $254 from it and loads it back.
+TEST_F(MmixTest, FramePointerOption)
+{
+    NaiveSelection();
+    mmix_frame_pointer = true;
+    EXPECT_EQ(R"(subu $254, $254, 24
+sto $253, $254, 16
+set $253, $254
+sto $0, $253, 0
+sto $1, $253, 8
+ldo $0, $253, 8
+set $254, $253
+ldo $253, $254, 16
+addu $254, $254, 24
+pop 1, 0
+)",
+              Code(CompileToMmix("long f(long a, long b) { return b; }")));
+    mmix_frame_pointer = false;
+}
 
 static const char seventeen[] = "long a0, long a1, long a2, long a3, long a4, long a5, long a6, "
                                 "long a7, long a8, long a9, long a10, long a11, long a12, "

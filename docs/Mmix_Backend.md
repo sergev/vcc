@@ -248,8 +248,8 @@ It runs over the function's MMIX IR to a fixed point.
 
 ## Stack frame
 
-The frame is addressed from `$254`, the stack pointer; there is no frame pointer. Only
-values the registers do not hold live in it.
+The frame is addressed from `$254`, the stack pointer, unless `--frame-pointer` is given
+(below). Only values the registers do not hold live in it.
 
 ```
 $254 + frame + 8*(i-16)     the 17th argument and later, 8 bytes each
@@ -270,13 +270,22 @@ add:
     pop     1, 0
 ```
 
+With `--frame-pointer` the slots, the save area and the incoming arguments are addressed
+from `$253` instead, at the same offsets. The frame holds one slot more, `%.savefp`, for
+the caller's `$253`, which GCC's ABI keeps across a call. The prologue reserves the frame,
+saves `$253` there and sets `set $253, $254`; the epilogue starts with `set $254, $253`
+and loads `$253` back. Outgoing arguments stay at `k($254)`. Every function then has a
+frame, so none returns in place and none makes a tail call. `VCC_MMIX_FRAME_POINTER` set
+in the environment runs every `mmix-tests` test this way; only the assembly goldens
+differ.
+
 ## Function calls
 
 The MMIXware ABI as GCC implements it, checked against GCC's output and by
 `interop_tests.cpp` both ways:
 
-- **Fixed registers:** `$254` the stack pointer; `$253` GCC's frame pointer and `$252`
-  its static chain (both unused here); `$251` the structure-result address; `$255`
+- **Fixed registers:** `$254` the stack pointer; `$253` the frame pointer, saved by a
+  function that uses it, and `$252` GCC's static chain (unused here); `$251` the structure-result address; `$255`
   scratch. `crt0` sets `rG` to 32, so `$32`–`$255` are global and locals end at `$31`.
 - **Calls:** `pushj $X, f`, or `pushgo $X, $249, 0` through a pointer. The result comes back
   in `$X`; `$0`…`$(X−1)` are preserved and everything above `$X` is lost.

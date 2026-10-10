@@ -19,6 +19,9 @@ extern bool mmix_regalloc;
 // Fuse instructions in selection and run the peephole pass (default), or not
 // (--no-peephole).
 extern bool mmix_peephole_on;
+// Address the frame from $253, set to $254 by the prologue, and restore $254 from it in
+// the epilogue (--frame-pointer).
+extern bool mmix_frame_pointer;
 
 #ifdef __cplusplus
 }

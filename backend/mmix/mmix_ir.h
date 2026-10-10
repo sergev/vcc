@@ -20,7 +20,7 @@ extern "C" {
 // Register numbers: $0..$255, then virtual registers.
 enum {
     MMIX_SP   = 254, // the stack pointer
-    MMIX_FP   = 253, // GCC's frame pointer, unused
+    MMIX_FP   = 253, // the frame pointer, GCC's too
     MMIX_SRET = 251, // the address of a structure result
     MMIX_TMP  = 255, // scratch, never allocated
     MMIX_VREG = 256, // first virtual register

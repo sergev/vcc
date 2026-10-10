@@ -63,9 +63,11 @@ class MmixTest : public QemuTest {
 protected:
     MmixTest() : QemuTest("mmix", mmix_config())
     {
-        // The defaults; a test may change them.
-        mmix_regalloc    = true;
-        mmix_peephole_on = true;
+        // The defaults; a test may change them.  VCC_MMIX_FRAME_POINTER set runs every
+        // test with the frame from $253, a check of that mode (the goldens then differ).
+        mmix_regalloc      = true;
+        mmix_peephole_on   = true;
+        mmix_frame_pointer = getenv("VCC_MMIX_FRAME_POINTER") != nullptr;
     }
 
     // Pin instruction selection itself: every variable in its slot, no peephole pass.

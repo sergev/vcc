@@ -415,6 +415,8 @@ void layout_frame(Gen *g)
         else if (nparam < MAX_REG_ARGS && var_reg(g, p->name) < 0)
             add_slot(g, p->name, p->type, mmix_type_size(p->type), mmix_type_align(p->type));
     }
+    if (g->fp)
+        add_slot(g, FP_SLOT, NULL, 8, 8);
     if (returns_struct(g))
         add_slot(g, SRET_SLOT, NULL, 8, 8);
     if (uses_float(g))
@@ -463,6 +465,11 @@ void layout_frame(Gen *g)
 int stack_param_off(const Gen *g, int i)
 {
     return g->frame_size + 8 * (i - MAX_REG_ARGS);
+}
+
+int frame_base(const Gen *g)
+{
+    return g->fp ? MMIX_FP : MMIX_SP;
 }
 
 const Slot *find_slot(const Gen *g, const char *name)
@@ -598,7 +605,7 @@ void mem_op(Gen *g, Mmix_Op op, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
     if (s) {
-        mem_op_at(g, op, reg, MMIX_SP, s->off + off);
+        mem_op_at(g, op, reg, frame_base(g), s->off + off);
         return;
     }
     if (name[0] == '%')
@@ -660,7 +667,7 @@ void address_of(Gen *g, int reg, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
     if (s) {
-        add_offset(g, reg, MMIX_SP, s->off + off);
+        add_offset(g, reg, frame_base(g), s->off + off);
         return;
     }
     if (name[0] == '%')
@@ -946,6 +953,10 @@ void gen_frame(Gen *g)
     Mmix_Block *body = switch_block(g, g->prologue);
     if (g->frame_size)
         adjust_sp(g, MMIX_SUBU);
+    if (g->fp) {
+        mem_op_at(g, MMIX_STO, MMIX_FP, MMIX_SP, find_slot(g, FP_SLOT)->off);
+        move_reg(g, MMIX_FP, MMIX_SP);
+    }
     if (find_slot(g, SRET_SLOT)) // any call this function makes may overwrite $251
         mem_op(g, MMIX_STO, MMIX_SRET, SRET_SLOT, 0);
     store_params(g);
@@ -960,6 +971,10 @@ void gen_frame(Gen *g)
         emit2(g, MMIX_PUT, mmix_special(MMIX_rJ), mmix_reg(rj_reg(g)));
     if (value)
         move_reg(g, 0, ret_reg(g));
+    if (g->fp) {
+        move_reg(g, MMIX_SP, MMIX_FP);
+        mem_op_at(g, MMIX_LDO, MMIX_FP, MMIX_SP, find_slot(g, FP_SLOT)->off);
+    }
     if (g->frame_size)
         adjust_sp(g, MMIX_ADDU);
     emit2(g, MMIX_POP, mmix_imm(value ? 1 : 0), mmix_imm(0));

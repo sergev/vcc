@@ -28,7 +28,9 @@
 // held in a register as its exact binary64 value: ldsf and stsf convert, and stsf
 // rounds; a float result in a register is rounded through the slot %.fround.
 //
-// Frame (SP is constant in the body; every offset is from it):
+// Frame (SP is constant in the body; every offset is from it, or from $253 with a frame
+// pointer, which the prologue sets to SP after allocating the frame, having saved the
+// caller's in the slot %.savefp; the epilogue sets SP from it):
 //   frame + 8*i ...     incoming stack arguments, the 17th and later
 //   ... frame - 1       a variadic function's save area: the argument registers after
 //                       its named ones, so the variable arguments are one run of slots
@@ -65,6 +67,7 @@ enum {
     MAX_REG_ARGS = 16,
 };
 #define FROUND_SLOT "%.fround"
+#define FP_SLOT     "%.savefp"
 
 typedef struct {
     const Tac_Type *type;
@@ -85,6 +88,7 @@ typedef struct {
     int frame_size;    // bytes of the outgoing area and the slots, a multiple of 8
     int va_off;        // a variadic function: the first variable argument's slot
     bool leaf;         // makes no call: rJ stays where it is
+    bool fp;           // the frame addressed from $253
     StringMap regs;    // name → its register in the allocator's numbering + 1
     StringMap dead;    // allocated parameters dead on entry
     int P;             // the compaction: $0..$(P-1) hold values live across a call
@@ -131,6 +135,8 @@ const char *gen_name(const Gen *g);
 // parameters above the frame.
 void layout_frame(Gen *g);
 const Slot *find_slot(const Gen *g, const char *name);
+// The register the slots are addressed from: $253 with a frame pointer, else $254.
+int frame_base(const Gen *g);
 // The offset from SP of the incoming stack slot of parameter `i` (16 or more).
 int stack_param_off(const Gen *g, int i);
 // Whether a parameter of type `t` comes by reference: a structure over 8 bytes.
