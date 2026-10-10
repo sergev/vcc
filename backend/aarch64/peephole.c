@@ -714,6 +714,9 @@ static bool can_substitute(const A64_Instr *in, int t, A64_Width w)
         bool is_mem          = o->kind == A64_OPND_MEM && (o->reg == t || (o->sub == A64_MEM_INDEX && o->index == t));
         if (is_mem && w != A64_X)
             return false;
+        if (o->kind == A64_OPND_MEM && o->reg == t && o->sub != A64_MEM_OFFSET &&
+            o->sub != A64_MEM_INDEX)
+            return false; // a writeback: the write of t would move with it
         if (!reads_operand(in, i, t))
             continue;
         if (i == 0 && reads_dest(in->op))

@@ -175,6 +175,50 @@ int main(void)
     EXPECT_EQ(25, exit_status);
 }
 
+// A 16-byte copy through a fresh pointer: the first store takes a pre-index, which
+// advances the copy of the pointer, so the move making that copy must stay (forwarding
+// it would move the writeback to the original and leave the second store's base stale).
+TEST_F(Aarch64Test, RunPeepholeKeepsWritebackCopy)
+{
+    SKIP_IF_NO_AARCH64_TOOLS();
+    CompileAndRunAarch64(R"(
+typedef struct { const char *file; int line, col; } Loc;
+typedef struct D { struct D *next; Loc loc; int kind; union { struct { void *spec; void *list; } var; } u; } D;
+typedef struct E { struct E *next; Loc loc; int kind; union { D *declaration; } u; } E;
+D d;
+E e;
+Loc cur = { "f", 3, 4 };
+int tok = 3;
+D *new_d(int k) { d.kind = k; return &d; }
+E *new_e(int k) { e.kind = k; return &e; }
+void *mk(void *a, void *b) { return a == b ? (void *)&d : (void *)&e; }
+void *specs(void **base) { *base = &e; return &e; }
+E *make(void)
+{
+    Loc loc    = cur;
+    void *base = 0;
+    void *spec = specs(&base);
+    if (tok == 3) {
+        E *x                       = new_e(1);
+        x->loc                     = loc;
+        x->u.declaration           = new_d(0);
+        x->u.declaration->loc      = loc;
+        x->u.declaration->u.var.spec = spec;
+        x->u.declaration->u.var.list = mk(base, spec);
+        return x;
+    }
+    return 0;
+}
+int main(void)
+{
+    E *x = make();
+    D *y = x->u.declaration;
+    return y->loc.line * 10 + y->loc.col + (y->u.var.list == &d ? 0 : 100);
+}
+)");
+    EXPECT_EQ(34, exit_status);
+}
+
 // A volatile local stays in its slot: the store is not followed into the reload, and
 // two accesses are two, not a pair.
 TEST_F(Aarch64Test, PeepholeKeepsVolatileReload)
