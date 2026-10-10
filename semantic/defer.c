@@ -196,7 +196,9 @@ static void check_case(const Walk *w, const char *what)
     }
 }
 
-static void walk_stmt(Walk *w, const Stmt *s)
+static void walk_stmt(Walk *w, const Stmt *s);
+
+static void walk_stmt_at(Walk *w, const Stmt *s)
 {
     if (!s)
         return;
@@ -272,6 +274,14 @@ static void walk_stmt(Walk *w, const Stmt *s)
     default:
         break;
     }
+}
+
+// walk_stmt with diag_loc at the node, for the errors found in it.
+static void walk_stmt(Walk *w, const Stmt *s)
+{
+    SrcLoc saved = diag_enter(s ? s->loc : diag_loc);
+    walk_stmt_at(w, s);
+    diag_loc = saved;
 }
 
 void defer_collect_labels(const Stmt *body, StringMap *labels)

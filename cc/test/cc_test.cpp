@@ -964,6 +964,37 @@ TEST_F(CcDriver, CompileErrorFails)
     EXPECT_NE(Stderr().find("exited with status"), std::string::npos) << Stderr();
 }
 
+// The diagnostics of each pass name the file, line and column.
+TEST_F(CcDriver, LexicalErrorLocation)
+{
+    WriteSource("t.c", "int main(void)\n{\n    return 1x;\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:3:12: error: invalid suffix"), std::string::npos) << Stderr();
+}
+
+TEST_F(CcDriver, SyntaxErrorLocation)
+{
+    WriteSource("t.c", "int main(void)\n{\n    int a = 1\n    return a;\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:4:5: error: expected ';', got 'return'"), std::string::npos)
+        << Stderr();
+}
+
+TEST_F(CcDriver, TypeErrorLocation)
+{
+    WriteSource("t.c", "int main(void)\n{\n    int *p;\n    p = 3.5;\n    return 0;\n}\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("t.c:4:7: error: "), std::string::npos) << Stderr();
+}
+
+TEST_F(CcDriver, ErrorLocationInHeader)
+{
+    WriteSource("h.h", "\nint f(void) { return y; }\n");
+    WriteSource("t.c", "int x;\n#include \"h.h\"\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("h.h:2:22: error: "), std::string::npos) << Stderr();
+}
+
 //
 // Usage errors.
 //

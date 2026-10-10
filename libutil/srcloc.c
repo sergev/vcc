@@ -8,6 +8,15 @@
 
 SrcLoc diag_loc;
 
+SrcLoc diag_enter(SrcLoc loc)
+{
+    SrcLoc saved = diag_loc;
+    if (loc.line > 0) {
+        diag_loc = loc;
+    }
+    return saved;
+}
+
 //
 // The interned names. They take plain malloc rather than xalloc: they must outlive
 // the xfree_all() a test fixture calls between tests, and must not count as a leak

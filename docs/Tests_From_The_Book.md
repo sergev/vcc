@@ -102,7 +102,7 @@ Parse error: Expected token 73, got 1 (lexeme: @)
 the same input produces:
 
 ```
-<input>:0: lexical error: invalid character '@'
+t.c:3:5: error: invalid character '@'
 ```
 
 This is why **negative tests are a forcing function for good diagnostics.** That is not just

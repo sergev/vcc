@@ -190,6 +190,7 @@ static void check_duplicate_params(const Type *fn_type)
             continue;
         for (const Param *b = a->next; b; b = b->next) {
             if (b->name && strcmp(a->name, b->name) == 0) {
+                diag_enter(b->loc);
                 fatal_error("Duplicate parameter name %s", a->name);
             }
         }
@@ -733,6 +734,7 @@ static void typecheck_local_var_decl(const Declaration *d)
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
         reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+            diag_enter(decl->loc); // the declaration restores it
             reject_coro_spec(d->u.var.specifiers, decl->name);
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
@@ -742,6 +744,7 @@ static void typecheck_local_var_decl(const Declaration *d)
         return;
     }
     for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+        diag_enter(decl->loc); // the declaration restores it
         decl->type     = resolve_typedef_names(decl->type);
         Type *var_type = decl->type;
         // A block-scope function declaration ("int f(int);" inside a body) has
@@ -1091,6 +1094,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
                     // A parameter shadowing an enclosing-scope variable, or a
                     // file-scope function of the same name, is forbidden by the
                     // no-shadowing design (external vs no linkage, C11 §6.7p3).
+                    diag_enter(p->loc);
                     fatal_error("Duplicate variable declaration %s", p->name);
                 }
             }
@@ -1142,7 +1146,9 @@ static void typecheck_fn_decl(ExternalDecl *d)
 }
 
 // Type-check a local declaration.
-void typecheck_local_decl(Declaration *d)
+void typecheck_local_decl(Declaration *d);
+
+static void typecheck_local_decl_at(Declaration *d)
 {
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
@@ -1162,6 +1168,14 @@ void typecheck_local_decl(Declaration *d)
     }
 }
 
+// typecheck_local_decl with diag_loc at the node, for the errors found in it.
+void typecheck_local_decl(Declaration *d)
+{
+    SrcLoc saved = diag_enter(d ? d->loc : diag_loc);
+    typecheck_local_decl_at(d);
+    diag_loc = saved;
+}
+
 // Type-check a global (file-scope) variable declaration.
 static void typecheck_file_scope_var_decl(Declaration *d)
 {
@@ -1172,6 +1186,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
     if (d->u.var.specifiers && d->u.var.specifiers->storage == STORAGE_CLASS_TYPEDEF) {
         reject_alignas(d->u.var.specifiers, "a typedef");
         for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+            diag_enter(decl->loc); // the declaration restores it
             reject_coro_spec(d->u.var.specifiers, decl->name);
             decl->type = resolve_typedef_names(decl->type);
             register_inline_struct_defs(decl->type);
@@ -1182,6 +1197,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
     }
     bool global = !is_static(d->u.var.specifiers);
     for (InitDeclarator *decl = d->u.var.declarators; decl; decl = decl->next) {
+        diag_enter(decl->loc); // the declaration restores it
         decl->type     = resolve_typedef_names(decl->type);
         Type *var_type = decl->type;
 
@@ -1258,7 +1274,9 @@ static void typecheck_file_scope_var_decl(Declaration *d)
 }
 
 // Type-check a global declaration.
-void typecheck_global_decl(ExternalDecl *d)
+void typecheck_global_decl(ExternalDecl *d);
+
+static void typecheck_global_decl_at(ExternalDecl *d)
 {
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
@@ -1290,4 +1308,12 @@ void typecheck_global_decl(ExternalDecl *d)
         }
         break;
     }
+}
+
+// typecheck_global_decl with diag_loc at the node, for the errors found in it.
+void typecheck_global_decl(ExternalDecl *d)
+{
+    SrcLoc saved = diag_enter(d ? d->loc : diag_loc);
+    typecheck_global_decl_at(d);
+    diag_loc = saved;
 }

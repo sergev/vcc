@@ -559,13 +559,30 @@ coro(int) void gen(int n) { defer n = 0; for (int i = 0; i < n; i++) yield i; }
 )";
 
 // The warnings `body` makes, after the generator (in a test: RunPipeline is the
-// fixture's).
-#define Warnings(t, body)                                              \
+// fixture's); with their locations, or (Warnings) without.
+#define LocatedWarnings(t, body)                                       \
     ([&]() {                                                           \
         testing::internal::CaptureStderr();                            \
         RunPipeline((std::string(lint_gen) + (body)).c_str());         \
         return testing::internal::GetCapturedStderr();                 \
     }())
+#define Warnings(t, body) WithoutLocations(LocatedWarnings(t, body))
+
+// Drop the "file:line:col: " before each "warning: ".
+static std::string WithoutLocations(const std::string &text)
+{
+    std::string out;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t eol      = text.find('\n', pos);
+        size_t end      = eol == std::string::npos ? text.size() : eol + 1;
+        std::string ln  = text.substr(pos, end - pos);
+        size_t warning  = ln.find("warning: ");
+        out            += warning == std::string::npos ? ln : ln.substr(warning);
+        pos             = end;
+    }
+    return out;
+}
 
 TEST_F(CoroTest, LintEscape)
 {
@@ -579,6 +596,20 @@ void f(void)
     keep = co_init(buf, sizeof buf, gen, 3);
 }
 )"));
+}
+
+// A warning names where: the assignment that lets the frame escape.
+TEST_F(CoroTest, LintLocation)
+{
+    std::string text = LocatedWarnings(this, R"(
+co_frame(int, void) *keep;
+void f(void)
+{
+    char buf[256];
+    keep = co_init(buf, sizeof buf, gen, 3);
+}
+)");
+    EXPECT_NE(std::string::npos, text.find(":9:10: warning: f: the frame of 'gen'")) << text;
 }
 
 TEST_F(CoroTest, LintReturned)

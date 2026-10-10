@@ -231,7 +231,7 @@ Recursive-descent parser guided by the C11 grammar in `grammar/` (not generated 
 | `main.c` | `parse` entry: `parse` → `export_ast` / `export_yaml` / `export_dot` |
 | `test/fixture.h` | Test helpers |
 
-Parser tests (9 files): `simple_tests.cpp`, `statement_tests.cpp`, `operator_tests.cpp`, `type_tests.cpp`, `struct_tests.cpp`, `declaration_tests.cpp`, `constant_tests.cpp`, `serialize_tests.cpp`, `negative_tests.cpp` → `parser-tests`.
+Parser tests (10 files): `simple_tests.cpp`, `statement_tests.cpp`, `operator_tests.cpp`, `type_tests.cpp`, `struct_tests.cpp`, `declaration_tests.cpp`, `constant_tests.cpp`, `serialize_tests.cpp`, `negative_tests.cpp`, `location_tests.cpp` → `parser-tests`.
 
 ### AST (`ast/`)
 
@@ -245,6 +245,28 @@ AST values are implemented in C (`ast.h` and companion `.c` files). Binary seria
 | `ast_export.c`, `ast_import.c` | Binary wire format |
 | `ast_yaml.c`, `ast_graphviz.c` | YAML and DOT |
 | `ast_print.c`, `ast_clone.c`, `ast_compare.c` | Print, clone, compare |
+
+**Source locations.** `ExternalDecl`, `Declaration`, `InitDeclarator`, `Initializer`,
+`Param`, `Expr` and `Stmt` carry a `SrcLoc loc` (`libutil/srcloc.h`): the file named by
+the last line marker, the line and the column, 1-based. A node is located at its first
+token, an operator node (binary, assignment, `?:`, cast, unary, postfix, call, subscript,
+member access) at its operator, a declarator and a parameter at the name, a function
+definition at its name. The constructors (`new_expression`, `new_stmt`, …) stamp the
+current `diag_loc`, which the parser keeps at the current token, so a node the later
+passes synthesize takes the location of the node they were working on. Clone copies the
+location; compare ignores it; YAML and DOT leave it out. In the binary stream it follows
+the node's tag as three words, line, column and a flag, the flag 1 followed by the file
+name when the file differs from the location written before, else 0.
+
+**Diagnostics.** Every error from `parse` and `lower` begins `file:line:col: error: `
+(`diag_print_prefix`): the scanner's at the start of the bad token, the parser's at the
+current token, the semantic and translator passes' at the node being checked. Those passes
+keep the error calls as they are: their walkers (`typecheck_expr`, `typecheck_statement`,
+the declaration, initializer, label and defer walkers, `gen_stmt`, `gen_expr`) point the
+global `diag_loc` at their node on entry and restore it on exit (`diag_enter`), so an
+error found after the operands were checked names the node itself. The coroutine lint's
+warnings take the same prefix with `warning`. TAC carries no locations, so the code
+generators' errors have none.
 
 ### Semantic analysis (`semantic/`)
 
@@ -888,6 +910,7 @@ Reference grammars and notes. See [grammar/README.md](../grammar/README.md) for 
 | **string_map** | `string_map.c`, `string_map.h` | Map used in symbol and type tables |
 | **float128** | `float128.c`, `float128.h` | IEEE binary128 in software: the value of every long double constant, exact on any host (parsing, folding, conversion, formatting); also included by the RISC-V runtime |
 | **c_escape** | `c_escape.c`, `c_escape.h` | Decoding of backslash escapes in character and string literals |
+| **srcloc** | `srcloc.c`, `srcloc.h` | Source locations: `SrcLoc`, the current `diag_loc`, interned file names, the `file:line:col: error: ` prefix of a diagnostic |
 
 Tests: `c_escape_tests.cpp`, `string_map_tests.cpp`, `wio_tests.cpp`, `xalloc_tests.cpp`, `float128_tests.cpp` → `libutil-tests`. `libutil/test/` also holds helpers shared by every test binary: `test_preprocess.h` (runs `cc -E` over test snippets with the target's headers) and `test_chdir.cpp` (each binary `chdir()`s into its build directory at startup).
 

@@ -272,7 +272,9 @@ static void place(const Type *t, Initializer **slot, InitItem **cur, InitMode mo
 }
 
 // Normalize a brace-enclosed initializer for type t; consumes init.
-static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode)
+static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode);
+
+static Initializer *normalize_compound_at(const Type *t, Initializer *init, InitMode mode)
 {
     const Type *ut = unalias(t);
     InitItem *items = init->u.items;
@@ -297,6 +299,15 @@ static Initializer *normalize_compound(const Type *t, Initializer *init, InitMod
     Initializer *node = new_canonical(ut);
     fill(ut, node, &items, true, false, mode);
     return node;
+}
+
+// normalize_compound with diag_loc at the node, for the errors found in it.
+static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode)
+{
+    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    Initializer *result = normalize_compound_at(t, init, mode);
+    diag_loc = saved;
+    return result;
 }
 
 Initializer *normalize_init(Type *type, Initializer *init, InitMode mode)

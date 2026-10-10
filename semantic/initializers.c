@@ -400,7 +400,9 @@ static Tac_StaticInit **flush_bits(BitImage *img, Tac_StaticInit **current, int 
     return current;
 }
 
-static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
+static Tac_StaticInit *static_init(Type *var_type, const Initializer *init);
+
+static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
 {
     // Look through a global typedef reference. Reads use the resolved type; the only
     // in-place mutation (set_array_size, below) is reached solely for a genuine
@@ -729,6 +731,15 @@ static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
     fatal_error("Unsupported initializer for type %s", type_kind_str[var_type->kind]);
 }
 
+// static_init with diag_loc at the node, for the errors found in it.
+static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
+{
+    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    Tac_StaticInit *result = static_init_at(var_type, init);
+    diag_loc = saved;
+    return result;
+}
+
 // Convert an initializer to a Tac_StaticInit list for global/static variables.
 // *init is normalized in place; the caller still owns it.
 // Merge adjacent ZERO runs, e.g. a zeroed member followed by padding.
@@ -761,7 +772,9 @@ Tac_StaticInit *build_static_init(Type *var_type, Initializer **init)
 
 // Type-check a canonical initializer (see init_normalize.c) against a target type.
 // Leaf expressions are already typechecked; an item with a NULL init becomes zero.
-static Initializer *check_init(Type *target_type, Initializer *init)
+static Initializer *check_init(Type *target_type, Initializer *init);
+
+static Initializer *check_init_at(Type *target_type, Initializer *init)
 {
     if (!init) {
         return make_zero_init(target_type);
@@ -838,6 +851,15 @@ static Initializer *check_init(Type *target_type, Initializer *init)
     }
 
     fatal_error("Cannot initialize scalar type with compound initializer");
+}
+
+// check_init with diag_loc at the node, for the errors found in it.
+static Initializer *check_init(Type *target_type, Initializer *init)
+{
+    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    Initializer *result = check_init_at(target_type, init);
+    diag_loc = saved;
+    return result;
 }
 
 // Type-check an initializer against a target type.

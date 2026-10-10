@@ -388,6 +388,9 @@ void process_file(const Args *args)
             print_external_decl(stdout, ast, 0);
         }
 
+        // Errors outside any statement or expression are the declaration's.
+        diag_loc = ast->loc;
+
         // Typecheck definitions and uses of functions and variables.
         // Annotate loops and break/continue statements — loop labels share the
         // unit-wide counter with the translator's temporaries.
@@ -437,7 +440,7 @@ void process_file(const Args *args)
 //
 void _Noreturn fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Fatal error: ");
+    diag_print_prefix(stderr, diag_loc, "error");
 
     va_list ap;
     va_start(ap, message);

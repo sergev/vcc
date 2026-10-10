@@ -1434,7 +1434,9 @@ Tac_Val *gen_string_constant(TacCtx *ctx, const char *s, size_t len)
     return val_var(dst->u.var_name);
 }
 
-Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
+Tac_Val *gen_expr(TacCtx *ctx, Expr *e);
+
+static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
 {
     if (!e) {
         fatal_error("NULL expression in TAC lowering");
@@ -2124,4 +2126,13 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
     default:
         fatal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
     }
+}
+
+// gen_expr with diag_loc at the node, for the errors found in it.
+Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
+{
+    SrcLoc saved = diag_enter(e ? e->loc : diag_loc);
+    Tac_Val *result = gen_expr_at(ctx, e);
+    diag_loc = saved;
+    return result;
 }

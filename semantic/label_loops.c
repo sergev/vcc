@@ -51,7 +51,9 @@ void label_loops_stmt(Stmt *stmt, int *seq)
     label_statement(stmt, stack, &depth);
 }
 
-static void label_statement(Stmt *stmt, LabelFrame *stack, int *depth)
+static void label_statement(Stmt *stmt, LabelFrame *stack, int *depth);
+
+static void label_statement_at(Stmt *stmt, LabelFrame *stack, int *depth)
 {
     if (!stmt) {
         return;
@@ -157,4 +159,12 @@ static void label_statement(Stmt *stmt, LabelFrame *stack, int *depth)
     default:
         break;
     }
+}
+
+// label_statement with diag_loc at the node, for the errors found in it.
+static void label_statement(Stmt *stmt, LabelFrame *stack, int *depth)
+{
+    SrcLoc saved = diag_enter(stmt ? stmt->loc : diag_loc);
+    label_statement_at(stmt, stack, depth);
+    diag_loc = saved;
 }

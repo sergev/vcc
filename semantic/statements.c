@@ -38,7 +38,9 @@ DeclOrStmt *typecheck_block(const Type *ret_type, DeclOrStmt *block)
 }
 
 // Type-check a statement.
-Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
+Stmt *typecheck_statement(const Type *ret_type, Stmt *s);
+
+static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
 {
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
@@ -195,4 +197,13 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
     default:
         fatal_error("Unsupported statement kind %d", s->kind);
     }
+}
+
+// typecheck_statement with diag_loc at the node, for the errors found in it.
+Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
+{
+    SrcLoc saved = diag_enter(s ? s->loc : diag_loc);
+    Stmt *result = typecheck_statement_at(ret_type, s);
+    diag_loc = saved;
+    return result;
 }

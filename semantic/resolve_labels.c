@@ -31,7 +31,9 @@ void resolve_labels(const ExternalDecl *ast)
 //
 // First pass: gather every label name, rejecting duplicates.
 //
-static void collect_labels(const Stmt *stmt, StringMap *labels)
+static void collect_labels(const Stmt *stmt, StringMap *labels);
+
+static void collect_labels_at(const Stmt *stmt, StringMap *labels)
 {
     if (!stmt) {
         return;
@@ -79,6 +81,14 @@ static void collect_labels(const Stmt *stmt, StringMap *labels)
     default: // leaf statements: nothing to collect
         break;
     }
+}
+
+// collect_labels with diag_loc at the node, for the errors found in it.
+static void collect_labels(const Stmt *stmt, StringMap *labels)
+{
+    SrcLoc saved = diag_enter(stmt ? stmt->loc : diag_loc);
+    collect_labels_at(stmt, labels);
+    diag_loc = saved;
 }
 
 //

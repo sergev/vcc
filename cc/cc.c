@@ -739,8 +739,9 @@ static int run(const char *tool, char *const argv[])
 //     vcpp -t <target> -nostdinc [-D__ASSEMBLER__] [cppflags] [-I<share>/include] in out
 // vcpp's own compiled-in include directory is switched off and the one beside
 // this vcc passed instead, which keeps a relocated installation self-consistent.
-// Line markers are kept (vparse understands them and maps diagnostics back to
-// the original source; both assemblers take them as comments or line markers).
+// Line markers are kept (vparse locates every AST node by them, so the errors of
+// vparse and vlower name the original file and line; both assemblers take them as
+// comments or line markers).
 // Returns 0 on success.
 //
 static int run_cpp(const char *in, const char *out, bool assembler)

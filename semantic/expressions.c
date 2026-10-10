@@ -313,7 +313,9 @@ Expr *typecheck_call_args(const Type *fn_type, Expr *args)
     return new_args;
 }
 
-static Expr *typecheck_expr(Expr *e)
+static Expr *typecheck_expr(Expr *e);
+
+static Expr *typecheck_expr_at(Expr *e)
 {
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
@@ -1072,6 +1074,15 @@ static Expr *typecheck_expr(Expr *e)
     default:
         fatal_error("Unsupported expression kind %d", e->kind);
     }
+}
+
+// typecheck_expr with diag_loc at the node, for the errors found in it.
+static Expr *typecheck_expr(Expr *e)
+{
+    SrcLoc saved = diag_enter(e ? e->loc : diag_loc);
+    Expr *result = typecheck_expr_at(e);
+    diag_loc = saved;
+    return result;
 }
 
 // Type-check an expression and apply array-to-pointer decay.

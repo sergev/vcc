@@ -27,6 +27,16 @@ typedef struct {
 extern SrcLoc diag_loc;
 
 //
+// Make loc the current location, when it is known; return the one it replaces,
+// for the caller to restore when it is done with the node:
+//
+//      SrcLoc saved = diag_enter(node->loc);
+//      ...
+//      diag_loc = saved;
+//
+SrcLoc diag_enter(SrcLoc loc);
+
+//
 // Return a copy of the name that lives until the program exits: the same pointer
 // for the same name, so AST nodes may share it and compare it by address.
 //

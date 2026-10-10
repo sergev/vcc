@@ -941,7 +941,9 @@ static void emit_return(TacCtx *ctx, Stmt *stmt)
     tac_append(ctx, in);
 }
 
-void gen_stmt(TacCtx *ctx, Stmt *stmt)
+void gen_stmt(TacCtx *ctx, Stmt *stmt);
+
+static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
 {
     if (!stmt) {
         return;
@@ -1179,4 +1181,12 @@ void gen_stmt(TacCtx *ctx, Stmt *stmt)
     default:
         fatal_error("Unsupported statement kind %d in TAC lowering", (int)stmt->kind);
     }
+}
+
+// gen_stmt with diag_loc at the node, for the errors found in it.
+void gen_stmt(TacCtx *ctx, Stmt *stmt)
+{
+    SrcLoc saved = diag_enter(stmt ? stmt->loc : diag_loc);
+    gen_stmt_at(ctx, stmt);
+    diag_loc = saved;
 }
