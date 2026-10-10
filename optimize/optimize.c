@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "cfg.h"
+#include "srcloc.h"
 #include "string_map.h"
 #include "target.h"
 #include "xalloc.h"
@@ -87,7 +88,7 @@ static char *snapshot(const Tac_Instruction *body)
     size_t len = 0;
     FILE *f    = open_memstream(&buf, &len);
     if (!f)
-        fatal_error("optimizer: open_memstream failed");
+        internal_error("optimizer: open_memstream failed");
     tac_export_yaml_instruction_list(f, body, 0);
     fclose(f);
     char *copy = xstrdup(buf);
@@ -188,7 +189,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, Tac_To
             // Every pass only ever removes or simplifies, so the passes cannot
             // undo each other forever: running into the cap means a bug.
 #ifndef NDEBUG
-            fatal_error("optimizer: %s does not converge in %d rounds",
+            internal_error("optimizer: %s does not converge in %d rounds",
                         fn ? fn->u.function.name : "?", OPT_MAX_ROUNDS);
 #else
             OPT_TRACE("[optimize] no fixed point after %d rounds; stopping\n", iter);

@@ -264,7 +264,7 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         for (const InitItem *item = init->u.items; item; item = item->next)
             gen_member_init(ctx, var_name, base_offset, item, skip_zero);
     } else {
-        fatal_error("Compound initializer for unsupported type %d in TAC lowering", (int)t->kind);
+        internal_error("Compound initializer for unsupported type %d in TAC lowering", (int)t->kind);
     }
 }
 
@@ -846,7 +846,7 @@ static void emit_goto(TacCtx *ctx, const char *label)
         }
         intptr_t v;
         if (!map_get(&ctx->label_pos, label, &v))
-            fatal_error("goto: no position for label %s", label);
+            internal_error("goto: no position for label %s", label);
         const DeferPos *to = (const DeferPos *)v;
         int k              = 0;
         while (k < ctx->nscopes && k < to->depth && ctx->scopes[k].key == to->scopes[k].key)
@@ -1003,7 +1003,7 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
         const char *cl = stmt->loop_continue_label;
         const char *bl = stmt->loop_end_label;
         if (!cl || !bl) {
-            fatal_error("while: missing loop labels (label_loops not run?)");
+            internal_error("while: missing loop labels (label_loops not run?)");
         }
         if (translate_rotate_loops) {
             // Rotated: the test at the bottom, and a copy of it at the top as a guard
@@ -1037,7 +1037,7 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
         const char *cl = stmt->loop_continue_label;
         const char *bl = stmt->loop_end_label;
         if (!cl || !bl) {
-            fatal_error("do-while: missing loop labels");
+            internal_error("do-while: missing loop labels");
         }
         char *loop_top = new_temp(ctx);
         emit_label(ctx, loop_top);
@@ -1054,7 +1054,7 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
         const char *cl = stmt->loop_continue_label;
         const char *bl = stmt->loop_end_label;
         if (!cl || !bl) {
-            fatal_error("for: missing loop labels");
+            internal_error("for: missing loop labels");
         }
         if (stmt->u.for_stmt.init) {
             if (stmt->u.for_stmt.init->kind == FOR_INIT_EXPR) {
@@ -1097,7 +1097,7 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
     }
     case STMT_SWITCH: {
         if (!stmt->loop_end_label)
-            fatal_error("switch: missing end label (label_loops not run?)");
+            internal_error("switch: missing end label (label_loops not run?)");
 
         CaseList cases = { NULL, NULL, NULL };
         cases.tail     = &cases.head;
@@ -1147,14 +1147,14 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
     }
     case STMT_BREAK: {
         if (!stmt->branch_target_label) {
-            fatal_error("break without target label");
+            internal_error("break without target label");
         }
         emit_break(ctx, stmt->branch_target_label, false);
         break;
     }
     case STMT_CONTINUE: {
         if (!stmt->branch_target_label) {
-            fatal_error("continue without target label");
+            internal_error("continue without target label");
         }
         emit_break(ctx, stmt->branch_target_label, true);
         break;
@@ -1168,18 +1168,18 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
         break;
     case STMT_CASE:
         if (!stmt->branch_target_label)
-            fatal_error("case: missing label (collect_cases not run?)");
+            internal_error("case: missing label (collect_cases not run?)");
         emit_label(ctx, stmt->branch_target_label);
         gen_stmt(ctx, stmt->u.case_stmt.stmt);
         break;
     case STMT_DEFAULT:
         if (!stmt->branch_target_label)
-            fatal_error("default: missing label (collect_cases not run?)");
+            internal_error("default: missing label (collect_cases not run?)");
         emit_label(ctx, stmt->branch_target_label);
         gen_stmt(ctx, stmt->u.default_stmt);
         break;
     default:
-        fatal_error("Unsupported statement kind %d in TAC lowering", (int)stmt->kind);
+        internal_error("Unsupported statement kind %d in TAC lowering", (int)stmt->kind);
     }
 }
 

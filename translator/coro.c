@@ -836,7 +836,7 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e)
         return v;
     }
     }
-    fatal_error("coroutines: unknown operation %d", (int)e->u.co_op.op);
+    internal_error("coroutines: unknown operation %d", (int)e->u.co_op.op);
 }
 
 //
@@ -1263,7 +1263,7 @@ static void rewrite(Split *s, Tac_Instruction *in)
             if (!t)
                 t = member_at(h->type, in->u.copy_to_offset.offset);
             if (!t)
-                fatal_error("coroutines: a constant of unknown width stored in %s", h->name);
+                internal_error("coroutines: a constant of unknown width stored in %s", h->name);
             use_val(s, src);
             char *a = put_offset(s, h->off + in->u.copy_to_offset.offset, t);
             in->u.copy_to_offset.src = NULL;
@@ -1280,7 +1280,7 @@ static void rewrite(Split *s, Tac_Instruction *in)
             Tac_Val *dst      = in->u.copy_from_offset.dst;
             const Tac_Type *t = frame_name_type(s->fn, dst->u.var_name);
             if (!t)
-                fatal_error("coroutines: %s has no type", dst->u.var_name);
+                internal_error("coroutines: %s has no type", dst->u.var_name);
             char *a           = put_offset(s, h->off + in->u.copy_from_offset.offset, t);
             Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_LOAD);
             ld->u.load.src_ptr  = val_var(a);

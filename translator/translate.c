@@ -1487,7 +1487,7 @@ static void verify_function(const Tac_TopLevel *chain, const Tac_TopLevel *fn)
     int errors    = tac_verify_function(fn, &layout, symtab_global_type, &g, stderr);
     tac_free_type(g.owned);
     if (errors)
-        fatal_error("TAC of %s fails verification (%d problems)", fn->u.function.name, errors);
+        internal_error("TAC of %s fails verification (%d problems)", fn->u.function.name, errors);
 }
 
 //

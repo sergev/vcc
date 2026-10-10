@@ -214,7 +214,7 @@ static Expr *typecheck_literal(Expr *e)
         break;
     }
     default:
-        fatal_error("Unsupported literal kind %d", e->u.literal->kind);
+        internal_error("Unsupported literal kind %d", e->u.literal->kind);
     }
     return e;
 }
@@ -444,7 +444,7 @@ static Expr *typecheck_expr_at(Expr *e)
             return e;
         }
         default:
-            fatal_error("Unsupported unary op %d", e->u.unary_op.op);
+            internal_error("Unsupported unary op %d", e->u.unary_op.op);
         }
     }
     case EXPR_BINARY_OP: {
@@ -625,7 +625,7 @@ static Expr *typecheck_expr_at(Expr *e)
             return e;
         }
         default:
-            fatal_error("Unsupported binary op %d", e->u.binary_op.op);
+            internal_error("Unsupported binary op %d", e->u.binary_op.op);
         }
     }
     case EXPR_ASSIGN: {
@@ -1072,7 +1072,7 @@ static Expr *typecheck_expr_at(Expr *e)
         return e;
     }
     default:
-        fatal_error("Unsupported expression kind %d", e->kind);
+        internal_error("Unsupported expression kind %d", e->kind);
     }
 }
 

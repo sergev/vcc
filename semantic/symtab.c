@@ -245,7 +245,7 @@ void symtab_set_coro(const char *name, const Type *yield_type)
 char *symtab_add_string(const char *s, size_t len)
 {
     if (!s) {
-        fatal_error("symtab_add_string: NULL string input");
+        internal_error("symtab_add_string: NULL string input");
         return NULL; // cannot happen
     }
 

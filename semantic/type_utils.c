@@ -118,11 +118,11 @@ size_t get_size(const Type *t)
         return target_config->ldouble_size;
     case TYPE_ARRAY:
         if (!t->u.array.size) {
-            fatal_error("get_size: Array size not specified");
+            internal_error("get_size: Array size not specified");
         }
         assert(t->u.array.size);
         if (t->u.array.size->kind != EXPR_LITERAL) {
-            fatal_error("get_size: Array size is not literal");
+            internal_error("get_size: Array size is not literal");
         }
         return t->u.array.size->u.literal->u.int_val * get_size(t->u.array.element);
     case TYPE_STRUCT:
@@ -146,7 +146,7 @@ size_t get_size(const Type *t)
     case TYPE_FUNCTION:
     case TYPE_VOID:
     default:
-        fatal_error("get_size: Type %s doesn't have size", type_kind_str[t->kind]);
+        internal_error("get_size: Type %s doesn't have size", type_kind_str[t->kind]);
     }
     return 0; // Unreachable
 }
@@ -202,7 +202,7 @@ size_t get_alignment(const Type *t)
     case TYPE_FUNCTION:
     case TYPE_VOID:
     default:
-        fatal_error("get_alignment: Type %s doesn't have alignment", type_kind_str[t->kind]);
+        internal_error("get_alignment: Type %s doesn't have alignment", type_kind_str[t->kind]);
     }
     return 0; // Unreachable
 }
@@ -280,7 +280,7 @@ bool is_signed(const Type *t)
     case TYPE_STRUCT:
     case TYPE_UNION:
     default:
-        fatal_error("is_signed: Signedness doesn't make sense for non-integral type %s",
+        internal_error("is_signed: Signedness doesn't make sense for non-integral type %s",
                     type_kind_str[t->kind]);
     }
     return false; // Unreachable

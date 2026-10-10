@@ -531,7 +531,7 @@ static void register_struct_type(const Type *t)
     // Minting the tag here instead would mint one per cloned node.  A definition reaching here
     // untagged means the AST did not come from that path (e.g. a stale .ast stream).
     if (!t->u.struct_t.name) {
-        fatal_error("Untagged struct/union definition reached the type registrar");
+        internal_error("Untagged struct/union definition reached the type registrar");
     }
     // Resolve typedef names in field types in-place, and type the bit-field widths, which
     // eval_const reads.
@@ -1164,7 +1164,7 @@ static void typecheck_local_decl_at(Declaration *d)
         typecheck_static_assert_decl(d);
         break;
     default:
-        fatal_error("Unsupported local declaration kind %d", d->kind);
+        internal_error("Unsupported local declaration kind %d", d->kind);
     }
 }
 

@@ -59,20 +59,20 @@ size_t get_array_size(const Type *t)
     }
     t = unalias(t);
     if (t->kind != TYPE_ARRAY) {
-        fatal_error("get_array_size: Array is expected");
+        internal_error("get_array_size: Array is expected");
     }
     if (!t->u.array.size) {
         return 0;
     }
     if (t->u.array.size->kind != EXPR_LITERAL) {
-        fatal_error("get_array_size: Size is not a literal");
+        internal_error("get_array_size: Size is not a literal");
     }
     if (!t->u.array.size->u.literal) {
-        fatal_error("get_array_size: No literal in size");
+        internal_error("get_array_size: No literal in size");
     }
     assert(t->u.array.size->u.literal);
     if (t->u.array.size->u.literal->kind != LITERAL_INT) {
-        fatal_error("get_array_size: Non-integer size");
+        internal_error("get_array_size: Non-integer size");
     }
     return t->u.array.size->u.literal->u.int_val;
 }
@@ -169,7 +169,7 @@ void validate_type(const Type *t)
         validate_type(typetab_resolve(t->u.typedef_name.name));
         break;
     default:
-        fatal_error("Unsupported type kind %d", t->kind);
+        internal_error("Unsupported type kind %d", t->kind);
     }
 }
 

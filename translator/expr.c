@@ -236,7 +236,7 @@ static Tac_BinaryOperator map_binary_op(BinaryOp op, const Type *operand_type)
     case BINARY_RIGHT_SHIFT:
         return is_unsigned ? TAC_BINARY_RIGHT_SHIFT_LOGICAL : TAC_BINARY_RIGHT_SHIFT;
     default:
-        fatal_error("Unsupported binary operator in TAC lowering");
+        internal_error("Unsupported binary operator in TAC lowering");
     }
 }
 
@@ -258,7 +258,7 @@ static Tac_UnaryOperator map_unary_op(UnaryOp op, const Type *operand_type)
     case UNARY_LOG_NOT:
         return TAC_UNARY_NOT;
     default:
-        fatal_error("Unsupported unary operator in TAC lowering");
+        internal_error("Unsupported unary operator in TAC lowering");
     }
 }
 
@@ -296,7 +296,7 @@ static Tac_BinaryOperator map_assign_op(AssignOp op, const Type *operand_type)
     case ASSIGN_OR:
         return TAC_BINARY_BITWISE_OR;
     default:
-        fatal_error("Unsupported compound assignment operator in TAC lowering");
+        internal_error("Unsupported compound assignment operator in TAC lowering");
     }
 }
 
@@ -357,7 +357,7 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
     case EXPR_UNARY_OP:
         if (e->u.unary_op.op == UNARY_DEREF)
             return gen_expr(ctx, e->u.unary_op.expr);
-        fatal_error("lvalue not yet supported in gen_lval: expression kind %d", (int)e->kind);
+        internal_error("lvalue not yet supported in gen_lval: expression kind %d", (int)e->kind);
     case EXPR_SUBSCRIPT: {
         // After typecheck exactly one operand is a (decayed) pointer; the other is
         // the integer index.  Scale by the size of the pointee: for a multi-
@@ -477,7 +477,7 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
         return val_var(ptr->u.var_name);
     }
     default:
-        fatal_error("lvalue not yet supported in gen_lval: expression kind %d", (int)e->kind);
+        internal_error("lvalue not yet supported in gen_lval: expression kind %d", (int)e->kind);
     }
 }
 
@@ -1439,7 +1439,7 @@ Tac_Val *gen_expr(TacCtx *ctx, Expr *e);
 static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
 {
     if (!e) {
-        fatal_error("NULL expression in TAC lowering");
+        internal_error("NULL expression in TAC lowering");
     }
     assert(e);
     switch (e->kind) {
@@ -1473,7 +1473,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             return v;
         }
         default:
-            fatal_error("Unsupported literal in TAC lowering");
+            internal_error("Unsupported literal in TAC lowering");
         }
     case EXPR_VAR:
         // An array used as a value decays to a pointer to its first element.  Materialize
@@ -2124,7 +2124,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
     case EXPR_AWAIT:
         return gen_await(ctx, e);
     default:
-        fatal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
+        internal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
     }
 }
 

@@ -44,11 +44,11 @@ int64_t literal_to_int64(const Literal *lit)
     case LITERAL_LONG_DOUBLE:
         return f128_to_i64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
-        fatal_error("literal_to_int64: Cannot convert string %s", lit->u.string_val);
+        internal_error("literal_to_int64: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
-        fatal_error("literal_to_int64: Cannot convert enum %s", lit->u.enum_const);
+        internal_error("literal_to_int64: Cannot convert enum %s", lit->u.enum_const);
     default:
-        fatal_error("literal_to_int64: Unknown kind %d", lit->kind);
+        internal_error("literal_to_int64: Unknown kind %d", lit->kind);
     }
 }
 
@@ -78,11 +78,11 @@ uint64_t literal_to_uint64(const Literal *lit)
     case LITERAL_LONG_DOUBLE:
         return f128_to_u64(lit->u.long_double_val, 64);
     case LITERAL_STRING:
-        fatal_error("literal_to_uint64: Cannot convert string %s", lit->u.string_val);
+        internal_error("literal_to_uint64: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
-        fatal_error("literal_to_uint64: Cannot convert enum %s", lit->u.enum_const);
+        internal_error("literal_to_uint64: Cannot convert enum %s", lit->u.enum_const);
     default:
-        fatal_error("literal_to_uint64: Unknown kind %d", lit->kind);
+        internal_error("literal_to_uint64: Unknown kind %d", lit->kind);
     }
 }
 
@@ -113,11 +113,11 @@ double literal_to_double(const Literal *lit)
         return target_double_is_single() ? (double)f128_to_float(lit->u.long_double_val)
                                          : f128_to_double(lit->u.long_double_val);
     case LITERAL_STRING:
-        fatal_error("literal_to_double: Cannot convert string %s", lit->u.string_val);
+        internal_error("literal_to_double: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
-        fatal_error("literal_to_double: Cannot convert enum %s", lit->u.enum_const);
+        internal_error("literal_to_double: Cannot convert enum %s", lit->u.enum_const);
     default:
-        fatal_error("literal_to_double: Unknown kind %d", lit->kind);
+        internal_error("literal_to_double: Unknown kind %d", lit->kind);
     }
 }
 
@@ -144,11 +144,11 @@ Float128 literal_to_long_double(const Literal *lit)
     case LITERAL_LONG_DOUBLE:
         return lit->u.long_double_val;
     case LITERAL_STRING:
-        fatal_error("literal_to_long_double: Cannot convert string %s", lit->u.string_val);
+        internal_error("literal_to_long_double: Cannot convert string %s", lit->u.string_val);
     case LITERAL_ENUM:
-        fatal_error("literal_to_long_double: Cannot convert enum %s", lit->u.enum_const);
+        internal_error("literal_to_long_double: Cannot convert enum %s", lit->u.enum_const);
     default:
-        fatal_error("literal_to_long_double: Unknown kind %d", lit->kind);
+        internal_error("literal_to_long_double: Unknown kind %d", lit->kind);
     }
 }
 
@@ -184,7 +184,7 @@ static uint64_t int_literal_bits(const Literal *lit)
     case LITERAL_ULONG_LONG:
         return (uint64_t)lit->u.ulong_long_val;
     default:
-        fatal_error("int_literal_bits: not an integer literal, kind %d", lit->kind);
+        internal_error("int_literal_bits: not an integer literal, kind %d", lit->kind);
     }
 }
 
@@ -324,7 +324,7 @@ Tac_StaticInit *new_static_init_int(size_t size, bool sign, uint64_t bits)
 Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Literal *lit)
 {
     if (!is_arithmetic(target_type)) {
-        fatal_error("Invalid static initializer for type %d", target_type->kind);
+        internal_error("Invalid static initializer for type %d", target_type->kind);
     }
 
     Tac_StaticInit *result = NULL;

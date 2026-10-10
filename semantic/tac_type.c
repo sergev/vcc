@@ -192,7 +192,7 @@ static Tac_Type *convert_type(const Type *t, bool deep)
         return ts;
     }
     default:
-        fatal_error("ast_type_to_tac_type: unsupported type kind %d", (int)t->kind);
+        internal_error("ast_type_to_tac_type: unsupported type kind %d", (int)t->kind);
     }
 }
 
