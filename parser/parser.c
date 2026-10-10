@@ -9,9 +9,10 @@
 #include "scanner.h"
 #include "xalloc.h"
 
-/* Global lexer state */
+/* Global lexer state; diag_loc holds where the current token starts */
 int current_token;
 static int peek_token;
+static SrcLoc peek_loc;
 const char *current_lexeme;
 static char lexeme_buffer[1024]; // Buffer for current lexeme
 
@@ -63,8 +64,10 @@ void advance_token()
     if (peek_token > 0) {
         current_token = peek_token;
         peek_token    = 0;
+        diag_loc      = peek_loc;
     } else {
         current_token = token_translation(yylex());
+        diag_loc      = scanner_token_loc;
     }
     current_lexeme = get_yytext();
 }
@@ -93,6 +96,7 @@ int next_token()
             current_lexeme = lexeme_buffer;
         }
         peek_token = token_translation(yylex());
+        peek_loc   = scanner_token_loc;
     }
     return peek_token;
 }
@@ -100,8 +104,8 @@ int next_token()
 void expect_token(int expected)
 {
     if (current_token != expected) {
-        fprintf(stderr, "Parse error: expected %s, got %s", token_name(expected),
-                token_name(current_token));
+        diag_print_prefix(stderr, diag_loc, "error");
+        fprintf(stderr, "expected %s, got %s", token_name(expected), token_name(current_token));
         if (current_lexeme && current_lexeme[0]) {
             fprintf(stderr, " (lexeme: %s)", current_lexeme);
         }
@@ -167,9 +171,11 @@ ExternalDecl *parse_external_declaration()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    SrcLoc loc = diag_loc; // of its first token
     if (current_token == TOKEN_STATIC_ASSERT) {
         // Static assert.
         ExternalDecl *ed  = new_external_decl(EXTERNAL_DECL_DECLARATION);
+        ed->loc           = loc;
         ed->u.declaration = parse_static_assert_declaration();
         return ed;
     }
@@ -183,10 +189,12 @@ ExternalDecl *parse_external_declaration()
         // Empty declaration.
         advance_token();
         Declaration *decl        = new_declaration(DECL_EMPTY);
+        decl->loc                = loc;
         decl->u.empty.specifiers = spec;
         decl->u.empty.type       = base_type;
 
         ExternalDecl *ed  = new_external_decl(EXTERNAL_DECL_DECLARATION);
+        ed->loc           = loc;
         ed->u.declaration = decl;
         return ed;
     }
@@ -199,8 +207,10 @@ ExternalDecl *parse_external_declaration()
     if (current_token == TOKEN_SEMICOLON || current_token == TOKEN_COMMA ||
         current_token == TOKEN_ASSIGN) {
         // Declaration of variables.
-        ExternalDecl *ed  = new_external_decl(EXTERNAL_DECL_DECLARATION);
-        ed->u.declaration = new_declaration(DECL_VAR);
+        ExternalDecl *ed       = new_external_decl(EXTERNAL_DECL_DECLARATION);
+        ed->loc                = loc;
+        ed->u.declaration      = new_declaration(DECL_VAR);
+        ed->u.declaration->loc = loc;
 
         ed->u.declaration->u.var.specifiers  = spec;
         ed->u.declaration->u.var.declarators = parse_init_declarator_list(decl, base_type);
@@ -219,6 +229,7 @@ ExternalDecl *parse_external_declaration()
     }
 
     ExternalDecl *ed          = new_external_decl(EXTERNAL_DECL_FUNCTION);
+    ed->loc                   = decl->loc; // of the function's name
     ed->u.function.specifiers = spec;
     ed->u.function.name       = xstrdup(decl->name);
     ed->u.function.type =
@@ -256,6 +267,7 @@ Program *parse(FILE *input)
         printf("--- %s()\n", __func__);
     }
     init_scanner(input);
+    peek_token = 0;
     reset_anon_tag_counter(); // synthetic anonymous tags are numbered per translation unit
     current_function_name = NULL;
     advance_token();

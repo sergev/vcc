@@ -11,6 +11,7 @@ extern "C" {
 #include <stdio.h>
 
 #include "float128.h"
+#include "srcloc.h"
 
 /* Forward declarations for recursive types */
 typedef struct Type Type;
@@ -166,6 +167,7 @@ struct Enumerator {
 
 struct Param {
     Param *next; /* linked list */
+    SrcLoc loc; /* source position, for diagnostics */
     Ident name;  /* optional */
     Type *type;
     DeclSpec *specifiers; /* optional */
@@ -176,6 +178,7 @@ typedef enum { DECL_VAR, DECL_STATIC_ASSERT, DECL_EMPTY } DeclarationKind;
 
 struct Declaration {
     Declaration *next; /* linked list for declaration_list */
+    SrcLoc loc; /* source position, for diagnostics */
     DeclarationKind kind;
     union {
         struct {
@@ -234,6 +237,7 @@ struct AlignmentSpec {
 
 struct InitDeclarator {
     InitDeclarator *next; /* linked list */
+    SrcLoc loc; /* source position, for diagnostics */
     Type *type;
     Ident name;
     Initializer *init; /* optional */
@@ -243,6 +247,7 @@ typedef enum { INITIALIZER_SINGLE, INITIALIZER_COMPOUND } InitializerKind;
 
 struct Initializer {
     InitializerKind kind;
+    SrcLoc loc; /* source position, for diagnostics */
     union {
         Expr *expr;
         InitItem *items;
@@ -359,6 +364,7 @@ typedef enum {
 
 struct Expr {
     Expr *next; /* linked list for argument lists */
+    SrcLoc loc; /* source position, for diagnostics */
     ExprKind kind;
     union {
         Literal *literal;
@@ -522,6 +528,7 @@ typedef enum {
 
 struct Stmt {
     StmtKind kind;
+    SrcLoc loc; /* source position, for diagnostics */
     union {
         Expr *expr; /* optional */
         DeclOrStmt *compound;
@@ -596,6 +603,7 @@ typedef enum { EXTERNAL_DECL_FUNCTION, EXTERNAL_DECL_DECLARATION } ExternalDeclK
 
 struct ExternalDecl {
     ExternalDecl *next; /* linked list */
+    SrcLoc loc; /* source position, for diagnostics */
     ExternalDeclKind kind;
     union {
         struct {

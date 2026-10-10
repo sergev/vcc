@@ -54,6 +54,7 @@ struct TypeSpec {   // Internal for parser only
 struct Declarator {
     Declarator *next; /* linked list */
     Ident name;       /* NULL for abstract declarator */
+    SrcLoc loc;       /* of the name */
     Pointer *pointers;
     DeclaratorSuffix *suffixes;
 };

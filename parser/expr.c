@@ -549,11 +549,13 @@ Expr *parse_postfix_expression()
 Expr *parse_postfix_tail(Expr *expr)
 {
     while (1) {
+        SrcLoc loc = diag_loc; // of the operator
         if (current_token == TOKEN_LBRACKET) {
             advance_token();
             Expr *index = parse_expression();
             expect_token(TOKEN_RBRACKET);
             Expr *new_expr              = new_expression(EXPR_SUBSCRIPT);
+            new_expr->loc               = loc;
             new_expr->u.subscript.left  = expr;
             new_expr->u.subscript.right = index;
             expr                        = new_expr;
@@ -565,6 +567,7 @@ Expr *parse_postfix_tail(Expr *expr)
             }
             expect_token(TOKEN_RPAREN);
             Expr *new_expr        = new_expression(EXPR_CALL);
+            new_expr->loc         = loc;
             new_expr->u.call.func = expr;
             new_expr->u.call.args = args;
             expr                  = new_expr;
@@ -573,6 +576,7 @@ Expr *parse_postfix_tail(Expr *expr)
             Ident field = xstrdup(current_lexeme);
             expect_token(TOKEN_IDENTIFIER);
             Expr *new_expr                 = new_expression(EXPR_FIELD_ACCESS);
+            new_expr->loc                  = loc;
             new_expr->u.field_access.expr  = expr;
             new_expr->u.field_access.field = field;
             expr                           = new_expr;
@@ -581,17 +585,20 @@ Expr *parse_postfix_tail(Expr *expr)
             Ident field = xstrdup(current_lexeme);
             expect_token(TOKEN_IDENTIFIER);
             Expr *new_expr               = new_expression(EXPR_PTR_ACCESS);
+            new_expr->loc                = loc;
             new_expr->u.ptr_access.expr  = expr;
             new_expr->u.ptr_access.field = field;
             expr                         = new_expr;
         } else if (current_token == TOKEN_INC_OP) {
             advance_token();
             Expr *new_expr       = new_expression(EXPR_POST_INC);
+            new_expr->loc        = loc;
             new_expr->u.post_inc = expr;
             expr                 = new_expr;
         } else if (current_token == TOKEN_DEC_OP) {
             advance_token();
             Expr *new_expr       = new_expression(EXPR_POST_DEC);
+            new_expr->loc        = loc;
             new_expr->u.post_dec = expr;
             expr                 = new_expr;
         } else {
@@ -623,6 +630,7 @@ Expr *parse_argument_expression_list()
 // Compound literal: (type-name) { initializer-list }, after the ')'; with its postfix tail.
 static Expr *parse_compound_literal(Type *type)
 {
+    SrcLoc loc = diag_loc; // of the '{'
     expect_token(TOKEN_LBRACE);
     InitItem *items = NULL;
     if (current_token != TOKEN_RBRACE) {
@@ -632,6 +640,7 @@ static Expr *parse_compound_literal(Type *type)
     }
     expect_token(TOKEN_RBRACE);
     Expr *compound                    = new_expression(EXPR_COMPOUND);
+    compound->loc                     = loc;
     compound->u.compound_literal.type = type;
     compound->u.compound_literal.init = items;
     return parse_postfix_tail(compound);
@@ -683,10 +692,12 @@ static bool starts_expression(int token)
 // arguments is checked here; their types, and which name a coroutine, in semantic.
 static Expr *parse_co_op()
 {
-    CoOp op = (CoOp)(current_token - TOKEN_CO_INIT);
+    CoOp op    = (CoOp)(current_token - TOKEN_CO_INIT);
+    SrcLoc loc = diag_loc;
     advance_token();
     expect_token(TOKEN_LPAREN);
     Expr *result         = new_expression(EXPR_CO_OP);
+    result->loc          = loc;
     result->u.co_op.op   = op;
     result->u.co_op.args = current_token == TOKEN_RPAREN ? NULL : parse_argument_expression_list();
     expect_token(TOKEN_RPAREN);
@@ -723,17 +734,20 @@ Expr *parse_unary_expression()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    SrcLoc loc = diag_loc; // of the operator
     if (current_token == TOKEN_INC_OP) {
         advance_token();
         Expr *result            = new_expression(EXPR_UNARY_OP);
         result->u.unary_op.op   = UNARY_PRE_INC;
         result->u.unary_op.expr = parse_prefix_operand();
+        result->loc             = loc;
         return result;
     } else if (current_token == TOKEN_DEC_OP) {
         advance_token();
         Expr *result            = new_expression(EXPR_UNARY_OP);
         result->u.unary_op.op   = UNARY_PRE_DEC;
         result->u.unary_op.expr = parse_prefix_operand();
+        result->loc             = loc;
         return result;
     } else if (current_token == TOKEN_AMPERSAND || current_token == TOKEN_STAR ||
                current_token == TOKEN_PLUS || current_token == TOKEN_MINUS ||
@@ -741,6 +755,7 @@ Expr *parse_unary_expression()
         Expr *result            = new_expression(EXPR_UNARY_OP);
         result->u.unary_op.op   = parse_unary_operator();
         result->u.unary_op.expr = parse_cast_expression();
+        result->loc             = loc;
         return result;
     } else if (current_token == TOKEN_SIZEOF) {
         advance_token();
@@ -753,14 +768,17 @@ Expr *parse_unary_expression()
             if (current_token == TOKEN_LBRACE) {
                 Expr *result          = new_expression(EXPR_SIZEOF_EXPR);
                 result->u.sizeof_expr = parse_compound_literal(type);
+                result->loc           = loc;
                 return result;
             }
             Expr *result          = new_expression(EXPR_SIZEOF_TYPE);
             result->u.sizeof_type = type;
+            result->loc           = loc;
             return result;
         } else {
             Expr *result          = new_expression(EXPR_SIZEOF_EXPR);
             result->u.sizeof_expr = parse_unary_expression();
+            result->loc           = loc;
             return result;
         }
     } else if (current_token == TOKEN_ALIGNOF) {
@@ -769,6 +787,7 @@ Expr *parse_unary_expression()
         Expr *result       = new_expression(EXPR_ALIGNOF);
         result->u.align_of = parse_type_name();
         expect_token(TOKEN_RPAREN);
+        result->loc = loc;
         return result;
     } else if (current_token == TOKEN_VA_CLASS) {
         advance_token();
@@ -776,17 +795,20 @@ Expr *parse_unary_expression()
         Expr *result       = new_expression(EXPR_VA_CLASS);
         result->u.va_class = parse_type_name();
         expect_token(TOKEN_RPAREN);
+        result->loc = loc;
         return result;
     } else if (current_token == TOKEN_YIELD) {
         advance_token();
         Expr *result = new_expression(EXPR_YIELD);
         if (starts_expression(current_token))
             result->u.yield_expr = parse_relational_expression();
+        result->loc = loc;
         return result;
     } else if (current_token == TOKEN_AWAIT) {
         advance_token();
         Expr *result         = new_expression(EXPR_AWAIT);
         result->u.await_expr = parse_cast_expression();
+        result->loc          = loc;
         return result;
     } else if (current_token >= TOKEN_CO_INIT && current_token <= TOKEN_CO_ALIGNOF) {
         return parse_co_op();
@@ -834,6 +856,7 @@ Expr *parse_cast_expression()
     if (current_token == TOKEN_LPAREN &&
         (is_type_specifier(next_token()) || is_type_qualifier(next_token()) ||
          next_token() == TOKEN_ATOMIC)) {
+        SrcLoc loc = diag_loc; // of the '('
         advance_token();
         Type *type = parse_type_name();
         expect_token(TOKEN_RPAREN);
@@ -841,6 +864,7 @@ Expr *parse_cast_expression()
             return parse_compound_literal(type);
         Expr *expr            = parse_cast_expression();
         Expr *new_expr        = new_expression(EXPR_CAST);
+        new_expr->loc         = loc;
         new_expr->u.cast.type = type;
         new_expr->u.cast.expr = expr;
         return new_expr;
@@ -1107,11 +1131,13 @@ Expr *parse_conditional_expression()
     }
     Expr *expr = parse_logical_or_expression();
     if (current_token == TOKEN_QUESTION) {
+        SrcLoc loc = diag_loc; // of the '?'
         advance_token();
         Expr *then_expr = parse_expression();
         expect_token(TOKEN_COLON);
         Expr *else_expr            = parse_conditional_expression();
         Expr *new_expr             = new_expression(EXPR_COND);
+        new_expr->loc              = loc;
         new_expr->u.cond.condition = expr;
         new_expr->u.cond.then_expr = then_expr;
         new_expr->u.cond.else_expr = else_expr;

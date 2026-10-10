@@ -37,12 +37,14 @@ Enumerator *new_enumerator(Ident name, Expr *value)
 Param *new_param()
 {
     Param *p = xalloc(sizeof(Param), __func__, __FILE__, __LINE__);
+    p->loc   = diag_loc;
     return p;
 }
 
 Declaration *new_declaration(DeclarationKind kind)
 {
     Declaration *d = xalloc(sizeof(Declaration), __func__, __FILE__, __LINE__);
+    d->loc         = diag_loc;
     d->kind        = kind;
     return d;
 }
@@ -77,6 +79,7 @@ AlignmentSpec *new_alignment_spec(AlignmentSpecKind kind)
 InitDeclarator *new_init_declarator()
 {
     InitDeclarator *id = xalloc(sizeof(InitDeclarator), __func__, __FILE__, __LINE__);
+    id->loc            = diag_loc;
     return id;
 }
 
@@ -102,6 +105,7 @@ DeclaratorSuffix *new_declarator_suffix(DeclaratorSuffixKind kind)
 Initializer *new_initializer(InitializerKind kind)
 {
     Initializer *i = xalloc(sizeof(Initializer), __func__, __FILE__, __LINE__);
+    i->loc         = diag_loc;
     i->kind        = kind;
     return i;
 }
@@ -125,6 +129,7 @@ Designator *new_designator(DesignatorKind kind)
 Expr *new_expression(ExprKind kind)
 {
     Expr *e = xalloc(sizeof(Expr), __func__, __FILE__, __LINE__);
+    e->loc  = diag_loc;
     e->kind = kind;
     return e;
 }
@@ -146,6 +151,7 @@ GenericAssoc *new_generic_assoc(GenericAssocKind kind)
 Stmt *new_stmt(StmtKind kind)
 {
     Stmt *s                = xalloc(sizeof(Stmt), __func__, __FILE__, __LINE__);
+    s->loc                 = diag_loc;
     s->kind                = kind;
     s->loop_end_label      = NULL;
     s->loop_continue_label = NULL;
@@ -170,6 +176,7 @@ ForInit *new_for_init(ForInitKind kind)
 ExternalDecl *new_external_decl(ExternalDeclKind kind)
 {
     ExternalDecl *ed = xalloc(sizeof(ExternalDecl), __func__, __FILE__, __LINE__);
+    ed->loc          = diag_loc;
     ed->kind         = kind;
     return ed;
 }

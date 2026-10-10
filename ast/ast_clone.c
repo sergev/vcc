@@ -156,6 +156,7 @@ Param *clone_param(const Param *param)
     if (param == NULL)
         return NULL;
     Param *result = new_param();
+    result->loc   = param->loc;
     if (result == NULL)
         return NULL;
     result->name       = param->name ? xstrdup(param->name) : NULL;
@@ -170,6 +171,7 @@ Declaration *clone_declaration(const Declaration *decl)
     if (decl == NULL)
         return NULL;
     Declaration *result = new_declaration(decl->kind);
+    result->loc         = decl->loc;
     if (result == NULL)
         return NULL;
     switch (decl->kind) {
@@ -237,6 +239,7 @@ InitDeclarator *clone_init_declarator(const InitDeclarator *init_decl)
     if (init_decl == NULL)
         return NULL;
     InitDeclarator *result = new_init_declarator();
+    result->loc            = init_decl->loc;
     if (result == NULL)
         return NULL;
     result->type = clone_type(init_decl->type, __func__, __FILE__, __LINE__);
@@ -251,6 +254,7 @@ Initializer *clone_initializer(const Initializer *init)
     if (init == NULL)
         return NULL;
     Initializer *result = new_initializer(init->kind);
+    result->loc         = init->loc;
     if (result == NULL)
         return NULL;
     switch (init->kind) {
@@ -299,6 +303,7 @@ Expr *clone_expression(const Expr *expr)
     if (expr == NULL)
         return NULL;
     Expr *result = new_expression(expr->kind);
+    result->loc  = expr->loc;
     if (result == NULL)
         return NULL;
     switch (expr->kind) {
@@ -457,6 +462,7 @@ Stmt *clone_stmt(const Stmt *stmt)
     if (stmt == NULL)
         return NULL;
     Stmt *result = new_stmt(stmt->kind);
+    result->loc  = stmt->loc;
     if (result == NULL)
         return NULL;
     switch (stmt->kind) {
@@ -557,6 +563,7 @@ ExternalDecl *clone_external_decl(const ExternalDecl *ext_decl)
     if (ext_decl == NULL)
         return NULL;
     ExternalDecl *result = new_external_decl(ext_decl->kind);
+    result->loc          = ext_decl->loc;
     if (result == NULL)
         return NULL;
     if (ext_decl->kind == EXTERNAL_DECL_FUNCTION) {

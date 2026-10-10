@@ -186,6 +186,7 @@ void process_file(const Args *args)
         perror(args->input_file);
         exit(1);
     }
+    scanner_set_input_name(args->input_file);
     Program *program = parse(input_file);
     fclose(input_file);
 
@@ -235,7 +236,7 @@ void process_file(const Args *args)
 //
 void _Noreturn fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Parse error: ");
+    diag_print_prefix(stderr, diag_loc, "error");
 
     va_list ap;
     va_start(ap, message);

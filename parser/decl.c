@@ -450,11 +450,13 @@ Declaration *parse_declaration()
     if (current_token == TOKEN_STATIC_ASSERT) {
         return parse_static_assert_declaration();
     }
+    SrcLoc loc           = diag_loc; // of its first token
     Type *base_type      = NULL;
     DeclSpec *specifiers = parse_declaration_specifiers(&base_type);
     if (current_token == TOKEN_SEMICOLON) {
         advance_token();
         Declaration *decl        = new_declaration(DECL_EMPTY);
+        decl->loc                = loc;
         decl->u.empty.specifiers = specifiers;
         decl->u.empty.type       = base_type;
         return decl;
@@ -463,6 +465,7 @@ Declaration *parse_declaration()
     expect_token(TOKEN_SEMICOLON);
     free_type(base_type);
     Declaration *decl       = new_declaration(DECL_VAR);
+    decl->loc               = loc;
     decl->u.var.specifiers  = specifiers;
     decl->u.var.declarators = declarators;
     if (is_typedef(specifiers)) {
@@ -576,8 +579,11 @@ InitDeclarator *parse_init_declarator(Declarator *decl, const Type *base_type)
         decl = parse_declarator();
     }
     InitDeclarator *init_decl = new_init_declarator();
-    init_decl->name           = decl->name;
-    decl->name                = NULL;
+    if (decl->name) {
+        init_decl->loc = decl->loc;
+    }
+    init_decl->name = decl->name;
+    decl->name      = NULL;
     if (current_token == TOKEN_ASSIGN) {
         advance_token();
         init_decl->init = parse_initializer();
@@ -1179,6 +1185,7 @@ Declarator *parse_direct_declarator()
         (current_token == TOKEN_TYPEDEF_NAME && typedef_redeclaration)) {
         decl       = new_declarator();
         decl->name = xstrdup(current_lexeme);
+        decl->loc  = diag_loc;
         advance_token();
     } else if (current_token == TOKEN_LPAREN) {
         advance_token();
@@ -1534,6 +1541,7 @@ Param *parse_parameter_declaration()
     /* Check for declarator or abstract_declarator */
     if (current_token == TOKEN_IDENTIFIER) {
         param->name = xstrdup(current_lexeme);
+        param->loc  = diag_loc;
         advance_token();
     }
     if (current_token == TOKEN_STAR || current_token == TOKEN_LBRACKET ||
@@ -1599,6 +1607,7 @@ Initializer *parse_initializer()
         printf("--- %s()\n", __func__);
     }
     if (current_token == TOKEN_LBRACE) {
+        SrcLoc loc = diag_loc; // of the '{'
         advance_token();
         InitItem *items = NULL;
         if (current_token != TOKEN_RBRACE) {
@@ -1608,6 +1617,7 @@ Initializer *parse_initializer()
         }
         expect_token(TOKEN_RBRACE);
         Initializer *init = new_initializer(INITIALIZER_COMPOUND);
+        init->loc         = loc;
         init->u.items     = items;
         return init;
     }
@@ -1715,6 +1725,7 @@ Declaration *parse_static_assert_declaration()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    SrcLoc loc = diag_loc; // of the _Static_assert
     expect_token(TOKEN_STATIC_ASSERT);
     expect_token(TOKEN_LPAREN);
     Expr *condition = parse_constant_expression();
@@ -1725,6 +1736,7 @@ Declaration *parse_static_assert_declaration()
     expect_token(TOKEN_SEMICOLON);
 
     Declaration *decl              = new_declaration(DECL_STATIC_ASSERT);
+    decl->loc                      = loc;
     decl->u.static_assrt.condition = condition;
     decl->u.static_assrt.message   = message;
     return decl;

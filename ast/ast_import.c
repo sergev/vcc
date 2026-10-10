@@ -6,6 +6,7 @@
 #include "internal.h"
 #include "tags.h"
 #include "wio.h"
+#include "xalloc.h"
 
 int import_debug; // Enable manually for debug
 
@@ -42,6 +43,24 @@ static void check_input(const WFILE *input, const char *context)
     }
 }
 
+// The file of the last location read (export_loc in ast_export.c).
+static const char *last_file;
+
+static SrcLoc import_loc(WFILE *input)
+{
+    SrcLoc loc;
+    loc.line = (int)wgetw(input);
+    loc.col  = (int)wgetw(input);
+    if (wgetw(input)) {
+        char *name = wgetstr(input);
+        last_file  = (name && name[0]) ? srcloc_intern(name) : NULL;
+        xfree(name);
+    }
+    check_input(input, "source location");
+    loc.file = last_file;
+    return loc;
+}
+
 void ast_import_open(WFILE *input, int fildes)
 {
     if (wdopen(input, fildes, "r") < 0) {
@@ -55,6 +74,14 @@ void ast_import_open(WFILE *input, int fildes)
         fprintf(stderr, "Error: Expected TAG_PROGRAM, got 0x%zx\n", tag);
         exit(1);
     }
+    size_t version = wgetw(input);
+    check_input(input, "AST version");
+    if (version != AST_VERSION) {
+        fprintf(stderr, "Error: AST version %zu, expected %d: rebuild it with this parse\n",
+                version, AST_VERSION);
+        exit(1);
+    }
+    last_file = NULL;
 }
 
 Program *import_ast(int fildes)
@@ -270,6 +297,7 @@ Param *import_param(WFILE *input)
         exit(1);
     }
     Param *param = new_param();
+    param->loc = import_loc(input);
     param->name  = wgetstr(input);
     check_input(input, "param name");
     param->type       = import_type(input);
@@ -292,6 +320,7 @@ Declaration *import_declaration(WFILE *input)
     }
     DeclarationKind kind = (DeclarationKind)(tag - TAG_DECLARATION);
     Declaration *decl    = new_declaration(kind);
+    decl->loc = import_loc(input);
     switch (kind) {
     case DECL_VAR:
         decl->u.var.specifiers      = import_decl_spec(input);
@@ -405,6 +434,7 @@ InitDeclarator *import_init_declarator(WFILE *input)
         exit(1);
     }
     InitDeclarator *idecl = new_init_declarator();
+    idecl->loc = import_loc(input);
     idecl->type           = import_type(input);
     idecl->name           = wgetstr(input);
     check_input(input, "init declarator name");
@@ -423,6 +453,7 @@ Initializer *import_initializer(WFILE *input)
         return NULL;
     InitializerKind kind = (InitializerKind)(tag - TAG_INITIALIZER);
     Initializer *init    = new_initializer(kind);
+    init->loc = import_loc(input);
     switch (kind) {
     case INITIALIZER_SINGLE:
         init->u.expr = import_expr(input);
@@ -509,6 +540,7 @@ Expr *import_expr(WFILE *input)
     }
     ExprKind kind = (ExprKind)(tag - TAG_EXPR);
     Expr *expr    = new_expression(kind);
+    expr->loc = import_loc(input);
     switch (kind) {
     case EXPR_LITERAL:
         expr->u.literal = import_literal(input);
@@ -736,6 +768,7 @@ Stmt *import_stmt(WFILE *input)
     }
     StmtKind kind = (StmtKind)(tag - TAG_STMT);
     Stmt *stmt    = new_stmt(kind);
+    stmt->loc = import_loc(input);
     switch (kind) {
     case STMT_EXPR:
         stmt->u.expr = import_expr(input);
@@ -861,6 +894,7 @@ ExternalDecl *import_external_decl(WFILE *input)
         return NULL;
     ExternalDeclKind kind = (ExternalDeclKind)(tag - TAG_EXTERNALDECL);
     ExternalDecl *exdecl  = new_external_decl(kind);
+    exdecl->loc = import_loc(input);
     switch (kind) {
     case EXTERNAL_DECL_FUNCTION:
         exdecl->u.function.type = import_type(input);

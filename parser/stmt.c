@@ -19,25 +19,31 @@ Stmt *parse_statement()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    SrcLoc loc = diag_loc; // of its first token
+    Stmt *stmt;
     if (current_token == TOKEN_IDENTIFIER && next_token() == TOKEN_COLON) {
-        return parse_labeled_statement();
+        stmt = parse_labeled_statement();
     } else if (current_token == TOKEN_CASE || current_token == TOKEN_DEFAULT) {
-        return parse_labeled_statement();
+        stmt = parse_labeled_statement();
     } else if (current_token == TOKEN_LBRACE) {
-        return parse_compound_statement();
+        stmt = parse_compound_statement();
     } else if (current_token == TOKEN_IF || current_token == TOKEN_SWITCH) {
-        return parse_selection_statement();
+        stmt = parse_selection_statement();
     } else if (current_token == TOKEN_WHILE || current_token == TOKEN_DO ||
                current_token == TOKEN_FOR) {
-        return parse_iteration_statement();
+        stmt = parse_iteration_statement();
     } else if (current_token == TOKEN_GOTO || current_token == TOKEN_CONTINUE ||
                current_token == TOKEN_BREAK || current_token == TOKEN_RETURN) {
-        return parse_jump_statement();
+        stmt = parse_jump_statement();
     } else if (current_token == TOKEN_DEFER) {
-        return parse_defer_statement();
+        stmt = parse_defer_statement();
     } else {
-        return parse_expression_statement();
+        stmt = parse_expression_statement();
     }
+    if (stmt) {
+        stmt->loc = loc;
+    }
+    return stmt;
 }
 
 //
@@ -111,6 +117,7 @@ Stmt *parse_compound_statement()
     if (parser_debug) {
         printf("--- %s()\n", __func__);
     }
+    SrcLoc loc = diag_loc; // of the '{'
     expect_token(TOKEN_LBRACE);
     scope_level++;
 
@@ -123,6 +130,7 @@ Stmt *parse_compound_statement()
     nametab_purge(scope_level);
 
     Stmt *stmt       = new_stmt(STMT_COMPOUND);
+    stmt->loc        = loc;
     stmt->u.compound = items;
     return stmt;
 }

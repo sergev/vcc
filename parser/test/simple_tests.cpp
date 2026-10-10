@@ -12,7 +12,7 @@ int scope_level;
 extern "C" {
 [[noreturn]] void fatal_error(const char *message, ...)
 {
-    fprintf(stderr, "Parse error: ");
+    diag_print_prefix(stderr, diag_loc, "error");
 
     va_list ap;
     va_start(ap, message);

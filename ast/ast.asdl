@@ -1,12 +1,20 @@
 module AST {
+    -- Where a node starts in the source, for diagnostics: the file (from the line
+    -- markers), line and column; an operator node at its operator, a declarator at
+    -- its name. Carried by ExternalDecl, Declaration, InitDeclarator, Initializer,
+    -- Param, Expr and Stmt.
+    SrcLoc = (string? file, int line, int col)
+
     Program = (ExternalDecl* decls)
 
     ExternalDecl = Function(Type type, identifier name, DeclSpec specifiers, Declaration* param_decls, Stmt? body)
                  | Declaration(Declaration decl)
+                 attributes(SrcLoc loc)
 
     Declaration = Var(DeclSpec specifiers, InitDeclarator* declarators)
                 | StaticAssert(Expr condition, string? message)
                 | Empty(DeclSpec specifiers, Type type)
+                attributes(SrcLoc loc)
 
     DeclSpec = (TypeQualifier* qualifiers, StorageClass? storage, FunctionSpec* func_specs, AlignmentSpec? align_spec)
 
@@ -17,10 +25,11 @@ module AST {
 
     AlignmentSpec = AlignType(Type type) | AlignExpr(Expr expr)
 
-    InitDeclarator = (Type type, identifier name, Initializer? init)
+    InitDeclarator = (Type type, identifier name, Initializer? init, SrcLoc loc)
 
     Initializer = Single(Expr expr)
                 | Compound(InitItem* items)
+                attributes(SrcLoc loc)
 
     InitItem = (Designator* designators, Initializer init)
 
@@ -60,7 +69,7 @@ module AST {
 
     Enumerator = (identifier name, Expr? value)
 
-    Param = (identifier? name, Type type)
+    Param = (identifier? name, Type type, SrcLoc loc)
 
     Expr = Literal(Literal lit)
          | Var(identifier var)
@@ -87,7 +96,7 @@ module AST {
          | Yield(Expr? expr)
          | Await(Expr expr)
          | CoOp(CoOp op, Expr* args)
-         attributes(Type? type)
+         attributes(Type? type, SrcLoc loc)
 
     CoOp = Init | Alloca | Resume | Cancel | Destroy | Done | Value | Result | Sizeof | Alignof
 
@@ -131,6 +140,7 @@ module AST {
          | Case(Expr expr, Stmt stmt)
          | Default(Stmt stmt)
          | Defer(Stmt stmt)        -- vcc extension: run stmt when the block is left
+         attributes(SrcLoc loc)
 
     DeclOrStmt = Decl(Declaration decl)
                | Stmt(Stmt stmt)

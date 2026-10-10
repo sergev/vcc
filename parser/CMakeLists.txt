@@ -24,6 +24,7 @@ add_executable(parser-tests
     test/constant_tests.cpp
     test/serialize_tests.cpp
     test/negative_tests.cpp
+    test/location_tests.cpp
     test/chapter1_tests.cpp
     test/chapter2_tests.cpp
     test/chapter3_tests.cpp

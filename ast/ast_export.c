@@ -28,6 +28,27 @@ void export_decl_or_stmt(WFILE *fd, DeclOrStmt *dost);
 void export_for_init(WFILE *fd, ForInit *finit);
 void export_external_decl(WFILE *fd, ExternalDecl *exdecl);
 
+// The file of the last location written: a location names its file only when it
+// differs, so a reader keeps the same state (import_loc).
+static const char *last_file;
+
+//
+// A source location: line, column, then 1 and the file name when the file is not
+// the one of the location before, else 0.
+//
+static void export_loc(WFILE *fd, SrcLoc loc)
+{
+    wputw(loc.line, fd);
+    wputw(loc.col, fd);
+    if (loc.file != last_file) {
+        wputw(1, fd);
+        wputstr(loc.file ? loc.file : "", fd);
+        last_file = loc.file;
+    } else {
+        wputw(0, fd);
+    }
+}
+
 void export_ast(int fildes, Program *program)
 {
     if (export_debug) {
@@ -39,6 +60,8 @@ void export_ast(int fildes, Program *program)
         exit(1);
     }
     wputw(TAG_PROGRAM, &fd);
+    wputw(AST_VERSION, &fd);
+    last_file = NULL;
     if (program) {
         for (ExternalDecl *decl = program->decls; decl; decl = decl->next) {
             export_external_decl(&fd, decl);
@@ -197,6 +220,7 @@ void export_param(WFILE *fd, Param *param)
         return;
     }
     wputw(TAG_PARAM, fd);
+    export_loc(fd, param->loc);
     wputstr(param->name, fd);
     export_type(fd, param->type);
     export_decl_spec(fd, param->specifiers);
@@ -212,6 +236,7 @@ void export_declaration(WFILE *fd, Declaration *decl)
         return;
     }
     wputw(TAG_DECLARATION + decl->kind, fd);
+    export_loc(fd, decl->loc);
     switch (decl->kind) {
     case DECL_VAR:
         export_decl_spec(fd, decl->u.var.specifiers);
@@ -297,6 +322,7 @@ void export_init_declarator(WFILE *fd, InitDeclarator *idecl)
         return;
     }
     wputw(TAG_INITDECLARATOR, fd);
+    export_loc(fd, idecl->loc);
     export_type(fd, idecl->type);
     wputstr(idecl->name, fd);
     export_initializer(fd, idecl->init);
@@ -312,6 +338,7 @@ void export_initializer(WFILE *fd, Initializer *init)
         return;
     }
     wputw(TAG_INITIALIZER + init->kind, fd);
+    export_loc(fd, init->loc);
     switch (init->kind) {
     case INITIALIZER_SINGLE:
         export_expr(fd, init->u.expr);
@@ -372,6 +399,7 @@ void export_expr(WFILE *fd, Expr *expr)
         return;
     }
     wputw(TAG_EXPR + expr->kind, fd);
+    export_loc(fd, expr->loc);
     switch (expr->kind) {
     case EXPR_LITERAL:
         export_literal(fd, expr->u.literal);
@@ -553,6 +581,7 @@ void export_stmt(WFILE *fd, Stmt *stmt)
         return;
     }
     wputw(TAG_STMT + stmt->kind, fd);
+    export_loc(fd, stmt->loc);
     switch (stmt->kind) {
     case STMT_EXPR:
         export_expr(fd, stmt->u.expr);
@@ -662,6 +691,7 @@ void export_external_decl(WFILE *fd, ExternalDecl *exdecl)
         return;
     }
     wputw(TAG_EXTERNALDECL + exdecl->kind, fd);
+    export_loc(fd, exdecl->loc);
     switch (exdecl->kind) {
     case EXTERNAL_DECL_FUNCTION:
         export_type(fd, exdecl->u.function.type);
