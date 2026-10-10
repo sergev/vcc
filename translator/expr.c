@@ -236,7 +236,7 @@ static Tac_BinaryOperator map_binary_op(BinaryOp op, const Type *operand_type)
     case BINARY_RIGHT_SHIFT:
         return is_unsigned ? TAC_BINARY_RIGHT_SHIFT_LOGICAL : TAC_BINARY_RIGHT_SHIFT;
     default:
-        internal_error("Unsupported binary operator in TAC lowering");
+        internal_error("unsupported binary operator in TAC lowering");
     }
 }
 
@@ -258,7 +258,7 @@ static Tac_UnaryOperator map_unary_op(UnaryOp op, const Type *operand_type)
     case UNARY_LOG_NOT:
         return TAC_UNARY_NOT;
     default:
-        internal_error("Unsupported unary operator in TAC lowering");
+        internal_error("unsupported unary operator in TAC lowering");
     }
 }
 
@@ -296,7 +296,7 @@ static Tac_BinaryOperator map_assign_op(AssignOp op, const Type *operand_type)
     case ASSIGN_OR:
         return TAC_BINARY_BITWISE_OR;
     default:
-        internal_error("Unsupported compound assignment operator in TAC lowering");
+        internal_error("unsupported compound assignment operator in TAC lowering");
     }
 }
 
@@ -1473,7 +1473,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             return v;
         }
         default:
-            internal_error("Unsupported literal in TAC lowering");
+            internal_error("unsupported literal in TAC lowering");
         }
     case EXPR_VAR:
         // An array used as a value decays to a pointer to its first element.  Materialize
@@ -2124,7 +2124,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
     case EXPR_AWAIT:
         return gen_await(ctx, e);
     default:
-        internal_error("Unsupported expression kind %d in TAC lowering", (int)e->kind);
+        internal_error("unsupported expression kind %d in TAC lowering", (int)e->kind);
     }
 }
 

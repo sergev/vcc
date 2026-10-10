@@ -284,7 +284,7 @@ Program *parse(FILE *input)
     advance_token();
     Program *program = parse_translation_unit();
     if (current_token != TOKEN_EOF) {
-        internal_error("Expected end of file");
+        internal_error("expected end of file");
     }
     return program;
 }

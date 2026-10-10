@@ -171,7 +171,7 @@ void validate_type(const Type *t)
         validate_type(typetab_resolve(t->u.typedef_name.name));
         break;
     default:
-        internal_error("Unsupported type kind %d", t->kind);
+        internal_error("unsupported type kind %d", t->kind);
     }
 }
 

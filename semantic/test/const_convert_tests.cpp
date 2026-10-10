@@ -236,14 +236,14 @@ TEST_F(ConstConvertTest, NonArithmeticTypeDies)
 {
     auto lit  = int_lit(0);
     auto type = make_type(TYPE_VOID);
-    EXPECT_DEATH(new_static_init_from_literal(&type, &lit), "Invalid static initializer");
+    EXPECT_DEATH(new_static_init_from_literal(&type, &lit), "invalid static initializer");
 }
 
 TEST_F(ConstConvertTest, StructTypeDies)
 {
     auto lit  = int_lit(0);
     auto type = make_type(TYPE_STRUCT);
-    EXPECT_DEATH(new_static_init_from_literal(&type, &lit), "Invalid static initializer");
+    EXPECT_DEATH(new_static_init_from_literal(&type, &lit), "invalid static initializer");
 }
 
 // Error paths: unsupported literal kinds

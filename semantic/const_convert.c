@@ -324,7 +324,7 @@ Tac_StaticInit *new_static_init_int(size_t size, bool sign, uint64_t bits)
 Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Literal *lit)
 {
     if (!is_arithmetic(target_type)) {
-        internal_error("Invalid static initializer for type %d", target_type->kind);
+        internal_error("invalid static initializer for type %d", target_type->kind);
     }
 
     Tac_StaticInit *result = NULL;

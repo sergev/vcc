@@ -204,7 +204,7 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
                     base_kind = TYPE_DOUBLE; /* Default for _Imaginary */
                 break;
             default:
-                internal_error("Unknown basic type specifier");
+                internal_error("unknown basic type specifier");
             }
         } else if (s->kind == TYPE_SPEC_STRUCT) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec ||
@@ -268,7 +268,7 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
         /* Handle basic types */
         if (base_kind == -1) {
             if (signedness == -1) {
-                internal_error("No valid type specifier provided");
+                internal_error("no valid type specifier provided");
             }
             base_kind = (signedness == SIGNED_SIGNED) ? TYPE_INT : TYPE_UINT;
         }
@@ -742,7 +742,7 @@ TypeSpec *parse_struct_or_union_specifier()
         printf("--- %s()\n", __func__);
     }
     if (current_token != TOKEN_STRUCT && current_token != TOKEN_UNION) {
-        internal_error("Expected struct or union");
+        internal_error("expected struct or union");
     }
     TypeSpec *ts =
         new_type_spec(current_token == TOKEN_STRUCT ? TYPE_SPEC_STRUCT : TYPE_SPEC_UNION);
@@ -1027,7 +1027,7 @@ TypeQualifier *parse_type_qualifier()
         advance_token();
         return new_type_qualifier(TYPE_QUALIFIER_ATOMIC);
     default:
-        internal_error("Expected type qualifier");
+        internal_error("expected type qualifier");
     }
 }
 

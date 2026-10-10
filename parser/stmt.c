@@ -77,7 +77,7 @@ Stmt *parse_labeled_statement()
         case_stmt->u.case_stmt.stmt = stmt;
         return case_stmt;
     } else if (current_token != TOKEN_DEFAULT) {
-        internal_error("Expected labeled statement");
+        internal_error("expected labeled statement");
     }
     advance_token();
     expect_token(TOKEN_COLON);
@@ -230,7 +230,7 @@ Stmt *parse_selection_statement()
         stmt->u.if_stmt.else_stmt = else_stmt;
         return stmt;
     } else if (current_token != TOKEN_SWITCH) {
-        internal_error("Expected if or switch");
+        internal_error("expected if or switch");
     }
     advance_token();
     expect_token(TOKEN_LPAREN);
@@ -281,7 +281,7 @@ Stmt *parse_iteration_statement()
         stmt->u.do_while.condition = condition;
         return stmt;
     } else if (current_token != TOKEN_FOR) {
-        internal_error("Expected while, do, or for");
+        internal_error("expected while, do, or for");
     }
     advance_token();
     expect_token(TOKEN_LPAREN);
@@ -351,7 +351,7 @@ Stmt *parse_jump_statement()
         expect_token(TOKEN_SEMICOLON);
         return new_stmt(STMT_BREAK);
     } else if (current_token != TOKEN_RETURN) {
-        internal_error("Expected jump statement");
+        internal_error("expected jump statement");
     }
     advance_token();
     Expr *expr = NULL;

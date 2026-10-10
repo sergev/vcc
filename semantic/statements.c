@@ -196,7 +196,7 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
         coro_defer_depth--;
         return s;
     default:
-        internal_error("Unsupported statement kind %d", s->kind);
+        internal_error("unsupported statement kind %d", s->kind);
     }
 }
 
