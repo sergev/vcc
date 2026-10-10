@@ -60,7 +60,6 @@ void export_ast(int fildes, Program *program)
         exit(1);
     }
     wputw(TAG_PROGRAM, &fd);
-    wputw(AST_VERSION, &fd);
     last_file = NULL;
     if (program) {
         for (ExternalDecl *decl = program->decls; decl; decl = decl->next) {

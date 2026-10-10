@@ -74,13 +74,6 @@ void ast_import_open(WFILE *input, int fildes)
         fprintf(stderr, "Error: Expected TAG_PROGRAM, got 0x%zx\n", tag);
         exit(1);
     }
-    size_t version = wgetw(input);
-    check_input(input, "AST version");
-    if (version != AST_VERSION) {
-        fprintf(stderr, "Error: AST version %zu, expected %d: rebuild it with this parse\n",
-                version, AST_VERSION);
-        exit(1);
-    }
     last_file = NULL;
 }
 

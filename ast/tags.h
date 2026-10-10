@@ -24,9 +24,3 @@ enum {
     TAG_TYPEQUALIFIER  = 0x7175616c, // 'qual' - for struct TypeQualifier
 };
 
-//
-// Version of the stream, the word after TAG_PROGRAM: raised on every change of
-// the format. 2: a source location after the tag of each Param, Declaration,
-// InitDeclarator, Initializer, Expr, Stmt and ExternalDecl.
-//
-enum { AST_VERSION = 2 };
