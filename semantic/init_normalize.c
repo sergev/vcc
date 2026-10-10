@@ -56,7 +56,7 @@ static Initializer *take_item(InitItem **cur)
     InitItem *item    = *cur;
     Initializer *init = item->init;
     if (item->designators)
-        fatal_error("Designator in scalar initializer");
+        fatal_error("designator in a scalar initializer");
     *cur = item->next;
     xfree(item);
     return init;
@@ -108,13 +108,12 @@ static InitItem **designate_index(const Type *t, Initializer *node, Designator *
     d->u.expr = typecheck_and_decay(d->u.expr);
     long index;
     if (!is_integer(d->u.expr->type) || !try_eval_const_int(d->u.expr, &index))
-        fatal_error("Array designator index is not an integer constant expression");
+        fatal_error("array designator index is not an integer constant expression");
     if (index < 0)
-        fatal_error("Array designator index %ld is negative", index);
+        fatal_error("array designator index %ld is negative", index);
     bool unsized = !t->u.array.size;
     if (!unsized && (size_t)index >= get_array_size(t))
-        fatal_error("Array designator index %ld is out of bounds for array of %zu", index,
-                    get_array_size(t));
+        fatal_error("array designator index %ld exceeds the bounds of '%s'", index, type_to_c(t));
 
     InitItem **s = &node->u.items;
     for (long i = 0;; i++, s = &(*s)->next) {
@@ -133,9 +132,9 @@ static void designate(const Type *t, Initializer *node, InitItem *item, InitItem
 {
     Designator *d = item->designators;
     if (d->kind == DESIGNATOR_ARRAY && t->kind != TYPE_ARRAY)
-        fatal_error("Array designator in %s initializer", aggregate_name(t));
+        fatal_error("array designator in an initializer of '%s'", type_to_c(t));
     if (d->kind == DESIGNATOR_FIELD && t->kind == TYPE_ARRAY)
-        fatal_error("Field designator .%s in array initializer", d->u.name);
+        fatal_error("field designator '.%s' in an initializer of '%s'", d->u.name, type_to_c(t));
 
     InitItem **s;
     if (t->kind == TYPE_ARRAY) {
@@ -201,9 +200,9 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                 const Type *sub = unalias(t->kind == TYPE_ARRAY ? t->u.array.element : field->type);
                 Initializer **sub_init = &(*slot)->init;
                 if (!is_aggregate(sub))
-                    fatal_error("Designator in scalar initializer");
+                    fatal_error("designator in a scalar initializer");
                 if (*sub_init && (*sub_init)->kind != INITIALIZER_COMPOUND)
-                    fatal_error("Designator into a subobject initialized by an expression is "
+                    fatal_error("a designator into a subobject initialized by an expression is "
                                 "not supported");
                 if (!*sub_init)
                     *sub_init = new_canonical(sub);
@@ -216,7 +215,7 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
         } else if (!*slot) {
             if (!unsized) {
                 if (braced)
-                    fatal_error("Too many elements in %s initializer", aggregate_name(t));
+                    fatal_error("excess elements in %s initializer", aggregate_name(t));
                 return;
             }
             *slot = new_init_item(NULL, NULL);
@@ -283,9 +282,9 @@ static Initializer *normalize_compound_at(const Type *t, Initializer *init, Init
     if (!is_aggregate(ut)) {
         // A braced scalar (§6.7.9p11).
         if (!items)
-            fatal_error("Empty scalar initializer");
+            fatal_error("scalar initializer cannot be empty");
         if (items->next)
-            fatal_error("Excess elements in scalar initializer");
+            fatal_error("excess elements in scalar initializer");
         Initializer *inner = take_item(&items);
         return inner->kind == INITIALIZER_COMPOUND ? normalize_compound(t, inner, mode)
                                                    : check_leaf(inner, mode);

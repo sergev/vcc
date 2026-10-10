@@ -380,7 +380,7 @@ TEST_F(TypecheckTest, DuplicateStructDeclaration)
         struct S { int y; };
     )");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Structure S was already declared");
+                "redefinition of 'struct S'");
 }
 
 //

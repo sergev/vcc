@@ -15,6 +15,33 @@
 
 const Type *typecheck_function;
 
+//
+// A name declared again where it is already declared: in the same scope a redefinition;
+// in an inner one it would shadow the outer declaration, which this compiler does not allow.
+//
+static int param_scope_level = -1; // the scope of the parameters of the function checked
+
+static _Noreturn void redeclared(const char *name)
+{
+    // The parameters and the outermost block of the body share a scope (C11 §6.2.1p4).
+    int level = symtab_level(name);
+    if (level == param_scope_level && scope_level == param_scope_level + 1)
+        level = scope_level;
+    if (level < scope_level)
+        fatal_error("declaration of '%s' shadows an earlier one, which is not allowed", name);
+    fatal_error("redefinition of '%s'", name);
+}
+
+// A bit-field, for a message: "bit-field 'x'", or "unnamed bit-field".
+static const char *bitfield_desc(const Field *f)
+{
+    static char buf[300];
+    if (!f->u.member.name)
+        return "unnamed bit-field";
+    snprintf(buf, sizeof(buf), "bit-field '%s'", f->u.member.name);
+    return buf;
+}
+
 static bool is_extern(const DeclSpec *spec)
 {
     return spec && (spec->storage == STORAGE_CLASS_EXTERN);
@@ -114,23 +141,23 @@ static int alignment_spec_value(AlignmentSpec *as)
         as->u.expr->u.literal->kind == LITERAL_INT) {
         a = (long)as->u.expr->u.literal->u.int_val;
         if (a != 0 && !valid_alignment(a))
-            fatal_error("Invalid alignment %ld in _Alignas", a);
+            fatal_error("invalid alignment %ld in '_Alignas'", a);
         return (int)a;
     } else if (as->kind == ALIGN_SPEC_TYPE) {
         as->u.type = resolve_typedef_names(as->u.type);
         validate_type(as->u.type);
         if (!is_complete(as->u.type) || unalias(as->u.type)->kind == TYPE_FUNCTION)
-            fatal_error("_Alignas of an incomplete or function type");
+            fatal_error("'_Alignas' of incomplete or function type '%s'", type_to_c(as->u.type));
         a = (long)get_alignment(as->u.type);
         free_type(as->u.type);
     } else {
         as->u.expr = typecheck_and_decay(as->u.expr);
         if (!is_integer(as->u.expr->type) || !try_eval_const_int(as->u.expr, &a))
-            fatal_error("_Alignas requires an integer constant expression");
+            fatal_error("'_Alignas' requires an integer constant expression");
         free_expression(as->u.expr);
     }
     if (a != 0 && !valid_alignment(a))
-        fatal_error("Invalid alignment %ld in _Alignas", a);
+        fatal_error("invalid alignment %ld in '_Alignas'", a);
     as->kind                           = ALIGN_SPEC_EXPR;
     as->u.expr                         = new_expression(EXPR_LITERAL);
     as->u.expr->u.literal              = new_literal(LITERAL_INT);
@@ -162,7 +189,7 @@ static int declared_alignment(DeclSpec *spec, const Type *t)
         return 0;
     int natural = (int)get_alignment(t);
     if (a < natural)
-        fatal_error("_Alignas(%d) is less strict than the alignment of the type", a);
+        fatal_error("'_Alignas(%d)' is less strict than the alignment of '%s'", a, type_to_c(t));
     return a > natural ? a : 0;
 }
 
@@ -178,7 +205,7 @@ static void note_alignment(const char *name, int a)
 static void reject_alignas(const DeclSpec *spec, const char *what)
 {
     if (spec && spec->align_spec)
-        fatal_error("_Alignas on %s", what);
+        fatal_error("'_Alignas' cannot be applied to %s", what);
 }
 
 // Reject two parameters with the same name in a function declaration or
@@ -193,7 +220,7 @@ static void check_duplicate_params(const Type *fn_type)
         for (const Param *b = a->next; b; b = b->next) {
             if (b->name && strcmp(a->name, b->name) == 0) {
                 diag_enter(b->loc);
-                fatal_error("Duplicate parameter name %s", a->name);
+                fatal_error("redefinition of parameter '%s'", a->name);
             }
         }
     }
@@ -231,7 +258,7 @@ static void adjust_function_params(Type *fn_type)
             free_type(p->type);
             p->type = ptr;
         } else if (pt->kind == TYPE_VOID) {
-            fatal_error("No void params allowed");
+            fatal_error("'void' must be the only parameter");
         }
     }
 }
@@ -240,14 +267,14 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
 {
     const Type *var_type = unalias(decl->type); // may be a typedef'd function type
     if (decl->init) {
-        fatal_error("Function declared with initializer");
+        fatal_error("function '%s' cannot have an initializer", decl->name);
     }
     validate_type(var_type);
     // A block-scope function declaration cannot specify a storage class other
     // than extern (C11 §6.7.1p7): "static int foo(void);" inside a body is
     // illegal, though it is legal at file scope (internal linkage).
     if (is_static(specifiers) && scope_level > 0) {
-        fatal_error("Block-scope function declaration cannot be static");
+        fatal_error("function '%s' declared in block scope cannot be 'static'", decl->name);
     }
     bool global       = !is_static(specifiers);
     const Type *yield = check_coroutine_decl(decl->name, specifiers, var_type);
@@ -265,10 +292,10 @@ static void register_function_declaration(InitDeclarator *decl, const DeclSpec *
         if (existing->kind != SYM_FUNC) {
             // A function declaration clashes with a non-function of the same
             // name (e.g. a variable) in scope.
-            fatal_error("Duplicate variable declaration %s", decl->name);
+            redeclared(decl->name);
         }
         if (!compatible_type(existing->type, adj)) {
-            fatal_error("Conflicting declarations for function %s", decl->name);
+            fatal_error("conflicting types for '%s'", decl->name);
         }
         agree_coroutine(existing, yield, decl->name);
     }
@@ -290,12 +317,12 @@ static void check_static_assert(const Expr *condition, const char *message)
 {
     long val;
     if (!try_eval_const_int(condition, &val))
-        fatal_error("_Static_assert condition is not a constant expression");
+        fatal_error("'_Static_assert' condition is not a constant expression");
     if (!val) {
         if (message)
-            fatal_error("_Static_assert failed: %s", message);
+            fatal_error("static assertion failed: %s", message);
         else
-            fatal_error("_Static_assert failed");
+            fatal_error("static assertion failed");
     }
 }
 
@@ -306,7 +333,7 @@ static void typecheck_static_assert_decl(Declaration *d)
 {
     d->u.static_assrt.condition = typecheck_and_decay(d->u.static_assrt.condition);
     if (!is_scalar(d->u.static_assrt.condition->type)) {
-        fatal_error("_Static_assert condition must have scalar type");
+        fatal_error("'_Static_assert' condition must have scalar type");
     }
     check_static_assert(d->u.static_assrt.condition, d->u.static_assrt.message);
 }
@@ -327,13 +354,15 @@ static void validate_struct_definition(const char *tag, const Field *members)
             continue;
         }
         if (unalias(m->u.member.type)->kind == TYPE_FUNCTION) {
-            fatal_error("Can't declare structure member with function type");
+            fatal_error("member '%s' has function type '%s'", m->u.member.name ? m->u.member.name : "",
+                        type_to_c(m->u.member.type));
         }
         if (!is_complete(m->u.member.type)) {
-            fatal_error("Cannot declare structure member with incomplete type");
+            fatal_error("member '%s' has incomplete type '%s'", m->u.member.name ? m->u.member.name : "",
+                        type_to_c(m->u.member.type));
         }
         if (m->u.member.name && map_get(&names, m->u.member.name, NULL)) {
-            fatal_error("Duplicate member %s in structure %s", m->u.member.name, tag);
+            fatal_error("duplicate member '%s'", m->u.member.name);
         }
         if (m->u.member.name)
             map_insert(&names, m->u.member.name, 0, 0);
@@ -350,7 +379,7 @@ static void register_enum_constants(const Type *enum_type)
         long val;
         if (e->value) {
             if (!try_eval_const_int(e->value, &val))
-                fatal_error("Enum constant '%s' has non-constant initializer", e->name);
+                fatal_error("value of enumerator '%s' is not a constant expression", e->name);
         } else {
             val = next_val;
         }
@@ -360,7 +389,7 @@ static void register_enum_constants(const Type *enum_type)
         int bits = target_config->int_bits;
         uint64_t umax = unsigned_narrow(~(uint64_t)0, (int)target_config->int_size * 8);
         if (bits < 64 && (val < 0 ? val < -(1L << (bits - 1)) : (uint64_t)val > umax))
-            fatal_error("Enum constant '%s' value %ld does not fit type int", e->name, val);
+            fatal_error("value %ld of enumerator '%s' does not fit in 'int'", val, e->name);
         symtab_add_enum_const(e->name, (int)sign_narrow((uint64_t)val, bits), scope_level);
     }
 }
@@ -373,7 +402,7 @@ void check_tag_kind(const Type *t)
         return;
     const StructDef *existing = structtab_find_opt(t->u.struct_t.name);
     if (existing && existing->kind != t->kind) {
-        fatal_error("'%s' defined as wrong kind of tag", t->u.struct_t.name);
+        fatal_error("'%s' was declared as a different kind of tag", t->u.struct_t.name);
     }
 }
 
@@ -384,17 +413,16 @@ static int bitfield_width(const Field *f)
 {
     const Type *t = unalias(f->u.member.type);
     if (!is_integer(t))
-        fatal_error("Bit-field %s has a non-integer type", f->u.member.name ? f->u.member.name : "");
+        fatal_error("%s has non-integer type '%s'", bitfield_desc(f), type_to_c(t));
     long width;
     if (!try_eval_const_int(f->u.member.bitfield, &width))
-        fatal_error("Bit-field width is not an integer constant");
+        fatal_error("width of %s is not an integer constant expression", bitfield_desc(f));
     if (width < 0)
-        fatal_error("Bit-field %s has a negative width", f->u.member.name ? f->u.member.name : "");
+        fatal_error("%s has negative width", bitfield_desc(f));
     if (width > integer_value_bits(t))
-        fatal_error("Width of bit-field %s exceeds its type",
-                    f->u.member.name ? f->u.member.name : "");
+        fatal_error("width of %s exceeds its type '%s'", bitfield_desc(f), type_to_c(t));
     if (width == 0 && f->u.member.name)
-        fatal_error("Named bit-field %s has zero width", f->u.member.name);
+        fatal_error("named %s has zero width", bitfield_desc(f));
     return (int)width;
 }
 
@@ -494,7 +522,7 @@ static void place_bitfield(FieldDef *m, int size, int alignment)
         base     = first / word * word;
         unit     = word;
         if (end > base + word)
-            fatal_error("Bit-field %s straddles a word", m->name);
+            fatal_error("bit-field '%s' straddles a word", m->name);
         fits = true;
     }
     for (int sz = 1; !fits && sz <= 8; sz *= 2) {
@@ -555,9 +583,9 @@ static void register_struct_type(const Type *t)
     const StructDef *existing = structtab_find_opt(t->u.struct_t.name);
     if (existing) {
         if (existing->complete)
-            fatal_error("Structure %s was already declared", t->u.struct_t.name);
+            fatal_error("redefinition of '%s'", type_to_c(t));
         if (existing->kind != kind)
-            fatal_error("'%s' defined as wrong kind of tag", t->u.struct_t.name);
+            fatal_error("'%s' was declared as a different kind of tag", t->u.struct_t.name);
     }
     validate_struct_definition(t->u.struct_t.name, t->u.struct_t.fields);
     FieldDef *members     = NULL;
@@ -585,9 +613,10 @@ static void register_struct_type(const Type *t)
         int member_alignment = get_alignment(f->u.member.type);
         int alignas          = alignment_spec_value(f->u.member.align_spec);
         if (alignas && f->u.member.bitfield)
-            fatal_error("_Alignas on a bit-field");
+            fatal_error("'_Alignas' cannot be applied to a bit-field");
         if (alignas && alignas < member_alignment)
-            fatal_error("_Alignas(%d) is less strict than the alignment of the type", alignas);
+            fatal_error("'_Alignas(%d)' is less strict than the alignment of '%s'", alignas,
+                        type_to_c(f->u.member.type));
         if (alignas > member_alignment)
             member_alignment = alignas;
         if (f->u.member.bitfield) {
@@ -721,7 +750,7 @@ static void add_typedef(const char *name, const Type *type)
     if (typetab_exists(name)) {
         const TypeDef *old = typetab_find(name);
         if (old->level != scope_level || !compatible_type(old->type, type))
-            fatal_error("Typedef %s redefined", name);
+            fatal_error("redefinition of typedef '%s'", name);
         return;
     }
     typetab_add(name, type, scope_level);
@@ -759,13 +788,13 @@ static void typecheck_local_var_decl(const Declaration *d)
         }
         reject_coro_spec(d->u.var.specifiers, decl->name);
         if (unalias(var_type)->kind == TYPE_VOID) {
-            fatal_error("No void declarations");
+            fatal_error("variable '%s' has incomplete type 'void'", decl->name);
         }
         register_inline_struct_defs(var_type);
         validate_type(var_type);
         if (is_extern(d->u.var.specifiers)) {
             if (decl->init) {
-                fatal_error("Initializer on local extern declaration");
+                fatal_error("'extern' variable '%s' cannot have an initializer", decl->name);
             }
             const Symbol *existing = symtab_get_opt(decl->name);
             // A block-scope extern declaration may link to a prior declaration
@@ -777,11 +806,10 @@ static void typecheck_local_var_decl(const Declaration *d)
             if (existing && (existing->kind == SYM_LOCAL ||
                              (existing->kind == SYM_STATIC && existing->block_scope &&
                               !existing->u.static_var.global))) {
-                fatal_error("Identifier %s declared both with and without linkage",
-                            decl->name);
+                fatal_error("'%s' is declared both with and without linkage", decl->name);
             }
             if (existing && unalias(existing->type)->kind != unalias(var_type)->kind) {
-                fatal_error("Variable %s redeclared with different type", decl->name);
+                fatal_error("conflicting types for '%s'", decl->name);
             }
             if (!existing) {
                 // Scope the synthesized symbol to this block so its identifier does
@@ -793,14 +821,14 @@ static void typecheck_local_var_decl(const Declaration *d)
             continue;
         }
         if (!is_complete(var_type)) {
-            fatal_error("Cannot define a variable with incomplete type");
+            fatal_error("variable '%s' has incomplete type '%s'", decl->name, type_to_c(var_type));
         }
         if (is_static(d->u.var.specifiers)) {
             // A static local has no linkage, so it cannot share a scope with
             // another declaration of the same name (C11 §6.7p3) — e.g.
             // "int x = 1; static int x;".
             if (symtab_get_opt(decl->name)) {
-                fatal_error("Duplicate variable declaration %s", decl->name);
+                redeclared(decl->name);
             }
             Tac_StaticInit *static_init = build_static_init(var_type, &decl->init);
             // The storage is emitted inside the owning function's module as a module-local
@@ -837,7 +865,7 @@ static void typecheck_local_var_decl(const Declaration *d)
             // A no-linkage variable clashing with another no-linkage variable
             // (shadowing, forbidden by design) or with a function of the same
             // name in scope (external vs no linkage, C11 §6.7p3).
-            fatal_error("Duplicate variable declaration %s", decl->name);
+            redeclared(decl->name);
         }
         bool unsized = unalias(var_type)->kind == TYPE_ARRAY && !unalias(var_type)->u.array.size;
         symtab_add_automatic_var_type(decl->name, var_type, scope_level);
@@ -1032,12 +1060,14 @@ static void typecheck_fn_decl(ExternalDecl *d)
     Type *adjusted_type = clone_type(fun_type, __func__, __FILE__, __LINE__);
     if (fun_type->kind == TYPE_FUNCTION) {
         if (unalias(fun_type->u.function.return_type)->kind == TYPE_ARRAY) {
-            fatal_error("A function cannot return an array");
+            fatal_error("function cannot return array type '%s'",
+                        type_to_c(fun_type->u.function.return_type));
         }
         // Strip the f(void) sentinel and decay array params to pointers.
         adjust_function_params(adjusted_type);
     } else {
-        fatal_error("Function has non-function type");
+        fatal_error("'%s' is defined as a function but has type '%s'", d->u.function.name,
+                    type_to_c(fun_type));
     }
     check_duplicate_params(adjusted_type);
     const Type *yield =
@@ -1054,24 +1084,26 @@ static void typecheck_fn_decl(ExternalDecl *d)
     const Type *ret = unalias(fun_type->u.function.return_type);
     bool ret_ok     = (ret->kind == TYPE_VOID) || is_complete(ret);
     if (has_body && (!ret_ok || !all_params_complete)) {
-        fatal_error("Can't define function with incomplete types");
+        fatal_error("function '%s' has an incomplete return or parameter type",
+                    d->u.function.name);
     }
     bool global      = !is_static(d->u.function.specifiers);
     Symbol *existing = symtab_get_opt(d->u.function.name);
     bool defined     = has_body;
     if (existing) {
         if (unalias(existing->type)->kind != fun_type->kind) {
-            fatal_error("Redeclared function %s with different type", d->u.function.name);
+            fatal_error("redefinition of '%s' as a different kind of symbol", d->u.function.name);
         }
         if (existing->kind == SYM_FUNC) {
             if (!compatible_type(existing->type, adjusted_type)) {
-                fatal_error("Conflicting declarations for function %s", d->u.function.name);
+                fatal_error("conflicting types for '%s'", d->u.function.name);
             }
             if (existing->u.func.defined && has_body) {
-                fatal_error("Defined function %s twice", d->u.function.name);
+                fatal_error("redefinition of '%s'", d->u.function.name);
             }
             if (existing->u.func.global && is_static(d->u.function.specifiers)) {
-                fatal_error("Static function declaration follows non-static");
+                fatal_error("static declaration of '%s' follows non-static declaration",
+                            d->u.function.name);
             }
             agree_coroutine(existing, yield, d->u.function.name);
             defined = has_body || existing->u.func.defined;
@@ -1086,9 +1118,10 @@ static void typecheck_fn_decl(ExternalDecl *d)
         symtab_set_coro(d->u.function.name, yield);
     if (has_body) {
         if (d->u.function.param_decls) {
-            fatal_error("Function parameters in K&R style are not supported");
+            fatal_error("K&R-style parameter declarations are not supported");
         }
         scope_increment();
+        param_scope_level = scope_level;
         for (const Param *p = params; p; p = p->next) {
             if (p->name) {
                 const Symbol *dup = symtab_get_opt(p->name);
@@ -1097,7 +1130,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
                     // file-scope function of the same name, is forbidden by the
                     // no-shadowing design (external vs no linkage, C11 §6.7p3).
                     diag_enter(p->loc);
-                    fatal_error("Duplicate variable declaration %s", p->name);
+                    redeclared(p->name);
                 }
             }
             symtab_add_automatic_var_type(p->name, p->type, scope_level);
@@ -1109,6 +1142,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
         d->u.function.body =
             typecheck_statement(fun_type->u.function.return_type, d->u.function.body);
         typecheck_function = NULL;
+        param_scope_level  = -1;
         coro_end_body();
 
         // A non-void function whose body can fall off the end yields an
@@ -1134,7 +1168,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
                 }
                 *tail = item;
             } else {
-                fatal_error("Non-void function '%s' may fall off the end without "
+                fatal_error("non-void function '%s' may reach its end without "
                             "returning a value",
                             d->u.function.name);
             }
@@ -1217,7 +1251,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
         reject_coro_spec(d->u.var.specifiers, decl->name);
 
         if (unalias(var_type)->kind == TYPE_VOID) {
-            fatal_error("Void variables not allowed");
+            fatal_error("variable '%s' has incomplete type 'void'", decl->name);
         }
         register_inline_struct_defs(var_type);
         validate_type(var_type);
@@ -1228,7 +1262,8 @@ static void typecheck_file_scope_var_decl(Declaration *d)
             // An incomplete type (e.g. a forward-declared struct) can't be initialized;
             // reject before building the initializer so the diagnostic is meaningful.
             if (!is_complete(var_type)) {
-                fatal_error("Can't define a variable with incomplete type");
+                fatal_error("variable '%s' has incomplete type '%s'", decl->name,
+                            type_to_c(var_type));
             }
             // Pre-register tentatively so the variable's own initializer can reference
             // it via sizeof (e.g. int foo = sizeof(foo); — valid C11 §6.2.1p7).
@@ -1239,23 +1274,24 @@ static void typecheck_file_scope_var_decl(Declaration *d)
             init_list = build_static_init(var_type, &decl->init);
         }
         if (!is_complete(var_type) && init_kind != INIT_NONE) {
-            fatal_error("Can't define a variable with incomplete type");
+            fatal_error("variable '%s' has incomplete type '%s'", decl->name,
+                            type_to_c(var_type));
         }
         Symbol *existing = symtab_get_opt(decl->name);
         if (existing) {
             if (unalias(existing->type)->kind != unalias(var_type)->kind) {
-                fatal_error("Variable %s redeclared with different type", decl->name);
+                fatal_error("conflicting types for '%s'", decl->name);
             }
             if (!compatible_type(existing->type, var_type)) {
-                fatal_error("Conflicting types for variable %s", decl->name);
+                fatal_error("conflicting types for '%s'", decl->name);
             }
             if (existing->kind == SYM_STATIC) {
                 if (!is_extern(d->u.var.specifiers) && existing->u.static_var.global != global) {
-                    fatal_error("Conflicting variable linkage");
+                    fatal_error("conflicting linkage for '%s'", decl->name);
                 }
                 if (existing->u.static_var.init_kind == INIT_INITIALIZED &&
                     init_kind == INIT_INITIALIZED) {
-                    fatal_error("Conflicting global variable definition");
+                    fatal_error("redefinition of '%s'", decl->name);
                 }
                 init_kind = existing->u.static_var.init_kind == INIT_INITIALIZED
                                 ? existing->u.static_var.init_kind

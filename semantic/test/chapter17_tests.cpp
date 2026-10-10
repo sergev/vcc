@@ -41,7 +41,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "Void variables not allowed");
+                 "variable 'v1' has incomplete type 'void'");
 }
 
 // a = (void)20; — can't convert void to another type by assignment.
@@ -64,7 +64,7 @@ TEST_F(PipelineTest, Chapter17_DefineVoid_Neg)
     return 0;
 }
 )"),
-                 "No void declarations");
+                 "variable 'x' has incomplete type 'void'");
 }
 
 // extern void v = 0; — can't initialize a void object.
@@ -74,7 +74,7 @@ TEST_F(PipelineTest, Chapter17_InitializedVoid_Neg)
 
 int main(void) { return 0; }
 )"),
-                 "Void variables not allowed");
+                 "variable 'v' has incomplete type 'void'");
 }
 
 // flag ? foo() : (a = 3); — a ternary can't have only one void branch.

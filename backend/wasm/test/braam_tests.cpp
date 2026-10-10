@@ -289,7 +289,7 @@ coro(braam_call *) int main(int argc, char **argv)
     return p[0];
 }
 )");
-    EXPECT_NE(std::string::npos, err.find("alloca in a coroutine")) << err;
+    EXPECT_NE(std::string::npos, err.find("'alloca' in a coroutine")) << err;
 }
 
 TEST_F(BraamTest, AllocaInFunction)

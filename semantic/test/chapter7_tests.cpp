@@ -24,7 +24,7 @@ TEST_F(PipelineTest, Chapter7_DoubleDefine_Neg)
     }
 }
 )"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'a'");
 }
 
 // int a redeclared at function scope after an inner block used it.
@@ -39,7 +39,7 @@ TEST_F(PipelineTest, Chapter7_DoubleDefineAfterScope_Neg)
     return a;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'a'");
 }
 
 // 'a' used after its declaring block has been left.
@@ -83,7 +83,7 @@ label2:;
     return 1;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'a'");
 }
 
 // Label names must be unique within a function, even across sibling blocks.
@@ -137,7 +137,7 @@ TEST_F(PipelineTest, Chapter7_AssignToSelf_Neg)
     }
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // Same shadow, with the inner block falling through to the outer return.
@@ -151,7 +151,7 @@ TEST_F(PipelineTest, Chapter7_AssignToSelf2_Neg)
     return a;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int a; { ...; int a = 7; ... } — inner 'a' shadows the outer 'a'.
@@ -168,7 +168,7 @@ TEST_F(PipelineTest, Chapter7_HiddenThenVisible_Neg)
     return b == 8 && a == -4;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int a = 2; { int a = 1; ... } — inner 'a' shadows the outer 'a'.
@@ -182,7 +182,7 @@ TEST_F(PipelineTest, Chapter7_HiddenVariable_Neg)
     }
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int x = 4; { int x; } — inner 'x' shadows the outer 'x'.
@@ -196,7 +196,7 @@ TEST_F(PipelineTest, Chapter7_InnerUninitialized_Neg)
     return x;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'x' shadows an earlier one, which is not allowed");
 }
 
 // Deeply nested blocks each redeclaring 'a' — every level shadows.
@@ -224,7 +224,7 @@ TEST_F(PipelineTest, Chapter7_SimilarVarNames_Neg)
     return result + a1;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int a = 5; if (...) { ...; int a = 5; ... } — inner 'a' shadows the outer.
@@ -242,7 +242,7 @@ TEST_F(PipelineTest, Chapter7_CompoundSubtractInBlock_Neg)
     return a;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int a = 0; { ...; int a = 4; ... } — inner 'a' shadows the outer 'a'.
@@ -259,7 +259,7 @@ TEST_F(PipelineTest, Chapter7_GotoBeforeDeclaration_Neg)
     }
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // int x = 5; { int x = 0; ... } — inner 'x' shadows the outer 'x'.
@@ -276,7 +276,7 @@ TEST_F(PipelineTest, Chapter7_GotoInnerScope_Neg)
     }
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'x' shadows an earlier one, which is not allowed");
 }
 
 // int a = 10; if (a) { int a = 1; ... } — inner 'a' shadows the outer 'a'.
@@ -295,5 +295,5 @@ end:
     return (a == 10 && b == 1);
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }

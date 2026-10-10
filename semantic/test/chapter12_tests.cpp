@@ -28,7 +28,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "redeclared with different type");
+                 "conflicting types for 'x'");
 }
 
 // A function redeclared with a different return type (unsigned int vs unsigned
@@ -45,5 +45,5 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Conflicting declarations for function");
+                 "conflicting types for 'foo'");
 }

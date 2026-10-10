@@ -43,7 +43,7 @@ TEST_F(PipelineTest, Chapter5_MixedPrecedenceAssignment_Neg)
 TEST_F(PipelineTest, Chapter5_Redefine_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 1;\n    int a = 2;\n    return a;\n}\n"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'a'");
 }
 
 // return 0 && a; — 'a' is undeclared.
@@ -78,7 +78,7 @@ TEST_F(PipelineTest, Chapter5_UndeclaredVar_Neg)
 TEST_F(PipelineTest, Chapter5_UseThenRedefine_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 0;\n    return a;\n    int a = 1;\n    return a;\n}\n"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'a'");
 }
 
 // --- invalid_semantics / extra_credit ---------------------------------------

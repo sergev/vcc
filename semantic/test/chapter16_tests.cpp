@@ -39,7 +39,7 @@ int main(void)
     return c;
 }
 )"),
-                 "redeclared with different type");
+                 "conflicting types for 'c'");
 }
 
 // foo(unsigned char) then foo(char) — conflicting function redeclaration.
@@ -53,7 +53,7 @@ int main(void) {
 }
 int foo(char c);
 )"),
-                 "Conflicting declarations for function foo");
+                 "conflicting types for 'foo'");
 }
 
 // char *ptr = {'a', 'b', 'c'}; — a pointer cannot take a compound initializer.
@@ -64,7 +64,7 @@ TEST_F(PipelineTest, Chapter16_CompoundInitializerForPointer_Neg)
     return 0;
 }
 )"),
-                 "Excess elements in scalar initializer");
+                 "excess elements in scalar initializer");
 }
 
 // signed char *s = c; (c is char *) — char * and signed char * differ.
@@ -110,7 +110,7 @@ int main(void)
     return arr[0][2];
 }
 )"),
-                 "String literal can only initialize character array");
+                 "cannot initialize array of type 'char \\[3\\]\\[3\\]' with a string literal");
 }
 
 // char too_long[3] = "abcd"; — the string is longer than the array.
@@ -121,7 +121,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerTooLong_Neg)
     return 0;
 }
 )"),
-                 "String literal too long for array");
+                 "initializer string for array of type 'char \\[3\\]' is too long");
 }
 
 // static char too_long[3] = "abcd"; — too-long string for a static array.
@@ -132,7 +132,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerTooLongStatic_Neg)
     return 0;
 }
 )"),
-                 "String literal too long for array");
+                 "initializer string for array of type 'char \\[3\\]' is too long");
 }
 
 // char array[3][3] = {"a", "bcde"}; — too-long string in a nested initializer.
@@ -143,7 +143,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerTooLongNested_Neg)
     return 0;
 }
 )"),
-                 "String literal too long for array");
+                 "initializer string for array of type 'char \\[3\\]' is too long");
 }
 
 // file-scope char array[3][3] = {"a", "bcde"}; — too-long nested string, static.
@@ -155,7 +155,7 @@ int main(void)
     return 0;
 }
 )"),
-                 "String literal too long for array");
+                 "initializer string for array of type 'char \\[3\\]' is too long");
 }
 
 // long ints[4] = "abc"; — a string can only initialize a character array.
@@ -166,7 +166,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerWrongType_Neg)
     return ints[1];
 }
 )"),
-                 "String literal can only initialize character array");
+                 "cannot initialize array of type 'long \\[4\\]' with a string literal");
 }
 
 // unsigned int nested[1][2] = {"a"}; — wrong element type for a string init.
@@ -178,7 +178,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerWrongTypeNested_Neg)
     return 0;
 }
 )"),
-                 "String literal can only initialize character array");
+                 "cannot initialize array of type 'unsigned int \\[2\\]' with a string literal");
 }
 
 // static long int nested[1][2] = {"a"}; — wrong element type, static.
@@ -190,7 +190,7 @@ TEST_F(PipelineTest, Chapter16_StringInitializerWrongTypeNestedStatic_Neg)
     return 0;
 }
 )"),
-                 "String literal can only initialize character array");
+                 "cannot initialize array of type 'long \\[2\\]' with a string literal");
 }
 
 // signed char *ptr = "foo"; — "foo" decays to char *, not signed char *.
@@ -212,7 +212,7 @@ TEST_F(PipelineTest, Chapter16_StringLiteralIsPlainCharPointerStatic_Neg)
     return 0;
 }
 )"),
-                 "String literal can only initialize pointer to char");
+                 "cannot initialize 'signed char \\*' with a string literal");
 }
 
 // --- invalid_types/extra_credit ---------------------------------------------

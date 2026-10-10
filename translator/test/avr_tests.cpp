@@ -139,7 +139,7 @@ TEST_F(TranslateTestAvr, EnumConstantRange)
 
 TEST_F(TranslateTestAvr, EnumConstantTooWide)
 {
-    EXPECT_DEATH(CompileToYaml("enum e { C = 65536 };"), "does not fit type int");
+    EXPECT_DEATH(CompileToYaml("enum e { C = 65536 };"), "value 65536 of enumerator 'C' does not fit in 'int'");
 }
 
 // C11 §6.8.4.2p5: case values are compared after conversion to the promoted controlling

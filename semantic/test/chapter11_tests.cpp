@@ -32,7 +32,7 @@ int main(void) {
     return x();
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'x' shadows an earlier one, which is not allowed");
 }
 
 // The result of a cast expression is not an lvalue.
@@ -58,7 +58,7 @@ int main(void) {
 
 int foo(long a);
 )"),
-                 "Conflicting declarations for function foo");
+                 "conflicting types for 'foo'");
 }
 
 // A global variable may not be redeclared with a different type.
@@ -72,7 +72,7 @@ int main(void) {
     return foo;
 }
 )"),
-                 "redeclared with different type");
+                 "conflicting types for 'foo'");
 }
 
 // A block-scope "extern" must match the type of the file-scope variable.
@@ -85,7 +85,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "redeclared with different type");
+                 "conflicting types for 'a'");
 }
 
 // --- invalid_labels / extra_credit ------------------------------------------

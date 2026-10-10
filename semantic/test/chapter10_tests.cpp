@@ -38,7 +38,7 @@ TEST_F(PipelineTest, Chapter10_ConflictingLocalDeclarations_Neg)
     return x;
 }
 )"),
-                 "Duplicate variable declaration x");
+                 "redefinition of 'x'");
 }
 
 // An extern declaration cannot follow a same-scope local with no linkage.
@@ -76,7 +76,7 @@ int main(void) {
     return i;
 }
 )"),
-                 "Duplicate variable declaration i");
+                 "declaration of 'i' shadows an earlier one, which is not allowed");
 }
 
 // A block-scope extern declaration does not leak past its block; the use of
@@ -152,7 +152,7 @@ static int foo(void) {
     return 0;
 }
 )"),
-                 "Static function declaration follows non-static");
+                 "static declaration of 'foo' follows non-static declaration");
 }
 
 // As above, with the non-static declaration at block scope.
@@ -167,7 +167,7 @@ static int foo(void) {
     return 0;
 }
 )"),
-                 "Static function declaration follows non-static");
+                 "static declaration of 'foo' follows non-static declaration");
 }
 
 // A file-scope variable cannot be defined twice.
@@ -181,7 +181,7 @@ int main(void) {
 
 int foo = 4;
 )"),
-                 "Conflicting global variable definition");
+                 "redefinition of 'foo'");
 }
 
 // Internal- and external-linkage declarations of the same file-scope variable
@@ -196,7 +196,7 @@ int main(void) {
 
 int foo = 3;
 )"),
-                 "Conflicting variable linkage");
+                 "conflicting linkage for 'foo'");
 }
 
 // Caught by no-shadowing: the inner extern shadows the enclosing local x.
@@ -237,7 +237,7 @@ TEST_F(PipelineTest, Chapter10_ExternVariableInitializer_Neg)
     return i;
 }
 )"),
-                 "Initializer on local extern declaration");
+                 "'extern' variable 'i' cannot have an initializer");
 }
 
 // A file-scope variable with static storage must have a constant initializer.
@@ -250,7 +250,7 @@ int main(void) {
     return b;
 }
 )"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 // A static local variable must have a constant initializer.
@@ -262,7 +262,7 @@ TEST_F(PipelineTest, Chapter10_NonConstantStaticLocalInitializer_Neg)
     return b;
 }
 )"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 // A file-scope variable cannot be redeclared as a function.
@@ -275,7 +275,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Duplicate variable declaration foo");
+                 "declaration of 'foo' shadows an earlier one, which is not allowed");
 }
 
 // A function cannot be redeclared as a file-scope variable.
@@ -289,7 +289,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Variable foo redeclared with different type");
+                 "conflicting types for 'foo'");
 }
 
 // A function cannot be redeclared as a variable with extern linkage.
@@ -304,7 +304,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Variable foo redeclared with different type");
+                 "conflicting types for 'foo'");
 }
 
 // A block-scope function declaration cannot have static storage class.
@@ -319,7 +319,7 @@ static int foo(void) {
     return 0;
 }
 )"),
-                 "Block-scope function declaration cannot be static");
+                 "function 'foo' declared in block scope cannot be 'static'");
 }
 
 // A for-loop counter cannot have a storage class (static).

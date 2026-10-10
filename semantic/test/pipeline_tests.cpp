@@ -159,7 +159,7 @@ TEST_F(PipelineTest, StaticAssertInStructFails)
 {
     ParseProgram("struct S { _Static_assert(0, \"bad\"); int x; };");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "_Static_assert failed: bad");
+                "static assertion failed: bad");
 }
 
 // _Static_assert with a true condition inside a union is accepted.
@@ -204,7 +204,7 @@ TEST_F(PipelineTest, StaticAssertAtFileScopeFails)
 {
     ParseProgram("_Static_assert(0, \"bad\"); int x;");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "_Static_assert failed: bad");
+                "static assertion failed: bad");
 }
 
 // A block-scope _Static_assert is evaluated too; it used to be an "unsupported
@@ -221,7 +221,7 @@ TEST_F(PipelineTest, StaticAssertInBlockFails)
 {
     ParseProgram("int f(void) { _Static_assert(0, \"bad\"); return 0; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "_Static_assert failed: bad");
+                "static assertion failed: bad");
 }
 
 // --- Missing-return diagnostic & main's implicit return 0 -------------------
@@ -233,7 +233,7 @@ TEST_F(PipelineTest, NonVoidFallsOffEnd_Neg)
     int x = 1;
 }
 )"),
-                 "may fall off the end");
+                 "non-void function 'f' may reach its end without returning a value");
 }
 
 // A non-void body ending in a call to a user-defined `_Noreturn` function does
@@ -255,7 +255,7 @@ int f(int x) {
     g();
 }
 )"),
-                 "may fall off the end");
+                 "non-void function 'f' may reach its end without returning a value");
 }
 
 // A function that returns on every path is accepted.
@@ -361,7 +361,7 @@ int main(void) { static void *q = "GH"; return 0; }
 TEST_F(PipelineTest, StaticUcharPointerFromStringDies)
 {
     EXPECT_DEATH(RunPipeline(R"(unsigned char *p = "AB";)"),
-                 "String literal can only initialize pointer to char or void");
+                 "cannot initialize 'unsigned char \\*' with a string literal");
 }
 
 // A real static initializer that is not a bare literal must still fold.  Each of these
@@ -474,7 +474,7 @@ TEST_F(PipelineTest, ConstExprUnsignedCastFalseAssertFails)
 {
     ParseProgram("_Static_assert((unsigned char)-1 == 254, \"bad\");");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "_Static_assert failed: bad");
+                "static assertion failed: bad");
 }
 
 // The folder carries a value's signedness, so an unsigned value at the host's full
@@ -538,19 +538,19 @@ TEST_F(PipelineTest, BareRealIsNotIntegerConstExpr_Neg)
     int x;
 };
 )"),
-                 "_Static_assert condition is not a constant expression");
+                 "'_Static_assert' condition is not a constant expression");
 }
 
 // The new floating-scalar path must not accept a non-constant initializer.
 TEST_F(PipelineTest, RealStaticInitFromVariable_Neg)
 {
-    EXPECT_DEATH(RunPipeline("double a; double b = -a;"), "Static initializer is not a constant");
+    EXPECT_DEATH(RunPipeline("double a; double b = -a;"), "initializer element is not a constant expression");
 }
 
 // Division by zero is not a constant expression: reject rather than fold an infinity.
 TEST_F(PipelineTest, RealStaticInitDivideByZero_Neg)
 {
-    EXPECT_DEATH(RunPipeline("double z = 1.0 / 0.0;"), "Static initializer is not a constant");
+    EXPECT_DEATH(RunPipeline("double z = 1.0 / 0.0;"), "initializer element is not a constant expression");
 }
 
 //
@@ -682,13 +682,13 @@ TEST_F(PipelineTest, StructDefinedInTypeName)
 TEST_F(PipelineTest, BlockScopeLiteralInStaticInit_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { static int *p = (int[]){ 1 }; }"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 TEST_F(PipelineTest, FileScopeLiteralNonConstant_Neg)
 {
     EXPECT_DEATH(RunPipeline("int x; int *p = (int[]){ x };"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 // &c of a scalar char points at its byte: offset 0 on a byte-addressed target, the low
@@ -794,13 +794,13 @@ int f(W *w, SizeP p) { return w->x + (int)*p + E_A; }
 
 TEST_F(PipelineTest, TypedefRedefinedWithOtherTypeDies)
 {
-    EXPECT_DEATH(RunPipeline("typedef int T; typedef long T;"), "Typedef T redefined");
+    EXPECT_DEATH(RunPipeline("typedef int T; typedef long T;"), "redefinition of typedef 'T'");
 }
 
 TEST_F(PipelineTest, TypedefRepeatedInInnerScopeDies)
 {
     EXPECT_DEATH(RunPipeline("typedef int T; void f(void) { typedef int T; }"),
-                 "Typedef T redefined");
+                 "redefinition of typedef 'T'");
 }
 
 // An automatic aggregate zero-fills its enum and long double members.

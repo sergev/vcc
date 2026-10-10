@@ -149,18 +149,18 @@ TEST_F(NormalizeTest, UnionElision)
 TEST_F(NormalizeTest, ExcessElidedDies)
 {
     EXPECT_DEATH(Normalize("int a[2][2] = { 1, 2, 3, 4, 5 };"),
-                 "Too many elements in array initializer");
+                 "excess elements in array initializer");
 }
 
 TEST_F(NormalizeTest, ExcessBracedDies)
 {
     EXPECT_DEATH(Normalize("int a[2][2] = { { 1, 2, 3 } };"),
-                 "Too many elements in array initializer");
+                 "excess elements in array initializer");
 }
 
 TEST_F(NormalizeTest, EmptyScalarDies)
 {
-    EXPECT_DEATH(Normalize("int x = { };"), "Empty scalar initializer");
+    EXPECT_DEATH(Normalize("int x = { };"), "scalar initializer cannot be empty");
 }
 
 // An array designator chain; positional initialization continues in the inner row.
@@ -195,18 +195,18 @@ int f(void)
 TEST_F(PipelineTest, NormalizeAutomaticExcessElidedDies)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { int a[2][2] = { 1, 2, 3, 4, 5 }; }"),
-                 "Too many elements in array initializer");
+                 "excess elements in array initializer");
 }
 
 TEST_F(PipelineTest, NormalizeAutomaticExcessStructDies)
 {
     EXPECT_DEATH(RunPipeline("struct s { int a; }; void f(void) { struct s x[1] = { { 1, 2 } }; }"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(PipelineTest, NormalizeAutomaticEmptyScalarDies)
 {
-    EXPECT_DEATH(RunPipeline("void f(void) { int x = { }; }"), "Empty scalar initializer");
+    EXPECT_DEATH(RunPipeline("void f(void) { int x = { }; }"), "scalar initializer cannot be empty");
 }
 
 // --- Field designators -------------------------------------------------------
@@ -291,7 +291,7 @@ TEST_F(NormalizeTest, UnionPositionalReentry)
 TEST_F(NormalizeTest, DesignatorAfterLastMemberDies)
 {
     EXPECT_DEATH(Normalize("struct s { int a, b; }; struct s g = { .b = 1, 2 };"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(NormalizeTest, UnknownMemberDies)
@@ -303,23 +303,23 @@ TEST_F(NormalizeTest, UnknownMemberDies)
 TEST_F(NormalizeTest, UnionExcessAfterDesignatorDies)
 {
     EXPECT_DEATH(Normalize("union u { int i; int j; }; union u g = { .j = 1, 2 };"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 TEST_F(NormalizeTest, FieldDesignatorOnArrayDies)
 {
-    EXPECT_DEATH(Normalize("int a[2] = { .x = 1 };"), "Field designator .x in array initializer");
+    EXPECT_DEATH(Normalize("int a[2] = { .x = 1 };"), "field designator '\\.x' in an initializer of 'int \\[2\\]'");
 }
 
 TEST_F(NormalizeTest, ArrayDesignatorOnStructDies)
 {
     EXPECT_DEATH(Normalize("struct s { int a; }; struct s g = { [0] = 1 };"),
-                 "Array designator in struct initializer");
+                 "array designator in an initializer of 'struct s'");
 }
 
 TEST_F(NormalizeTest, DesignatorOnScalarDies)
 {
-    EXPECT_DEATH(Normalize("int x = { .a = 1 };"), "Designator in scalar initializer");
+    EXPECT_DEATH(Normalize("int x = { .a = 1 };"), "designator in a scalar initializer");
 }
 
 // A field designator chain.
@@ -427,13 +427,13 @@ TEST_F(NormalizeTest, ArrayDesignatorEndsElision)
 
 TEST_F(NormalizeTest, ArrayDesignatorNegativeDies)
 {
-    EXPECT_DEATH(Normalize("int a[4] = { [-1] = 1 };"), "Array designator index -1 is negative");
+    EXPECT_DEATH(Normalize("int a[4] = { [-1] = 1 };"), "array designator index -1 is negative");
 }
 
 TEST_F(NormalizeTest, ArrayDesignatorOutOfBoundsDies)
 {
     EXPECT_DEATH(Normalize("int a[4] = { [4] = 1 };"),
-                 "Array designator index 4 is out of bounds for array of 4");
+                 "array designator index 4 exceeds the bounds of 'int \\[4\\]'");
 }
 
 // The parser rejects a non-constant index.
@@ -445,7 +445,7 @@ TEST_F(NormalizeTest, ArrayDesignatorNonConstantDies)
 TEST_F(NormalizeTest, ArrayDesignatorRealIndexDies)
 {
     EXPECT_DEATH(Normalize("int a[4] = { [1.0] = 1 };"),
-                 "Array designator index is not an integer constant expression");
+                 "array designator index is not an integer constant expression");
 }
 
 // Automatic mode: designated char * elements and an unsized array; nothing leaks.
@@ -563,13 +563,13 @@ TEST_F(NormalizeTest, ChainSwitchesUnionMember)
 TEST_F(NormalizeTest, ChainIntoScalarDies)
 {
     EXPECT_DEATH(Normalize("struct s { int a; }; struct s g = { .a.x = 1 };"),
-                 "Designator in scalar initializer");
+                 "designator in a scalar initializer");
 }
 
 TEST_F(NormalizeTest, ChainIntoStringDies)
 {
     EXPECT_DEATH(Normalize("struct s { char n[4]; }; struct s g = { .n = \"AB\", .n[1] = 67 };"),
-                 "Designator into a subobject initialized by an expression is not supported");
+                 "a designator into a subobject initialized by an expression is not supported");
 }
 
 TEST_F(PipelineTest, ChainIntoExpressionDies)
@@ -578,7 +578,7 @@ TEST_F(PipelineTest, ChainIntoExpressionDies)
 struct s { struct in in; };
 void f(struct in v) { struct s x = { .in = v, .in.a = 1 }; }
 )"),
-                 "Designator into a subobject initialized by an expression is not supported");
+                 "a designator into a subobject initialized by an expression is not supported");
 }
 
 // Automatic mode: chains, in-place refinement and a union member; nothing leaks.

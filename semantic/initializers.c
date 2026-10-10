@@ -130,7 +130,7 @@ static Initializer *make_zero_init(Type *t)
         init->u.expr->u.literal = new_literal(LITERAL_INT); // Null pointer
         break;
     default:
-        fatal_error("Unsupported type for zero init: %d", t->kind);
+        internal_error("unsupported type for zero init: %d", t->kind);
     }
     return init;
 }
@@ -152,7 +152,7 @@ static Initializer *make_zero_init(Type *t)
 static const char *static_compound_literal(Expr *e)
 {
     if (scope_level > 0)
-        fatal_error("Static initializer is not a constant");
+        fatal_error("initializer element is not a constant expression");
     Type *t           = check_type_name(e->u.compound_literal.type);
     Initializer *init = new_initializer(INITIALIZER_COMPOUND);
     init->u.items     = e->u.compound_literal.init;
@@ -189,15 +189,16 @@ static bool eval_lvalue_addr(const Expr *e, const char **name, long *off, const 
         if (!eval_lvalue_addr(e->u.field_access.expr, name, off, &base_type))
             return false;
         if (base_type->kind != TYPE_STRUCT && base_type->kind != TYPE_UNION)
-            fatal_error("Member access of non-struct type in static initializer");
+            fatal_error("member reference base type '%s' is not a structure or union",
+                        type_to_c(base_type));
         const FieldDef *member = structtab_find(base_type->u.struct_t.name)->members;
         for (; member; member = member->next) {
             if (strcmp(member->name, e->u.field_access.field) == 0)
                 break;
         }
         if (!member)
-            fatal_error("Struct %s has no member %s", base_type->u.struct_t.name,
-                        e->u.field_access.field);
+            fatal_error("no member named '%s' in '%s'", e->u.field_access.field,
+                        type_to_c(base_type));
         assert(member);
         *off += member->offset; // field offsets are byte offsets within the struct
         *type = unalias(member->type);
@@ -213,7 +214,7 @@ static bool eval_lvalue_addr(const Expr *e, const char **name, long *off, const 
             return false;
         long index;
         if (!try_eval_const_int(e->u.subscript.right, &index))
-            fatal_error("Array subscript in static initializer must be a compile-time constant");
+            fatal_error("array subscript in an initializer is not a constant expression");
         const Type *element = unalias(base_type->u.array.element);
         *off += index * (long)get_size(element);
         *type = element;
@@ -352,7 +353,7 @@ static uint64_t static_int_value(Tac_StaticInit *si)
         v = 0;
         break;
     default:
-        fatal_error("Bit-field initializer is not an integer constant");
+        fatal_error("initializer of a bit-field is not an integer constant expression");
     }
     tac_free_static_init(si);
     return v;
@@ -423,7 +424,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
         const Type *element_type = unalias(var_type->u.array.element);
         if (element_type->kind != TYPE_CHAR && element_type->kind != TYPE_SCHAR &&
             element_type->kind != TYPE_UCHAR) {
-            fatal_error("String literal can only initialize character array");
+            fatal_error("cannot initialize array of type '%s' with a string literal", type_to_c(var_type));
         }
         size_t string_length;
         char *decoded =
@@ -437,7 +438,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             array_size = get_array_size(var_type);
             if (string_length > array_size) {
                 xfree(decoded);
-                fatal_error("String literal too long for array");
+                fatal_error("initializer string for array of type '%s' is too long", type_to_c(var_type));
             }
         }
 
@@ -460,7 +461,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
         init->u.expr->kind == EXPR_LITERAL && init->u.expr->u.literal->kind == LITERAL_STRING) {
         TypeKind target_kind = unalias(var_type->u.pointer.target)->kind;
         if (target_kind != TYPE_CHAR && target_kind != TYPE_VOID) {
-            fatal_error("String literal can only initialize pointer to char or void");
+            fatal_error("cannot initialize '%s' with a string literal", type_to_c(var_type));
         }
         size_t decoded_length;
         char *decoded =
@@ -485,7 +486,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             bool same = compatible_type(var_type, probe.type);
             free_type(probe.type);
             if (!same)
-                fatal_error("Incompatible types in static pointer initialization");
+                fatal_error("incompatible pointer types when initializing '%s'", type_to_c(var_type));
             size_t n                     = strlen(sym->name);
             Tac_StaticInit *pointer_init = tac_new_static_init(TAC_STATIC_INIT_POINTER);
             pointer_init->u.pointer.name = xalloc(n + sizeof "$co", __func__, __FILE__, __LINE__);
@@ -510,7 +511,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             // blocks used to make, unified here).
             if (target->kind != TYPE_VOID && pointee->kind != TYPE_VOID &&
                 !compatible_type(var_type->u.pointer.target, pointee)) {
-                fatal_error("Incompatible types in static pointer initialization");
+                fatal_error("incompatible pointer types when initializing '%s'", type_to_c(var_type));
             }
             bool is_fat = (target->kind == TYPE_CHAR || target->kind == TYPE_SCHAR ||
                            target->kind == TYPE_UCHAR || target->kind == TYPE_VOID);
@@ -557,7 +558,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             // and is rejected (C11 §6.7.9p4 / §6.3.2.3p3).
             if (init->u.expr->kind != EXPR_CAST ||
                 unalias(init->u.expr->u.cast.type)->kind != TYPE_POINTER) {
-                fatal_error("Static initializer for pointer must be a null pointer constant");
+                fatal_error("initializer of '%s' is neither an address nor a null pointer constant", type_to_c(var_type));
             }
             return new_static_init_int(get_size(var_type), true, (uint64_t)val);
         }
@@ -571,7 +572,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
     if (init->kind == INITIALIZER_SINGLE && init->u.expr->kind == EXPR_LITERAL &&
         (var_type->kind == TYPE_ARRAY || var_type->kind == TYPE_STRUCT ||
          var_type->kind == TYPE_UNION)) {
-        fatal_error("Cannot initialize aggregate type with scalar value");
+        fatal_error("cannot initialize '%s' with a scalar value", type_to_c(var_type));
     }
 
     // Handle scalar initialized with a literal.  An enum constant is an EXPR_LITERAL too,
@@ -590,7 +591,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             return zero_init;
         }
         if (!is_arithmetic(var_type)) {
-            fatal_error("Static initializer requires arithmetic type");
+            fatal_error("cannot initialize '%s' with this initializer", type_to_c(var_type));
         }
         return new_static_init_from_literal(var_type, literal);
     }
@@ -620,7 +621,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
         }
         // A variable with static storage duration must have a constant
         // initializer (C11 §6.7.9p4): "int b = 1 + a;" / "static int b = a * 2;".
-        fatal_error("Static initializer is not a constant");
+        fatal_error("initializer element is not a constant expression");
     }
 
     // Handle floating scalar initialized with a constant expression (e.g. -0.5, 1.0 / 4).
@@ -638,7 +639,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             Literal lit = { .kind = LITERAL_DOUBLE, .u.real_val = val };
             return new_static_init_from_literal(var_type, &lit);
         }
-        fatal_error("Static initializer is not a constant");
+        fatal_error("initializer element is not a constant expression");
     }
 
     // Handle array with compound initializer: exactly one item per element.  A run of
@@ -728,7 +729,7 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
     }
 
     // Handle invalid cases.
-    fatal_error("Unsupported initializer for type %s", type_kind_str[var_type->kind]);
+    fatal_error("cannot initialize '%s' with this initializer", type_to_c(var_type));
 }
 
 // static_init with diag_loc at the node, for the errors found in it.
@@ -792,7 +793,7 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
         const Type *element_type = unalias(target_type->u.array.element);
         if (element_type->kind != TYPE_CHAR && element_type->kind != TYPE_SCHAR &&
             element_type->kind != TYPE_UCHAR) {
-            fatal_error("String literal can only initialize character array");
+            fatal_error("cannot initialize array of type '%s' with a string literal", type_to_c(target_type));
         }
         size_t string_length;
         char *decoded =
@@ -803,7 +804,7 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
         } else {
             size_t array_size = get_array_size(target_type);
             if (string_length > array_size) {
-                fatal_error("String literal too long for array");
+                fatal_error("initializer string for array of type '%s' is too long", type_to_c(target_type));
             }
         }
         init->u.expr = typecheck_string(init->u.expr);
@@ -850,7 +851,7 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
         return init;
     }
 
-    fatal_error("Cannot initialize scalar type with compound initializer");
+    fatal_error("cannot initialize scalar type '%s' with a braced list", type_to_c(target_type));
 }
 
 // check_init with diag_loc at the node, for the errors found in it.

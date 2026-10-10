@@ -264,7 +264,7 @@ int main(void)
     return 0;
 }
 )"),
-                 "Cannot initialize aggregate type with scalar value");
+                 "cannot initialize 'double \\[3\\]' with a scalar value");
 }
 
 // int x = {1, 2, 3}; — a scalar can't take a multi-element compound initializer.
@@ -276,7 +276,7 @@ TEST_F(PipelineTest, Chapter15_CompoundInitializerForScalar_Neg)
     return x;
 }
 )"),
-                 "Excess elements in scalar initializer");
+                 "excess elements in scalar initializer");
 }
 
 // static int x = {1, 2, 3}; — same for a static scalar.
@@ -288,7 +288,7 @@ TEST_F(PipelineTest, Chapter15_CompoundInitializerForStaticScalar_Neg)
     return x;
 }
 )"),
-                 "Excess elements in scalar initializer");
+                 "excess elements in scalar initializer");
 }
 
 // int arr[3] = {1, 2, 3, 4}; — too many elements.
@@ -299,7 +299,7 @@ TEST_F(PipelineTest, Chapter15_CompoundInitializerTooLong_Neg)
     return arr[2];
 }
 )"),
-                 "Too many elements in array initializer");
+                 "excess elements in array initializer");
 }
 
 // static int arr[3] = {1, 2, 3, 4}; — too many elements (static).
@@ -310,7 +310,7 @@ TEST_F(PipelineTest, Chapter15_CompoundInitializerTooLongStatic_Neg)
     return arr[2];
 }
 )"),
-                 "Too many elements in array initializer");
+                 "excess elements in array initializer");
 }
 
 // int *arr[3] = {0, 0, 1.0}; — a double can't convert to int *.
@@ -334,7 +334,7 @@ int main(void)
     return 0;
 }
 )"),
-                 "Static initializer requires arithmetic type");
+                 "cannot initialize 'int \\*' with this initializer");
 }
 
 // static int arr[3] = {p, p+1, 0}; — a static initializer must be constant.
@@ -349,7 +349,7 @@ int main(void) {
     return foo(5);
 }
 )"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 // --- extra_credit: compound assignment / switch -----------------------------
@@ -529,7 +529,7 @@ int main(void) {
 
 int arr[5];
 )"),
-                 "Conflicting");
+                 "conflicting types for 'arr'");
 }
 
 // int f(int arr[2][3]); int f(int arr[2][4]); — conflicting adjusted parameter types (gap).
@@ -539,7 +539,7 @@ TEST_F(PipelineTest, Chapter15_ConflictingFunctionDeclarations_Neg)
 
 int f(int arr[2][4]);
 )"),
-                 "Conflicting");
+                 "conflicting types for 'f'");
 }
 
 // static int arr[1] = 0; — a scalar can't initialize a static array (the non-static

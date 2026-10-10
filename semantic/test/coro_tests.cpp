@@ -137,7 +137,7 @@ TEST_F(PipelineTest, CoroutinesNotOnTarget_Neg)
             target_config = target_lookup("besm6");
             RunPipeline("_Coro(int) void f(void) { _Yield 1; }");
         },
-        "coroutines are not supported on target besm6");
+        "coroutines are not supported on target 'besm6'");
 }
 
 TEST_F(PipelineTest, CoOpNotOnTarget_Neg)
@@ -147,7 +147,7 @@ TEST_F(PipelineTest, CoOpNotOnTarget_Neg)
             target_config = target_lookup("besm6");
             RunPipeline("int f(_Coro_frame(int, void) *p) { return __co_done(p); }");
         },
-        "coroutines are not supported on target besm6");
+        "coroutines are not supported on target 'besm6'");
 }
 
 TEST_F(PipelineTest, CoroutinesOnTarget)
@@ -165,12 +165,12 @@ TEST_F(CoroTest, Variadic_Neg)
 TEST_F(CoroTest, Inline_Neg)
 {
     EXPECT_DEATH(RunPipeline("inline _Coro(int) void f(void) { _Yield 1; }"),
-                 "cannot be inline");
+                 "coroutine 'f' cannot be 'inline'");
 }
 
 TEST_F(CoroTest, Noreturn_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Noreturn _Coro(int) void f(void);"), "cannot be _Noreturn");
+    EXPECT_DEATH(RunPipeline("_Noreturn _Coro(int) void f(void);"), "coroutine 'f' cannot be '_Noreturn'");
 }
 
 TEST_F(CoroTest, NoPrototype_Neg)
@@ -198,30 +198,30 @@ TEST_F(CoroTest, FrameArray_Neg)
 
 TEST_F(CoroTest, OnVariable_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Coro(int) int x;"), "_Coro on 'x', which is not a function");
+    EXPECT_DEATH(RunPipeline("_Coro(int) int x;"), "'_Coro' on 'x', which is not a function");
 }
 
 TEST_F(CoroTest, OnFunctionPointer_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { _Coro(int) void (*p)(void); }"),
-                 "_Coro on 'p', which is not a function");
+                 "'_Coro' on 'p', which is not a function");
 }
 
 TEST_F(CoroTest, TwoCoro_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Coro(int) _Coro(int) void f(void);"), "More than one _Coro");
+    EXPECT_DEATH(RunPipeline("_Coro(int) _Coro(int) void f(void);"), "more than one '_Coro' in a declaration");
 }
 
 TEST_F(CoroTest, ConflictingYield_Neg)
 {
     EXPECT_DEATH(RunPipeline("_Coro(int) void f(void); _Coro(long) void f(void) { _Yield 1; }"),
-                 "Conflicting declarations for function f");
+                 "conflicting types for 'f'");
 }
 
 TEST_F(CoroTest, CoroAndFunction_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void); _Coro(int) void f(void);"),
-                 "Conflicting declarations for function f");
+                 "conflicting types for 'f'");
 }
 
 // --- naming a coroutine -----------------------------------------------------
@@ -229,19 +229,19 @@ TEST_F(CoroTest, CoroAndFunction_Neg)
 TEST_F(CoroTest, DirectCall_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { range(0, 1); }").c_str()),
-                 "Coroutine 'range' may only be named in");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AsValue_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void *f(void) { return (void *)range; }").c_str()),
-                 "Coroutine 'range' may only be named in");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AddressOf_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { void *p = &range; }").c_str()),
-                 "Coroutine 'range' may only be named in");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, InitNotCoroutine_Neg)
@@ -250,13 +250,13 @@ TEST_F(CoroTest, InitNotCoroutine_Neg)
 void g(int);
 void f(void) { char buf[64]; __co_init(buf, sizeof buf, g, 1); }
 )"),
-                 "co_init: 'g' is not a coroutine");
+                 "'co_init': 'g' is not a coroutine");
 }
 
 TEST_F(CoroTest, SizeofExpression_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("unsigned long f(void) { return co_sizeof(range + 1); }").c_str()),
-                 "Coroutine 'range' may only be named in");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AllocaArguments_Neg)
@@ -270,19 +270,19 @@ TEST_F(CoroTest, AllocaArguments_Neg)
 TEST_F(CoroTest, ResumeNotFrame_Neg)
 {
     EXPECT_DEATH(RunPipeline("int f(char *p) { return __co_resume(p); }"),
-                 "co_resume needs a co_frame pointer");
+                 "'co_resume' needs a co_frame pointer");
 }
 
 TEST_F(CoroTest, ValueOfVoid_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(_Coro_frame(void, int) *p) { __co_value(p); }"),
-                 "co_value of a coroutine that yields void");
+                 "'co_value' of a coroutine that yields void");
 }
 
 TEST_F(CoroTest, ResultOfVoid_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(_Coro_frame(int, void) *p) { __co_result(p); }"),
-                 "co_result of a coroutine that returns void");
+                 "'co_result' of a coroutine that returns void");
 }
 
 TEST_F(CoroTest, FrameTypes_Neg)
@@ -295,55 +295,55 @@ TEST_F(CoroTest, FrameTypes_Neg)
 
 TEST_F(CoroTest, YieldOutside_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int f(void) { return _Yield 1; }"), "yield outside a coroutine");
+    EXPECT_DEATH(RunPipeline("int f(void) { return _Yield 1; }"), "'yield' outside a coroutine");
 }
 
 TEST_F(CoroTest, AwaitOutside_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { _Await range(0, 1); }").c_str()),
-                 "await outside a coroutine");
+                 "'await' outside a coroutine");
 }
 
 TEST_F(CoroTest, YieldInDefer_Neg)
 {
     EXPECT_DEATH(RunPipeline("_Coro(int) void f(void) { _Defer _Yield 1; }"),
-                 "yield inside a deferred statement");
+                 "'yield' inside a deferred statement");
 }
 
 TEST_F(CoroTest, AwaitInDefer_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("coro(int) void f(void) { defer await range(0, 1); }").c_str()),
-                 "await inside a deferred statement");
+                 "'await' inside a deferred statement");
 }
 
 TEST_F(CoroTest, YieldValueInVoid_Neg)
 {
     EXPECT_DEATH(RunPipeline("_Coro(void) void f(void) { _Yield 1; }"),
-                 "yield with a value in a coroutine that yields void");
+                 "'yield' with a value in a coroutine that yields void");
 }
 
 TEST_F(CoroTest, BareYield_Neg)
 {
     EXPECT_DEATH(RunPipeline("_Coro(int) void f(void) { _Yield; }"),
-                 "yield without a value in a coroutine that yields a value");
+                 "'yield' without a value in a coroutine that yields a value");
 }
 
 TEST_F(CoroTest, AwaitOtherYield_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("coro(long) void f(void) { await range(0, 1); }").c_str()),
-                 "await of a coroutine with another yield type");
+                 "'await' of a coroutine with another yield type");
 }
 
 TEST_F(CoroTest, AwaitFrameOtherYield_Neg)
 {
     EXPECT_DEATH(RunPipeline("_Coro(void) void f(_Coro_frame(int, void) *p) { _Await p; }"),
-                 "await of a coroutine with another yield type");
+                 "'await' of a coroutine with another yield type");
 }
 
 TEST_F(CoroTest, AwaitFunction_Neg)
 {
     EXPECT_DEATH(RunPipeline("int g(void); _Coro(int) void f(void) { _Await g(); }"),
-                 "await needs a call of a coroutine or a co_frame pointer");
+                 "'await' needs a call of a coroutine or a co_frame pointer");
 }
 
 // --- co_alloca in its block -------------------------------------------------
@@ -351,7 +351,7 @@ TEST_F(CoroTest, AwaitFunction_Neg)
 TEST_F(CoroTest, AllocaInLoopHead_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { while (co_resume(co_alloca(range, 0, 0, 1))) ; }").c_str()),
-                 "co_alloca in the head of a loop");
+                 "'co_alloca' in the head of a loop");
 }
 
 TEST_F(CoroTest, GotoPastAlloca_Neg)
@@ -510,7 +510,7 @@ TEST_F(CoroTest, CoroPtrParams_Neg)
 TEST_F(CoroTest, CoroPtrTypes_Neg)
 {
     EXPECT_DEATH(RunPipeline((std::string(tasks) + "coro_ptr(char, int) p = a;").c_str()),
-                 "Incompatible types");
+                 "incompatible pointer types when initializing '_Coro_frame\\(char, int\\) \\*'");
 }
 
 TEST_F(CoroTest, CoroPtrAssign_Neg)
@@ -525,7 +525,7 @@ TEST_F(CoroTest, CoroPtrCall_Neg)
 {
     EXPECT_DEATH(RunPipeline((std::string(tasks) +
                               "void f(coro_ptr(int, int) p) { p(0); }").c_str()),
-                 "A coro_ptr can only be called by await");
+                 "a coro_ptr can only be called by 'await'");
 }
 
 TEST_F(CoroTest, CoroPtrArguments_Neg)
@@ -750,7 +750,7 @@ coro(int) void g(int n)
     yield p[0];
 }
 )"),
-                 "alloca in a coroutine");
+                 "'alloca' in a coroutine: its frame outlives the stack");
 }
 
 // BESM-6 has alloca, though no coroutines.

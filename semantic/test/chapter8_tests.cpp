@@ -147,7 +147,7 @@ TEST_F(PipelineTest, Chapter8_DifferentCasesSameScope_Neg)
     return 0;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'b'");
 }
 
 // Duplicate 'case 1' across a label is still the same enclosing switch.
@@ -289,7 +289,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateVariableInSwitch_Neg)
     return 0;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "redefinition of 'b'");
 }
 
 // A labeled 'break' with no enclosing loop or switch.
@@ -401,7 +401,7 @@ TEST_F(PipelineTest, Chapter8_ForShadow_Neg)
     return acc == 45 && shadow == 1;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'shadow' shadows an earlier one, which is not allowed");
 }
 
 // for-init 'int i' and a further inner 'int i' both shadow the outer 'i'.
@@ -420,7 +420,7 @@ TEST_F(PipelineTest, Chapter8_ForNestedShadow_Neg)
     return k == 101 && i == 0 && j == 0;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'i' shadows an earlier one, which is not allowed");
 }
 
 // A case block's 'int a' shadows the outer 'int a'.
@@ -438,7 +438,7 @@ TEST_F(PipelineTest, Chapter8_CaseBlock_Neg)
     return (a == 4 && b == 8);
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // A switch-body 'int a' shadows the outer 'int a'.
@@ -456,5 +456,5 @@ TEST_F(PipelineTest, Chapter8_SwitchDecl_Neg)
     return a == 3 && b == 4;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }

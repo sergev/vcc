@@ -38,7 +38,7 @@ static const Expr *arena_call;
 static void require_target(void)
 {
     if (target_config->no_coroutines)
-        fatal_error("coroutines are not supported on target %s", target_config->name);
+        fatal_error("coroutines are not supported on target '%s'", target_config->name);
 }
 
 // A short name for the messages: co_init for __co_init.
@@ -136,7 +136,7 @@ static FunctionSpec *coro_spec(const DeclSpec *spec)
     for (FunctionSpec *fs = spec ? spec->func_specs : NULL; fs; fs = fs->next) {
         if (fs->kind == FUNC_SPEC_CORO) {
             if (found)
-                fatal_error("More than one _Coro in a declaration");
+                fatal_error("more than one '_Coro' in a declaration");
             found = fs;
         }
     }
@@ -146,7 +146,7 @@ static FunctionSpec *coro_spec(const DeclSpec *spec)
 void reject_coro_spec(const DeclSpec *spec, const char *name)
 {
     if (coro_spec(spec))
-        fatal_error("_Coro on '%s', which is not a function", name);
+        fatal_error("'_Coro' on '%s', which is not a function", name);
 }
 
 // On Braam (docs/Braam.md §7) the runtime awaits main: it is a coroutine yielding
@@ -184,15 +184,15 @@ const Type *check_coroutine_decl(const char *name, const DeclSpec *spec, const T
         fatal_error("main cannot be a coroutine");
     for (const FunctionSpec *fs = spec->func_specs; fs; fs = fs->next) {
         if (fs->kind == FUNC_SPEC_INLINE)
-            fatal_error("Coroutine '%s' cannot be inline", name);
+            fatal_error("coroutine '%s' cannot be 'inline'", name);
         if (fs->kind == FUNC_SPEC_NORETURN)
-            fatal_error("Coroutine '%s' cannot be _Noreturn", name);
+            fatal_error("coroutine '%s' cannot be '_Noreturn'", name);
     }
     fn_type = unalias(fn_type);
     if (fn_type->u.function.variadic)
-        fatal_error("Coroutine '%s' cannot be variadic", name);
+        fatal_error("coroutine '%s' cannot be variadic", name);
     if (!fn_type->u.function.params)
-        fatal_error("Coroutine '%s' needs a prototype: write (void) for no parameters", name);
+        fatal_error("coroutine '%s' needs a prototype: write (void) for no parameters", name);
     cs->yield_type = resolve_typedef_names(cs->yield_type);
     validate_type(cs->yield_type);
     check_value_type(cs->yield_type, "The yield type of a coroutine");
@@ -207,7 +207,7 @@ void agree_coroutine(const Symbol *existing, const Type *yield, const char *name
         return;
     if (existing->u.func.coro != (yield != NULL) ||
         (yield && !compatible_type(existing->u.func.yield_type, yield)))
-        fatal_error("Conflicting declarations for function %s", name);
+        fatal_error("conflicting types for '%s'", name);
 }
 
 void coro_begin_body(const Type *yield)
@@ -227,10 +227,10 @@ void coro_end_body(void)
 static const Symbol *named_coroutine(Expr *e, const char *what)
 {
     if (e->kind != EXPR_VAR)
-        fatal_error("%s needs the name of a coroutine", what);
+        fatal_error("'%s' needs the name of a coroutine", what);
     const Symbol *sym = symtab_get(e->u.var);
     if (sym->kind != SYM_FUNC || !sym->u.func.coro)
-        fatal_error("%s: '%s' is not a coroutine", what, e->u.var);
+        fatal_error("'%s': '%s' is not a coroutine", what, e->u.var);
     // Typed as the function, so the translator can tell the callee (as for a call).
     free_type(e->type);
     e->type = clone_type(sym->type, __func__, __FILE__, __LINE__);
@@ -247,7 +247,7 @@ static const Type *result_of(const Symbol *sym)
 void check_alloca_call(void)
 {
     if (in_coro)
-        fatal_error("alloca in a coroutine: its frame outlives the stack");
+        fatal_error("'alloca' in a coroutine: its frame outlives the stack");
 }
 
 bool coroutine_call_allowed(const Expr *call)
@@ -258,7 +258,7 @@ bool coroutine_call_allowed(const Expr *call)
 void check_coroutine_name(const Symbol *sym)
 {
     if (sym->kind == SYM_FUNC && sym->u.func.coro)
-        fatal_error("Coroutine '%s' may only be named in co_init, co_alloca, co_sizeof, "
+        fatal_error("coroutine '%s' may only be named in co_init, co_alloca, co_sizeof, "
                     "co_alignof or await, or used as a coro_ptr when it takes (void) or "
                     "(void *)",
                     sym->name);
@@ -282,7 +282,7 @@ static Expr *coro_ptr_args(Expr *args, const char *what)
     if (!args)
         return NULL;
     if (args->next)
-        fatal_error("%s: a coro_ptr takes at most one argument, a void *", what);
+        fatal_error("'%s': a coro_ptr takes at most one argument, a void *", what);
     static const Type void_type = { .kind = TYPE_VOID };
     Type *void_ptr              = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
     void_ptr->u.pointer.target  = clone_type(&void_type, __func__, __FILE__, __LINE__);
@@ -294,7 +294,7 @@ static Expr *coro_ptr_args(Expr *args, const char *what)
 const Type *typecheck_coro_ptr_call(Expr *call, const Type *desc)
 {
     if (!coroutine_call_allowed(call))
-        fatal_error("A coro_ptr can only be called by await");
+        fatal_error("a coro_ptr can only be called by 'await'");
     call->u.call.args = coro_ptr_args(call->u.call.args, "await");
     return desc->u.struct_t.frame_result;
 }
@@ -313,7 +313,7 @@ static const Type *named_or_pointer(Expr **e, const char *what)
     *e               = typecheck_and_decay(*e);
     const Type *desc = coro_desc_target((*e)->type);
     if (!desc)
-        fatal_error("%s needs the name of a coroutine or a coro_ptr", what);
+        fatal_error("'%s' needs the name of a coroutine or a coro_ptr", what);
     return desc;
 }
 
@@ -321,9 +321,9 @@ static void check_suspension(const char *what)
 {
     require_target();
     if (!in_coro)
-        fatal_error("%s outside a coroutine", what);
+        fatal_error("'%s' outside a coroutine", what);
     if (coro_defer_depth > 0)
-        fatal_error("%s inside a deferred statement", what);
+        fatal_error("'%s' inside a deferred statement", what);
 }
 
 // The yield types of an await and its awaiter must be the same: the suspensions are
@@ -331,7 +331,7 @@ static void check_suspension(const char *what)
 static void check_same_yield(const Type *y)
 {
     if (unalias(y)->kind != unalias(coro_yield)->kind || !compatible_type(y, coro_yield))
-        fatal_error("await of a coroutine with another yield type");
+        fatal_error("'await' of a coroutine with another yield type");
 }
 
 Expr *typecheck_yield(Expr *e)
@@ -340,11 +340,11 @@ Expr *typecheck_yield(Expr *e)
     bool is_void = unalias(coro_yield)->kind == TYPE_VOID;
     if (e->u.yield_expr) {
         if (is_void)
-            fatal_error("yield with a value in a coroutine that yields void");
+            fatal_error("'yield' with a value in a coroutine that yields void");
         e->u.yield_expr =
             coerce_for_assignment(typecheck_and_decay(e->u.yield_expr), coro_yield, "yielding");
     } else if (!is_void) {
-        fatal_error("yield without a value in a coroutine that yields a value");
+        fatal_error("'yield' without a value in a coroutine that yields a value");
     }
     free_type(e->type);
     e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__); // co_signal
@@ -390,7 +390,7 @@ Expr *typecheck_await(Expr *e)
     }
     const Type *frame = frame_target(op->type);
     if (!frame)
-        fatal_error("await needs a call of a coroutine or a co_frame pointer");
+        fatal_error("'await' needs a call of a coroutine or a co_frame pointer");
     lint_settled(op); // an await runs it to its end
     check_same_yield(frame->u.struct_t.frame_yield);
     result = frame->u.struct_t.frame_result;
@@ -435,7 +435,7 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
         args          = storage;
     } else {
         if (coro_loop_head_depth > 0)
-            fatal_error("co_alloca in the head of a loop");
+            fatal_error("'co_alloca' in the head of a loop");
         name       = args;
         Expr *size = args->next;
         rest       = size->next;
@@ -492,16 +492,16 @@ Expr *typecheck_co_op(Expr *e)
         e->u.co_op.args   = p;
         const Type *frame = frame_target(p->type);
         if (!frame)
-            fatal_error("%s needs a co_frame pointer", op_name(op));
+            fatal_error("'%s' needs a co_frame pointer", op_name(op));
         if (op == CO_OP_DESTROY || op == CO_OP_DONE || op == CO_OP_RESULT)
             lint_settled(p);
         if (op == CO_OP_VALUE) {
             if (unalias(frame->u.struct_t.frame_yield)->kind == TYPE_VOID)
-                fatal_error("co_value of a coroutine that yields void");
+                fatal_error("'co_value' of a coroutine that yields void");
             type = clone_type(frame->u.struct_t.frame_yield, __func__, __FILE__, __LINE__);
         } else if (op == CO_OP_RESULT) {
             if (unalias(frame->u.struct_t.frame_result)->kind == TYPE_VOID)
-                fatal_error("co_result of a coroutine that returns void");
+                fatal_error("'co_result' of a coroutine that returns void");
             type = clone_type(frame->u.struct_t.frame_result, __func__, __FILE__, __LINE__);
         } else {
             type = new_type(TYPE_INT, __func__, __FILE__, __LINE__); // co_status, or a truth

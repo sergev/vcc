@@ -102,7 +102,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'var' has incomplete type 'union s'");
 }
 
 
@@ -118,7 +118,7 @@ TEST_F(PipelineTest, Chapter18_StructTagsFileScopeVarTypeUndeclared_Neg)
 
 struct s var;
 )SRC"),
-                 "Can't define a variable with incomplete type");
+                 "variable 'var' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsForLoopScope_Neg)
@@ -141,7 +141,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'x' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsForLoopScope2_Neg)
@@ -179,7 +179,7 @@ struct s {
     struct a b;
 };
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'b' has incomplete type 'struct a'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsParamUndeclared_Neg)
@@ -193,7 +193,7 @@ int foo(struct s x) {
     return 0;
 }
 )SRC"),
-                 "Can't define function with incomplete types");
+                 "function 'foo' has an incomplete return or parameter type");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsReturnTypeUndeclared_Neg)
@@ -208,7 +208,7 @@ struct s foo(void) {
     exit(0);
 }
 )SRC"),
-                 "Can't define function with incomplete types");
+                 "function 'foo' has an incomplete return or parameter type");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsSizeofUndeclared_Neg)
@@ -242,7 +242,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'var' has incomplete type 'struct s'");
 }
 
 
@@ -369,7 +369,7 @@ union u return_union(void){
     return result;
 }
 )SRC"),
-                 "Structure u was already declared");
+                 "redefinition of 'union u'");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTypesUnionBranchMismatch_Neg)
@@ -420,7 +420,7 @@ union u; // declare incomplete union type
 
 union u my_union; // INVALID: defining variable with incomplete union type
 )SRC"),
-                 "Can't define a variable with incomplete type");
+                 "variable 'my_union' has incomplete type 'union u'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteUnionsSizeofIncompleteUnionType_Neg)
@@ -459,7 +459,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 // Assigning to a member of a non-lvalue (function-return) union is rejected in typecheck:
@@ -579,7 +579,7 @@ foo:;
     return 0;
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesPostfixDecrStructArrow_Neg)
@@ -786,7 +786,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersNestedInitWrongType_Neg)
@@ -833,7 +833,7 @@ int main(void) {
     };
 }
 )SRC"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersScalarUnionInitializer_Neg)
@@ -877,7 +877,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticNestedInitNotConst_Neg)
@@ -902,7 +902,7 @@ struct has_union some_struct = {1,
                                 {some_var},  // INVALID - not constant
                                 'a'};
 )SRC"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticNestedInitTooLong_Neg)
@@ -923,7 +923,7 @@ struct s my_struct = {
     {1, 2}  // invalid - nested union initializer has two elements
 };
 )SRC"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticScalarUnionInitializer_Neg)
@@ -937,7 +937,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Cannot initialize aggregate type with scalar value");
+                 "cannot initialize 'union u' with a scalar value");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticTooLong_Neg)
@@ -958,7 +958,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Too many elements in union initializer");
+                 "excess elements in union initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticUnionInitNotConstant_Neg)
@@ -976,7 +976,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticUnionInitWrongType_Neg)
@@ -996,7 +996,7 @@ int main(void) {
     static union u my_union = {"A char array"};
 }
 )SRC"),
-                 "String literal can only initialize pointer to char");
+                 "cannot initialize 'signed char \\*' with a string literal");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersUnionInitWrongType_Neg)
@@ -1091,7 +1091,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Structure tag was already declared");
+                 "redefinition of 'union tag'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagDeclConflictsWithDef_Neg)
@@ -1156,7 +1156,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "'tag' defined as wrong kind of tag");
+                 "'tag' was declared as a different kind of tag");
 }
 
 
@@ -1186,7 +1186,7 @@ int main(void) {
     union u *ptr = &foo;
 }
 )SRC"),
-                 "Structure u was already declared");
+                 "redefinition of 'union u'");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTagResolutionCompareStructAndUnionPtrs_Neg)
@@ -1208,7 +1208,7 @@ int main(void) {
     }
 }
 )SRC"),
-                 "'tag' defined as wrong kind of tag");
+                 "'tag' was declared as a different kind of tag");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTagResolutionConflictingParamUnionTypes_Neg)
@@ -1228,7 +1228,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "'s' defined as wrong kind of tag");
+                 "'s' was declared as a different kind of tag");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTagResolutionDistinctUnionTypes_Neg)
@@ -1252,7 +1252,7 @@ int main(void) {
     return blah.a;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'blah' has incomplete type 'union s'");
 }
 
 // Under no-shadowing, 'union u' reopens the file-scope 'struct u' with the wrong
@@ -1275,7 +1275,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "'u' defined as wrong kind of tag");
+                 "'u' was declared as a different kind of tag");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTagResolutionUnionWrongMember_Neg)
@@ -1296,7 +1296,7 @@ int main(void) {
     return foo.b; // foo belongs to outer union u type, which doesn't have member 'b'
 }
 )SRC"),
-                 "Structure u was already declared");
+                 "redefinition of 'union u'");
 }
 
 
@@ -1334,7 +1334,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Structure u was already declared");
+                 "redefinition of 'union u'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteUnionMember_Neg)
@@ -1350,7 +1350,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'bad_struct' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberNameConflicts_Neg)
@@ -1366,7 +1366,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Duplicate member a in structure u");
+                 "duplicate member 'a'");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionSelfReference_Neg)
@@ -1381,7 +1381,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'self' has incomplete type 'union u'");
 }
 
 
@@ -1573,7 +1573,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersInitStructWithString_Neg)
@@ -1608,7 +1608,7 @@ struct s {
 // can't initialize a nested element of type void * with a constant of type double
 struct s x = {0.0, {1.0}};
 )SRC"),
-                 "Static initializer requires arithmetic type");
+                 "cannot initialize 'void \\*' with this initializer");
 }
 
 // DISABLED: static struct initialized with a scalar 0 is not rejected (static-init path)
@@ -1696,7 +1696,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersNestedStaticCompoundTooLong_Neg)
@@ -1712,7 +1712,7 @@ struct outer {
 
 struct outer x = {{1, 2}}; // sub-initializer for nested 'struct inner' has too many elements
 )SRC"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersNestedStructInitializerWrongType_Neg)
@@ -1755,7 +1755,7 @@ struct outer {
 // you can't initialize an element in a static variable with a non-constant expression
 struct outer y = {1.0, x};
 )SRC"),
-                 "Static initializer is not a constant");
+                 "initializer element is not a constant expression");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersNonConstantStaticInit_Neg)
@@ -1769,7 +1769,7 @@ struct pair x = {1, 2};
 // you can't initialize a static variable with a non-constant expression
 struct pair y = x;
 )SRC"),
-                 "Unsupported initializer for type struct");
+                 "cannot initialize 'struct pair' with this initializer");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersStaticInitializerTooLong_Neg)
@@ -1783,7 +1783,7 @@ struct pair {
 // struct has
 struct pair p = {1, 2, 3};
 )SRC"),
-                 "Too many elements in struct initializer");
+                 "excess elements in struct initializer");
 }
 
 // A static pointer initialized with an address constant whose array subscript is not a
@@ -1795,7 +1795,7 @@ int arr[3];
 int i;
 int *p = &arr[i];
 )SRC"),
-                 "Array subscript in static initializer must be a compile-time constant");
+                 "array subscript in an initializer is not a constant expression");
 }
 
 // A scalar variable's value is not an address constant, so it cannot initialize a static
@@ -1806,7 +1806,7 @@ TEST_F(PipelineTest, Chapter18_StaticPointerFromScalarVar_Neg)
 int x;
 int *p = x;
 )SRC"),
-                 "Unsupported initializer for type ptr");
+                 "cannot initialize 'int \\*' with this initializer");
 }
 
 
@@ -1910,7 +1910,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'v' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteParam_Neg)
@@ -1922,7 +1922,7 @@ struct s;
 // even if the parameter isn't used
 int foo(struct s x) { return 0; }
 )SRC"),
-                 "Can't define function with incomplete types");
+                 "function 'foo' has an incomplete return or parameter type");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompletePtrAddition_Neg)
@@ -1970,7 +1970,7 @@ struct s return_struct_def(void) {
 
 int main(void) { return 0; }
 )SRC"),
-                 "Can't define function with incomplete types");
+                 "function 'return_struct_def' has an incomplete return or parameter type");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteReturnTypeFuncall_Neg)
@@ -2062,7 +2062,7 @@ static struct s x;
 
 int main(void) { return 0; }
 )SRC"),
-                 "Can't define a variable with incomplete type");
+                 "variable 'x' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsInitializeIncomplete_Neg)
@@ -2080,7 +2080,7 @@ struct s {
   int a;
 };
 )SRC"),
-                 "Can't define a variable with incomplete type");
+                 "variable 'x' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsSizeofIncomplete_Neg)
@@ -2351,7 +2351,7 @@ struct s {
   double x;
 };
 )SRC"),
-                 "Duplicate member x in structure s");
+                 "duplicate member 'x'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationDuplicateStructDeclaration_Neg)
@@ -2369,7 +2369,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Structure x was already declared");
+                 "redefinition of 'struct x'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationIncompleteMember_Neg)
@@ -2382,7 +2382,7 @@ struct a {
   struct s g;
 };
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'g' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationInvalidArrayMember_Neg)
@@ -2414,7 +2414,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'y' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationVoidMember_Neg)
@@ -2425,7 +2425,7 @@ struct s {
   void x;
 };
 )SRC"),
-                 "Cannot declare structure member with incomplete type");
+                 "member 'x' has incomplete type 'void'");
 }
 
 
@@ -2641,7 +2641,7 @@ int main(void) {
     struct s *ptr = &foo;
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionDistinctStructTypes_Neg)
@@ -2665,7 +2665,7 @@ int main(void) {
     return blah.a;
 }
 )SRC"),
-                 "Cannot define a variable with incomplete type");
+                 "variable 'blah' has incomplete type 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionInvalidShadowSelfReference_Neg)
@@ -2686,7 +2686,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionMemberNameWrongScope_Neg)
@@ -2707,7 +2707,7 @@ int main(void) {
     return foo.b; // foo belongs to outer struct s type, which doesn't have member 'b'
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionMemberNameWrongScopeNested_Neg)
@@ -2735,7 +2735,7 @@ int main(void) {
                           // doesn't have member 'b'
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionMismatchedReturnType_Neg)
@@ -2758,7 +2758,7 @@ struct s return_struct(void) {
   return result;
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 TEST_F(PipelineTest, Chapter18_TagResolutionShadowedTagBranchMismatch_Neg)
@@ -2782,7 +2782,7 @@ int main(void) {
     }
 }
 )SRC"),
-                 "Structure s was already declared");
+                 "redefinition of 'struct s'");
 }
 
 
@@ -2798,7 +2798,7 @@ union s {
     int foo(void);
 };
 )SRC"),
-                 "Can't declare structure member with function type");
+                 "member 'foo' has function type 'int \\(void\\)'");
 }
 
 
@@ -2814,5 +2814,5 @@ struct s {
     int foo(void);
 };
 )SRC"),
-                 "Can't declare structure member with function type");
+                 "member 'foo' has function type 'int \\(void\\)'");
 }

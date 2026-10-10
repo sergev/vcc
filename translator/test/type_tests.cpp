@@ -601,7 +601,7 @@ TEST_F(TranslateTestRiscv, AlignasLessStrict)
 
 TEST_F(TranslateTestRiscv, AlignasNotPowerOfTwo)
 {
-    EXPECT_DEATH(CompileUnit("_Alignas(3) char c;"), "Invalid alignment 3");
+    EXPECT_DEATH(CompileUnit("_Alignas(3) char c;"), "invalid alignment 3 in '_Alignas'");
 }
 
 TEST_F(TranslateTestRiscv, AlignasNotConstant)
@@ -611,23 +611,23 @@ TEST_F(TranslateTestRiscv, AlignasNotConstant)
 
 TEST_F(TranslateTestRiscv, AlignasTypedef)
 {
-    EXPECT_DEATH(CompileUnit("typedef _Alignas(8) int T;"), "_Alignas on a typedef");
+    EXPECT_DEATH(CompileUnit("typedef _Alignas(8) int T;"), "'_Alignas' cannot be applied to a typedef");
 }
 
 TEST_F(TranslateTestRiscv, AlignasFunction)
 {
-    EXPECT_DEATH(CompileUnit("_Alignas(8) int f(void);"), "_Alignas on a function");
+    EXPECT_DEATH(CompileUnit("_Alignas(8) int f(void);"), "'_Alignas' cannot be applied to a function");
 }
 
 TEST_F(TranslateTestRiscv, AlignasRegister)
 {
     EXPECT_DEATH(CompileUnit("void f(void) { register _Alignas(8) int r = 0; }"),
-                 "_Alignas on a register variable");
+                 "'_Alignas' cannot be applied to a register variable");
 }
 
 TEST_F(TranslateTestRiscv, AlignasParameter)
 {
-    EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"), "_Alignas on a parameter");
+    EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"), "'_Alignas' cannot be applied to a parameter");
 }
 
 // _Alignas on a member: its offset, and the struct's alignment and size, follow it.
@@ -648,7 +648,7 @@ TEST_F(TranslateTestRiscv, AlignasMember)
 
 TEST_F(TranslateTestRiscv, AlignasBitField)
 {
-    EXPECT_DEATH(CompileUnit("struct B { _Alignas(8) int x : 3; };"), "_Alignas on a bit-field");
+    EXPECT_DEATH(CompileUnit("struct B { _Alignas(8) int x : 3; };"), "'_Alignas' cannot be applied to a bit-field");
 }
 
 TEST_F(TranslateTestRiscv, AlignasMemberLessStrict)

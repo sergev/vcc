@@ -43,7 +43,7 @@ int main(void) {
     return foo(1, 2);
 }
 )"),
-                 "Duplicate parameter name a");
+                 "redefinition of parameter 'a'");
 }
 
 // Duplicate parameter names in a function definition.
@@ -57,7 +57,7 @@ int main(void) {
     return foo(1, 2);
 }
 )"),
-                 "Duplicate parameter name a");
+                 "redefinition of parameter 'a'");
 }
 
 // A function (external linkage) and a variable (no linkage) with the same name
@@ -70,7 +70,7 @@ TEST_F(PipelineTest, Chapter9_RedefineFunAsVar_Neg)
     return foo;
 }
 )"),
-                 "Duplicate variable declaration foo");
+                 "declaration of 'foo' shadows an earlier one, which is not allowed");
 }
 
 // A function's parameter list and body share a scope; redeclaring 'a' is illegal.
@@ -85,7 +85,7 @@ int main(void) {
     return foo(3);
 }
 )"),
-                 "Duplicate variable declaration a");
+                 "redefinition of 'a'");
 }
 
 // As above, in the other declaration order.
@@ -97,7 +97,7 @@ TEST_F(PipelineTest, Chapter9_RedefineVarAsFun_Neg)
     return foo;
 }
 )"),
-                 "Duplicate variable declaration foo");
+                 "redefinition of 'foo'");
 }
 
 // A function must be declared before it is called.
@@ -254,7 +254,7 @@ int main(void) {
     return x();
 }
 )"),
-                 "Duplicate variable declaration x");
+                 "declaration of 'x' shadows an earlier one, which is not allowed");
 }
 
 // A prototype and a definition of foo with different arity conflict.
@@ -270,7 +270,7 @@ int foo(int a, int b) {
     return 4;
 }
 )"),
-                 "Conflicting declarations for function foo");
+                 "conflicting types for 'foo'");
 }
 
 // Two block-scope declarations of foo in different functions conflict.
@@ -288,7 +288,7 @@ int bar(void) {
     return foo(1, 2);
 }
 )"),
-                 "Conflicting declarations for function foo");
+                 "conflicting types for 'foo'");
 }
 
 // A function designator is not an arithmetic operand for division.
@@ -319,7 +319,7 @@ int foo(void){
     return 4;
 }
 )"),
-                 "Defined function foo twice");
+                 "redefinition of 'foo'");
 }
 
 // A function defined twice, with an intervening local declaration of it.
@@ -338,7 +338,7 @@ int foo(void){
     return 4;
 }
 )"),
-                 "Defined function foo twice");
+                 "redefinition of 'foo'");
 }
 
 // --- valid-dir programs reclassified as negatives by the no-shadowing rule ---
@@ -364,7 +364,7 @@ int foo(void) {
     return 8;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'foo' shadows an earlier one, which is not allowed");
 }
 
 // A nested local variable shadows an enclosing function declaration.
@@ -385,7 +385,7 @@ int foo(void) {
     return 4;
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'foo' shadows an earlier one, which is not allowed");
 }
 
 // A parameter shadows a file-scope function of the same name.
@@ -403,7 +403,7 @@ int main(void) {
     return a() + b(2);
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // A parameter shadows the function it belongs to.
@@ -417,7 +417,7 @@ int main(void) {
     return a(1);
 }
 )"),
-                 "Duplicate variable declaration");
+                 "declaration of 'a' shadows an earlier one, which is not allowed");
 }
 
 // foo takes two parameters but is called with one.
@@ -561,7 +561,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Function declared with initializer");
+                 "function 'foo' cannot have an initializer");
 }
 
 // A function declaration is not permitted in a for-loop header.
