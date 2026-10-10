@@ -41,12 +41,15 @@ stack, release on `longjmp`, and no runtime call.
   registers pushed under Y before it pops them.
 - **MSP430 is done** ([Msp430_Backend.md](Msp430_Backend.md#alloca)): `--frame-pointer`
   (r4; `VCC_MSP430_FRAME_POINTER` runs the whole MSP430 suite so) and alloca on it.
+- **MMIX is done** ([Mmix_Backend.md](Mmix_Backend.md#alloca)): `--frame-pointer` (`$253`,
+  saved in a slot of the frame; `VCC_MMIX_FRAME_POINTER` runs the whole MMIX suite so)
+  and alloca on it. The interop `regcheck` harness now checks `$253` too.
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
   inline, and a function using them gets a frame (`backend/wasm/frame.c:251`).
-- **Every other target but BESM-6** runs `alloca` and `co_alloca` on the LIFO arena in
-  `libc/common/costack.c`: 64 KiB, 1 KiB with a 16-bit `size_t`.
+- **No target is left on the arena** (`libc/common/costack.c`): every coroutine target
+  sets `stack_alloca`. The translator's arena branch is dead code until A11 removes it.
 - **Every backend assumes the stack pointer is fixed after the prologue:**
   - The outgoing stack arguments are stored at `sp + off` (riscv, aarch64, arm32, x86,
     msp430, mmix). AVR and BESM-6 push them instead.
@@ -96,25 +99,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
 
-### A8. MMIX: a frame-pointer mode, then alloca
-
-- **A8a. Frame-pointer mode.** First read GCC's `mmix.c` to see how it uses `$253` for alloca,
-  and follow it. `$253` is outside the allocator's pool (`regalloc.c:19`).
-  - Address slots, the vararg area and incoming stack arguments from `$253`
-    (`frame.c:407-465`).
-  - Save the caller's `$253` (GCC's ABI makes it callee-saved).
-  - Epilogue: `$254 = $253 - …` (`frame.c:911-963`).
-  - Validate with the whole suite forced into the mode, as MSP430's was
-    (`VCC_MSP430_FRAME_POINTER` in `msp430_test.h`).
-- **A8b. alloca.**
-  - Intercept in `gen_call` (`call.c:294`, beside `is_va_start`); exclude the builtin from
-    `makes_call` (`call.c:20`).
-  - `has_alloca` forces the fp mode and a frame, blocks tail calls (`call.c:377`) and the
-    in-place `pop` (`call.c:232`).
-  - Alignment 8. Selection: `subu $254, $254, n; andn $254, $254, 7; addu dst, $254,
-    outgoing`.
-- **Tests:** `mmix-tests` with interop with `mmix-knuth-mmixware-gcc`.
-
 ### A9. wasm32: switch to the final contract
 
 wasm already allocates on the shadow stack.
@@ -145,9 +129,8 @@ wasm already allocates on the shadow stack.
 
 Once every target sets `stack_alloca`:
 - Remove `gen_alloca_release` and the arena branch of `gen_alloca` from the translator,
-  with the tests of the arena: the run suite's `AllocaArenaOverflow` and the translator's
-  `AllocaOnArena`, on MMIX (should A8 come before the others, move it to a target still
-  on the arena).
+  with the run suite's `AllocaArenaOverflow`, now skipped everywhere (the translator's
+  `AllocaOnArena` went with A8).
 - Mark `co_alloca`'s arena use outside coroutines as gone in
   `docs/Coroutines_Internals.md`.
 - Decide whether `costack.c`'s `__coro_stack_*` stay. They are still needed for coroutines'
@@ -164,8 +147,6 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A8 is the largest left, because of its new frame-pointer mode; its "a" half is worth
-  doing separately, validated by the whole suite as MSP430's was.
 - A10 is optional.
 - The risks:
   - peephole passes that model sp as constant;

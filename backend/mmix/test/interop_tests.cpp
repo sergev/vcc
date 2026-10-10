@@ -229,8 +229,8 @@ int PFX_check(void)
 )";
 
 // Calls f(a) with values in its own locals below the hole, and returns f's result when
-// rJ (as pushgo set it), $254, rD and those locals came back unchanged; else minus a mask
-// of what changed.
+// rJ (as pushgo set it), $254, rD, those locals and $253 came back unchanged; else minus
+// a mask of what changed.
 const char regcheck_asm[] = R"(
 	.text
 	.global	regcheck
@@ -240,8 +240,9 @@ regcheck:
 	set	$3,$254
 	get	$4,rD
 	setl	$5,#1234
-	set	$9,$1
-	pushgo	$8,$0,0
+	set	$8,$253
+	set	$10,$1
+	pushgo	$9,$0,0
 L:rc:	get	$6,rJ
 	geta	$7,L:rc
 	cmpu	$10,$6,$7
@@ -257,10 +258,13 @@ L:rc:	get	$6,rJ
 	cmpu	$10,$5,$12
 	zsnz	$10,$10,8
 	or	$11,$11,$10
+	cmpu	$10,$253,$8
+	zsnz	$10,$10,16
+	or	$11,$11,$10
 	negu	$12,0,$11
-	csnz	$8,$11,$12
+	csnz	$9,$11,$12
 	put	rJ,$2
-	set	$0,$8
+	set	$0,$9
 	pop	1,0
 )";
 
@@ -316,6 +320,69 @@ clobber:
         int main(void) { return regcheck(clobber, 5) == -2 ? 0 : 1; }
     )");
     EXPECT_EQ("", Run(ours + regcheck_asm + bad, "crt0.o"));
+    EXPECT_EQ(0, exit_status);
+}
+
+// alloca both ways with GCC: ours called by GCC's code and by the harness, which checks
+// $253 and $254 come back, and GCC's called by ours; eighteen arguments, two on the
+// stack beside the memory.  (GCC has __builtin_alloca built in, we declare it.)
+TEST_F(MmixTest, RunAllocaWithGcc)
+{
+    SKIP_IF_NO_MMIX_TOOLS();
+    const char *sum = R"(
+long NAME(long n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
+          long j, long k, long l, long m, long o, long p, long q, long r)
+{
+    long *v = __builtin_alloca(n * sizeof(long));
+    for (long x = 0; x < n; x++)
+        v[x] = x + a;
+    long s = 0;
+    for (long x = 0; x < n; x++)
+        s += v[x];
+    return s + b + c + d + e + f + g + h + i + j + k + l + m + o + p + q + r;
+}
+)";
+    auto named = [&](const char *name) {
+        std::string t = sum;
+        t.replace(t.find("NAME"), 4, name);
+        return t;
+    };
+    const char *decl = "(long, long, long, long, long, long, long, long, long, long, long, "
+                       "long, long, long, long, long, long, long);\n";
+    std::string ours = std::string(R"(
+void *__builtin_alloca(unsigned long);
+long regcheck(long (*f)(long), long a);
+long their_check(void);
+void putbyte(int c);
+long their_sum)") + decl + named("our_sum") + R"(
+long our_one(long n)
+{
+    long *v = __builtin_alloca(n * sizeof(long));
+    for (long x = 0; x < n; x++)
+        v[x] = x;
+    long s = 0;
+    for (long x = 0; x < n; x++)
+        s += v[x];
+    return s;
+}
+int main(void)
+{
+    long *q = __builtin_alloca(16);
+    q[0]    = 5;
+    long r  = their_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17);
+    putbyte("0123456789abcdef"[(r == 207) + 2 * their_check() + 4 * (q[0] == 5) +
+                               8 * (regcheck(our_one, 5) == 10)]);
+    return 0;
+}
+)";
+    std::string theirs = std::string("long our_sum") + decl + named("their_sum") + R"(
+long their_check(void)
+{
+    return our_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17) == 207;
+}
+)";
+    EXPECT_EQ("f", Run(CompileToMmix(ours.c_str()) + regcheck_asm, "crt0.o", &theirs, { "-O2" },
+                       ".gcc"));
     EXPECT_EQ(0, exit_status);
 }
 

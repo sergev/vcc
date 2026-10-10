@@ -287,8 +287,14 @@ void gen_call(Gen *g, const Tac_Instruction *in);
 bool gen_tail_call(Gen *g, const Tac_Instruction *in);
 // The stack bytes of the arguments of call `in`.
 int call_stack_size(const Gen *g, const Tac_Instruction *in);
-// Whether the function makes a call (__va_start is none: it is expanded in place).
+// Whether the function makes a call (__va_start and the stack builtins are none: they
+// are expanded in place).
 bool makes_call(const Tac_TopLevel *tl);
+// Whether `in` is a call of __builtin_alloca, __builtin_stack_save or
+// __builtin_stack_restore, and whether function `tl` makes one: it then moves $254 in
+// its body, and has its frame from $253.
+bool mmix_stack_builtin(const Tac_Instruction *in);
+bool mmix_moves_sp(const Tac_TopLevel *tl);
 // The number of named parameters of the function.
 int param_count(const Gen *g);
 

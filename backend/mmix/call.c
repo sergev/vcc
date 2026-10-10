@@ -14,10 +14,26 @@ static bool is_va_start(const Tac_Instruction *in)
     return !in->u.fun_call.indirect && strcmp(in->u.fun_call.fun_name, "__va_start") == 0;
 }
 
+bool mmix_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+bool mmix_moves_sp(const Tac_TopLevel *tl)
+{
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && mmix_stack_builtin(in))
+            return true;
+    return false;
+}
+
 bool makes_call(const Tac_TopLevel *tl)
 {
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
-        if ((in->kind == TAC_INSTRUCTION_FUN_CALL && !is_va_start(in)) ||
+        if ((in->kind == TAC_INSTRUCTION_FUN_CALL && !is_va_start(in) && !mmix_stack_builtin(in)) ||
             in->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN)
             return true;
     return false;
@@ -283,6 +299,30 @@ static void gen_va_start(Gen *g, const Tac_Instruction *in)
     mem_op_at(g, MMIX_STO, REG_B, REG_A, 0);
 }
 
+// save: dst = $254; restore: $254 = arg; alloca: $254 -= (arg + 7) & -8, dst = $254
+// plus the outgoing area, known before selection (layout_frame).  The frame is from
+// $253, and the epilogue sets $254 back from it.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    if (strcmp(name, "__builtin_stack_restore") == 0) {
+        move_reg(g, MMIX_SP, use_val(g, in->u.fun_call.args, REG_A, NULL));
+        return;
+    }
+    if (strcmp(name, "__builtin_alloca") == 0) {
+        int n = use_val(g, in->u.fun_call.args, REG_A, NULL);
+        emit3(g, MMIX_ADDU, mmix_reg(REG_A), mmix_reg(n), mmix_imm(7));
+        emit3(g, MMIX_ANDN, mmix_reg(REG_A), mmix_reg(REG_A), mmix_imm(7));
+        emit3(g, MMIX_SUBU, mmix_reg(MMIX_SP), mmix_reg(MMIX_SP), mmix_reg(REG_A));
+    }
+    if (!dst)
+        return;
+    int r = def_reg(g, dst, REG_A);
+    add_offset(g, r, MMIX_SP, strcmp(name, "__builtin_alloca") == 0 ? g->out_size : 0);
+    def_done(g, r, dst, true);
+}
+
 // pushj $H, H the hole: the arguments go in $(H+1).. and on the stack at 0($254) up,
 // the result comes back in $H.  First the copies of the large structure arguments
 // (the callee copies too, as GCC's does, but ours keep an argument apart from the
@@ -295,6 +335,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
 {
     if (is_va_start(in)) {
         gen_va_start(g, in);
+        return;
+    }
+    if (mmix_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
         return;
     }
     const Tac_Type *ft = in->u.fun_call.fun_type;
@@ -374,7 +418,7 @@ static bool same_result(const Tac_Type *a, const Tac_Type *b)
 bool gen_tail_call(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type, *ours = g->tl->u.function.type;
-    if (is_va_start(in) || g->leaf || g->frame_size != 0 || !ft || ft->kind != TAC_TYPE_FUN_TYPE ||
+    if (is_va_start(in) || mmix_stack_builtin(in) || g->leaf || g->frame_size != 0 || !ft || ft->kind != TAC_TYPE_FUN_TYPE ||
         !ours || ours->kind != TAC_TYPE_FUN_TYPE ||
         !same_result(ft->u.fun_type.ret_type, ours->u.fun_type.ret_type))
         return false;

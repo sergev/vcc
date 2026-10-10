@@ -84,6 +84,56 @@ pop 1, 0
     mmix_frame_pointer = false;
 }
 
+// alloca: the frame from $253 (without --frame-pointer), $254 lowered by the size
+// rounded to 8 through $248, the memory above the outgoing arguments; the epilogue sets
+// $254 back from $253.
+TEST_F(MmixTest, AllocaLeaf)
+{
+    EXPECT_EQ(R"(subu $254, $254, 8
+sto $253, $254, 0
+set $253, $254
+addu $248, $0, 7
+andn $248, $248, 7
+subu $254, $254, $248
+addu $2, $254, 0
+sto $0, $2, 0
+addu $0, $0, 1
+set $254, $253
+ldo $253, $254, 0
+addu $254, $254, 8
+pop 1, 0
+)",
+              Code(CompileToMmix(R"(
+void *__builtin_alloca(unsigned long);
+long f(long n)
+{
+    long *p = __builtin_alloca(n);
+    p[0] = n;
+    return p[0] + 1;
+}
+)")));
+}
+
+TEST_F(MmixTest, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToMmix(R"(
+void *__builtin_alloca(unsigned long);
+long g(long, long, long, long, long, long, long, long, long, long, long, long, long, long,
+       long, long, long, long);
+long f(long n, long k)
+{
+    long *p = __builtin_alloca(n);
+    p[0] = k;
+    return g(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, p[0], k) + p[0];
+}
+)"));
+    EXPECT_NE(std::string::npos, code.find("subu $254, $254, $248\naddu $4, $254, 16\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("sto $1, $254, 0\nsto $1, $254, 8\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("set $254, $253\nldo $253, $254, 16\naddu $254, $254, 24\npop 1, 0\n"))
+        << code;
+}
+
 static const char seventeen[] = "long a0, long a1, long a2, long a3, long a4, long a5, long a6, "
                                 "long a7, long a8, long a9, long a10, long a11, long a12, "
                                 "long a13, long a14, long a15";

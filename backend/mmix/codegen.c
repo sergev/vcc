@@ -21,7 +21,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
 {
     Gen g;
     gen_init(&g, program, tl);
-    g.fp = mmix_frame_pointer;
+    g.fp = mmix_frame_pointer || mmix_moves_sp(tl);
     if (mmix_regalloc)
         gen_regalloc(&g);
     layout_frame(&g);

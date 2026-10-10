@@ -20,7 +20,7 @@ extern bool mmix_regalloc;
 // (--no-peephole).
 extern bool mmix_peephole_on;
 // Address the frame from $253, set to $254 by the prologue, and restore $254 from it in
-// the epilogue (--frame-pointer).
+// the epilogue (--frame-pointer); a function calling a stack builtin always does.
 extern bool mmix_frame_pointer;
 
 #ifdef __cplusplus

@@ -275,7 +275,12 @@ static const Target targets[] = {
       0,        // double_mant_dig: binary64
       0,        // no_loop_opt
       1,        // big-endian
-      BITFIELD_PACKED },
+      BITFIELD_PACKED,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from $253
 
     // BESM-6: 48-bit word-oriented machine.
     // sizeof() values are in 8-bit bytes (CHAR_BIT = 8).

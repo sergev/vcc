@@ -829,11 +829,8 @@ standard output, and exit status 255), in every build:
 | `CO_TRAP_NOT_DONE` | `co_result` before the coroutine finished, or after `co_destroy` |
 | `CO_TRAP_NO_SPACE` | an `await`, or a `co_alloca` inside a coroutine, found no spare room left (section 5) |
 
-A `co_alloca` in an ordinary function takes its memory from the stack on wasm32,
-x86-64, AArch64, RISC-V, ARM32, AVR and MSP430, and running out stops the program as
-any stack overflow does. On MMIX it takes it from a fixed arena of the runtime (64 KiB),
-and
-running out is `CO_TRAP_NO_SPACE: co_alloca or alloca`.
+A `co_alloca` in an ordinary function takes its memory from the stack, and running out
+stops the program as any stack overflow does.
 
 ### Warnings
 
@@ -1146,10 +1143,9 @@ void  __coro_pop(void *frame, void *p);
   `f$init(mem, a, b)`. With no parent the frame is the root of its own task, and the
   bytes of `mem` past the frame are that task's arena.
 - `co_alloca(f, extra, ...)` does the same on `(size + extra)` rounded up to 16 bytes,
-  taken in a function from the stack on every target but MMIX, and there with
-  `__coro_alloca` from the runtime's arena (`libc/common/costack.c`; given back by
-  `__coro_stack_restore` to what `__coro_stack_save` returned), or in a coroutine with
-  `__coro_push` from the arena of the task.
+  taken in a function from the stack (`__builtin_alloca`, given back by
+  `__builtin_stack_restore` to what `__builtin_stack_save` returned), or in a coroutine
+  with `__coro_push` from the arena of the task.
 - `co_resume`, `co_cancel` and `co_destroy` are `__coro_resume` with signal 0, 1 and 2.
   It checks the state and the running bit, sets the flags, calls the frame's
   `resume`, and clears the flags. A destroy of a frame that never started only marks

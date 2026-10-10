@@ -39,6 +39,13 @@ static bool runtime_call(void *arg, const Flow *f, const Tac_Instruction *in, co
     return false; // no runtime helpers: multiply, divide and binary64 are instructions
 }
 
+// The stack builtins are expanded in place, through the scratch registers: no call.
+static bool inline_call(void *arg, const Tac_Instruction *in)
+{
+    (void)arg;
+    return mmix_stack_builtin(in);
+}
+
 // A parameter arrives in $i, kept by a call for i < 14.
 // cppcheck-suppress constParameterCallback ; RegAlloc_Target's hook
 static void param_hints(void *arg, StringMap *hints, StringMap *hints_hi)
@@ -93,6 +100,7 @@ void gen_regalloc(Gen *g)
         .runtime_call = runtime_call,
         .param_hints  = param_hints,
         .call_hints   = call_hints,
+        .inline_call  = inline_call,
         .assign       = assign,
         .dead_param   = dead_param,
     };

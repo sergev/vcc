@@ -164,8 +164,7 @@ TEST_F(TranslateTestX86, CoroutineHeaderLp64)
     EXPECT_TRUE(Has(yaml.substr(at, 400), "value: 40")) << yaml.substr(at, 400);
 }
 
-// alloca on the arena: the mark saved at the entry, restored before each return and at
-// the end.
+// alloca: every target has it on its stack, so the TAC holds the builtin alone.
 static int Count(const std::string &yaml, const std::string &what)
 {
     int n = 0;
@@ -192,20 +191,6 @@ void f(int n)
     g(0);
 }
 )";
-
-TEST_F(TranslateTestMmix, AllocaOnArena)
-{
-    std::string yaml = CompileToYaml(alloca_fn);
-    EXPECT_FALSE(Has(yaml, "__builtin_alloca")) << yaml;
-    EXPECT_EQ(1, Count(yaml, "fun_name: __coro_stack_save")) << yaml;
-    EXPECT_EQ(1, Count(yaml, "fun_name: __coro_alloca")) << yaml;
-    EXPECT_EQ(3, Count(yaml, "fun_name: __coro_stack_restore")) << yaml;
-    size_t save = yaml.find("fun_name: __coro_stack_save");
-    EXPECT_LT(save, yaml.find("fun_name: __coro_alloca")) << yaml;
-    // Each return right after a restore.
-    for (size_t at = yaml.find("kind: return"); at != std::string::npos; at = yaml.find("kind: return", at + 1))
-        EXPECT_LT(yaml.rfind("fun_name: g", at), yaml.rfind("fun_name: __coro_stack_restore", at)) << yaml;
-}
 
 // Where the backend has the builtins, the epilogue gives the memory back.
 static void ExpectOnStack(const std::string &yaml)
@@ -237,6 +222,11 @@ TEST_F(TranslateTestAvr, AllocaOnStack)
 }
 
 TEST_F(TranslateTestMsp430, AllocaOnStack)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
+}
+
+TEST_F(TranslateTestMmix, AllocaOnStack)
 {
     ExpectOnStack(CompileToYaml(alloca_fn));
 }

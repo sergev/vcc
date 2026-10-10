@@ -279,6 +279,28 @@ frame, so none returns in place and none makes a tail call. `VCC_MMIX_FRAME_POIN
 in the environment runs every `mmix-tests` test this way; only the assembly goldens
 differ.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the stack, as GCC's code does. The translator passes them on as calls of
+`__builtin_alloca`, `__builtin_stack_save` and `__builtin_stack_restore`, which
+`gen_call` expands in place through `$248`. A function that calls any of them has the
+frame from `$253` as under `--frame-pointer`, whatever the option:
+
+```
+addu    $248, $0, 7
+andn    $248, $248, 7       the size, rounded to 8
+subu    $254, $254, $248
+addu    $2, $254, OUT       the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area, which `layout_frame` knows before selection. The
+epilogue's `set $254, $253` gives the memory back. None of the builtins counts as a
+call: not for `rJ`, the leaf's register numbering or the allocator (its `inline_call`
+hook). The peephole pass needs nothing: `$253` and `$254` are globals, which its
+liveness takes to be always live. `interop_tests.cpp` checks with GCC both ways, and
+through `regcheck`, which now also checks `$253`.
+
 ## Function calls
 
 The MMIXware ABI as GCC implements it, checked against GCC's output and by
