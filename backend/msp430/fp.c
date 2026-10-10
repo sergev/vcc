@@ -148,7 +148,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         break;
     default:
         internal_error("msp430: %s: FP unary operator %d is not implemented", gen_name(g),
-                    in->u.unary.op);
+                       in->u.unary.op);
     }
 }
 

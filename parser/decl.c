@@ -96,7 +96,8 @@ Type *fuse_type_specifiers(const TypeSpec *specs)
     for (const TypeSpec *s = specs; s; s = s->next) {
         if (s->kind == TYPE_SPEC_BASIC) {
             if (struct_spec || union_spec || enum_spec || typedef_spec || atomic_spec) {
-                fatal_error("cannot combine a type specifier with a struct, union, enum or typedef name");
+                fatal_error(
+                    "cannot combine a type specifier with a struct, union, enum or typedef name");
             }
             switch (s->u.basic->kind) {
             case TYPE_VOID:

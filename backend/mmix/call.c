@@ -346,7 +346,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     int cursor = g->copy_off, i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         if (i >= MAX_ARGS)
-            fatal_error("a call in function '%s' passes more than %d arguments, the MMIX limit", gen_name(g), MAX_ARGS);
+            fatal_error("a call in function '%s' passes more than %d arguments, the MMIX limit",
+                        gen_name(g), MAX_ARGS);
         const Tac_Type *t = val_type(g, a);
         copy[i]           = 0;
         if (mmix_is_scalar(t) || struct_in_reg(t))

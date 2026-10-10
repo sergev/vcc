@@ -783,7 +783,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing) {
         if (g->moves_sp)
-            internal_error("riscv: %s: a call's stack arguments past the area reserved", gen_name(g));
+            internal_error("riscv: %s: a call's stack arguments past the area reserved",
+                           gen_name(g));
         g->outgoing = s.stack;
     }
     if (hidden) {

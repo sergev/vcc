@@ -190,7 +190,7 @@ Tac_Instruction *optimize_function(Tac_Instruction *body, OptFlags flags, Tac_To
             // undo each other forever: running into the cap means a bug.
 #ifndef NDEBUG
             internal_error("optimizer: %s does not converge in %d rounds",
-                        fn ? fn->u.function.name : "?", OPT_MAX_ROUNDS);
+                           fn ? fn->u.function.name : "?", OPT_MAX_ROUNDS);
 #else
             OPT_TRACE("[optimize] no fixed point after %d rounds; stopping\n", iter);
             return new_body;

@@ -264,7 +264,8 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         for (const InitItem *item = init->u.items; item; item = item->next)
             gen_member_init(ctx, var_name, base_offset, item, skip_zero);
     } else {
-        internal_error("compound initializer for unsupported type %d in TAC lowering", (int)t->kind);
+        internal_error("compound initializer for unsupported type %d in TAC lowering",
+                       (int)t->kind);
     }
 }
 

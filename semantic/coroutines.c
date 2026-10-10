@@ -258,10 +258,11 @@ bool coroutine_call_allowed(const Expr *call)
 void check_coroutine_name(const Symbol *sym)
 {
     if (sym->kind == SYM_FUNC && sym->u.func.coro)
-        fatal_error("coroutine '%s' may only be named in co_init, co_alloca, co_sizeof, "
-                    "co_alignof or await, or used as a coro_ptr when it takes (void) or "
-                    "(void *)",
-                    sym->name);
+        fatal_error(
+            "coroutine '%s' may only be named in co_init, co_alloca, co_sizeof, "
+            "co_alignof or await, or used as a coro_ptr when it takes (void) or "
+            "(void *)",
+            sym->name);
 }
 
 bool coroutine_value(Expr *e, const Symbol *sym)
@@ -426,8 +427,8 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
         static const Type void_type = { .kind = TYPE_VOID };
         Type *void_ptr              = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
         void_ptr->u.pointer.target  = clone_type(&void_type, __func__, __FILE__, __LINE__);
-        storage = coerce_for_assignment(typecheck_and_decay(storage), void_ptr,
-                                        "passing the storage");
+        storage =
+            coerce_for_assignment(typecheck_and_decay(storage), void_ptr, "passing the storage");
         free_type(void_ptr);
         bytes         = size_argument(bytes, "co_init: the size");
         storage->next = bytes;

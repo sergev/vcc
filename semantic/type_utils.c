@@ -281,7 +281,7 @@ bool is_signed(const Type *t)
     case TYPE_UNION:
     default:
         internal_error("is_signed: Signedness doesn't make sense for non-integral type %s",
-                    type_kind_str[t->kind]);
+                       type_kind_str[t->kind]);
     }
     return false; // Unreachable
 }

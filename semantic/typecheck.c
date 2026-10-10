@@ -312,7 +312,7 @@ Type *common_pointer_type(const Expr *e1, const Expr *e2)
     if (e2_void_ptr && p1->kind == TYPE_POINTER)
         return e2->type;
     fatal_error("incompatible pointer types ('%s' and '%s')", type_to_c(e1->type),
-                        type_to_c(e2->type));
+                type_to_c(e2->type));
 }
 
 // Parser represents f(void) as a single unnamed TYPE_VOID param; treat as no params.
@@ -415,8 +415,8 @@ Expr *coerce_for_assignment(Expr *e, const Type *target_type, const char *contex
     if (e_type->kind == TYPE_POINTER && target_type->kind == TYPE_ARRAY &&
         e_type->u.pointer.target->kind == target_type->u.array.element->kind)
         return e;
-    fatal_error("cannot convert '%s' to '%s' when %s", type_to_c(e->type),
-                type_to_c(target_type), context);
+    fatal_error("cannot convert '%s' to '%s' when %s", type_to_c(e->type), type_to_c(target_type),
+                context);
 }
 
 //

@@ -426,7 +426,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         }
         default:
             internal_error("wasm: %s: unary operator %d on floating point", g->fn->name,
-                        in->u.unary.op);
+                           in->u.unary.op);
         }
         end_dst(g, dst);
         return;
@@ -450,7 +450,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     default:
         internal_error("wasm: %s: unary operator %d is not implemented", g->fn->name,
-                    in->u.unary.op);
+                       in->u.unary.op);
     }
     narrow(g, type_of(g, dst->u.var_name));
     end_dst(g, dst);
@@ -541,7 +541,8 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, Wasm_ValType t)
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2, *dst = in->u.binary.dst;
     Wasm_Op op32, op64;
     if (!fp_binop(in->u.binary.op, &op32, &op64))
-        internal_error("wasm: %s: binary operator %d on floating point", g->fn->name, in->u.binary.op);
+        internal_error("wasm: %s: binary operator %d on floating point", g->fn->name,
+                       in->u.binary.op);
     begin_dst(g, dst);
     push_val(g, a, t);
     push_val(g, b, t);
@@ -599,7 +600,7 @@ static void check_ld_operand(const Gen *g, const Tac_Val *v)
 {
     if (v->kind == TAC_VAL_CONSTANT && v->u.constant->kind != TAC_CONST_LONG_DOUBLE)
         internal_error("wasm: %s: a long double operand of constant kind %d", g->fn->name,
-                    v->u.constant->kind);
+                       v->u.constant->kind);
 }
 
 // A comparison routine's int on the stack, against 0 by operator op.
@@ -1236,7 +1237,7 @@ static void select_instr(Gen *g, const Tac_Instruction *in)
         break;
     }
     internal_error("wasm: %s: TAC %s is not implemented", g->fn->name,
-                tac_instruction_name(in->kind));
+                   tac_instruction_name(in->kind));
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

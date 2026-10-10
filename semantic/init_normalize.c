@@ -202,8 +202,9 @@ static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, 
                 if (!is_aggregate(sub))
                     fatal_error("designator in a scalar initializer");
                 if (*sub_init && (*sub_init)->kind != INITIALIZER_COMPOUND)
-                    fatal_error("a designator into a subobject initialized by an expression is "
-                                "not supported");
+                    fatal_error(
+                        "a designator into a subobject initialized by an expression is "
+                        "not supported");
                 if (!*sub_init)
                     *sub_init = new_canonical(sub);
                 fill(sub, *sub_init, cur, false, true, mode);

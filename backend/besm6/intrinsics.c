@@ -259,8 +259,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         const Tac_Val *addr = instr->u.fun_call.args;
         const Tac_Val *acc  = addr ? addr->next : NULL;
         if (!acc || acc->next)
-            fatal_error("intrinsic '%s' takes exactly two arguments: an address and a word",
-                        name);
+            fatal_error("intrinsic '%s' takes exactly two arguments: an address and a word", name);
 
         // A constant address becomes the instruction's own 12-bit offset field
         // (`,ext, 2073`); a computed one arrives in C.  The hardware genuinely needs the
@@ -330,8 +329,8 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         if (mask && !mask->next && mask->kind == TAC_VAL_CONSTANT) {
             Besm_ConstWord w = besm_const_word(mask->u.constant);
             if (w.is_real || w.word > 077777)
-                fatal_error("intrinsic '%s': mask %llo does not fit the 15-bit address field",
-                            name, (unsigned long long)w.word);
+                fatal_error("intrinsic '%s': mask %llo does not fit the 15-bit address field", name,
+                            (unsigned long long)w.word);
 
             Besm_Instr *vtm = emit(block, tail, BESM_REG_VTM);
             vtm->reg        = 0; // the register field being 0 *is* the mode write
@@ -384,9 +383,10 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         const Tac_Val *ea  = op ? op->next : NULL;
         const Tac_Val *acc = ea ? ea->next : NULL;
         if (!acc || acc->next)
-            fatal_error("intrinsic '%s' takes exactly three arguments: an opcode, an effective "
-                        "address and a word",
-                        name);
+            fatal_error(
+                "intrinsic '%s' takes exactly three arguments: an opcode, an effective "
+                "address and a word",
+                name);
         if (op->kind != TAC_VAL_CONSTANT)
             fatal_error("intrinsic '%s': the opcode must be a compile-time constant", name);
 

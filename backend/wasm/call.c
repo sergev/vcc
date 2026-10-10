@@ -378,8 +378,8 @@ static void declare_helper(Gen *g, const char *name, const Tac_Type *ft)
         if (strcmp(g->helpers[i].name, name) == 0)
             return;
     if (g->nhelpers >= (int)(sizeof(g->helpers) / sizeof(g->helpers[0])))
-        fatal_error("function '%s' needs more than %d runtime routines, the wasm32 limit", g->fn->name,
-                    (int)(sizeof(g->helpers) / sizeof(g->helpers[0])));
+        fatal_error("function '%s' needs more than %d runtime routines, the wasm32 limit",
+                    g->fn->name, (int)(sizeof(g->helpers) / sizeof(g->helpers[0])));
     Wasm_Sig sig;
     wasm_signature(ft, &sig);
     g->helpers[g->nhelpers].name  = name;

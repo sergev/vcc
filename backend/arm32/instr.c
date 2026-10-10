@@ -682,6 +682,6 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
         break; // the slot is laid out with the frame
     default:
         internal_error("arm32: %s: %s is not implemented", gen_name(g),
-                    tac_instruction_name(in->kind));
+                       tac_instruction_name(in->kind));
     }
 }

@@ -21,13 +21,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#include "srcloc.h"
 #include "xalloc.h"
 
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "srcloc.h"
 
 int xalloc_debug; // Enable manually for debug
 
@@ -65,8 +66,8 @@ void *xalloc(size_t size, const char *funcname, const char *filename, unsigned l
     /* Allocate memory using malloc */
     void *ptr = calloc(1, total_size);
     if (ptr == NULL) {
-        diag_error(diag_loc, "out of memory: %zu bytes for %s() at %s:%u", size, funcname,
-                   filename, lineno);
+        diag_error(diag_loc, "out of memory: %zu bytes for %s() at %s:%u", size, funcname, filename,
+                   lineno);
         exit(1);
     }
 

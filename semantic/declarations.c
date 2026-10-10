@@ -372,12 +372,12 @@ static void validate_struct_definition(const char *tag, const Field *members)
             continue;
         }
         if (unalias(m->u.member.type)->kind == TYPE_FUNCTION) {
-            fatal_error("member '%s' has function type '%s'", m->u.member.name ? m->u.member.name : "",
-                        type_to_c(m->u.member.type));
+            fatal_error("member '%s' has function type '%s'",
+                        m->u.member.name ? m->u.member.name : "", type_to_c(m->u.member.type));
         }
         if (!is_complete(m->u.member.type)) {
-            fatal_error("member '%s' has incomplete type '%s'", m->u.member.name ? m->u.member.name : "",
-                        type_to_c(m->u.member.type));
+            fatal_error("member '%s' has incomplete type '%s'",
+                        m->u.member.name ? m->u.member.name : "", type_to_c(m->u.member.type));
         }
         if (m->u.member.name && map_get(&names, m->u.member.name, NULL)) {
             fatal_error("duplicate member '%s'", m->u.member.name);
@@ -828,7 +828,8 @@ static void typecheck_local_var_decl(const Declaration *d)
             if (existing && (existing->kind == SYM_LOCAL ||
                              (existing->kind == SYM_STATIC && existing->block_scope &&
                               !existing->u.static_var.global))) {
-                error_at_previous(decl->name, "'%s' is declared both with and without linkage", decl->name);
+                error_at_previous(decl->name, "'%s' is declared both with and without linkage",
+                                  decl->name);
             }
             if (existing && unalias(existing->type)->kind != unalias(var_type)->kind) {
                 error_at_previous(decl->name, "conflicting types for '%s'", decl->name);
@@ -1106,19 +1107,21 @@ static void typecheck_fn_decl(ExternalDecl *d)
     const Type *ret = unalias(fun_type->u.function.return_type);
     bool ret_ok     = (ret->kind == TYPE_VOID) || is_complete(ret);
     if (has_body && (!ret_ok || !all_params_complete)) {
-        fatal_error("function '%s' has an incomplete return or parameter type",
-                    d->u.function.name);
+        fatal_error("function '%s' has an incomplete return or parameter type", d->u.function.name);
     }
     bool global      = !is_static(d->u.function.specifiers);
     Symbol *existing = symtab_get_opt(d->u.function.name);
     bool defined     = has_body;
     if (existing) {
         if (unalias(existing->type)->kind != fun_type->kind) {
-            error_at_previous(d->u.function.name, "redefinition of '%s' as a different kind of symbol", d->u.function.name);
+            error_at_previous(d->u.function.name,
+                              "redefinition of '%s' as a different kind of symbol",
+                              d->u.function.name);
         }
         if (existing->kind == SYM_FUNC) {
             if (!compatible_type(existing->type, adjusted_type)) {
-                error_at_previous(d->u.function.name, "conflicting types for '%s'", d->u.function.name);
+                error_at_previous(d->u.function.name, "conflicting types for '%s'",
+                                  d->u.function.name);
             }
             if (existing->u.func.defined && has_body) {
                 error_at_previous(d->u.function.name, "redefinition of '%s'", d->u.function.name);
@@ -1191,9 +1194,10 @@ static void typecheck_fn_decl(ExternalDecl *d)
                 }
                 *tail = item;
             } else {
-                fatal_error("non-void function '%s' may reach its end without "
-                            "returning a value",
-                            d->u.function.name);
+                fatal_error(
+                    "non-void function '%s' may reach its end without "
+                    "returning a value",
+                    d->u.function.name);
             }
         }
 
@@ -1297,8 +1301,7 @@ static void typecheck_file_scope_var_decl(Declaration *d)
             init_list = build_static_init(var_type, &decl->init);
         }
         if (!is_complete(var_type) && init_kind != INIT_NONE) {
-            fatal_error("variable '%s' has incomplete type '%s'", decl->name,
-                            type_to_c(var_type));
+            fatal_error("variable '%s' has incomplete type '%s'", decl->name, type_to_c(var_type));
         }
         Symbol *existing = symtab_get_opt(decl->name);
         if (existing) {

@@ -441,8 +441,7 @@ Expr *typecheck_call_args(const Type *fn_type, Expr *args, const char *name)
         if (p) {
             char context[300];
             if (name)
-                snprintf(context, sizeof(context), "passing argument %d of '%s'", arg_number,
-                         name);
+                snprintf(context, sizeof(context), "passing argument %d of '%s'", arg_number, name);
             else
                 snprintf(context, sizeof(context), "passing argument %d", arg_number);
             new_arg = coerce_for_assignment(typecheck_and_decay(arg), p->type, context);
@@ -888,13 +887,13 @@ static Expr *typecheck_expr_at(Expr *e)
             // For struct/union operands the tags must match, too.
             if ((then_ty->kind == TYPE_STRUCT || then_ty->kind == TYPE_UNION) &&
                 strcmp(then_ty->u.struct_t.name, else_ty->u.struct_t.name) != 0) {
-                fatal_error("incompatible operand types in '?:' ('%s' and '%s')", type_of(then_expr),
-                            type_of(else_expr));
+                fatal_error("incompatible operand types in '?:' ('%s' and '%s')",
+                            type_of(then_expr), type_of(else_expr));
             }
             result_type = then_expr->type;
         } else {
             fatal_error("incompatible operand types in '?:' ('%s' and '%s')", type_of(then_expr),
-                            type_of(else_expr));
+                        type_of(else_expr));
         }
         free_type(e->type);
         e->type             = clone_type(result_type, __func__, __FILE__, __LINE__);

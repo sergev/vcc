@@ -424,7 +424,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
         const Type *element_type = unalias(var_type->u.array.element);
         if (element_type->kind != TYPE_CHAR && element_type->kind != TYPE_SCHAR &&
             element_type->kind != TYPE_UCHAR) {
-            fatal_error("cannot initialize array of type '%s' with a string literal", type_to_c(var_type));
+            fatal_error("cannot initialize array of type '%s' with a string literal",
+                        type_to_c(var_type));
         }
         size_t string_length;
         char *decoded =
@@ -438,7 +439,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             array_size = get_array_size(var_type);
             if (string_length > array_size) {
                 xfree(decoded);
-                fatal_error("initializer string for array of type '%s' is too long", type_to_c(var_type));
+                fatal_error("initializer string for array of type '%s' is too long",
+                            type_to_c(var_type));
             }
         }
 
@@ -486,7 +488,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             bool same = compatible_type(var_type, probe.type);
             free_type(probe.type);
             if (!same)
-                fatal_error("incompatible pointer types when initializing '%s'", type_to_c(var_type));
+                fatal_error("incompatible pointer types when initializing '%s'",
+                            type_to_c(var_type));
             size_t n                     = strlen(sym->name);
             Tac_StaticInit *pointer_init = tac_new_static_init(TAC_STATIC_INIT_POINTER);
             pointer_init->u.pointer.name = xalloc(n + sizeof "$co", __func__, __FILE__, __LINE__);
@@ -511,7 +514,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             // blocks used to make, unified here).
             if (target->kind != TYPE_VOID && pointee->kind != TYPE_VOID &&
                 !compatible_type(var_type->u.pointer.target, pointee)) {
-                fatal_error("incompatible pointer types when initializing '%s'", type_to_c(var_type));
+                fatal_error("incompatible pointer types when initializing '%s'",
+                            type_to_c(var_type));
             }
             bool is_fat = (target->kind == TYPE_CHAR || target->kind == TYPE_SCHAR ||
                            target->kind == TYPE_UCHAR || target->kind == TYPE_VOID);
@@ -558,7 +562,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             // and is rejected (C11 §6.7.9p4 / §6.3.2.3p3).
             if (init->u.expr->kind != EXPR_CAST ||
                 unalias(init->u.expr->u.cast.type)->kind != TYPE_POINTER) {
-                fatal_error("initializer of '%s' is neither an address nor a null pointer constant", type_to_c(var_type));
+                fatal_error("initializer of '%s' is neither an address nor a null pointer constant",
+                            type_to_c(var_type));
             }
             return new_static_init_int(get_size(var_type), true, (uint64_t)val);
         }
@@ -793,7 +798,8 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
         const Type *element_type = unalias(target_type->u.array.element);
         if (element_type->kind != TYPE_CHAR && element_type->kind != TYPE_SCHAR &&
             element_type->kind != TYPE_UCHAR) {
-            fatal_error("cannot initialize array of type '%s' with a string literal", type_to_c(target_type));
+            fatal_error("cannot initialize array of type '%s' with a string literal",
+                        type_to_c(target_type));
         }
         size_t string_length;
         char *decoded =
@@ -804,7 +810,8 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
         } else {
             size_t array_size = get_array_size(target_type);
             if (string_length > array_size) {
-                fatal_error("initializer string for array of type '%s' is too long", type_to_c(target_type));
+                fatal_error("initializer string for array of type '%s' is too long",
+                            type_to_c(target_type));
             }
         }
         init->u.expr = typecheck_string(init->u.expr);

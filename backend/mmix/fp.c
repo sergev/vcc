@@ -87,7 +87,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         break;
     default:
         internal_error("mmix: %s: unary operator %d on floating point", gen_name(g),
-                    in->u.unary.op);
+                       in->u.unary.op);
     }
     def_done(g, d, in->u.unary.dst, true);
 }

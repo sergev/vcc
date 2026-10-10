@@ -140,7 +140,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
     }
     default:
         internal_error("mmix: %s: unary operator %d is not implemented", gen_name(g),
-                    in->u.unary.op);
+                       in->u.unary.op);
     }
     def_done(g, d, dst, canonical);
 }
@@ -850,6 +850,6 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         break; // the slot is laid out with the frame
     default:
         internal_error("mmix: %s: %s is not implemented", gen_name(g),
-                    tac_instruction_name(in->kind));
+                       tac_instruction_name(in->kind));
     }
 }

@@ -84,7 +84,7 @@ Wasm_Pass wasm_pass(const Tac_Type *t, const Tac_Type **scalar)
 {
     if (t->kind == TAC_TYPE_STRUCTURE && !t->u.structure.members && t->u.structure.size > 0)
         internal_error("wasm: structure %s passed with no members known",
-                    t->u.structure.tag ? t->u.structure.tag : "?");
+                       t->u.structure.tag ? t->u.structure.tag : "?");
     const Tac_Type *s = tac_wasm32_scalar(t);
     if (scalar)
         *scalar = s;

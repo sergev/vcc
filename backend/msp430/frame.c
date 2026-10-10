@@ -403,7 +403,7 @@ Msp_Operand mem_at(const Gen *g, const char *name, int off)
         reg = var_reg(g, name, off / 2);
         if (!reg)
             internal_error("msp430: %s: word %d of register variable %s", gen_name(g), off / 2,
-                        name);
+                           name);
         return msp_reg(reg);
     }
     return slot_at(g, name, off);
