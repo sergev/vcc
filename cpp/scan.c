@@ -37,8 +37,10 @@
 char *scan_token(char *p)
 {
     int c, i;
-    char quoc;              // the opening quote of the string/char literal being scanned
-    static int state = BEG; // remembers a pending newline between calls (slow scan)
+    char quoc;                  // the opening quote of the string/char literal being scanned
+    const char *com_seg = NULL; // block comment: where its current line starts in the buffer
+    long com_width      = 0;    // block comment: its width on the current line before com_seg
+    static int state    = BEG;  // remembers a pending newline between calls (slow scan)
 
     if (state != BEG)
         goto prevlf;
@@ -133,6 +135,8 @@ char *scan_token(char *p)
             for (;;) {
                 if (*p++ == '*') { // comment
                     cpp.in_block_comment = 1;
+                    com_seg              = p - 2; // start of the comment's current line
+                    com_width            = 0;     // its width on earlier buffers
                     if (!cpp.opt_keep_comments) {
                         cpp.tok_ptr = p - 2;
                         flush_output();
@@ -147,8 +151,10 @@ char *scan_token(char *p)
                                     goto endcom;
                                 if (AT_BUF_END(--p)) {
                                     if (!cpp.opt_keep_comments) {
+                                        com_width += p - com_seg;
                                         cpp.tok_ptr = p;
                                         p           = refill_buffer(p);
+                                        com_seg     = p;
                                     } else if ((p - cpp.tok_ptr) >= BUFSIZ) { // split long comment
                                         cpp.tok_ptr = p;
                                         p           = refill_buffer(p); // last char written is '*'
@@ -165,14 +171,18 @@ char *scan_token(char *p)
                             }
                         else if (p[-1] == '\n') {
                             ++cpp.line_no[cpp.inc_level];
+                            com_seg   = p;
+                            com_width = 0;
                             if (!cpp.opt_keep_comments) {
                                 putc('\n', cpp.out_file);
                                 put_newlines();
                             }
                         } else if (AT_BUF_END(--p)) {
                             if (!cpp.opt_keep_comments) {
+                                com_width += p - com_seg;
                                 cpp.tok_ptr = p;
                                 p           = refill_buffer(p);
+                                com_seg     = p;
                             } else if ((p - cpp.tok_ptr) >= BUFSIZ) { // split long comment
                                 cpp.tok_ptr = p;
                                 p           = refill_buffer(p);
@@ -189,12 +199,18 @@ char *scan_token(char *p)
                 endcom:
                     cpp.in_block_comment = 0;
                     if (!cpp.opt_keep_comments) {
-                        // A comment becomes one space (C11 §5.1.1.2 phase 3), so
+                        // A comment becomes white space (C11 §5.1.1.2 phase 3), so
                         // adjacent tokens do not merge -- but only when we are in
-                        // live text, not inside a skipped #if branch.
+                        // live text, not inside a skipped #if branch.  As many
+                        // spaces as the comment is wide on its last line keep the
+                        // columns of the text after it, for diagnostics.
                         --cpp.false_level;
-                        if (cpp.false_level == 0)
-                            putc(' ', cpp.out_file);
+                        if (cpp.false_level == 0) {
+                            com_width += p - com_seg;
+                            do
+                                putc(' ', cpp.out_file);
+                            while (--com_width > 0);
+                        }
                         cpp.out_ptr = cpp.tok_ptr = p;
                         goto again;
                     }

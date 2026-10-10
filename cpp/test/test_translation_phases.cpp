@@ -84,3 +84,16 @@ int e;
     EXPECT_EQ(lines[8], "int d;");
     EXPECT_EQ(lines[10], "int e;");
 }
+
+// Phase 3: a dropped block comment leaves as many spaces as it is wide on its
+// last line, so the text after it keeps its source column (for diagnostics).
+TEST_F(TranslationPhases, BlockCommentKeepsColumns)
+{
+    Result r = Preprocess(R"(int a; /* c */ int b;
+/* one
+   two */ int c;
+)");
+    ASSERT_EQ(r.exit_code, 0) << r.err;
+    EXPECT_NE(r.out.find("\nint a;         int b;\n"), std::string::npos) << r.out;
+    EXPECT_NE(r.out.find("\n          int c;\n"), std::string::npos) << r.out;
+}
