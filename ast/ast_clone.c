@@ -156,9 +156,9 @@ Param *clone_param(const Param *param)
     if (param == NULL)
         return NULL;
     Param *result = new_param();
-    result->loc   = param->loc;
     if (result == NULL)
         return NULL;
+    result->loc        = param->loc;
     result->name       = param->name ? xstrdup(param->name) : NULL;
     result->type       = clone_type(param->type, __func__, __FILE__, __LINE__);
     result->next       = clone_param(param->next);
@@ -171,9 +171,9 @@ Declaration *clone_declaration(const Declaration *decl)
     if (decl == NULL)
         return NULL;
     Declaration *result = new_declaration(decl->kind);
-    result->loc         = decl->loc;
     if (result == NULL)
         return NULL;
+    result->loc = decl->loc;
     switch (decl->kind) {
     case DECL_VAR:
         result->u.var.specifiers  = clone_decl_spec(decl->u.var.specifiers);
@@ -239,9 +239,9 @@ InitDeclarator *clone_init_declarator(const InitDeclarator *init_decl)
     if (init_decl == NULL)
         return NULL;
     InitDeclarator *result = new_init_declarator();
-    result->loc            = init_decl->loc;
     if (result == NULL)
         return NULL;
+    result->loc  = init_decl->loc;
     result->type = clone_type(init_decl->type, __func__, __FILE__, __LINE__);
     result->name = init_decl->name ? xstrdup(init_decl->name) : NULL;
     result->init = clone_initializer(init_decl->init);
@@ -254,9 +254,9 @@ Initializer *clone_initializer(const Initializer *init)
     if (init == NULL)
         return NULL;
     Initializer *result = new_initializer(init->kind);
-    result->loc         = init->loc;
     if (result == NULL)
         return NULL;
+    result->loc = init->loc;
     switch (init->kind) {
     case INITIALIZER_SINGLE:
         result->u.expr = clone_expression(init->u.expr);
@@ -303,9 +303,9 @@ Expr *clone_expression(const Expr *expr)
     if (expr == NULL)
         return NULL;
     Expr *result = new_expression(expr->kind);
-    result->loc  = expr->loc;
     if (result == NULL)
         return NULL;
+    result->loc = expr->loc;
     switch (expr->kind) {
     case EXPR_LITERAL:
         result->u.literal = clone_literal(expr->u.literal);
@@ -462,9 +462,9 @@ Stmt *clone_stmt(const Stmt *stmt)
     if (stmt == NULL)
         return NULL;
     Stmt *result = new_stmt(stmt->kind);
-    result->loc  = stmt->loc;
     if (result == NULL)
         return NULL;
+    result->loc = stmt->loc;
     switch (stmt->kind) {
     case STMT_EXPR:
         result->u.expr = clone_expression(stmt->u.expr);
@@ -563,9 +563,9 @@ ExternalDecl *clone_external_decl(const ExternalDecl *ext_decl)
     if (ext_decl == NULL)
         return NULL;
     ExternalDecl *result = new_external_decl(ext_decl->kind);
-    result->loc          = ext_decl->loc;
     if (result == NULL)
         return NULL;
+    result->loc = ext_decl->loc;
     if (ext_decl->kind == EXTERNAL_DECL_FUNCTION) {
         result->u.function.type =
             clone_type(ext_decl->u.function.type, __func__, __FILE__, __LINE__);

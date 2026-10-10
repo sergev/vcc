@@ -50,7 +50,7 @@ static void CheckLocations(Program *program)
     ExpectLoc(x->loc, 4, 5);
     InitDeclarator *xd = x->u.var.declarators;
     ExpectLoc(xd->loc, 4, 9);
-    Expr *sum = xd->init->u.expr;
+    const Expr *sum = xd->init->u.expr;
     ExpectLoc(sum->loc, 4, 15);
     ExpectLoc(sum->u.binary_op.left->loc, 4, 13);
     ExpectLoc(sum->u.binary_op.right->loc, 4, 17);
@@ -66,7 +66,7 @@ static void CheckLocations(Program *program)
     ExpectLoc(assign->loc, 6, 11);
     Expr *neg = assign->u.assign.value;
     ExpectLoc(neg->loc, 6, 13);
-    Expr *call = neg->u.unary_op.expr;
+    const Expr *call = neg->u.unary_op.expr;
     ExpectLoc(call->loc, 6, 15);
     ExpectLoc(call->u.call.func->loc, 6, 14);
     ExpectLoc(call->u.call.args->next->loc, 6, 19);
@@ -74,7 +74,7 @@ static void CheckLocations(Program *program)
     // return x ? a : b;
     item = item->next;
     ASSERT_NE(nullptr, item);
-    Stmt *ret = item->u.stmt;
+    const Stmt *ret = item->u.stmt;
     ExpectLoc(ret->loc, 7, 5);
     ExpectLoc(ret->u.expr->loc, 7, 14);
 }
