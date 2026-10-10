@@ -11,22 +11,46 @@
 #include "intern.h"
 
 //
-// Print one diagnostic line "progname: [file:]line: label: message" to stderr,
-// in GNU/Clang style, using printf-style formatting (the message and its
-// arguments arrive as a va_list).  `label` is "error" or "warning".  Every error
-// bumps cpp.exit_code so the program can exit non-zero; the callers below wrap
-// this with the usual (const char *fmt, ...) interface.
+// Print one diagnostic line "file:line: label: message" to stderr, as the other
+// passes do (docs/Technical_Reference.md, "Diagnostics"); with no line yet (a
+// command-line error), "progname: label: message".  `label` is "error" or
+// "warning".  Every error bumps cpp.exit_code so the program exits non-zero.
 //
-static void vreport(const char *label, const char *s, va_list ap)
+static void vreport_at(const char *file, int line, const char *label, const char *s, va_list ap)
 {
-    fprintf(stderr, "%s: ", cpp.prog_name ? cpp.prog_name : "cpp");
-    if (cpp.inc_file[cpp.inc_level][0]) {
-        fprintf(stderr, "%s:", cpp.inc_file[cpp.inc_level]);
-    }
-    fprintf(stderr, "%d: %s: ", cpp.line_no[cpp.inc_level], label);
+    if (line > 0)
+        fprintf(stderr, "%s:%d: ", (file && file[0]) ? file : "<stdin>", line);
+    else
+        fprintf(stderr, "%s: ", cpp.prog_name ? cpp.prog_name : "cpp");
+    fprintf(stderr, "%s: ", label);
     vfprintf(stderr, s, ap);
     fprintf(stderr, "\n");
     ++cpp.exit_code;
+}
+
+//
+// Report at the current line: the line of the directive being processed, if any.
+//
+static void vreport(const char *label, const char *s, va_list ap)
+{
+    int line = cpp.line_no[cpp.inc_level];
+    if (cpp.dir_line > 0 && cpp.dir_level == cpp.inc_level)
+        line = cpp.dir_line;
+    vreport_at(cpp.inc_file[cpp.inc_level], line, label, s, ap);
+}
+
+void pperror_at(const char *file, int line, const char *s, ...)
+{
+    va_list ap;
+
+    va_start(ap, s);
+    vreport_at(file, line, "error", s, ap);
+    va_end(ap);
+}
+
+void exit_cpp(void)
+{
+    exit(cpp.exit_code ? 1 : 0);
 }
 
 //

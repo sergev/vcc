@@ -210,7 +210,7 @@ struct cppstate {
     char **pre_defs_end;       // one past the last stored -D; init: pre_defs
     char *pre_undefs[NPREDEF]; // -U names
     char **pre_undefs_end;     // one past the last stored -U; init: pre_undefs
-    int exit_code;             // accumulated error count; becomes the process exit status
+    int exit_code;             // error count; nonzero makes the process exit with status 1
 
     // quick handles into the symbol table (`symbols', above) for the built-in
     // directive/macro entries
@@ -232,6 +232,14 @@ struct cppstate {
     // skipped region), meaning no further branch may be taken.
     int if_top;
     char if_taken[MAXIF + 1];
+    int if_line[MAXIF + 1];    // where each open group's #if is, to report it unterminated
+    char *if_file[MAXIF + 1];
+
+    // The line of the directive being processed, at include level dir_level; 0 when
+    // none is. A directive's errors are found after its newline is read, and name
+    // this line rather than the next.
+    int dir_line;
+    int dir_level;
 
     // scratch shared by the #if expression lexer (yylex.c) and parser (parser.c)
     // §6.10.1p4: the arithmetic is in intmax_t, or uintmax_t for an unsigned operand.
@@ -264,4 +272,11 @@ int eval_if(void);                              // evaluate a whole #if expressi
 char *skip_blanks(char *p);                     // advance past whitespace tokens (scan.c)
 struct symtab *lookup(char *namep, int enterf); // find/insert a symbol (macro.c)
 void pperror(const char *s, ...);               // report an error (diag.c)
+void pperror_at(const char *file, int line, const char *s, ...); // ... at a given line
 void ppwarn(const char *s, ...);                // report a warning (diag.c)
+#ifdef __cplusplus
+[[noreturn]]
+#else
+_Noreturn
+#endif
+void exit_cpp(void); // exit: status 1 after any error, else 0 (diag.c)

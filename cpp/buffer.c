@@ -154,7 +154,7 @@ char *refill_buffer(char *p)
     np = cpp.buf_mid - (p - cpp.tok_ptr);
     op = cpp.tok_ptr;
     if (AT_BUF_START(np + 1)) {
-        pperror("token too long");
+        pperror("token is too long");
         np = cpp.buf_start;
         p  = cpp.tok_ptr + BUFSIZ;
     }
@@ -220,7 +220,7 @@ char *refill_buffer(char *p)
                     cpp.line_no[cpp.inc_level] = cpp.call_line;
                     if (cpp.call_file)
                         cpp.inc_file[cpp.inc_level] = cpp.call_file;
-                    pperror("%s: unterminated macro call", cpp.macro_name);
+                    pperror("unterminated call of macro '%s'", cpp.macro_name);
                     cpp.line_no[cpp.inc_level]  = tlin;
                     cpp.inc_file[cpp.inc_level] = tfil;
                     np                          = p;
@@ -245,9 +245,11 @@ char *refill_buffer(char *p)
                 }
                 if (cpp.in_block_comment)
                     pperror("unterminated comment");
+                for (int i = 1; i <= cpp.if_top && i <= MAXIF; i++)
+                    pperror_at(cpp.if_file[i], cpp.if_line[i], "unterminated conditional directive");
                 cpp.tok_ptr = p;
                 flush_output();
-                exit(cpp.exit_code);
+                exit_cpp();
             }
             close(cpp.in_fd);
             cpp.in_fd          = cpp.inc_fd[--cpp.inc_level];
@@ -273,7 +275,7 @@ char *spill_buffer(char *p)
     int d;
 
     if (cpp.push_top >= MAXFRE) {
-        pperror("%s: too much pushback", cpp.macro_name);
+        pperror("expanding macro '%s' needs more pushback than the preprocessor has", cpp.macro_name);
         p = cpp.tok_ptr = cpp.buf_end;
         flush_output(); // begin flushing pushback
         while (cpp.push_top > cpp.inc_push_top[cpp.inc_level]) {
@@ -288,8 +290,8 @@ char *spill_buffer(char *p)
         np = cpp.side_ptr;
         cpp.side_ptr += BUFSIZ;
         if (cpp.side_ptr >= side_buf + SBSIZE) {
-            pperror("no space");
-            exit(cpp.exit_code);
+            pperror("the preprocessor is out of buffer space");
+            exit_cpp();
         }
         *cpp.side_ptr++ = '\0';
     }
@@ -312,7 +314,7 @@ char *spill_buffer(char *p)
     while (cpp.out_ptr < op)
         *--np = *--op; // slide over new
     if (AT_BUF_START(np))
-        pperror("token too long");
+        pperror("token is too long");
     d = np - cpp.out_ptr;
     cpp.out_ptr += d;
     cpp.tok_ptr += d;

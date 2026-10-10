@@ -274,7 +274,7 @@ TEST_F(Predefined, CoroutinesTargets) {
 TEST_F(Predefined, UnknownTargetFails) {
     Result r = Preprocess("x\n", {"-t", "pdp11"});
     EXPECT_NE(r.exit_code, 0);
-    EXPECT_NE(r.err.find("unknown target pdp11"), std::string::npos) << r.err;
+    EXPECT_NE(r.err.find("unknown target 'pdp11'"), std::string::npos) << r.err;
 }
 
 // The target macros are ordinary, not §6.10.8.4 ones.
@@ -301,7 +301,7 @@ TEST_F(Predefined, TooManyDefineOptionsFails) {
     for (int i = 0; i < 201; ++i) args.push_back("-DM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
-    EXPECT_NE(r.err.find("too many -D options"), std::string::npos) << r.err;
+    EXPECT_NE(r.err.find("too many '-D' options"), std::string::npos) << r.err;
 }
 
 TEST_F(Predefined, TooManyUndefOptionsFails) {
@@ -309,5 +309,5 @@ TEST_F(Predefined, TooManyUndefOptionsFails) {
     for (int i = 0; i < 201; ++i) args.push_back("-UM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
-    EXPECT_NE(r.err.find("too many -U options"), std::string::npos) << r.err;
+    EXPECT_NE(r.err.find("too many '-U' options"), std::string::npos) << r.err;
 }

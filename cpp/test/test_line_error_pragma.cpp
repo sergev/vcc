@@ -92,3 +92,57 @@ TEST_F(Pragma, AssemblerCommentLine) {
 TEST_F(Pragma, UndefinedControlInC) {
     EXPECT_PP_DIAGNOSES("# a comment\n");
 }
+
+// Diagnostics name the file and the line of the directive, not the line after it.
+using Diagnostic = PreprocessorTest;
+
+TEST_F(Diagnostic, ErrorNamesDirectiveLine) {
+    Result r = Preprocess("x\n#error boom\ny\n");
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("input.c:2: error: #error boom"), std::string::npos) << r.err;
+}
+
+TEST_F(Diagnostic, MissingIncludeNamesDirectiveLine) {
+    Result r = Preprocess("#include <no_such_header.h>\n");
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("input.c:1: error: 'no_such_header.h' file not found"),
+              std::string::npos)
+        << r.err;
+}
+
+// An #if left open at the end of input is diagnosed where it starts.
+TEST_F(Diagnostic, UnterminatedConditional) {
+    Result r = Preprocess("int x;\n#ifdef A\n#else\n#if 0\n");
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("input.c:2: error: unterminated conditional directive"),
+              std::string::npos)
+        << r.err;
+    EXPECT_NE(r.err.find("input.c:4: error: unterminated conditional directive"),
+              std::string::npos)
+        << r.err;
+}
+
+TEST_F(Diagnostic, MacroArgumentCounts) {
+    Result r = Preprocess("#define F(a, b) a + b\nF(1)\nF(1, 2, 3)\n");
+    EXPECT_NE(r.err.find("input.c:2: error: macro 'F' requires 2 arguments, but only 1 given"),
+              std::string::npos)
+        << r.err;
+    EXPECT_NE(r.err.find("input.c:3: error: macro 'F' passed 3 arguments, but takes just 2"),
+              std::string::npos)
+        << r.err;
+}
+
+TEST_F(Diagnostic, UnknownDirectiveNamed) {
+    Result r = Preprocess("#bogus x\n");
+    EXPECT_NE(r.err.find("input.c:1: error: invalid preprocessing directive '#bogus'"),
+              std::string::npos)
+        << r.err;
+}
+
+// The exit status is 1 however many errors there are.
+TEST_F(Diagnostic, ExitStatusIsOne) {
+    std::string src;
+    for (int i = 0; i < 256; i++)
+        src += "#error e\n";
+    EXPECT_EQ(Preprocess(src).exit_code, 1);
+}

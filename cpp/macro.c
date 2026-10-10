@@ -89,7 +89,7 @@ char *do_define(char *p)
     int paste_pending = 0; // a '##' was just seen; its right operand pastes onto the left
 
     if (cpp.side_ptr > side_buf + SBSIZE - BUFSIZ) {
-        pperror("too much defining");
+        pperror("macro definition is too long");
         return (p);
     }
     oldsavch = cpp.side_ptr; // to reclaim space if redefinition
@@ -97,7 +97,7 @@ char *do_define(char *p)
     p   = skip_blanks(p);
     pin = cpp.tok_ptr;
     if (cpp.char_class[(unsigned char)*pin] != IDENT) {
-        ppwarn("illegal macro name");
+        ppwarn("macro name must be an identifier");
         while (*cpp.tok_ptr != '\n')
             p = skip_blanks(p);
         return (p);
@@ -105,7 +105,7 @@ char *do_define(char *p)
     np = lookup_token(pin, p, 1);
     // §6.10.8.4: "defined" is reserved and may not be used as a macro name.
     if (strcmp(np->name, "defined") == 0) {
-        pperror("\"defined\" cannot be used as a macro name");
+        pperror("'defined' cannot be used as a macro name");
         while (*cpp.tok_ptr != '\n') // consume the rest of the line
             p = skip_blanks(p);
         --cpp.false_level;
@@ -114,7 +114,7 @@ char *do_define(char *p)
     // §6.10.8.4: a predefined macro may not be the subject of #define, whatever
     // the replacement list (so this precedes the identical-redefinition check).
     if (np->predefined) {
-        pperror("predefined macro \"%s\" cannot be redefined", np->name);
+        pperror("predefined macro '%s' cannot be redefined", np->name);
         while (*cpp.tok_ptr != '\n')
             p = skip_blanks(p);
         --cpp.false_level;
@@ -144,7 +144,7 @@ char *do_define(char *p)
             if (*pin == '\n') {
                 --cpp.line_no[cpp.inc_level];
                 --p;
-                pperror("%s: missing )", np->name);
+                pperror("missing ')' in the parameter list of macro '%s'", np->name);
                 break;
             }
             if (*pin == ')')
@@ -169,7 +169,7 @@ char *do_define(char *p)
                 // Anonymous C99 form `#define P(...)`: an implicit final formal
                 // literally named __VA_ARGS__.
                 if (pf >= &formal[MAXFRM])
-                    pperror("%s: too many formals", np->name);
+                    pperror("macro '%s' has more than %d parameters", np->name, MAXFRM);
                 else {
                     *pf++ = cf;
                     strcpy(cf, va_args_name);
@@ -183,13 +183,13 @@ char *do_define(char *p)
             if (cpp.char_class[(unsigned char)*pin] != IDENT) {
                 c  = *p;
                 *p = '\0';
-                pperror("bad formal: %s", pin);
+                pperror("invalid macro parameter '%s'", pin);
                 *p = c;
                 prev_was_formal = 0;
             } else if (pf >= &formal[MAXFRM]) {
                 c  = *p;
                 *p = '\0';
-                pperror("too many formals: %s", pin);
+                pperror("too many macro parameters at '%s'", pin);
                 *p = c;
                 prev_was_formal = 0;
             } else {
@@ -312,7 +312,7 @@ char *do_define(char *p)
                     pin     = p;
                 } else if (!variadic && formal_matches(va_args_name, pin, p)) {
                     // §6.10.3p5: __VA_ARGS__ is legal only in a variadic macro.
-                    pperror("__VA_ARGS__ can only appear in a variadic macro");
+                    pperror("'__VA_ARGS__' can only appear in a variadic macro");
                 }
             } else if (*pin == '"' || *pin == '\'') { // inside quotation marks, too
                 char quoc = *pin;
@@ -338,7 +338,7 @@ char *do_define(char *p)
                    formal_matches(va_args_name, pin, p)) {
             // §6.10.3p5: __VA_ARGS__ must not appear in an object-like macro
             // (params == 0, so it is never variadic).
-            pperror("__VA_ARGS__ can only appear in a variadic macro");
+            pperror("'__VA_ARGS__' can only appear in a variadic macro");
         }
         while (pin < p)
             *psav++ = *pin++;
@@ -355,7 +355,7 @@ char *do_define(char *p)
             ;                              // go back to the beginning
         if (0 != strcmp(++cf, oldsavch)) { // redefinition different from old
             --cpp.line_no[cpp.inc_level];
-            pperror("%s redefined", np->name);
+            pperror("'%s' macro redefined", np->name);
             ++cpp.line_no[cpp.inc_level];
             np->value = psav - 1;
         } else
@@ -406,8 +406,8 @@ struct symtab *lookup(char *namep, int enterf)
         }
         if (--sp < &symbols[0]) {
             if (around) {
-                pperror("too many defines", 0);
-                exit(cpp.exit_code);
+                pperror("too many macros defined", 0);
+                exit_cpp();
             } else {
                 ++around;
                 sp = &symbols[SYMSIZ - 1];
@@ -559,7 +559,7 @@ char *expand_text(const char *a0, const char *a1, char *out, int cap)
     // ceiling need not fault, and the exit status must not say it did.
     if (cpp.arg_depth >= MAXARGDEPTH) {
         if (!cpp.opt_no_warnings)
-            ppwarn("%s: argument not pre-expanded, nesting deeper than %d", cpp.macro_name,
+            ppwarn("an argument of macro '%s' is not pre-expanded: nesting deeper than %d", cpp.macro_name,
                    MAXARGDEPTH);
         return raw_text(a0, a1, out, cap);
     }
@@ -573,7 +573,7 @@ char *expand_text(const char *a0, const char *a1, char *out, int cap)
     // diagnosable NULL; a blown stack on this machine is a wrong answer.
     subarena = malloc(8 + 2 * BUFSIZ + 8);
     if (subarena == NULL) {
-        pperror("out of memory expanding an argument of %s", cpp.macro_name);
+        pperror("out of memory expanding an argument of macro '%s'", cpp.macro_name);
         return raw_text(a0, a1, out, cap);
     }
     start = subarena + 8 + BUFSIZ; // mirror the real arena: BUFSIZ of pushback headroom
@@ -680,14 +680,14 @@ static char *pragma_operator(char *p)
         p = skip_blanks(p);
     while (*cpp.tok_ptr == '\n');
     if (*cpp.tok_ptr != '(') {
-        pperror("_Pragma: missing '('");
+        pperror("expected '(' after '_Pragma'");
         goto done;
     }
     do
         p = skip_blanks(p);
     while (*cpp.tok_ptr == '\n');
     if (*cpp.tok_ptr != '"') {
-        pperror("_Pragma: string literal expected");
+        pperror("expected a string literal in '_Pragma'");
         goto done;
     }
     // destringize [tok_ptr, p): drop the quotes, unescaping the escaped
@@ -703,7 +703,7 @@ static char *pragma_operator(char *p)
         p = skip_blanks(p);
     while (*cpp.tok_ptr == '\n');
     if (*cpp.tok_ptr != ')')
-        pperror("_Pragma: missing ')'");
+        pperror("expected ')' after the string in '_Pragma'");
 done:
     *w = '\0';
     --cpp.false_level;
@@ -751,7 +751,7 @@ char *expand_macro(char *p, struct symtab *sp)
         return (p); // a function-like name ending an argument: rescanned after substitution
     if ((p - cpp.recur_bound) <= cpp.recur_bound_adj) {
         if (++cpp.recur_depth > SYMSIZ && !cpp.opt_recurse) {
-            pperror("%s: macro recursion", sp->name);
+            pperror("macro '%s' expands into itself", sp->name);
             return (p);
         }
     } else
@@ -764,7 +764,7 @@ char *expand_macro(char *p, struct symtab *sp)
         return pragma_operator(p);
     scratch = malloc(ACTTXT_SIZE + EXPTXT_SIZE + STRBUF_SIZE);
     if (scratch == NULL) {
-        pperror("%s: out of memory expanding a macro", sp->name);
+        pperror("out of memory expanding macro '%s'", sp->name);
         return (p); // leave the name un-expanded, as the blue-paint path does
     }
     acttxt = scratch;
@@ -788,6 +788,7 @@ char *expand_macro(char *p, struct symtab *sp)
         char **pa;
         int variadic; // last formal is __VA_ARGS__: absorbs all trailing actuals
         int nformals; // number of formals (incl. __VA_ARGS__)
+        int takes;    // number of arguments it takes, for a message: none for foo()
         ca = acttxt;
         pa = actual;
         if (params == 0xFF) {
@@ -799,6 +800,7 @@ char *expand_macro(char *p, struct symtab *sp)
         } else
             variadic = 0;
         nformals = params;
+        takes    = (*vp & 0xFF) == 0xFF ? 0 : nformals - variadic;
         SET_SLOW_SCAN();
         ++cpp.false_level; // no expansion during search for actuals
         cpp.paren_level = -1;
@@ -846,10 +848,10 @@ char *expand_macro(char *p, struct symtab *sp)
                     while (cpp.tok_ptr < p)
                         *ca++ = *cpp.tok_ptr++;
                     if (ca > &acttxt[BUFSIZ])
-                        pperror("%s: actuals too long", sp->name);
+                        pperror("the arguments of macro '%s' are too long", sp->name);
                 }
                 if (pa >= &actual[MAXFRM])
-                    pperror("%s: argument mismatch", sp->name);
+                    pperror("macro '%s' passed more than %d arguments", sp->name, MAXFRM);
                 else
                     *pa++ = ca;
             }
@@ -857,8 +859,12 @@ char *expand_macro(char *p, struct symtab *sp)
         // A variadic macro may omit the trailing variadic argument entirely (GNU
         // extension); that leaves exactly the __VA_ARGS__ formal unfilled and is
         // not an error.  Any other count mismatch still is.
-        if (params != 0 && !(variadic && params == 1))
-            pperror("%s: argument mismatch", sp->name);
+        if (params > 0 && !(variadic && params == 1))
+            pperror("macro '%s' requires %s%d arguments, but only %d given", sp->name,
+                    variadic ? "at least " : "", takes, nformals - params);
+        else if (params < 0)
+            pperror("macro '%s' passed %d arguments, but takes just %d", sp->name,
+                    nformals - params, takes);
         while (--params >= 0)
             *pa++ = &""[1]; // null string for missing actuals
         --cpp.false_level;

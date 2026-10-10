@@ -43,7 +43,7 @@ static void add_once_file(int fd)
     if (is_once_file(fd) || fstat(fd, &st) < 0)
         return;
     if (once_count >= MAXONCE) {
-        pperror("too many #pragma once files");
+        pperror("too many '#pragma once' files");
         return;
     }
     once_files[once_count].dev   = st.st_dev;
@@ -118,7 +118,7 @@ static char *do_include(char *p)
         if (*--cp == '"')
             *cp = '\0';
     } else {
-        pperror("bad include syntax", 0);
+        pperror("expected \"FILENAME\" or <FILENAME> after '#include'", 0);
         inctype = 2;
     }
     // flush current file to \n , then write \n
@@ -134,12 +134,12 @@ static char *do_include(char *p)
         return (p);
     // look for included file
     if (cpp.inc_level + 1 >= MAXINC) {
-        pperror("Unreasonable include nesting", 0);
+        pperror("'#include' nested more than %d deep", MAXINC - 1);
         return (p);
     }
     if ((nfil = cpp.side_ptr) > side_buf + SBSIZE - BUFSIZ) {
-        pperror("no space");
-        exit(cpp.exit_code);
+        pperror("the preprocessor is out of buffer space");
+        exit_cpp();
     }
     // Try each directory on the search path in turn until one opens.
     filok = 0;
@@ -162,7 +162,7 @@ static char *do_include(char *p)
         }
     }
     if (filok == 0)
-        pperror("Can't find include file %s", filname);
+        pperror("'%s' file not found", filname);
     else {
         cpp.line_no[cpp.inc_level]  = 1;
         cpp.trig_nhold[cpp.inc_level] = 0; // fresh file: no trigraph '?' carried in
@@ -247,11 +247,13 @@ static void enter_if(int was_live, int taken)
     else
         ++cpp.false_level;
     if (cpp.if_top >= MAXIF) {
-        pperror("Too many nested #if", 0);
+        pperror("too many nested conditional directives", 0);
         return; // matching #endif still unwinds via the level counters
     }
     ++cpp.if_top;
     cpp.if_taken[cpp.if_top] = (was_live && !taken) ? 0 : 1;
+    cpp.if_line[cpp.if_top]  = cpp.dir_line;
+    cpp.if_file[cpp.if_top]  = cpp.inc_file[cpp.inc_level];
 }
 
 //
@@ -267,10 +269,13 @@ char *process_directives(char *p)
 {
     for (;;) {
         const struct symtab *np; // the directive keyword's symbol-table entry
+        cpp.dir_line = 0;
         SET_FAST_SCAN();
         p = scan_token(p);
         if (*cpp.tok_ptr == '\n')
             ++cpp.tok_ptr;
+        cpp.dir_line  = cpp.line_no[cpp.inc_level];
+        cpp.dir_level = cpp.inc_level;
         flush_output();
         SET_SLOW_SCAN();
         p              = skip_blanks(p);
@@ -309,7 +314,7 @@ char *process_directives(char *p)
             }
         } else if (np == cpp.sym_endif) { // endif
             if (cpp.if_top == 0)
-                pperror("If-less endif", 0);
+                pperror("'#endif' without '#if'", 0);
             else {
                 if (cpp.false_level) {
                     if (--cpp.false_level == 0)
@@ -320,7 +325,7 @@ char *process_directives(char *p)
             }
         } else if (np == cpp.sym_elif) { // elif
             if (cpp.if_top == 0)
-                pperror("If-less elif", 0);
+                pperror("'#elif' without '#if'", 0);
             else if (cpp.if_taken[cpp.if_top]) {
                 // A branch was already taken (or the whole group is nested in a
                 // skipped region): this #elif must not be taken.
@@ -343,7 +348,7 @@ char *process_directives(char *p)
             }
         } else if (np == cpp.sym_else) { // else
             if (cpp.if_top == 0)
-                pperror("If-less else", 0);
+                pperror("'#else' without '#if'", 0);
             else if (cpp.if_taken[cpp.if_top]) {
                 // Some branch already taken: skip the #else branch.
                 if (cpp.false_level == 0) {
@@ -371,9 +376,9 @@ char *process_directives(char *p)
                 is_def = (strcmp(cpp.tok_ptr, "defined") == 0);
                 *p     = saved;
                 if (is_def) // §6.10.8.4
-                    pperror("\"defined\" cannot be undefined");
+                    pperror("'defined' cannot be undefined");
                 else if (usp->name && (unsigned char)usp->name[0] != DROP && usp->predefined)
-                    pperror("predefined macro \"%s\" cannot be undefined", usp->name);
+                    pperror("predefined macro '%s' cannot be undefined", usp->name);
                 else
                     lookup_token(cpp.tok_ptr, p, DROP);
                 --cpp.false_level;
@@ -423,7 +428,7 @@ char *process_directives(char *p)
                 while (*e == ' ' || *e == '\t')
                     ++e;
                 if (*e < '0' || *e > '9')
-                    pperror("illegal #line", 0); // §6.10.4: first operand must be a digit sequence
+                    pperror("expected a line number after '#line'", 0); // §6.10.4: first operand must be a digit sequence
                 else {
                     const char *fname = 0;
                     int num           = (int)strtol(e, &e, 10);
@@ -480,7 +485,7 @@ char *process_directives(char *p)
         } else if (*++cpp.tok_ptr == '\n')
             cpp.out_ptr = cpp.tok_ptr; // allows blank line after #
         else if (!in_assembler())
-            pperror("undefined control", 0);
+            pperror("invalid preprocessing directive '#%.*s'", (int)(p - cpp.tok_ptr), cpp.tok_ptr);
         // else an assembler comment ("# text" in a .S file), dropped as GCC does
         // flush to lf
         ++cpp.false_level;

@@ -92,7 +92,7 @@ int lex_if_token()
             continue;
         } else {
             *cpp.scan_ptr = savc;
-            pperror("Illegal character %c in preprocessor if", *cpp.tok_ptr);
+            pperror("invalid character '%c' in '#if'", *cpp.tok_ptr);
             continue;
         }
     ret:
@@ -134,7 +134,7 @@ static intmax_t str_to_int(char *st, int b, int *is_unsigned)
             if (*s == c)
                 ++s; // ll, LL
         } else {
-            pperror("Illegal number %s", st);
+            pperror("invalid number '%s' in '#if'", st);
             break;
         }
     }

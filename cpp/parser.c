@@ -108,7 +108,7 @@ static Value apply_op(int op, Value a, Value b)
     case '/':
     case '%':
         if (sb == 0) {
-            pperror(op == '/' ? "Division by zero" : "Modulo by zero");
+            pperror(op == '/' ? "division by zero in '#if'" : "remainder by zero in '#if'");
             return value(0, u);
         }
         if (u)
@@ -154,7 +154,7 @@ static Value apply_op(int op, Value a, Value b)
     case ',':
         return b;
     default:
-        pperror("Unexpected operator in preprocessor if");
+        pperror("unexpected operator in '#if'");
         return a;
     }
 }
@@ -177,12 +177,12 @@ static Value eval_binary(int min_prec)
         if (op == '?') {
             Value mid = eval_binary(precedence(','));
             if (!match(':'))
-                pperror("Expected ':' in ternary operator");
+                pperror("expected ':' in '#if'");
             Value els = eval_binary(prec);
             val       = val.v ? mid : els;
             val.u     = mid.u || els.u;
         } else if (op == '=') {
-            pperror("Assignment operator not allowed in preprocessor if");
+            pperror("assignment is not allowed in '#if'");
             eval_binary(prec); // consume the right-hand side to stay in sync
         } else {
             Value rhs = eval_binary(prec + 1);
@@ -216,23 +216,23 @@ static Value eval_term(void)
     } else if (match('(')) {
         val = eval_expr();
         if (!match(')'))
-            pperror("Expected ')'");
+            pperror("expected ')' in '#if'");
         return val;
     } else if (match(DEFINED)) {
         if (match('(')) {
             if (cpp.look_token != number)
-                pperror("Expected number in DEFINED");
+                pperror("expected an identifier after 'defined'");
             val = value(cpp.look_value, 0);
             advance();
             if (!match(')'))
-                pperror("Expected ')' in DEFINED");
+                pperror("expected ')' after the name in 'defined'");
             return val;
         } else if (cpp.look_token == number) {
             val = value(cpp.look_value, 0);
             advance();
             return val;
         } else {
-            pperror("Expected number or '(' after DEFINED");
+            pperror("expected an identifier or '(' after 'defined'");
         }
     } else if (cpp.look_token == number) {
         val = value(cpp.look_value, cpp.look_unsigned);
@@ -240,7 +240,7 @@ static Value eval_term(void)
         return val;
     }
 
-    pperror("Invalid term");
+    pperror("expected a value in '#if'");
     return value(0, 0);
 }
 
@@ -249,6 +249,6 @@ int eval_if(void)
     advance();
     Value result = eval_expr();
     if (cpp.look_token != stop)
-        pperror("Expected stop token");
+        pperror("extra tokens at the end of '#if'");
     return result.v != 0;
 }

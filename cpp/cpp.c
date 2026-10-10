@@ -9,6 +9,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -123,12 +124,12 @@ static void select_target(const char *name)
             return;
         }
     }
-    pperror("unknown target %s", name);
+    pperror("unknown target '%s'", name);
     fprintf(stderr, "Valid targets:");
     for (i = 0; i < sizeof(targets) / sizeof(targets[0]); i++)
         fprintf(stderr, " %s", targets[i].name);
     fprintf(stderr, "\n");
-    exit(8);
+    exit(1);
 }
 
 //
@@ -256,8 +257,8 @@ static void parse_args(int argc, char *argv[])
                 else if (i + 1 < argc)
                     select_target(argv[++i]);
                 else {
-                    pperror("missing target after -t");
-                    exit(8);
+                    pperror("missing argument to '-t'");
+                    exit(1);
                 }
                 continue;
             case 'n':
@@ -265,8 +266,8 @@ static void parse_args(int argc, char *argv[])
                     opt_nostdinc++;
                     continue;
                 }
-                pperror("unknown flag %s", argv[i]);
-                exit(8);
+                pperror("unknown option '%s'", argv[i]);
+                exit(1);
             case '-':
                 if (strcmp(argv[i], "--target") == 0 && i + 1 < argc) {
                     select_target(argv[++i]);
@@ -276,11 +277,11 @@ static void parse_args(int argc, char *argv[])
                     select_target(argv[i] + 9);
                     continue;
                 }
-                pperror("unknown flag %s", argv[i]);
-                exit(8);
+                pperror("unknown option '%s'", argv[i]);
+                exit(1);
             case 'D':
                 if (cpp.pre_defs_end >= cpp.pre_defs + NPREDEF) {
-                    pperror("too many -D options, ignoring %s", argv[i]);
+                    pperror("too many '-D' options; '%s' is ignored", argv[i]);
                     continue;
                 }
                 // ignore plain "-D" (no argument)
@@ -289,31 +290,31 @@ static void parse_args(int argc, char *argv[])
                 continue;
             case 'U':
                 if (cpp.pre_undefs_end >= cpp.pre_undefs + NPREDEF) {
-                    pperror("too many -U options, ignoring %s", argv[i]);
+                    pperror("too many '-U' options; '%s' is ignored", argv[i]);
                     continue;
                 }
                 *cpp.pre_undefs_end++ = argv[i] + 2;
                 continue;
             case 'I':
                 if (cpp.ndirs > MAXDIRS)
-                    pperror("excessive -I file (%s) ignored", argv[i]);
+                    pperror("too many '-I' directories; '%s' is ignored", argv[i]);
                 else
                     cpp.search_dirs[cpp.ndirs++] = argv[i] + 2;
                 continue;
             case '\0':
                 if (nfiles++ >= 2)
-                    pperror("extraneous name %s", argv[i]);
+                    pperror("unexpected argument '%s'", argv[i]);
                 continue;
             default:
-                pperror("unknown flag %s", argv[i]);
-                exit(8);
+                pperror("unknown option '%s'", argv[i]);
+                exit(1);
             }
         default:
             if (nfiles++ == 0) {
                 cpp.in_fd = open(argv[i], READ);
                 if (cpp.in_fd < 0) {
-                    pperror("No source file %s", argv[i]);
-                    exit(8);
+                    pperror("cannot open '%s': %s", argv[i], strerror(errno));
+                    exit(1);
                 }
                 cpp.inc_file[cpp.inc_level] = save_string(argv[i]);
                 cpp.search_dirs[0] = cpp.inc_dir[cpp.inc_level] = dir_of(argv[i]);
@@ -327,18 +328,18 @@ static void parse_args(int argc, char *argv[])
                 static char sobuf[BUFSIZ];
                 cpp.out_file = fopen(argv[i], "w");
                 if (!cpp.out_file) {
-                    pperror("Can't create %s", argv[i]);
-                    exit(8);
+                    pperror("cannot create '%s': %s", argv[i], strerror(errno));
+                    exit(1);
                 }
                 fclose(stdout);
                 setbuffer(cpp.out_file, sobuf, sizeof(sobuf));
             } else
-                pperror("extraneous name %s", argv[i]);
+                pperror("unexpected argument '%s'", argv[i]);
         }
     }
     if (isatty(cpp.in_fd)) {
         usage();
-        exit(8);
+        exit(1);
     }
 }
 
@@ -480,5 +481,5 @@ int main(int argc, char *argv[])
     emit_line_marker();
     cpp.out_ptr = cpp.tok_ptr = cpp.buf_end;
     process_directives(cpp.buf_end);
-    return (cpp.exit_code);
+    exit_cpp();
 }
