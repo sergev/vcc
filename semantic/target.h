@@ -128,7 +128,7 @@ typedef struct {
     int no_coroutines;
     // The backend expands __builtin_stack_save, __builtin_alloca and
     // __builtin_stack_restore in place (wasm32's shadow stack, the stack of x86-64,
-    // AArch64, RISC-V, ARM32 and AVR); elsewhere alloca, and co_alloca in a function, take
+    // AArch64, RISC-V, ARM32, AVR and MSP430); elsewhere alloca, and co_alloca in a function, take
     // the runtime's LIFO arena, __coro_stack_save and the rest (libc/common/costack.c).
     int stack_alloca;
     // Braam's process model (wasm32-braam, docs/Braam.md §7): main is a coroutine

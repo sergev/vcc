@@ -225,8 +225,9 @@ static bool removable(const Msp_Instr *in)
     }
     if (msp_form[in->op] == MSP_FORM_JUMP)
         return false;
+    // A write to SP (alloca) moves the stack: never dead, though not tracked.
     const Msp_Operand *w = written(in);
-    return !w || is_reg(w);
+    return !w || (is_reg(w) && w->reg >= 4);
 }
 
 //

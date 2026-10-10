@@ -235,3 +235,8 @@ TEST_F(TranslateTestAvr, AllocaOnStack)
 {
     ExpectOnStack(CompileToYaml(alloca_fn));
 }
+
+TEST_F(TranslateTestMsp430, AllocaOnStack)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
+}

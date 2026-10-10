@@ -39,6 +39,8 @@ stack, release on `longjmp`, and no runtime call.
 - **AVR is done** ([Avr_Backend.md](Avr_Backend.md#alloca)): SP written through Z with
   interrupts held off, the memory at SP + 1, and the epilogue's SP put back below the
   registers pushed under Y before it pops them.
+- **MSP430 is done** ([Msp430_Backend.md](Msp430_Backend.md#alloca)): `--frame-pointer`
+  (r4; `VCC_MSP430_FRAME_POINTER` runs the whole MSP430 suite so) and alloca on it.
 - **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
   `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
   (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
@@ -94,29 +96,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
 
-### A7. MSP430: a frame-pointer mode, then alloca
-
-- **A7a. Frame-pointer mode, without alloca.** Add `--frame-pointer` to `genmsp430`, with r4 as
-  fp:
-  - Drop r4 from both pools (`regalloc.c:14-15`).
-  - Address slots and incoming arguments from r4: `slot_at`, `frame.c:369` and `:474`, and
-    `complete_incoming` at `frame.c:754`.
-  - Epilogue: `mov r4, r1` before the pops.
-
-  The `sp_bias` around pushes then no longer applies to slots. Run the whole `msp430-tests`
-  suite with the flag forced on (an environment switch in the fixture, as `VCC_OPT_MAX_ITER`
-  is read) to validate the mode before anything depends on it.
-- **A7b. alloca.**
-  - Intercept in `gen_call` (`call.c:207`), the frame pre-scans (`call.c:455`,
-    `instr.c:1179`) and `uses_scratch` / `regalloc.c:65`.
-  - `has_alloca` forces the fp mode and a frame. Never drop the frame
-    (`msp_frame_referenced`, `codegen.c:63`), and never a bare `ret` (`frame.c:756`).
-  - Selection: `sub n, r1; bic #1, r1; mov r1, dst; add #out_size, dst`.
-  - Peephole: the forward-facts `step` and `writes_memory` (`peephole.c:659-668`, `:888`) must
-    forget slot facts on any write to r1. The dead-store pass already bails on `sp_moves`.
-- **Tests:** `msp430-tests` with interop with `msp430-elf-gcc` both ways. Check GCC's own
-  `alloca` code for the convention it uses.
-
 ### A8. MMIX: a frame-pointer mode, then alloca
 
 - **A8a. Frame-pointer mode.** First read GCC's `mmix.c` to see how it uses `$253` for alloca,
@@ -125,7 +104,8 @@ target; and the backend's doc gets an "alloca" section, the lists of targets on 
     (`frame.c:407-465`).
   - Save the caller's `$253` (GCC's ABI makes it callee-saved).
   - Epilogue: `$254 = $253 - …` (`frame.c:911-963`).
-  - Validate with the whole suite forced into the mode, as in A7a.
+  - Validate with the whole suite forced into the mode, as MSP430's was
+    (`VCC_MSP430_FRAME_POINTER` in `msp430_test.h`).
 - **A8b. alloca.**
   - Intercept in `gen_call` (`call.c:294`, beside `is_va_start`); exclude the builtin from
     `makes_call` (`call.c:20`).
@@ -184,8 +164,8 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A7 and A8 are the largest, because of the new frame-pointer modes. Their "a" halves are
-  worth doing separately, validated by the whole suite.
+- A8 is the largest left, because of its new frame-pointer mode; its "a" half is worth
+  doing separately, validated by the whole suite as MSP430's was.
 - A10 is optional.
 - The risks:
   - peephole passes that model sp as constant;

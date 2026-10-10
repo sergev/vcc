@@ -740,7 +740,7 @@ int instr_out_size(const Gen *g, const Tac_Instruction *in)
     switch (in->kind) {
     case TAC_INSTRUCTION_FUN_CALL:
     case TAC_INSTRUCTION_FUN_CALL_NORETURN:
-        return call_stack_size(g, in);
+        return msp_stack_builtin(in) ? 0 : call_stack_size(g, in);
     case TAC_INSTRUCTION_BINARY: {
         // A binary64 comparison takes its second operand on the stack.
         const Tac_Type *t = operand_type(g, in->u.binary.src1, in->u.binary.src2);

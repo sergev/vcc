@@ -235,6 +235,30 @@ f:
 The test fixture's `VCC_MSP430_FRAME_POINTER` runs every MSP430 test in this mode; the
 goldens then differ, every program runs the same.
 
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and `co_alloca` in an ordinary function take their memory
+from the machine stack. The translator passes them on as calls of `__builtin_alloca`,
+`__builtin_stack_save` and `__builtin_stack_restore`, which `gen_call` expands in place
+through r15 alone. A function that calls any of them has the frame from r4 as under
+`--frame-pointer`, whatever the option:
+
+```
+mov     r12, r15
+inc     r15
+bic     #1, r15         ; the size, rounded to 2
+sub     r15, r1
+mov     r1, r15
+add     #OUT, r15       ; the memory, above the outgoing arguments
+```
+
+`OUT` is the outgoing-argument area, which `layout_frame` knows before selection. The
+epilogue's `mov r4, r1` gives the memory back. The peephole pass forgets what it knew of
+`x(r1)` words at the `sub`, never takes it for a dead instruction (r1 is not among the
+registers its liveness tracks), and leaves the dead frame stores of such a function
+alone; the register allocator does not count the builtins as calls (its `inline_call`
+hook).
+
 ## Branch relaxation
 
 A conditional or unconditional jump reaches −512…+511 words. Neither assembler relaxes

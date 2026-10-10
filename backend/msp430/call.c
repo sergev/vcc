@@ -204,8 +204,54 @@ int call_stack_size(const Gen *g, const Tac_Instruction *in)
     return stack;
 }
 
+bool msp_stack_builtin(const Tac_Instruction *in)
+{
+    const char *name = in->u.fun_call.fun_name;
+    return !in->u.fun_call.indirect &&
+           (strcmp(name, "__builtin_alloca") == 0 || strcmp(name, "__builtin_stack_save") == 0 ||
+            strcmp(name, "__builtin_stack_restore") == 0);
+}
+
+bool msp_moves_sp(const Tac_TopLevel *tl)
+{
+    for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next)
+        if (in->kind == TAC_INSTRUCTION_FUN_CALL && msp_stack_builtin(in))
+            return true;
+    return false;
+}
+
+// save: dst = SP; restore: SP = arg; alloca: SP -= (arg + 1) & -2, dst = SP plus the
+// outgoing area, known before selection (layout_frame).  Through r15 alone; the frame
+// is from r4, and the epilogue puts SP back from it.
+static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
+{
+    const char *name   = in->u.fun_call.fun_name;
+    const Tac_Val *dst = in->u.fun_call.dst;
+    Msp_Operand r15 = msp_reg(MSP_SCRATCH), sp = msp_reg(MSP_SP);
+    if (strcmp(name, "__builtin_stack_save") == 0) {
+        emit2(g, MSP_MOV, sp, r15);
+    } else if (strcmp(name, "__builtin_stack_restore") == 0) {
+        emit2(g, MSP_MOV, val_word(g, in->u.fun_call.args, 0), sp);
+        return;
+    } else {
+        emit2(g, MSP_MOV, val_word(g, in->u.fun_call.args, 0), r15);
+        emit1(g, MSP_INC, msp_reg(MSP_SCRATCH));
+        emit2(g, MSP_BIC, msp_imm(1), msp_reg(MSP_SCRATCH));
+        emit2(g, MSP_SUB, msp_reg(MSP_SCRATCH), sp);
+        emit2(g, MSP_MOV, msp_reg(MSP_SP), msp_reg(MSP_SCRATCH));
+        if (g->out_size)
+            emit2(g, MSP_ADD, msp_imm(g->out_size), msp_reg(MSP_SCRATCH));
+    }
+    if (dst)
+        emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), mem_at(g, dst->u.var_name, 0));
+}
+
 void gen_call(Gen *g, const Tac_Instruction *in)
 {
+    if (msp_stack_builtin(in)) {
+        gen_stack_builtin(g, in);
+        return;
+    }
     int n, stack;
     ArgLoc *locs = call_locs(g, in, gen_type, NULL, &n, &stack);
 

@@ -39,6 +39,13 @@ static bool runtime_call(void *arg, const Flow *f, const Tac_Instruction *in, co
     return true;
 }
 
+// alloca and the other stack builtins: in place, through r15 alone (call.c).
+static bool inline_call(void *arg, const Tac_Instruction *in)
+{
+    (void)arg;
+    return msp_stack_builtin(in);
+}
+
 static void get_param_hints(void *arg, StringMap *hints, StringMap *hints_hi)
 {
     param_hints(((Target *)arg)->g, hints, hints_hi);
@@ -82,6 +89,7 @@ void gen_regalloc(Gen *g)
         .call_hints   = get_call_hints,
         .assign       = assign,
         .dead_param   = dead_param,
+        .inline_call  = inline_call,
     };
     regalloc(&desc, g->tl);
 }

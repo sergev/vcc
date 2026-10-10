@@ -66,6 +66,7 @@ typedef struct {
     StringMap byref;   // structure parameters read through their pointer, uncopied
     bool no_r8;        // a helper takes r8-r11: no variable there
     bool fp;           // the frame from r4 (--frame-pointer): x(r4) for a slot
+    bool moves_sp;     // calls a stack builtin (alloca): SP moves, the frame from r4
     int out_size;      // bytes of outgoing stack arguments
     int frame_size;    // bytes of the outgoing area and the slots, even
     int sp_bias;       // bytes pushed for the moment: added to every x(r1)
@@ -245,6 +246,11 @@ const Tac_Val *instr_dst(const Tac_Instruction *in);
 void gen_return(Gen *g, const Tac_Val *v, bool last);
 // A call, direct or through a pointer; FUN_CALL_NORETURN too.
 void gen_call(Gen *g, const Tac_Instruction *in);
+// Whether `in` calls __builtin_alloca, __builtin_stack_save or __builtin_stack_restore,
+// which gen_call expands in place.
+bool msp_stack_builtin(const Tac_Instruction *in);
+// Whether function `tl` calls one: SP then moves in it, and its frame is from r4.
+bool msp_moves_sp(const Tac_TopLevel *tl);
 // The stack bytes of the arguments of call `in`.
 int call_stack_size(const Gen *g, const Tac_Instruction *in);
 // Register allocation hints: the registers the parameters arrive in, and those of a

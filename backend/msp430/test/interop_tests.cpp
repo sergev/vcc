@@ -216,22 +216,10 @@ TEST_F(Msp430Test, RunSignatureTableWithClang)
     EXPECT_EQ("0000 0000", ClangRun(theirs, CompileToMsp430(ours.c_str())));
 }
 
-// R4-R10 survive our calls: a hand-written caller fills them, calls our code, which
-// multiplies, divides and does floating point through the helpers, and checks them.
-TEST_F(Msp430Test, RunPreservedRegisters)
+// A hand-written `check`: fills r4-r10, calls `work(123, 45)`, and returns in r12 a bit
+// per register that did not survive, 0 if all did; and a main that prints it.
+static std::string PreservedCheck()
 {
-    SKIP_IF_NO_MSP430_TOOLS();
-    SKIP_IF_NO_MSP430_GCC();
-    std::string ours = CompileToMsp430(R"(
-int work(int a, int b)
-{
-    volatile long long x = a;
-    long long y = x * x + (x << 40);
-    long q = (long)a * b / 7;
-    double d = (double)a / b;
-    return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000) + (int)(d * 100);
-}
-)");
     std::string check = R"(
     .text
     .globl  check
@@ -251,7 +239,10 @@ check:
     for (int r = 10; r >= 4; r--)
         check += "    pop     r" + std::to_string(r) + "\n";
     check += "    ret\n";
-    std::string main_src = R"(
+    return check;
+}
+
+static const char *const kPreservedMain = R"(
 void putbyte(int c);
 int check(void);
 int main(void)
@@ -262,6 +253,25 @@ int main(void)
     return 0;
 }
 )";
+
+// R4-R10 survive our calls: a hand-written caller fills them, calls our code, which
+// multiplies, divides and does floating point through the helpers, and checks them.
+TEST_F(Msp430Test, RunPreservedRegisters)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
+    std::string ours = CompileToMsp430(R"(
+int work(int a, int b)
+{
+    volatile long long x = a;
+    long long y = x * x + (x << 40);
+    long q = (long)a * b / 7;
+    double d = (double)a / b;
+    return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000) + (int)(d * 100);
+}
+)");
+    std::string check = PreservedCheck();
+    std::string main_src = kPreservedMain;
     EXPECT_EQ("00", GccRun(main_src, ours + check));
 }
 
@@ -992,4 +1002,81 @@ TEST_F(Msp430Test, RunBitfieldsGccCallsUs)
     SKIP_IF_NO_MSP430_GCC();
     EXPECT_EQ("", GccRun(kBitfieldCaller, CompileToMsp430(kBitfieldCallee.c_str())));
     EXPECT_EQ(0, exit_status);
+}
+
+// The same with alloca: the frame from r4, SP moved, a call with arguments on the stack
+// below the memory.
+TEST_F(Msp430Test, RunPreservedRegistersAlloca)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
+    std::string ours = CompileToMsp430(R"(
+void *__builtin_alloca(unsigned int);
+int sum6(int a, int b, int c, int d, int e, int f) { return a + b + c + d + e + f; }
+int work(int a, int b)
+{
+    int *p = __builtin_alloca(a * sizeof(int));
+    long q = 0;
+    for (int i = 0; i < a; i++)
+        p[i] = i * b;
+    for (int i = 0; i < a; i++)
+        q += p[i] % 7;
+    return (int)q + sum6(a, b, 1, 2, p[1], p[2]);
+}
+)");
+    EXPECT_EQ("00", GccRun(kPreservedMain, ours + PreservedCheck()));
+}
+
+// alloca both ways with GCC: ours called by GCC's code, which keeps values in r4-r10
+// across the call, and GCC's called by ours; eight int arguments, four on the stack
+// beside the memory.  (GCC has __builtin_alloca built in, we declare it.)
+TEST_F(Msp430Test, RunAllocaWithGcc)
+{
+    SKIP_IF_NO_MSP430_TOOLS();
+    SKIP_IF_NO_MSP430_GCC();
+    const char *sum = R"(
+int NAME(int n, int a, int b, int c, int d, int e, int f, int g)
+{
+    int *p = __builtin_alloca(n * sizeof(int));
+    for (int k = 0; k < n; k++)
+        p[k] = k + a;
+    int s = 0;
+    for (int k = 0; k < n; k++)
+        s += p[k];
+    return s + b + c + d + e + f + g;
+}
+)";
+    auto named = [&](const char *name) {
+        std::string t = sum;
+        t.replace(t.find("NAME"), 4, name);
+        return t;
+    };
+    std::string ours = std::string(R"(
+void *__builtin_alloca(unsigned int);
+int their_sum(int n, int a, int b, int c, int d, int e, int f, int g);
+int their_check(void);
+void putbyte(int c);
+)") + named("our_sum") + R"(
+int main(void)
+{
+    int *q = __builtin_alloca(16);
+    q[0]   = 5;
+    int r  = their_sum(10, 1, 2, 3, 4, 5, 6, 7);
+    putbyte('0' + (r == 82) + 2 * their_check() + 4 * (q[0] == 5));
+    return 0;
+}
+)";
+    std::string theirs = std::string(R"(
+int our_sum(int n, int a, int b, int c, int d, int e, int f, int g);
+volatile int seed = 7;
+)") + named("their_sum") + R"(
+int their_check(void)
+{
+    int s = seed;
+    int v0 = s * 3, v1 = s * 5, v2 = s * 11, v3 = s * 13, v4 = s * 17, v5 = s * 19;
+    int r = our_sum(10, 1, 2, 3, 4, 5, 6, 7);
+    return r == 82 && v0 + v1 + v2 + v3 + v4 + v5 == s * 68 && v0 == 21 && v5 == 133;
+}
+)";
+    EXPECT_EQ("7", GccRun(theirs, CompileToMsp430(ours.c_str())));
 }

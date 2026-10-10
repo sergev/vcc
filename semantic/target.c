@@ -86,7 +86,15 @@ static const Target targets[] = {
                         // pointer walk that follows a structure's address
       0,        // ldouble_mant_dig: long double is double, binary64
       0,        // hw_sqrt: no FP hardware
-      0 },      // double_mant_dig: binary64
+      0,        // double_mant_dig: binary64
+      0,        // no_loop_opt
+      0,        // little-endian
+      BITFIELD_SYSV,
+      0,        // bitfield_access_bits
+      0,        // bitfield_unit_per_field
+      0,        // jump_tables
+      0,        // no_coroutines
+      1 },      // stack_alloca: on the machine stack, the frame from r4
 
     { "arm32",
       1, 1,   // _Bool

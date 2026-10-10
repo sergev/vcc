@@ -86,6 +86,51 @@ ret
     msp430_frame_pointer = false;
 }
 
+// alloca: the frame from r4 (without --frame-pointer), SP lowered by the size rounded to
+// 2 through r15, the memory above the outgoing arguments; the epilogue puts SP back from
+// r4.
+TEST_F(Msp430Test, AllocaLeaf)
+{
+    std::string code = Code(CompileToMsp430(R"(
+void *__builtin_alloca(unsigned int);
+int g(int *);
+int f(int n)
+{
+    int *p = __builtin_alloca(n);
+    p[0] = n;
+    return g(p) + p[0];
+}
+)"));
+    EXPECT_EQ(0u, code.find(R"(push r4
+push r10
+mov r1, r4
+mov r12, r15
+inc r15
+bic #1, r15
+sub r15, r1
+mov r1, r15
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov r4, r1\npop r10\npop r4\nret\n")) << code;
+}
+
+TEST_F(Msp430Test, AllocaAboveOutgoing)
+{
+    std::string code = Code(CompileToMsp430(R"(
+void *__builtin_alloca(unsigned int);
+int g(int, int, int, int, int, int);
+int f(int n, int k)
+{
+    int *p = __builtin_alloca(n);
+    p[0] = k;
+    return g(1, 2, 3, 4, p[0], k) + p[0];
+}
+)"));
+    EXPECT_NE(std::string::npos, code.find("sub r15, r1\nmov r1, r15\nadd #4, r15\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov r13, 0(r1)\nmov r13, 2(r1)\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("mov r4, r1\nadd #4, r1\npop r10\npop r4\nret\n"))
+        << code;
+}
+
 // A long with only r15 left: its low word in r15, its high word on the stack, taken
 // into registers, or copied into the slot.
 EXPECT_CODE(SplitLongParam, R"(mov r15, r12

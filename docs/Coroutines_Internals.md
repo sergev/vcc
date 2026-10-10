@@ -69,7 +69,7 @@ The lowering is in shared code, and every target but BESM-6 has it.
 `Target.no_coroutines`, set for BESM-6 alone, gates it: `lower -t besm6` of a program
 with `_Coro` says "coroutines are not supported on target besm6". Two more fields say
 what the backend can do: `jump_tables` (§5.2), wasm32's alone, and `stack_alloca`
-(§5.1), set on every target but MSP430, MMIX and BESM-6. `defer` has no target dependency and is not gated. BESM-6 output does not
+(§5.1), set on every target but MMIX and BESM-6. `defer` has no target dependency and is not gated. BESM-6 output does not
 change, since no BESM-6 program uses it and the shared cleanup (§4) is off there.
 
 ## 3. Front end
@@ -254,11 +254,12 @@ what catch a misused frame.
 - **In an ordinary function**: `%sp = __builtin_stack_save()`, `%p =
   __builtin_alloca(n)`. The release, run at the end of the block (§4), is `if (%p) {
   if (!__coro_done(%p)) __coro_resume(%p, 2); __builtin_stack_restore(%sp); %p = 0;
-  }`. The wasm, x86-64, AArch64, RISC-V, ARM32 and AVR backends expand the three
-  builtins inline (§5.3, [X86_64_Backend.md](X86_64_Backend.md#alloca),
+  }`. Every backend but MMIX's expands the three builtins inline (§5.3,
+  [X86_64_Backend.md](X86_64_Backend.md#alloca),
   [Aarch64_Backend.md](Aarch64_Backend.md#alloca),
   [Riscv_Backend.md](Riscv_Backend.md#alloca),
-  [Arm32_Backend.md](Arm32_Backend.md#alloca), [Avr_Backend.md](Avr_Backend.md#alloca)). On a target without
+  [Arm32_Backend.md](Arm32_Backend.md#alloca), [Avr_Backend.md](Avr_Backend.md#alloca),
+  [Msp430_Backend.md](Msp430_Backend.md#alloca)). On a target without
   `stack_alloca` they are `__coro_stack_save`, `__coro_alloca` and
   `__coro_stack_restore`, calls of `libc/common/costack.c`: a static arena (64 KiB,
   1 KiB where `size_t` has 16 bits) taken and given back in LIFO order, its overflow
