@@ -1,9 +1,9 @@
 // Fixture for a backend whose programs run on bare-metal qemu: assemble our output (GNU
 // as, or clang) and compile any clang part, link (GNU ld, or ld.lld) against the
 // target's crt0 and libc.a, run qemu under a timeout, and return the UART output with
-// main's result (the qemu exit status) in exit_status.  A backend fixture derives from it with a QemuConfig.  The
-// runner need not be qemu: MSP430 runs on the mspsim simulator, MMIX on Knuth's mmix,
-// through the same steps.
+// main's result (the qemu exit status) in exit_status.  A backend fixture derives from it with a
+// QemuConfig.  The runner need not be qemu: MSP430 runs on the mspsim simulator, MMIX on Knuth's
+// mmix, through the same steps.
 #pragma once
 
 #include <fstream>
@@ -21,9 +21,9 @@ struct QemuConfig {
     std::vector<std::string> c_flags;      // more for C, e.g. -ffreestanding
     const char *ld;                        // GNU ld or ld.lld
     const char *link_script;               // empty: the linker's default (MMIX)
-    const char *lib_dir;           // crt0 objects and libc.a
-    std::vector<std::string> qemu; // the command up to -kernel <exe> (or image_option)
-    const char *scratch_suffix;    // keeps the scratch files of two widths apart
+    const char *lib_dir;                   // crt0 objects and libc.a
+    std::vector<std::string> qemu;         // the command up to -kernel <exe> (or image_option)
+    const char *scratch_suffix;            // keeps the scratch files of two widths apart
     // Where main's result comes from: false, qemu's exit status (semihosting); true,
     // the first byte written to the debug console (port 0xe9 on x86), which the run
     // sends to a file of its own.  qemu's x86 exit device cannot carry a whole byte.
@@ -194,8 +194,8 @@ protected:
         }
         exit_status = rc;
         if (cfg.exit_report && ReadFile(log_path).find(cfg.exit_report) == std::string::npos) {
-            ADD_FAILURE() << "the program did not stop itself (status " << rc << ") on "
-                          << exe_path << ":\n"
+            ADD_FAILURE() << "the program did not stop itself (status " << rc << ") on " << exe_path
+                          << ":\n"
                           << ReadFile(log_path);
             return "ERROR";
         }
@@ -203,8 +203,7 @@ protected:
             std::string status = ReadFile(status_path);
             if (status.empty()) {
                 ADD_FAILURE() << "no exit status on the "
-                              << (cfg.status_from_serial ? "status serial port"
-                                                            : "debug console")
+                              << (cfg.status_from_serial ? "status serial port" : "debug console")
                               << " of " << exe_path << ":\n"
                               << ReadFile(log_path);
                 return "ERROR";

@@ -141,8 +141,7 @@ void address_of(Gen *g, Msp_Operand dst, const char *name, int off);
 // which it pushes.  Only r15 is changed.
 void copy_ptr(Gen *g, bool load, int ptr, const char *name, int off, int size, int align);
 // Copy `size` bytes of named objects: dst+doff = src+soff.
-void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, int size,
-                int align);
+void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, int size, int align);
 
 // The moves dst = src at once, in an order that reads every source before it is
 // overwritten; a cycle is broken by swapping two locations with three `xor`s.

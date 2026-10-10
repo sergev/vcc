@@ -68,14 +68,14 @@ typedef struct Tac_TopLevel {
             char *name;
             bool global;
             bool variadic;
-            bool noret;            // True if declared/defined _Noreturn
-            Tac_Type *type;        // Function type (FUN_TYPE); NULL when unknown
-            Tac_Param *params;     // Parameters, in order
-            Tac_Param *locals;     // Automatic locals and temporaries; with params,
-                                   // every frame-resident name of the body
+            bool noret;                     // True if declared/defined _Noreturn
+            Tac_Type *type;                 // Function type (FUN_TYPE); NULL when unknown
+            Tac_Param *params;              // Parameters, in order
+            Tac_Param *locals;              // Automatic locals and temporaries; with params,
+                                            // every frame-resident name of the body
             Tac_StaticLocal *static_locals; // Block-scope static variables, emitted
                                             // inside this function's module.
-            Tac_Instruction *body; // Linked list of instructions
+            Tac_Instruction *body;          // Linked list of instructions
         } function;
         struct {
             char *name;
@@ -135,13 +135,13 @@ typedef enum {
     TAC_INSTRUCTION_GET_ADDRESS_BYTE,  // &char object → char*/void* fat pointer (offset_enc 0)
     TAC_INSTRUCTION_GET_ADDRESS_DECAY, // char-array/string decay → fat pointer (offset_enc 5)
     TAC_INSTRUCTION_LOAD,
-    TAC_INSTRUCTION_LOAD_BYTE,         // dereference a single byte through a fat pointer
+    TAC_INSTRUCTION_LOAD_BYTE, // dereference a single byte through a fat pointer
     TAC_INSTRUCTION_STORE,
-    TAC_INSTRUCTION_STORE_BYTE,        // store a single byte through a fat pointer
+    TAC_INSTRUCTION_STORE_BYTE, // store a single byte through a fat pointer
     TAC_INSTRUCTION_ADD_PTR,
     TAC_INSTRUCTION_PTR_DIFF, // char*/void* difference → ptrdiff_t (long) byte count
     TAC_INSTRUCTION_COPY_TO_OFFSET,
-    TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET,   // sub-word packed char member (byte read-modify-write)
+    TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET, // sub-word packed char member (byte read-modify-write)
     TAC_INSTRUCTION_COPY_FROM_OFFSET,
     TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET, // sub-word packed char member (byte extract)
     TAC_INSTRUCTION_JUMP,
@@ -158,8 +158,8 @@ typedef enum {
     TAC_UNARY_COMPLEMENT,
     TAC_UNARY_NEGATE,
     TAC_UNARY_NOT,
-    TAC_UNARY_NEGATE_UNSIGNED,    // negate, 48-bit modular (unsigned operand)
-    TAC_UNARY_NEGATE_DOUBLE,      // negate, floating-point operand
+    TAC_UNARY_NEGATE_UNSIGNED,     // negate, 48-bit modular (unsigned operand)
+    TAC_UNARY_NEGATE_DOUBLE,       // negate, floating-point operand
     TAC_UNARY_COMPLEMENT_UNSIGNED, // complement, full 48-bit flip (unsigned operand)
     TAC_UNARY_SQRT_DOUBLE          // square root of a double: a call of the C library's
                                    // sqrt, on a target where it is one instruction
@@ -192,14 +192,14 @@ typedef enum {
     TAC_BINARY_ADD_UNSIGNED,
     TAC_BINARY_SUBTRACT_UNSIGNED,
     TAC_BINARY_MULTIPLY_UNSIGNED,
-    TAC_BINARY_ADD_DOUBLE,      // add, floating-point operands
-    TAC_BINARY_SUBTRACT_DOUBLE, // subtract, floating-point operands
-    TAC_BINARY_MULTIPLY_DOUBLE, // multiply, floating-point operands
-    TAC_BINARY_DIVIDE_DOUBLE,   // divide, floating-point operands
-    TAC_BINARY_LESS_THAN_DOUBLE,        // <,  floating-point operands
-    TAC_BINARY_LESS_OR_EQUAL_DOUBLE,    // <=, floating-point operands
-    TAC_BINARY_GREATER_THAN_DOUBLE,     // >,  floating-point operands
-    TAC_BINARY_GREATER_OR_EQUAL_DOUBLE  // >=, floating-point operands
+    TAC_BINARY_ADD_DOUBLE,             // add, floating-point operands
+    TAC_BINARY_SUBTRACT_DOUBLE,        // subtract, floating-point operands
+    TAC_BINARY_MULTIPLY_DOUBLE,        // multiply, floating-point operands
+    TAC_BINARY_DIVIDE_DOUBLE,          // divide, floating-point operands
+    TAC_BINARY_LESS_THAN_DOUBLE,       // <,  floating-point operands
+    TAC_BINARY_LESS_OR_EQUAL_DOUBLE,   // <=, floating-point operands
+    TAC_BINARY_GREATER_THAN_DOUBLE,    // >,  floating-point operands
+    TAC_BINARY_GREATER_OR_EQUAL_DOUBLE // >=, floating-point operands
 } Tac_BinaryOperator;
 
 enum { TAC_DST_KIND_UNKNOWN = -1, TAC_DST_KIND_NO_FOLD = -2 };
@@ -217,10 +217,10 @@ typedef struct Tac_Instruction {
         } return_;
         // The three integer-width conversions carry the destination's Tac_ConstKind
         // (or TAC_DST_KIND_UNKNOWN = -1 = "not supplied", or TAC_DST_KIND_NO_FOLD for a
-        // destination with no constant kind, e.g. a 16-bit short: never folded) so the constant folder can label a folded
-        // result with the conversion's true result type — a promotion `unsigned char →
-        // int` and an explicit cast `unsigned char → unsigned int` both lower to the
-        // same ZERO_EXTEND, and only the destination kind distinguishes them. The shared
+        // destination with no constant kind, e.g. a 16-bit short: never folded) so the constant
+        // folder can label a folded result with the conversion's true result type — a promotion
+        // `unsigned char → int` and an explicit cast `unsigned char → unsigned int` both lower to
+        // the same ZERO_EXTEND, and only the destination kind distinguishes them. The shared
         // {src,dst,dst_kind} prefix lets the folder read it through `u.sign_extend`.
         struct {
             Tac_Val *src;
@@ -386,8 +386,8 @@ typedef struct Tac_Instruction {
             char *name;
         } label;
         struct {
-            Tac_Val *index;       // an unsigned int
-            char **targets;       // index i jumps to targets[i], for i < count
+            Tac_Val *index; // an unsigned int
+            char **targets; // index i jumps to targets[i], for i < count
             int count;
             char *default_target; // any other index
         } jump_table;
@@ -400,7 +400,7 @@ typedef struct Tac_Instruction {
             // which (a global `f` may be either), and a backend that guesses from frame
             // residency calls the pointer's own storage.  FUN_CALL_NORETURN is always direct.
             bool indirect;
-            Tac_Val *args;      // Linked list of values
+            Tac_Val *args; // Linked list of values
             Tac_Val *dst;
             Tac_Type *fun_type; // Callee's type (FUN_TYPE); NULL when unknown
         } fun_call;
@@ -502,8 +502,8 @@ typedef struct Tac_Type {
         } array;
         struct {
             char *tag;
-            int size;            // in bytes; 0 when incomplete
-            int alignment;       // in bytes
+            int size;      // in bytes; 0 when incomplete
+            int alignment; // in bytes
             bool is_union;
             Tac_Member *members; // by offset; NULL when not expanded (behind a pointer)
         } structure;
@@ -545,18 +545,18 @@ typedef struct Tac_StaticInit {
     struct Tac_StaticInit *next; // Linked list
     Tac_StaticInitKind kind;
     union {
-        int8_t char_val;             // INIT_I8
-        int16_t short_val;           // INIT_I16
-        int32_t int_val;             // INIT_I32
-        int64_t long_val;            // INIT_I64
-        uint8_t uchar_val;           // INIT_U8
-        uint16_t ushort_val;         // INIT_U16
-        uint32_t uint_val;           // INIT_U32
-        uint64_t ulong_val;          // INIT_U64
-        double float_val;            // INIT_FLOAT
-        double double_val;           // INIT_DOUBLE
+        int8_t char_val;          // INIT_I8
+        int16_t short_val;        // INIT_I16
+        int32_t int_val;          // INIT_I32
+        int64_t long_val;         // INIT_I64
+        uint8_t uchar_val;        // INIT_U8
+        uint16_t ushort_val;      // INIT_U16
+        uint32_t uint_val;        // INIT_U32
+        uint64_t ulong_val;       // INIT_U64
+        double float_val;         // INIT_FLOAT
+        double double_val;        // INIT_DOUBLE
         Float128 long_double_val; // INIT_LONG_DOUBLE, binary128 bits
-        int zero_bytes;              // INIT_ZERO
+        int zero_bytes;           // INIT_ZERO
 
         // INIT_STRING
         struct {

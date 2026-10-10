@@ -22,7 +22,7 @@ putchr:
     putbyte(b);
     if (shift > 0) {
         shift = shift - 8;
-        b = ch >> shift;
+        b     = ch >> shift;
         goto putchr;
     }
 }

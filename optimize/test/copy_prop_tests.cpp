@@ -516,8 +516,8 @@ TEST_F(OptimizerTest, CopyPropStoreKillsStaticCopy)
 
     Tac_TopLevel *tl = make_fn_tl({ "x", "p" });
 
-    OptFlags flags          = opt_flags_default();
-    flags.dead_store_elim   = false;
+    OptFlags flags                = opt_flags_default();
+    flags.dead_store_elim         = false;
     const Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     const Tac_Instruction *last = result;
@@ -541,15 +541,15 @@ TEST_F(OptimizerTest, CopyPropKeepsValueClass)
     copy->next             = load;
     load->next             = ret;
 
-    Tac_TopLevel *tl            = make_fn_tl({ "i", "p", "x" });
-    Tac_Param *i                = tl->u.function.locals;
-    i->type                     = tac_new_type(TAC_TYPE_UINT);
-    i->next->type               = tac_new_type(TAC_TYPE_POINTER);
+    Tac_TopLevel *tl                     = make_fn_tl({ "i", "p", "x" });
+    Tac_Param *i                         = tl->u.function.locals;
+    i->type                              = tac_new_type(TAC_TYPE_UINT);
+    i->next->type                        = tac_new_type(TAC_TYPE_POINTER);
     i->next->type->u.pointer.target_type = tac_new_type(TAC_TYPE_INT);
-    i->next->next->type         = tac_new_type(TAC_TYPE_INT);
+    i->next->next->type                  = tac_new_type(TAC_TYPE_INT);
 
-    OptFlags flags          = opt_flags_default();
-    flags.dead_store_elim   = false;
+    OptFlags flags                = opt_flags_default();
+    flags.dead_store_elim         = false;
     const Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     const Tac_Instruction *in = result;
@@ -832,17 +832,17 @@ TEST_F(OptimizerTest, CopyPropBackEdgeIntoEntryNotPropagated)
     Tac_Instruction *entry = make_label("L1");
     Tac_Instruction *cmp =
         make_binary(TAC_BINARY_GREATER_THAN, make_var("n"), make_const_int(0), make_var("c"));
-    Tac_Instruction *jiz  = make_jump_if_zero(make_var("c"), "L0");
-    Tac_Instruction *cp   = make_copy(make_var("d"), make_var("n"));
-    Tac_Instruction *jmp  = make_jump("L1");
-    Tac_Instruction *lbl  = make_label("L0");
-    Tac_Instruction *ret  = make_return(make_var("n"));
-    entry->next           = cmp;
-    cmp->next             = jiz;
-    jiz->next             = cp;
-    cp->next              = jmp;
-    jmp->next             = lbl;
-    lbl->next             = ret;
+    Tac_Instruction *jiz = make_jump_if_zero(make_var("c"), "L0");
+    Tac_Instruction *cp  = make_copy(make_var("d"), make_var("n"));
+    Tac_Instruction *jmp = make_jump("L1");
+    Tac_Instruction *lbl = make_label("L0");
+    Tac_Instruction *ret = make_return(make_var("n"));
+    entry->next          = cmp;
+    cmp->next            = jiz;
+    jiz->next            = cp;
+    cp->next             = jmp;
+    jmp->next            = lbl;
+    lbl->next            = ret;
 
     OptFlags flags          = opt_flags_default();
     flags.dead_store_elim   = false;

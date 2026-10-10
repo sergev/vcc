@@ -3,8 +3,8 @@
 // against the host's arithmetic.
 //
 #include <climits>
-#include <initializer_list>
 #include <cstdint>
+#include <initializer_list>
 #include <sstream>
 #include <type_traits>
 
@@ -49,24 +49,30 @@ inch $1, #123
               Steps(0x0123456789abcdefull));
     EXPECT_EQ(R"(setl $1, #ffff
 incml $1, #ffff
-)", Steps(0xffffffffull));
+)",
+              Steps(0xffffffffull));
     EXPECT_EQ(R"(setmh $1, #ffff
 inch $1, #ffff
-)", Steps(0xffffffff00000000ull));
+)",
+              Steps(0xffffffff00000000ull));
     EXPECT_EQ("negu $1, 0, 1\n", Steps(UINT64_MAX));
     EXPECT_EQ("negu $1, 0, 255\n", Steps((uint64_t)-255));
     EXPECT_EQ(R"(negu $1, 0, 1
 andnl $1, #ff
-)", Steps((uint64_t)-256));
+)",
+              Steps((uint64_t)-256));
     EXPECT_EQ(R"(negu $1, 0, 1
 andnl $1, #ffff
-)", Steps((uint64_t)-65536));
+)",
+              Steps((uint64_t)-65536));
     EXPECT_EQ(R"(negu $1, 0, 1
 andnl $1, #3e7
-)", Steps((uint64_t)-1000));
+)",
+              Steps((uint64_t)-1000));
     EXPECT_EQ(R"(negu $1, 0, 1
 andnh $1, #8000
-)", Steps((uint64_t)INT64_MAX));
+)",
+              Steps((uint64_t)INT64_MAX));
     // A tie (three either way) goes to set.
     EXPECT_EQ(R"(setml $1, #8000
 incmh $1, #ffff
@@ -79,24 +85,50 @@ inch $1, #ffff
              0x8000000000000001ull, 0x7fffffff00000000ull, (uint64_t)-2, (uint64_t)-70000,
              (uint64_t)INT64_MIN }) {
         ConstStep steps[4];
-        int n     = mmix_const_steps(v, steps);
+        int n      = mmix_const_steps(v, steps);
         uint64_t r = 0;
         for (int i = 0; i < n; i++) {
             unsigned a = steps[i].arg;
             switch (steps[i].op) {
-            case MMIX_NEGU: r = (uint64_t)0 - a; break;
-            case MMIX_SETL: r = a; break;
-            case MMIX_SETML: r = (uint64_t)a << 16; break;
-            case MMIX_SETMH: r = (uint64_t)a << 32; break;
-            case MMIX_SETH: r = (uint64_t)a << 48; break;
-            case MMIX_INCML: r += (uint64_t)a << 16; break;
-            case MMIX_INCMH: r += (uint64_t)a << 32; break;
-            case MMIX_INCH: r += (uint64_t)a << 48; break;
-            case MMIX_ANDNL: r &= ~(uint64_t)a; break;
-            case MMIX_ANDNML: r &= ~((uint64_t)a << 16); break;
-            case MMIX_ANDNMH: r &= ~((uint64_t)a << 32); break;
-            case MMIX_ANDNH: r &= ~((uint64_t)a << 48); break;
-            default: ADD_FAILURE() << "unexpected step"; break;
+            case MMIX_NEGU:
+                r = (uint64_t)0 - a;
+                break;
+            case MMIX_SETL:
+                r = a;
+                break;
+            case MMIX_SETML:
+                r = (uint64_t)a << 16;
+                break;
+            case MMIX_SETMH:
+                r = (uint64_t)a << 32;
+                break;
+            case MMIX_SETH:
+                r = (uint64_t)a << 48;
+                break;
+            case MMIX_INCML:
+                r += (uint64_t)a << 16;
+                break;
+            case MMIX_INCMH:
+                r += (uint64_t)a << 32;
+                break;
+            case MMIX_INCH:
+                r += (uint64_t)a << 48;
+                break;
+            case MMIX_ANDNL:
+                r &= ~(uint64_t)a;
+                break;
+            case MMIX_ANDNML:
+                r &= ~((uint64_t)a << 16);
+                break;
+            case MMIX_ANDNMH:
+                r &= ~((uint64_t)a << 32);
+                break;
+            case MMIX_ANDNH:
+                r &= ~((uint64_t)a << 48);
+                break;
+            default:
+                ADD_FAILURE() << "unexpected step";
+                break;
             }
         }
         EXPECT_EQ(v, r) << std::hex << v;
@@ -123,7 +155,8 @@ TEST_F(MmixTest, SignedAddIsAddu)
     NaiveSelection();
     std::string code = Code(CompileToMmix("int f(int a, int b) { return a + b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(addu $248, $248, $249
-sttu $248, )")) << code;
+sttu $248, )"))
+        << code;
     EXPECT_EQ(std::string::npos, code.find("add $")) << code;
 }
 
@@ -185,8 +218,7 @@ xor $248, $248, $249
 zsn $248, $248, $249
 csz $248, $255, 0
 subu $250, $255, $248
-)"))
-        << code;
+)")) << code;
 }
 
 TEST_F(MmixTest, UnsignedDivide)
@@ -235,17 +267,19 @@ unsigned long f2(unsigned a) { return a; }
 int f3(long a) { return (signed char)a; }
 )"));
     EXPECT_NE(std::string::npos, code.find(R"(ldt $248, $254, 0
-sto $248, )")) << code;
+sto $248, )"))
+        << code;
     EXPECT_NE(std::string::npos, code.find(R"(ldtu $248, $254, 0
-sto $248, )")) << code;
+sto $248, )"))
+        << code;
     EXPECT_NE(std::string::npos, code.find(R"(ldb $248, $254, 7
-stbu $248, )")) << code;
+stbu $248, )"))
+        << code;
 }
 
 // The expression of `op` on a and b in C, and on the host.
 template <typename T>
-static void Case(std::ostringstream &src, int &n, const char *type, const char *op, T a, T b,
-                 T r)
+static void Case(std::ostringstream &src, int &n, const char *type, const char *op, T a, T b, T r)
 {
     const char *u = std::is_unsigned<T>::value ? "UL" : "";
     src << "    { volatile " << type << " a = " << +a << u << ", b = " << +b << u << "; if (("

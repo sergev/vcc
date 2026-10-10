@@ -1,6 +1,6 @@
 //
-// alloca (<alloca.h>, docs/Standard_Include_Files.md) run on every target but BESM-6 (which has its own,
-// backend/besm6/test/alloca_tests.cpp): the memory lives on the stack until the function
+// alloca (<alloca.h>, docs/Standard_Include_Files.md) run on every target but BESM-6 (which has its
+// own, backend/besm6/test/alloca_tests.cpp): the memory lives on the stack until the function
 // returns.  Through each backend's coroutine fixture CoroTest (test/coro_test.h).  The
 // programs print nothing that depends on the target's sizes, and take little stack, for
 // AVR's and MSP430's sake.

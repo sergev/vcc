@@ -67,15 +67,15 @@ typedef struct {
     const Tac_TopLevel *program; // the translation unit
     const Tac_TopLevel *tl;      // the function
     A32_Block *prologue;
-    StringMap frame;   // name → Slot *
-    StringMap globals; // name → const Tac_Type *
-    int locals_size;   // bytes of slots below the frame record
-    int outgoing;      // bytes of the outgoing argument area
-    bool moves_sp;     // calls a stack builtin (alloca): sp moves in the body
-    int ret_ptr;       // slot of the result address that came in r0, or 0
-    StringMap regs;    // name → allocated register + 1 (regalloc.c)
-    StringMap regs_hi; // name → its high word's register + 1
-    StringMap dead;    // allocated parameters dead on entry (regalloc.c)
+    StringMap frame;     // name → Slot *
+    StringMap globals;   // name → const Tac_Type *
+    int locals_size;     // bytes of slots below the frame record
+    int outgoing;        // bytes of the outgoing argument area
+    bool moves_sp;       // calls a stack builtin (alloca): sp moves in the body
+    int ret_ptr;         // slot of the result address that came in r0, or 0
+    StringMap regs;      // name → allocated register + 1 (regalloc.c)
+    StringMap regs_hi;   // name → its high word's register + 1
+    StringMap dead;      // allocated parameters dead on entry (regalloc.c)
     unsigned saved_core; // r4-r9 in use, a bit each
     unsigned saved_vfp;  // d8-d13 in use, a bit per d register
     bool sp_frame;       // the frame addressed from sp, r11 free for values
@@ -168,11 +168,11 @@ int use_word(Gen *g, int scratch, const Tac_Val *v, const Tac_Type *as, int half
 // Moves as if all at once (a source may be another's destination); a cycle is broken
 // through r12/lr or d14/d15.
 typedef enum {
-    MOVE_CORE,       // mov
-    MOVE_HI_SIGN,    // dst = src >> 31, the high word of a signed int
-    MOVE_S,          // vmov.f32
-    MOVE_D,          // vmov.f64
-    MOVE_S_TO_CORE,  // vmov r, s: a float, or a word of a double
+    MOVE_CORE,      // mov
+    MOVE_HI_SIGN,   // dst = src >> 31, the high word of a signed int
+    MOVE_S,         // vmov.f32
+    MOVE_D,         // vmov.f64
+    MOVE_S_TO_CORE, // vmov r, s: a float, or a word of a double
 } MoveKind;
 typedef struct {
     int dst, src;
@@ -289,8 +289,7 @@ void set_cond(Gen *g, int reg, int cond);
 // r0-r3, r12, lr and d0-d7; `type_of(arg, v)` gives the type of operand `v`.  Sets
 // *dst to its result.
 typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst);
 // Operand 2 of `op` for integer value `v` of type `t`: a modified immediate when the
 // constant is one, or when its negation (add, sub, cmp) or complement (and) is, with
 // *op changed to the counterpart; else core register `scratch`, loaded.

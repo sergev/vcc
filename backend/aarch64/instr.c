@@ -296,7 +296,10 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
     bool sgn     = !a64_is_unsigned(st);
     A64_Op op    = A64_RET;
     if (kind == TAC_INSTRUCTION_SIGN_EXTEND && !(sgn && ssize < 4 && dw == A64_W))
-        op = ssize == 1 ? A64_SXTB : ssize == 2 ? A64_SXTH : ssize == 4 && dw == A64_X ? A64_SXTW : op;
+        op = ssize == 1                  ? A64_SXTB
+             : ssize == 2                ? A64_SXTH
+             : ssize == 4 && dw == A64_X ? A64_SXTW
+                                         : op;
     else if (kind == TAC_INSTRUCTION_ZERO_EXTEND && sgn)
         op = ssize == 1 ? A64_UXTB : ssize == 2 ? A64_UXTH : op; // a W value's upper half is zero
     if (op == A64_RET) {
@@ -630,9 +633,9 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     Tac_BinaryOperator op = in->u.binary.op;
     bool shift            = op == TAC_BINARY_LEFT_SHIFT || op == TAC_BINARY_RIGHT_SHIFT ||
                             op == TAC_BINARY_RIGHT_SHIFT_LOGICAL;
-    int a = use_scalar(g, in->u.binary.src1, t);
-    int b = use_operand2(g, in, t, shift);
-    int d = def_reg(g, T0, in->u.binary.dst);
+    int a                 = use_scalar(g, in->u.binary.src1, t);
+    int b                 = use_operand2(g, in, t, shift);
+    int d                 = def_reg(g, T0, in->u.binary.dst);
     gen_int_binop(g, op, t->kind == TAC_TYPE_POINTER || unsigned_op(op), int_width(t), d, a, b);
     store_int(g, d, in->u.binary.dst);
 }
@@ -645,8 +648,8 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
 {
     const Tac_Type *st = val_type(g, src), *dt = val_type(g, dst);
     bool sfp = a64_is_fp(st), dfp = a64_is_fp(dt);
-    int s    = use_val(g, sfp ? F0 : T0, src);
-    int d    = def_reg(g, dfp ? F1 : T1, dst);
+    int s = use_val(g, sfp ? F0 : T0, src);
+    int d = def_reg(g, dfp ? F1 : T1, dst);
     A64_Op op;
     if (sfp && dfp) {
         op = A64_FCVT;
@@ -684,7 +687,8 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
         if (fp)
             name = a64_is_double(st) ? "__extenddftf2" : "__extendsftf2";
         else
-            name = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
+            name =
+                w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
     }
     int arg = a64_is_ld(st) || fp ? A64_V(0) : A64_X(0);
     load_val(g, arg, src);
@@ -710,7 +714,8 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 
 // Under Apple's ABI, where long double is double: a conversion to or from it as the
 // conversion to or from double, or a copy between the two.
-static void gen_ld_as_double(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+static void gen_ld_as_double(Gen *g, const Tac_Val *src, const Tac_Val *dst,
+                             Tac_InstructionKind kind)
 {
     switch (kind) {
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_DOUBLE:
@@ -727,8 +732,7 @@ static void gen_ld_as_double(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac
     gen_fp_convert(g, src, dst, kind);
 }
 
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst)
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_LONG_DOUBLE_TO_INT:
@@ -754,7 +758,8 @@ bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
 {
     if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
-        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
     if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)
@@ -841,8 +846,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
             gen_ld_as_double(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst,
                              in->kind);
         else
-            gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst,
-                           in->kind);
+            gen_ld_convert(g, in->u.long_double_to_int.src, in->u.long_double_to_int.dst, in->kind);
         break;
     case TAC_INSTRUCTION_UNARY:
         gen_unary(g, in);

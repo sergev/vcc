@@ -119,7 +119,10 @@ TEST_F(BookTest, Chapter11_LongAndIntLocals)
 // Pass longs (within 2^40) as arguments, including on-stack arguments.
 TEST_F(BookTest, Chapter11_LongArgs)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int test_sum(long a, long b, int c, int d, int e, int f, int g, int h, long i) {
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int test_sum(long a, long b, int c, int d, int e, int f, int g, int h, long i) {
     if (a + b < 100l) {
         return 1;
     }
@@ -168,7 +171,9 @@ int main(void) {
 // Multiply by a large (in-range) immediate amid many int locals.
 TEST_F(BookTest, Chapter11_RewriteLargeMultiplyRegression)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
 
 long glob = 5l;
@@ -395,7 +400,9 @@ int main(void) {
 // (concatenated client + lib, client first so its prototype precedes main).
 TEST_F(BookTest, Chapter11_LongArgsLibrary)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int test_sum(int a, int b, int c, long d, int e, long f, int g, int h, long i);
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(int test_sum(int a, int b, int c, long d, int e, long f, int g, int h, long i);
 
 int main(void) {
     return test_sum(0, 0, 0, 34359738368l, 0, 34359738368l, 0, 0, 34359738368l);
@@ -889,7 +896,8 @@ int main(void) {
 // Long arguments to int parameters truncate to 32 bits.
 TEST_F(BookTest, Chapter11_ConvertFunctionArguments)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
     if (a != -1l)
         return 1;
     if (b != 2)

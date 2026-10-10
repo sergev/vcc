@@ -76,12 +76,13 @@ TEST_F(ScannerTest, HandlesDefer)
 // The coroutine keywords; the short names are macros of <coro.h>, identifiers here.
 TEST_F(ScannerTest, HandlesCoroutineKeywords)
 {
-    SetInput("_Coro _Coro_frame _Yield _Await __co_init __co_alloca __co_resume __co_cancel "
-             "__co_destroy __co_done __co_value __co_result __co_sizeof __co_alignof yield");
-    for (int t : { TOKEN_CORO, TOKEN_CORO_FRAME, TOKEN_YIELD, TOKEN_AWAIT, TOKEN_CO_INIT,
-                   TOKEN_CO_ALLOCA, TOKEN_CO_RESUME, TOKEN_CO_CANCEL, TOKEN_CO_DESTROY,
-                   TOKEN_CO_DONE, TOKEN_CO_VALUE, TOKEN_CO_RESULT, TOKEN_CO_SIZEOF,
-                   TOKEN_CO_ALIGNOF, TOKEN_IDENTIFIER })
+    SetInput(
+        "_Coro _Coro_frame _Yield _Await __co_init __co_alloca __co_resume __co_cancel "
+        "__co_destroy __co_done __co_value __co_result __co_sizeof __co_alignof yield");
+    for (int t :
+         { TOKEN_CORO, TOKEN_CORO_FRAME, TOKEN_YIELD, TOKEN_AWAIT, TOKEN_CO_INIT, TOKEN_CO_ALLOCA,
+           TOKEN_CO_RESUME, TOKEN_CO_CANCEL, TOKEN_CO_DESTROY, TOKEN_CO_DONE, TOKEN_CO_VALUE,
+           TOKEN_CO_RESULT, TOKEN_CO_SIZEOF, TOKEN_CO_ALIGNOF, TOKEN_IDENTIFIER })
         EXPECT_EQ(GetNextToken(), t);
 }
 

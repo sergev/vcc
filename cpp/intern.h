@@ -17,8 +17,8 @@
 #define IDENT  2   // char_class value: identifier character
 #define NUMBR  3   // char_class value: digit
 
-#define DROP   0xFE // special character not legal ASCII or EBCDIC
-#define SAME   0    // strcmp() returns this when two strings are equal
+#define DROP 0xFE // special character not legal ASCII or EBCDIC
+#define SAME 0    // strcmp() returns this when two strings are equal
 #ifdef besm6
 // Part of defs.h's non-conforming BESM-6 profile, and here rather than there
 // because it buys STACK and not address space: actual[] and expanded[] are two
@@ -28,11 +28,13 @@
 // measured chain.  (v7's own cpp stopped at 32.)
 #define MAXFRM 31
 #else
-#define MAXFRM 127  // max number of formals/actuals to a macro (§5.2.4.1 minimum; also the
-                    // encoding ceiling: the param-number byte and the VA_FLAG=0x80 params-count
-                    // byte both top out at 127, so a 128th formal is rejected, not misencoded)
+#define MAXFRM \
+    127 // max number of formals/actuals to a macro (§5.2.4.1 minimum; also the
+        // encoding ceiling: the param-number byte and the VA_FLAG=0x80 params-count
+        // byte both top out at 127, so a 128th formal is rejected, not misencoded)
 #endif
-#define VA_FLAG 0x80 // OR'd into a stored params byte: last formal is __VA_ARGS__ (absorbs trailing args)
+#define VA_FLAG \
+    0x80 // OR'd into a stored params byte: last formal is __VA_ARGS__ (absorbs trailing args)
 
 // scan-table selection and buffer-boundary predicates
 #define IN_SLOW_SCAN()  (cpp.scan_tab == cpp.slow_tab)        // scanning a #if expression?
@@ -109,7 +111,8 @@ struct symtab *install_directive(const char *s); // register a built-in like "#d
 char *do_define(char *p);                                    // parse and store a #define
 struct symtab *lookup_token(char *p1, char *p2, int enterf); // look up the token in [p1,p2)
 char *expand_macro(char *p, struct symtab *sp);              // expand a macro call in place
-char *expand_text(const char *a0, const char *a1, char *out, int cap); // fully expand [a0,a1) into out
+char *expand_text(const char *a0, const char *a1, char *out,
+                  int cap); // fully expand [a0,a1) into out
 
 // diag.c -- diagnostics and small string helpers
 char *dir_of(char *s);                   // reduce a path to its directory part

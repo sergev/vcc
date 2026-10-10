@@ -28,7 +28,7 @@ static const int fp_pool[]  = { RA(A32_DREG(0)),  RA(A32_DREG(1)),  RA(A32_DREG(
                                 RA(A32_DREG(9)),  RA(A32_DREG(10)), RA(A32_DREG(11)),
                                 RA(A32_DREG(12)), RA(A32_DREG(13)) };
 
-#define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))  // r11 last
+#define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0]))) // r11 last
 #define NFP  ((int)(sizeof(fp_pool) / sizeof(fp_pool[0])))
 
 typedef struct {

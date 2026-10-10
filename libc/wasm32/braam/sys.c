@@ -22,13 +22,13 @@ coro(braam_call *) int braam_sys(unsigned op, const void *payload, unsigned len,
 {
     braam_call c = { op, 0, payload, len, NULL, 0 };
     defer __braam_forget(&c); /* destroyed while waiting: the reply goes unclaimed */
-    yield &c;
+    yield & c;
     int status = -8; /* Io: a reply too short for its status */
     unsigned n = 0;
     if (c.reply_len >= 4) {
         const unsigned char *r = c.reply;
-        status = (int)(r[0] | r[1] << 8 | r[2] << 16 | (unsigned)r[3] << 24);
-        n      = c.reply_len - 4 < cap ? c.reply_len - 4 : cap;
+        status                 = (int)(r[0] | r[1] << 8 | r[2] << 16 | (unsigned)r[3] << 24);
+        n                      = c.reply_len - 4 < cap ? c.reply_len - 4 : cap;
         memcpy(out, r + 4, n);
     }
     free(c.reply);
@@ -68,8 +68,8 @@ coro(braam_call *) ssize_t write(int fd, const void *buf, size_t n)
     size_t done = 0;
     while (done < n) {
         unsigned chunk = n - done > BRAAM_READ_MAX ? BRAAM_READ_MAX : (unsigned)(n - done);
-        int st = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_WRITE, fd), (const char *)buf + done,
-                                 chunk, NULL, 0, NULL);
+        int st = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_WRITE, fd), (const char *)buf + done, chunk,
+                                 NULL, 0, NULL);
         if (st < 0)
             return failed(st);
         if (st == 0)
@@ -81,8 +81,8 @@ coro(braam_call *) ssize_t write(int fd, const void *buf, size_t n)
 
 coro(braam_call *) int open(const char *path, int flags)
 {
-    int st = await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_OPEN, flags), path, strlen(path), NULL, 0,
-                             NULL);
+    int st =
+        await braam_sys(BRAAM_SYS_OP(BRAAM_SYS_OPEN, flags), path, strlen(path), NULL, 0, NULL);
     return st < 0 ? failed(st) : st;
 }
 
@@ -210,10 +210,10 @@ static int fill(struct stat *st, const unsigned char *r, unsigned got, const cha
     st->st_size  = (off_t)get_u64(r + 4);
     st->st_mtime = (time_t)(get_u64(r + 12) / 1000);
     st->st_atime = st->st_ctime = st->st_mtime;
-    st->st_dev   = 1;
-    st->st_nlink = 1;
-    st->st_blksize = 512;
-    st->st_blocks  = (st->st_size + 511) / 512;
+    st->st_dev                  = 1;
+    st->st_nlink                = 1;
+    st->st_blksize              = 512;
+    st->st_blocks               = (st->st_size + 511) / 512;
     if (path) { /* FNV-1a, as Braam's compat layer makes st_ino */
         unsigned long long h = 0xcbf29ce484222325ull;
         for (; *path; path++)

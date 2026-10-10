@@ -8,7 +8,7 @@
 void *memset(void *s, int c, size_t n)
 {
     char *p = s;
-    char b = (char)c;          /* value stored is (unsigned char)c */
+    char b  = (char)c; /* value stored is (unsigned char)c */
     while (n > 0) {
         *p = b;
         p++;

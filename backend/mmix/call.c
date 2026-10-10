@@ -191,8 +191,8 @@ void store_params(Gen *g)
         intptr_t dead;
         if (r >= 0) {
             if (!map_get(&g->dead, p->name, &dead))
-                m[n++] = (Move){ r, i, mmix_is_float(p->type) ? MOVE_FROM_BITS : MOVE_SET, 8,
-                                 false };
+                m[n++] =
+                    (Move){ r, i, mmix_is_float(p->type) ? MOVE_FROM_BITS : MOVE_SET, 8, false };
         } else if (mmix_is_scalar(p->type))
             store_abi(g, i, p->name, p->type);
         else if (struct_in_reg(p->type))
@@ -386,7 +386,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Val *dst = in->u.fun_call.dst;
     bool sret          = dst ? !mmix_is_scalar(val_type(g, dst))
                              : ft && ft->kind == TAC_TYPE_FUN_TYPE && ft->u.fun_type.ret_type &&
-                          !mmix_is_scalar(ft->u.fun_type.ret_type);
+                                   !mmix_is_scalar(ft->u.fun_type.ret_type);
     if (sret) {
         if (dst)
             address_of(g, MMIX_SRET, dst->u.var_name, 0);
@@ -419,8 +419,8 @@ static bool same_result(const Tac_Type *a, const Tac_Type *b)
 bool gen_tail_call(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type, *ours = g->tl->u.function.type;
-    if (is_va_start(in) || mmix_stack_builtin(in) || g->leaf || g->frame_size != 0 || !ft || ft->kind != TAC_TYPE_FUN_TYPE ||
-        !ours || ours->kind != TAC_TYPE_FUN_TYPE ||
+    if (is_va_start(in) || mmix_stack_builtin(in) || g->leaf || g->frame_size != 0 || !ft ||
+        ft->kind != TAC_TYPE_FUN_TYPE || !ours || ours->kind != TAC_TYPE_FUN_TYPE ||
         !same_result(ft->u.fun_type.ret_type, ours->u.fun_type.ret_type))
         return false;
     int n = 0;

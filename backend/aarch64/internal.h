@@ -223,7 +223,6 @@ void a64_peephole(A64_Func *fn, unsigned result);
 // Whether `in` calls a runtime routine (long double arithmetic and conversions);
 // `type_of(arg, v)` gives the type of operand `v`.  Sets *dst to its result.
 typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst);
 
 #endif // AARCH64_INTERNAL_H

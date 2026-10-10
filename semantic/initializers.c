@@ -26,9 +26,9 @@ static InitItem *union_rest(const Type *u, const Type *member)
     int used = (int)get_size(member);
     if (size <= used)
         return NULL;
-    int unit  = (int)target_config->int_size;
-    bool word = used % unit == 0 && size % unit == 0;
-    Type *pad = new_type(TYPE_ARRAY, __func__, __FILE__, __LINE__);
+    int unit             = (int)target_config->int_size;
+    bool word            = used % unit == 0 && size % unit == 0;
+    Type *pad            = new_type(TYPE_ARRAY, __func__, __FILE__, __LINE__);
     pad->u.array.element = new_type(word ? TYPE_INT : TYPE_UCHAR, __func__, __FILE__, __LINE__);
     set_array_size(pad, word ? (size - used) / unit : size - used);
     InitItem *rest = new_init_item(NULL, make_zero_init(pad));
@@ -68,10 +68,10 @@ static Initializer *make_zero_init(Type *t)
             // initializer.  gen_compound_init's struct branch addresses each member at
             // base_offset + item->offset; without this, every member of a zero-filled
             // nested struct collapses onto offset 0.
-            item->offset   = members->offset;
-            item->bf       = members->bf;
-            *tail          = item;
-            tail           = &item->next;
+            item->offset = members->offset;
+            item->bf     = members->bf;
+            *tail        = item;
+            tail         = &item->next;
         }
         return init;
     }
@@ -153,14 +153,14 @@ static const char *static_compound_literal(Expr *e)
 {
     if (scope_level > 0)
         fatal_error("initializer element is not a constant expression");
-    Type *t           = check_type_name(e->u.compound_literal.type);
-    Initializer *init = new_initializer(INITIALIZER_COMPOUND);
-    init->u.items     = e->u.compound_literal.init;
+    Type *t                    = check_type_name(e->u.compound_literal.type);
+    Initializer *init          = new_initializer(INITIALIZER_COMPOUND);
+    init->u.items              = e->u.compound_literal.init;
     e->u.compound_literal.type = t;
     e->u.compound_literal.init = NULL;
     Tac_StaticInit *data       = build_static_init(t, &init);
     free_initializer(init);
-    char *name = symtab_add_compound_literal(t, data);
+    char *name      = symtab_add_compound_literal(t, data);
     const char *ret = symtab_get(name)->name;
     xfree(name);
     return ret;
@@ -472,8 +472,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
         xfree(decoded);
         // A char*/void* is a fat pointer.  A string decays to its first byte, which is
         // packed in the MSB (byte#0), so byte_offset 0 yields offset_enc 5.
-        Tac_StaticInit *pointer_init      = tac_new_static_init(TAC_STATIC_INIT_FAT_POINTER);
-        pointer_init->u.pointer.name      = string_id;
+        Tac_StaticInit *pointer_init        = tac_new_static_init(TAC_STATIC_INIT_FAT_POINTER);
+        pointer_init->u.pointer.name        = string_id;
         pointer_init->u.pointer.byte_offset = 0;
         return pointer_init;
     }
@@ -530,7 +530,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
                                               init->u.expr->u.unary_op.op == UNARY_ADDRESS
                                           ? init->u.expr->u.unary_op.expr
                                           : NULL;
-                if (target_word_addressed() && operand && (operand->kind == EXPR_VAR || operand->kind == EXPR_COMPOUND)) {
+                if (target_word_addressed() && operand &&
+                    (operand->kind == EXPR_VAR || operand->kind == EXPR_COMPOUND)) {
                     const Type *ot = unalias(symtab_get(base)->type);
                     if (ot->kind == TYPE_CHAR || ot->kind == TYPE_SCHAR || ot->kind == TYPE_UCHAR)
                         off += (long)target_config->aggregate_align - 1;
@@ -694,8 +695,8 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
             if (!item->init) {
                 continue;
             }
-            current = append_zero(current, field->offset - current_offset);
-            current = append_static_init(current, static_init(field->type, item->init));
+            current        = append_zero(current, field->offset - current_offset);
+            current        = append_static_init(current, static_init(field->type, item->init));
             current_offset = field->offset + get_size(field->type);
         }
         current = flush_bits(&img, current, &current_offset);
@@ -740,9 +741,9 @@ static Tac_StaticInit *static_init_at(Type *var_type, const Initializer *init)
 // static_init with diag_loc at the node, for the errors found in it.
 static Tac_StaticInit *static_init(Type *var_type, const Initializer *init)
 {
-    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    SrcLoc saved           = diag_enter(init ? init->loc : diag_loc);
     Tac_StaticInit *result = static_init_at(var_type, init);
-    diag_loc = saved;
+    diag_loc               = saved;
     return result;
 }
 
@@ -864,9 +865,9 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
 // check_init with diag_loc at the node, for the errors found in it.
 static Initializer *check_init(Type *target_type, Initializer *init)
 {
-    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    SrcLoc saved        = diag_enter(init ? init->loc : diag_loc);
     Initializer *result = check_init_at(target_type, init);
-    diag_loc = saved;
+    diag_loc            = saved;
     return result;
 }
 

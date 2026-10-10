@@ -205,12 +205,12 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     emit_xts_val(block, tail, f, &(Tac_Val){ .kind = TAC_VAL_CONSTANT, .u.constant = &six });
     Besm_Instr *call = emit(block, tail, BESM_BRANCH_CALL);
     call->name       = xstrdup("b$udiv");
-    emit(block, tail, BESM_MEM_XTS);          // push the count; A = 0
+    emit(block, tail, BESM_MEM_XTS); // push the count; A = 0
     Besm_Instr *wtc = emit(block, tail, BESM_MOD_WTC);
-    wtc->reg        = REG_SP;                 // stack mode: pop it into C
+    wtc->reg        = REG_SP; // stack mode: pop it into C
     Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
     utm->reg        = REG_SP;
-    utm->addr       = 1;                      // r15 += C + 1
+    utm->addr       = 1; // r15 += C + 1
 }
 
 //

@@ -129,8 +129,8 @@ int PFX_check(void)
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 static std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -151,12 +151,11 @@ TEST_F(WasmTest, RunVariadic)
 TEST_F(WasmTest, RunVariadicWithClang)
 {
     SKIP_IF_NO_WASM32_CLANG();
-    std::string ours = Subst(variadic_src, "our", "their") +
-                       Subst(variadic_check, "our", "their") +
+    std::string ours = Subst(variadic_src, "our", "their") + Subst(variadic_check, "our", "their") +
                        "int their_check(void);\n"
                        "int main(void) { return our_check() | their_check() << 4; }";
-    std::string theirs = Subst(variadic_src, "their", "our") +
-                         Subst(variadic_check, "their", "our");
+    std::string theirs =
+        Subst(variadic_src, "their", "our") + Subst(variadic_check, "their", "our");
     EXPECT_EQ("", CompileAndRunWithClang(ours, theirs));
     EXPECT_EQ(0, exit_status);
 }

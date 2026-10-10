@@ -100,7 +100,7 @@ struct Type {
             const struct StructDef *cached_def; /* the tag's definition; NULL = not resolved */
             Type *frame_yield;  /* _Coro_frame(Y, T): Y (void included); NULL for any other */
             Type *frame_result; /* _Coro_frame(Y, T): T */
-        } struct_t; /* optional name */
+        } struct_t;             /* optional name */
         struct {
             Ident name;
             Enumerator *enumerators;
@@ -148,8 +148,8 @@ struct Field {
     union {
         struct {
             Type *type;
-            Ident name;     /* optional */
-            Expr *bitfield; /* optional */
+            Ident name;                /* optional */
+            Expr *bitfield;            /* optional */
             AlignmentSpec *align_spec; /* optional: _Alignas */
         } member;
         struct {
@@ -167,7 +167,7 @@ struct Enumerator {
 
 struct Param {
     Param *next; /* linked list */
-    SrcLoc loc; /* source position, for diagnostics */
+    SrcLoc loc;  /* source position, for diagnostics */
     Ident name;  /* optional */
     Type *type;
     DeclSpec *specifiers; /* optional */
@@ -178,7 +178,7 @@ typedef enum { DECL_VAR, DECL_STATIC_ASSERT, DECL_EMPTY } DeclarationKind;
 
 struct Declaration {
     Declaration *next; /* linked list for declaration_list */
-    SrcLoc loc; /* source position, for diagnostics */
+    SrcLoc loc;        /* source position, for diagnostics */
     DeclarationKind kind;
     union {
         struct {
@@ -237,7 +237,7 @@ struct AlignmentSpec {
 
 struct InitDeclarator {
     InitDeclarator *next; /* linked list */
-    SrcLoc loc; /* source position, for diagnostics */
+    SrcLoc loc;           /* source position, for diagnostics */
     Type *type;
     Ident name;
     Initializer *init; /* optional */
@@ -259,7 +259,8 @@ struct InitItem {
     InitItem *next; /* linked list */
     Designator *designators;
     Initializer *init;
-    int offset; /* byte offset of this item within the enclosing struct; set by typecheck (0 otherwise) */
+    int offset;  /* byte offset of this item within the enclosing struct; set by typecheck (0
+                    otherwise) */
     BitField bf; /* a bit-field member's place in the unit at offset; set by typecheck */
 };
 
@@ -603,7 +604,7 @@ typedef enum { EXTERNAL_DECL_FUNCTION, EXTERNAL_DECL_DECLARATION } ExternalDeclK
 
 struct ExternalDecl {
     ExternalDecl *next; /* linked list */
-    SrcLoc loc; /* source position, for diagnostics */
+    SrcLoc loc;         /* source position, for diagnostics */
     ExternalDeclKind kind;
     union {
         struct {

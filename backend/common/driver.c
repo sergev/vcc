@@ -87,7 +87,7 @@ static char *generate_output_filename(const char *input_file, const char *new_ex
 //
 static int parse_args(int argc, char *argv[], Args *args, const Backend *backend)
 {
-    int nflags = num_flags(backend);
+    int nflags                  = num_flags(backend);
     struct option *long_options = calloc(nflags + 4, sizeof(struct option));
     if (!long_options) {
         diag_error(diag_loc, "out of memory");

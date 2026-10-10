@@ -226,6 +226,5 @@ TEST_F(ParserTest, CoroFrameOneType_negative)
 
 TEST_F(ParserTest, CoroFrameCombine_negative)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int _Coro_frame(int, void) *p;")),
-                 "cannot combine");
+    EXPECT_DEATH(parse(CreateTempFile("int _Coro_frame(int, void) *p;")), "cannot combine");
 }

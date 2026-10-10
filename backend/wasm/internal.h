@@ -43,9 +43,9 @@ typedef struct {
     struct {
         const char *name;
         char *sig;
-    } helpers[32];               // the runtime routines called, to declare
+    } helpers[32]; // the runtime routines called, to declare
     int nhelpers;
-    bool barrier;                // translating a volatile access
+    bool barrier; // translating a volatile access
 } Gen;
 
 // How a value travels in a call, as clang's wasm32 passes it.

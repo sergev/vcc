@@ -29,10 +29,10 @@
 // and the flags.
 typedef uint64_t Regs;
 
-#define FLAGS     (1ull << 32)
-#define CALLER    (0x0fc7ull | 0xffff0000ull) // rax rcx rdx rsi rdi r8-r11, every xmm
-#define ARGS      (0x03c7ull | 0x00ff0000ull) // rax (%al) rcx rdx rsi rdi r8 r9, xmm0-7
-#define SAVED     0xf028ull                   // rbx rbp r12-r15
+#define FLAGS  (1ull << 32)
+#define CALLER (0x0fc7ull | 0xffff0000ull) // rax rcx rdx rsi rdi r8-r11, every xmm
+#define ARGS   (0x03c7ull | 0x00ff0000ull) // rax (%al) rcx rdx rsi rdi r8 r9, xmm0-7
+#define SAVED  0xf028ull                   // rbx rbp r12-r15
 
 static Regs ret_regs, ret_wide; // the function's result registers, read by ret
 
@@ -92,7 +92,8 @@ static int role(const X86_Instr *in, int i)
     int r = READ;
     switch (in->op) {
     case X86_IMUL:
-        r = in->opnd[2].kind != X86_OPND_NONE ? (i == 2 ? WRITE : READ) : (i == 1 ? READ | WRITE : READ);
+        r = in->opnd[2].kind != X86_OPND_NONE ? (i == 2 ? WRITE : READ)
+                                              : (i == 1 ? READ | WRITE : READ);
         break;
     case X86_MOV:
     case X86_MOVABS:
@@ -329,7 +330,7 @@ typedef struct Live {
     int nblocks;
     X86_Block **blocks;
     Regs *live_in, *live_out;
-    bool upper;               // of the upper halves of the general registers
+    bool upper;                // of the upper halves of the general registers
     const struct Live *halves; // with the upper-half liveness of the same blocks
 } Live;
 
@@ -369,7 +370,7 @@ static void live_compute(Live *lv, X86_Func *fn, bool upper)
     lv->blocks   = xalloc(n * sizeof(X86_Block *), __func__, __FILE__, __LINE__);
     lv->live_in  = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
     lv->live_out = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
-    int i = 0;
+    int i        = 0;
     for (X86_Block *b = fn->blocks; b; b = b->next, i++) {
         lv->blocks[i]   = b;
         lv->live_in[i]  = 0;
@@ -379,9 +380,9 @@ static void live_compute(Live *lv, X86_Func *fn, bool upper)
     while (changed) {
         changed = false;
         for (i = lv->nblocks - 1; i >= 0; i--) {
-            const X86_Block *b  = lv->blocks[i];
-            const X86_Instr *t  = b->tail;
-            Regs out            = 0;
+            const X86_Block *b = lv->blocks[i];
+            const X86_Instr *t = b->tail;
+            Regs out           = 0;
             if (t && t->op == X86_JMP) {
                 int k = block_index(lv, t->opnd[0].sym);
                 out   = k >= 0 ? lv->live_in[k] : ~0ull;
@@ -426,7 +427,8 @@ static Regs live_after(const Live *lv, int bi, const X86_Instr *in)
     for (const X86_Instr *p = b->head; p; p = p->next, len++)
         if (p == in)
             at = len;
-    const X86_Instr **seq = xalloc((len ? len : 1) * sizeof(X86_Instr *), __func__, __FILE__, __LINE__);
+    const X86_Instr **seq =
+        xalloc((len ? len : 1) * sizeof(X86_Instr *), __func__, __FILE__, __LINE__);
     int k = 0;
     for (const X86_Instr *p = b->head; p; p = p->next)
         seq[k++] = p;
@@ -544,7 +546,7 @@ static int view_bits(const X86_Operand *o)
 // register of the file may stand in for it.
 static bool replaceable(const X86_Instr *in, int t, int bits)
 {
-    Regs h = hidden_regs(in);
+    Regs h    = hidden_regs(in);
     bool addr = false;
     for (int i = 0; i < X86_MAX_OPERANDS; i++) {
         const X86_Operand *o = &in->opnd[i];
@@ -634,7 +636,8 @@ static bool upper_unread(const Live *lv, int bi, const X86_Instr *in, int r)
 
 // Delete what does nothing: a move to itself, an extension repeated in place, a lea
 // of its own base, an add or sub of zero, a result nobody reads.
-static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link, const X86_Instr *prev)
+static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link,
+                        const X86_Instr *prev)
 {
     X86_Instr *in = *link;
     if (in->is_volatile)
@@ -646,8 +649,8 @@ static bool delete_noop(const Live *lv, int bi, X86_Block *b, X86_Instr **link, 
         return true;
     }
     if (prev && same_instr(prev, in) && is_reg(s) && is_reg(d) && s->reg == d->reg &&
-        (in->op == X86_MOVSB || in->op == X86_MOVZB || in->op == X86_MOVSW ||
-         in->op == X86_MOVZW || (in->op == X86_MOV && in->width == X86_L))) {
+        (in->op == X86_MOVSB || in->op == X86_MOVZB || in->op == X86_MOVSW || in->op == X86_MOVZW ||
+         (in->op == X86_MOV && in->width == X86_L))) {
         delete_at(b, link);
         return true;
     }
@@ -854,14 +857,15 @@ static bool fold_load(const Live *lv, int bi, X86_Block *b, X86_Instr **link)
     int k = -1; // the operand of `use` that becomes M
     if (is_reg(&use->opnd[0]) && use->opnd[0].reg == t && takes_source(use, imm)) {
         k = 0;
-    } else if (use->op == X86_CMP && is_reg(&use->opnd[1]) && use->opnd[1].reg == t &&
-               !imm && use->opnd[0].kind != X86_OPND_MEM && use->opnd[0].kind != X86_OPND_RIP) {
+    } else if (use->op == X86_CMP && is_reg(&use->opnd[1]) && use->opnd[1].reg == t && !imm &&
+               use->opnd[0].kind != X86_OPND_MEM && use->opnd[0].kind != X86_OPND_RIP) {
         k = 1;
     }
     if (k < 0 || (gp_load && use->width != ld->width) ||
-        (fp_load && (use->op == X86_MOV || (use->op == X86_ADDSD || use->op == X86_SUBSD ||
-                                            use->op == X86_MULSD || use->op == X86_DIVSD ||
-                                            use->op == X86_SQRTSD || use->op == X86_UCOMISD) != (ld->op == X86_MOVSD))))
+        (fp_load && (use->op == X86_MOV ||
+                     (use->op == X86_ADDSD || use->op == X86_SUBSD || use->op == X86_MULSD ||
+                      use->op == X86_DIVSD || use->op == X86_SQRTSD || use->op == X86_UCOMISD) !=
+                         (ld->op == X86_MOVSD))))
         return false;
     const X86_Operand *other = &use->opnd[1 - k];
     if (!into_dest &&
@@ -945,7 +949,7 @@ static bool delete_reload(X86_Block *b, X86_Instr **link)
     if (st->op == X86_MOV && (st->width == X86_L || st->width == X86_Q)) {
         ld->op = X86_MOV;
     } else if (st->op == X86_MOVSS || st->op == X86_MOVSD) {
-        ld->op = X86_MOVAPS;
+        ld->op    = X86_MOVAPS;
         ld->width = X86_Q;
     } else {
         return false;
@@ -1051,7 +1055,8 @@ static bool rewrite_branches(X86_Func *fn)
     for (X86_Block *b = fn->blocks; b; b = b->next) {
         for (const X86_Instr *in = b->head; in; in = in->next) {
             if ((in->op == X86_JMP || in->op == X86_RET) && in->next) {
-                // cppcheck-suppress knownConditionTrueFalse ; delete_instr unlinks in->next through b
+                // cppcheck-suppress knownConditionTrueFalse ; delete_instr unlinks in->next through
+                // b
                 while (in->next)
                     delete_instr(b, in->next);
                 changed = true;
@@ -1223,7 +1228,7 @@ static bool make_cmov(X86_Func *fn)
                 continue;
             // The arm: what follows j in `a`, or else the next block.
             X86_Block *box = a, *after = a->next;
-            X86_Instr *mv  = j->next;
+            X86_Instr *mv = j->next;
             if (!mv) {
                 box = a->next;
                 if (!box || (box->label && label_refs(fn, box->label) > 0))
@@ -1265,8 +1270,8 @@ static bool make_cmov(X86_Func *fn)
             // One move made unconditionally, the other one conditionally after it: from a
             // register or slot that is not D, or else a constant through r11.
             X86_Instr *first = mv, *cond = other;
-            int ccond        = cc; // the branch is taken to `other`
-            bool via_r11     = false;
+            int ccond    = cc; // the branch is taken to `other`
+            bool via_r11 = false;
             if (!cmov_source(cond) || reads_operand(&cond->opnd[0], d)) {
                 first = other;
                 cond  = mv;
@@ -1316,8 +1321,7 @@ static bool rewrite(const Live *lv, int bi, X86_Block *b, X86_Instr **link, cons
 {
     return delete_noop(lv, bi, b, link, prev) || forward_move(lv, bi, b, link) ||
            compute_in_place(lv, bi, b, link) || fold_load(lv, bi, b, link) ||
-           fold_address(lv, bi, b, link) || delete_reload(b, link) ||
-           short_form(lv, bi, b, link);
+           fold_address(lv, bi, b, link) || delete_reload(b, link) || short_form(lv, bi, b, link);
 }
 
 void x86_peephole_func(X86_Func *fn)

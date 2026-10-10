@@ -18,7 +18,7 @@ int main(void)
     for (int i = 0; i < 127; i++)
         src[i] = (char)('a' + i % 26);
     src[127] = 0;
-    int bad = 0;
+    int bad  = 0;
     for (int r = 0; r < 20; r++) {
         copy(dst, src);
         bad += compare(dst, src) != 0;

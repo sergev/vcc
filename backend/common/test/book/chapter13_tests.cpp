@@ -141,7 +141,10 @@ TEST_F(BookTest, Chapter13_ConstantDoubles)
 // double/int parameters; all values exact small.
 TEST_F(BookTest, Chapter13_DoubleAndIntParameters)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double d1, double d2, int i1, double d3, double d4, int i2, int i3,
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int check_arguments(double d1, double d2, int i1, double d3, double d4, int i2, int i3,
                     int i4, double d5, double d6, double d7, int i5, double d8) {
     if (d1 != 1.0) { return 1; }
     if (d2 != 2.0) { return 2; }
@@ -168,7 +171,8 @@ int main(void) {
 // registers and on the stack across recursive calls; values 1..18 exact.
 TEST_F(BookTest, Chapter13_DoubleAndIntParamsRecursive)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
         int i4, double d4, int i5, double d5, int i6, double d6,
         int i7, double d7, int i8, double d8, int i9, double d9) {
     if (i1 != d9) {
@@ -204,7 +208,10 @@ int main(void) {
 // function_calls/double_parameters: 8 double parameters passed in registers.
 TEST_F(BookTest, Chapter13_DoubleParameters)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
 
 int main(void) {
     return check_arguments(1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0);
@@ -226,7 +233,10 @@ int check_arguments(double a, double b, double c, double d, double e, double f, 
 // function_calls/push_xmm: 11 double arguments, some passed on the stack.
 TEST_F(BookTest, Chapter13_PushXmm)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int callee(double a, double b, double c, double d, double e, double f, double g,
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int callee(double a, double b, double c, double d, double e, double f, double g,
            double h, double i, double j, double k) {
     if (a != 0.) { return 1; }
     if (b != 1.) { return 2; }
@@ -312,7 +322,9 @@ int main(void) {
 // clique of small-int locals; semantically simple.
 TEST_F(BookTest, Chapter13_CvttsdRegression)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
 
 double glob = 5000.;
@@ -398,7 +410,8 @@ TEST_F(BookTest, Chapter13_CompoundAssign)
 // on success so client's d == 78.00 is false, returns 0.
 TEST_F(BookTest, Chapter13_DoubleAndIntParamsRecursiveLibrary)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(int fun(int i1, double d1, int i2, double d2, int i3, double d3,
         int i4, double d4, int i5, double d5, int i6, double d6,
         int i7, double d7, int i8, double d8, int i9, double d9);
 int main(void) {
@@ -438,7 +451,10 @@ int fun(int i1, double d1, int i2, double d2, int i3, double d3,
 // libraries/double_parameters (client + lib merged).
 TEST_F(BookTest, Chapter13_DoubleParametersLibrary)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int check_arguments(double a, double b, double c, double d, double e, double f, double g, double h);
 
 int main(void) {
     return check_arguments(1.0, 2.0, 3.0, 4.0, -1.0, -2.0, -3.0, -4.0);

@@ -7,14 +7,16 @@ using Pragma         = PreprocessorTest;
 using NullDirective  = PreprocessorTest;
 
 // §6.10.4: #line sets the presumed line number and file name.
-TEST_F(LineControl, SetsLineAndFile) {
+TEST_F(LineControl, SetsLineAndFile)
+{
     EXPECT_TOKENS(
         "#line 100 \"foo.c\"\n"
         "__LINE__ __FILE__\n",
         "100 \"foo.c\"");
 }
 
-TEST_F(LineControl, SetsLineOnly) {
+TEST_F(LineControl, SetsLineOnly)
+{
     EXPECT_TOKENS(
         "#line 500\n"
         "__LINE__\n",
@@ -22,7 +24,8 @@ TEST_F(LineControl, SetsLineOnly) {
 }
 
 // §6.10.4p5: the digit sequence / file name may be produced by macro expansion.
-TEST_F(LineControl, MacroExpandedOperands) {
+TEST_F(LineControl, MacroExpandedOperands)
+{
     EXPECT_TOKENS(
         "#define WHERE 250\n"
         "#line WHERE\n"
@@ -32,7 +35,8 @@ TEST_F(LineControl, MacroExpandedOperands) {
 
 // §6.10.4: the first operand must be a digit sequence; a non-numeric #line is a
 // constraint violation and must prevent successful translation.
-TEST_F(LineControl, NonDigitOperandDiagnosed) {
+TEST_F(LineControl, NonDigitOperandDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#line notanumber\n");
 }
 
@@ -40,7 +44,8 @@ TEST_F(LineControl, NonDigitOperandDiagnosed) {
 // scan pointer past its own newline, so the loop's fast scan for "\n#" walked
 // over whatever came next and took it for text -- silently, and whatever it was.
 // README.md, "A directive after #line".
-TEST_F(LineControl, NextLineDirectiveNotSwallowed) {
+TEST_F(LineControl, NextLineDirectiveNotSwallowed)
+{
     EXPECT_TOKENS(
         "#line 11\n"
         "#define AA 7\n"
@@ -51,78 +56,84 @@ TEST_F(LineControl, NextLineDirectiveNotSwallowed) {
 // The shape that found it: b6yacc writes `# line N "file"' straight above the
 // %{ ... %} block it copies out of a grammar, and cmd/lex/parser.y opens that
 // block with an #include.
-TEST_F(LineControl, NextLineIncludeNotSwallowed) {
-    EXPECT_TRUE(TokensAre(
-        "# line 11 \"gen.y\"\n"
-        "#include \"defs.h\"\n"
-        "TAG\n",
-        "ok",
-        {},
-        {{"defs.h", "#define TAG ok\n"}}));
+TEST_F(LineControl, NextLineIncludeNotSwallowed)
+{
+    EXPECT_TRUE(
+        TokensAre("# line 11 \"gen.y\"\n"
+                  "#include \"defs.h\"\n"
+                  "TAG\n",
+                  "ok", {}, { { "defs.h", "#define TAG ok\n" } }));
 }
 
 // §6.10.5: a #error not skipped by conditional inclusion prevents successful
 // translation.
-TEST_F(ErrorDirective, StopsTranslation) {
+TEST_F(ErrorDirective, StopsTranslation)
+{
     EXPECT_PP_DIAGNOSES("code\n#error deliberate failure\nmore\n");
 }
 
 // A #error inside a skipped group is inert.
-TEST_F(ErrorDirective, SkippedErrorIsInert) {
+TEST_F(ErrorDirective, SkippedErrorIsInert)
+{
     EXPECT_TOKENS("#if 0\n#error not reached\n#endif\nOK\n", "OK");
 }
 
 // §6.10.6: an unrecognized #pragma is ignored (implementation-defined, but must
 // not fail translation).
-TEST_F(Pragma, UnknownPragmaAccepted) {
+TEST_F(Pragma, UnknownPragmaAccepted)
+{
     EXPECT_PP_OK("#pragma this is not a real pragma\nOK\n");
 }
 
 // §6.10.7: a # directive with nothing after it has no effect.
-TEST_F(NullDirective, HasNoEffect) {
+TEST_F(NullDirective, HasNoEffect)
+{
     EXPECT_TOKENS("#\nOK\n#   \n", "OK");
 }
 
 // In assembly (__ASSEMBLER__ defined, as vcc does for a .S file) a '#' that starts no
 // directive is a comment, dropped without a diagnostic as GCC does.
-TEST_F(Pragma, AssemblerCommentLine) {
-    EXPECT_TRUE(TokensAre("# a comment\n    nop\n", "nop", {"-D__ASSEMBLER__"}));
+TEST_F(Pragma, AssemblerCommentLine)
+{
+    EXPECT_TRUE(TokensAre("# a comment\n    nop\n", "nop", { "-D__ASSEMBLER__" }));
 }
 
-TEST_F(Pragma, UndefinedControlInC) {
+TEST_F(Pragma, UndefinedControlInC)
+{
     EXPECT_PP_DIAGNOSES("# a comment\n");
 }
 
 // Diagnostics name the file and the line of the directive, not the line after it.
 using Diagnostic = PreprocessorTest;
 
-TEST_F(Diagnostic, ErrorNamesDirectiveLine) {
+TEST_F(Diagnostic, ErrorNamesDirectiveLine)
+{
     Result r = Preprocess("x\n#error boom\ny\n");
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("input.c:2: error: #error boom"), std::string::npos) << r.err;
 }
 
-TEST_F(Diagnostic, MissingIncludeNamesDirectiveLine) {
+TEST_F(Diagnostic, MissingIncludeNamesDirectiveLine)
+{
     Result r = Preprocess("#include <no_such_header.h>\n");
     EXPECT_NE(r.exit_code, 0);
-    EXPECT_NE(r.err.find("input.c:1: error: 'no_such_header.h' file not found"),
-              std::string::npos)
+    EXPECT_NE(r.err.find("input.c:1: error: 'no_such_header.h' file not found"), std::string::npos)
         << r.err;
 }
 
 // An #if left open at the end of input is diagnosed where it starts.
-TEST_F(Diagnostic, UnterminatedConditional) {
+TEST_F(Diagnostic, UnterminatedConditional)
+{
     Result r = Preprocess("int x;\n#ifdef A\n#else\n#if 0\n");
     EXPECT_NE(r.exit_code, 0);
-    EXPECT_NE(r.err.find("input.c:2: error: unterminated conditional directive"),
-              std::string::npos)
+    EXPECT_NE(r.err.find("input.c:2: error: unterminated conditional directive"), std::string::npos)
         << r.err;
-    EXPECT_NE(r.err.find("input.c:4: error: unterminated conditional directive"),
-              std::string::npos)
+    EXPECT_NE(r.err.find("input.c:4: error: unterminated conditional directive"), std::string::npos)
         << r.err;
 }
 
-TEST_F(Diagnostic, MacroArgumentCounts) {
+TEST_F(Diagnostic, MacroArgumentCounts)
+{
     Result r = Preprocess("#define F(a, b) a + b\nF(1)\nF(1, 2, 3)\n");
     EXPECT_NE(r.err.find("input.c:2: error: macro 'F' requires 2 arguments, but only 1 given"),
               std::string::npos)
@@ -132,7 +143,8 @@ TEST_F(Diagnostic, MacroArgumentCounts) {
         << r.err;
 }
 
-TEST_F(Diagnostic, UnknownDirectiveNamed) {
+TEST_F(Diagnostic, UnknownDirectiveNamed)
+{
     Result r = Preprocess("#bogus x\n");
     EXPECT_NE(r.err.find("input.c:1: error: invalid preprocessing directive '#bogus'"),
               std::string::npos)
@@ -140,7 +152,8 @@ TEST_F(Diagnostic, UnknownDirectiveNamed) {
 }
 
 // The exit status is 1 however many errors there are.
-TEST_F(Diagnostic, ExitStatusIsOne) {
+TEST_F(Diagnostic, ExitStatusIsOne)
+{
     std::string src;
     for (int i = 0; i < 256; i++)
         src += "#error e\n";

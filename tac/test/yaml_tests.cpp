@@ -849,18 +849,12 @@ TEST_F(TacYamlTest, AllScalarTypeKinds)
         Tac_TypeKind kind;
         const char *name;
     } scalars[] = {
-        { TAC_TYPE_SCHAR, "schar" },
-        { TAC_TYPE_UCHAR, "uchar" },
-        { TAC_TYPE_SHORT, "short" },
-        { TAC_TYPE_INT, "int" },
-        { TAC_TYPE_LONG, "long" },
-        { TAC_TYPE_LONG_LONG, "long_long" },
-        { TAC_TYPE_USHORT, "ushort" },
-        { TAC_TYPE_UINT, "uint" },
-        { TAC_TYPE_ULONG, "ulong" },
-        { TAC_TYPE_ULONG_LONG, "ulong_long" },
-        { TAC_TYPE_FLOAT, "float" },
-        { TAC_TYPE_DOUBLE, "double" },
+        { TAC_TYPE_SCHAR, "schar" },   { TAC_TYPE_UCHAR, "uchar" },
+        { TAC_TYPE_SHORT, "short" },   { TAC_TYPE_INT, "int" },
+        { TAC_TYPE_LONG, "long" },     { TAC_TYPE_LONG_LONG, "long_long" },
+        { TAC_TYPE_USHORT, "ushort" }, { TAC_TYPE_UINT, "uint" },
+        { TAC_TYPE_ULONG, "ulong" },   { TAC_TYPE_ULONG_LONG, "ulong_long" },
+        { TAC_TYPE_FLOAT, "float" },   { TAC_TYPE_DOUBLE, "double" },
         { TAC_TYPE_VOID, "void" },
     };
 
@@ -963,18 +957,18 @@ TEST_F(TacYamlTest, StructureType)
 
 TEST_F(TacYamlTest, TypedFunction)
 {
-    Tac_TopLevel *tl                         = make_empty_function("f", true);
-    tl->u.function.type                      = tac_new_type(TAC_TYPE_FUN_TYPE);
+    Tac_TopLevel *tl                            = make_empty_function("f", true);
+    tl->u.function.type                         = tac_new_type(TAC_TYPE_FUN_TYPE);
     tl->u.function.type->u.fun_type.param_types = tac_new_type(TAC_TYPE_LONG);
-    tl->u.function.type->u.fun_type.ret_type = tac_new_type(TAC_TYPE_DOUBLE);
-    Tac_Param *p                             = tac_new_param();
-    p->name                                  = xstrdup("%n");
-    p->type                                  = tac_new_type(TAC_TYPE_LONG);
-    tl->u.function.params                    = p;
-    Tac_Param *l                             = tac_new_param();
-    l->name                                  = xstrdup("%1");
-    l->type                                  = tac_new_type(TAC_TYPE_DOUBLE);
-    tl->u.function.locals                    = l;
+    tl->u.function.type->u.fun_type.ret_type    = tac_new_type(TAC_TYPE_DOUBLE);
+    Tac_Param *p                                = tac_new_param();
+    p->name                                     = xstrdup("%n");
+    p->type                                     = tac_new_type(TAC_TYPE_LONG);
+    tl->u.function.params                       = p;
+    Tac_Param *l                                = tac_new_param();
+    l->name                                     = xstrdup("%1");
+    l->type                                     = tac_new_type(TAC_TYPE_DOUBLE);
+    tl->u.function.locals                       = l;
 
     std::string out = capture(tl);
     EXPECT_EQ(out, R"(- toplevel:

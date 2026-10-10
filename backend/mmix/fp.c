@@ -14,11 +14,11 @@ enum { ROUND_OFF = 1 }; // fix's rounding mode: toward zero, as C converts
 void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 {
     Tac_BinaryOperator op = in->u.binary.op;
-    int x = use_val(g, in->u.binary.src1, REG_A, NULL);
-    int y = use_val(g, in->u.binary.src2, REG_B, NULL);
+    int x                 = use_val(g, in->u.binary.src1, REG_A, NULL);
+    int y                 = use_val(g, in->u.binary.src2, REG_B, NULL);
     Mmix_Operand a = mmix_reg(x), b = mmix_reg(y), c = mmix_reg(REG_C);
-    int d          = def_reg(g, in->u.binary.dst, REG_C);
-    bool rounded   = !mmix_is_float(val_type(g, in->u.binary.dst));
+    int d        = def_reg(g, in->u.binary.dst, REG_C);
+    bool rounded = !mmix_is_float(val_type(g, in->u.binary.dst));
     switch (op) {
     case TAC_BINARY_ADD_DOUBLE:
         emit3(g, MMIX_FADD, mmix_reg(d), a, b);

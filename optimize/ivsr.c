@@ -198,15 +198,15 @@ typedef struct {
     Tac_TopLevel *fn;
     OptPreds preds;
     int n;
-    bool *reach;           // reachable from the entry
-    unsigned char *dom;    // dom[b * n + d]: d dominates b
-    StringMap types;       // private name → its Tac_Type
+    bool *reach;        // reachable from the entry
+    unsigned char *dom; // dom[b * n + d]: d dominates b
+    StringMap types;    // private name → its Tac_Type
     StringMap address_taken;
-    StringMap names;       // every name and label of the function, for fresh names
+    StringMap names; // every name and label of the function, for fresh names
     int next_temp;
-    int h;                 // the loop at work: its header,
-    const bool *in_loop;   // and its blocks
-    int *stack;            // scratch for reaches()
+    int h;               // the loop at work: its header,
+    const bool *in_loop; // and its blocks
+    int *stack;          // scratch for reaches()
     bool *seen;
 } Ivsr;
 
@@ -248,15 +248,16 @@ static void insert_at_end(OptBlock *b, Tac_Instruction *in)
         in->next           = NULL;
         return;
     }
-    const Tac_Val *cond = last->kind == TAC_INSTRUCTION_JUMP_IF_ZERO   ? last->u.jump_if_zero.condition
-                          : last->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO ? last->u.jump_if_not_zero.condition
-                                                                         : NULL;
+    const Tac_Val *cond =
+        last->kind == TAC_INSTRUCTION_JUMP_IF_ZERO       ? last->u.jump_if_zero.condition
+        : last->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO ? last->u.jump_if_not_zero.condition
+                                                         : NULL;
     if (!cond && last->kind != TAC_INSTRUCTION_JUMP && last->kind != TAC_INSTRUCTION_JUMP_TABLE) {
         insert_after(b, last, in);
         return;
     }
     Tac_Instruction *at = last, *p = prev_of(b, last);
-    const char *d       = p ? def_name(p) : NULL;
+    const char *d = p ? def_name(p) : NULL;
     if (is_var(cond) && d && !strcmp(d, cond->u.var_name) && p->kind == TAC_INSTRUCTION_BINARY)
         at = p;
     insert_before(b, at, in);
@@ -269,10 +270,10 @@ static void fresh_temp(Ivsr *s, const Tac_Type *type, char *name)
         snprintf(name, 32, "%%%d", s->next_temp++);
     while (map_get(&s->names, name, NULL));
     map_insert(&s->names, name, 1, 0);
-    Tac_Param *p = tac_new_param();
-    p->name      = xstrdup(name);
-    p->type      = tac_clone_type(type);
-    p->next      = s->fn->u.function.locals;
+    Tac_Param *p             = tac_new_param();
+    p->name                  = xstrdup(name);
+    p->type                  = tac_clone_type(type);
+    p->next                  = s->fn->u.function.locals;
     s->fn->u.function.locals = p;
     map_insert(&s->types, name, (intptr_t)p->type, 0);
 }
@@ -307,8 +308,8 @@ static void compute_dominators(Ivsr *s)
     for (int i = 0; i < n; i++)
         s->reach[i] = false;
     int *stack = XALLOC(n, int), sp = 0;
-    stack[sp++]  = 0;
-    s->reach[0]  = true;
+    stack[sp++] = 0;
+    s->reach[0] = true;
     while (sp) {
         const OptBlock *b = s->cfg->blocks[stack[--sp]];
         for (int k = 0; k < b->nsucc; k++)
@@ -428,8 +429,8 @@ static bool is_step(const Tac_Instruction *in, const char *j, long long *step)
     if (in->kind != TAC_INSTRUCTION_BINARY || in->is_volatile)
         return false;
     Tac_BinaryOperator op = in->u.binary.op;
-    bool add = op == TAC_BINARY_ADD || op == TAC_BINARY_ADD_UNSIGNED;
-    bool sub = op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_UNSIGNED;
+    bool add              = op == TAC_BINARY_ADD || op == TAC_BINARY_ADD_UNSIGNED;
+    bool sub              = op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_UNSIGNED;
     long long c;
     if (!(add || sub) || !is_var(in->u.binary.src1) || strcmp(in->u.binary.src1->u.var_name, j) ||
         !int_const(in->u.binary.src2, &c))
@@ -477,7 +478,7 @@ static bool reaches(const Ivsr *s, int a, int b)
 {
     for (int i = 0; i < s->n; i++)
         s->seen[i] = false;
-    int sp        = 0;
+    int sp         = 0;
     s->stack[sp++] = a;
     while (sp) {
         const OptBlock *blk = s->cfg->blocks[s->stack[--sp]];
@@ -522,8 +523,7 @@ static int steps_between(const Ivsr *s, const Tac_Instruction *from, int fb,
 // the IV in *iv, the constant in *off, and whether x is j sign-extended in *ext. Or as
 // an invariant less j, plus the constant: the invariant's name in *inv, else NULL.
 static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Instruction *use,
-                         const Tac_Val *x, BasicIv *iv, long long *off, bool *ext,
-                         const char **inv)
+                         const Tac_Val *x, BasicIv *iv, long long *off, bool *ext, const char **inv)
 {
     if (!is_var(x))
         return false;
@@ -532,7 +532,7 @@ static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Inst
     *off             = 0;
     const char *name = x->u.var_name;
     int xb;
-    Tac_Instruction *xd = single_def(d, name, &xb);
+    Tac_Instruction *xd       = single_def(d, name, &xb);
     const Tac_Instruction *sx = NULL; // the sign extension, in block sb
     int sb                    = -1;
     if (xd && xd->kind == TAC_INSTRUCTION_SIGN_EXTEND && !xd->is_volatile &&
@@ -550,7 +550,7 @@ static bool affine_index(const Ivsr *s, const LoopDefs *d, int b, const Tac_Inst
     if (!basic_iv(s, d, name, iv)) {
         if (!xd || xd->kind != TAC_INSTRUCTION_BINARY || !is_var(xd->u.binary.src1))
             return false;
-        j = xd->u.binary.src1->u.var_name;
+        j                     = xd->u.binary.src1->u.var_name;
         Tac_BinaryOperator op = xd->u.binary.op;
         const Tac_Val *m      = xd->u.binary.src2;
         if ((op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_SUBTRACT_UNSIGNED) && !xd->is_volatile &&
@@ -766,13 +766,14 @@ static bool replace_tests(Ivsr *s, const bool *in_loop, const LoopDefs *d, Reduc
     for (int b = 0; b < s->n; b++) {
         if (!in_loop[b])
             continue;
-        OptBlock *blk = s->cfg->blocks[b];
+        OptBlock *blk        = s->cfg->blocks[b];
         Tac_Instruction *jmp = blk->last;
         if (!jmp || (jmp->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
                      jmp->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
             continue;
-        const Tac_Val *c = jmp->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ? jmp->u.jump_if_zero.condition
-                                                                      : jmp->u.jump_if_not_zero.condition;
+        const Tac_Val *c = jmp->kind == TAC_INSTRUCTION_JUMP_IF_ZERO
+                               ? jmp->u.jump_if_zero.condition
+                               : jmp->u.jump_if_not_zero.condition;
         int cb;
         Tac_Instruction *cmp = is_var(c) ? single_def(d, c->u.var_name, &cb) : NULL;
         if (!cmp || cb != b || cmp->kind != TAC_INSTRUCTION_BINARY || cmp->is_volatile)
@@ -787,8 +788,9 @@ static bool replace_tests(Ivsr *s, const bool *in_loop, const LoopDefs *d, Reduc
             bound = cp->u.copy.src;
         }
         long long bval = 0;
-        if (is_var(bound) ? !is_private(s, bound->u.var_name) || defined_in_loop(d, bound->u.var_name)
-                          : !int_const(bound, &bval))
+        if (is_var(bound)
+                ? !is_private(s, bound->u.var_name) || defined_in_loop(d, bound->u.var_name)
+                : !int_const(bound, &bval))
             continue;
         BasicIv iv;
         long long off;
@@ -816,9 +818,10 @@ static bool replace_tests(Ivsr *s, const bool *in_loop, const LoopDefs *d, Reduc
         }
         if (!r)
             continue;
-        int op = mirrored ? pointer_test(mirror_test(cmp->u.binary.op), is_signed_kind(jkind), -iv.step)
-                          : pointer_test(cmp->u.binary.op, is_signed_kind(jkind),
-                                         r->inv ? -iv.step : iv.step);
+        int op = mirrored
+                     ? pointer_test(mirror_test(cmp->u.binary.op), is_signed_kind(jkind), -iv.step)
+                     : pointer_test(cmp->u.binary.op, is_signed_kind(jkind),
+                                    r->inv ? -iv.step : iv.step);
         if (op < 0)
             continue;
         if (mirrored) {
@@ -836,7 +839,8 @@ static bool replace_tests(Ivsr *s, const bool *in_loop, const LoopDefs *d, Reduc
             xkind = target_config->pointer_size == target_config->long_size ? TAC_CONST_LONG
                                                                             : TAC_CONST_LONG_LONG;
             if (is_var(bound)) {
-                Tac_Type *lt = tac_new_type(xkind == TAC_CONST_LONG ? TAC_TYPE_LONG : TAC_TYPE_LONG_LONG);
+                Tac_Type *lt =
+                    tac_new_type(xkind == TAC_CONST_LONG ? TAC_TYPE_LONG : TAC_TYPE_LONG_LONG);
                 char e[32];
                 fresh_temp(s, lt, e);
                 tac_free_type(lt);
@@ -1056,8 +1060,8 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
             char *ptype = tac_type_str(pt);
             Reduced *r  = reduced;
             while (r && !(!strcmp(r->base, base) && !strcmp(r->iv, iv.name) &&
-                          (inv ? r->inv && !strcmp(r->inv, inv) : !r->inv) &&
-                          r->scale == scale && r->ext == ext && !strcmp(r->type, ptype)))
+                          (inv ? r->inv && !strcmp(r->inv, inv) : !r->inv) && r->scale == scale &&
+                          r->ext == ext && !strcmp(r->type, ptype)))
                 r = r->next;
             if (r) {
                 xfree(ptype);
@@ -1071,8 +1075,8 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
                 r->ext   = ext;
                 r->type  = ptype;
                 fresh_temp(s, pt, r->q);
-                r->next  = reduced;
-                reduced  = r;
+                r->next = reduced;
+                reduced = r;
 
                 // Ahead of the loop: q = base + j*scale, or base + (inv - j)*scale.
                 Tac_Val *index = new_var(r->iv);
@@ -1081,21 +1085,21 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
                     char x0[32];
                     fresh_temp(s, type_of(s, r->iv), x0);
                     Tac_Instruction *sub = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-                    sub->u.binary.op     = is_signed_kind(jkind) ? TAC_BINARY_SUBTRACT
-                                                                 : TAC_BINARY_SUBTRACT_UNSIGNED;
-                    sub->u.binary.src1   = new_var(inv);
-                    sub->u.binary.src2   = index;
-                    sub->u.binary.dst    = new_var(x0);
+                    sub->u.binary.op =
+                        is_signed_kind(jkind) ? TAC_BINARY_SUBTRACT : TAC_BINARY_SUBTRACT_UNSIGNED;
+                    sub->u.binary.src1 = new_var(inv);
+                    sub->u.binary.src2 = index;
+                    sub->u.binary.dst  = new_var(x0);
                     insert_at_end(s->cfg->blocks[pre], sub);
                     index = new_var(x0);
                 }
                 if (ext) {
                     char e[32];
                     fresh_temp(s, xt, e);
-                    Tac_Instruction *sx          = tac_new_instruction(TAC_INSTRUCTION_SIGN_EXTEND);
-                    sx->u.sign_extend.src        = index;
-                    sx->u.sign_extend.dst        = new_var(e);
-                    sx->u.sign_extend.dst_kind   = kind;
+                    Tac_Instruction *sx        = tac_new_instruction(TAC_INSTRUCTION_SIGN_EXTEND);
+                    sx->u.sign_extend.src      = index;
+                    sx->u.sign_extend.dst      = new_var(e);
+                    sx->u.sign_extend.dst_kind = kind;
                     insert_at_end(s->cfg->blocks[pre], sx);
                     index = new_var(e);
                 }
@@ -1122,10 +1126,10 @@ static bool reduce_loop(Ivsr *s, int h, const bool *in_loop)
             tac_free_val(in->u.add_ptr.ptr);
             tac_free_val(in->u.add_ptr.index);
             if (off == 0) {
-                Tac_Val *dst      = in->u.add_ptr.dst;
-                in->kind          = TAC_INSTRUCTION_COPY;
-                in->u.copy.src    = new_var(r->q);
-                in->u.copy.dst    = dst;
+                Tac_Val *dst   = in->u.add_ptr.dst;
+                in->kind       = TAC_INSTRUCTION_COPY;
+                in->u.copy.src = new_var(r->q);
+                in->u.copy.dst = dst;
             } else {
                 in->u.add_ptr.ptr   = new_var(r->q);
                 in->u.add_ptr.index = new_const(kind, off);
@@ -1211,8 +1215,8 @@ static int mentions(const Tac_Instruction *in, const char *name)
 
 static int signed_kind(int kind)
 {
-    return kind == TAC_CONST_UINT    ? TAC_CONST_INT
-           : kind == TAC_CONST_ULONG ? TAC_CONST_LONG
+    return kind == TAC_CONST_UINT         ? TAC_CONST_INT
+           : kind == TAC_CONST_ULONG      ? TAC_CONST_LONG
            : kind == TAC_CONST_ULONG_LONG ? TAC_CONST_LONG_LONG
                                           : kind;
 }
@@ -1267,9 +1271,9 @@ static bool step_pointer(Ivsr *s, const LoopDefs *d, Tac_Instruction *c, int cb,
             return false;
     }
     int_const(step->u.add_ptr.index, &by);
-    int kind        = signed_kind(step->u.add_ptr.index->u.constant->kind);
-    int scale       = step->u.add_ptr.scale;
-    BasicIv copy    = { .name = q, .def = c, .block = cb, .step = 0 };
+    int kind     = signed_kind(step->u.add_ptr.index->u.constant->kind);
+    int scale    = step->u.add_ptr.scale;
+    BasicIv copy = { .name = q, .def = c, .block = cb, .step = 0 };
     for (int b = 0; b < s->n; b++) {
         if (!s->in_loop[b])
             continue;
@@ -1295,8 +1299,9 @@ static bool step_pointer(Ivsr *s, const LoopDefs *d, Tac_Instruction *c, int cb,
                 bool load  = in->kind == TAC_INSTRUCTION_LOAD;
                 bool store = in->kind == TAC_INSTRUCTION_STORE && !is_name(in->u.store.src, q);
                 long long k;
-                bool add   = in->kind == TAC_INSTRUCTION_ADD_PTR && !is_name(in->u.add_ptr.index, q) &&
-                             int_const(in->u.add_ptr.index, &k) && in->u.add_ptr.scale == scale;
+                bool add = in->kind == TAC_INSTRUCTION_ADD_PTR &&
+                           !is_name(in->u.add_ptr.index, q) && int_const(in->u.add_ptr.index, &k) &&
+                           in->u.add_ptr.scale == scale;
                 if (pending && !(load || store || add))
                     return false;
                 if (pending && apply && add) {
@@ -1361,8 +1366,9 @@ static bool step_in_place(Ivsr *s)
             if (!s->in_loop[b])
                 continue;
             for (Tac_Instruction *in = s->cfg->blocks[b]->first; in; in = in->next)
-                if (in->kind == TAC_INSTRUCTION_COPY && !in->is_volatile && is_var(in->u.copy.src) &&
-                    is_var(in->u.copy.dst) && step_pointer(s, &d, in, b, false)) {
+                if (in->kind == TAC_INSTRUCTION_COPY && !in->is_volatile &&
+                    is_var(in->u.copy.src) && is_var(in->u.copy.dst) &&
+                    step_pointer(s, &d, in, b, false)) {
                     step_pointer(s, &d, in, b, true);
                     again = changed = true;
                     break;
@@ -1431,7 +1437,7 @@ bool reduce_induction_variables(OptCfg *cfg, Tac_TopLevel *fn)
     if (cfg->nblocks == 0 || !fn || fn->kind != TAC_TOPLEVEL_FUNCTION)
         return false;
     bool changed = false;
-    Ivsr s = { .cfg = cfg, .fn = fn, .n = cfg->nblocks };
+    Ivsr s       = { .cfg = cfg, .fn = fn, .n = cfg->nblocks };
     opt_preds_build(&s.preds, cfg);
     StringMap observable;
     collect_alias_sets(cfg, fn, &observable, &s.address_taken);

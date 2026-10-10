@@ -6,12 +6,12 @@
 //
 #include "x86_test.h"
 
-#define EXPECT_HAS(name, expected, src)                                    \
-    TEST_F(X86Test, name)                                                  \
-    {                                                                      \
-        NaiveSelection();                                                  \
-        std::string code = Code(CompileToX86(src));                        \
-        EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
+#define EXPECT_HAS(name, expected, src)                            \
+    TEST_F(X86Test, name)                                          \
+    {                                                              \
+        NaiveSelection();                                          \
+        std::string code = Code(CompileToX86(src));                \
+        EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
 
 TEST(TacAbi, Sysv64Class)
@@ -43,7 +43,7 @@ TEST(TacAbi, Sysv64Class)
     EXPECT_EQ(TAC_SYSV64_INTEGER | TAC_SYSV64_INTEGER << 2, tac_sysv64_class(&s));
 
     // { char[3] } is one INTEGER eightbyte; seventeen bytes are MEMORY.
-    Tac_Type a = { .kind = TAC_TYPE_ARRAY };
+    Tac_Type a          = { .kind = TAC_TYPE_ARRAY };
     a.u.array.elem_type = &c;
     a.u.array.size      = 3;
     EXPECT_EQ(TAC_SYSV64_INTEGER, tac_sysv64_class(&a));
@@ -52,13 +52,13 @@ TEST(TacAbi, Sysv64Class)
 
     // { long double } is X87; { long double; int } and a union of long double and
     // double are MEMORY.
-    Tac_Member x1 = { .name = const_cast<char *>("v"), .offset = 0, .type = &ld };
+    Tac_Member x1         = { .name = const_cast<char *>("v"), .offset = 0, .type = &ld };
     s.u.structure.members = &x1;
     s.u.structure.size    = 16;
     EXPECT_EQ(TAC_SYSV64_X87, tac_sysv64_class(&s));
-    Tac_Member x2 = { .name = const_cast<char *>("k"), .offset = 16, .type = &i };
-    x1.next              = &x2;
-    s.u.structure.size   = 32;
+    Tac_Member x2      = { .name = const_cast<char *>("k"), .offset = 16, .type = &i };
+    x1.next            = &x2;
+    s.u.structure.size = 32;
     EXPECT_EQ(TAC_SYSV64_MEMORY, tac_sysv64_class(&s));
     Tac_Member u2 = { .name = const_cast<char *>("d"), .offset = 0, .type = &d };
     Tac_Member u1 = { .next = &u2, .name = const_cast<char *>("v"), .offset = 0, .type = &ld };
@@ -114,7 +114,8 @@ EXPECT_HAS(MixedResult, "call h\nmovq %rax, -32(%rbp)\nmovsd %xmm0, -24(%rbp)\n"
 
 // All or nothing: two eightbytes do not fit in r9 alone, so the struct goes on the
 // stack and the next argument still takes r9.
-EXPECT_HAS(AllOrNothing, R"(movq -16(%rbp), %r11
+EXPECT_HAS(
+    AllOrNothing, R"(movq -16(%rbp), %r11
 movq %r11, (%rsp)
 movq -8(%rbp), %r11
 movq %r11, 8(%rsp)
@@ -126,8 +127,8 @@ movl $5, %r8d
 movl $6, %r9d
 call k
 )",
-           "struct p { long a, b; }; int k(long a, long b, long c, long d, long e, struct p x, long z);"
-           "int f(void) { struct p x = { 1, 2 }; return k(1, 2, 3, 4, 5, x, 6); }")
+    "struct p { long a, b; }; int k(long a, long b, long c, long d, long e, struct p x, long z);"
+    "int f(void) { struct p x = { 1, 2 }; return k(1, 2, 3, 4, 5, x, 6); }")
 
 // A MEMORY struct is copied onto the stack, the widest pieces the alignment allows,
 // padding included.
@@ -145,11 +146,12 @@ call g
 
 // Past 64 bytes a loop of 16 bytes through xmm15, counting in r11 (no allocated
 // register changes), then the rest.
-EXPECT_HAS(CopyLoop, "leaq (%rsp), %rax\nleaq -84(%rbp), %r10\nmovl $4, %r11d\n"
-                     "movups (%r10), %xmm15\nmovups %xmm15, (%rax)\naddq $16, %r10\n"
-                     "addq $16, %rax\nsubl $1, %r11d\njne .Lx0\nmovl (%r10), %r11d\n"
-                     "movl %r11d, (%rax)\nmovl 4(%r10), %r11d\nmovl %r11d, 4(%rax)\n"
-                     "movl 8(%r10), %r11d\nmovl %r11d, 8(%rax)\ncall g\n",
+EXPECT_HAS(CopyLoop,
+           "leaq (%rsp), %rax\nleaq -84(%rbp), %r10\nmovl $4, %r11d\n"
+           "movups (%r10), %xmm15\nmovups %xmm15, (%rax)\naddq $16, %r10\n"
+           "addq $16, %rax\nsubl $1, %r11d\njne .Lx0\nmovl (%r10), %r11d\n"
+           "movl %r11d, (%rax)\nmovl 4(%r10), %r11d\nmovl %r11d, 4(%rax)\n"
+           "movl 8(%r10), %r11d\nmovl %r11d, 8(%rax)\ncall g\n",
            "struct s { int a[19]; }; int g(struct s x); int f(struct s *p) { return g(*p); }")
 
 // A member is a load or store at its offset in the slot.
@@ -158,7 +160,8 @@ EXPECT_HAS(MemberAccess, "movl $5, -8(%rbp)\nmovl -8(%rbp), %eax\n",
 
 // A MEMORY result is written through the address that came in rdi, which goes back
 // in rax; the parameters start at rsi.
-EXPECT_CODE(StructResultCallee, R"(pushq %rbp
+EXPECT_CODE(
+    StructResultCallee, R"(pushq %rbp
 movq %rsp, %rbp
 subq $48, %rsp
 movq %rdi, -8(%rbp)
@@ -178,7 +181,7 @@ movq -8(%rbp), %rax
 leave
 ret
 )",
-            "struct q { long a, b, c; }; struct q f(long a) { struct q x = { a, 2, 3 }; return x; }")
+    "struct q { long a, b, c; }; struct q f(long a) { struct q x = { a, 2, 3 }; return x; }")
 // The caller passes the destination's address.
 EXPECT_HAS(StructResultCaller, "movl $7, %esi\nleaq -48(%rbp), %rdi\ncall g\n",
            "struct q { long a, b, c; }; struct q g(long a);"

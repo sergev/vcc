@@ -111,8 +111,10 @@ TEST_F(EmitTest, Imm32)
 // The suffix follows the instruction's width; an unsuffixed mnemonic stands alone.
 TEST_F(EmitTest, Suffixes)
 {
-    EXPECT_EQ("    movb    $1, %al\n", Line(X86_MOV, X86_B, { x86_imm(1), x86_reg(X86_RAX, X86_B) }));
-    EXPECT_EQ("    movw    $1, %ax\n", Line(X86_MOV, X86_W, { x86_imm(1), x86_reg(X86_RAX, X86_W) }));
+    EXPECT_EQ("    movb    $1, %al\n",
+              Line(X86_MOV, X86_B, { x86_imm(1), x86_reg(X86_RAX, X86_B) }));
+    EXPECT_EQ("    movw    $1, %ax\n",
+              Line(X86_MOV, X86_W, { x86_imm(1), x86_reg(X86_RAX, X86_W) }));
     EXPECT_EQ("    movl    $-1, %eax\n",
               Line(X86_MOV, X86_L, { x86_imm(-1), x86_reg(X86_RAX, X86_L) }));
     EXPECT_EQ("    movq    %rsp, %rbp\n",
@@ -162,9 +164,12 @@ TEST_F(EmitTest, MemoryOperands)
 TEST_F(EmitTest, SymbolOperands)
 {
     X86_Operand rax = x86_reg(X86_RAX, X86_Q);
-    EXPECT_EQ("    movq    counter(%rip), %rax\n", Line(X86_MOV, X86_Q, { x86_rip("counter", 0), rax }));
-    EXPECT_EQ("    movq    table+8(%rip), %rax\n", Line(X86_MOV, X86_Q, { x86_rip("table", 8), rax }));
-    EXPECT_EQ("    movq    table-8(%rip), %rax\n", Line(X86_MOV, X86_Q, { x86_rip("table", -8), rax }));
+    EXPECT_EQ("    movq    counter(%rip), %rax\n",
+              Line(X86_MOV, X86_Q, { x86_rip("counter", 0), rax }));
+    EXPECT_EQ("    movq    table+8(%rip), %rax\n",
+              Line(X86_MOV, X86_Q, { x86_rip("table", 8), rax }));
+    EXPECT_EQ("    movq    table-8(%rip), %rax\n",
+              Line(X86_MOV, X86_Q, { x86_rip("table", -8), rax }));
     EXPECT_EQ("    movq    .L3, %rax\n", Line(X86_MOV, X86_Q, { x86_label(".L3"), rax }));
 }
 

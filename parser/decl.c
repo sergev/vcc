@@ -389,7 +389,7 @@ Type *type_apply_suffixes(Type *type, const DeclaratorSuffix *suffixes)
     case SUFFIX_ARRAY: {
         // Recurse on remaining suffixes first so the leftmost bracket becomes
         // the outermost array dimension, matching C semantics for foo[3][1].
-        type                      = type_apply_suffixes(type, s->next);
+        type = type_apply_suffixes(type, s->next);
         validate_array_size(s->u.array.size);
         Type *array               = new_type(TYPE_ARRAY, __func__, __FILE__, __LINE__);
         array->u.array.element    = type;
@@ -848,8 +848,7 @@ Field *parse_struct_declaration()
          * anonymous bitfield (`int : 4;`) or an anonymous struct/union member
          * (`struct { ... };`) may omit it.  Reject e.g. `int;`. */
         if (!field->u.member.name && !field->u.member.bitfield &&
-            field->u.member.type->kind != TYPE_STRUCT &&
-            field->u.member.type->kind != TYPE_UNION) {
+            field->u.member.type->kind != TYPE_STRUCT && field->u.member.type->kind != TYPE_UNION) {
             fatal_error("member declaration does not declare anything");
         }
 
@@ -889,8 +888,8 @@ TypeSpec *parse_specifier_qualifier_list(TypeQualifier **qualifiers, AlignmentSp
         if (current_token == TOKEN_ALIGNAS && align) {
             parse_one_alignment_specifier(align);
         } else if (current_token == TOKEN_CONST || current_token == TOKEN_RESTRICT ||
-            current_token == TOKEN_VOLATILE ||
-            (current_token == TOKEN_ATOMIC && next_token() != TOKEN_LPAREN)) {
+                   current_token == TOKEN_VOLATILE ||
+                   (current_token == TOKEN_ATOMIC && next_token() != TOKEN_LPAREN)) {
             TypeQualifier *q = parse_type_qualifier();
             append_list(qualifiers, q);
         } else if (is_type_specifier(current_token) || is_type_qualifier(current_token) ||
@@ -1072,9 +1071,9 @@ Type *parse_coro_frame_specifier()
     }
     expect_token(TOKEN_CORO_FRAME);
     expect_token(TOKEN_LPAREN);
-    Type *frame                    = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
-    frame->u.struct_t.name         = xstrdup("__co_frame");
-    frame->u.struct_t.frame_yield  = parse_type_name();
+    Type *frame                   = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
+    frame->u.struct_t.name        = xstrdup("__co_frame");
+    frame->u.struct_t.frame_yield = parse_type_name();
     expect_token(TOKEN_COMMA);
     frame->u.struct_t.frame_result = parse_type_name();
     expect_token(TOKEN_RPAREN);
@@ -1096,9 +1095,9 @@ Type *parse_coro_ptr_specifier()
     }
     expect_token(TOKEN_CORO_PTR);
     expect_token(TOKEN_LPAREN);
-    Type *desc                    = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
-    desc->u.struct_t.name         = xstrdup("__co_desc");
-    desc->u.struct_t.frame_yield  = parse_type_name();
+    Type *desc                   = new_type(TYPE_STRUCT, __func__, __FILE__, __LINE__);
+    desc->u.struct_t.name        = xstrdup("__co_desc");
+    desc->u.struct_t.frame_yield = parse_type_name();
     expect_token(TOKEN_COMMA);
     desc->u.struct_t.frame_result = parse_type_name();
     expect_token(TOKEN_RPAREN);

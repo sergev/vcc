@@ -242,8 +242,7 @@ static void apply_transfer(StringMap *cs, const Tac_Instruction *ins, const Stri
         return;
     }
 
-    if (ins->kind == TAC_INSTRUCTION_FUN_CALL ||
-        ins->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
+    if (ins->kind == TAC_INSTRUCTION_FUN_CALL || ins->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
         // A call may read or write any static or address-taken variable, so all
         // copies involving them become invalid; also kill the call's own result.
         OPT_TRACE("[copy-prop] fun-call %s: kill static+address-taken copies\n",
@@ -566,7 +565,7 @@ void propagate_copies(OptCfg *cfg, const Tac_TopLevel *fn)
     // every copy, the top of the lattice, so a copy made ahead of a loop reaches into
     // it: the back edge's out-set is not yet known when the header is first met.
     // Pessimistic (empty) where the target opts out of the loop optimizations.
-    bool *done = xalloc(n * sizeof(bool), __func__, __FILE__, __LINE__);
+    bool *done      = xalloc(n * sizeof(bool), __func__, __FILE__, __LINE__);
     bool optimistic = !target_config->no_loop_opt;
     for (int i = 0; i < n; i++) {
         map_init(&in_sets[i]);

@@ -11,7 +11,7 @@ static unsigned long long udivmod(unsigned long long n, unsigned long long d,
 {
     if ((n >> 32) == 0 && (d >> 32) == 0) {
         unsigned long a = (unsigned long)n, b = (unsigned long)d;
-        *rem            = a % b;
+        *rem = a % b;
         return a / b;
     }
     if (d >> 63) {

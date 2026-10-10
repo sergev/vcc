@@ -155,7 +155,7 @@ static ArgLoc classify(ArgState *s, const Tac_Type *t, bool variadic)
         return a;
     }
     if (!rv_is_aggregate(t) && !rv_is_ld(t)) {
-        a.npieces = 1;
+        a.npieces  = 1;
         a.piece[0] = (Piece){ .size = rv_size(t), .type = t };
         if (rv_is_fp(t) && !variadic && s->next_fp < 8) {
             a.piece[0].reg = RV_FA0 + s->next_fp++;
@@ -224,7 +224,8 @@ static void store_piece(Gen *g, int reg, int base, int64_t off, const Piece *pc)
 // A double in a pair of integer registers (rv32), not a struct flattened into fields.
 static bool split_fp(const ArgLoc *a)
 {
-    return a->npieces == 2 && a->piece[0].type && rv_is_fp(a->piece[0].type) && !whole(&a->piece[0]);
+    return a->npieces == 2 && a->piece[0].type && rv_is_fp(a->piece[0].type) &&
+           !whole(&a->piece[0]);
 }
 
 // No fmv.x.d on rv32: a double goes between the register files through memory.
@@ -306,7 +307,7 @@ void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
                 if (a.piece[i].reg >= 0)
                     map_insert(i ? hints_hi : hints, p->name, a.piece[i].reg, 0);
         } else if (!rv_is_aggregate(p->type) && !rv_is_pair(p->type) && a.piece[0].reg >= 0 &&
-            is_freg(a.piece[0].reg) == rv_is_fp(p->type))
+                   is_freg(a.piece[0].reg) == rv_is_fp(p->type))
             map_insert(hints, p->name, a.piece[0].reg, 0);
     }
 }
@@ -371,7 +372,7 @@ void gen_params(Gen *g)
     } fp_loads[8]; // doubles that arrived in integer registers, for FP registers
     int nfp_loads = 0;
     bool variadic = gen_variadic(g);
-    int x = riscv_xlen;
+    int x         = riscv_xlen;
     if (variadic)
         for (int i = 0; i < 8; i++)
             emit2(g, xlen_store(), rv_reg(RV_A0 + i), rv_mem(RV_S0, x * (i - 8)));
@@ -617,8 +618,8 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
             for (int k = 0; k < 2; k++)
                 if (!hint[var + k * f->nvars] && a.piece[k].reg >= 0)
                     hint[var + k * f->nvars] = a.piece[k].reg;
-        } else if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_pair(t) && a.piece[0].reg >= 0 &&
-            is_freg(a.piece[0].reg) == rv_is_fp(t))
+        } else if (var >= 0 && !hint[var] && !rv_is_aggregate(t) && !rv_is_pair(t) &&
+                   a.piece[0].reg >= 0 && is_freg(a.piece[0].reg) == rv_is_fp(t))
             hint[var] = a.piece[0].reg;
     }
     const Tac_Val *dst = in->u.fun_call.dst;
@@ -629,7 +630,7 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         if (!hint[var + f->nvars])
             hint[var + f->nvars] = RV_A0 + 1;
     } else if (var >= 0 && !hint[var] && f->types[var] && !rv_is_aggregate(f->types[var]) &&
-        !rv_is_pair(f->types[var]) && !rv_is_ld(f->types[var]))
+               !rv_is_pair(f->types[var]) && !rv_is_ld(f->types[var]))
         hint[var] = rv_is_fp(f->types[var]) ? RV_FA0 : RV_A0;
 }
 
@@ -666,9 +667,9 @@ bool rv_stack_builtin(const Tac_Instruction *in)
 // The bytes call `in` stores into the outgoing area, as gen_call places them.
 static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 {
-    const Tac_Type *ft  = in->u.fun_call.fun_type;
-    int nfixed          = 0;
-    bool variadic       = ft && ft->u.fun_type.variadic;
+    const Tac_Type *ft = in->u.fun_call.fun_type;
+    int nfixed         = 0;
+    bool variadic      = ft && ft->u.fun_type.variadic;
     if (ft)
         for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
             nfixed++;
@@ -685,7 +686,8 @@ static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 void reserve_outgoing(Gen *g)
 {
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
-        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL &&
+             in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
             rv_stack_builtin(in))
             continue;
         int n = stack_bytes(g, in);
@@ -750,10 +752,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     int nargs = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next)
         nargs++;
-    Arg *args            = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
+    Arg *args = xalloc((nargs ? nargs : 1) * sizeof(Arg), __func__, __FILE__, __LINE__);
     Move moves[32];
-    int nmoves           = 0;
-    const Tac_Type *ret  = ret_type(ft);
+    int nmoves          = 0;
+    const Tac_Type *ret = ret_type(ft);
     if (!ret && in->u.fun_call.dst)
         ret = val_type(g, in->u.fun_call.dst);
     bool hidden          = hidden_result(ret);
@@ -761,10 +763,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Type *want = ft ? ft->u.fun_type.param_types : NULL;
     int i                = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
-        Arg *a  = &args[i];
-        a->v    = v;
-        a->type = val_type(g, v);
-        a->want = want;
+        Arg *a     = &args[i];
+        a->v       = v;
+        a->type    = val_type(g, v);
+        a->want    = want;
         a->loc     = classify(&s, a->type, variadic && i >= nfixed);
         a->copy    = 0;
         a->spilled = false;
@@ -830,14 +832,14 @@ void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_V
             vals[i].u.constant        = &consts[i];
         }
     }
-    Tac_Type fun                 = { .kind = TAC_TYPE_FUN_TYPE };
-    fun.u.fun_type.param_types   = nargs ? params : NULL;
-    fun.u.fun_type.ret_type      = (Tac_Type *)ret;
-    Tac_Instruction call         = { .kind = TAC_INSTRUCTION_FUN_CALL };
-    call.u.fun_call.fun_name     = (char *)name;
-    call.u.fun_call.args         = nargs ? vals : NULL;
-    call.u.fun_call.dst          = (Tac_Val *)dst;
-    call.u.fun_call.fun_type     = &fun;
+    Tac_Type fun               = { .kind = TAC_TYPE_FUN_TYPE };
+    fun.u.fun_type.param_types = nargs ? params : NULL;
+    fun.u.fun_type.ret_type    = (Tac_Type *)ret;
+    Tac_Instruction call       = { .kind = TAC_INSTRUCTION_FUN_CALL };
+    call.u.fun_call.fun_name   = (char *)name;
+    call.u.fun_call.args       = nargs ? vals : NULL;
+    call.u.fun_call.dst        = (Tac_Val *)dst;
+    call.u.fun_call.fun_type   = &fun;
     gen_call(g, &call);
 }
 

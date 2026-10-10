@@ -22,7 +22,6 @@
 //
 #include "book_test.h"
 
-
 // =============================================================================
 // no_structure_parameters — smoke & parse_and_lex
 // =============================================================================
@@ -117,7 +116,6 @@ int main(void) {
 })"));
 }
 
-
 // =============================================================================
 // no_structure_parameters — semantic_analysis (no malloc)
 // =============================================================================
@@ -133,7 +131,6 @@ int main(void) {
     return 0;
 })"));
 }
-
 
 // =============================================================================
 // parameters
@@ -231,7 +228,6 @@ int modify_nested_struct(struct outer s) {
 )"));
 }
 
-
 // =============================================================================
 // params_and_returns
 // =============================================================================
@@ -327,7 +323,6 @@ int main(void) {
 })"));
 }
 
-
 // =============================================================================
 // semantic_analysis (no malloc / no tag-shadowing)
 // =============================================================================
@@ -381,7 +376,6 @@ int main(void) {
 })"));
 }
 
-
 // =============================================================================
 // extra_credit/other_features
 // =============================================================================
@@ -413,7 +407,6 @@ x:
     return x.x;
 })"));
 }
-
 
 // =============================================================================
 // extra_credit/member_access & union_copy & semantic_analysis (unions)
@@ -570,7 +563,6 @@ int main(void) {
 }
 )PROG"));
 }
-
 
 // =============================================================================
 // size_and_offset — sizeof rewritten to BESM-6 layout (char==1, others==6 bytes,
@@ -985,7 +977,6 @@ union contains_structs* get_union_ptr(void) {
 )PROG"));
 }
 
-
 // =============================================================================
 // no_structure_parameters/libraries & params_and_returns/libraries (merged,
 // client first; no malloc/static-local/strcmp dependence)
@@ -1112,7 +1103,6 @@ struct big missing_return_value(int *i) {
 }
 )"));
 }
-
 
 // =============================================================================
 // DISABLED_ — remaining chapter-18 valid programs that need a runtime/feature the
@@ -1873,8 +1863,7 @@ TEST_F(BookTest, Chapter18_ScalarMemberAccessStaticStructs)
     // Helpers renamed to test_sl/test_slp/test_gs/test_gsp because the original
     // names collide in their first 8 chars (Madlen truncates labels).  Expected
     // stdout is the full printed sequence followed by --status's "0\n".
-    EXPECT_EQ("ZERO\nMN\nOP\nWX\nYZ\nBCD\nCDE\nDEF\nEFG\nBCD\nCDE\n0\n",
-              CompileAndRunBook(R"PROG(
+    EXPECT_EQ("ZERO\nMN\nOP\nWX\nYZ\nBCD\nCDE\nDEF\nEFG\nBCD\nCDE\n0\n", CompileAndRunBook(R"PROG(
 // Make sure members in static structures retain their values
 // across multiple function invocations
 

@@ -230,7 +230,7 @@ void type_int_literal(Literal *lit)
     // C11 §6.4.4.1p5: the first type of the suffix's list that can represent the value.
     // Octal and hexadecimal constants may take the unsigned types too.
     static const LiteralKind dec_none[] = { LITERAL_INT, LITERAL_LONG, LITERAL_LONG_LONG };
-    static const LiteralKind hex_none[] = { LITERAL_INT,  LITERAL_UINT,      LITERAL_LONG,
+    static const LiteralKind hex_none[] = { LITERAL_INT,   LITERAL_UINT,      LITERAL_LONG,
                                             LITERAL_ULONG, LITERAL_LONG_LONG, LITERAL_ULONG_LONG };
     static const LiteralKind dec_l[]    = { LITERAL_LONG, LITERAL_LONG_LONG };
     static const LiteralKind hex_l[]    = { LITERAL_LONG, LITERAL_ULONG, LITERAL_LONG_LONG,

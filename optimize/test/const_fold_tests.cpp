@@ -8,7 +8,10 @@ namespace {
 // (so a width-specific fold does not leak into later, target-agnostic tests).
 struct TargetGuard {
     const Target *saved;
-    explicit TargetGuard(const char *name) : saved(target_config) { target_config = target_lookup(name); }
+    explicit TargetGuard(const char *name) : saved(target_config)
+    {
+        target_config = target_lookup(name);
+    }
     ~TargetGuard() { target_config = saved; }
 };
 } // namespace
@@ -29,8 +32,9 @@ TEST_F(OptimizerTest, NullBodyReturnsNull)
 // sqrt(2.25)  →  Copy(ConstDouble(1.5), t); sqrt(-0.0) is -0.0.
 TEST_F(OptimizerTest, UnaryFoldSqrt)
 {
-    Tac_Instruction *body = make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(2.25), make_var("t"));
-    body                  = constant_fold(body);
+    Tac_Instruction *body =
+        make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(2.25), make_var("t"));
+    body = constant_fold(body);
     AssertFoldedDouble(body, 1.5);
 
     body = constant_fold(make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(-0.0), make_var("t")));
@@ -42,8 +46,9 @@ TEST_F(OptimizerTest, UnaryFoldSqrt)
 TEST_F(OptimizerTest, UnaryNoFoldSqrtNegative)
 {
     for (double x : { -4.0, std::nan("") }) {
-        Tac_Instruction *body = make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(x), make_var("t"));
-        body                  = constant_fold(body);
+        Tac_Instruction *body =
+            make_unary(TAC_UNARY_SQRT_DOUBLE, make_const_double(x), make_var("t"));
+        body = constant_fold(body);
         ASSERT_NE(body, nullptr);
         EXPECT_EQ(body->kind, TAC_INSTRUCTION_UNARY);
     }
@@ -322,9 +327,9 @@ TEST_F(OptimizerTest, BinaryFoldLongDoubleAdd)
 TEST_F(OptimizerTest, BinaryFoldLongDoublePrecision)
 {
     TargetGuard guard("riscv64");
-    Tac_Instruction *body = constant_fold(make_binary(TAC_BINARY_DIVIDE_DOUBLE,
-                                                      make_const_long_double(1.0L),
-                                                      make_const_long_double(3.0L), make_var("t")));
+    Tac_Instruction *body =
+        constant_fold(make_binary(TAC_BINARY_DIVIDE_DOUBLE, make_const_long_double(1.0L),
+                                  make_const_long_double(3.0L), make_var("t")));
     ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
     Float128 q = body->u.copy.src->u.constant->u.long_double_val;
     EXPECT_EQ(0x3ffd555555555555ULL, q.hi);
@@ -344,7 +349,7 @@ TEST_F(OptimizerTest, BinaryFoldLongDoublePrecision)
 TEST_F(OptimizerTest, BinaryFoldLongDoubleX87)
 {
     TargetGuard guard("x86_64");
-    Tac_Val *tenth = make_const_long_double(0);
+    Tac_Val *tenth                       = make_const_long_double(0);
     tenth->u.constant->u.long_double_val = f128_from_string("0.1", nullptr);
     Tac_Instruction *body = constant_fold(make_binary(TAC_BINARY_MULTIPLY_DOUBLE, tenth,
                                                       make_const_long_double(3.0L), make_var("t")));
@@ -363,8 +368,8 @@ TEST_F(OptimizerTest, BinaryFoldLongDoubleX87)
 // exactly like their plain counterparts.  1.5 * 2.5 → Copy(ConstDouble(3.75), t).
 TEST_F(OptimizerTest, BinaryFoldDoubleOpVariants)
 {
-    Tac_Instruction *add = constant_fold(make_binary(
-        TAC_BINARY_ADD_DOUBLE, make_const_double(1.5), make_const_double(2.5), make_var("t")));
+    Tac_Instruction *add = constant_fold(make_binary(TAC_BINARY_ADD_DOUBLE, make_const_double(1.5),
+                                                     make_const_double(2.5), make_var("t")));
     AssertFoldedDouble(add, 4.0);
 
     Tac_Instruction *sub = constant_fold(make_binary(
@@ -459,8 +464,8 @@ TEST_F(OptimizerTest, BinaryFoldRightShiftNegativeBesm6Logical)
 // The bug, exactly: an unsigned int shifted left by 36 on a 48-bit-int target.
 TEST_F(OptimizerTest, BinaryFoldLeftShiftPastHostIntWidthBesm6)
 {
-    Tac_Instruction *body = make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1),
-                                        make_const_int(36), make_var("t"));
+    Tac_Instruction *body =
+        make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1), make_const_int(36), make_var("t"));
     {
         TargetGuard besm6("besm6");
         body = constant_fold(body);
@@ -493,8 +498,8 @@ TEST_F(OptimizerTest, BinaryFoldRightShiftPastHostIntWidthBesm6)
 // answers 0, which is what the BESM-6 shift unit produces past 48 bits.
 TEST_F(OptimizerTest, BinaryFoldLeftShiftOutOfRangeBesm6IsZero)
 {
-    Tac_Instruction *body = make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1),
-                                        make_const_int(48), make_var("t"));
+    Tac_Instruction *body =
+        make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1), make_const_int(48), make_var("t"));
     {
         TargetGuard besm6("besm6");
         body = constant_fold(body);
@@ -509,8 +514,8 @@ TEST_F(OptimizerTest, BinaryFoldLeftShiftOutOfRangeBesm6IsZero)
 // the 16 the old masking gave.  Nothing in range changes for this target.
 TEST_F(OptimizerTest, BinaryFoldLeftShiftOutOfRangeX86IsZero)
 {
-    Tac_Instruction *body = make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1),
-                                        make_const_int(36), make_var("t"));
+    Tac_Instruction *body =
+        make_binary(TAC_BINARY_LEFT_SHIFT, make_const_uint(1), make_const_int(36), make_var("t"));
     {
         TargetGuard x86("x86_64");
         body = constant_fold(body);

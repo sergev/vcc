@@ -37,7 +37,7 @@ enum {
 struct symtab {
     char *name;
     char *value;
-    char  predefined; // §6.10.8.4: reject #define/#undef of this name
+    char predefined; // §6.10.8.4: reject #define/#undef of this name
 };
 
 #define ALFSIZ 256 // alphabet size: one table slot per possible byte value
@@ -56,7 +56,7 @@ struct symtab {
 // pointer reaches past word 32,767, and the stack is 4,096 words.  The host
 // build (b6cpp, and the conformance suite in test/) keeps the full sizes; see
 // README.md, "Building for the BESM-6".
-#   define BUFSIZ  1024
+#define BUFSIZ 1024
 
 // SBSIZE is measured against the real workload and not guessed down: the side
 // buffer holds every macro's name and body plus every file name saved, and the
@@ -65,14 +65,16 @@ struct symtab {
 // <sys/reg.h> with "too much defining"; this leaves room for a source with half
 // again as many.  It is 4,096 words of the address space -- the single largest
 // object in the program -- so it is also the first knob to turn if one is needed.
-#   define SBSIZE  24576
+#define SBSIZE 24576
 
-#   define SYMSIZ  1021 // prime; 315 macros is the measured load of a kernel source
+#define SYMSIZ 1021 // prime; 315 macros is the measured load of a kernel source
 #else
-#   define BUFSIZ  8192
-#   define SBSIZE  1048576 // bytes of "side buffer": every macro's name and body, the file names, and
-                           // the pushback buffers, BUFSIZ each (vcc's own X-macro tables need more than 64 KB)
-#   define SYMSIZ  6151  // number of slots in the symbol hash table (prime; holds the §5.2.4.1 min of 4095 macros)
+#define BUFSIZ 8192
+#define SBSIZE \
+    1048576 // bytes of "side buffer": every macro's name and body, the file names, and
+            // the pushback buffers, BUFSIZ each (vcc's own X-macro tables need more than 64 KB)
+#define SYMSIZ \
+    6151 // number of slots in the symbol hash table (prime; holds the §5.2.4.1 min of 4095 macros)
 #endif
 
 // How deep a macro call may sit inside a macro ARGUMENT before the argument is
@@ -84,13 +86,13 @@ struct symtab {
 // the frame chain it came from.  The host has no such limit and keeps a value
 // that only stops a runaway.
 #ifdef besm6
-#   define MAXARGDEPTH 1
+#define MAXARGDEPTH 1
 #else
-#   define MAXARGDEPTH 200
+#define MAXARGDEPTH 200
 #endif
 
-#define MAXINC  10 // maximum depth of nested #include files
-#define MAXIF   64 // maximum depth of nested #if/#ifdef/#ifndef blocks
+#define MAXINC 10 // maximum depth of nested #include files
+#define MAXIF  64 // maximum depth of nested #if/#ifdef/#ifndef blocks
 
 // Max buffers of macro pushback in flight at once, max -D / -U options and max -I
 // directories accepted on the command line, max files that said "#pragma once".  The
@@ -98,15 +100,15 @@ struct symtab {
 // cc.c's thirty -D, a library's -I path), and each pushback buffer is BUFSIZ bytes of
 // the side buffer.
 #ifdef besm6
-#   define MAXFRE  14
-#   define NPREDEF 20
-#   define MAXDIRS 8
-#   define MAXONCE 32
+#define MAXFRE  14
+#define NPREDEF 20
+#define MAXDIRS 8
+#define MAXONCE 32
 #else
-#   define MAXFRE  64
-#   define NPREDEF 200
-#   define MAXDIRS 64
-#   define MAXONCE 1024
+#define MAXFRE  64
+#define NPREDEF 200
+#define MAXDIRS 64
+#define MAXONCE 1024
 #endif
 
 // The three scratch areas expand_macro() carves out of one heap block, and the
@@ -120,13 +122,13 @@ struct symtab {
 // between `end' and the stack; with two it does not, and expand_macro starts reporting
 // "out of memory" on ordinary input.  Measure the break, not the request.
 #ifdef besm6
-#   define EXPTXT_MULT 2
+#define EXPTXT_MULT 2
 #else
-#   define EXPTXT_MULT 4                     // exptxt holds this many BUFSIZ of expanded actuals
+#define EXPTXT_MULT 4 // exptxt holds this many BUFSIZ of expanded actuals
 #endif
-#define ACTTXT_SIZE BUFSIZ                   // ... the raw actuals
-#define EXPTXT_SIZE (EXPTXT_MULT * BUFSIZ)   // ... the expanded ones
-#define STRBUF_SIZE (2 * BUFSIZ + 4)         // ... one '#param' result, worst-case all-escaped
+#define ACTTXT_SIZE BUFSIZ                 // ... the raw actuals
+#define EXPTXT_SIZE (EXPTXT_MULT * BUFSIZ) // ... the expanded ones
+#define STRBUF_SIZE (2 * BUFSIZ + 4)       // ... one '#param' result, worst-case all-escaped
 
 //
 // The four large arrays, at file scope rather than inside struct cppstate --
@@ -190,13 +192,15 @@ struct cppstate {
     int line_no[MAXINC];      // current line number
     char *inc_file[MAXINC];   // file name (for line markers and errors)
     char *inc_dir[MAXINC];    // directory the file was found in (searched first for its #includes)
-    int trig_nhold[MAXINC];   // trailing '?' count carried across a read boundary (per level, -trigraphs)
-    char *search_dirs[MAXDIRS + 3]; // #include search path: [0]=current dir, then -I dirs, then system
-    int in_fd;                // fd of the file currently being read; init: STDIN
-    char *prog_name;          // diagnostic prefix: basename of argv[0]
-    FILE *out_file;           // where preprocessed text is written (usually stdout)
-    int ndirs;                // number of entries filled in search_dirs; init: 1
-    int inc_level;            // current #include nesting depth (0 = top-level file)
+    int trig_nhold[MAXINC];   // trailing '?' count carried across a read boundary (per level,
+                              // -trigraphs)
+    char *search_dirs[MAXDIRS +
+                      3]; // #include search path: [0]=current dir, then -I dirs, then system
+    int in_fd;            // fd of the file currently being read; init: STDIN
+    char *prog_name;      // diagnostic prefix: basename of argv[0]
+    FILE *out_file;       // where preprocessed text is written (usually stdout)
+    int ndirs;            // number of entries filled in search_dirs; init: 1
+    int inc_level;        // current #include nesting depth (0 = top-level file)
 
     // command-line option flags
     int opt_no_lines;      // -P: do not emit "# line" markers
@@ -216,8 +220,8 @@ struct cppstate {
     // directive/macro entries
     struct symtab *last_sym; // most recent lookup() result (cache for lookup_token)
     struct symtab *sym_define, *sym_undef, *sym_include, *sym_if, *sym_elif, *sym_else, *sym_endif,
-        *sym_ifdef, *sym_ifndef, *sym_line, *sym_error, *sym_pragma,
-        *sym_pragma_op, *sym_line_macro, *sym_file_macro;
+        *sym_ifdef, *sym_ifndef, *sym_line, *sym_error, *sym_pragma, *sym_pragma_op,
+        *sym_line_macro, *sym_file_macro;
 
     // #if conditional nesting: how many enclosing blocks are taken vs skipped
     int true_level, false_level;
@@ -232,7 +236,7 @@ struct cppstate {
     // skipped region), meaning no further branch may be taken.
     int if_top;
     char if_taken[MAXIF + 1];
-    int if_line[MAXIF + 1];    // where each open group's #if is, to report it unterminated
+    int if_line[MAXIF + 1]; // where each open group's #if is, to report it unterminated
     char *if_file[MAXIF + 1];
 
     // The line of the directive being processed, at include level dir_level; 0 when
@@ -243,11 +247,11 @@ struct cppstate {
 
     // scratch shared by the #if expression lexer (yylex.c) and parser (parser.c)
     // §6.10.1p4: the arithmetic is in intmax_t, or uintmax_t for an unsigned operand.
-    intmax_t tok_value;    // value of the number token just scanned
-    int tok_unsigned;      // it has a 'u' suffix, or fits only uintmax_t
-    int look_token;        // one-token lookahead: type of the next token
-    intmax_t look_value;   // value that went with the lookahead token
-    int look_unsigned;     // ... and its signedness
+    intmax_t tok_value;  // value of the number token just scanned
+    int tok_unsigned;    // it has a 'u' suffix, or fits only uintmax_t
+    int look_token;      // one-token lookahead: type of the next token
+    intmax_t look_value; // value that went with the lookahead token
+    int look_unsigned;   // ... and its signedness
 };
 
 extern struct cppstate cpp; // the single global instance, defined in cpp.c
@@ -273,7 +277,7 @@ char *skip_blanks(char *p);                     // advance past whitespace token
 struct symtab *lookup(char *namep, int enterf); // find/insert a symbol (macro.c)
 void pperror(const char *s, ...);               // report an error (diag.c)
 void pperror_at(const char *file, int line, const char *s, ...); // ... at a given line
-void ppwarn(const char *s, ...);                // report a warning (diag.c)
+void ppwarn(const char *s, ...);                                 // report a warning (diag.c)
 #ifdef __cplusplus
 [[noreturn]]
 #else

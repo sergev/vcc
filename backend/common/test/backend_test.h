@@ -43,7 +43,7 @@ protected:
     {
         target_config = target_lookup(target_name);
         ASSERT_NE(nullptr, target_config);
-        opt_flags        = opt_flags_default();
+        opt_flags = opt_flags_default();
         if (const char *n = getenv("VCC_OPT_MAX_ITER")) // for bisecting a failure
             opt_flags.max_iterations = atoi(n);
         translate_verify = 1;

@@ -240,7 +240,8 @@ TEST_F(Float128Test, InteropClangCallsUs)
 #if RISCV_TEST_XLEN == 64
 TEST_F(Float128Test, CallsRuntime)
 {
-    EXPECT_EQ(R"(addi sp, sp, -64
+    EXPECT_EQ(
+        R"(addi sp, sp, -64
 sd ra, 56(sp)
 sd a0, 32(sp)
 sd a1, 40(sp)
@@ -253,13 +254,14 @@ ld ra, 56(sp)
 addi sp, sp, 64
 ret
 )",
-              Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }")));
+        Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }")));
 }
 #else
 // On rv32 the operands go by reference to copies, the result through a hidden pointer.
 TEST_F(Float128Test, CallsRuntime)
 {
-    std::string s = Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }"));
+    std::string s =
+        Code(CompileToRiscv("long double f(long double a, long double b) { return a + b; }"));
     EXPECT_NE(std::string::npos, s.find("call __addtf3\n")) << s;
     EXPECT_EQ(std::string::npos, s.find("ld ")) << s;
 }

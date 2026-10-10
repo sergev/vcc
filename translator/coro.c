@@ -63,13 +63,13 @@ void coro_layout(const Type *yield, const Type *result, int *value_off, int *res
     *value_off = *result_off = off;
     if (unalias(yield)->kind != TYPE_VOID) {
         int ya = (int)get_alignment(yield);
-        off    = *value_off = align_up(off, ya);
+        off = *value_off = align_up(off, ya);
         off += (int)get_size(yield);
         a = ya > a ? ya : a;
     }
     if (unalias(result)->kind != TYPE_VOID) {
         int ra = (int)get_alignment(result);
-        off    = *result_off = align_up(off, ra);
+        off = *result_off = align_up(off, ra);
         off += (int)get_size(result);
         a = ra > a ? ra : a;
     }
@@ -105,9 +105,9 @@ static Tac_Type *size_type(void)
 // The type of f$resume: int (char *).
 static Tac_Type *resume_type(void)
 {
-    Tac_Type *ft                 = tac_kind(TAC_TYPE_FUN_TYPE);
-    ft->u.fun_type.param_types   = char_ptr();
-    ft->u.fun_type.ret_type      = tac_kind(TAC_TYPE_INT);
+    Tac_Type *ft               = tac_kind(TAC_TYPE_FUN_TYPE);
+    ft->u.fun_type.param_types = char_ptr();
+    ft->u.fun_type.ret_type    = tac_kind(TAC_TYPE_INT);
     return ft;
 }
 
@@ -147,10 +147,10 @@ static Tac_StaticInit *size_init(unsigned n)
 // The type every init function a descriptor holds has: void (char *, void *).
 static Tac_Type *ptr_init_type(void)
 {
-    Tac_Type *ft                    = tac_kind(TAC_TYPE_FUN_TYPE);
-    ft->u.fun_type.param_types      = char_ptr();
+    Tac_Type *ft                     = tac_kind(TAC_TYPE_FUN_TYPE);
+    ft->u.fun_type.param_types       = char_ptr();
     ft->u.fun_type.param_types->next = void_ptr();
-    ft->u.fun_type.ret_type         = tac_kind(TAC_TYPE_VOID);
+    ft->u.fun_type.ret_type          = tac_kind(TAC_TYPE_VOID);
     return ft;
 }
 
@@ -172,7 +172,7 @@ static Tac_Type *init_type(const Type *fn)
 static char *suffixed(const char *name, const char *suffix)
 {
     size_t n = strlen(name), m = strlen(suffix);
-    char *s  = xalloc(n + m + 1, __func__, __FILE__, __LINE__);
+    char *s = xalloc(n + m + 1, __func__, __FILE__, __LINE__);
     memcpy(s, name, n);
     memcpy(s + n, suffix, m + 1);
     return s;
@@ -186,12 +186,12 @@ static void append(TacCtx *ctx, Tac_Instruction *in)
 // %d = ptr + off, a pointer to `pointee` (owned).
 static Tac_Val *emit_offset(TacCtx *ctx, const char *ptr, int off, Tac_Type *pointee)
 {
-    Tac_Val *dst          = new_var_val(ctx, tac_type_ptr(pointee));
-    Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-    in->u.add_ptr.ptr     = val_var(ptr);
-    in->u.add_ptr.index   = val_int(off);
-    in->u.add_ptr.scale   = 1;
-    in->u.add_ptr.dst     = dst;
+    Tac_Val *dst        = new_var_val(ctx, tac_type_ptr(pointee));
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+    in->u.add_ptr.ptr   = val_var(ptr);
+    in->u.add_ptr.index = val_int(off);
+    in->u.add_ptr.scale = 1;
+    in->u.add_ptr.dst   = dst;
     append(ctx, in);
     return val_var(dst->u.var_name);
 }
@@ -244,10 +244,10 @@ static void emit_return_int(TacCtx *ctx, int status)
 static Tac_Val *emit_call(TacCtx *ctx, const char *name, Tac_Type *ret, int n, Tac_Val **args,
                           Tac_Type **params)
 {
-    Tac_Type *ft          = tac_kind(TAC_TYPE_FUN_TYPE);
-    Tac_Type **pt         = &ft->u.fun_type.param_types;
-    Tac_Instruction *in   = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
-    Tac_Val **at          = &in->u.fun_call.args;
+    Tac_Type *ft        = tac_kind(TAC_TYPE_FUN_TYPE);
+    Tac_Type **pt       = &ft->u.fun_type.param_types;
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    Tac_Val **at        = &in->u.fun_call.args;
     for (int i = 0; i < n; i++) {
         *pt = params[i];
         pt  = &(*pt)->next;
@@ -266,7 +266,8 @@ static Tac_Val *emit_call(TacCtx *ctx, const char *name, Tac_Type *ret, int n, T
 
 static void emit_state(TacCtx *ctx, unsigned state)
 {
-    emit_store(ctx, val_uint(state), emit_offset(ctx, ctx->coro->fp, CO_STATE, tac_kind(TAC_TYPE_UINT)));
+    emit_store(ctx, val_uint(state),
+               emit_offset(ctx, ctx->coro->fp, CO_STATE, tac_kind(TAC_TYPE_UINT)));
 }
 
 static bool is_aggregate(const Type *t)
@@ -308,12 +309,12 @@ Tac_Val *gen_yield(TacCtx *ctx, Expr *e)
     Tac_Val *signal    = emit_call(ctx, "__coro_suspend", tac_kind(TAC_TYPE_INT), 1, args, params);
 
     // Resumed by co_destroy: leave every block, running its exit actions, and finish.
-    Tac_Val *destroy      = new_var_val(ctx, tac_kind(TAC_TYPE_INT));
-    Tac_Instruction *cmp  = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-    cmp->u.binary.op      = TAC_BINARY_EQUAL;
-    cmp->u.binary.src1    = val_var(signal->u.var_name);
-    cmp->u.binary.src2    = val_int(CO_SIGNAL_DESTROY);
-    cmp->u.binary.dst     = destroy;
+    Tac_Val *destroy     = new_var_val(ctx, tac_kind(TAC_TYPE_INT));
+    Tac_Instruction *cmp = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+    cmp->u.binary.op     = TAC_BINARY_EQUAL;
+    cmp->u.binary.src1   = val_var(signal->u.var_name);
+    cmp->u.binary.src2   = val_int(CO_SIGNAL_DESTROY);
+    cmp->u.binary.dst    = destroy;
     append(ctx, cmp);
     char *over                   = new_temp(ctx);
     Tac_Instruction *jz          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
@@ -361,8 +362,8 @@ static Tac_Val *coro_resume_fn(TacCtx *ctx, const char *g)
 // A frame for coroutine `g` (the EXPR_VAR naming it) at `storage` of `bytes`: set up
 // by the runtime, the root of a task of its own or, with a `parent` frame, of the
 // parent's task; then the arguments `args` stored by g$init.
-static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *bytes,
-                        Tac_Val *desc, Tac_Val *parent, Expr *args)
+static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *bytes, Tac_Val *desc,
+                        Tac_Val *parent, Expr *args)
 {
     Tac_Val *sargs[]    = { storage, bytes, desc, coro_resume_fn(ctx, g->u.var),
                             parent ? parent : val_int(0) };
@@ -370,14 +371,14 @@ static void setup_frame(TacCtx *ctx, const Expr *g, Tac_Val *storage, Tac_Val *b
                             tac_type_ptr(resume_type()), void_ptr() };
     tac_free_val(emit_call(ctx, "__coro_setup", void_ptr(), 5, sargs, sparams));
 
-    char *init                   = suffixed(g->u.var, "$init");
-    Tac_Type *it                 = init_type(g->type);
-    Tac_Instruction *in          = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
-    in->u.fun_call.fun_name      = xstrdup(init);
-    in->u.fun_call.fun_type      = tac_clone_type(it);
-    Tac_Val **at                 = &in->u.fun_call.args;
-    *at                          = dup_val(storage);
-    at                           = &(*at)->next;
+    char *init              = suffixed(g->u.var, "$init");
+    Tac_Type *it            = init_type(g->type);
+    Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    in->u.fun_call.fun_name = xstrdup(init);
+    in->u.fun_call.fun_type = tac_clone_type(it);
+    Tac_Val **at            = &in->u.fun_call.args;
+    *at                     = dup_val(storage);
+    at                      = &(*at)->next;
     for (Expr *a = args; a; a = a->next) {
         *at = gen_expr(ctx, a);
         at  = &(*at)->next;
@@ -404,7 +405,8 @@ Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type)
 // Word `k` of the descriptor at variable `desc`, of type `type` (owned).
 static Tac_Val *desc_word(TacCtx *ctx, const char *desc, int k, Tac_Type *type)
 {
-    Tac_Val *at = emit_offset(ctx, desc, k * (int)target_config->pointer_size, tac_clone_type(type));
+    Tac_Val *at =
+        emit_offset(ctx, desc, k * (int)target_config->pointer_size, tac_clone_type(type));
     return emit_load(ctx, at, type);
 }
 
@@ -426,12 +428,12 @@ static void setup_frame_by_ptr(TacCtx *ctx, const char *desc, Tac_Val *storage, 
                             tac_type_ptr(resume_type()), void_ptr() };
     tac_free_val(emit_call(ctx, "__coro_setup", void_ptr(), 5, sargs, sparams));
 
-    Tac_Val *init           = desc_word(ctx, desc, DESC_INIT, tac_type_ptr(ptr_init_type()));
-    Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
-    in->u.fun_call.fun_name = xstrdup(init->u.var_name);
-    in->u.fun_call.indirect = true;
-    in->u.fun_call.fun_type = ptr_init_type();
-    in->u.fun_call.args     = dup_val(storage);
+    Tac_Val *init             = desc_word(ctx, desc, DESC_INIT, tac_type_ptr(ptr_init_type()));
+    Tac_Instruction *in       = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    in->u.fun_call.fun_name   = xstrdup(init->u.var_name);
+    in->u.fun_call.indirect   = true;
+    in->u.fun_call.fun_type   = ptr_init_type();
+    in->u.fun_call.args       = dup_val(storage);
     in->u.fun_call.args->next = arg ? gen_expr(ctx, arg) : val_int(0);
     append(ctx, in);
     tac_free_val(init);
@@ -453,7 +455,8 @@ static Tac_Val *in_variable(TacCtx *ctx, Tac_Val *v, Tac_Type *type)
     return r;
 }
 
-static Tac_Val *emit_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b, Tac_Type *type)
+static Tac_Val *emit_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b,
+                            Tac_Type *type)
 {
     Tac_Val *dst        = new_var_val(ctx, type);
     Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_BINARY);
@@ -493,15 +496,17 @@ static Tac_Val *emit_resume(TacCtx *ctx, Tac_Val *p, Tac_Val *signal)
 // runs, and destroys it only after it has suspended.
 static Tac_Val *emit_direct_resume(TacCtx *ctx, const char *g, Tac_Val *sub, Tac_Val *signal)
 {
-    Tac_Val *flags = emit_binary(ctx, TAC_BINARY_LEFT_SHIFT, signal, val_int(1), tac_kind(TAC_TYPE_INT));
-    flags          = emit_binary(ctx, TAC_BINARY_BITWISE_OR, flags, val_int(1), tac_kind(TAC_TYPE_INT));
+    Tac_Val *flags =
+        emit_binary(ctx, TAC_BINARY_LEFT_SHIFT, signal, val_int(1), tac_kind(TAC_TYPE_INT));
+    flags = emit_binary(ctx, TAC_BINARY_BITWISE_OR, flags, val_int(1), tac_kind(TAC_TYPE_INT));
     emit_store(ctx, flags, emit_offset(ctx, sub->u.var_name, CO_FLAGS, tac_kind(TAC_TYPE_INT)));
     char *name         = suffixed(g, "$resume");
     Tac_Val *args[]    = { dup_val(sub) };
     Tac_Type *params[] = { char_ptr() };
     Tac_Val *status    = emit_call(ctx, name, tac_kind(TAC_TYPE_INT), 1, args, params);
     xfree(name);
-    emit_store(ctx, val_int(0), emit_offset(ctx, sub->u.var_name, CO_FLAGS, tac_kind(TAC_TYPE_INT)));
+    emit_store(ctx, val_int(0),
+               emit_offset(ctx, sub->u.var_name, CO_FLAGS, tac_kind(TAC_TYPE_INT)));
     tac_free_val(sub);
     return status;
 }
@@ -581,16 +586,17 @@ static Tac_Val *start_frame(TacCtx *ctx, Expr *e)
 
     // co_alloca: memory until the end of the block, off the shadow stack in a function
     // and off the task's arena in a coroutine, whose shadow stack goes at each suspension.
-    Expr *g       = a;
-    bool by_ptr   = is_coro_ptr(g);
-    Tac_Val *sp   = ctx->coro ? NULL : emit_call(ctx, stack_builtin("stack_save"), void_ptr(), 0, NULL, NULL);
-    Tac_Val *desc = by_ptr ? in_variable(ctx, gen_expr(ctx, g), tac_type_ptr(size_type()))
-                           : coro_desc(ctx, g->u.var);
-    Tac_Val *size = emit_load(ctx, dup_val(desc), size_type());
+    Expr *g     = a;
+    bool by_ptr = is_coro_ptr(g);
+    Tac_Val *sp =
+        ctx->coro ? NULL : emit_call(ctx, stack_builtin("stack_save"), void_ptr(), 0, NULL, NULL);
+    Tac_Val *desc  = by_ptr ? in_variable(ctx, gen_expr(ctx, g), tac_type_ptr(size_type()))
+                            : coro_desc(ctx, g->u.var);
+    Tac_Val *size  = emit_load(ctx, dup_val(desc), size_type());
     Tac_Val *extra = gen_expr(ctx, a->next);
 
     // bytes = (size + extra + 15) & -16
-    Tac_Val *bytes = new_var_val(ctx, size_type());
+    Tac_Val *bytes       = new_var_val(ctx, size_type());
     Tac_Instruction *add = tac_new_instruction(TAC_INSTRUCTION_BINARY);
     add->u.binary.op     = TAC_BINARY_ADD_UNSIGNED;
     add->u.binary.src1   = size;
@@ -700,18 +706,19 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
     bool arena        = by_ptr || is_coroutine_call(op);
     Tac_Val *sub;
     if (by_ptr) {
-        Tac_Val *desc  = in_variable(ctx, gen_expr(ctx, op->u.call.func), tac_type_ptr(size_type()));
-        Tac_Val *size  = desc_word(ctx, desc->u.var_name, DESC_SIZE, size_type());
+        Tac_Val *desc = in_variable(ctx, gen_expr(ctx, op->u.call.func), tac_type_ptr(size_type()));
+        Tac_Val *size = desc_word(ctx, desc->u.var_name, DESC_SIZE, size_type());
         Tac_Val *align = desc_word(ctx, desc->u.var_name, DESC_ALIGN, size_type());
         sub = in_variable(ctx, emit_push(ctx, dup_val(size), align, "(coro_ptr)"), void_ptr());
-        setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(sub), size, own_frame(ctx), op->u.call.args);
+        setup_frame_by_ptr(ctx, desc->u.var_name, dup_val(sub), size, own_frame(ctx),
+                           op->u.call.args);
         tac_free_val(desc);
     } else if (arena) {
-        const Expr *g  = op->u.call.func;
-        Tac_Val *desc  = coro_desc(ctx, g->u.var);
-        Tac_Val *size  = emit_load(ctx, dup_val(desc), size_type());
-        Tac_Val *alp   = emit_offset(ctx, desc->u.var_name, (int)target_config->pointer_size,
-                                     size_type());
+        const Expr *g = op->u.call.func;
+        Tac_Val *desc = coro_desc(ctx, g->u.var);
+        Tac_Val *size = emit_load(ctx, dup_val(desc), size_type());
+        Tac_Val *alp =
+            emit_offset(ctx, desc->u.var_name, (int)target_config->pointer_size, size_type());
         Tac_Val *align = emit_load(ctx, alp, size_type());
         sub = in_variable(ctx, emit_push(ctx, dup_val(size), align, g->u.var), void_ptr());
         setup_frame(ctx, g, dup_val(sub), size, desc, own_frame(ctx), op->u.call.args);
@@ -748,7 +755,7 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
     }
     Tac_Val *fargs[]    = { own_frame(ctx) };
     Tac_Type *fparams[] = { char_ptr() };
-    Tac_Val *signal     = emit_call(ctx, "__coro_suspend", tac_kind(TAC_TYPE_INT), 1, fargs, fparams);
+    Tac_Val *signal = emit_call(ctx, "__coro_suspend", tac_kind(TAC_TYPE_INT), 1, fargs, fparams);
 
     // Destroyed: the sub-coroutine first, then every block of ours.
     char *over = new_temp(ctx);
@@ -770,8 +777,9 @@ Tac_Val *gen_await(TacCtx *ctx, Expr *e)
     Tac_Val *result = val_int(0);
     if (unalias(e->type)->kind != TYPE_VOID) {
         tac_free_val(result);
-        Tac_Val *addr = emit_offset(ctx, sub->u.var_name, result_off, ast_type_to_tac_type(e->type));
-        result        = read_at(ctx, addr->u.var_name, e->type);
+        Tac_Val *addr =
+            emit_offset(ctx, sub->u.var_name, result_off, ast_type_to_tac_type(e->type));
+        result = read_at(ctx, addr->u.var_name, e->type);
         tac_free_val(addr);
     }
     if (arena)
@@ -792,11 +800,11 @@ static Tac_Val *read_frame(TacCtx *ctx, Expr *e)
     int value_off, result_off, end, align;
     coro_layout(frame->u.struct_t.frame_yield, frame->u.struct_t.frame_result, &value_off,
                 &result_off, &end, &align);
-    bool value          = e->u.co_op.op == CO_OP_VALUE;
-    Tac_Val *args[]     = { p, val_uint(value ? value_off : result_off) };
-    Tac_Type *params[]  = { void_ptr(), tac_kind(TAC_TYPE_UINT) };
-    Tac_Val *raw        = emit_call(ctx, value ? "__coro_value" : "__coro_result", void_ptr(), 2, args,
-                                    params);
+    bool value         = e->u.co_op.op == CO_OP_VALUE;
+    Tac_Val *args[]    = { p, val_uint(value ? value_off : result_off) };
+    Tac_Type *params[] = { void_ptr(), tac_kind(TAC_TYPE_UINT) };
+    Tac_Val *raw =
+        emit_call(ctx, value ? "__coro_value" : "__coro_result", void_ptr(), 2, args, params);
     Tac_Val *addr = in_variable(ctx, raw, tac_type_ptr_to(e->type));
     Tac_Val *v    = read_at(ctx, addr->u.var_name, e->type);
     tac_free_val(addr);
@@ -826,12 +834,12 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e)
     case CO_OP_SIZEOF:
     case CO_OP_ALIGNOF: {
         const Expr *g = e->u.co_op.args;
-        Tac_Val *desc = is_coro_ptr(g) ? in_variable(ctx, gen_expr(ctx, (Expr *)g),
-                                                     tac_type_ptr(size_type()))
-                                       : coro_desc(ctx, g->u.var);
-        Tac_Val *v    = desc_word(ctx, desc->u.var_name,
-                                  e->u.co_op.op == CO_OP_ALIGNOF ? DESC_ALIGN : DESC_SIZE,
-                                  size_type());
+        Tac_Val *desc = is_coro_ptr(g)
+                            ? in_variable(ctx, gen_expr(ctx, (Expr *)g), tac_type_ptr(size_type()))
+                            : coro_desc(ctx, g->u.var);
+        Tac_Val *v =
+            desc_word(ctx, desc->u.var_name,
+                      e->u.co_op.op == CO_OP_ALIGNOF ? DESC_ALIGN : DESC_SIZE, size_type());
         tac_free_val(desc);
         return v;
     }
@@ -848,8 +856,8 @@ typedef struct {
     const Tac_Type *type; // borrowed from the function's params or locals
     int off;
     int size, align;
-    bool memory;   // an aggregate or long double: copied through a shadow, not loaded
-    char *shadow;  // memory: its copy in the shadow-stack frame, for whole-value uses
+    bool memory;  // an aggregate or long double: copied through a shadow, not loaded
+    char *shadow; // memory: its copy in the shadow-stack frame, for whole-value uses
 } Home;
 
 typedef struct {
@@ -976,8 +984,8 @@ static void add_home(Split *s, const char *name, int size, int align)
         xfree(s->homes);
         s->homes = n;
     }
-    h         = &s->homes[s->nhomes++];
-    *h        = (Home){ xstrdup(name), t, 0, type_size(t), type_align(t), memory_type(t), NULL };
+    h  = &s->homes[s->nhomes++];
+    *h = (Home){ xstrdup(name), t, 0, type_size(t), type_align(t), memory_type(t), NULL };
     if (size > h->size)
         h->size = size;
     if (align > h->align)
@@ -1057,10 +1065,10 @@ static char *split_temp(Split *s, Tac_Type *type)
 {
     char buf[32];
     snprintf(buf, sizeof buf, "%%co.%d", s->ntemps++);
-    Tac_Param *p = tac_new_param();
-    p->name      = xstrdup(buf);
-    p->type      = type;
-    p->next      = s->fn->u.function.locals;
+    Tac_Param *p             = tac_new_param();
+    p->name                  = xstrdup(buf);
+    p->type                  = type;
+    p->next                  = s->fn->u.function.locals;
     s->fn->u.function.locals = p;
     return xstrdup(buf);
 }
@@ -1078,12 +1086,12 @@ static void put(Split *s, Tac_Instruction *in)
 // %a = fp + off, a pointer to a copy of `pointee`.
 static char *put_offset(Split *s, int off, const Tac_Type *pointee)
 {
-    char *a                 = split_temp(s, tac_type_ptr(tac_clone_type(pointee)));
-    Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-    in->u.add_ptr.ptr       = val_var(s->fp);
-    in->u.add_ptr.index     = val_int(off);
-    in->u.add_ptr.scale     = 1;
-    in->u.add_ptr.dst       = val_var(a);
+    char *a             = split_temp(s, tac_type_ptr(tac_clone_type(pointee)));
+    Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+    in->u.add_ptr.ptr   = val_var(s->fp);
+    in->u.add_ptr.index = val_int(off);
+    in->u.add_ptr.scale = 1;
+    in->u.add_ptr.dst   = val_var(a);
     put(s, in);
     return a;
 }
@@ -1107,7 +1115,7 @@ static void put_store(Split *s, Tac_Val *src, const char *ptr)
 // The unsigned integer type of a chunk of `n` bytes.
 static Tac_Type *chunk_type(int n)
 {
-    return tac_new_type(n >= 8 ? TAC_TYPE_ULONG_LONG
+    return tac_new_type(n >= 8   ? TAC_TYPE_ULONG_LONG
                         : n == 4 ? TAC_TYPE_UINT
                         : n == 2 ? TAC_TYPE_USHORT
                                  : TAC_TYPE_UCHAR);
@@ -1132,16 +1140,16 @@ static void put_shadow_copy(Split *s, const Home *h, bool in)
         char *v      = split_temp(s, ct);
         if (in) {
             put_load(s, a, v);
-            Tac_Instruction *to          = tac_new_instruction(TAC_INSTRUCTION_COPY_TO_OFFSET);
-            to->u.copy_to_offset.src     = val_var(v);
-            to->u.copy_to_offset.dst     = xstrdup(h->shadow);
-            to->u.copy_to_offset.offset  = k;
+            Tac_Instruction *to         = tac_new_instruction(TAC_INSTRUCTION_COPY_TO_OFFSET);
+            to->u.copy_to_offset.src    = val_var(v);
+            to->u.copy_to_offset.dst    = xstrdup(h->shadow);
+            to->u.copy_to_offset.offset = k;
             put(s, to);
         } else {
-            Tac_Instruction *from          = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-            from->u.copy_from_offset.src   = xstrdup(h->shadow);
+            Tac_Instruction *from           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
+            from->u.copy_from_offset.src    = xstrdup(h->shadow);
             from->u.copy_from_offset.offset = k;
-            from->u.copy_from_offset.dst   = val_var(v);
+            from->u.copy_from_offset.dst    = val_var(v);
             put(s, from);
             put_store(s, val_var(v), a);
         }
@@ -1242,11 +1250,11 @@ static void rewrite(Split *s, Tac_Instruction *in)
                 ? home_of(s, in->u.get_address.src->u.var_name)
                 : NULL;
         if (h) {
-            Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
-            ap->u.add_ptr.ptr   = val_var(s->fp);
-            ap->u.add_ptr.index = val_int(h->off);
-            ap->u.add_ptr.scale = 1;
-            ap->u.add_ptr.dst   = in->u.get_address.dst;
+            Tac_Instruction *ap   = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
+            ap->u.add_ptr.ptr     = val_var(s->fp);
+            ap->u.add_ptr.index   = val_int(h->off);
+            ap->u.add_ptr.scale   = 1;
+            ap->u.add_ptr.dst     = in->u.get_address.dst;
             in->u.get_address.dst = NULL;
             tac_free_instruction(in);
             rewrite(s, ap);
@@ -1257,15 +1265,15 @@ static void rewrite(Split *s, Tac_Instruction *in)
     case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
         h = home_of(s, in->u.copy_to_offset.dst);
         if (h) {
-            Tac_Val *src      = in->u.copy_to_offset.src;
-            const Tac_Type *t = src->kind == TAC_VAL_VAR ? frame_name_type(s->fn, src->u.var_name)
-                                                          : NULL;
+            Tac_Val *src = in->u.copy_to_offset.src;
+            const Tac_Type *t =
+                src->kind == TAC_VAL_VAR ? frame_name_type(s->fn, src->u.var_name) : NULL;
             if (!t)
                 t = member_at(h->type, in->u.copy_to_offset.offset);
             if (!t)
                 internal_error("coroutines: a constant of unknown width stored in %s", h->name);
             use_val(s, src);
-            char *a = put_offset(s, h->off + in->u.copy_to_offset.offset, t);
+            char *a                  = put_offset(s, h->off + in->u.copy_to_offset.offset, t);
             in->u.copy_to_offset.src = NULL;
             put_store(s, src, a);
             xfree(a);
@@ -1281,10 +1289,10 @@ static void rewrite(Split *s, Tac_Instruction *in)
             const Tac_Type *t = frame_name_type(s->fn, dst->u.var_name);
             if (!t)
                 internal_error("coroutines: %s has no type", dst->u.var_name);
-            char *a           = put_offset(s, h->off + in->u.copy_from_offset.offset, t);
-            Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_LOAD);
-            ld->u.load.src_ptr  = val_var(a);
-            ld->u.load.dst      = dst;
+            char *a                    = put_offset(s, h->off + in->u.copy_from_offset.offset, t);
+            Tac_Instruction *ld        = tac_new_instruction(TAC_INSTRUCTION_LOAD);
+            ld->u.load.src_ptr         = val_var(a);
+            ld->u.load.dst             = dst;
             in->u.copy_from_offset.dst = NULL;
             tac_free_instruction(in);
             xfree(a);
@@ -1360,13 +1368,14 @@ static void rewrite(Split *s, Tac_Instruction *in)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break;
     default: // COPY, the conversions and GET_ADDRESS share the {src, dst} layout
-        if (in->kind != TAC_INSTRUCTION_GET_ADDRESS && in->kind != TAC_INSTRUCTION_GET_ADDRESS_BYTE &&
+        if (in->kind != TAC_INSTRUCTION_GET_ADDRESS &&
+            in->kind != TAC_INSTRUCTION_GET_ADDRESS_BYTE &&
             in->kind != TAC_INSTRUCTION_GET_ADDRESS_DECAY)
             use_val(s, in->u.copy.src);
         def = in->u.copy.dst;
         break;
     }
-    char *renamed = NULL;
+    char *renamed  = NULL;
     const Home *dh = def_val(s, def, &renamed);
     put(s, in);
     write_back(s, dh, renamed);
@@ -1389,11 +1398,11 @@ static void put_suspension(Split *s, Tac_Instruction *call, int k)
         char *f  = put_offset(s, CO_FLAGS, &(Tac_Type){ .kind = TAC_TYPE_INT });
         char *fl = split_temp(s, tac_new_type(TAC_TYPE_INT));
         put_load(s, f, fl);
-        Tac_Instruction *sh = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-        sh->u.binary.op     = TAC_BINARY_RIGHT_SHIFT;
-        sh->u.binary.src1   = val_var(fl);
-        sh->u.binary.src2   = val_int(1);
-        sh->u.binary.dst    = call->u.fun_call.dst;
+        Tac_Instruction *sh  = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+        sh->u.binary.op      = TAC_BINARY_RIGHT_SHIFT;
+        sh->u.binary.src1    = val_var(fl);
+        sh->u.binary.src2    = val_int(1);
+        sh->u.binary.dst     = call->u.fun_call.dst;
         call->u.fun_call.dst = NULL;
         rewrite(s, sh);
         xfree(f);
@@ -1483,10 +1492,10 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
         char *st = split_temp(&s, tac_new_type(TAC_TYPE_UINT));
         put_load(&s, a, st);
         xfree(a);
-        Tac_Instruction *jt        = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
-        jt->u.jump_table.index     = val_var(st);
-        jt->u.jump_table.count     = k + 1;
-        jt->u.jump_table.targets   = xalloc((k + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+        Tac_Instruction *jt      = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+        jt->u.jump_table.index   = val_var(st);
+        jt->u.jump_table.count   = k + 1;
+        jt->u.jump_table.targets = xalloc((k + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
         jt->u.jump_table.targets[0] = entry_label(&s, 0);
         for (int i = 1; i <= k; i++)
             jt->u.jump_table.targets[i] = entry_label(&s, i);
@@ -1509,7 +1518,7 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
             eq->u.binary.src2   = val_uint((unsigned)i);
             eq->u.binary.dst    = val_var(c);
             put(&s, eq);
-            Tac_Instruction *j          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
+            Tac_Instruction *j              = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
             j->u.jump_if_not_zero.condition = val_var(c);
             j->u.jump_if_not_zero.target    = entry_label(&s, i);
             put(&s, j);
@@ -1541,12 +1550,12 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     fn->u.function.body = s.head;
 
     // f$init(fp, params...): store each parameter in its home.
-    Tac_TopLevel *init        = tac_new_toplevel(TAC_TOPLEVEL_FUNCTION);
-    init->u.function.name     = suffixed(info->name, "$init");
-    init->u.function.global   = info->global;
-    init->u.function.params   = fn->u.function.params;
-    init->u.function.type     = tac_new_type(TAC_TYPE_FUN_TYPE);
-    Tac_Type **pt             = &init->u.function.type->u.fun_type.param_types;
+    Tac_TopLevel *init      = tac_new_toplevel(TAC_TOPLEVEL_FUNCTION);
+    init->u.function.name   = suffixed(info->name, "$init");
+    init->u.function.global = info->global;
+    init->u.function.params = fn->u.function.params;
+    init->u.function.type   = tac_new_type(TAC_TYPE_FUN_TYPE);
+    Tac_Type **pt           = &init->u.function.type->u.fun_type.param_types;
     for (const Tac_Param *p = init->u.function.params; p; p = p->next) {
         *pt = tac_clone_type(p->type);
         pt  = &(*pt)->next;
@@ -1564,10 +1573,9 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
             if (h->memory) {
                 int c = chunk_of(h);
                 for (int off = 0; off < h->size; off += c) {
-                    Tac_Type *ct = chunk_type(c);
-                    char *v      = split_temp(&is, ct);
-                    Tac_Instruction *from           = tac_new_instruction(
-                        TAC_INSTRUCTION_COPY_FROM_OFFSET);
+                    Tac_Type *ct          = chunk_type(c);
+                    char *v               = split_temp(&is, ct);
+                    Tac_Instruction *from = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
                     from->u.copy_from_offset.src    = xstrdup(p->name);
                     from->u.copy_from_offset.offset = off;
                     from->u.copy_from_offset.dst    = val_var(v);
@@ -1590,24 +1598,24 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
     }
 
     // f$resume keeps only the frame pointer.
-    Tac_Param *fp           = tac_new_param();
-    fp->name                = xstrdup(s.fp);
-    fp->type                = tac_clone_type(init->u.function.params->type);
-    fn->u.function.params   = fp;
+    Tac_Param *fp         = tac_new_param();
+    fp->name              = xstrdup(s.fp);
+    fp->type              = tac_clone_type(init->u.function.params->type);
+    fn->u.function.params = fp;
     tac_free_type(fn->u.function.type);
-    fn->u.function.type     = resume_type();
+    fn->u.function.type = resume_type();
 
     // f$co: the frame's size and alignment, and for a coroutine with a coro_ptr its init
     // and resume functions.
-    Tac_TopLevel *desc             = tac_new_toplevel(TAC_TOPLEVEL_STATIC_VARIABLE);
-    desc->u.static_variable.name   = suffixed(info->name, "$co");
-    desc->u.static_variable.global = info->global;
-    desc->u.static_variable.type   = desc_type(info->with_ptr);
-    Tac_StaticInit *size           = size_init((unsigned)end);
-    Tac_StaticInit *al             = size_init((unsigned)align);
-    size->next                     = al;
+    Tac_TopLevel *desc                = tac_new_toplevel(TAC_TOPLEVEL_STATIC_VARIABLE);
+    desc->u.static_variable.name      = suffixed(info->name, "$co");
+    desc->u.static_variable.global    = info->global;
+    desc->u.static_variable.type      = desc_type(info->with_ptr);
+    Tac_StaticInit *size              = size_init((unsigned)end);
+    Tac_StaticInit *al                = size_init((unsigned)align);
+    size->next                        = al;
     desc->u.static_variable.init_list = size;
-    init->next                     = desc;
+    init->next                        = desc;
 
     if (info->with_ptr) {
         // (void): an init that takes the void * as every descriptor's does, and stores
@@ -1629,12 +1637,12 @@ Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info)
             desc->next               = initp;
             init_name                = initp->u.function.name;
         }
-        Tac_StaticInit *ip       = tac_new_static_init(TAC_STATIC_INIT_POINTER);
-        ip->u.pointer.name       = xstrdup(init_name);
-        Tac_StaticInit *rp       = tac_new_static_init(TAC_STATIC_INIT_POINTER);
-        rp->u.pointer.name       = xstrdup(fn->u.function.name);
-        al->next                 = ip;
-        ip->next                 = rp;
+        Tac_StaticInit *ip = tac_new_static_init(TAC_STATIC_INIT_POINTER);
+        ip->u.pointer.name = xstrdup(init_name);
+        Tac_StaticInit *rp = tac_new_static_init(TAC_STATIC_INIT_POINTER);
+        rp->u.pointer.name = xstrdup(fn->u.function.name);
+        al->next           = ip;
+        ip->next           = rp;
     }
 
     free_split(&s);

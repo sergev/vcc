@@ -69,8 +69,8 @@ TEST_F(CodegenTest, AddPtrPointerLoad)
 // 41 bits (,aax, =37777777777777) to keep a negative index a valid signed offset.
 TEST_F(CodegenTest, AddPtrPowerOfTwoScale)
 {
-    std::string output =
-        CompileToMadlen("struct S { long a, b; }; struct S *f(struct S *p, long i){ return &p[i]; }");
+    std::string output = CompileToMadlen(
+        "struct S { long a, b; }; struct S *f(struct S *p, long i){ return &p[i]; }");
     EXPECT_EQ(R"(c
         f:   ,name,
     b/ret:   ,subp,

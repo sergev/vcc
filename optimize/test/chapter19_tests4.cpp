@@ -94,7 +94,8 @@ int main(void) {
     return 0;
 }
 )SRC")),
-              "binary=15 copy=10 fun_call=12 jump=8 jump_if_not_zero=1 jump_if_zero=18 label=27 return=18 unary=1");
+              "binary=15 copy=10 fun_call=12 jump=8 jump_if_not_zero=1 jump_if_zero=18 label=27 "
+              "return=18 unary=1");
 }
 
 TEST_F(PipelineTest, Chapter19_DSE_IntOnly_DontElim_SelfCopy)

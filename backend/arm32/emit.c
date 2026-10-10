@@ -47,8 +47,9 @@ static void emit_reglist(FILE *out, unsigned mask, A32_Width width)
     const char *sep = "";
     for (int r = 0; r <= A32_PC; r++) {
         if (mask & (1u << r)) {
-            fprintf(out, "%s%s", sep,
-                    width == A32_D ? a32_reg_name(A32_S0 + 2 * r, A32_D) : a32_reg_name(r, A32_CORE));
+            fprintf(
+                out, "%s%s", sep,
+                width == A32_D ? a32_reg_name(A32_S0 + 2 * r, A32_D) : a32_reg_name(r, A32_CORE));
             sep = ", ";
         }
     }
@@ -126,12 +127,12 @@ void a32_emit_instr(FILE *out, const A32_Instr *in)
 {
     static const char *const conds[] = { "",   "eq", "ne", "hs", "lo", "mi", "pl", "vs",
                                          "vc", "hi", "ls", "ge", "lt", "gt", "le" };
-    const char *mnem = a32_mnemonic[in->op];
-    const char *dot  = strchr(mnem, '.');
-    int base         = dot ? (int)(dot - mnem) : (int)strlen(mnem);
+    const char *mnem                 = a32_mnemonic[in->op];
+    const char *dot                  = strchr(mnem, '.');
+    int base                         = dot ? (int)(dot - mnem) : (int)strlen(mnem);
     char text[24];
-    snprintf(text, sizeof text, "%.*s%s%s%s", base, mnem, in->set_flags ? "s" : "",
-             conds[in->cond], mnem + base);
+    snprintf(text, sizeof text, "%.*s%s%s%s", base, mnem, in->set_flags ? "s" : "", conds[in->cond],
+             mnem + base);
     fprintf(out, "    %s", text);
     for (int i = 0; i < A32_MAX_OPERANDS && in->opnd[i].kind != A32_OPND_NONE; i++) {
         if (i == 0) {
@@ -150,23 +151,24 @@ void a32_emit_instr(FILE *out, const A32_Instr *in)
 // from the command line but none of the ABI ones.
 void a32_emit_header(FILE *out)
 {
-    fputs("    .syntax unified\n"
-          "    .arch   armv7-a\n"
-          "    .arch_extension idiv\n"
-          "    .fpu    vfpv3-d16\n"
-          "    .eabi_attribute Tag_ABI_PCS_R9_use, 0\n"
-          "    .eabi_attribute Tag_ABI_PCS_GOT_use, 1\n"
-          "    .eabi_attribute Tag_ABI_PCS_wchar_t, 4\n"
-          "    .eabi_attribute Tag_ABI_FP_denormal, 1\n"
-          "    .eabi_attribute Tag_ABI_FP_exceptions, 0\n"
-          "    .eabi_attribute Tag_ABI_FP_number_model, 3\n"
-          "    .eabi_attribute Tag_ABI_align_needed, 1\n"
-          "    .eabi_attribute Tag_ABI_align_preserved, 1\n"
-          "    .eabi_attribute Tag_ABI_enum_size, 2\n"
-          "    .eabi_attribute Tag_ABI_VFP_args, 1\n"
-          "    .eabi_attribute Tag_ABI_FP_16bit_format, 1\n"
-          "    .arm\n",
-          out);
+    fputs(
+        "    .syntax unified\n"
+        "    .arch   armv7-a\n"
+        "    .arch_extension idiv\n"
+        "    .fpu    vfpv3-d16\n"
+        "    .eabi_attribute Tag_ABI_PCS_R9_use, 0\n"
+        "    .eabi_attribute Tag_ABI_PCS_GOT_use, 1\n"
+        "    .eabi_attribute Tag_ABI_PCS_wchar_t, 4\n"
+        "    .eabi_attribute Tag_ABI_FP_denormal, 1\n"
+        "    .eabi_attribute Tag_ABI_FP_exceptions, 0\n"
+        "    .eabi_attribute Tag_ABI_FP_number_model, 3\n"
+        "    .eabi_attribute Tag_ABI_align_needed, 1\n"
+        "    .eabi_attribute Tag_ABI_align_preserved, 1\n"
+        "    .eabi_attribute Tag_ABI_enum_size, 2\n"
+        "    .eabi_attribute Tag_ABI_VFP_args, 1\n"
+        "    .eabi_attribute Tag_ABI_FP_16bit_format, 1\n"
+        "    .arm\n",
+        out);
 }
 
 void a32_emit_func(FILE *out, const A32_Func *fn)

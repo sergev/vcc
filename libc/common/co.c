@@ -14,11 +14,11 @@
 #include <stddef.h>
 
 struct co_header {
-    unsigned state;           /* 0 created; k >= 1 suspended at point k; DONE; DESTROYED */
-    unsigned flags;           /* RUNNING, and the signal of the resumption, shifted by 1 */
-    int (*resume)(void *);    /* f$resume */
-    struct co_header *task;   /* the root frame of the task */
-    char *top, *limit;        /* the root's arena */
+    unsigned state;         /* 0 created; k >= 1 suspended at point k; DONE; DESTROYED */
+    unsigned flags;         /* RUNNING, and the signal of the resumption, shifted by 1 */
+    int (*resume)(void *);  /* f$resume */
+    struct co_header *task; /* the root frame of the task */
+    char *top, *limit;      /* the root's arena */
 };
 
 enum {

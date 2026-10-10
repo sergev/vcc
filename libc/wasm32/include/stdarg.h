@@ -24,13 +24,12 @@ void __va_start(va_list *ap);
 #define __va_size(T)  ((sizeof(T) + 3) & ~3UL)
 #define __va_align(T) (_Alignof(T) > 4 ? _Alignof(T) : 4)
 
-#define va_arg(ap, T)                                                                  \
-    (*(__builtin_va_class(T)                                                           \
-           ? *(T **)(((ap) += 4) - 4)                                                  \
-           : (T *)(((ap) = (char *)(((unsigned long)(ap) + __va_align(T) - 1) &       \
-                                    -(unsigned long)__va_align(T)) +                  \
-                           __va_size(T)) -                                             \
-                   __va_size(T))))
+#define va_arg(ap, T)                                                                             \
+    (*(__builtin_va_class(T) ? *(T **)(((ap) += 4) - 4)                                           \
+                             : (T *)(((ap) = (char *)(((unsigned long)(ap) + __va_align(T) - 1) & \
+                                                      -(unsigned long)__va_align(T)) +            \
+                                             __va_size(T)) -                                      \
+                                     __va_size(T))))
 
 #define va_end(ap) ((void)(ap))
 

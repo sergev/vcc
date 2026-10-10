@@ -175,8 +175,8 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     map_init(&g->slots);
     map_init(&g->refs);
     map_init(&g->pindex);
-    g->fn   = wasm_new_func(wasm_symbol(program, tl->u.function.name), tl->u.function.global);
-    g->flow = flow_build(tl);
+    g->fn         = wasm_new_func(wasm_symbol(program, tl->u.function.name), tl->u.function.global);
+    g->flow       = flow_build(tl);
     Wasm_Func *fn = g->fn;
     if (!tl->u.function.type)
         internal_error("wasm: %s has no type", fn->name);
@@ -276,14 +276,14 @@ void gen_prologue(Gen *g)
         const Tac_Type *s;
         switch (wasm_pass(p->type, &s)) {
         case WASM_PASS_VALUE:
-            wasm_append(fn, WASM_LOCAL_GET)->imm  = g->fp;
-            wasm_append(fn, WASM_LOCAL_GET)->imm  = index;
+            wasm_append(fn, WASM_LOCAL_GET)->imm   = g->fp;
+            wasm_append(fn, WASM_LOCAL_GET)->imm   = index;
             wasm_append(fn, wasm_store_op(s))->imm = off;
             break;
         case WASM_PASS_PAIR:
             for (int half = 0; half < 2; half++) {
-                wasm_append(fn, WASM_LOCAL_GET)->imm  = g->fp;
-                wasm_append(fn, WASM_LOCAL_GET)->imm  = index + half;
+                wasm_append(fn, WASM_LOCAL_GET)->imm = g->fp;
+                wasm_append(fn, WASM_LOCAL_GET)->imm = index + half;
                 wasm_append(fn, WASM_I64_STORE)->imm = off + 8 * half;
             }
             break;

@@ -13,9 +13,9 @@ typedef struct {
     intmax_t rem;
 } imaxdiv_t;
 
-intmax_t  imaxabs(intmax_t j);
+intmax_t imaxabs(intmax_t j);
 imaxdiv_t imaxdiv(intmax_t numer, intmax_t denom);
-intmax_t  strtoimax(const char *nptr, char **endptr, int base);
+intmax_t strtoimax(const char *nptr, char **endptr, int base);
 uintmax_t strtoumax(const char *nptr, char **endptr, int base);
 
 #define PRId8   "d"

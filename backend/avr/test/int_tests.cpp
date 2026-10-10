@@ -65,16 +65,14 @@ TEST_F(AvrTest, NegateLong)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return -a; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(com r25
+    EXPECT_NE(std::string::npos, s.find(R"(com r25
 com r24
 com r23
 neg r22
 sbci r23, 255
 sbci r24, 255
 sbci r25, 255
-)"))
-        << s;
+)")) << s;
 }
 
 // A 16-bit multiply is inline, from three mul, with r1 cleared after.
@@ -82,8 +80,7 @@ TEST_F(AvrTest, MultiplyInt)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a * b; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(mul r24, r22
+    EXPECT_NE(std::string::npos, s.find(R"(mul r24, r22
 movw r20, r0
 mul r24, r23
 add r21, r0
@@ -91,8 +88,7 @@ mul r25, r22
 add r21, r0
 clr r1
 movw r24, r20
-)"))
-        << s;
+)")) << s;
 }
 
 // Divide and remainder come out of the helper's special registers: the quotient of
@@ -110,15 +106,14 @@ std Y+6, r23
 TEST_F(AvrTest, RemainderUnsignedLong)
 {
     NaiveSelection();
-    std::string r = Body(CompileToAvr("unsigned long f(unsigned long a, unsigned long b) "
-                                      "{ return a % b; }"));
-    EXPECT_NE(std::string::npos,
-              r.find(R"(call __udivmodsi4
+    std::string r =
+        Body(CompileToAvr("unsigned long f(unsigned long a, unsigned long b) "
+                          "{ return a % b; }"));
+    EXPECT_NE(std::string::npos, r.find(R"(call __udivmodsi4
 std Y+9, r22
 std Y+10, r23
 std Y+11, r24
-)"))
-        << r;
+)")) << r;
 }
 
 // A comparison: cp/cpc, then 1 or 0 in r24; > swaps the operands of brlt.
@@ -126,16 +121,14 @@ TEST_F(AvrTest, CompareGreater)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a > b; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(cp r22, r24
+    EXPECT_NE(std::string::npos, s.find(R"(cp r22, r24
 cpc r23, r25
 ldi r24, 1
 brlt .Lv1
 clr r24
 std Y+5, r24
 std Y+6, r1
-)"))
-        << s;
+)")) << s;
 }
 
 EXPECT_CODE(CompareUnsignedLessOrEqual,
@@ -164,8 +157,7 @@ TEST_F(AvrTest, ShiftLongByConstant)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("long f(long a) { return a >> 9; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(mov r22, r23
+    EXPECT_NE(std::string::npos, s.find(R"(mov r22, r23
 mov r23, r24
 mov r24, r25
 mov r25, r24
@@ -175,8 +167,7 @@ asr r25
 ror r24
 ror r23
 ror r22
-)"))
-        << s;
+)")) << s;
 }
 
 // A shift by a variable: a loop counted down in r26.
@@ -190,8 +181,7 @@ lsl r24
 rol r25
 dec r26
 brpl .Lv1
-)"))
-        << s;
+)")) << s;
 }
 
 // Sign extension: the top byte's sign through C, then copies.
@@ -205,8 +195,7 @@ mov r24, r23
 lsl r24
 sbc r24, r24
 mov r25, r24
-)"))
-        << s;
+)")) << s;
 }
 
 // Zero extension copies r1.
@@ -218,8 +207,7 @@ TEST_F(AvrTest, ZeroExtendUnsignedToLong)
 ldd r23, Y+2
 mov r24, r1
 mov r25, r1
-)"))
-        << s;
+)")) << s;
 }
 
 // A test of zero: cp/cpc against r1.
@@ -227,8 +215,7 @@ TEST_F(AvrTest, LogicalNot)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(long a) { return !a; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(cp r22, r1
+    EXPECT_NE(std::string::npos, s.find(R"(cp r22, r1
 cpc r23, r1
 cpc r24, r1
 cpc r25, r1
@@ -285,8 +272,8 @@ std::string IntProgram(Group group, const std::vector<T> &vals)
     Cases c;
     std::string decl = "    int bad = 0;\n";
     for (size_t i = 0; i < vals.size(); i++)
-        decl += "    volatile " + CType<T>() + " v" + std::to_string(i) + " = " +
-                Literal(vals[i]) + ";\n";
+        decl += "    volatile " + CType<T>() + " v" + std::to_string(i) + " = " + Literal(vals[i]) +
+                ";\n";
     const int bits = 8 * sizeof(T);
     for (size_t i = 0; i < vals.size(); i++) {
         T x           = vals[i];
@@ -314,8 +301,8 @@ std::string IntProgram(Group group, const std::vector<T> &vals)
                 c.add(a + " ^ " + b, (T)(x ^ y));
             } else if (group == MULDIV) {
                 c.add(a + " * " + b, (T)((U)x * (U)y));
-                bool overflow = std::is_signed<T>::value && y == (T)-1 &&
-                                x == std::numeric_limits<T>::min();
+                bool overflow =
+                    std::is_signed<T>::value && y == (T)-1 && x == std::numeric_limits<T>::min();
                 if (y != 0 && !overflow) {
                     c.add(a + " / " + b, (T)(x / y));
                     c.add(a + " % " + b, (T)(x % y));
@@ -332,7 +319,8 @@ std::string IntProgram(Group group, const std::vector<T> &vals)
     }
     return R"(int main(void)
 {
-)" + decl + c.body + R"(    return bad;
+)" + decl + c.body +
+           R"(    return bad;
 }
 )";
 }
@@ -341,17 +329,15 @@ const std::vector<int16_t> ints       = { 32767, -32768, -1, 7, 300 };
 const std::vector<uint16_t> unsigneds = { 65535, 32768, 1, 7, 300 };
 const std::vector<int32_t> longs      = { 2147483647, -2147483647 - 1, -1, 100000, -70000 };
 const std::vector<uint32_t> ulongs    = { 4294967295u, 2147483648u, 1, 100000, 65536 };
-const std::vector<int64_t> llongs     = { INT64_MAX, INT64_MIN, -1, 0x123456789aLL,
-                                          -0x100000000LL };
-const std::vector<uint64_t> ullongs   = { UINT64_MAX, 1ull << 63, 1, 0x123456789aULL,
-                                          0xffffffffULL };
+const std::vector<int64_t> llongs   = { INT64_MAX, INT64_MIN, -1, 0x123456789aLL, -0x100000000LL };
+const std::vector<uint64_t> ullongs = { UINT64_MAX, 1ull << 63, 1, 0x123456789aULL, 0xffffffffULL };
 
 } // namespace
 
 #define INT_RUN_TEST(name, group, vals)                               \
-    TEST_F(AvrTest, RunInt##name)                                    \
-    {                                                                \
-        SKIP_IF_NO_AVR_TOOLS();                                      \
+    TEST_F(AvrTest, RunInt##name)                                     \
+    {                                                                 \
+        SKIP_IF_NO_AVR_TOOLS();                                       \
         EXPECT_EQ("0\n", CompileAndRunBook(IntProgram(group, vals))); \
     }
 

@@ -6,16 +6,16 @@
 //
 #include <gtest/gtest.h>
 
-#include "wasm_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "wasm_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;

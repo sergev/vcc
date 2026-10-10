@@ -24,8 +24,8 @@ typedef struct block {
     size_t pad[2];
 } Block;
 
-static char *brk;           /* the end of the heap so far */
-static Block *free_list;    /* in address order */
+static char *brk;        /* the end of the heap so far */
+static Block *free_list; /* in address order */
 
 static Block **next_of(Block *b)
 {
@@ -53,7 +53,7 @@ void *malloc(size_t n)
 {
     if (n > (size_t)-1 - 2 * ALIGN)
         return NULL;
-    size_t size = (n + sizeof(Block) + ALIGN - 1) & ~(size_t)(ALIGN - 1);
+    size_t size  = (n + sizeof(Block) + ALIGN - 1) & ~(size_t)(ALIGN - 1);
     Block **link = &free_list;
     Block *b;
     for (b = free_list; b; link = next_of(b), b = *link)
@@ -81,8 +81,8 @@ void free(void *p)
 {
     if (!p)
         return;
-    Block *b = (Block *)p - 1;
-    b->used  = 0;
+    Block *b    = (Block *)p - 1;
+    b->used     = 0;
     Block *prev = NULL, *next = free_list;
     while (next && next < b) {
         prev = next;

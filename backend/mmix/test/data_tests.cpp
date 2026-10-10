@@ -28,8 +28,7 @@ m:
     .long   0x3fc00000
     .zero   4
     .quad   0x4004000000000000
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(fp:
     .quad   f
 )")) << s;

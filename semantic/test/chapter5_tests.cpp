@@ -28,22 +28,25 @@ TEST_F(PipelineTest, Chapter5_InvalidLvalue2_Neg)
 // a + 3 = 4; — the result of '+' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_InvalidLvalue_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 2;\n    a + 3 = 4;\n    return a;\n}\n"),
-                 "expression is not assignable");
+    EXPECT_DEATH(
+        RunPipeline("int main(void) {\n    int a = 2;\n    a + 3 = 4;\n    return a;\n}\n"),
+        "expression is not assignable");
 }
 
 // a = 3 * b = a; — parses as a = ((3*b) = a); '3*b' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_MixedPrecedenceAssignment_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 1;\n    int b = 2;\n    a = 3 * b = a;\n}\n"),
-                 "expression is not assignable");
+    EXPECT_DEATH(
+        RunPipeline("int main(void) {\n    int a = 1;\n    int b = 2;\n    a = 3 * b = a;\n}\n"),
+        "expression is not assignable");
 }
 
 // int a declared twice in the same scope.
 TEST_F(PipelineTest, Chapter5_Redefine_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 1;\n    int a = 2;\n    return a;\n}\n"),
-                 "redefinition of 'a'");
+    EXPECT_DEATH(
+        RunPipeline("int main(void) {\n    int a = 1;\n    int a = 2;\n    return a;\n}\n"),
+        "redefinition of 'a'");
 }
 
 // return 0 && a; — 'a' is undeclared.
@@ -77,8 +80,10 @@ TEST_F(PipelineTest, Chapter5_UndeclaredVar_Neg)
 // int a declared again after a use (and a return).
 TEST_F(PipelineTest, Chapter5_UseThenRedefine_Neg)
 {
-    EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 0;\n    return a;\n    int a = 1;\n    return a;\n}\n"),
-                 "redefinition of 'a'");
+    EXPECT_DEATH(
+        RunPipeline(
+            "int main(void) {\n    int a = 0;\n    return a;\n    int a = 1;\n    return a;\n}\n"),
+        "redefinition of 'a'");
 }
 
 // --- invalid_semantics / extra_credit ---------------------------------------

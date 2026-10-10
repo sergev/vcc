@@ -19,8 +19,7 @@ TEST_F(Msp430Test, DataSections)
     .size   d, 2
 d:
     .short  5
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(    .section .bss.b,"aw",@nobits
     .globl  b
     .p2align 1
@@ -28,8 +27,7 @@ d:
     .size   b, 4
 b:
     .zero   4
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(    .section .data.msg,"aw",@progbits)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(msg:
     .ascii  "hi"
@@ -42,11 +40,14 @@ TEST_F(Msp430Test, DataAlignment)
 {
     std::string s = CompileToMsp430("char c = 1; char s[3] = \"ab\"; int i = 2;");
     EXPECT_EQ(std::string::npos, s.find(R"(.p2align 1
-    .type   c,)")) << s;
+    .type   c,)"))
+        << s;
     EXPECT_EQ(std::string::npos, s.find(R"(.p2align 1
-    .type   s,)")) << s;
+    .type   s,)"))
+        << s;
     EXPECT_NE(std::string::npos, s.find(R"(.p2align 1
-    .type   i,)")) << s;
+    .type   i,)"))
+        << s;
 }
 
 // Every initializer kind: integers by width, binary32 and binary64 bits, and
@@ -68,17 +69,20 @@ TEST_F(Msp430Test, DataInitializers)
     )");
     for (const char *e : { R"(c:
     .byte   -1
-)", R"(u:
+)",
+                           R"(u:
     .short  65535
 )",
                            R"(l:
     .long   -2
-)", R"(ll:
+)",
+                           R"(ll:
     .quad   4886718345
 )",
                            R"(f:
     .long   0x3fc00000
-)", R"(d:
+)",
+                           R"(d:
     .quad   0x3fb999999999999a
 )",
                            R"(ld:
@@ -91,7 +95,8 @@ TEST_F(Msp430Test, DataInitializers)
 )",
                            R"(fp:
     .short  g
-)", R"(ip:
+)",
+                           R"(ip:
     .short  arr+2
 )" })
         EXPECT_NE(std::string::npos, s.find(e)) << e << s;

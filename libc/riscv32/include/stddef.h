@@ -7,9 +7,9 @@
 #ifndef _STDDEF_H
 #define _STDDEF_H
 
-typedef long          ptrdiff_t;
+typedef long ptrdiff_t;
 typedef unsigned long size_t;
-typedef int           wchar_t;
+typedef int wchar_t;
 
 typedef struct {
     long long __ll;
@@ -20,6 +20,6 @@ typedef struct {
 #define NULL ((void *)0)
 #endif
 
-#define offsetof(type, member) ((size_t) & (((type *)0)->member))
+#define offsetof(type, member) ((size_t)&(((type *)0)->member))
 
 #endif /* _STDDEF_H */

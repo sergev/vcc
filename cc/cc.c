@@ -15,11 +15,10 @@
 // The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
 // system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64,
 // riscv32, aarch64, arm32, x86_64, avr, msp430, mmix and besm6 are bare metal, wasm32
-// a WebAssembly module, run under node, and wasm32-braam a process of Braam.  By default it is the host, where that is one of the
-// hosted targets, else riscv64.
-// Input files are dispatched by suffix: .c runs the full pipeline, .S is
-// preprocessed assembly (cpp -> as), .s is assembled directly, and .o is passed
-// straight to the linker, as is a .a archive.
+// a WebAssembly module, run under node, and wasm32-braam a process of Braam.  By default it is the
+// host, where that is one of the hosted targets, else riscv64. Input files are dispatched by
+// suffix: .c runs the full pipeline, .S is preprocessed assembly (cpp -> as), .s is assembled
+// directly, and .o is passed straight to the linker, as is a .a archive.
 //
 // Selection of the last stage to run is controlled by -E (stop after cpp),
 // -S (stop after codegen, emit assembly) and -c (stop after as, emit object).
@@ -235,28 +234,59 @@ static const struct target targets[] = {
     { "mmix", ARCH_CROSS, "vgenmmix", MMIX_AS, MMIX_LD, MMIX_LDFLAGS, "mmix-knuth-mmixware",
       "-x -no-predefined-syms", NULL, NULL, NULL, "--defsym=__.MMIX.start..text=0x100", MMIX_LIBGCC,
       true },
-    { .name = "wasm32", .arch = ARCH_CROSS, .codegen = "vgenwasm", .as_default = WASM32_AS,
-      .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
-      .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
-      .llvm_ld = "wasm-ld", .llvm_ld_flags = "--stack-first -z stack-size=1048576" },
+    { .name             = "wasm32",
+      .arch             = ARCH_CROSS,
+      .codegen          = "vgenwasm",
+      .as_default       = WASM32_AS,
+      .ld_default       = WASM32_LD,
+      .ld_default_flags = "",
+      .prefixes         = "",
+      .triple           = "wasm32",
+      .clang_flags      = "--no-default-config " WASM32_FEATURES,
+      .no_script        = true,
+      .llvm_ld          = "wasm-ld",
+      .llvm_ld_flags    = "--stack-first -z stack-size=1048576" },
     // Braam's process ABI (docs/Braam.md §7.1): the memory imported, no entry (the
     // exports are crt0.o's), the stack Braam's own programs have.
-    { .name = "wasm32-braam", .arch = ARCH_CROSS, .codegen = "vgenwasm", .as_default = WASM32_AS,
-      .ld_default = WASM32_LD, .ld_default_flags = "", .prefixes = "", .triple = "wasm32",
-      .clang_flags = "--no-default-config " WASM32_FEATURES, .no_script = true,
-      .llvm_ld       = "wasm-ld",
-      .llvm_ld_flags = "--no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections",
-      .braam         = true },
-    { .name = "x86_64-linux", .arch = ARCH_HOSTED, .codegen = "vgenx86",
-      .as_default = X86_64_LINUX_CC, .ld_default = X86_64_LINUX_CC,
-      .prefixes = "x86_64-linux-gnu", .triple = "x86_64-linux-gnu", .gen_flag = "--linux" },
-    { .name = "aarch64-linux", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
-      .as_default = AARCH64_LINUX_CC, .ld_default = AARCH64_LINUX_CC,
-      .prefixes = "aarch64-linux-gnu", .triple = "aarch64-linux-gnu", .gen_flag = "--linux" },
-    { .name = "aarch64-darwin", .arch = ARCH_HOSTED, .codegen = "vgenaarch64",
-      .as_default = AARCH64_DARWIN_CC, .ld_default = AARCH64_DARWIN_CC,
-      .prefixes = "aarch64-apple-darwin", .triple = "arm64-apple-macos", .gen_flag = "--darwin",
-      .pie = true },
+    { .name             = "wasm32-braam",
+      .arch             = ARCH_CROSS,
+      .codegen          = "vgenwasm",
+      .as_default       = WASM32_AS,
+      .ld_default       = WASM32_LD,
+      .ld_default_flags = "",
+      .prefixes         = "",
+      .triple           = "wasm32",
+      .clang_flags      = "--no-default-config " WASM32_FEATURES,
+      .no_script        = true,
+      .llvm_ld          = "wasm-ld",
+      .llvm_ld_flags =
+          "--no-entry --import-memory --stack-first -z stack-size=131072 --gc-sections",
+      .braam = true },
+    { .name       = "x86_64-linux",
+      .arch       = ARCH_HOSTED,
+      .codegen    = "vgenx86",
+      .as_default = X86_64_LINUX_CC,
+      .ld_default = X86_64_LINUX_CC,
+      .prefixes   = "x86_64-linux-gnu",
+      .triple     = "x86_64-linux-gnu",
+      .gen_flag   = "--linux" },
+    { .name       = "aarch64-linux",
+      .arch       = ARCH_HOSTED,
+      .codegen    = "vgenaarch64",
+      .as_default = AARCH64_LINUX_CC,
+      .ld_default = AARCH64_LINUX_CC,
+      .prefixes   = "aarch64-linux-gnu",
+      .triple     = "aarch64-linux-gnu",
+      .gen_flag   = "--linux" },
+    { .name       = "aarch64-darwin",
+      .arch       = ARCH_HOSTED,
+      .codegen    = "vgenaarch64",
+      .as_default = AARCH64_DARWIN_CC,
+      .ld_default = AARCH64_DARWIN_CC,
+      .prefixes   = "aarch64-apple-darwin",
+      .triple     = "arm64-apple-macos",
+      .gen_flag   = "--darwin",
+      .pie        = true },
 };
 
 static const struct target *target; // set by -t, else the default
@@ -275,7 +305,7 @@ struct vec {
 static void vec_push(struct vec *v, char *s)
 {
     if (v->len == v->cap) {
-        v->cap = v->cap ? v->cap * 2 : 8;
+        v->cap  = v->cap ? v->cap * 2 : 8;
         v->data = realloc(v->data, v->cap * sizeof(*v->data));
         if (!v->data) {
             fprintf(stderr, "%s: error: out of memory\n", progname);
@@ -295,32 +325,33 @@ static void vec_free(struct vec *v)
 //
 // Parsed command-line state.
 //
-static bool opt_c;      // -c: compile/assemble only, no link
-static bool opt_S;      // -S: compile to assembly only
-static bool opt_E;      // -E: preprocess only
-static bool opt_g;      // -g: request debug info (a no-op; README.md, "Reserved options")
-static bool opt_O;      // -O: request optimization (a no-op; README.md, "Reserved options")
-static char opt_x;      // -x LANG: the input language for every file, as its suffix ('c', 'S', 's'); 0 by suffix
-static bool opt_v;         // -v: echo each sub-command before running it
-static bool opt_nostdlib;  // -nostdlib: skip the library dir, crt0.o and the implicit -l's
+static bool opt_c; // -c: compile/assemble only, no link
+static bool opt_S; // -S: compile to assembly only
+static bool opt_E; // -E: preprocess only
+static bool opt_g; // -g: request debug info (a no-op; README.md, "Reserved options")
+static bool opt_O; // -O: request optimization (a no-op; README.md, "Reserved options")
+static char
+    opt_x; // -x LANG: the input language for every file, as its suffix ('c', 'S', 's'); 0 by suffix
+static bool opt_v;        // -v: echo each sub-command before running it
+static bool opt_nostdlib; // -nostdlib: skip the library dir, crt0.o and the implicit -l's
 static unsigned long braam_pages = 4; // --initial-pages: a Braam process's initial memory, as
                                       // BRAAM_BIN_INITIAL_PAGES in braam-core's BraamProgram.cmake
-static bool opt_nostdinc;  // -nostdinc: skip the target's standard include dir
-static char *outfile;      // -o NAME: explicit output name
-static char *linkscript;   // -T FILE: linker script (not besm6), instead of the standard one
-static char *codegen_dialect;  // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
+static bool opt_nostdinc;             // -nostdinc: skip the target's standard include dir
+static char *outfile;                 // -o NAME: explicit output name
+static char *linkscript;      // -T FILE: linker script (not besm6), instead of the standard one
+static char *codegen_dialect; // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
 
-static struct vec sources;   // input .c/.s files to compile
-static struct vec objects;   // .o (and produced) files to link
-static struct vec cppflags;  // -D/-I/-U pass-throughs for the preprocessor
-static struct vec ldflags;   // -L/-l pass-throughs for the linker
-static struct vec tmpfiles;  // temp files to unlink on exit
-static struct vec owned;     // heap-allocated file names to free on exit
+static struct vec sources;  // input .c/.s files to compile
+static struct vec objects;  // .o (and produced) files to link
+static struct vec cppflags; // -D/-I/-U pass-throughs for the preprocessor
+static struct vec ldflags;  // -L/-l pass-throughs for the linker
+static struct vec tmpfiles; // temp files to unlink on exit
+static struct vec owned;    // heap-allocated file names to free on exit
 
-static char *exe_dir;  // directory vcc runs from (owned), or NULL if unknown
+static char *exe_dir;   // directory vcc runs from (owned), or NULL if unknown
 static char *share_dir; // <exe_dir>/../share/vcc/<target> (owned)
 
-static int errflag;  // set nonzero on any failure; becomes the exit status
+static int errflag; // set nonzero on any failure; becomes the exit status
 
 //
 // Take ownership of a heap-allocated string so it is freed at exit.  Every
@@ -341,7 +372,7 @@ static char *own(char *s)
 static char *concat(const char *a, const char *b)
 {
     size_t n = strlen(a) + strlen(b) + 1;
-    char *s = malloc(n);
+    char *s  = malloc(n);
     if (!s) {
         fprintf(stderr, "%s: error: out of memory\n", progname);
         exit(1);
@@ -409,9 +440,9 @@ static bool is_archive(const char *name)
 static char *replace_suffix(const char *name, const char *suf)
 {
     const char *slash = strrchr(name, '/');
-    const char *base = slash ? slash + 1 : name;
-    const char *dot = strrchr(base, '.');
-    size_t stem = dot ? (size_t)(dot - base) : strlen(base);
+    const char *base  = slash ? slash + 1 : name;
+    const char *dot   = strrchr(base, '.');
+    size_t stem       = dot ? (size_t)(dot - base) : strlen(base);
 
     char *out = malloc(stem + strlen(suf) + 2);
     if (!out) {
@@ -452,7 +483,7 @@ static char *make_temp(const char *suf)
     if (!dir || !*dir)
         dir = "/tmp";
 
-    size_t n = strlen(dir) + strlen(suf) + sizeof("/vccXXXXXX.");
+    size_t n   = strlen(dir) + strlen(suf) + sizeof("/vccXXXXXX.");
     char *path = malloc(n);
     if (!path) {
         error("out of memory");
@@ -494,7 +525,7 @@ static const char *exe_path(const char *argv0, char *buf)
     const char *path = getenv("PATH");
     while (path && *path) {
         const char *colon = strchr(path, ':');
-        size_t len = colon ? (size_t)(colon - path) : strlen(path);
+        size_t len        = colon ? (size_t)(colon - path) : strlen(path);
         snprintf(buf, PATH_MAX, "%.*s/%s", (int)len, len ? path : ".", argv0);
         if (access(buf, X_OK) == 0)
             return buf;
@@ -538,7 +569,7 @@ static void locate_share(void)
         if (slash)
             *slash = '\0'; // /usr/local/bin -> /usr/local; /bin -> ""
     }
-    size_t n = strlen(prefix) + strlen(target->name) + sizeof("/share/vcc/");
+    size_t n  = strlen(prefix) + strlen(target->name) + sizeof("/share/vcc/");
     share_dir = malloc(n);
     if (!share_dir) {
         error("out of memory");
@@ -561,12 +592,12 @@ static char *find_pass(const char *envvar, const char *name)
         return own(strdup(override));
 
     if (!exe_dir) {
-        error("cannot find '%s': the directory %s runs from is unknown; set %s", name,
-              progname, envvar);
+        error("cannot find '%s': the directory %s runs from is unknown; set %s", name, progname,
+              envvar);
         return NULL;
     }
     char *path = concat(exe_dir, "/");
-    path = concat(path, name);
+    path       = concat(path, name);
     if (access(path, X_OK) != 0) {
         error("cannot find '%s'; set %s to its path", path, envvar);
         return NULL;
@@ -627,8 +658,8 @@ static bool is_llvm(const char *path)
 // Returns true if the tool is clang or ld.lld; sets *chosen_configured when it is the
 // configured one (if `chosen_configured` is not NULL).
 //
-static bool push_tool(struct vec *av, const char *envvar, const char *configured,
-                      const char *tool, bool *chosen_configured)
+static bool push_tool(struct vec *av, const char *envvar, const char *configured, const char *tool,
+                      bool *chosen_configured)
 {
     if (chosen_configured)
         *chosen_configured = false;
@@ -905,7 +936,7 @@ static int compile_one(const char *src)
         if (opt_E || opt_S)
             return 0;
         char *obj = object_name(src);
-        int rc = run_as(src, obj);
+        int rc    = run_as(src, obj);
         vec_push(&objects, obj);
         return rc;
     }
@@ -937,7 +968,7 @@ static int compile_one(const char *src)
 
         // Assemble the preprocessed output: .s -> .o
         char *obj = object_name(src);
-        int rc = run_as(sfile, obj);
+        int rc    = run_as(sfile, obj);
         vec_push(&objects, obj);
         return rc;
     }
@@ -969,7 +1000,7 @@ static int compile_one(const char *src)
     // Code generation: .tac -> .s (or .mad/.bemsh for the -Smadlen/-Sbemsh
     // dialects, so the derived name reflects the assembly dialect emitted --
     // the same extensions vgenbesm6 itself picks).
-    const char *asmsuf = !codegen_dialect                        ? "s"
+    const char *asmsuf = !codegen_dialect                           ? "s"
                          : strcmp(codegen_dialect, "--madlen") == 0 ? "mad"
                                                                     : "bemsh";
     const char *asmfile =
@@ -981,7 +1012,7 @@ static int compile_one(const char *src)
 
     // Assemble: .s -> .o
     char *obj = object_name(src);
-    int rc = run_as(asmfile, obj);
+    int rc    = run_as(asmfile, obj);
     vec_push(&objects, obj);
     return rc;
 }
@@ -1003,8 +1034,8 @@ static int compile_one(const char *src)
 //              or ld.lld with no flags
 // where <lib> is <share>/lib.  -nostdlib drops the -L, crt0.o and the implicit
 // archives; the linker script (the qemu `virt` memory map) stays, unless
-// -T names another.  MMIX takes the linker's default script.  A missing crt0.o is a fatal error.  See README.md,
-// "Linking".  Returns 0 on success.
+// -T names another.  MMIX takes the linker's default script.  A missing crt0.o is a fatal error.
+// See README.md, "Linking".  Returns 0 on success.
 //
 //
 // Link for a hosted target, with its C compiler:
@@ -1085,7 +1116,7 @@ static int braam_stamp(const char *path)
     memcpy(out, data, 8);
     while (at < (size_t)size) {
         size_t start = at, len = 0;
-        unsigned shift = 0;
+        unsigned shift   = 0;
         unsigned char id = data[at++];
         while (at < (size_t)size) {
             unsigned char b = data[at++];
@@ -1105,9 +1136,9 @@ static int braam_stamp(const char *path)
 
     // The section: id 0, its size, the name, five words.
     const unsigned long meta[5] = { 0x6d617262, 21, 0, braam_pages, 1600 };
-    out[n++] = 0;
-    out[n++] = 1 + 5 + 20;
-    out[n++] = 5;
+    out[n++]                    = 0;
+    out[n++]                    = 1 + 5 + 20;
+    out[n++]                    = 5;
     memcpy(out + n, "braam", 5);
     n += 5;
     for (int i = 0; i < 5; i++)
@@ -1175,9 +1206,10 @@ static int link_objects(void)
         char *crt0 = concat(libdir, "/crt0.o");
         if (access(crt0, R_OK) != 0) {
             if (target->arch == ARCH_BESM6)
-                error("'%s' not found: the BESM-6 crt0.o and libc.a come from v7besm and "
-                      "must be installed into %s; or use '-nostdlib'",
-                      crt0, libdir);
+                error(
+                    "'%s' not found: the BESM-6 crt0.o and libc.a come from v7besm and "
+                    "must be installed into %s; or use '-nostdlib'",
+                    crt0, libdir);
             else
                 error("'%s' not found; install the runtime, or use '-nostdlib'", crt0);
             vec_free(&av);
@@ -1266,14 +1298,17 @@ static void usage(int status)
     printf("    -Lpath          Add a library search directory (for the linker)\n");
     printf("    -lname          Link against library libname (for the linker)\n");
     printf("    -T file         Linker script instead of the standard one (not besm6)\n");
-    printf("    -nostdlib       Do not use the standard library dir, crt0.o or the implicit libraries\n");
+    printf(
+        "    -nostdlib       Do not use the standard library dir, crt0.o or the implicit "
+        "libraries\n");
     printf("    -nostdinc       Do not add the standard include directory\n");
     printf("    --initial-pages=N  wasm32-braam: the process's initial memory, in 64 KiB pages\n");
     printf("                    (default 4)\n");
     printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
     printf("                    Accepted and ignored, for build systems made for GCC\n");
-    printf("Inputs are dispatched by suffix: .c (compile), "
-           ".S (preprocess + assemble), .s (assemble), .o and .a (link).\n");
+    printf(
+        "Inputs are dispatched by suffix: .c (compile), "
+        ".S (preprocess + assemble), .s (assemble), .o and .a (link).\n");
     exit(status);
 }
 

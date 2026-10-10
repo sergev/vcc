@@ -16,8 +16,8 @@
 #define DECIMAL_DIG     12
 
 /* float == double == long double on BESM-6. */
-#define FLT_MANT_DIG 40
-#define DBL_MANT_DIG 40
+#define FLT_MANT_DIG  40
+#define DBL_MANT_DIG  40
 #define LDBL_MANT_DIG 40
 
 #define FLT_DIG  12

@@ -24,15 +24,15 @@ ldd r25, Y+2
 TEST_F(AvrTest, CallCharArgument)
 {
     NaiveSelection();
-    std::string s = Body(CompileToAvr("int g(signed char c, int i);\n"
-                                      "int f(void) { return g(-1, 2); }"));
+    std::string s =
+        Body(CompileToAvr("int g(signed char c, int i);\n"
+                          "int f(void) { return g(-1, 2); }"));
     EXPECT_NE(std::string::npos, s.find(R"(ldi r24, 255
 ldi r25, 255
 ldi r22, 2
 ldi r23, 0
 call g
-)"))
-        << s;
+)")) << s;
 }
 
 // The long does not fit in r9:r8, so it and the int after it go on the stack: pushed
@@ -41,11 +41,10 @@ call g
 TEST_F(AvrTest, CallStackArguments)
 {
     NaiveSelection();
-    std::string s = Body(CompileToAvr(
-        "int g(long long a, long long b, long c, int d);\n"
-        "int f(void) { return g(1, 2, 0x01020304, 0x0506); }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(ldi r26, 5
+    std::string s =
+        Body(CompileToAvr("int g(long long a, long long b, long c, int d);\n"
+                          "int f(void) { return g(1, 2, 0x01020304, 0x0506); }"));
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r26, 5
 push r26
 ldi r26, 6
 push r26
@@ -57,10 +56,8 @@ ldi r26, 3
 push r26
 ldi r26, 4
 push r26
-)"))
-        << s;
-    EXPECT_NE(std::string::npos,
-              s.find(R"(call g
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(call g
 in r30, __SP_L__
 in r31, __SP_H__
 adiw r30, 6
@@ -70,8 +67,7 @@ out __SP_H__, r31
 out __SREG__, r0
 out __SP_L__, r30
 std Y+1, r24
-)"))
-        << s;
+)")) << s;
 }
 
 // Two bytes of stack arguments are released with pop.
@@ -108,7 +104,7 @@ int main(void)
     return 0;
 }
 )",
-                                     R"(
+                                           R"(
 long g(signed char a, int b, long c, long long d, unsigned char e, int f)
 {
     return a + b + c + (long)(d - 4999999995LL) + e + f;
@@ -137,7 +133,7 @@ long h(long long a, long long b, long c, int d)
 }
 signed char k(signed char c) { return c - 1; }
 )",
-                                     R"(
+                                           R"(
 void putbyte(int c);
 long g(signed char a, int b, long c, long long d, unsigned char e, int f);
 long h(long long a, long long b, long c, int d);

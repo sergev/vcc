@@ -22,8 +22,6 @@
 //
 #include "book_test.h"
 
-
-
 // --- void --------------------------------------------------------------------
 
 // void/cast_to_void: cast expressions (variable, call, void call) to void.
@@ -53,7 +51,6 @@ int main(void) {
     return x;
 })"));
 }
-
 
 // void/ternary: ternary expressions where both sides are void.
 TEST_F(BookTest, Chapter17_VoidTernary)
@@ -96,11 +93,11 @@ int main(void) {
 })"));
 }
 
-
 // void/void_function: functions with void return values, incl. early return.
 TEST_F(BookTest, Chapter17_VoidFunction)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test our support for functions with void return values */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(/* Test our support for functions with void return values */
 int foo = 0;
 
 void set_foo_to_positive_num(int a) {
@@ -130,7 +127,6 @@ int main(void) {
     return 0;
 })"));
 }
-
 
 // void/void_for_loop: void expressions in a for-loop header.  putchar -> libc
 // putch; prints the uppercase alphabet Z..A, A..Z, Z..A (uppercase Latin renders
@@ -171,13 +167,15 @@ int main(void) {
 })"));
 }
 
-
 // --- sizeof (x86 size literals rewritten to BESM-6 sizes) --------------------
 
 // sizeof/simple: two forms of sizeof (type names and expressions).
 TEST_F(BookTest, Chapter17_SizeofSimple)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
 
 int main(void) {
     if (sizeof (int) != 4) {
@@ -191,7 +189,6 @@ int main(void) {
     return 0;
 })"));
 }
-
 
 // sizeof/sizeof_basic_types: size of all basic types (LP64).
 TEST_F(BookTest, Chapter17_SizeofBasicTypes)
@@ -233,12 +230,13 @@ int main(void) {
 })"));
 }
 
-
 // sizeof/sizeof_consts: the type, and size, of all constants (char const has
 // int type).
 TEST_F(BookTest, Chapter17_SizeofConsts)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly determine the type, and size, of all constants */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we correctly determine the type, and size, of all constants */
 
 int main(void) {
     // test that character constants have integer type, not character type;
@@ -275,11 +273,11 @@ int main(void) {
 })"));
 }
 
-
 // sizeof/sizeof_result_is_ulong: sizeof yields an unsigned long.
 TEST_F(BookTest, Chapter17_SizeofResultIsUlong)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
 
 int main(void) {
 
@@ -299,7 +297,6 @@ int main(void) {
     return 0;
 })"));
 }
-
 
 // sizeof/sizeof_array: arrays keep their type under sizeof (no decay), array
 // parameters are adjusted to pointers, and sizeof of a string literal is its
@@ -344,12 +341,13 @@ int main(void) {
 })"));
 }
 
-
 // sizeof/sizeof_derived_types: sizes of derived (pointer and array) types,
 // including the nested abstract declarator double(*([3][4]))[2].
 TEST_F(BookTest, Chapter17_SizeofDerivedTypes)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we accurately calculate the size of derived (pointer and array)
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Make sure we accurately calculate the size of derived (pointer and array)
  * types */
 
 int main(void) {
@@ -392,7 +390,6 @@ int main(void) {
 })"));
 }
 
-
 // sizeof/sizeof_not_evaluated: sizeof does not evaluate its operand (foo, which
 // would call exit, is never run).
 TEST_F(BookTest, Chapter17_SizeofNotEvaluated)
@@ -406,14 +403,15 @@ int main(void) {
 })"));
 }
 
-
 // --- sizeof extra_credit (`static` dropped on test locals; sizes rewritten) --
 
 // extra_credit/sizeof_bitwise: size of bitwise/bitshift expressions (common
 // type / promoted left operand).
 TEST_F(BookTest, Chapter17_SizeofBitwise)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of bitwise and bitshift expression
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(// Test that we correctly get the size of bitwise and bitshift expression
 int main(void) {
     static long l = 0;
     int i = 0;
@@ -451,12 +449,13 @@ int main(void) {
 })"));
 }
 
-
 // extra_credit/sizeof_compound: size of compound-assignment expressions, which
 // are not evaluated (the type of the left operand; uc %= 2 stays char size 1).
 TEST_F(BookTest, Chapter17_SizeofCompound)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get size of compound expressions (and don't evaluate
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(// Test that we correctly get size of compound expressions (and don't evaluate
 // them)
 
 int main(void) {
@@ -506,12 +505,12 @@ int main(void) {
 })"));
 }
 
-
 // extra_credit/sizeof_compound_bitwise: size of compound bitwise expressions
 // (not evaluated; left-operand type, signed-char results stay 1).
 TEST_F(BookTest, Chapter17_SizeofCompoundBitwise)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of compound bitwise operations
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(// Test that we correctly get the size of compound bitwise operations
 // (and don't evaluate them)
 
 int main(void) {
@@ -552,12 +551,14 @@ int main(void) {
 })"));
 }
 
-
 // extra_credit/sizeof_incr: size of ++/-- expressions (not evaluated; operand
 // type, char results stay 1).
 TEST_F(BookTest, Chapter17_SizeofIncr)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
 
 int main(void) {
     int i = 0;
@@ -607,7 +608,6 @@ int main(void) {
 })"));
 }
 
-
 // =============================================================================
 // Dynamic-allocation programs rewritten for the BESM-6 (no heap): malloc/calloc
 // replaced with static storage; free dropped.  memset/memcmp/memcpy ARE in libc.
@@ -625,7 +625,6 @@ int main(void) {
     return result;
 })"));
 }
-
 
 // BESM-6: static zeroed array instead of calloc.
 TEST_F(BookTest, Chapter17_ArrayOfPointersToVoid)
@@ -669,11 +668,12 @@ int main(void) {
 })"));
 }
 
-
 // BESM-6: static buffer instead of calloc.
 TEST_F(BookTest, Chapter17_CommonPointerType)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test finding the common type of void * and other pointer types (it's always
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test finding the common type of void * and other pointer types (it's always
  * void *) */
 
 int main(void) {
@@ -709,12 +709,13 @@ int main(void) {
 })"));
 }
 
-
 // BESM-6: static storage replaces malloc; pointer-byte aliasing and the memcmp
 // sign check hold under the big-endian byte-#0 layout (memcmp returns *a-*b).
 TEST_F(BookTest, Chapter17_ConversionByAssignment)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* In conversion as if by assignment, we can implicitly convert between void *
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* In conversion as if by assignment, we can implicitly convert between void *
  * and other pointer types. */
 
 int memcmp(void *s1, void *s2, unsigned long n);
@@ -829,12 +830,12 @@ int main(void) {
 })"));
 }
 
-
 // BESM-6: static double[4] replaces malloc; the x86 `% 8` alignment check is
 // removed (pointers are word addresses, not byte addresses).
 TEST_F(BookTest, Chapter17_VoidPointerExplicitCast)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* test explicit casts between void * and other pointer types,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(/* test explicit casts between void * and other pointer types,
  * and between void * and integer types
  */
 
@@ -865,13 +866,14 @@ int main(void) {
 })"));
 }
 
-
 // BESM-6: static buffers replace malloc/realloc/calloc; the realloc "grow" is a
 // no-op since the static buffer is already the larger size, and aligned_alloc +
 // its `% 256` check are removed (no BESM-6 analogue — pointers are word addresses).
 TEST_F(BookTest, Chapter17_MemoryManagementFunctions)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can write, grow, and read back statically allocated buffers */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we can write, grow, and read back statically allocated buffers */
 
 int main(void) {
     static char char_buffer[100];  // already the post-"realloc" size
@@ -902,12 +904,12 @@ int main(void) {
 })"));
 }
 
-
 // sizeof/sizeof_expressions: the size of a range of expressions (a static buffer
 // instead of malloc).
 TEST_F(BookTest, Chapter17_SizeofExpressions)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly get the size of a range of expressions */
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(/* Test that we correctly get the size of a range of expressions */
 
 int main(void) {
     double d;
@@ -945,7 +947,6 @@ int main(void) {
 })"));
 }
 
-
 // BESM-6: static zeroed buffer instead of calloc; memset is in libc.
 TEST_F(BookTest, Chapter17_PassAllocedMemory)
 {
@@ -982,7 +983,6 @@ int main(void) {
 })"));
 }
 
-
 // --- (B) sizeof a multi-dimensional global array ----------------------------
 
 // libraries/sizeof_extern: sizeof a large array, 1000 * 2000 doubles.
@@ -994,7 +994,6 @@ int main(void) {
     return sizeof large_array == 16000000;
 })"));
 }
-
 
 // --- (C) loop over ctest timeout --------------------------------------------
 

@@ -47,8 +47,8 @@ protected:
                 continue;
             cases++;
             const StructDef *d = structtab_find(l.tag);
-            std::string got    = "size=" + std::to_string(d->size) +
-                              " align=" + std::to_string(d->alignment);
+            std::string got =
+                "size=" + std::to_string(d->size) + " align=" + std::to_string(d->alignment);
             for (const FieldDef *f = d->members; f; f = f->next)
                 got += std::string(" ") + f->name + "=" + Ones(f, d->size);
             EXPECT_EQ(got, l.layout) << target << " struct " << l.tag << " { " << l.body << " }";
@@ -58,16 +58,46 @@ protected:
     }
 };
 
-TEST_F(BitfieldTest, LayoutX86_64) { CheckLayouts("x86_64"); }
-TEST_F(BitfieldTest, LayoutAarch64) { CheckLayouts("aarch64"); }
-TEST_F(BitfieldTest, LayoutAarch64Darwin) { CheckLayouts("aarch64-darwin"); }
-TEST_F(BitfieldTest, LayoutArm32) { CheckLayouts("arm32"); }
-TEST_F(BitfieldTest, LayoutRiscv64) { CheckLayouts("riscv64"); }
-TEST_F(BitfieldTest, LayoutRiscv32) { CheckLayouts("riscv32"); }
-TEST_F(BitfieldTest, LayoutAvr) { CheckLayouts("avr"); }
-TEST_F(BitfieldTest, LayoutMsp430) { CheckLayouts("msp430"); }
-TEST_F(BitfieldTest, LayoutMmix) { CheckLayouts("mmix"); }
-TEST_F(BitfieldTest, LayoutWasm32) { CheckLayouts("wasm32"); }
+TEST_F(BitfieldTest, LayoutX86_64)
+{
+    CheckLayouts("x86_64");
+}
+TEST_F(BitfieldTest, LayoutAarch64)
+{
+    CheckLayouts("aarch64");
+}
+TEST_F(BitfieldTest, LayoutAarch64Darwin)
+{
+    CheckLayouts("aarch64-darwin");
+}
+TEST_F(BitfieldTest, LayoutArm32)
+{
+    CheckLayouts("arm32");
+}
+TEST_F(BitfieldTest, LayoutRiscv64)
+{
+    CheckLayouts("riscv64");
+}
+TEST_F(BitfieldTest, LayoutRiscv32)
+{
+    CheckLayouts("riscv32");
+}
+TEST_F(BitfieldTest, LayoutAvr)
+{
+    CheckLayouts("avr");
+}
+TEST_F(BitfieldTest, LayoutMsp430)
+{
+    CheckLayouts("msp430");
+}
+TEST_F(BitfieldTest, LayoutMmix)
+{
+    CheckLayouts("mmix");
+}
+TEST_F(BitfieldTest, LayoutWasm32)
+{
+    CheckLayouts("wasm32");
+}
 
 // C11 §6.7.2.1p4-5, §6.5.3.2p1, §6.5.3.4p1.
 TEST_F(TranslateTestRiscv, BitfieldWidthExceedsType)
@@ -108,7 +138,7 @@ TEST_F(TranslateTestRiscv, BitfieldSizeof)
 // over them, and a member access after one finds its own name.
 TEST_F(TranslateTestRiscv, BitfieldUnnamedNotMembers)
 {
-    Tac_TopLevel *tac = CompileUnit(R"(
+    Tac_TopLevel *tac  = CompileUnit(R"(
         struct S { int a : 3; int : 5; int b : 4; int : 0; char c; };
         struct S s = { 1, 2, 'z' };
         struct S t = { .c = 'y', .b = -1 };

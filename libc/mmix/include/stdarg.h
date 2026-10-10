@@ -22,8 +22,7 @@ void __va_start(va_list *ap);
 
 #define va_start(ap, last) __va_start(&(ap))
 
-#define va_arg(ap, T)                                                                  \
-    (*(sizeof(T) > 8 ? *(T **)(((ap) += 8) - 8) : (T *)(((ap) += 8) - sizeof(T))))
+#define va_arg(ap, T) (*(sizeof(T) > 8 ? *(T **)(((ap) += 8) - 8) : (T *)(((ap) += 8) - sizeof(T))))
 
 #define va_end(ap) ((void)(ap))
 

@@ -346,7 +346,8 @@ TEST_F(PipelineTest, DeadLocalRemovedAlongsideGlobalWrite)
 // use was folded or eliminated is dropped, the rest keep their types.
 TEST_F(PipelineTest, LocalsPrunedToOptimizedBody)
 {
-    std::string yaml = OptimizeYaml("int f(int a) { int x = a + 1; int y = 7; x = y; return x * a; }");
+    std::string yaml =
+        OptimizeYaml("int f(int a) { int x = a + 1; int y = 7; x = y; return x * a; }");
     EXPECT_EQ(locals, "%1:int") << yaml;
 }
 
@@ -384,7 +385,8 @@ TEST_F(PipelineTest, VolatilePostIncrementRereads)
 // ++r, r += 2 and r-- each read r once and write it once.
 TEST_F(PipelineTest, VolatileUpdatesReadOnceWriteOnce)
 {
-    std::string yaml = OptimizeYaml("int f(void) { volatile int r = 5; ++r; r += 2; r--; return r; }");
+    std::string yaml =
+        OptimizeYaml("int f(void) { volatile int r = 5; ++r; r += 2; r--; return r; }");
     EXPECT_EQ(8, count_of(yaml, "volatile: true")) << yaml;
     EXPECT_EQ(3, count_of(yaml, "  kind: binary\n")) << yaml;
     EXPECT_EQ(std::string::npos, yaml.find("value: 8")) << yaml; // not folded
@@ -394,7 +396,8 @@ TEST_F(PipelineTest, VolatileUpdatesReadOnceWriteOnce)
 // writes stay although the first is overwritten.
 TEST_F(PipelineTest, VolatileAssignmentValueIsStored)
 {
-    std::string yaml = OptimizeYaml("int f(void) { volatile int r = 1; int y = (r = 3); return y; }");
+    std::string yaml =
+        OptimizeYaml("int f(void) { volatile int r = 1; int y = (r = 3); return y; }");
     EXPECT_EQ(2, count_of(yaml, "volatile: true")) << yaml;
     EXPECT_EQ(0, count_of(yaml, "    name: %r\n  dst:")) << yaml; // r is never read
 }

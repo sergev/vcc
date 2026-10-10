@@ -128,8 +128,8 @@ void symtab_add_static_var(const char *name, const Type *t, bool global, InitKin
     map_insert_free(&symtab, name, (intptr_t)sym, 0, symtab_destroy_callback);
 }
 
-void symtab_add_static_var_scoped(const char *name, const Type *t, bool global,
-                                  InitKind init_kind, Tac_StaticInit *init_list, int level)
+void symtab_add_static_var_scoped(const char *name, const Type *t, bool global, InitKind init_kind,
+                                  Tac_StaticInit *init_list, int level)
 {
     Symbol *sym = new_symbol(name, clone_type(t, __func__, __FILE__, __LINE__), SYM_STATIC);
     sym->u.static_var.global    = global;
@@ -215,7 +215,8 @@ static void static_locals_clear(void)
 //
 // Add a function
 // Precondition: name is a non-null string, t is a valid Type* (function type).
-// Postcondition: A Symbol with SYM_FUNC, name, t, global, defined, and noret is added/replaced in symtab.
+// Postcondition: A Symbol with SYM_FUNC, name, t, global, defined, and noret is added/replaced in
+// symtab.
 //
 void symtab_add_fun(const char *name, const Type *t, bool global, bool defined, bool noret)
 {
@@ -230,8 +231,8 @@ void symtab_add_fun(const char *name, const Type *t, bool global, bool defined, 
 
 void symtab_set_coro(const char *name, const Type *yield_type)
 {
-    Symbol *sym           = symtab_get(name);
-    sym->u.func.coro      = true;
+    Symbol *sym            = symtab_get(name);
+    sym->u.func.coro       = true;
     sym->u.func.yield_type = clone_type(yield_type, __func__, __FILE__, __LINE__);
 }
 

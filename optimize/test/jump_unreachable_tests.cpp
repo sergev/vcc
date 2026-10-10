@@ -166,8 +166,8 @@ TEST_F(OptimizerTest, UnreachableDeadElseBranch)
 // gone, so the fall-through edge leads to the Exit, not to a block past the end.
 TEST_F(OptimizerTest, CondJumpEndsFunction)
 {
-    Tac_Instruction *body = chain({ make_label("top"), make_fun_call("bar"),
-                                    make_jump_if_not_zero(make_var("x"), "top") });
+    Tac_Instruction *body = chain(
+        { make_label("top"), make_fun_call("bar"), make_jump_if_not_zero(make_var("x"), "top") });
     Tac_Instruction *result = optimize_function(body, opt_flags_default(), nullptr);
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(result->kind, TAC_INSTRUCTION_LABEL);
@@ -176,15 +176,15 @@ TEST_F(OptimizerTest, CondJumpEndsFunction)
 // A jump table on index `k`, to targets A, B, C, default D.
 static Tac_Instruction *make_table(Tac_Val *k)
 {
-    Tac_Instruction *jt              = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
-    jt->u.jump_table.index           = k;
-    jt->u.jump_table.count           = 3;
+    Tac_Instruction *jt    = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+    jt->u.jump_table.index = k;
+    jt->u.jump_table.count = 3;
     jt->u.jump_table.targets =
         static_cast<char **>(xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__));
-    jt->u.jump_table.targets[0]      = xstrdup("A");
-    jt->u.jump_table.targets[1]      = xstrdup("B");
-    jt->u.jump_table.targets[2]      = xstrdup("C");
-    jt->u.jump_table.default_target  = xstrdup("D");
+    jt->u.jump_table.targets[0]     = xstrdup("A");
+    jt->u.jump_table.targets[1]     = xstrdup("B");
+    jt->u.jump_table.targets[2]     = xstrdup("C");
+    jt->u.jump_table.default_target = xstrdup("D");
     return jt;
 }
 

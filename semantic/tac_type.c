@@ -28,10 +28,10 @@ static Tac_Type *convert_type(const Type *t, bool deep);
 // out of order, as each is the smallest that holds its field.
 static void add_member(Tac_Type *ts, const char *name, int offset, Tac_Type *type)
 {
-    Tac_Member *m = tac_new_member();
-    m->name       = name ? xstrdup(name) : NULL;
-    m->offset     = offset;
-    m->type       = type;
+    Tac_Member *m  = tac_new_member();
+    m->name        = name ? xstrdup(name) : NULL;
+    m->offset      = offset;
+    m->type        = type;
     Tac_Member **p = &ts->u.structure.members;
     while (*p && (*p)->offset <= offset)
         p = &(*p)->next;
@@ -53,7 +53,7 @@ static void add_unit_member(Tac_Type *ts, int offset, int size, bool per_field)
         type    = convert_type(&ut, true);
     } else {
         // An access unit of an odd size (clang's i24, i40...): its bytes.
-        type                   = tac_new_type(TAC_TYPE_ARRAY);
+        type                    = tac_new_type(TAC_TYPE_ARRAY);
         type->u.array.elem_type = tac_new_type(TAC_TYPE_UCHAR);
         type->u.array.size      = size;
     }
@@ -166,15 +166,15 @@ static Tac_Type *convert_type(const Type *t, bool deep)
     case TYPE_STRUCT:
     case TYPE_UNION: {
         // An incomplete type (an extern of an undefined tag) has size 0.
-        const StructDef *d       = struct_def_of(t);
-        Tac_Type *ts             = tac_new_type(TAC_TYPE_STRUCTURE);
-        ts->u.structure.tag      = t->u.struct_t.name ? xstrdup(t->u.struct_t.name) : NULL;
-        ts->u.structure.size     = d ? d->size : t->u.struct_t.cached_size;
+        const StructDef *d        = struct_def_of(t);
+        Tac_Type *ts              = tac_new_type(TAC_TYPE_STRUCTURE);
+        ts->u.structure.tag       = t->u.struct_t.name ? xstrdup(t->u.struct_t.name) : NULL;
+        ts->u.structure.size      = d ? d->size : t->u.struct_t.cached_size;
         ts->u.structure.alignment = d ? d->alignment : t->u.struct_t.cached_align;
-        ts->u.structure.is_union = t->kind == TYPE_UNION;
+        ts->u.structure.is_union  = t->kind == TYPE_UNION;
         if (deep && d) {
-            bool access    = target_config && target_config->bitfield_access_bits;
-            bool per_field = target_config && target_config->bitfield_unit_per_field;
+            bool access       = target_config && target_config->bitfield_access_bits;
+            bool per_field    = target_config && target_config->bitfield_unit_per_field;
             const FieldDef *u = d->unnamed; // merged in declaration order
             for (const FieldDef *f = d->members;; f = f->next) {
                 for (; u && (!f || u->index < f->index); u = u->next)

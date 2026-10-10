@@ -227,7 +227,8 @@ TEST_F(CodegenTest, IntrinsicCyclicAddBranchOmega)
 //
 // popcount(0377) = 8; popcount(0) = 0.  anx numbers from the MSB — bit 48 is position 1 and
 // bit 1 is position 48 — so highbit(1) = 48 and highbit(2^47) = 1.  Zero has no highest set
-// bit and there is no distinguished "use of undeclared identifier" value: the result is just x, here 0.
+// bit and there is no distinguished "use of undeclared identifier" value: the result is just x,
+// here 0.
 //
 TEST_F(CodegenTest, IntrinsicPopcountRun)
 {
@@ -242,7 +243,10 @@ TEST_F(CodegenTest, IntrinsicPopcountRun)
             printf("%d %d %d\n", hbit(1), hbit(04000000000000000u), hbit(0));
         }
     )");
-    EXPECT_EQ("8 0\n" "48 1 0\n", result);
+    EXPECT_EQ(
+        "8 0\n"
+        "48 1 0\n",
+        result);
 }
 
 //
@@ -267,7 +271,10 @@ TEST_F(CodegenTest, IntrinsicGatherScatterRun)
                 puts("DIFFERENT");
         }
     )");
-    EXPECT_EQ("520052005200520\n" "SAME\n", result);
+    EXPECT_EQ(
+        "520052005200520\n"
+        "SAME\n",
+        result);
 }
 
 //
@@ -313,7 +320,10 @@ TEST_F(CodegenTest, IntrinsicCyclicAddBranchRun)
                 puts("ZERO");
         }
     )");
-    EXPECT_EQ("ZERO\n" "NONZERO\n", result);
+    EXPECT_EQ(
+        "ZERO\n"
+        "NONZERO\n",
+        result);
 }
 
 //
@@ -341,7 +351,12 @@ TEST_F(CodegenTest, UnixRunIntrinsics)
             return 0;
         }
     )");
-    EXPECT_EQ("8 48\n" "1\n" "1\n" "zero\n", result);
+    EXPECT_EQ(
+        "8 48\n"
+        "1\n"
+        "1\n"
+        "zero\n",
+        result);
 }
 
 //
@@ -1140,7 +1155,12 @@ TEST_F(CodegenTest, BemshIntrinsicsRun)
                 puts("ZERO");
         }
     )");
-    EXPECT_EQ("8 48\n" "1\n" "1\n" "ZERO\n", result);
+    EXPECT_EQ(
+        "8 48\n"
+        "1\n"
+        "1\n"
+        "ZERO\n",
+        result);
 }
 
 //
@@ -1329,7 +1349,10 @@ TEST_F(CodegenTest, UnixRunIntrinsicExtracode)
             return 7;
         }
     )");
-    EXPECT_EQ("BYE\n" "42\n", result);
+    EXPECT_EQ(
+        "BYE\n"
+        "42\n",
+        result);
 }
 
 //
@@ -1356,7 +1379,10 @@ TEST_F(CodegenTest, UnixRunIntrinsicExtracodeComputed)
             return 7;
         }
     )");
-    EXPECT_EQ("BYE\n" "42\n", result);
+    EXPECT_EQ(
+        "BYE\n"
+        "42\n",
+        result);
 }
 
 //
@@ -1382,5 +1408,8 @@ TEST_F(CodegenTest, UnixRunIntrinsicExtracodeStacked)
             return 7;
         }
     )");
-    EXPECT_EQ("BYE\n" "42\n", result);
+    EXPECT_EQ(
+        "BYE\n"
+        "42\n",
+        result);
 }

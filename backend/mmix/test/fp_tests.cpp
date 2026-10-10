@@ -34,8 +34,7 @@ xor $248, $248, $255
 TEST_F(MmixTest, FloatArithmetic)
 {
     NaiveSelection();
-    std::string code =
-        Code(CompileToMmix("float f(float a, float b) { return a * b; }"));
+    std::string code = Code(CompileToMmix("float f(float a, float b) { return a * b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(ldsf $248, $254, 0
 ldsf $249, $254, 4
 fmul $250, $248, $249
@@ -56,15 +55,14 @@ TEST_F(MmixTest, DoubleComparisons)
     EXPECT_NE(std::string::npos, code.find(R"(fcmp $250, $248, $249
 zsn $250, $250, 1
 )")) << code;
-    EXPECT_NE(std::string::npos,
-              code.find(R"(fcmp $250, $248, $249
+    EXPECT_NE(std::string::npos, code.find(R"(fcmp $250, $248, $249
 fun $255, $248, $249
 zsnp $250, $250, 1
 csnz $250, $255, 0
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(feql $250, $248, $249
-sttu $250, )")) << code;
+sttu $250, )"))
+        << code;
     EXPECT_NE(std::string::npos, code.find(R"(feql $250, $248, $249
 zsz $250, $250, 1
 )")) << code;
@@ -86,9 +84,11 @@ TEST_F(MmixTest, FpConversions)
     EXPECT_NE(std::string::npos, code.find("flot $248, $248\n")) << code;
     EXPECT_NE(std::string::npos, code.find("flotu $248, $248\n")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(sflot $248, $248
-stsf $248, )")) << code;
+stsf $248, )"))
+        << code;
     EXPECT_NE(std::string::npos, code.find(R"(sflotu $248, $248
-stsf $248, )")) << code;
+stsf $248, )"))
+        << code;
 }
 
 // A truth test is any bit but the sign.
@@ -98,7 +98,8 @@ TEST_F(MmixTest, FpTruthTest)
     std::string code = Code(CompileToMmix("int f(double d) { if (d) return 1; return 2; }"));
     EXPECT_NE(std::string::npos, code.find(R"(ldo $248, $254, 0
 slu $248, $248, 1
-bz $248, )")) << code;
+bz $248, )"))
+        << code;
 }
 
 // A double constant as an exact C expression.
@@ -188,8 +189,7 @@ int main(void)
       if ((double)l != 4611686293305294848.0) return 916;
       if (h != 16777216.0f) return 917;
       if ((double)(float)0.1 != )"
-        << D((double)0.1f)
-        << R"() return 918;
+        << D((double)0.1f) << R"() return 918;
       if ((unsigned)(double)u != 4294967295u) return 919; }
 )";
     src << R"(    return 0;

@@ -37,8 +37,7 @@ static const char *arith_helper(Tac_BinaryOperator op, int size)
 // A comparison: the helper, the compare of its result r with zero that sets the flags,
 // as `cmp k, r12` (k is 0, or 1 for <= and >), and the jump taken when the comparison
 // holds.  Each helper's result for an unordered pair makes its own comparison false.
-static bool compare_helper(Tac_BinaryOperator op, int size, const char **name, int *k,
-                           Msp_Op *cond)
+static bool compare_helper(Tac_BinaryOperator op, int size, const char **name, int *k, Msp_Op *cond)
 {
     bool d = size == 8;
     *k     = 0;
@@ -131,7 +130,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
 void gen_fp_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Val *src = in->u.unary.src, *dst = in->u.unary.dst;
-    int n              = msp_words(val_type(g, src));
+    int n = msp_words(val_type(g, src));
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_DOUBLE: {
@@ -188,7 +187,7 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         bool is_unsigned = kind == TAC_INSTRUCTION_UINT_TO_DOUBLE ||
                            kind == TAC_INSTRUCTION_UINT_TO_FLOAT ||
                            kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
-        bool d = dsize == 8;
+        bool d           = dsize == 8;
         if (ssize == 8) {
             load_val(g, src, 12, 4, EXT_TYPE);
             call_helper(g, d ? (is_unsigned ? "__mspabi_fltulld" : "__mspabi_fltllid")
@@ -211,7 +210,7 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         bool is_unsigned = kind == TAC_INSTRUCTION_DOUBLE_TO_UINT ||
                            kind == TAC_INSTRUCTION_FLOAT_TO_UINT ||
                            kind == TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT;
-        bool d = ssize == 8;
+        bool d           = ssize == 8;
         load_val(g, src, 12, ssize / 2, EXT_TYPE);
         if (dsize == 8)
             call_helper(g, d ? (is_unsigned ? "__mspabi_fixdull" : "__mspabi_fixdlli")

@@ -36,7 +36,7 @@ A32_Block *a32_new_block(A32_Func *fn, const char *label)
 
 A32_Instr *a32_append(A32_Func *fn, A32_Op op)
 {
-    A32_Block *b  = fn->tail;
+    A32_Block *b    = fn->tail;
     A32_Instr *in   = xalloc(sizeof(A32_Instr), __func__, __FILE__, __LINE__);
     in->op          = op;
     in->is_volatile = fn->volatile_access;
@@ -152,9 +152,8 @@ A32_Operand a32_upper16(const char *name, int64_t offset)
 
 static A32_Operand mem(int base, int64_t offset, A32_MemMode mode)
 {
-    return (A32_Operand){
-        .kind = A32_OPND_MEM, .reg = base, .imm = offset, .sub = mode, .reg2 = -1
-    };
+    return (
+        A32_Operand){ .kind = A32_OPND_MEM, .reg = base, .imm = offset, .sub = mode, .reg2 = -1 };
 }
 
 A32_Operand a32_mem(int base, int64_t offset)
@@ -182,9 +181,8 @@ A32_Operand a32_mem_index(int base, int index, bool negative, int shift)
 
 A32_Operand a32_shift(int reg, A32_Shift shift, int amount)
 {
-    return (A32_Operand){
-        .kind = A32_OPND_SHIFT, .reg = reg, .imm = amount, .sub = shift, .reg2 = -1
-    };
+    return (
+        A32_Operand){ .kind = A32_OPND_SHIFT, .reg = reg, .imm = amount, .sub = shift, .reg2 = -1 };
 }
 
 A32_Operand a32_shift_reg(int reg, A32_Shift shift, int amount_reg)

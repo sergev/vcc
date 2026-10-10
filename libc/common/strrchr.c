@@ -9,8 +9,8 @@
 
 char *strrchr(const char *s, int c)
 {
-    char ch = (char)c;
-    const char *p = s;
+    char ch          = (char)c;
+    const char *p    = s;
     const char *last = 0;
     for (;;) {
         if (*p == ch) {

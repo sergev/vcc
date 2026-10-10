@@ -3,16 +3,16 @@
 // one copy compiled by us (names prefixed our_) and one by clang -O1 (their_), each
 // calling the other's.
 //
-#include "aarch64_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "aarch64_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -34,7 +34,7 @@ TEST_F(Aarch64Test, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
     SKIP_IF_NO_AARCH64_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 struct s3 { char a, b, c; };
 struct s12 { int a, b, c; };
 struct s40 { long a[5]; };
@@ -43,7 +43,7 @@ struct d4 { double d[4]; };
 struct q1 { long double q; };
 long ld_val(long double x);
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e);
 long PFX_mixed(int a, double b, long c, float d, char e, double f, short g, float h, long i,
                double j, int k, float l, unsigned m, double n, long o, float p, int q,
@@ -57,7 +57,7 @@ struct q1 PFX_rq1(struct q1 k);
 long double PFX_rld(int pick, long double a, long double b);
 int PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e)
 {
     return (signed char)(a + (b >> 8) + c + d + e);
@@ -106,7 +106,7 @@ TEST_F(Aarch64Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
     SKIP_IF_NO_AARCH64_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };
 struct s24 { long a, b, c; };
@@ -115,13 +115,13 @@ struct d4 { double d[4]; };
 struct al { _Alignas(16) long a; long b; };
 long ld_val(long double x);
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 long PFX_vsum(int n, va_list ap);
 long PFX_add(int n, ...);
 long PFX_add_own(int n, ...);
 long PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 long PFX_vsum(int n, va_list ap)
 {
     long t = 0;
@@ -209,7 +209,7 @@ TEST_F(Aarch64Test, RunAllocaWithClang)
 {
     SKIP_IF_NO_AARCH64_TOOLS();
     SKIP_IF_NO_AARCH64_CLANG();
-    const char *sum = R"(
+    const char *sum    = R"(
 long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
              long j)
 {
@@ -222,12 +222,13 @@ long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long
     return s + b + c + d + e + f + g + h + i + j;
 }
 )";
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned long);
 long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
                long j);
 int their_check(void);
-)") + Subst(sum, "our", "") + R"(
+)") + Subst(sum, "our", "") +
+                         R"(
 int main(void)
 {
     long *q = __builtin_alloca(64);
@@ -240,7 +241,8 @@ int main(void)
 long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
              long j);
 volatile long seed = 7;
-)") + Subst(sum, "their", "") + R"(
+)") + Subst(sum, "their", "") +
+                         R"(
 int their_check(void)
 {
     long s = seed;

@@ -1,5 +1,5 @@
-#include "typecheck_fixture.h"
 #include "target.h"
+#include "typecheck_fixture.h"
 
 TEST_F(TypecheckTest, SysacctNamei)
 {

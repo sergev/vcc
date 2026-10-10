@@ -48,12 +48,12 @@ TEST_F(WasmTest, StructSignatures)
                    (int)(long)rTwo + (int)(long)rLD + (int)(long)rld + (int)(long)rE;
         }
     )");
-    for (const char *want : {
-             "fI (i32) -> ()", "fN (f64) -> ()", "fA1 (f32) -> ()", "fU1 (i64) -> ()",
-             "fB (i64) -> ()", "fB2 (i32) -> ()", "fTwo (i32) -> ()", "fC3 (i32) -> ()",
-             "fU2 (i32) -> ()", "fLD (i64, i64, i64, i64) -> ()", "fE (i32, i32) -> ()",
-             "rI () -> (i32)", "rTwo (i32, i32) -> ()", "rLD (i32) -> ()", "rld (i32) -> ()",
-             "rE () -> ()" })
+    for (const char *want :
+         { "fI (i32) -> ()", "fN (f64) -> ()", "fA1 (f32) -> ()", "fU1 (i64) -> ()",
+           "fB (i64) -> ()", "fB2 (i32) -> ()", "fTwo (i32) -> ()", "fC3 (i32) -> ()",
+           "fU2 (i32) -> ()", "fLD (i64, i64, i64, i64) -> ()", "fE (i32, i32) -> ()",
+           "rI () -> (i32)", "rTwo (i32, i32) -> ()", "rLD (i32) -> ()", "rld (i32) -> ()",
+           "rE () -> ()" })
         EXPECT_NE(s.find(std::string("\t.functype\t") + want + "\n"), std::string::npos)
             << want << "\n"
             << s;

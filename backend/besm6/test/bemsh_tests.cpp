@@ -288,19 +288,19 @@ g      внешн .g
 TEST(BemshMangle, HelperNamesMatchLibbem)
 {
     const std::pair<const char *, const char *> helpers[] = {
-        { "b$save", "_save" },   { "b$save0", "_save0" }, { "b$ret", "_ret" },
-        { "b$mul", "_mul" },     { "b$div", "_div" },     { "b$mod", "_mod" },
-        { "b$uadd", "_uadd" },   { "b$usub", "_usub" },   { "b$umul", "_umul" },
-        { "b$udiv", "_udiv" },   { "b$umod", "_umod" },   { "b$uneg", "_uneg" },
-        { "b$lsh", "_lsh" },     { "b$rsh", "_rsh" },     { "b$eq", "_eq" },
-        { "b$ne", "_ne" },       { "b$lt", "_lt" },       { "b$le", "_le" },
-        { "b$gt", "_gt" },       { "b$ge", "_ge" },       { "b$not", "_not" },
-        { "b$ult", "_ult" },     { "b$ule", "_ule" },     { "b$ugt", "_ugt" },
-        { "b$uge", "_uge" },     { "b$flt", "_flt" },     { "b$fle", "_fle" },
-        { "b$fgt", "_fgt" },     { "b$fge", "_fge" },     { "b$dtoi", "_dtoi" },
-        { "b$dtou", "_dtou" },   { "b$utod", "_utod" },   { "b$padd", "_padd" },
-        { "b$pinc", "_pinc" },   { "b$pdec", "_pdec" },   { "b$pdiff", "_pdiff" },
-        { "b$stb", "_stb" },     { "b$tout", "_tout" },
+        { "b$save", "_save" }, { "b$save0", "_save0" }, { "b$ret", "_ret" },
+        { "b$mul", "_mul" },   { "b$div", "_div" },     { "b$mod", "_mod" },
+        { "b$uadd", "_uadd" }, { "b$usub", "_usub" },   { "b$umul", "_umul" },
+        { "b$udiv", "_udiv" }, { "b$umod", "_umod" },   { "b$uneg", "_uneg" },
+        { "b$lsh", "_lsh" },   { "b$rsh", "_rsh" },     { "b$eq", "_eq" },
+        { "b$ne", "_ne" },     { "b$lt", "_lt" },       { "b$le", "_le" },
+        { "b$gt", "_gt" },     { "b$ge", "_ge" },       { "b$not", "_not" },
+        { "b$ult", "_ult" },   { "b$ule", "_ule" },     { "b$ugt", "_ugt" },
+        { "b$uge", "_uge" },   { "b$flt", "_flt" },     { "b$fle", "_fle" },
+        { "b$fgt", "_fgt" },   { "b$fge", "_fge" },     { "b$dtoi", "_dtoi" },
+        { "b$dtou", "_dtou" }, { "b$utod", "_utod" },   { "b$padd", "_padd" },
+        { "b$pinc", "_pinc" }, { "b$pdec", "_pdec" },   { "b$pdiff", "_pdiff" },
+        { "b$stb", "_stb" },   { "b$tout", "_tout" },
     };
     std::set<std::string> outputs;
     for (auto &h : helpers) {
@@ -331,10 +331,10 @@ TEST(BemshMangle, GeneralRuleShapes)
     EXPECT_EQ(mangle("main"), "main");
     EXPECT_EQ(mangle("_str0"), "_str0"); // string-constant name, leading '_' kept
     EXPECT_EQ(mangle("g"), "g");
-    EXPECT_EQ(mangle("%L2"), "L2");   // branch label: '%' dropped
-    EXPECT_EQ(mangle("%3"), "T3");    // temp label: '%' dropped, digit-first → 'T' prefix
-    EXPECT_EQ(mangle("foo$1"), "foo1"); // static-local suffix: '$' dropped (NOT a helper)
-    EXPECT_EQ(mangle("b$0"), "b0");     // a static named `b` — general path, not a helper
+    EXPECT_EQ(mangle("%L2"), "L2");      // branch label: '%' dropped
+    EXPECT_EQ(mangle("%3"), "T3");       // temp label: '%' dropped, digit-first → 'T' prefix
+    EXPECT_EQ(mangle("foo$1"), "foo1");  // static-local suffix: '$' dropped (NOT a helper)
+    EXPECT_EQ(mangle("b$0"), "b0");      // a static named `b` — general path, not a helper
     EXPECT_EQ(mangle("=в'1'"), "=в'1'"); // literal-command operand passes through verbatim
 }
 
@@ -343,11 +343,11 @@ TEST(BemshMangle, GeneralRuleShapes)
 TEST(BemshMangle, InvariantsAndDeterminism)
 {
     const char *corpus[] = {
-        "main", "counter", "program", "helper", "compute", "process", "verylongname",
-        "_str0", "_str1", "value", "index", "buffer", "result", "total",
-        "%L1", "%L2", "%L10", "%1", "%3", "%99",
-        "flag$0", "flag$1", "b$ret", "b$save", "b$pdiff", "exit", "frexp",
-        "123abc", "_only", "$$$", "%", "a_b_c_d", "X",
+        "main",   "counter", "program", "helper",  "compute", "process", "verylongname",
+        "_str0",  "_str1",   "value",   "index",   "buffer",  "result",  "total",
+        "%L1",    "%L2",     "%L10",    "%1",      "%3",      "%99",     "flag$0",
+        "flag$1", "b$ret",   "b$save",  "b$pdiff", "exit",    "frexp",   "123abc",
+        "_only",  "$$$",     "%",       "a_b_c_d", "X",
     };
     for (const char *name : corpus) {
         std::string a = mangle(name);
@@ -365,17 +365,17 @@ TEST(BemshMangle, InvariantsAndDeterminism)
 TEST(BemshMangle, NoCollisionsOverCorpus)
 {
     const char *corpus[] = {
-        "counter", "total", "result", "buffer", "index", "value",  // globals
-        "main", "helper", "compute", "process",                    // functions
-        "_str0", "_str1", "_str2",                                 // string constants
-        "flag$0", "flag$1",                                        // static locals
-        "%L1", "%L2", "%L10", "%3", "%7",                          // labels / temps
-        "b$ret", "b$save", "b$mul",                                // helpers
+        "counter", "total",  "result",  "buffer",  "index", "value", // globals
+        "main",    "helper", "compute", "process",                   // functions
+        "_str0",   "_str1",  "_str2",                                // string constants
+        "flag$0",  "flag$1",                                         // static locals
+        "%L1",     "%L2",    "%L10",    "%3",      "%7",             // labels / temps
+        "b$ret",   "b$save", "b$mul",                                // helpers
     };
     std::map<std::string, std::string> seen; // output → first input that produced it
     for (const char *name : corpus) {
         std::string out = mangle(name);
-        auto it = seen.find(out);
+        auto it         = seen.find(out);
         EXPECT_TRUE(it == seen.end())
             << "collision: '" << name << "' and '" << (it == seen.end() ? "" : it->second)
             << "' both mangle to '" << out << "'";
@@ -423,5 +423,5 @@ TEST_F(CodegenTest, BemshLargeRealOctalFallback)
 {
     std::string out = CompileToBemsh("double f(void) { return 1099511627776.0; }");
     EXPECT_NE(out.find("сч =в'6450000000000000'"), std::string::npos); // exact octal word
-    EXPECT_EQ(out.find("=е'"), std::string::npos);                     // no decimal (would overflow)
+    EXPECT_EQ(out.find("=е'"), std::string::npos); // no decimal (would overflow)
 }

@@ -24,9 +24,9 @@ inline bool mmix_tools_available()
 }
 
 // Skip a run test when the GNU MMIX toolchain or mmix is absent.
-#define SKIP_IF_NO_MMIX_TOOLS()                                                           \
-    do {                                                                                  \
-        if (!mmix_tools_available())                                                      \
+#define SKIP_IF_NO_MMIX_TOOLS()                                                          \
+    do {                                                                                 \
+        if (!mmix_tools_available())                                                     \
             GTEST_SKIP() << "mmix-knuth-mmixware-as/ld/gcc or mmix not found; skipping"; \
     } while (0)
 
@@ -42,15 +42,10 @@ inline bool mmix_tools_available()
 // exit tells that from a jump into zeroed memory.
 inline QemuConfig mmix_config()
 {
-    QemuConfig c = { "mmix-tests",
-                     MMIX_GCC,
-                     {},
-                     { "-ffreestanding", "-fno-builtin" },
-                     MMIX_LD,
-                     "",
-                     MMIX_LIB_DIR,
-                     { MMIX_SIM, "-q" },
-                     "" };
+    QemuConfig c = {
+        "mmix-tests", MMIX_GCC,           {}, { "-ffreestanding", "-fno-builtin" }, MMIX_LD, "",
+        MMIX_LIB_DIR, { MMIX_SIM, "-q" }, ""
+    };
     c.image_option = "";
     c.link_flags   = { "--defsym", "__.MMIX.start..text=0x100" };
     c.exit_report  = "[exit ";
@@ -106,9 +101,9 @@ protected:
             std::ofstream f(base + ".s");
             f << asm_text;
         }
-        EXPECT_EQ(0, RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", base + ".o",
-                               base + ".s" },
-                             base + ".log"))
+        EXPECT_EQ(0,
+                  RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", base + ".o", base + ".s" },
+                          base + ".log"))
             << "GNU as rejects the output:\n"
             << ReadFile(base + ".log");
     }
@@ -264,9 +259,9 @@ int __wrap_main(void)
 
 // A golden test of the instruction lines of a translation unit's one function (each
 // test compiles one: the fixture's symbol table lives per test).
-#define EXPECT_CODE(name, expected, src)              \
-    TEST_F(MmixTest, name)                            \
-    {                                                 \
-        NaiveSelection();                             \
+#define EXPECT_CODE(name, expected, src)               \
+    TEST_F(MmixTest, name)                             \
+    {                                                  \
+        NaiveSelection();                              \
         EXPECT_EQ(expected, Code(CompileToMmix(src))); \
     }

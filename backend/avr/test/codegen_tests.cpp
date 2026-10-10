@@ -40,14 +40,16 @@ EXPECT_CODE(VoidFallOff, "", "void f(void) { }")
 // little-endian.
 EXPECT_CODE(ReturnChar, R"(ldi r24, 255
 ldi r25, 255
-)", "signed char f(void) { return -1; }")
+)",
+            "signed char f(void) { return -1; }")
 EXPECT_CODE(ReturnUnsignedChar, R"(ldi r24, 255
 ldi r25, 0
 )",
             "unsigned char f(void) { return 255; }")
 EXPECT_CODE(ReturnInt, R"(ldi r24, 52
 ldi r25, 18
-)", "int f(void) { return 0x1234; }")
+)",
+            "int f(void) { return 0x1234; }")
 EXPECT_CODE(ReturnLong, R"(ldi r22, 4
 ldi r23, 3
 ldi r24, 2
@@ -65,4 +67,3 @@ ldi r24, 2
 ldi r25, 1
 )",
             "long long f(void) { return 0x0102030405060708LL; }")
-

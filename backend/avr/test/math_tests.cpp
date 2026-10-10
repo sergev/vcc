@@ -117,7 +117,8 @@ TEST_F(AvrTest, FrexpLdexpRoundTrip)
     EXPECT_EQ(R"(M=0.750000 E=4
 BACK=12.000000
 BACK=100.000000
-)", CompileAndRunAvr(R"PROG(
+)",
+              CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 #include <math.h>
 static void body(void) {

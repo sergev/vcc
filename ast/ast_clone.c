@@ -215,7 +215,7 @@ FunctionSpec *clone_function_spec(const FunctionSpec *fs)
     if (result == NULL)
         return NULL;
     result->yield_type = clone_type(fs->yield_type, __func__, __FILE__, __LINE__);
-    result->next = clone_function_spec(fs->next);
+    result->next       = clone_function_spec(fs->next);
     return result;
 }
 

@@ -8,15 +8,14 @@
 // int, long, int: r12, r14:r13, r15 -- a long need not start on an even register.
 TEST_F(Msp430Test, ArgsInOrder)
 {
-    std::string code = Code(CompileToMsp430("int g(int, long, int); int f(void) { return g(1, 2, 3); }"));
-    EXPECT_NE(std::string::npos,
-              code.find(R"(mov #1, r12
+    std::string code =
+        Code(CompileToMsp430("int g(int, long, int); int f(void) { return g(1, 2, 3); }"));
+    EXPECT_NE(std::string::npos, code.find(R"(mov #1, r12
 mov #2, r13
 clr r14
 mov #3, r15
 br #g
-)"))
-        << code;
+)")) << code;
 }
 
 // A long with only r15 left: low word in r15, high word on the stack.
@@ -42,14 +41,12 @@ clr 4(r1)
 clr 6(r1)
 mov #5, 8(r1)
 clr 10(r1)
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(mov #1, r12
 mov #3, r13
 mov #4, r14
 call #u
-)"))
-        << code;
+)")) << code;
 }
 
 // A double after three ints goes on the stack; the int after it takes r15.
@@ -85,8 +82,8 @@ call #u
 // A char goes extended to its register.
 TEST_F(Msp430Test, ArgCharExtended)
 {
-    std::string code = Code(CompileToMsp430(
-        "int g(signed char); signed char c; int f(void) { return g(c); }"));
+    std::string code =
+        Code(CompileToMsp430("int g(signed char); signed char c; int f(void) { return g(c); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov.b &c, r12
 sxt r12
 br #g
@@ -96,16 +93,14 @@ br #g
 // A variadic callee takes every argument on the stack.
 TEST_F(Msp430Test, ArgsVariadicOnStack)
 {
-    std::string code = Code(CompileToMsp430(
-        "int v(int, ...); int f(void) { return v(1, 2L, 3); }"));
-    EXPECT_NE(std::string::npos,
-              code.find(R"(mov #1, 0(r1)
+    std::string code =
+        Code(CompileToMsp430("int v(int, ...); int f(void) { return v(1, 2L, 3); }"));
+    EXPECT_NE(std::string::npos, code.find(R"(mov #1, 0(r1)
 mov #2, 2(r1)
 clr 4(r1)
 mov #3, 6(r1)
 call #v
-)"))
-        << code;
+)")) << code;
 }
 
 // Through a pointer: moved into r11 with the arguments, never called through an
@@ -113,20 +108,20 @@ call #v
 EXPECT_CODE(IndirectCall, R"(mov r12, r11
 mov #7, r12
 br r11
-)", "int f(int (*fp)(int)) { return fp(7); }")
+)",
+            "int f(int (*fp)(int)) { return fp(7); }")
 
 // Results: r12, r13:r12, r15:r12.
 TEST_F(Msp430Test, ResultsStored)
 {
-    std::string code = Code(CompileToMsp430(
-        "long long g(void); long long x; void f(void) { x = g(); }"));
+    std::string code =
+        Code(CompileToMsp430("long long g(void); long long x; void f(void) { x = g(); }"));
     EXPECT_NE(std::string::npos, code.find(R"(call #g
 mov r12, 0(r1)
 mov r13, 2(r1)
 mov r14, 4(r1)
 mov r15, 6(r1)
-)"))
-        << code;
+)")) << code;
 }
 
 // Every rule, caller and callee ours: each callee checks what it got.

@@ -26,9 +26,9 @@ TEST_F(Aarch64Test, StaticFunctionIsLocal)
 
 // A leaf function that needs no stack has no frame: the body, then ret.
 // Each test compiles one translation unit: the fixture's symbol table lives per test.
-#define EXPECT_CODE(name, body, src)                           \
-    TEST_F(Aarch64Test, name)                                  \
-    {                                                          \
+#define EXPECT_CODE(name, body, src)                          \
+    TEST_F(Aarch64Test, name)                                 \
+    {                                                         \
         EXPECT_EQ(body "ret\n", Code(CompileToAarch64(src))); \
     }
 

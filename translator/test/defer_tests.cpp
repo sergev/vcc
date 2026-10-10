@@ -61,7 +61,8 @@ void f(void) { _Defer g(1); _Defer g(2); g(3); }
 // Every return runs the defers registered so far, and only those.
 TEST_F(TranslateTest, DeferReturn)
 {
-    EXPECT_EQ("g1 ret jump label label g2 g1 ret0 jump label label g3 g2 g1 ret0", Trace(CompileToYaml(R"(
+    EXPECT_EQ("g1 ret jump label label g2 g1 ret0 jump label label g3 g2 g1 ret0",
+              Trace(CompileToYaml(R"(
 void g(int);
 int f(int x) { _Defer g(1); if (x) return x; _Defer g(2); if (x > 1) return 0; g(3); return 0; }
 )")));
@@ -100,7 +101,8 @@ void f(int x) { while (x) { _Defer g(1); if (x == 1) continue; if (x == 2) break
 // block runs that defer.
 TEST_F(TranslateTest, DeferGoto)
 {
-    EXPECT_EQ("g1 jump jump label label g1 label g2 label g3 g4 jump jump label label g4", Trace(CompileToYaml(R"(
+    EXPECT_EQ("g1 jump jump label label g1 label g2 label g3 g4 jump jump label label g4",
+              Trace(CompileToYaml(R"(
 void g(int);
 void f(int x)
 {
@@ -192,5 +194,6 @@ TEST_F(TranslateTestX86, DeferSharedOff)
 
 TEST_F(TranslateTest, DeferSharedNotOnBesm6)
 {
-    EXPECT_EQ("g1 g2 g3 g4 ret5 jump label label g1 g2 g3 g4 ret6", Trace(CompileToYaml(shared_src)));
+    EXPECT_EQ("g1 g2 g3 g4 ret5 jump label label g1 g2 g3 g4 ret6",
+              Trace(CompileToYaml(shared_src)));
 }

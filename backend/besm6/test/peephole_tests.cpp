@@ -63,8 +63,8 @@ TEST_F(CodegenTest, VolatileReloadKept)
 // against the preceding `7 ,atx,`, which lies in a different basic block).
 TEST_F(CodegenTest, ReloadAcrossLabelKept)
 {
-    std::string output = CompileToMadlen(
-        "int foo(int a, int b) { int c; if (a) c = a; else c = b; return c; }");
+    std::string output =
+        CompileToMadlen("int foo(int a, int b) { int c; if (a) c = a; else c = b; return c; }");
     EXPECT_EQ(R"(c
       foo:   ,name,
     b/ret:   ,subp,
@@ -337,17 +337,17 @@ TEST_F(CodegenTest, ConditionalOverJumpBehaviorUnchanged)
 // deletes the redundant `uj`, leaving the label.
 TEST_F(CodegenTest, JumpToNextLabelRemoved)
 {
-    Besm_Func *fn    = besm_new_func("foo", BESM_CC_INTERNAL);
-    Besm_Block *blk  = besm_new_block();
-    Besm_Instr *uj   = besm_new_instr(BESM_BRANCH_UJ);
-    uj->name         = xstrdup("L");
-    Besm_Instr *lbl  = besm_new_instr(BESM_STMT_LABEL);
-    lbl->name        = xstrdup("L");
-    Besm_Instr *end  = besm_new_instr(BESM_STMT_END);
-    uj->next         = lbl;
-    lbl->next        = end;
-    blk->body        = uj;
-    fn->blocks       = blk;
+    Besm_Func *fn   = besm_new_func("foo", BESM_CC_INTERNAL);
+    Besm_Block *blk = besm_new_block();
+    Besm_Instr *uj  = besm_new_instr(BESM_BRANCH_UJ);
+    uj->name        = xstrdup("L");
+    Besm_Instr *lbl = besm_new_instr(BESM_STMT_LABEL);
+    lbl->name       = xstrdup("L");
+    Besm_Instr *end = besm_new_instr(BESM_STMT_END);
+    uj->next        = lbl;
+    lbl->next       = end;
+    blk->body       = uj;
+    fn->blocks      = blk;
 
     besm_peephole(fn, nullptr);
 
@@ -471,8 +471,9 @@ c
 // anywhere but `g.x`.
 TEST_F(CodegenTest, GlobalReloadAcrossAliasingStoreKept)
 {
-    std::string output = CompileToMadlen("struct Foo { int x; int y; }; struct Foo g; "
-                                         "int f(int *p) { g.x = 7; *p = 1; return g.x; }");
+    std::string output = CompileToMadlen(
+        "struct Foo { int x; int y; }; struct Foo g; "
+        "int f(int *p) { g.x = 7; *p = 1; return g.x; }");
     EXPECT_EQ(R"(c
         g:   ,name,
              ,bss, 2
@@ -725,7 +726,8 @@ TEST_F(CodegenTest, IoAddressDisplacementTooLargeKept)
 //
 TEST_F(CodegenTest, OmegaFixupAfterSubtract)
 {
-    std::string output = CompileToMadlen("int diff(int x, int y) { if (x - y) return 1; return 0; }");
+    std::string output =
+        CompileToMadlen("int diff(int x, int y) { if (x - y) return 1; return 0; }");
     EXPECT_EQ(R"(c
      diff:   ,name,
     b/ret:   ,subp,
@@ -748,7 +750,8 @@ TEST_F(CodegenTest, OmegaFixupAfterSubtract)
 // Unary minus lowers to `x-a`, which is additive too, so the same fixup applies.
 TEST_F(CodegenTest, OmegaFixupAfterUnaryNegate)
 {
-    std::string output = CompileToMadlen("int neg(int x) { int b = -x; if (b) return 1; return 0; }");
+    std::string output =
+        CompileToMadlen("int neg(int x) { int b = -x; if (b) return 1; return 0; }");
     EXPECT_EQ(R"(c
       neg:   ,name,
     b/ret:   ,subp,

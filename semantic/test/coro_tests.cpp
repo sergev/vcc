@@ -54,7 +54,8 @@ int print_range(void)
         sum += co_value(f);
     return sum + co_done(f) + (int)co_sizeof(range) + (int)co_alignof(range);
 }
-)").c_str());
+)")
+                    .c_str());
 }
 
 // Both forms of await; the result of a coroutine; a frame type through a typedef, and
@@ -170,7 +171,8 @@ TEST_F(CoroTest, Inline_Neg)
 
 TEST_F(CoroTest, Noreturn_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Noreturn _Coro(int) void f(void);"), "coroutine 'f' cannot be '_Noreturn'");
+    EXPECT_DEATH(RunPipeline("_Noreturn _Coro(int) void f(void);"),
+                 "coroutine 'f' cannot be '_Noreturn'");
 }
 
 TEST_F(CoroTest, NoPrototype_Neg)
@@ -209,7 +211,8 @@ TEST_F(CoroTest, OnFunctionPointer_Neg)
 
 TEST_F(CoroTest, TwoCoro_Neg)
 {
-    EXPECT_DEATH(RunPipeline("_Coro(int) _Coro(int) void f(void);"), "more than one '_Coro' in a declaration");
+    EXPECT_DEATH(RunPipeline("_Coro(int) _Coro(int) void f(void);"),
+                 "more than one '_Coro' in a declaration");
 }
 
 TEST_F(CoroTest, ConflictingYield_Neg)
@@ -229,19 +232,22 @@ TEST_F(CoroTest, CoroAndFunction_Neg)
 TEST_F(CoroTest, DirectCall_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { range(0, 1); }").c_str()),
-                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof "
+                 "or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AsValue_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void *f(void) { return (void *)range; }").c_str()),
-                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof "
+                 "or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AddressOf_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { void *p = &range; }").c_str()),
-                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
+                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof "
+                 "or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, InitNotCoroutine_Neg)
@@ -255,8 +261,10 @@ void f(void) { char buf[64]; __co_init(buf, sizeof buf, g, 1); }
 
 TEST_F(CoroTest, SizeofExpression_Neg)
 {
-    EXPECT_DEATH(RunPipeline(With("unsigned long f(void) { return co_sizeof(range + 1); }").c_str()),
-                 "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
+    EXPECT_DEATH(
+        RunPipeline(With("unsigned long f(void) { return co_sizeof(range + 1); }").c_str()),
+        "coroutine 'range' may only be named in co_init, co_alloca, co_sizeof, co_alignof or "
+        "await, or used as a coro_ptr when it takes \\(void\\) or \\(void \\*\\)");
 }
 
 TEST_F(CoroTest, AllocaArguments_Neg)
@@ -287,8 +295,10 @@ TEST_F(CoroTest, ResultOfVoid_Neg)
 
 TEST_F(CoroTest, FrameTypes_Neg)
 {
-    EXPECT_DEATH(RunPipeline(With("void f(void) { co_frame(long, void) *p = co_alloca(range, 0, 0, 1); }").c_str()),
-                 "cannot convert '.*' to '.*' when");
+    EXPECT_DEATH(
+        RunPipeline(
+            With("void f(void) { co_frame(long, void) *p = co_alloca(range, 0, 0, 1); }").c_str()),
+        "cannot convert '.*' to '.*' when");
 }
 
 // --- yield and await --------------------------------------------------------
@@ -350,8 +360,10 @@ TEST_F(CoroTest, AwaitFunction_Neg)
 
 TEST_F(CoroTest, AllocaInLoopHead_Neg)
 {
-    EXPECT_DEATH(RunPipeline(With("void f(void) { while (co_resume(co_alloca(range, 0, 0, 1))) ; }").c_str()),
-                 "'co_alloca' in the head of a loop");
+    EXPECT_DEATH(
+        RunPipeline(
+            With("void f(void) { while (co_resume(co_alloca(range, 0, 0, 1))) ; }").c_str()),
+        "'co_alloca' in the head of a loop");
 }
 
 TEST_F(CoroTest, GotoPastAlloca_Neg)
@@ -365,7 +377,8 @@ void f(int x)
 l:
     x++;
 }
-)").c_str()),
+)")
+                                 .c_str()),
                  "'goto l' jumps forward past a defer or co_alloca");
 }
 
@@ -380,7 +393,8 @@ void f(int x)
         x++;
     }
 }
-)").c_str()),
+)")
+                                 .c_str()),
                  "'goto l' jumps forward past a defer or co_alloca");
 }
 
@@ -396,7 +410,8 @@ void f(int x)
         x++;
     }
 }
-)").c_str()),
+)")
+                                 .c_str()),
                  "'case' label past a defer or co_alloca in its switch");
 }
 
@@ -411,7 +426,8 @@ again:
     if (x--)
         goto again;
 }
-)").c_str());
+)")
+                    .c_str());
 }
 
 // --- Braam (wasm32-braam: the runtime awaits main) -----------------------------
@@ -451,18 +467,18 @@ TEST_F(BraamMainTest, OtherYieldType)
 
 TEST_F(BraamMainTest, NoArguments)
 {
-    EXPECT_DEATH(RunPipeline((std::string(braam_call) +
-                              "_Coro(braam_call *) int main(void) { return 0; }")
-                                 .c_str()),
-                 "the parameters are not");
+    EXPECT_DEATH(
+        RunPipeline(
+            (std::string(braam_call) + "_Coro(braam_call *) int main(void) { return 0; }").c_str()),
+        "the parameters are not");
 }
 
 TEST_F(BraamMainTest, VoidResult)
 {
-    EXPECT_DEATH(RunPipeline((std::string(braam_call) +
-                              "_Coro(braam_call *) void main(int c, char **v) { }")
-                                 .c_str()),
-                 "it does not return int");
+    EXPECT_DEATH(
+        RunPipeline((std::string(braam_call) + "_Coro(braam_call *) void main(int c, char **v) { }")
+                        .c_str()),
+        "it does not return int");
 }
 
 // --- coro_ptr ---------------------------------------------------------------
@@ -497,7 +513,8 @@ int main(void)
     co_frame(int, int) *f = co_init(storage, sizeof storage, table[0]);
     return run(a, 0) + (p == table[1]) + (p != 0) + co_done(f);
 }
-)").c_str());
+)")
+                    .c_str());
 }
 
 TEST_F(CoroTest, CoroPtrParams_Neg)
@@ -523,9 +540,9 @@ TEST_F(CoroTest, CoroPtrAssign_Neg)
 
 TEST_F(CoroTest, CoroPtrCall_Neg)
 {
-    EXPECT_DEATH(RunPipeline((std::string(tasks) +
-                              "void f(coro_ptr(int, int) p) { p(0); }").c_str()),
-                 "a coro_ptr can only be called by 'await'");
+    EXPECT_DEATH(
+        RunPipeline((std::string(tasks) + "void f(coro_ptr(int, int) p) { p(0); }").c_str()),
+        "a coro_ptr can only be called by 'await'");
 }
 
 TEST_F(CoroTest, CoroPtrArguments_Neg)
@@ -546,9 +563,10 @@ TEST_F(CoroTest, CoroPtrYield_Neg)
 
 TEST_F(CoroTest, CoroPtrSizeof_Neg)
 {
-    EXPECT_DEATH(RunPipeline((std::string(tasks) +
-                              "int f(int *p) { return (int)co_sizeof(p + 1); }").c_str()),
-                 "needs the name of a coroutine or a coro_ptr");
+    EXPECT_DEATH(
+        RunPipeline(
+            (std::string(tasks) + "int f(int *p) { return (int)co_sizeof(p + 1); }").c_str()),
+        "needs the name of a coroutine or a coro_ptr");
 }
 
 // --- the lint for frames in automatic storage -------------------------------
@@ -560,11 +578,11 @@ coro(int) void gen(int n) { defer n = 0; for (int i = 0; i < n; i++) yield i; }
 
 // The warnings `body` makes, after the generator (in a test: RunPipeline is the
 // fixture's); with their locations, or (Warnings) without.
-#define LocatedWarnings(t, body)                                       \
-    ([&]() {                                                           \
-        testing::internal::CaptureStderr();                            \
-        RunPipeline((std::string(lint_gen) + (body)).c_str());         \
-        return testing::internal::GetCapturedStderr();                 \
+#define LocatedWarnings(t, body)                               \
+    ([&]() {                                                   \
+        testing::internal::CaptureStderr();                    \
+        RunPipeline((std::string(lint_gen) + (body)).c_str()); \
+        return testing::internal::GetCapturedStderr();         \
     }())
 #define Warnings(t, body) WithoutLocations(LocatedWarnings(t, body))
 
@@ -574,21 +592,22 @@ static std::string WithoutLocations(const std::string &text)
     std::string out;
     size_t pos = 0;
     while (pos < text.size()) {
-        size_t eol      = text.find('\n', pos);
-        size_t end      = eol == std::string::npos ? text.size() : eol + 1;
-        std::string ln  = text.substr(pos, end - pos);
-        size_t warning  = ln.find("warning: ");
-        out            += warning == std::string::npos ? ln : ln.substr(warning);
-        pos             = end;
+        size_t eol     = text.find('\n', pos);
+        size_t end     = eol == std::string::npos ? text.size() : eol + 1;
+        std::string ln = text.substr(pos, end - pos);
+        size_t warning = ln.find("warning: ");
+        out += warning == std::string::npos ? ln : ln.substr(warning);
+        pos = end;
     }
     return out;
 }
 
 TEST_F(CoroTest, LintEscape)
 {
-    EXPECT_EQ("warning: f: the frame of 'gen' outlives its storage 'buf', an automatic object: "
-              "use static or allocated storage\n",
-              Warnings(this, R"(
+    EXPECT_EQ(
+        "warning: f: the frame of 'gen' outlives its storage 'buf', an automatic object: "
+        "use static or allocated storage\n",
+        Warnings(this, R"(
 co_frame(int, void) *keep;
 void f(void)
 {
@@ -614,21 +633,24 @@ void f(void)
 
 TEST_F(CoroTest, LintReturned)
 {
-    EXPECT_NE(std::string::npos, Warnings(this, R"(
+    EXPECT_NE(std::string::npos,
+              Warnings(this, R"(
 co_frame(int, void) *f(void)
 {
     char buf[256];
     co_frame(int, void) *p = co_init(buf, sizeof buf, gen, 3);
     return p;
 }
-)").find("warning: f: the frame of 'gen' outlives its storage 'buf'"));
+)")
+                  .find("warning: f: the frame of 'gen' outlives its storage 'buf'"));
 }
 
 TEST_F(CoroTest, LintLeftSuspended)
 {
-    EXPECT_EQ("warning: f: the frame of 'gen' in 'buf' may be left suspended at the end of the "
-              "block, its defers never run: co_destroy it, or use co_alloca\n",
-              Warnings(this, R"(
+    EXPECT_EQ(
+        "warning: f: the frame of 'gen' in 'buf' may be left suspended at the end of the "
+        "block, its defers never run: co_destroy it, or use co_alloca\n",
+        Warnings(this, R"(
 int f(void)
 {
     char buf[256];
@@ -712,7 +734,8 @@ void f(void)
     struct { _Alignas(16) char b[256]; } s;
     keep = co_init(&s, sizeof s, gen, 3);
 }
-)").find("outlives its storage 's'"));
+)")
+                                     .find("outlives its storage 's'"));
 }
 
 // --- alloca ------------------------------------------------------------------
@@ -758,6 +781,7 @@ TEST_F(PipelineTest, AllocaOnBesm6)
 {
     const Target *was = target_config;
     target_config     = target_lookup("besm6");
-    RunPipeline("void *__builtin_alloca(unsigned long); void *f(void) { return __builtin_alloca(6); }");
+    RunPipeline(
+        "void *__builtin_alloca(unsigned long); void *f(void) { return __builtin_alloca(6); }");
     target_config = was;
 }

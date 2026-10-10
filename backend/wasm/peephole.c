@@ -74,9 +74,8 @@ static bool is_store(Wasm_Op op)
 // Whether instruction `in` may write memory, as a store, a call or a volatile access.
 static bool writes_memory(const Wasm_Instr *in)
 {
-    return in->barrier || is_store(in->op) || in->op == WASM_CALL ||
-           in->op == WASM_CALL_INDIRECT || in->op == WASM_MEMORY_COPY ||
-           in->op == WASM_MEMORY_FILL || in->op == WASM_MEMORY_GROW;
+    return in->barrier || is_store(in->op) || in->op == WASM_CALL || in->op == WASM_CALL_INDIRECT ||
+           in->op == WASM_MEMORY_COPY || in->op == WASM_MEMORY_FILL || in->op == WASM_MEMORY_GROW;
 }
 
 // The first instruction of the expression whose value `last` leaves on the stack, or
@@ -209,7 +208,7 @@ static bool stackify(Wasm_Func *fn, Counts *c)
 
         // Find the read, with what the code between does to the stack.
         int height = 0, low = 0;
-        Effects e  = { 0 };
+        Effects e = { 0 };
         Wasm_Instr *get;
         for (get = set->next; get && !is_get(get, local); get = get->next) {
             int pops, pushes;
@@ -221,8 +220,7 @@ static bool stackify(Wasm_Func *fn, Counts *c)
             height += pushes;
             if (writes_memory(get) || get->op == WASM_CALL || get->op == WASM_CALL_INDIRECT)
                 e.writes_memory = true;
-            if (get->op == WASM_GLOBAL_SET || get->op == WASM_CALL ||
-                get->op == WASM_CALL_INDIRECT)
+            if (get->op == WASM_GLOBAL_SET || get->op == WASM_CALL || get->op == WASM_CALL_INDIRECT)
                 e.writes_global = true;
             if (!e.first)
                 e.first = get;
@@ -403,26 +401,46 @@ static bool is_int_compare(Wasm_Op op)
 static Wasm_Op invert(Wasm_Op op)
 {
     switch (op) {
-    case WASM_I32_EQ:   return WASM_I32_NE;
-    case WASM_I32_NE:   return WASM_I32_EQ;
-    case WASM_I32_LT_S: return WASM_I32_GE_S;
-    case WASM_I32_LT_U: return WASM_I32_GE_U;
-    case WASM_I32_GT_S: return WASM_I32_LE_S;
-    case WASM_I32_GT_U: return WASM_I32_LE_U;
-    case WASM_I32_LE_S: return WASM_I32_GT_S;
-    case WASM_I32_LE_U: return WASM_I32_GT_U;
-    case WASM_I32_GE_S: return WASM_I32_LT_S;
-    case WASM_I32_GE_U: return WASM_I32_LT_U;
-    case WASM_I64_EQ:   return WASM_I64_NE;
-    case WASM_I64_NE:   return WASM_I64_EQ;
-    case WASM_I64_LT_S: return WASM_I64_GE_S;
-    case WASM_I64_LT_U: return WASM_I64_GE_U;
-    case WASM_I64_GT_S: return WASM_I64_LE_S;
-    case WASM_I64_GT_U: return WASM_I64_LE_U;
-    case WASM_I64_LE_S: return WASM_I64_GT_S;
-    case WASM_I64_LE_U: return WASM_I64_GT_U;
-    case WASM_I64_GE_S: return WASM_I64_LT_S;
-    default:            return WASM_I64_LT_U;
+    case WASM_I32_EQ:
+        return WASM_I32_NE;
+    case WASM_I32_NE:
+        return WASM_I32_EQ;
+    case WASM_I32_LT_S:
+        return WASM_I32_GE_S;
+    case WASM_I32_LT_U:
+        return WASM_I32_GE_U;
+    case WASM_I32_GT_S:
+        return WASM_I32_LE_S;
+    case WASM_I32_GT_U:
+        return WASM_I32_LE_U;
+    case WASM_I32_LE_S:
+        return WASM_I32_GT_S;
+    case WASM_I32_LE_U:
+        return WASM_I32_GT_U;
+    case WASM_I32_GE_S:
+        return WASM_I32_LT_S;
+    case WASM_I32_GE_U:
+        return WASM_I32_LT_U;
+    case WASM_I64_EQ:
+        return WASM_I64_NE;
+    case WASM_I64_NE:
+        return WASM_I64_EQ;
+    case WASM_I64_LT_S:
+        return WASM_I64_GE_S;
+    case WASM_I64_LT_U:
+        return WASM_I64_GE_U;
+    case WASM_I64_GT_S:
+        return WASM_I64_LE_S;
+    case WASM_I64_GT_U:
+        return WASM_I64_LE_U;
+    case WASM_I64_LE_S:
+        return WASM_I64_GT_S;
+    case WASM_I64_LE_U:
+        return WASM_I64_GT_U;
+    case WASM_I64_GE_S:
+        return WASM_I64_LT_S;
+    default:
+        return WASM_I64_LT_U;
     }
 }
 
@@ -457,18 +475,22 @@ static bool fold_offset(Wasm_Func *fn, Wasm_Instr *at, Wasm_Instr *add)
 // Whether op leaves 0 or 1.
 static bool is_boolean(Wasm_Op op)
 {
-    return is_int_compare(op) || (op >= WASM_F32_EQ && op <= WASM_F64_GE) ||
-           op == WASM_I32_EQZ || op == WASM_I64_EQZ;
+    return is_int_compare(op) || (op >= WASM_F32_EQ && op <= WASM_F64_GE) || op == WASM_I32_EQZ ||
+           op == WASM_I64_EQZ;
 }
 
 // The width of a store of an i32 that merge_stores widens, or 0.
 static int narrow_store_width(Wasm_Op op)
 {
     switch (op) {
-    case WASM_I32_STORE8:  return 1;
-    case WASM_I32_STORE16: return 2;
-    case WASM_I32_STORE:   return 4;
-    default:               return 0;
+    case WASM_I32_STORE8:
+        return 1;
+    case WASM_I32_STORE16:
+        return 2;
+    case WASM_I32_STORE:
+        return 4;
+    default:
+        return 0;
     }
 }
 
@@ -508,16 +530,16 @@ static bool merge_stores(Wasm_Func *fn, Wasm_Instr *s2)
         align = w; // the frame alone is known to be aligned
     switch (w) {
     case 1:
-        s1->op = WASM_I32_STORE16;
+        s1->op  = WASM_I32_STORE16;
         c1->imm = (int16_t)value;
         break;
     case 2:
-        s1->op = WASM_I32_STORE;
+        s1->op  = WASM_I32_STORE;
         c1->imm = (int32_t)value;
         break;
     default:
-        s1->op = WASM_I64_STORE;
-        c1->op = WASM_I64_CONST;
+        s1->op  = WASM_I64_STORE;
+        c1->op  = WASM_I64_CONST;
         c1->imm = (int64_t)value;
         break;
     }
@@ -533,7 +555,7 @@ static bool rewrite(Wasm_Func *fn)
 {
     bool changed = false;
     for (Wasm_Instr *in = fn->first, *next; in; in = next) {
-        next = in->next;
+        next          = in->next;
         Wasm_Instr *p = in->prev;
         // x == 0 → eqz x
         if ((in->op == WASM_I32_EQ && is_const(p, WASM_I32_CONST, 0)) ||

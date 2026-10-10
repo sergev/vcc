@@ -1,9 +1,9 @@
 // The MSP430 fixture for the shared "Writing a C Compiler" suite
 // (backend/common/test/book/): programs run on mspsim, each also built wholly by GCC with
-// newlib, and by clang on our runtime, and the outputs compared.  The book's expected values assume a 32-bit int
-// and a 64-bit long, GCC's MSP430 output does not: GCC is the oracle here, and the book's
-// own expectation is set aside (its failures are intercepted and dropped).  The chapters
-// are enabled in CMakeLists.txt as the code generator reaches them.
+// newlib, and by clang on our runtime, and the outputs compared.  The book's expected values assume
+// a 32-bit int and a 64-bit long, GCC's MSP430 output does not: GCC is the oracle here, and the
+// book's own expectation is set aside (its failures are intercepted and dropped).  The chapters are
+// enabled in CMakeLists.txt as the code generator reaches them.
 #pragma once
 
 #include <gtest/gtest-spi.h>
@@ -44,8 +44,7 @@ protected:
         SkipIfListed(skipped);
         SKIP_IF_NO_MSP430_TOOLS();
         intercept.reset(new ::testing::ScopedFakeTestPartResultReporter(
-            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
-            &results));
+            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD, &results));
     }
 
     // Report again every result but the failures of the book's own expectations.

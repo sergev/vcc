@@ -90,7 +90,7 @@ static void shift_var(Gen *g, Tac_BinaryOperator op, bool arith)
     if (op == TAC_BINARY_LEFT_SHIFT) {
         op3(g, RV_SLL, T3, T0, T2); // a = lo << n
         op3(g, RV_SLL, T1, T1, T2);
-        op2(g, RV_NOT, T2, T2);     // 31 - n
+        op2(g, RV_NOT, T2, T2); // 31 - n
         opi(g, RV_SRLI, T0, T0, 1);
         op3(g, RV_SRL, T0, T0, T2);
         op3(g, RV_OR, T1, T1, T0); // b = hi << n | lo >> (32 - n)
@@ -123,7 +123,7 @@ static void gen_ll_shift(Gen *g, const Tac_Instruction *in, bool is_unsigned)
 {
     Tac_BinaryOperator op = in->u.binary.op;
     const Tac_Val *count  = in->u.binary.src2;
-    bool arith = op == TAC_BINARY_RIGHT_SHIFT && !is_unsigned;
+    bool arith            = op == TAC_BINARY_RIGHT_SHIFT && !is_unsigned;
     if (count->kind == TAC_VAL_CONSTANT) {
         int n = (int)(const_value(g, count->u.constant) & 63);
         load_pair(g, T0, T1, in->u.binary.src1);
@@ -165,9 +165,9 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     case TAC_BINARY_REMAINDER:
     case TAC_BINARY_REMAINDER_UNSIGNED: {
         // A call as any other: an operand may be in an argument register.
-        bool div                     = op == TAC_BINARY_DIVIDE || op == TAC_BINARY_DIVIDE_UNSIGNED;
-        const Tac_Type *t            = u ? &ull : &ll;
-        const Tac_Val *args[2]       = { a, b };
+        bool div                    = op == TAC_BINARY_DIVIDE || op == TAC_BINARY_DIVIDE_UNSIGNED;
+        const Tac_Type *t           = u ? &ull : &ll;
+        const Tac_Val *args[2]      = { a, b };
         const Tac_Type *const ts[2] = { t, t };
         gen_runtime_call(g, div ? (u ? "__udivdi3" : "__divdi3") : (u ? "__umoddi3" : "__moddi3"),
                          t, args, ts, 2, dst);
@@ -220,7 +220,9 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
     case TAC_BINARY_BITWISE_AND:
     case TAC_BINARY_BITWISE_OR:
     case TAC_BINARY_BITWISE_XOR: {
-        Rv_Op o = op == TAC_BINARY_BITWISE_AND ? RV_AND : op == TAC_BINARY_BITWISE_OR ? RV_OR : RV_XOR;
+        Rv_Op o = op == TAC_BINARY_BITWISE_AND  ? RV_AND
+                  : op == TAC_BINARY_BITWISE_OR ? RV_OR
+                                                : RV_XOR;
         op3(g, o, T0, T0, T2);
         op3(g, o, T1, T1, T3);
         break;

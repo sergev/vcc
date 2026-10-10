@@ -120,7 +120,7 @@ X86_Operand const_mem(Gen *g, uint64_t lo, uint64_t hi, int size)
         }
     }
     if (g->nconsts == g->maxconsts) {
-        g->maxconsts = g->maxconsts ? 2 * g->maxconsts : 8;
+        g->maxconsts   = g->maxconsts ? 2 * g->maxconsts : 8;
         FpConst *grown = xalloc(g->maxconsts * sizeof(FpConst), __func__, __FILE__, __LINE__);
         if (g->nconsts)
             memcpy(grown, g->consts, g->nconsts * sizeof(FpConst));
@@ -138,7 +138,10 @@ void emit_consts(const Gen *g, FILE *out)
     for (int i = 0; i < g->nconsts; i++) {
         const FpConst *c = &g->consts[i];
         fprintf(out, "    .section .rodata\n    .p2align %d\n.LC%d:\n",
-                c->size == 4 ? 2 : c->size == 8 ? 3 : 4, c->label);
+                c->size == 4   ? 2
+                : c->size == 8 ? 3
+                               : 4,
+                c->label);
         if (c->size == 4)
             fprintf(out, "    .long   0x%08x\n", (unsigned)c->lo);
         else
@@ -521,7 +524,7 @@ X86_Operand mem_at(X86_Operand m, int64_t off)
 void gen_memcopy(Gen *g, X86_Operand dst, X86_Operand src, int size, int align)
 {
     static const X86_Width widths[] = { [1] = X86_B, [2] = X86_W, [4] = X86_L, [8] = X86_Q };
-    int chunk = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
+    int chunk                       = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
     if (size > 64) {
         // 16 bytes at a time in a loop, through xmm15, the addresses in rax and r10 and
         // the count in r11, so that no allocated register changes; the rest after it,
@@ -727,7 +730,7 @@ void gen_prologue(Gen *g)
             emit1(g, X86_PUSH, X86_Q, x86_reg(g->saved_reg[i], X86_Q));
         if (fr.rest)
             emit2(g, X86_SUB, X86_Q, x86_imm(fr.rest), x86_reg(X86_RSP, X86_Q));
-        g->fn->tail = tail;
+        g->fn->tail      = tail;
         X86_Block *first = g->fn->blocks;
         if (seq.head) {
             seq.tail->next = first->head;

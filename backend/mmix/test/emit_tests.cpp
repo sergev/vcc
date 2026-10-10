@@ -165,9 +165,9 @@ TEST_F(EmitTest, Function)
     in->opnd[0]    = R(0);
     in->opnd[1]    = mmix_wyde(200);
     mmix_new_block(fn, "L:1");
-    in          = mmix_append(fn, MMIX_POP);
-    in->opnd[0] = I(1);
-    in->opnd[1] = I(0);
+    in            = mmix_append(fn, MMIX_POP);
+    in->opnd[0]   = I(1);
+    in->opnd[1]   = I(0);
     std::string s = Capture([&](FILE *f) { mmix_emit_func(f, fn); });
     mmix_free_func(fn);
     EXPECT_EQ(s, R"(    .text
@@ -221,8 +221,8 @@ static std::vector<Mmix_Instr> AllOps()
             v.push_back(Make(op, { R(1), mmix_label("L:1") }));
             break;
         case MMIX_FORM_ADDR:
-            v.push_back(Make(op, { R(1), op == MMIX_GETA ? mmix_label("L:1")
-                                                          : mmix_sym("data", 8) }));
+            v.push_back(
+                Make(op, { R(1), op == MMIX_GETA ? mmix_label("L:1") : mmix_sym("data", 8) }));
             break;
         case MMIX_FORM_JUMP:
             v.push_back(Make(op, { mmix_label("L:1") }));
@@ -274,7 +274,6 @@ L:1:
             s << l;
         s << "    .data\ndata:   .octa 0, 0, 0\n";
     }
-    ASSERT_EQ(0, RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", o_path, s_path },
-                         log_path))
+    ASSERT_EQ(0, RunTool({ MMIX_AS, "-x", "-no-predefined-syms", "-o", o_path, s_path }, log_path))
         << ReadFile(log_path);
 }

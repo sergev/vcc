@@ -20,7 +20,6 @@
 //
 #include "typecheck_fixture.h"
 
-
 // --- invalid_struct_tags ---
 
 TEST_F(PipelineTest, Chapter18_StructTagsArrayOfUndeclared_Neg)
@@ -68,7 +67,6 @@ int main(void) {
                  "where a complete type is required");
 }
 
-
 // --- invalid_struct_tags/extra_credit ---
 
 TEST_F(PipelineTest, Chapter18_ExtraCreditSizeofUndeclaredUnion_Neg)
@@ -104,7 +102,6 @@ int main(void) {
 )SRC"),
                  "variable 'var' has incomplete type 'union s'");
 }
-
 
 // --- invalid_struct_tags ---
 
@@ -245,7 +242,6 @@ int main(void) {
                  "variable 'var' has incomplete type 'struct s'");
 }
 
-
 // --- invalid_types/extra_credit/bad_union_member_access ---
 
 TEST_F(PipelineTest, Chapter18_BadUnionMemberAccessNestedNonMember_Neg)
@@ -312,7 +308,6 @@ int main(void) {
 )SRC"),
                  "no member named 'm' in '(struct|union) a'");
 }
-
 
 // --- invalid_types/extra_credit/incompatible_union_types ---
 
@@ -410,7 +405,6 @@ int main(void) {
                  "incompatible pointer types");
 }
 
-
 // --- invalid_types/extra_credit/incomplete_unions ---
 
 TEST_F(PipelineTest, Chapter18_IncompleteUnionsDefineIncompleteUnion_Neg)
@@ -435,7 +429,6 @@ int main(void) {
 )SRC"),
                  "invalid application of 'sizeof' to an incomplete type");
 }
-
 
 // --- invalid_types/extra_credit/invalid_union_lvalues ---
 
@@ -491,7 +484,6 @@ int main(void) {
 )SRC"),
                  "expression is not assignable");
 }
-
 
 // --- invalid_types/extra_credit/other_features ---
 
@@ -673,7 +665,6 @@ int main(void) {
                  "'switch' requires an integer value");
 }
 
-
 // --- invalid_types/extra_credit/scalar_required ---
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCastBetweenUnions_Neg)
@@ -765,7 +756,6 @@ int main(void) {
 )SRC"),
                  "(invalid operands to|a value of scalar type is required)");
 }
-
 
 // --- invalid_types/extra_credit/union_initializers ---
 
@@ -1020,7 +1010,6 @@ int main(void) {
                  "cannot convert '.*' to '.*' when");
 }
 
-
 // --- invalid_types/extra_credit/union_struct_conflicts ---
 
 TEST_F(PipelineTest, Chapter18_TagDeclAndUse_Neg)
@@ -1137,7 +1126,8 @@ int main(void) {
                  ".");
 }
 
-// DISABLED: relies on tag shadowing in an inner scope; no-shadowing design has no distinct inner type
+// DISABLED: relies on tag shadowing in an inner scope; no-shadowing design has no distinct inner
+// type
 TEST_F(PipelineTest, Chapter18_UnionShadowedByIncompleteStruct_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"SRC(
@@ -1158,7 +1148,6 @@ int main(void) {
 )SRC"),
                  "'tag' was declared as a different kind of tag");
 }
-
 
 // --- invalid_types/extra_credit/union_tag_resolution ---
 
@@ -1299,7 +1288,6 @@ int main(void) {
                  "redefinition of 'union u'");
 }
 
-
 // --- invalid_types/extra_credit/union_type_declarations ---
 
 // An array with an incomplete element type is rejected even when the array is
@@ -1383,7 +1371,6 @@ int main(void) {
 )SRC"),
                  "member 'self' has incomplete type 'union u'");
 }
-
 
 // --- invalid_types/incompatible_types ---
 
@@ -1554,7 +1541,6 @@ int main(void) {
 )SRC"),
                  "cannot convert '.*' to '.*' when");
 }
-
 
 // --- invalid_types/initializers ---
 
@@ -1808,7 +1794,6 @@ int *p = x;
 )SRC"),
                  "cannot initialize 'int \\*' with this initializer");
 }
-
 
 // --- invalid_types/invalid_incomplete_structs ---
 
@@ -2111,7 +2096,6 @@ int main(void) {
                  "invalid application of 'sizeof' to an incomplete type");
 }
 
-
 // --- invalid_types/invalid_lvalues ---
 
 TEST_F(PipelineTest, Chapter18_LvaluesAddressOfNonLvalue_Neg)
@@ -2134,7 +2118,8 @@ int main(void) {
                  "cannot take the address of an rvalue");
 }
 
-// `return_struct()` is an rvalue, so the nested member `.b.x` is a non-lvalue: reject the assignment.
+// `return_struct()` is an rvalue, so the nested member `.b.x` is a non-lvalue: reject the
+// assignment.
 TEST_F(PipelineTest, Chapter18_LvaluesAssignNestedNonLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"SRC(
@@ -2201,7 +2186,6 @@ int main(void) {
 )SRC"),
                  "expression is not assignable");
 }
-
 
 // --- invalid_types/invalid_member_operators ---
 
@@ -2339,7 +2323,6 @@ int main(void) {
                  "member reference type '.*' is not a pointer to a structure or union");
 }
 
-
 // --- invalid_types/invalid_struct_declaration ---
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationDuplicateMemberName_Neg)
@@ -2427,7 +2410,6 @@ struct s {
 )SRC"),
                  "member 'x' has incomplete type 'void'");
 }
-
 
 // --- invalid_types/scalar_required ---
 
@@ -2616,7 +2598,6 @@ int main(void) {
                  "invalid operands to '\\[\\]'");
 }
 
-
 // --- invalid_types/tag_resolution ---
 
 TEST_F(PipelineTest, Chapter18_TagResolutionAddressOfWrongType_Neg)
@@ -2785,7 +2766,6 @@ int main(void) {
                  "redefinition of 'struct s'");
 }
 
-
 // --- invalid_parse/extra_credit ---
 
 TEST_F(PipelineTest, Chapter18_ExtraCreditUnionMemberIsFunction_Neg)
@@ -2800,7 +2780,6 @@ union s {
 )SRC"),
                  "member 'foo' has function type 'int \\(void\\)'");
 }
-
 
 // --- invalid_parse ---
 

@@ -143,8 +143,8 @@ static int fp_compare_cond(Tac_BinaryOperator op, bool *swap)
 
 void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
-    bool d             = x86_is_double(t);
-    const Tac_Val *a   = in->u.binary.src1, *b = in->u.binary.src2;
+    bool d           = x86_is_double(t);
+    const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     const Tac_Val *dst = in->u.binary.dst;
     bool swap;
     int cond = fp_compare_cond(in->u.binary.op, &swap);
@@ -190,8 +190,8 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     // Two-operand form, as for integers: in the destination's register unless that is
     // b's, when an add or multiply swaps the operands and the others go through xmm14.
     int bs = var_reg(g, b), rd = var_reg(g, dst);
-    if (bs && bs == rd && bs != var_reg(g, a) && (op == X86_ADDSD || op == X86_ADDSS ||
-                                                  op == X86_MULSD || op == X86_MULSS)) {
+    if (bs && bs == rd && bs != var_reg(g, a) &&
+        (op == X86_ADDSD || op == X86_ADDSS || op == X86_MULSD || op == X86_MULSS)) {
         const Tac_Val *x = a;
         a                = b;
         b                = x;
@@ -292,7 +292,7 @@ static void gen_u64_to_fp(Gen *g, bool d)
 // has 2^63 subtracted first and the top bit set after.
 static void gen_fp_to_u64(Gen *g, bool d)
 {
-    X86_Op cvt   = d ? X86_CVTTSD2SI : X86_CVTTSS2SI;
+    X86_Op cvt     = d ? X86_CVTTSD2SI : X86_CVTTSS2SI;
     uint64_t two63 = d ? 0x43e0000000000000ULL : 0x5f000000;
     char big[32], done[32];
     new_label(big);
@@ -335,8 +335,8 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
     if (dfp) {
         // A register holds an unsigned int zero-extended to 64 bits, a narrower type
         // extended to 32, as a 32-bit load leaves them.
-        bool d = x86_is_double(dt);
-        bool u = kind == TAC_INSTRUCTION_UINT_TO_DOUBLE || kind == TAC_INSTRUCTION_UINT_TO_FLOAT;
+        bool d   = x86_is_double(dt);
+        bool u   = kind == TAC_INSTRUCTION_UINT_TO_DOUBLE || kind == TAC_INSTRUCTION_UINT_TO_FLOAT;
         int size = x86_size(st);
         if (u && size == 8) {
             load_val(g, T0, src);

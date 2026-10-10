@@ -31,8 +31,8 @@ static void emit_operand(FILE *out, const AVR_Operand *o)
 {
     static const char *const ptr_name[] = { [AVR_X] = "X", [AVR_Y] = "Y", [AVR_Z] = "Z" };
     static const char *const modifier[] = {
-        [AVR_MOD_NONE] = NULL,          [AVR_MOD_LO8] = "lo8",       [AVR_MOD_HI8] = "hi8",
-        [AVR_MOD_HH8] = "hh8",          [AVR_MOD_PM_LO8] = "pm_lo8", [AVR_MOD_PM_HI8] = "pm_hi8",
+        [AVR_MOD_NONE] = NULL, [AVR_MOD_LO8] = "lo8",       [AVR_MOD_HI8] = "hi8",
+        [AVR_MOD_HH8] = "hh8", [AVR_MOD_PM_LO8] = "pm_lo8", [AVR_MOD_PM_HI8] = "pm_hi8",
         [AVR_MOD_PM] = "pm",
     };
     switch (o->kind) {

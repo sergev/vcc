@@ -145,7 +145,7 @@ int gen_ll_compare(Gen *g, const Tac_Instruction *in)
         const Tac_Val *x = swap ? b : a, *y = swap ? a : b;
         bool less = op == TAC_BINARY_LESS_THAN || op == TAC_BINARY_LESS_THAN_UNSIGNED ||
                     op == TAC_BINARY_GREATER_THAN || op == TAC_BINARY_GREATER_THAN_UNSIGNED;
-        int r = use_word(g, T0, x, t, 0);
+        int r     = use_word(g, T0, x, t, 0);
         emit2(g, A32_CMP, a32_reg(r), a32_reg(use_word(g, T1, y, t, 0)));
         r = use_word(g, T0, x, t, 1);
         op3(g, A32_SBC, T0, r, a32_reg(use_word(g, T1, y, t, 1)), true);
@@ -312,8 +312,7 @@ void gen_ll_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instr
     store_pair(g, dst, A32_R0, A32_R0 + 1);
 }
 
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst)
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_INT_TO_DOUBLE:

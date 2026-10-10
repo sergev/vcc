@@ -10,8 +10,7 @@
 
 _Noreturn void __assert_rtn(const char *func, const char *file, int line, const char *expr);
 
-#define assert(expr) \
-    ((expr) ? (void)0 : __assert_rtn(__func__, __FILE__, __LINE__, #expr))
+#define assert(expr) ((expr) ? (void)0 : __assert_rtn(__func__, __FILE__, __LINE__, #expr))
 
 #endif
 

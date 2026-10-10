@@ -92,14 +92,14 @@ TEST_F(Arm32Test, RunStructInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *decls = R"(
+    const char *decls  = R"(
 struct s3 { char a, b, c; };
 struct s6 { short a, b, c; };
 struct s12 { int a, b, c; };
 struct s16 { long long a; int b; };
 struct s40 { int a[10]; };
 )";
-    std::string ours  = std::string(decls) + R"(
+    std::string ours   = std::string(decls) + R"(
 int theirs(struct s3 a, struct s12 b, struct s16 c, struct s40 d, int x, struct s6 e);
 int split(int x, struct s12 b);
 struct s3 theirs3(int k);

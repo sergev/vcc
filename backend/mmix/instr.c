@@ -19,8 +19,8 @@ static bool same_form(const Tac_Type *st, const Tac_Type *dt)
         return mmix_is_float(st) == mmix_is_float(dt);
     // A narrow value of the other signedness is extended the other way: (int)u must
     // sign-extend what was zero-extended.
-    if (mmix_type_size(dt) == mmix_type_size(st) && mmix_type_size(dt) < 8 &&
-        mmix_is_scalar(st) && mmix_is_scalar(dt) && mmix_is_unsigned(st) != mmix_is_unsigned(dt))
+    if (mmix_type_size(dt) == mmix_type_size(st) && mmix_type_size(dt) < 8 && mmix_is_scalar(st) &&
+        mmix_is_scalar(dt) && mmix_is_unsigned(st) != mmix_is_unsigned(dt))
         return false;
     return mmix_type_size(dt) >= mmix_type_size(st);
 }
@@ -197,7 +197,7 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Mmix_Op zs, bool is_u
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
     const Tac_Type *t = operand_type(g, a, b);
     is_unsigned |= t->kind == TAC_TYPE_POINTER;
-    t = with_sign(t, is_unsigned);
+    t     = with_sign(t, is_unsigned);
     int x = use_val(g, a, REG_A, t), d = def_reg(g, in->u.binary.dst, REG_A);
     if (!is_zero(b) || (is_unsigned && zs != MMIX_ZSZ && zs != MMIX_ZSNZ)) {
         Mmix_Operand z = val_operand(g, b, REG_B, t);
@@ -211,11 +211,10 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Mmix_Op zs, bool is_u
 // Signed division: div rounds the quotient down and leaves a remainder with the
 // divisor's sign; C truncates.  When the remainder is nonzero and the operands' signs
 // differ, the quotient is one more and the remainder one divisor less.
-static void gen_signed_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t,
-                              bool remainder)
+static void gen_signed_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool remainder)
 {
-    int a = use_val(g, in->u.binary.src1, REG_A, t);
-    int b = use_val(g, in->u.binary.src2, REG_B, t);
+    int a          = use_val(g, in->u.binary.src1, REG_A, t);
+    int b          = use_val(g, in->u.binary.src2, REG_B, t);
     Mmix_Operand A = mmix_reg(REG_A), B = mmix_reg(b), C = mmix_reg(REG_C), T = mmix_reg(MMIX_TMP);
     emit3(g, MMIX_DIV, C, mmix_reg(a), B);
     emit2(g, MMIX_GET, T, mmix_special(MMIX_rR));
@@ -315,7 +314,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     }
     // A shift count has a type of its own.  A constant first operand of a commutative
     // operation goes second, where a byte is the immediate.
-    bool shift       = mop == MMIX_SLU || mop == MMIX_SR || mop == MMIX_SRU;
+    bool shift           = mop == MMIX_SLU || mop == MMIX_SR || mop == MMIX_SRU;
     const Tac_Val *a_val = in->u.binary.src1, *b = in->u.binary.src2;
     bool commutes = mop == MMIX_ADDU || mop == MMIX_MULU || mop == MMIX_AND || mop == MMIX_OR ||
                     mop == MMIX_XOR;
@@ -335,14 +334,15 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
             return;
         }
     }
-    int a = use_val(g, a_val, REG_A, t);
-    Mmix_Operand z   = val_operand(g, b, REG_B, shift ? val_type(g, b) : t);
-    int d            = def_reg(g, in->u.binary.dst, REG_A);
+    int a          = use_val(g, a_val, REG_A, t);
+    Mmix_Operand z = val_operand(g, b, REG_B, shift ? val_type(g, b) : t);
+    int d          = def_reg(g, in->u.binary.dst, REG_A);
     emit3(g, mop, mmix_reg(d), mmix_reg(a), z);
     if (op == TAC_BINARY_REMAINDER_UNSIGNED)
         emit2(g, MMIX_GET, mmix_reg(d), mmix_special(MMIX_rR));
     int size = mmix_type_size(val_type(g, in->u.binary.dst));
-    if (size < 4 && (op == TAC_BINARY_ADD || op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_MULTIPLY))
+    if (size < 4 &&
+        (op == TAC_BINARY_ADD || op == TAC_BINARY_SUBTRACT || op == TAC_BINARY_MULTIPLY))
         canonical = false;
     def_done(g, d, in->u.binary.dst, canonical || size == 8);
 }
@@ -350,8 +350,8 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 // Branch to TAC label `target` when `cond` is zero (or nonzero).
 static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char *target)
 {
-    int r = mmix_is_fp(val_type(g, cond)) ? gen_fp_test(g, cond, REG_A)
-                                          : use_val(g, cond, REG_A, NULL);
+    int r =
+        mmix_is_fp(val_type(g, cond)) ? gen_fp_test(g, cond, REG_A) : use_val(g, cond, REG_A, NULL);
     char *l = label_name(target);
     emit2(g, if_zero ? MMIX_BZ : MMIX_BNZ, mmix_reg(r), mmix_label(l));
     xfree(l);
@@ -396,7 +396,7 @@ static void gen_load(Gen *g, const Tac_Val *ptr, const Tac_Val *dst, bool byte)
         copy_bytes(g, access_size(g, ptr, dst), mmix_type_align(t));
         return;
     }
-    int p      = use_val(g, ptr, REG_B, NULL), d = def_reg(g, dst, REG_A);
+    int p = use_val(g, ptr, REG_B, NULL), d = def_reg(g, dst, REG_A);
     Mmix_Op op = byte ? load_op_ext(1, !mmix_is_unsigned(t)) : load_op(t);
     emit3(g, op, mmix_reg(d), mmix_reg(p), mmix_imm(0));
     def_done(g, d, dst, true);
@@ -502,8 +502,7 @@ static const Tac_Type *scalar_at(const Tac_Type *t, int offset, int size)
 // Member `offset` of aggregate `name` = src, in src's width (a byte for the BYTE form).
 // A constant takes the type of the member there: a zero filling a pointer member may
 // come as an int.
-static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset,
-                               bool byte)
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int offset, bool byte)
 {
     const Tac_Type *t = val_type(g, src);
     if (src->kind == TAC_VAL_VAR && !mmix_is_scalar(t)) {
@@ -546,7 +545,8 @@ static bool read_once(const Gen *g, const Tac_Val *dst)
 // Whether `in` is a conditional jump on variable `v`.
 static bool jumps_on(const Tac_Instruction *in, const Tac_Val *v)
 {
-    if (!in || (in->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && in->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+    if (!in ||
+        (in->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && in->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *c = in->u.jump_if_zero.condition;
     return c->kind == TAC_VAL_VAR && strcmp(c->u.var_name, v->u.var_name) == 0;
@@ -652,7 +652,8 @@ static bool gen_not_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruct
         !jumps_on(next, in->u.unary.dst) || !read_once(g, in->u.unary.dst))
         return false;
     const Tac_Val *src = in->u.unary.src;
-    int r = mmix_is_fp(val_type(g, src)) ? gen_fp_test(g, src, REG_A) : use_val(g, src, REG_A, NULL);
+    int r =
+        mmix_is_fp(val_type(g, src)) ? gen_fp_test(g, src, REG_A) : use_val(g, src, REG_A, NULL);
     branch_to(g, next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ? MMIX_BNZ : MMIX_BZ, r,
               next->u.jump_if_zero.target);
     return true;
@@ -689,9 +690,9 @@ static bool gen_indexed_access(Gen *g, const Tac_Instruction *in, const Tac_Inst
     } else if (in->u.add_ptr.scale != 1) {
         return false;
     }
-    int p          = use_val(g, in->u.add_ptr.ptr, REG_B, NULL);
-    Mmix_Operand z = index->kind == TAC_VAL_CONSTANT ? mmix_imm(off)
-                                                     : mmix_reg(use_val(g, index, REG_C, NULL));
+    int p = use_val(g, in->u.add_ptr.ptr, REG_B, NULL);
+    Mmix_Operand z =
+        index->kind == TAC_VAL_CONSTANT ? mmix_imm(off) : mmix_reg(use_val(g, index, REG_C, NULL));
     if (load) {
         const Tac_Type *t = val_type(g, val);
         int d             = def_reg(g, val, REG_A);
@@ -809,11 +810,11 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
             internal_error("mmix: %s: the address of a constant", gen_name(g));
-    {
-        int d = def_reg(g, in->u.get_address.dst, REG_A);
-        address_of(g, d, in->u.get_address.src->u.var_name, 0);
-        def_done(g, d, in->u.get_address.dst, true);
-    }
+        {
+            int d = def_reg(g, in->u.get_address.dst, REG_A);
+            address_of(g, d, in->u.get_address.src->u.var_name, 0);
+            def_done(g, d, in->u.get_address.dst, true);
+        }
         break;
     case TAC_INSTRUCTION_LOAD:
     case TAC_INSTRUCTION_LOAD_BYTE:
@@ -821,8 +822,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
         break;
     case TAC_INSTRUCTION_STORE:
     case TAC_INSTRUCTION_STORE_BYTE:
-        gen_store(g, in->u.store.src, in->u.store.dst_ptr,
-                  in->kind == TAC_INSTRUCTION_STORE_BYTE);
+        gen_store(g, in->u.store.src, in->u.store.dst_ptr, in->kind == TAC_INSTRUCTION_STORE_BYTE);
         break;
     case TAC_INSTRUCTION_ADD_PTR:
         gen_add_ptr(g, in);

@@ -62,8 +62,7 @@ TEST_F(Msp430Test, RunIllegalInstructionFails)
     std::string out;
     {
         ::testing::ScopedFakeTestPartResultReporter intercept(
-            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
-            &results);
+            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD, &results);
         out = RunAssembly(R"(    .text
     .globl  main
 main:
@@ -153,8 +152,8 @@ int main(void)
 }
 
 static const int16_t ops16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
-static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7,
-                                 0, 1, -1, 123456789, 65536, -65537 };
+static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7, 0, 1,
+                                 -1,         123456789,       65536,  -65537 };
 
 // Division and remainder through the __mspabi_div*/rem* helpers, and products through
 // __mspabi_mpyi and __mspabi_mpyl, over operands with every sign and the extremes; the
@@ -203,7 +202,8 @@ int main(void)
             if (y != 0)
                 expected += std::to_string((uint16_t)x / (uint16_t)y) + " " +
                             std::to_string((uint16_t)x % (uint16_t)y) + " ";
-            expected += std::to_string((int16_t)(uint16_t)((uint32_t)(uint16_t)x * (uint16_t)y)) + " ";
+            expected +=
+                std::to_string((int16_t)(uint16_t)((uint32_t)(uint16_t)x * (uint16_t)y)) + " ";
             int32_t p = ops32[i], q = ops32[j];
             if (q != 0 && !(p == INT32_MIN && q == -1))
                 expected += std::to_string(p / q) + " " + std::to_string(p % q) + " ";
@@ -253,7 +253,7 @@ TEST_F(Msp430Test, RuntimeLongShifts)
 {
     SKIP_IF_NO_MSP430_TOOLS();
     SKIP_IF_NO_MSP430_GCC();
-    std::string src = std::string(print_c) + R"(
+    std::string src          = std::string(print_c) + R"(
 volatile long v[] = { -2023406815L, 0x12345678L, 1, -1 };
 int main(void)
 {
@@ -365,9 +365,11 @@ TEST_F(Msp430Test, RunSetjmpLongjmp)
 TEST_F(Msp430Test, RunSetjmpLongjmpGccClang)
 {
     SKIP_IF_NO_MSP430_TOOLS();
-    std::string src = setjmp_program;
-    std::vector<std::string> flags = { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I",
-                                       TEST_MODEL_INCLUDE_DIR, "-I", TEST_COMMON_INCLUDE_DIR };
+    std::string src                = setjmp_program;
+    std::vector<std::string> flags = { "-O1", "-nostdinc",
+                                       "-I",  TEST_INCLUDE_DIR,
+                                       "-I",  TEST_MODEL_INCLUDE_DIR,
+                                       "-I",  TEST_COMMON_INCLUDE_DIR };
     EXPECT_EQ("", Run("", "crt0.o", &src, flags, ".gcc"));
     EXPECT_EQ(42, exit_status);
     // cppcheck-suppress knownConditionTrueFalse ; depends on the configured toolchain

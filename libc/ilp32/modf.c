@@ -8,7 +8,7 @@
 
 double modf(double x, double *iptr)
 {
-    double i = x, frac;
+    double i         = x, frac;
     unsigned long *w = (unsigned long *)&i;
     int e            = (int)((w[1] >> 20) & 0x7ff) - 1023; /* unbiased exponent */
 

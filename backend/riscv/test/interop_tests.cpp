@@ -3,8 +3,8 @@
 // one side compiled by us and the other by clang, in both directions.  The caller
 // returns the number of the first check that failed, or 0.  Built for both widths.
 //
-#include "riscv_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "riscv_test.h"
 
 static const std::string kDecls = R"(
 struct I2 { long a, b; };
@@ -273,12 +273,13 @@ TEST_F(RiscvTest, RunAllocaWithClang)
 {
     SKIP_IF_NO_RISCV_TOOLS();
     SKIP_IF_NO_RISCV_CLANG();
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned long);
 long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
                long j);
 int their_check(void);
-)") + AllocaSum("our_sum") + R"(
+)") + AllocaSum("our_sum") +
+                         R"(
 int main(void)
 {
     long *q = __builtin_alloca(64);
@@ -291,7 +292,8 @@ int main(void)
 long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
              long j);
 volatile long seed = 7;
-)") + AllocaSum("their_sum") + R"(
+)") + AllocaSum("their_sum") +
+                         R"(
 int their_check(void)
 {
     long s = seed;

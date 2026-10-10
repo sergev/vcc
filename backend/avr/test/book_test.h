@@ -47,8 +47,7 @@ protected:
                    "Chapter11_LargeConstants") == 0)
             GTEST_SKIP() << "clang -O0 miscompiles a long long compare";
         intercept.reset(new ::testing::ScopedFakeTestPartResultReporter(
-            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
-            &results));
+            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD, &results));
     }
 
     // Report again every result but the failures of the book's own expectations.
@@ -72,14 +71,10 @@ protected:
     std::string CompileAndRunBook(const std::string &src)
     {
         static const char *const clang_o1[] = {
-            "Chapter15_ArrayOfPointersToArrays",
-            "Chapter18_AutoStructInitializers",
-            "Chapter18_CompoundAssignStructMembers",
-            "Chapter18_IncrStructMembers",
-            "Chapter18_ScalarMemberAccessLinkedList",
-            "Chapter18_ScalarMemberAccessNestedStruct",
-            "Chapter18_StructCopyWithArrowOperator",
-            nullptr,
+            "Chapter15_ArrayOfPointersToArrays",      "Chapter18_AutoStructInitializers",
+            "Chapter18_CompoundAssignStructMembers",  "Chapter18_IncrStructMembers",
+            "Chapter18_ScalarMemberAccessLinkedList", "Chapter18_ScalarMemberAccessNestedStruct",
+            "Chapter18_StructCopyWithArrowOperator",  nullptr,
         };
         const char *opt  = "-O0";
         const char *name = ::testing::UnitTest::GetInstance()->current_test_info()->name();

@@ -63,7 +63,8 @@ TEST_F(RelaxTest, ForwardBranchInRange)
     breq    .Lt
 .Lt:
     ret
-)", Relaxed(AVR_BREQ, 0, 63, false));
+)",
+              Relaxed(AVR_BREQ, 0, 63, false));
 }
 
 TEST_F(RelaxTest, ForwardBranchOutOfRange)
@@ -85,7 +86,8 @@ TEST_F(RelaxTest, BackwardBranchInRange)
 .Lt:
     brlt    .Lt
     ret
-)", Relaxed(AVR_BRLT, 63, 0, true));
+)",
+              Relaxed(AVR_BRLT, 63, 0, true));
 }
 
 TEST_F(RelaxTest, BackwardBranchOutOfRange)
@@ -107,12 +109,14 @@ TEST_F(RelaxTest, JumpInRange)
     rjmp    .Lt
 .Lt:
     ret
-)", Relaxed(AVR_RJMP, 0, 2047, false));
+)",
+              Relaxed(AVR_RJMP, 0, 2047, false));
     EXPECT_EQ(R"(f:
 .Lt:
     rjmp    .Lt
     ret
-)", Relaxed(AVR_RJMP, 2047, 0, true));
+)",
+              Relaxed(AVR_RJMP, 2047, 0, true));
 }
 
 TEST_F(RelaxTest, JumpOutOfRange)
@@ -121,12 +125,14 @@ TEST_F(RelaxTest, JumpOutOfRange)
     jmp     .Lt
 .Lt:
     ret
-)", Relaxed(AVR_RJMP, 0, 2048, false));
+)",
+              Relaxed(AVR_RJMP, 0, 2048, false));
     EXPECT_EQ(R"(f:
 .Lt:
     jmp     .Lt
     ret
-)", Relaxed(AVR_RJMP, 2048, 0, true));
+)",
+              Relaxed(AVR_RJMP, 2048, 0, true));
 }
 
 // A relaxed branch whose rjmp is itself out of reach becomes a jmp.
@@ -152,8 +158,7 @@ TEST_F(AvrTest, RunLongLoop)
     EXPECT_EQ("1900\n", CompileAndRunBook(R"(int main(void) {
     int sum = 0;
     for (int i = 0; i < 10; i++) {
-)" +
-                                          body + R"(    }
+)" + body + R"(    }
     return sum;
 }
 )"));

@@ -20,7 +20,7 @@ typedef long *va_list; /* one machine word per argument */
  * Point ap just past the last named argument.  Parameters are laid out in
  * ascending words, so the first variadic argument is at &last + 1.
  */
-#define va_start(ap, last) ((ap) = (va_list)&(last) + 1)
+#define va_start(ap, last) ((ap) = (va_list) & (last) + 1)
 
 /* Fetch the next argument as type T and advance one word. */
 #define va_arg(ap, T) (*(T *)(void *)((ap)++))

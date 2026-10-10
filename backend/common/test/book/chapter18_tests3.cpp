@@ -729,7 +729,6 @@ int chk1(struct bytesize19 s19, struct bytesize20 s20, struct bytesize21 s21, st
 )PROG"));
 }
 
-
 // BESM-6: static struct inner instead of calloc for the nested pointer member.
 TEST_F(BookTest, Chapter18_AccessRetvalMembers)
 {

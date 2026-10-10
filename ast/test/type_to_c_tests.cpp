@@ -7,15 +7,9 @@
 
 class TypeToC : public ::testing::Test {
 protected:
-    void TearDown() override
-    {
-        xfree_all();
-    }
+    void TearDown() override { xfree_all(); }
 
-    static Type *T(TypeKind kind)
-    {
-        return new_type(kind, __func__, __FILE__, __LINE__);
-    }
+    static Type *T(TypeKind kind) { return new_type(kind, __func__, __FILE__, __LINE__); }
 
     static Type *Ptr(Type *target, TypeQualifier *quals = nullptr)
     {
@@ -30,17 +24,17 @@ protected:
         Type *t            = T(TYPE_ARRAY);
         t->u.array.element = element;
         if (n >= 0) {
-            Expr *size                    = new_expression(EXPR_LITERAL);
-            size->u.literal               = new_literal(LITERAL_INT);
-            size->u.literal->u.int_val    = n;
-            t->u.array.size               = size;
+            Expr *size                 = new_expression(EXPR_LITERAL);
+            size->u.literal            = new_literal(LITERAL_INT);
+            size->u.literal->u.int_val = n;
+            t->u.array.size            = size;
         }
         return t;
     }
 
     static Type *Func(Type *ret, std::initializer_list<Type *> params, bool variadic = false)
     {
-        Type *t                  = T(TYPE_FUNCTION);
+        Type *t                   = T(TYPE_FUNCTION);
         t->u.function.return_type = ret;
         t->u.function.variadic    = variadic;
         Param **tail              = &t->u.function.params;
@@ -62,10 +56,7 @@ protected:
         return t;
     }
 
-    static TypeQualifier *Const()
-    {
-        return new_type_qualifier(TYPE_QUALIFIER_CONST);
-    }
+    static TypeQualifier *Const() { return new_type_qualifier(TYPE_QUALIFIER_CONST); }
 
     static std::string C(const Type *t)
     {

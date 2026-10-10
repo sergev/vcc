@@ -102,7 +102,7 @@ protected:
         if (!X86_GNU || !command_available(X86_ASSEMBLER))
             return;
         std::string s_path = QemuScratchPath(".gas.s"), log_path = QemuScratchPath(".gas.log");
-        FILE *f            = fopen(s_path.c_str(), "w");
+        FILE *f = fopen(s_path.c_str(), "w");
         ASSERT_NE(nullptr, f);
         fputs(asm_text.c_str(), f);
         fclose(f);

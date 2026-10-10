@@ -88,7 +88,7 @@ static void test_word(Gen *g, Msp_Operand o, bool byte)
 {
     if (o.kind == MSP_OPND_IMM) {
         emit2(g, MSP_MOV, o, msp_reg(MSP_SCRATCH))->byte = byte;
-        o = msp_reg(MSP_SCRATCH);
+        o                                                = msp_reg(MSP_SCRATCH);
     }
     emit1(g, MSP_TST, o)->byte = byte;
 }
@@ -98,7 +98,7 @@ static void compare_words(Gen *g, Msp_Operand b, Msp_Operand a, bool byte)
 {
     if (a.kind == MSP_OPND_IMM) {
         emit2(g, MSP_MOV, a, msp_reg(MSP_SCRATCH))->byte = byte;
-        a = msp_reg(MSP_SCRATCH);
+        a                                                = msp_reg(MSP_SCRATCH);
     }
     emit2(g, MSP_CMP, b, a)->byte = byte;
 }
@@ -222,8 +222,8 @@ static void gen_arith(Gen *g, Msp_Op first, Msp_Op rest, bool commutative, const
             emit2(g, i == 0 ? first : rest, msp_copy(&wb[i]), msp_copy(&d[i]))->byte = byte;
     } else if (n == 1) {
         emit2(g, MSP_MOV, msp_copy(&wa[0]), msp_reg(MSP_SCRATCH))->byte = byte;
-        emit2(g, first, msp_copy(&wb[0]), msp_reg(MSP_SCRATCH))->byte = byte;
-        emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_copy(&d[0]))->byte = byte;
+        emit2(g, first, msp_copy(&wb[0]), msp_reg(MSP_SCRATCH))->byte   = byte;
+        emit2(g, MSP_MOV, msp_reg(MSP_SCRATCH), msp_copy(&d[0]))->byte  = byte;
     } else {
         // mov and push leave the carry alone.
         int bias = g->sp_bias;
@@ -364,8 +364,8 @@ static void shift_const(Gen *g, Shift sh, const Msp_Operand *d, int n, bool byte
 static void gen_shift(Gen *g, const Tac_Instruction *in, Shift sh)
 {
     const Tac_Val *count = in->u.binary.src2, *dst = in->u.binary.dst;
-    int n                = msp_words(val_type(g, dst));
-    bool byte            = val_size(g, dst) == 1;
+    int n     = msp_words(val_type(g, dst));
+    bool byte = val_size(g, dst) == 1;
     // The count first: dst may be where it lives.
     if (count->kind != TAC_VAL_CONSTANT)
         emit2(g, MSP_MOV, val_word(g, count, 0), msp_reg(MSP_SCRATCH))->byte =
@@ -447,8 +447,7 @@ static void mul_const(Gen *g, const Tac_Val *a, uint64_t k)
     for (int i = p.top - 1; i >= 0; i--) {
         emit1(g, MSP_RLA, msp_reg(MSP_SCRATCH));
         if (p.digit[i])
-            emit2(g, p.digit[i] > 0 ? MSP_ADD : MSP_SUB, val_word(g, a, 0),
-                  msp_reg(MSP_SCRATCH));
+            emit2(g, p.digit[i] > 0 ? MSP_ADD : MSP_SUB, val_word(g, a, 0), msp_reg(MSP_SCRATCH));
     }
     if (p.neg) {
         emit1(g, MSP_INV, msp_reg(MSP_SCRATCH));
@@ -458,8 +457,7 @@ static void mul_const(Gen *g, const Tac_Val *a, uint64_t k)
 
 // The constant factor of a 16-bit multiply done inline, its other operand in *a; or
 // false.
-static bool inline_multiply(const Gen *g, const Tac_Instruction *in, const Tac_Val **a,
-                            uint64_t *k)
+static bool inline_multiply(const Gen *g, const Tac_Instruction *in, const Tac_Val **a, uint64_t *k)
 {
     Tac_BinaryOperator op = in->u.binary.op;
     if (op != TAC_BINARY_MULTIPLY && op != TAC_BINARY_MULTIPLY_UNSIGNED)
@@ -512,8 +510,12 @@ static void arith_helper(Gen *g, const Tac_Instruction *in, int n)
         { "__mspabi_remu", "__mspabi_remul", "__mspabi_remull" },
     };
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2;
-    Load l[2]        = { { a, n == 4 ? 8 : 12, n, EXT_TYPE },
-                         { b, n == 4 ? 12 : n == 1 ? 13 : 14, n, EXT_TYPE } };
+    Load l[2] = { { a, n == 4 ? 8 : 12, n, EXT_TYPE },
+                  { b,
+                    n == 4   ? 12
+                    : n == 1 ? 13
+                             : 14,
+                    n, EXT_TYPE } };
     load_vals(g, l, 2);
     call_helper(g, names[arith_row(in->u.binary.op)][n == 1 ? 0 : n == 2 ? 1 : 2]);
     store_val(g, in->u.binary.dst, 12, n);
@@ -668,7 +670,7 @@ static void gen_compare(Gen *g, const Tac_Instruction *in, Cond c, bool swap, co
     new_label(yes);
     new_label(done);
     compare_jump(g, a, b, n, byte, c, is_unsigned, yes);
-    bool dbyte = val_size(g, dst) == 1;
+    bool dbyte                                   = val_size(g, dst) == 1;
     emit1(g, MSP_CLR, val_word(g, dst, 0))->byte = dbyte;
     emit1(g, MSP_JMP, msp_label(done));
     gen_label_block(g, yes);
@@ -913,7 +915,7 @@ static void gen_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size)
 static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Val *index = in->u.add_ptr.index, *p = in->u.add_ptr.ptr, *dst = in->u.add_ptr.dst;
-    int scale            = in->u.add_ptr.scale;
+    int scale     = in->u.add_ptr.scale;
     Msp_Operand d = val_word(g, dst, 0), wp = val_word(g, p, 0);
     if (index->kind == TAC_VAL_CONSTANT) {
         int off = (int)(const_bits(index->u.constant) * (uint64_t)scale);
@@ -927,9 +929,9 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
             emit2(g, MSP_ADD, msp_imm(off & 0xffff), msp_copy(&d));
     } else if (scale_shift(scale) >= 0) {
         // The scaled index in dst when it is a register apart from the pointer, else r15.
-        int k             = scale_shift(scale);
-        bool in_place     = d.kind == MSP_OPND_REG && !same_opnd(&d, &wp);
-        Msp_Operand r     = in_place ? msp_copy(&d) : msp_reg(MSP_SCRATCH);
+        int k              = scale_shift(scale);
+        bool in_place      = d.kind == MSP_OPND_REG && !same_opnd(&d, &wp);
+        Msp_Operand r      = in_place ? msp_copy(&d) : msp_reg(MSP_SCRATCH);
         Msp_Operand index0 = val_word(g, index, 0);
         if (same_opnd(&index0, &r))
             xfree(index0.sym);
@@ -967,8 +969,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int
 }
 
 // dst = member `offset` of aggregate `name`, of `size` bytes.
-static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst,
-                                 int size)
+static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst, int size)
 {
     const Tac_Type *t = val_type(g, dst);
     if (!msp_is_scalar(t)) {
@@ -1000,7 +1001,8 @@ static void gen_cond_jump(Gen *g, bool if_zero, const Tac_Val *cond, const char 
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
 {
     if (!g->uses || !next ||
-        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *dst;
     if (in->kind == TAC_INSTRUCTION_BINARY)
@@ -1134,8 +1136,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
             internal_error("msp430: %s: the address of a constant", gen_name(g));
-        address_of(g, val_word(g, in->u.get_address.dst, 0), in->u.get_address.src->u.var_name,
-                   0);
+        address_of(g, val_word(g, in->u.get_address.dst, 0), in->u.get_address.src->u.var_name, 0);
         break;
     case TAC_INSTRUCTION_LOAD:
         gen_load(g, in->u.load.src_ptr, in->u.load.dst,

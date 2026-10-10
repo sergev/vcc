@@ -7,7 +7,7 @@
 
 typedef int jmp_buf[48];
 
-int            setjmp(jmp_buf env);
+int setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
 
 #endif /* _SETJMP_H */

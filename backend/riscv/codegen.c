@@ -8,8 +8,8 @@
 #include "internal.h"
 #include "xalloc.h"
 
-bool riscv_regalloc = true;
-bool riscv_peephole = true;
+bool riscv_regalloc      = true;
+bool riscv_peephole      = true;
 bool riscv_frame_pointer = false;
 int riscv_xlen           = 8;
 
@@ -123,8 +123,8 @@ static int declared_alignment(const Tac_TopLevel *program, const char *name)
 {
     int a = 0;
     for (const Tac_TopLevel *t = program; t; t = t->next)
-        if (t->kind == TAC_TOPLEVEL_STATIC_VARIABLE && strcmp(t->u.static_variable.name, name) == 0 &&
-            t->u.static_variable.alignment > a)
+        if (t->kind == TAC_TOPLEVEL_STATIC_VARIABLE &&
+            strcmp(t->u.static_variable.name, name) == 0 && t->u.static_variable.alignment > a)
             a = t->u.static_variable.alignment;
     return a;
 }

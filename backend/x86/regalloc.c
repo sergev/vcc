@@ -15,9 +15,9 @@
 // Argument registers, then callee-saved; a value live across a call starts at NARG.
 static const int int_pool[] = { X86_RDI, X86_RSI, X86_RDX, X86_RCX, X86_R8,  X86_R9,
                                 X86_RBX, X86_R12, X86_R13, X86_R14, X86_R15, X86_RBP };
-static const int fp_pool[]  = { X86_XMM0 + 0,  X86_XMM0 + 1,  X86_XMM0 + 2,  X86_XMM0 + 3,
-                                X86_XMM0 + 4,  X86_XMM0 + 5,  X86_XMM0 + 6,  X86_XMM0 + 7,
-                                X86_XMM0 + 8,  X86_XMM0 + 9,  X86_XMM0 + 10, X86_XMM0 + 11,
+static const int fp_pool[]  = { X86_XMM0 + 0,  X86_XMM0 + 1, X86_XMM0 + 2,  X86_XMM0 + 3,
+                                X86_XMM0 + 4,  X86_XMM0 + 5, X86_XMM0 + 6,  X86_XMM0 + 7,
+                                X86_XMM0 + 8,  X86_XMM0 + 9, X86_XMM0 + 10, X86_XMM0 + 11,
                                 X86_XMM0 + 12, X86_XMM0 + 13 };
 
 #define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))
@@ -46,8 +46,7 @@ static const Tac_Type *operand_type(const void *arg, const Tac_Val *v)
     return var >= 0 ? t->flow->types[var] : val_type(t->g, v);
 }
 
-static bool makes_clobber(void *arg, const Flow *f, const Tac_Instruction *in,
-                          const Tac_Val **res)
+static bool makes_clobber(void *arg, const Flow *f, const Tac_Instruction *in, const Tac_Val **res)
 {
     Target *t = arg;
     t->flow   = f;

@@ -8,9 +8,9 @@
 #include "internal.h"
 
 // Encode a C double as a native BESM-6 48-bit floating-point word (see
-// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
-// sign, bits 40-1 = 40-bit two's-complement mantissa.  b6as has no floating-point literal
-// syntax, so the Unix emitter renders every real as its octal bit pattern.
+// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41
+// = sign, bits 40-1 = 40-bit two's-complement mantissa.  b6as has no floating-point literal syntax,
+// so the Unix emitter renders every real as its octal bit pattern.
 static uint64_t unix_real_word(double v)
 {
     if (v == 0.0)
@@ -158,7 +158,7 @@ static void unix_operand(char *buf, size_t n, const Besm_Instr *i)
     if (i->name && i->name[0] == '=') {
         // Copy the octal digits, skipping any grouping spaces Madlen allows.
         const char *src = i->name + 1;
-        char        prefix = '\0';
+        char prefix     = '\0';
         if (*src == ':') {
             // =:<octal> is a Madlen left-aligned octal literal; b6as spells left-align as
             // the prefix-apostrophe form 0'<octal>.  =:64 -> #0'64.
@@ -233,7 +233,7 @@ static const Besm_Instr *emit_unix_z00(FILE *out, const Besm_Instr *z00a, SegKin
 {
     set_segment(out, cur, SEG_DATA);
     const Besm_Instr *z00b = z00a->next;
-    char a[64] = "";
+    char a[64]             = "";
     if (z00b)
         unix_addr(a, sizeof(a), z00b->name, z00b->addr);
     if (z00a->label)

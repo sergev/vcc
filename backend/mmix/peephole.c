@@ -114,7 +114,7 @@ static bool is_load(Mmix_Op op)
 static bool pure(const Mmix_Instr *in)
 {
     if (!writes_x(in) || in->op == MMIX_GET || in->op == MMIX_DIV || in->op == MMIX_DIVU)
-        return false; // div and divu write rR too
+        return false;    // div and divu write rR too
     if (is_load(in->op)) // from the frame only: memory elsewhere may be volatile
         return is_frame_reg(&in->opnd[1]);
     // Signed arithmetic and fix set overflow bits in rA, but not the ones we emit.
@@ -341,7 +341,7 @@ static bool small_value(const Mmix_Instr *in, Mmix_Operand *z)
 static bool conditional_set(Mmix_Func *fn)
 {
     for (Mmix_Block *b = fn->blocks; b; b = b->next) {
-        Mmix_Block *n = b->next;
+        Mmix_Block *n   = b->next;
         Mmix_Instr *jmp = b->tail;
         if (!n || !n->label || !n->next || !n->next->label || !n->head || n->head != n->tail ||
             !jmp || jmp->op != MMIX_JMP || !same_label(&jmp->opnd[0], n->next))
@@ -378,7 +378,7 @@ static bool conditional_set(Mmix_Func *fn)
 static bool branch_over_set(Mmix_Func *fn)
 {
     for (Mmix_Block *b = fn->blocks; b; b = b->next) {
-        Mmix_Block *n = b->next;
+        Mmix_Block *n  = b->next;
         Mmix_Instr *br = b->tail;
         Mmix_Operand z;
         if (!br || !is_branch(br->op) || br->op >= MMIX_PBN || !n || !n->head ||
@@ -503,7 +503,7 @@ static int block_of(const Liveness *lv, const char *label)
 // is not a block of the function; 0 when `in` does not jump.
 static Regs live_at_target(const Liveness *lv, const Mmix_Instr *in)
 {
-    const Mmix_Operand *target = in->op == MMIX_JMP ? &in->opnd[0]
+    const Mmix_Operand *target = in->op == MMIX_JMP  ? &in->opnd[0]
                                  : is_branch(in->op) ? &in->opnd[1]
                                                      : NULL;
     if (!target)
@@ -617,7 +617,7 @@ static bool rewrite_live(const Liveness *lv, Mmix_Block *b, Regs out)
             continue;
         int t = in->opnd[0].reg, x = in->opnd[1].reg;
         // set $t,$x; I reading $t: I reads $x.
-        Mmix_Instr *next = ins[k + 1];
+        Mmix_Instr *next   = ins[k + 1];
         bool next_writes_t = writes_x(next) && next->opnd[0].reg == t;
         if (renamable(next) && reads(next, t) && (!(live[k + 1] & reg_bit(t)) || next_writes_t)) {
             rename_reads(next, t, x);

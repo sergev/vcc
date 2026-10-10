@@ -281,13 +281,20 @@ static void ts_puts(TypeStr *ts, const char *s)
 static void ts_type(TypeStr *ts, const Tac_Type *type)
 {
     static const char *const scalar[] = {
-        [TAC_TYPE_SCHAR] = "schar",   [TAC_TYPE_UCHAR] = "uchar",
-        [TAC_TYPE_SHORT] = "short",   [TAC_TYPE_INT] = "int",
-        [TAC_TYPE_LONG] = "long",     [TAC_TYPE_LONG_LONG] = "long_long",
-        [TAC_TYPE_USHORT] = "ushort", [TAC_TYPE_UINT] = "uint",
-        [TAC_TYPE_ULONG] = "ulong",   [TAC_TYPE_ULONG_LONG] = "ulong_long",
-        [TAC_TYPE_FLOAT] = "float",   [TAC_TYPE_DOUBLE] = "double",
-        [TAC_TYPE_LONG_DOUBLE] = "long_double", [TAC_TYPE_VOID] = "void",
+        [TAC_TYPE_SCHAR]       = "schar",
+        [TAC_TYPE_UCHAR]       = "uchar",
+        [TAC_TYPE_SHORT]       = "short",
+        [TAC_TYPE_INT]         = "int",
+        [TAC_TYPE_LONG]        = "long",
+        [TAC_TYPE_LONG_LONG]   = "long_long",
+        [TAC_TYPE_USHORT]      = "ushort",
+        [TAC_TYPE_UINT]        = "uint",
+        [TAC_TYPE_ULONG]       = "ulong",
+        [TAC_TYPE_ULONG_LONG]  = "ulong_long",
+        [TAC_TYPE_FLOAT]       = "float",
+        [TAC_TYPE_DOUBLE]      = "double",
+        [TAC_TYPE_LONG_DOUBLE] = "long_double",
+        [TAC_TYPE_VOID]        = "void",
     };
     char num[64];
 
@@ -526,41 +533,41 @@ void tac_print_instruction(FILE *fd, const Tac_Instruction *instr, int depth)
         break;
     case TAC_INSTRUCTION_UNARY:
         fprintf(fd, "unary %s\n",
-                instr->u.unary.op == TAC_UNARY_COMPLEMENT          ? "complement"
+                instr->u.unary.op == TAC_UNARY_COMPLEMENT            ? "complement"
                 : instr->u.unary.op == TAC_UNARY_COMPLEMENT_UNSIGNED ? "complement_unsigned"
-                : instr->u.unary.op == TAC_UNARY_NEGATE            ? "negate"
-                : instr->u.unary.op == TAC_UNARY_NEGATE_UNSIGNED   ? "negate_unsigned"
-                : instr->u.unary.op == TAC_UNARY_NEGATE_DOUBLE     ? "negate_double"
-                : instr->u.unary.op == TAC_UNARY_SQRT_DOUBLE       ? "sqrt_double"
-                                                                   : "not");
+                : instr->u.unary.op == TAC_UNARY_NEGATE              ? "negate"
+                : instr->u.unary.op == TAC_UNARY_NEGATE_UNSIGNED     ? "negate_unsigned"
+                : instr->u.unary.op == TAC_UNARY_NEGATE_DOUBLE       ? "negate_double"
+                : instr->u.unary.op == TAC_UNARY_SQRT_DOUBLE         ? "sqrt_double"
+                                                                     : "not");
         break;
     case TAC_INSTRUCTION_BINARY:
         fprintf(fd, "binary %s\n",
-                instr->u.binary.op == TAC_BINARY_ADD                ? "add"
-                : instr->u.binary.op == TAC_BINARY_SUBTRACT         ? "subtract"
-                : instr->u.binary.op == TAC_BINARY_MULTIPLY         ? "multiply"
-                : instr->u.binary.op == TAC_BINARY_DIVIDE           ? "divide"
-                : instr->u.binary.op == TAC_BINARY_REMAINDER        ? "remainder"
-                : instr->u.binary.op == TAC_BINARY_EQUAL            ? "equal"
-                : instr->u.binary.op == TAC_BINARY_NOT_EQUAL        ? "not_equal"
-                : instr->u.binary.op == TAC_BINARY_LESS_THAN        ? "less_than"
-                : instr->u.binary.op == TAC_BINARY_LESS_OR_EQUAL    ? "less_or_equal"
-                : instr->u.binary.op == TAC_BINARY_GREATER_THAN     ? "greater_than"
-                : instr->u.binary.op == TAC_BINARY_GREATER_OR_EQUAL ? "greater_or_equal"
-                : instr->u.binary.op == TAC_BINARY_BITWISE_AND      ? "bitwise_and"
-                : instr->u.binary.op == TAC_BINARY_BITWISE_OR       ? "bitwise_or"
-                : instr->u.binary.op == TAC_BINARY_BITWISE_XOR      ? "bitwise_xor"
-                : instr->u.binary.op == TAC_BINARY_LEFT_SHIFT       ? "left_shift"
-                : instr->u.binary.op == TAC_BINARY_ADD_DOUBLE       ? "add_double"
-                : instr->u.binary.op == TAC_BINARY_SUBTRACT_DOUBLE  ? "subtract_double"
-                : instr->u.binary.op == TAC_BINARY_MULTIPLY_DOUBLE  ? "multiply_double"
-                : instr->u.binary.op == TAC_BINARY_DIVIDE_DOUBLE    ? "divide_double"
-                : instr->u.binary.op == TAC_BINARY_LESS_THAN_DOUBLE ? "less_than_double"
+                instr->u.binary.op == TAC_BINARY_ADD                    ? "add"
+                : instr->u.binary.op == TAC_BINARY_SUBTRACT             ? "subtract"
+                : instr->u.binary.op == TAC_BINARY_MULTIPLY             ? "multiply"
+                : instr->u.binary.op == TAC_BINARY_DIVIDE               ? "divide"
+                : instr->u.binary.op == TAC_BINARY_REMAINDER            ? "remainder"
+                : instr->u.binary.op == TAC_BINARY_EQUAL                ? "equal"
+                : instr->u.binary.op == TAC_BINARY_NOT_EQUAL            ? "not_equal"
+                : instr->u.binary.op == TAC_BINARY_LESS_THAN            ? "less_than"
+                : instr->u.binary.op == TAC_BINARY_LESS_OR_EQUAL        ? "less_or_equal"
+                : instr->u.binary.op == TAC_BINARY_GREATER_THAN         ? "greater_than"
+                : instr->u.binary.op == TAC_BINARY_GREATER_OR_EQUAL     ? "greater_or_equal"
+                : instr->u.binary.op == TAC_BINARY_BITWISE_AND          ? "bitwise_and"
+                : instr->u.binary.op == TAC_BINARY_BITWISE_OR           ? "bitwise_or"
+                : instr->u.binary.op == TAC_BINARY_BITWISE_XOR          ? "bitwise_xor"
+                : instr->u.binary.op == TAC_BINARY_LEFT_SHIFT           ? "left_shift"
+                : instr->u.binary.op == TAC_BINARY_ADD_DOUBLE           ? "add_double"
+                : instr->u.binary.op == TAC_BINARY_SUBTRACT_DOUBLE      ? "subtract_double"
+                : instr->u.binary.op == TAC_BINARY_MULTIPLY_DOUBLE      ? "multiply_double"
+                : instr->u.binary.op == TAC_BINARY_DIVIDE_DOUBLE        ? "divide_double"
+                : instr->u.binary.op == TAC_BINARY_LESS_THAN_DOUBLE     ? "less_than_double"
                 : instr->u.binary.op == TAC_BINARY_LESS_OR_EQUAL_DOUBLE ? "less_or_equal_double"
                 : instr->u.binary.op == TAC_BINARY_GREATER_THAN_DOUBLE  ? "greater_than_double"
                 : instr->u.binary.op == TAC_BINARY_GREATER_OR_EQUAL_DOUBLE
                     ? "greater_or_equal_double"
-                                                                    : "right_shift");
+                    : "right_shift");
         break;
     case TAC_INSTRUCTION_COPY:
         fprintf(fd, "copy\n");

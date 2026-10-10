@@ -31,8 +31,8 @@
 typedef uint64_t Regs;
 
 #define BIT(r)    (1ull << (r))
-#define CORE_ARGS 0xfull                     // r0-r3
-#define VFP_ARGS  (0xffffull << A32_S0)      // s0-s15
+#define CORE_ARGS 0xfull                // r0-r3
+#define VFP_ARGS  (0xffffull << A32_S0) // s0-s15
 #define SCRATCH   (BIT(T0) | BIT(T1) | BIT(T2) | 0xfull << F0)
 
 static Regs reg_set(int reg, A32_Width w)
@@ -225,8 +225,9 @@ static Regs live_before(const A32_Block *b, Regs live)
     int n = 0;
     for (const A32_Instr *in = b->head; in; in = in->next)
         n++;
-    const A32_Instr **list = xalloc((n ? n : 1) * sizeof(A32_Instr *), __func__, __FILE__, __LINE__);
-    n                      = 0;
+    const A32_Instr **list =
+        xalloc((n ? n : 1) * sizeof(A32_Instr *), __func__, __FILE__, __LINE__);
+    n = 0;
     for (const A32_Instr *in = b->head; in; in = in->next)
         list[n++] = in;
     while (n > 0)
@@ -260,11 +261,11 @@ static void compute_liveness(A32_Func *fn)
     free_liveness();
     for (const A32_Block *b = fn->blocks; b; b = b->next)
         live_info.n++;
-    size_t n           = live_info.n ? live_info.n : 1;
-    live_info.blocks   = xalloc(n * sizeof(A32_Block *), __func__, __FILE__, __LINE__);
-    live_info.in       = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
-    live_info.out      = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
-    int i              = 0;
+    size_t n         = live_info.n ? live_info.n : 1;
+    live_info.blocks = xalloc(n * sizeof(A32_Block *), __func__, __FILE__, __LINE__);
+    live_info.in     = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
+    live_info.out    = xalloc(n * sizeof(Regs), __func__, __FILE__, __LINE__);
+    int i            = 0;
     for (A32_Block *b = fn->blocks; b; b = b->next, i++) {
         live_info.blocks[i] = b;
         live_info.in[i] = live_info.out[i] = 0;
@@ -274,8 +275,8 @@ static void compute_liveness(A32_Func *fn)
         changed = false;
         for (i = live_info.n - 1; i >= 0; i--) {
             const A32_Block *b = live_info.blocks[i];
-            Regs out = falls_through(b) && i + 1 < live_info.n ? live_info.in[i + 1] : 0;
-            Regs in  = live_before(b, out);
+            Regs out           = falls_through(b) && i + 1 < live_info.n ? live_info.in[i + 1] : 0;
+            Regs in            = live_before(b, out);
             if (in != live_info.in[i] || out != live_info.out[i])
                 changed = true;
             live_info.in[i]  = in;
@@ -450,8 +451,8 @@ static bool forward_move(A32_Instr **link)
 // could go to another register.
 static bool computes(const A32_Instr *in)
 {
-    if (!def_operand(in, 0) || in->cond != A32_AL || in->op == A32_UMULL ||
-        in->op == A32_LDRD || reads_dest(in))
+    if (!def_operand(in, 0) || in->cond != A32_AL || in->op == A32_UMULL || in->op == A32_LDRD ||
+        reads_dest(in))
         return false;
     int r = in->opnd[0].reg;
     return r != A32_SP && r != A32_PC && r < A32_VREG;
@@ -602,7 +603,7 @@ static bool delete_reload(A32_Instr *st)
                 delete_at(link);
             } else {
                 n->op = load == A32_LDR ? A32_MOV : v->width == A32_D ? A32_VMOV_F64 : A32_VMOV_F32;
-                n->opnd[1] = *v;
+                n->opnd[1]     = *v;
                 n->opnd[1].sym = NULL;
             }
             return true;
@@ -645,8 +646,8 @@ static bool fold_address(A32_Instr **link)
         m->reg = o[1].reg;
         m->imm = off;
     } else if (add->op == A32_ADD && m->imm == 0 && n->op != A32_VLDR && n->op != A32_VSTR) {
-        bool word  = n->op == A32_LDR || n->op == A32_STR || n->op == A32_LDRB || n->op == A32_STRB;
-        int shift  = 0;
+        bool word = n->op == A32_LDR || n->op == A32_STR || n->op == A32_LDRB || n->op == A32_STRB;
+        int shift = 0;
         if (o[2].kind == A32_OPND_SHIFT) {
             if (o[2].sub != A32_SHIFT_LSL || o[2].reg2 >= 0 || !word)
                 return false;
@@ -678,9 +679,10 @@ static bool shift_operand(const A32_Instr *in, A32_Operand *sh)
     if ((in->op != A32_LSL && in->op != A32_LSR && in->op != A32_ASR) || !is_reg(&o[1]) ||
         o[2].kind != A32_OPND_IMM || o[2].imm < 1 || o[2].imm > 31)
         return false;
-    *sh = a32_shift(o[1].reg, in->op == A32_LSL   ? A32_SHIFT_LSL
-                              : in->op == A32_LSR ? A32_SHIFT_LSR
-                                                  : A32_SHIFT_ASR,
+    *sh = a32_shift(o[1].reg,
+                    in->op == A32_LSL   ? A32_SHIFT_LSL
+                    : in->op == A32_LSR ? A32_SHIFT_LSR
+                                        : A32_SHIFT_ASR,
                     (int)o[2].imm);
     return true;
 }
@@ -772,12 +774,13 @@ static bool fold_test(A32_Instr **link)
     A32_Instr *mask = *link, *n = mask->next;
     if (!n || n->op != A32_CMP || n->cond != A32_AL || mask->cond != A32_AL || mask->set_flags ||
         !is_reg(&n->opnd[0]) || n->opnd[0].reg != mask->opnd[0].reg ||
-        n->opnd[1].kind != A32_OPND_IMM || n->opnd[1].imm != 0 || n->opnd[2].kind != A32_OPND_NONE ||
-        mask->opnd[3].kind != A32_OPND_NONE || !last_read(n, BIT(n->opnd[0].reg)))
+        n->opnd[1].kind != A32_OPND_IMM || n->opnd[1].imm != 0 ||
+        n->opnd[2].kind != A32_OPND_NONE || mask->opnd[3].kind != A32_OPND_NONE ||
+        !last_read(n, BIT(n->opnd[0].reg)))
         return false;
-    n->op      = A32_TST;
-    n->opnd[0] = mask->opnd[1];
-    n->opnd[1] = mask->opnd[2];
+    n->op             = A32_TST;
+    n->opnd[0]        = mask->opnd[1];
+    n->opnd[1]        = mask->opnd[2];
     mask->opnd[1].sym = mask->opnd[2].sym = NULL;
     delete_at(link);
     return true;
@@ -1262,9 +1265,9 @@ static bool rewrite(A32_Instr **link)
          in->op == A32_BIC) &&
         in->cond == A32_AL && !in->set_flags && is_reg(&o[0]) && is_reg(&o[1]) &&
         o[2].kind == A32_OPND_IMM && o[2].imm == 0 && o[3].kind == A32_OPND_NONE) {
-        in->op      = A32_MOV;
-        o[2]        = (A32_Operand){ 0 };
-        o[2].reg2   = -1;
+        in->op    = A32_MOV;
+        o[2]      = (A32_Operand){ 0 };
+        o[2].reg2 = -1;
         return true;
     }
     if (!in->next)
@@ -1367,8 +1370,8 @@ enum { MAX_ARM = 4 }; // instructions on each side of a predicated diamond
 static bool predicable(const A32_Instr *in)
 {
     return in->cond == A32_AL && !sets_flags(in) && in->op != A32_B && !is_return(in) &&
-           in->op != A32_ADC && in->op != A32_SBC && in->op != A32_RSC &&
-           in->op != A32_VCMP_F32 && in->op != A32_VCMP_F64 && !(defs(in) & BIT(A32_SP));
+           in->op != A32_ADC && in->op != A32_SBC && in->op != A32_RSC && in->op != A32_VCMP_F32 &&
+           in->op != A32_VCMP_F64 && !(defs(in) & BIT(A32_SP));
 }
 
 // The code from `in` (in block `b`) on, to the block labelled `stop`: past only blocks
@@ -1422,7 +1425,7 @@ static bool predicate(const A32_Func *fn, A32_Block *b)
             bl = link;
     if (!bl)
         return false;
-    A32_Instr *br = *bl;
+    A32_Instr *br  = *bl;
     const char *l1 = target(br);
     if (references(fn, l1) != 1)
         return false;
@@ -1461,10 +1464,10 @@ static bool pair(A32_Instr **link)
         xm->reg2 >= 0 || ym->reg2 >= 0 || xm->reg != ym->reg ||
         (xm->reg != A32_SP && xm->reg != A32_FP))
         return false;
-    bool up                  = ym->imm == xm->imm + 4;
-    const A32_Instr *lo      = up ? x : y, *hi = up ? y : x;
-    int r                    = lo->opnd[0].reg;
-    const A32_Operand addr   = lo->opnd[1];
+    bool up             = ym->imm == xm->imm + 4;
+    const A32_Instr *lo = up ? x : y, *hi = up ? y : x;
+    int r                  = lo->opnd[0].reg;
+    const A32_Operand addr = lo->opnd[1];
     if ((!up && ym->imm != xm->imm - 4) || r % 2 || r >= A32_LR || hi->opnd[0].reg != r + 1 ||
         !fits(A32_LDRD, addr.imm) || addr.imm % 4)
         return false;

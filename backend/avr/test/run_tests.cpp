@@ -93,8 +93,8 @@ int main(void)
 }
 
 static const int16_t ops16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
-static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7,
-                                 0, 1, -1, 123456789, 65536, -65537 };
+static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7, 0, 1,
+                                 -1,         123456789,       65536,  -65537 };
 
 // Division and remainder through __divmodhi4, __udivmodhi4, __divmodsi4 and
 // __udivmodsi4, and products through __mulsi3, over operands with every sign and the
@@ -297,8 +297,8 @@ TEST_F(AvrTest, RunSetjmpLongjmpClang)
     SKIP_IF_NO_AVR_CLANG();
     std::string src = setjmp_program;
     EXPECT_EQ("", Run("", "crt0.o", &src,
-                      { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR, "-I",
-                        TEST_COMMON_INCLUDE_DIR },
+                      { "-O1", "-nostdinc", "-I", TEST_INCLUDE_DIR, "-I", TEST_MODEL_INCLUDE_DIR,
+                        "-I", TEST_COMMON_INCLUDE_DIR },
                       ".clang"));
     EXPECT_EQ(42, exit_status);
 }

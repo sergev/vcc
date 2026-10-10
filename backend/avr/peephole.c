@@ -24,9 +24,9 @@
 
 typedef uint64_t Set; // r0-r31, and SREG as bit 32
 
-#define SREG  (1ull << 32)
-#define R(r)  (1ull << (r))
-#define ALL   ((1ull << 33) - 1)
+#define SREG    (1ull << 32)
+#define R(r)    (1ull << (r))
+#define ALL     ((1ull << 33) - 1)
 #define PAIR(r) (R(r) | R((r) + 1))
 
 static bool is_branch(AVR_Op op)
@@ -314,7 +314,7 @@ static void relink(Blk *k)
 {
     AVR_Block *b = k->b;
     b->head = b->tail = NULL;
-    int j            = 0;
+    int j             = 0;
     for (int i = 0; i < k->n; i++) {
         AVR_Instr *in = k->in[i];
         if (!in)
@@ -324,7 +324,7 @@ static void relink(Blk *k)
             b->tail->next = in;
         else
             b->head = in;
-        b->tail   = in;
+        b->tail    = in;
         k->in[j++] = in;
     }
     k->n = j;
@@ -450,8 +450,8 @@ static bool clean_jumps(Cfg *c)
         relink(k);
         if (k->n == 0)
             continue;
-        dead     = is_jump(k->in[k->n - 1]->op);
-        int next = next_nonempty(c, bi);
+        dead            = is_jump(k->in[k->n - 1]->op);
+        int next        = next_nonempty(c, bi);
         AVR_Instr *last = k->in[k->n - 1];
         // A jump to the next instruction.
         if (last->op == AVR_RJMP && labels_between(c, bi, next, last->opnd[0].sym)) {
@@ -467,7 +467,7 @@ static bool clean_jumps(Cfg *c)
             AVR_Instr *br = k->in[k->n - 2];
             br->op        = avr_inverse(br->op);
             xfree(br->opnd[0].sym);
-            br->opnd[0]  = last->opnd[0];
+            br->opnd[0]       = last->opnd[0];
             last->opnd[0].sym = NULL;
             drop(k, k->n - 1);
             relink(k);
@@ -483,15 +483,15 @@ static bool clean_jumps(Cfg *c)
 //
 
 typedef struct {
-    bool y;        // a slot byte Y+q, else a global's sym+off
+    bool y; // a slot byte Y+q, else a global's sym+off
     int q;
     const char *sym;
     int reg;
 } MemFact;
 
 typedef struct {
-    int eq[32];   // the register a register is known to equal (its class's root), or -1
-    int k[32];    // its known constant, or -1
+    int eq[32]; // the register a register is known to equal (its class's root), or -1
+    int k[32];  // its known constant, or -1
     MemFact m[64];
     int nm;
 } Facts;
@@ -516,7 +516,7 @@ static void kill(Facts *f, int r)
     for (int x = 0; x < 32; x++)
         if (x != r && f->eq[x] == r) {
             if (heir < 0) {
-                heir      = x;
+                heir     = x;
                 f->eq[x] = -1;
             } else {
                 f->eq[x] = heir;
@@ -612,7 +612,7 @@ static bool forward(Cfg *c)
         Blk *k = &c->blk[bi];
         facts_reset(&f);
         for (int i = 0; i < k->n; i++) {
-            AVR_Instr *in = k->in[i];
+            AVR_Instr *in        = k->in[i];
             const AVR_Operand *a = &in->opnd[0], *b = &in->opnd[1];
             bool y;
             int q;
@@ -721,9 +721,8 @@ static bool backward(Cfg *c)
             // ldi t, k; cp r, t: cpi r, k.
             if (in->op == AVR_CP && i > 0 && k->in[i - 1] && k->in[i - 1]->op == AVR_LDI &&
                 !k->in[i - 1]->vol && k->in[i - 1]->opnd[1].kind == AVR_OPND_IMM &&
-                k->in[i - 1]->opnd[0].reg == in->opnd[1].reg &&
-                in->opnd[0].reg >= 16 && in->opnd[0].reg != in->opnd[1].reg &&
-                !(live & R(in->opnd[1].reg))) {
+                k->in[i - 1]->opnd[0].reg == in->opnd[1].reg && in->opnd[0].reg >= 16 &&
+                in->opnd[0].reg != in->opnd[1].reg && !(live & R(in->opnd[1].reg))) {
                 in->op      = AVR_CPI;
                 in->opnd[1] = avr_imm(k->in[i - 1]->opnd[1].imm & 0xff);
                 drop(k, i - 1);
@@ -799,8 +798,8 @@ void avr_peephole_frame(AVR_Func *fn)
             AVR_Instr *in = k->in[i];
             if (!in || in->op != AVR_CALL)
                 continue;
-            bool then_ret = i + 1 < k->n ? k->in[i + 1]->op == AVR_RET
-                                         : lone_ret(&c, next_nonempty(&c, bi));
+            bool then_ret =
+                i + 1 < k->n ? k->in[i + 1]->op == AVR_RET : lone_ret(&c, next_nonempty(&c, bi));
             if (!then_ret)
                 continue;
             in->op = AVR_JMP;

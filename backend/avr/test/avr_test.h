@@ -62,8 +62,8 @@ inline QemuConfig avr_config(const char *cc, std::vector<std::string> target_fla
                          AVR_LLD,
                          AVR_LINK_SCRIPT,
                          AVR_LIB_DIR,
-                         { AVR_QEMU, "-M", "arduino-mega", "-display", "none", "-monitor",
-                           "none", "-serial", "stdio" },
+                         { AVR_QEMU, "-M", "arduino-mega", "-display", "none", "-monitor", "none",
+                           "-serial", "stdio" },
                          "",
                          false,
                          "-bios",
@@ -131,8 +131,9 @@ protected:
     static std::string Body(const std::string &asm_text)
     {
         static const char *const frame[] = {
-            "push r", "pop r", "in r28, ", "in r29, ", "sbiw r28, ", "adiw r28, ", "subi r28, ",
-            "sbci r29, ", "in r0, __SREG__", "cli", "out __SP_", "out __SREG__", "ret", "rcall .",
+            "push r",     "pop r",        "in r28, ",   "in r29, ",        "sbiw r28, ",
+            "adiw r28, ", "subi r28, ",   "sbci r29, ", "in r0, __SREG__", "cli",
+            "out __SP_",  "out __SREG__", "ret",        "rcall .",
         };
         auto is_frame = [](const std::string &line) {
             return std::any_of(std::begin(frame), std::end(frame), [&line](const char *f) {
@@ -203,10 +204,11 @@ protected:
             cfg.extra_libs = { AVR_LIBGCC };
         // -fhosted after the fixture's -ffreestanding: GCC gives main its implicit
         // `return 0` (C11 5.1.2.2.3) only in a hosted program, which the book's are.
-        const std::vector<std::string> flags = { "-O0", "-w", "-fhosted", "-nostdinc",
-                                                 "-I", TEST_INCLUDE_DIR, "-I",
-                                                 TEST_MODEL_INCLUDE_DIR, "-I",
-                                                 TEST_COMMON_INCLUDE_DIR };
+        const std::vector<std::string> flags = { "-O0",      "-w",
+                                                 "-fhosted", "-nostdinc",
+                                                 "-I",       TEST_INCLUDE_DIR,
+                                                 "-I",       TEST_MODEL_INCLUDE_DIR,
+                                                 "-I",       TEST_COMMON_INCLUDE_DIR };
         return Run(cfg, "", "crt0-status.o", &src, flags, ".gcc");
     }
 };

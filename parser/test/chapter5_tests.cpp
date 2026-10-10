@@ -11,22 +11,25 @@
 // a + = 1; — '+' and '=' are separate tokens, so '=' has no left operand.
 TEST_F(ParserTest, Chapter5_CompoundInvalidOperator_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a + = 1;\n    return a;\n}\n")),
-                 "expected an expression before '='");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a + = 1;\n    return a;\n}\n")),
+        "expected an expression before '='");
 }
 
 // int return = 4; — 'return' is a keyword, not a declarator name.
 TEST_F(ParserTest, Chapter5_DeclareKeywordAsVar_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int return = 4;\n    return return + 1;\n}\n")),
-                 "expected an identifier or '\\(' before 'return'");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int return = 4;\n    return return + 1;\n}\n")),
+        "expected an identifier or '\\(' before 'return'");
 }
 
 // int foo bar = 3; — two identifiers where a declarator is expected.
 TEST_F(ParserTest, Chapter5_InvalidSpecifier_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int foo bar = 3;\n    return bar;\n}\n")),
-                 "expected ';' before 'bar'");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int foo bar = 3;\n    return bar;\n}\n")),
+        "expected ';' before 'bar'");
 }
 
 // ints a = 1; — 'ints' is not a type, so it parses as an expression statement.
@@ -46,22 +49,25 @@ TEST_F(ParserTest, Chapter5_InvalidVariableName_Neg)
 // a =/ 1; — '=' then '/' has no right operand for the assignment.
 TEST_F(ParserTest, Chapter5_MalformedCompoundAssignment_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int a = 10;\n    a =/ 1;\n    return a;\n}\n")),
-                 "expected an expression before '/'");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int a = 10;\n    a =/ 1;\n    return a;\n}\n")),
+        "expected an expression before '/'");
 }
 
 // a - -; — second '-' is unary minus with no operand before the ';'.
 TEST_F(ParserTest, Chapter5_MalformedDecrement_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a - -;\n    return a;\n}\n")),
-                 "expected an expression before ';'");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a - -;\n    return a;\n}\n")),
+        "expected an expression before ';'");
 }
 
 // a + +; — second '+' is unary plus with no operand before the ';'.
 TEST_F(ParserTest, Chapter5_MalformedIncrement_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a + +;\n    return a;\n}\n")),
-                 "expected an expression before ';'");
+    EXPECT_DEATH(
+        parse(CreateTempFile("int main(void) {\n    int a = 0;\n    a + +;\n    return a;\n}\n")),
+        "expected an expression before ';'");
 }
 
 // return 1 < = 2; — '<' and '=' lex separately, so '=' has no left operand.
@@ -81,7 +87,8 @@ TEST_F(ParserTest, Chapter5_MalformedNotEqual_Neg)
 // int a = 2  (missing ';' before the next statement).
 TEST_F(ParserTest, Chapter5_MissingSemicolon_Neg)
 {
-    EXPECT_DEATH(parse(CreateTempFile("int main(void) {\n    int a = 2\n    a = a + 4;\n    return a;\n}\n")),
+    EXPECT_DEATH(parse(CreateTempFile(
+                     "int main(void) {\n    int a = 2\n    a = a + 4;\n    return a;\n}\n")),
                  "expected ';' before 'a'");
 }
 

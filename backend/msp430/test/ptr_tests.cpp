@@ -9,7 +9,8 @@
 EXPECT_CODE(LoadThroughPointer, R"(mov 2(r12), r13
 mov @r12, r12
 ret
-)", "long f(long *p) { return *p; }")
+)",
+            "long f(long *p) { return *p; }")
 
 // Through r15 from a pointer in memory, straight to the destination's slot.
 TEST_F(Msp430Test, LoadThroughPointerInMemory)
@@ -19,15 +20,13 @@ TEST_F(Msp430Test, LoadThroughPointerInMemory)
     EXPECT_NE(std::string::npos, code.find(R"(mov @r1, r15
 mov @r15, 2(r1)
 mov 2(r15), 4(r1)
-)"))
-        << code;
+)")) << code;
 }
 
 // Consecutive words into registers through a pointer dead after: @r12+, no index word.
 TEST_F(Msp430Test, LoadsAutoIncrement)
 {
-    std::string code =
-        Code(CompileToMsp430("long add2(long *p, long *q) { return *p + *q; }"));
+    std::string code = Code(CompileToMsp430("long add2(long *p, long *q) { return *p + *q; }"));
     EXPECT_NE(std::string::npos, code.find("mov @r12+, r11\nmov @r12+, r14\n")) << code;
 }
 
@@ -53,8 +52,7 @@ cmp r11, r14
 jge .L17
 mov r14, -2(r10)
 mov r11, 0(r10)
-)"))
-        << code;
+)")) << code;
     // The end pointer steps down by a constant the generator has.
     EXPECT_NE(std::string::npos, code.find("decd r9\n")) << code;
 }
@@ -154,12 +152,14 @@ TEST_F(Msp430Test, RunSlotStoresKept)
 // A store takes its value straight from the immediate (or memory).
 EXPECT_CODE(StoreThroughPointer, R"(mov #1234, 0(r12)
 ret
-)", "void f(int *p) { *p = 1234; }")
+)",
+            "void f(int *p) { *p = 1234; }")
 
 // A char goes through a pointer as a byte.
 EXPECT_CODE(CharThroughPointer, R"(mov.b @r13, 0(r12)
 ret
-)", "void f(char *p, char *q) { *p = *q; }")
+)",
+            "void f(char *p, char *q) { *p = *q; }")
 
 // The index scaled by shifts for a power of two, by shifts and adds for a small
 // constant otherwise.
@@ -191,13 +191,14 @@ mov.b 1(r15), r12
 // A constant index folds into the load's offset.
 EXPECT_CODE(ConstantIndex, R"(mov 6(r12), r12
 ret
-)", "int f(int *p) { return p[3]; }")
+)",
+            "int f(int *p) { return p[3]; }")
 
 // The address of a slot is SP plus its offset (none at offset 0).
 TEST_F(Msp430Test, AddressOfLocal)
 {
-    std::string code = Code(
-        CompileToMsp430("void g(int *); void f(void) { int x, y; g(&x); g(&y); }"));
+    std::string code =
+        Code(CompileToMsp430("void g(int *); void f(void) { int x, y; g(&x); g(&y); }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r1, r12
 call #g
 )")) << code;

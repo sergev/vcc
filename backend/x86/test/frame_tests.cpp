@@ -86,7 +86,7 @@ int main(void) {
 // array is 16-byte aligned 24 bytes below the return address.
 TEST_F(X86Test, LeafRedZone)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 int pick(int i) { int a[4]; a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4; return a[i & 3]; }
 )"));
@@ -98,7 +98,7 @@ int pick(int i) { int a[4]; a[0] = 1; a[1] = 2; a[2] = 3; a[3] = 4; return a[i &
 // A leaf whose slots do not fit the 128 bytes of the red zone reserves them.
 TEST_F(X86Test, LeafPastRedZone)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 int pick(int i) { char a[128]; a[0] = 1; a[i & 127] = 2; return a[0]; }
 )"));
@@ -110,9 +110,9 @@ int pick(int i) { char a[128]; a[0] = 1; a[i & 127] = 2; return a[0]; }
 // With --frame-pointer, rbp is pushed and set, and slots are addressed from it.
 TEST_F(X86Test, FramePointerOption)
 {
-    x86_peephole = false;
+    x86_peephole      = false;
     x86_frame_pointer = true;
-    std::string code = Code(CompileToX86(R"(
+    std::string code  = Code(CompileToX86(R"(
 double h(double);
 double across(double a, double b) { double x = h(a); return x + b; }
 )"));
@@ -125,7 +125,7 @@ double across(double a, double b) { double x = h(a); return x + b; }
 // r12-r15, and rsp kept 16-byte aligned by what is reserved below them.
 TEST_F(X86Test, RbpAllocated)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 int g(int);
 int six(void)
@@ -222,7 +222,7 @@ TEST_F(X86Test, RunRspFrameAlignment)
 {
     SKIP_IF_NO_X86_TOOLS();
     SKIP_IF_NO_X86_CLANG();
-    std::string ours = R"(
+    std::string ours   = R"(
 int misalign(void);
 int g(int x) { return x; }
 

@@ -81,7 +81,7 @@ void gen_branch(Gen *g, const char *target, bool conditional)
 static void gen_dispatch(Gen *g)
 {
     const Flow *f = g->flow;
-    g->nblocks = f->nblocks;
+    g->nblocks    = f->nblocks;
     map_init(&g->labels);
     for (int b = 0; b < f->nblocks; b++)
         for (int i = f->blocks[b].first; i <= f->blocks[b].last; i++)
@@ -128,16 +128,16 @@ static void gen_dispatch(Gen *g)
 enum { CTX_IF, CTX_LOOP, CTX_BLOCK };
 
 typedef struct {
-    int from, to;  // a jump from block `from` to block `to`
+    int from, to;   // a jump from block `from` to block `to`
     int via, index; // goes to dispatch node `via` with the state `index`
 } Redirect;
 
 typedef struct {
     Gen *g;
     const Flow *f;
-    int n;        // the basic blocks, 0..n-1; dispatch nodes follow, up to N-1
+    int n; // the basic blocks, 0..n-1; dispatch nodes follow, up to N-1
     int N, cap;
-    int *nsucc;   // node → its successors in the graph translated
+    int *nsucc; // node → its successors in the graph translated
     int **succ;
     Redirect *rd;
     int nrd, caprd;
@@ -192,7 +192,7 @@ static bool analyze(Structure *s)
     for (int b = 0; b < n; b++)
         seen[b] = false;
     int sp = 0, np = 0;
-    stack[sp] = 0;
+    stack[sp]  = 0;
     next[sp++] = 0;
     seen[0]    = true;
     while (sp) {
@@ -211,7 +211,7 @@ static bool analyze(Structure *s)
     }
     s->count = np;
     for (int i = 0; i < np; i++) {
-        s->order[i]             = post[np - 1 - i];
+        s->order[i]              = post[np - 1 - i];
         s->rpo[post[np - 1 - i]] = i;
     }
     xfree(stack);
@@ -426,7 +426,7 @@ static bool add_dispatch(Structure *s, const bool *region, bool *scc, const int 
                 break;
             }
             if (s->nrd == s->caprd) {
-                s->caprd   = s->caprd ? 2 * s->caprd : 16;
+                s->caprd    = s->caprd ? 2 * s->caprd : 16;
                 Redirect *r = xalloc(s->caprd * sizeof *r, __func__, __FILE__, __LINE__);
                 for (int j = 0; j < s->nrd; j++)
                     r[j] = s->rd[j];
@@ -462,9 +462,9 @@ static bool fix_region(Structure *s, const bool *in, int header)
         if (in[v] && v != header && c.index[v] < 0)
             strongconnect(&c, v);
 
-    bool ok    = true;
-    bool *scc  = xalloc(cap * sizeof(bool), __func__, __FILE__, __LINE__);
-    int *es    = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
+    bool ok   = true;
+    bool *scc = xalloc(cap * sizeof(bool), __func__, __FILE__, __LINE__);
+    int *es   = xalloc(cap * sizeof(int), __func__, __FILE__, __LINE__);
     for (int k = 0; k < c.ncomp && ok; k++) {
         int size = 0, ne = 0;
         bool cycle = false;
@@ -619,7 +619,8 @@ static void jump_table(Structure *s, int x, const Tac_Instruction *in)
     int *tr       = xalloc((count + 1) * sizeof(int), __func__, __FILE__, __LINE__);
     int ntr       = 0;
     for (int i = 0; i <= count; i++) {
-        int t = target_of(s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
+        int t = target_of(
+            s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
         bool seen = false;
         for (int j = 0; j < ntr; j++)
             seen |= tr[j] == t;
@@ -635,16 +636,17 @@ static void jump_table(Structure *s, int x, const Tac_Instruction *in)
     bt->ntable     = count + 1;
     bt->table      = xalloc(bt->ntable * sizeof(int), __func__, __FILE__, __LINE__);
     for (int i = 0; i <= count; i++) {
-        int t = target_of(s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
+        int t = target_of(
+            s->g, i < count ? in->u.jump_table.targets[i] : in->u.jump_table.default_target);
         int j = 0;
         while (j < ntr && tr[j] != t)
             j++;
         if (j < ntr) {
             bt->table[i] = ntr - 1 - j;
         } else {
-            int to       = effective(s, x, t);
-            bt->table[i] = s->rpo[to] <= s->rpo[x] ? ctx_depth(s, CTX_LOOP, to)
-                                                   : ctx_depth(s, CTX_BLOCK, to);
+            int to = effective(s, x, t);
+            bt->table[i] =
+                s->rpo[to] <= s->rpo[x] ? ctx_depth(s, CTX_LOOP, to) : ctx_depth(s, CTX_BLOCK, to);
         }
     }
     for (int j = ntr - 1; j >= 0; j--) {
@@ -674,9 +676,9 @@ static void node_within(Structure *s, int x, const int *ys, int k)
     if (x >= s->n) {
         // A dispatch node: to the entry the state names, leaving the block before it.
         wasm_append(fn, WASM_LOCAL_GET)->imm = g->state;
-        Wasm_Instr *bt = wasm_append(fn, WASM_BR_TABLE);
-        bt->ntable     = s->nsucc[x] + 1;
-        bt->table      = xalloc(bt->ntable * sizeof(int), __func__, __FILE__, __LINE__);
+        Wasm_Instr *bt                       = wasm_append(fn, WASM_BR_TABLE);
+        bt->ntable                           = s->nsucc[x] + 1;
+        bt->table = xalloc(bt->ntable * sizeof(int), __func__, __FILE__, __LINE__);
         for (int i = 0; i < s->nsucc[x]; i++)
             bt->table[i] = ctx_depth(s, CTX_BLOCK, s->succ[x][i]);
         bt->table[s->nsucc[x]] = bt->table[0];
@@ -687,7 +689,7 @@ static void node_within(Structure *s, int x, const int *ys, int k)
     bool jump = in->kind == TAC_INSTRUCTION_JUMP || in->kind == TAC_INSTRUCTION_JUMP_IF_ZERO ||
                 in->kind == TAC_INSTRUCTION_JUMP_IF_NOT_ZERO ||
                 in->kind == TAC_INSTRUCTION_JUMP_TABLE;
-    g->cur = x;
+    g->cur    = x;
     for (int i = blk->first; i <= blk->last - (jump ? 1 : 0); i++)
         gen_instr(g, s->f->instrs[i]);
     switch (in->kind) {
@@ -782,8 +784,8 @@ static bool gen_structured(Gen *g)
     s.succ        = xalloc(n * sizeof(int *), __func__, __FILE__, __LINE__);
     for (int b = 0; b < s.n; b++) {
         s.nsucc[b] = f->blocks[b].nsucc;
-        s.succ[b]  = xalloc((s.nsucc[b] > 2 ? s.nsucc[b] : 2) * sizeof(int), __func__, __FILE__,
-                            __LINE__);
+        s.succ[b] =
+            xalloc((s.nsucc[b] > 2 ? s.nsucc[b] : 2) * sizeof(int), __func__, __FILE__, __LINE__);
         for (int k = 0; k < f->blocks[b].nsucc; k++)
             s.succ[b][k] = f->blocks[b].succ[k];
     }

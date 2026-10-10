@@ -11,9 +11,9 @@
 
 typedef int sig_atomic_t;
 
-#define SIGINT   BRAAM_SIG_INT   /* ^C */
+#define SIGINT   BRAAM_SIG_INT /* ^C */
 #define SIGKILL  BRAAM_SIG_KILL
-#define SIGTERM  BRAAM_SIG_TERM  /* what kill sends */
+#define SIGTERM  BRAAM_SIG_TERM /* what kill sends */
 #define SIGCONT  BRAAM_SIG_CONT
 #define SIGTSTP  BRAAM_SIG_TSTP
 #define SIGWINCH BRAAM_SIG_WINCH /* the terminal changed shape */

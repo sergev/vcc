@@ -438,15 +438,16 @@ int main(void) {
 TEST_F(RiscvTest, PrintfInfNan)
 {
     SKIP_IF_NO_RISCV_TOOLS();
-    EXPECT_EQ("[inf] [INF] [inf] [INF] [inf] [INF]\n"
-              "[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]\n"
-              "[nan] [NAN] [nan] [NAN] [nan] [NAN]\n"
-              "[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]\n"
-              "[     nan] [NAN     ] [     nan] [nan]\n"
-              "[-inf] [      -inf] [-INF      ] [-INF]\n"
-              "[inf] [nan]\n"
-              "-inf|NAN|inf\n",
-              CompileAndRunRiscv(R"PROG(
+    EXPECT_EQ(
+        "[inf] [INF] [inf] [INF] [inf] [INF]\n"
+        "[-inf] [-INF] [-inf] [-INF] [-inf] [-INF]\n"
+        "[nan] [NAN] [nan] [NAN] [nan] [NAN]\n"
+        "[     inf] [inf     ] [     inf] [+inf] [ inf] [    +inf]\n"
+        "[     nan] [NAN     ] [     nan] [nan]\n"
+        "[-inf] [      -inf] [-INF      ] [-INF]\n"
+        "[inf] [nan]\n"
+        "-inf|NAN|inf\n",
+        CompileAndRunRiscv(R"PROG(
 #include <math.h>
 #include <stdio.h>
 int main(void) {
@@ -472,11 +473,12 @@ int main(void) {
 TEST_F(RiscvTest, PrintfRoundHalfEven)
 {
     SKIP_IF_NO_RISCV_TOOLS();
-    EXPECT_EQ("0 2 2 4 -2\n"
-              "0.2 0.8 1.12 0.35\n"
-              "2e+01 4e+01 1.2e+00 1.12e+00\n"
-              "2 0.12 0.5 1e-05\n",
-              CompileAndRunRiscv(R"PROG(
+    EXPECT_EQ(
+        "0 2 2 4 -2\n"
+        "0.2 0.8 1.12 0.35\n"
+        "2e+01 4e+01 1.2e+00 1.12e+00\n"
+        "2 0.12 0.5 1e-05\n",
+        CompileAndRunRiscv(R"PROG(
 #include <stdio.h>
 int main(void) {
     printf("%.0f %.0f %.0f %.0f %.0f\n", 0.5, 1.5, 2.5, 3.5, -2.5);

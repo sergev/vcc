@@ -19,8 +19,8 @@ namespace {
 
 class BraamTest : public ::testing::Test {
 protected:
-    int status = -1;  // of the last run
-    std::string log;  // its stderr
+    int status = -1; // of the last run
+    std::string log; // its stderr
 
     static bool Available()
     {
@@ -186,7 +186,7 @@ coro(braam_call *) int main(int argc, char **argv)
 // a file that is not there is an error with errno set.
 TEST_F(BraamTest, Wc)
 {
-    std::string src = std::string("#include <errno.h>\n#include <string.h>\n") + wc_src;
+    std::string src  = std::string("#include <errno.h>\n#include <string.h>\n") + wc_src;
     std::string text = "one two  three\nfour\n\tfive six\n";
     EXPECT_EQ("3 6 30\n", BuildAndRun(src, {}, text));
     EXPECT_EQ(0, status);
@@ -245,7 +245,8 @@ static unsigned U32(const std::string &s, size_t p)
 // driver's --initial-pages) and 1600.  run.mjs checks the imports and exports too.
 TEST_F(BraamTest, Section)
 {
-    const char *src = "#include <braam.h>\ncoro(braam_call *) int main(int c, char **v) { return 0; }";
+    const char *src =
+        "#include <braam.h>\ncoro(braam_call *) int main(int c, char **v) { return 0; }";
     for (unsigned pages : { 4u, 9u }) {
         std::vector<std::string> options;
         if (pages != 4)
@@ -253,9 +254,15 @@ TEST_F(BraamTest, Section)
         ASSERT_EQ("", Build(src, options));
         std::ifstream f(Scratch(".wasm"), std::ios::binary);
         std::string bin((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-        size_t at = bin.find(std::string("\x05" "braam", 6));
+        size_t at =
+            bin.find(std::string("\x05"
+                                 "braam",
+                                 6));
         ASSERT_NE(std::string::npos, at);
-        EXPECT_EQ(std::string::npos, bin.find(std::string("\x05" "braam", 6), at + 1));
+        EXPECT_EQ(std::string::npos, bin.find(std::string("\x05"
+                                                          "braam",
+                                                          6),
+                                              at + 1));
         EXPECT_EQ(0, bin[at - 2]); // a custom section
         EXPECT_EQ(26, bin[at - 1]);
         EXPECT_EQ(0x6d617262u, U32(bin, at + 6));
@@ -385,7 +392,7 @@ coro(braam_call *) int main(int argc, char **argv)
     return 0;
 }
 )",
-                                       {}, "ada\n"));
+                                                {}, "ada\n"));
     EXPECT_EQ(0, status);
 }
 
@@ -412,8 +419,9 @@ TEST_F(BraamTest, TaskBytes)
     EXPECT_EQ("", BuildAndRun(deep_src));
     EXPECT_EQ(255, status);
     EXPECT_NE(std::string::npos, log.find("Sys::Exit said 255")) << log;
-    EXPECT_EQ("300\n", BuildAndRun(std::string("const unsigned __braam_task_bytes = 256 * 1024;\n") +
-                                   deep_src));
+    EXPECT_EQ(
+        "300\n",
+        BuildAndRun(std::string("const unsigned __braam_task_bytes = 256 * 1024;\n") + deep_src));
     EXPECT_EQ(0, status);
 }
 
@@ -426,19 +434,20 @@ TEST_F(BraamTest, Files)
     std::string dir = "braam-Files.d";
     std::string cmd = "rm -rf " + dir;
     ASSERT_EQ(0, system(cmd.c_str()));
-    EXPECT_EQ("size 19 reg 1 dir 0\n"
-              "1: one\n2: two\n3: three\n4: four\n"
-              "eof 1 err 0\n"
-              "first o again o\n"
-              "tell 13\n"
-              "read 5 '\nfour'\n"
-              "fstat size 19\n"
-              "appended 24\n"
-              "old -1 new 0\n"
-              "rmdir full -1 Not empty\n"
-              "cwd ends /d\n"
-              "unlink 0 rmdir 0 rmdir 0\n",
-              BuildAndRun(R"(
+    EXPECT_EQ(
+        "size 19 reg 1 dir 0\n"
+        "1: one\n2: two\n3: three\n4: four\n"
+        "eof 1 err 0\n"
+        "first o again o\n"
+        "tell 13\n"
+        "read 5 '\nfour'\n"
+        "fstat size 19\n"
+        "appended 24\n"
+        "old -1 new 0\n"
+        "rmdir full -1 Not empty\n"
+        "cwd ends /d\n"
+        "unlink 0 rmdir 0 rmdir 0\n",
+        BuildAndRun(R"(
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -497,7 +506,7 @@ coro(braam_call *) int main(int argc, char **argv)
     return 0;
 }
 )",
-                          { dir }));
+                    { dir }));
     EXPECT_EQ(0, status) << log;
 }
 
@@ -595,7 +604,7 @@ coro(braam_call *) int main(int argc, char **argv)
     return await remove(argv[1]);
 }
 )",
-                                          { src }));
+                                              { src }));
     EXPECT_EQ(0, status);
     EXPECT_EQ(data, ReadFile("braam-CopyFile.copy"));
 }
@@ -630,9 +639,10 @@ TEST_F(BraamTest, NotesExample)
 // the program goes on reading.
 TEST_F(BraamTest, SignalCaught)
 {
-    EXPECT_EQ("spawned 1\nread 3\nticker: Interrupted\ninterrupted, took 1, pending 0\n"
-              "read 4\nticker done 1 result 42\n",
-              BuildAndRun(R"(
+    EXPECT_EQ(
+        "spawned 1\nread 3\nticker: Interrupted\ninterrupted, took 1, pending 0\n"
+        "read 4\nticker done 1 result 42\n",
+        BuildAndRun(R"(
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -669,7 +679,7 @@ coro(braam_call *) int main(int argc, char **argv)
     return 0;
 }
 )",
-                          {}, "abc\003def\n"));
+                    {}, "abc\003def\n"));
     EXPECT_EQ(0, status) << log;
 }
 
@@ -704,10 +714,11 @@ coro(braam_call *) int main(int argc, char **argv)
 // spawns; a task destroyed while it sleeps leaves its slot, which a new one then takes.
 TEST_F(BraamTest, Tasks)
 {
-    EXPECT_EQ("spawned 1 2 3 4 5 6 7, then 0\n"
-              "done 7\ndone 6\ndone 5\ndone 4\ndone 3\ndone 2\ndone 1\n"
-              "after destroy: 1\ndone 9\n",
-              BuildAndRun(R"(
+    EXPECT_EQ(
+        "spawned 1 2 3 4 5 6 7, then 0\n"
+        "done 7\ndone 6\ndone 5\ndone 4\ndone 3\ndone 2\ndone 1\n"
+        "after destroy: 1\ndone 9\n",
+        BuildAndRun(R"(
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -795,6 +806,6 @@ coro(braam_call *) int main(int argc, char **argv)
     return 0;
 }
 )",
-                                           {}, "x"));
+                                                  {}, "x"));
     EXPECT_EQ(0, status) << log;
 }

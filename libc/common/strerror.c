@@ -10,13 +10,21 @@
 char *strerror(int errnum)
 {
     switch (errnum) {
-    case 0:  return "SUCCESS";
-    case 1:  return "DOMAIN ERROR";            /* EDOM   */
-    case 2:  return "RESULT OUT OF RANGE";     /* ERANGE */
-    case 3:  return "ILLEGAL BYTE SEQUENCE";   /* EILSEQ */
-    case 4:  return "INVALID ARGUMENT";        /* EINVAL */
-    case 5:  return "OUT OF MEMORY";           /* ENOMEM */
-    case 6:  return "I/O ERROR";               /* EIO    */
-    default: return "UNKNOWN ERROR";
+    case 0:
+        return "SUCCESS";
+    case 1:
+        return "DOMAIN ERROR"; /* EDOM   */
+    case 2:
+        return "RESULT OUT OF RANGE"; /* ERANGE */
+    case 3:
+        return "ILLEGAL BYTE SEQUENCE"; /* EILSEQ */
+    case 4:
+        return "INVALID ARGUMENT"; /* EINVAL */
+    case 5:
+        return "OUT OF MEMORY"; /* ENOMEM */
+    case 6:
+        return "I/O ERROR"; /* EIO    */
+    default:
+        return "UNKNOWN ERROR";
     }
 }

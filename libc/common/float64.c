@@ -23,14 +23,20 @@
 
 static uint64_t bits(double d)
 {
-    union { double d; uint64_t u; } v;
+    union {
+        double d;
+        uint64_t u;
+    } v;
     v.d = d;
     return v.u;
 }
 
 static double from_bits(uint64_t u)
 {
-    union { double d; uint64_t u; } v;
+    union {
+        double d;
+        uint64_t u;
+    } v;
     v.u = u;
     return v.d;
 }
@@ -261,8 +267,8 @@ double sqrt(double x)
             d2 = (unsigned)((m >> (j + 1)) & 1) << 1;
         if (j >= 0)
             d2 |= (unsigned)((m >> j) & 1);
-        r            = (r << 2) | d2;
-        uint64_t t   = (q << 2) | 1;
+        r          = (r << 2) | d2;
+        uint64_t t = (q << 2) | 1;
         if (r >= t) {
             r -= t;
             q = (q << 1) | 1;
@@ -329,7 +335,7 @@ long __fixdfsi(double d)
         return 0;
     if (exp >= 31)
         return (a & SIGN) ? (long)(-2147483647L - 1) : 2147483647L;
-    uint64_t sig = (a & FRAC) | IMPLICIT;
+    uint64_t sig    = (a & FRAC) | IMPLICIT;
     unsigned long m = (unsigned long)(sig >> (52 - exp));
     return (a & SIGN) ? -(long)m : (long)m;
 }
@@ -370,7 +376,10 @@ double __floatunsidf(unsigned long u)
 /* float → double: exact. */
 double __extendsfdf2(float f)
 {
-    union { float f; uint32_t u; } v;
+    union {
+        float f;
+        uint32_t u;
+    } v;
     v.f           = f;
     uint32_t a    = v.u;
     uint64_t sign = (uint64_t)(a & 0x80000000UL) << 32;
@@ -421,7 +430,10 @@ float __truncdfsf2(double d)
             u = 0x7f800000UL;
         u |= sign;
     }
-    union { float f; uint32_t u; } v;
+    union {
+        float f;
+        uint32_t u;
+    } v;
     v.u = u;
     return v.f;
 }

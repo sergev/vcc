@@ -17,7 +17,7 @@ const int x86_form[X86_NUM_OPS] = {
 #undef X86_FORM
 };
 
-const char *const x86_cond_name[16] = { "o", "no", "b",  "ae", "e", "ne", "be", "a",
+const char *const x86_cond_name[16] = { "o", "no", "b", "ae", "e", "ne", "be", "a",
                                         "s", "ns", "p", "np", "l", "ge", "le", "g" };
 
 X86_Func *x86_new_func(const char *name, bool global)
@@ -43,7 +43,7 @@ X86_Block *x86_new_block(X86_Func *fn, const char *label)
 
 X86_Instr *x86_append(X86_Func *fn, X86_Op op, X86_Width width)
 {
-    X86_Block *b  = fn->tail;
+    X86_Block *b    = fn->tail;
     X86_Instr *in   = xalloc(sizeof(X86_Instr), __func__, __FILE__, __LINE__);
     in->op          = op;
     in->width       = width;

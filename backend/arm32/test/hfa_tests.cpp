@@ -49,7 +49,8 @@ vldr d2, [r11, #-16]
 sub sp, r11, #56
 )")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(bl r
-vstr d0, )")) << code;
+vstr d0, )"))
+        << code;
 }
 
 // Not homogeneous: mixed float and double, an int member, or five members.
@@ -85,7 +86,7 @@ TEST(TacAbi, Aapcs32Class)
     s.u.structure.members = &m1;
     s.u.structure.size    = 16;
     EXPECT_EQ(8 * 8 + 2, tac_aapcs32_class(&s));
-    m2.type = &f;
+    m2.type            = &f;
     s.u.structure.size = 16; // padded after the float
     EXPECT_EQ(TAC_AAPCS32_CORE, tac_aapcs32_class(&s));
 }
@@ -97,7 +98,7 @@ TEST_F(Arm32Test, RunHfaInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *decls = R"(
+    const char *decls  = R"(
 struct f1 { float a; };
 struct f2 { float a, b; };
 struct f3 { float a[3]; };
@@ -107,7 +108,7 @@ struct d2 { double a; long double b; };
 struct d3 { double a, b, c; };
 struct d4 { double a[2]; double b, c; };
 )";
-    std::string ours  = std::string(decls) + R"(
+    std::string ours   = std::string(decls) + R"(
 double theirs(float x, struct d3 a, struct f2 b, float y, struct f1 c, struct d1 d);
 double theirs_stack(struct d4 a, struct d4 b, float x, struct f3 c, double y);
 double theirs_mix(struct d2 a, struct f4 b, int k);

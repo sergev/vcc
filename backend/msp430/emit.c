@@ -74,8 +74,8 @@ static void emit_operand(FILE *out, const Msp_Operand *o, bool byte, bool source
 // it is, since only its source half can be @rN.
 void msp_emit_instr(FILE *out, const Msp_Instr *in)
 {
-    Msp_Form form    = msp_form[in->op];
-    const char *mnem = msp_mnemonic[in->op];
+    Msp_Form form                      = msp_form[in->op];
+    const char *mnem                   = msp_mnemonic[in->op];
     Msp_Operand opnd[MSP_MAX_OPERANDS] = { in->opnd[0], in->opnd[1] };
     if (form == MSP_FORM_TWICE && msp_zero_indexed(&in->opnd[0])) {
         mnem    = in->op == MSP_RLA ? "add" : "addc";

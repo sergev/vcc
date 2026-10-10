@@ -1,8 +1,8 @@
 /*
  * <coro.h> — short names for vcc's extensions of C: `defer` on every target, and
  * coroutines on every target but BESM-6, where the compiler predefines
- * __vcc_coroutines__ (docs/Coroutines_in_C.md).  Without this header the reserved spellings still work:
- * _Defer, _Coro(Y), _Yield, _Await, _Coro_frame(Y, T), _Coro_ptr(Y, T) and
+ * __vcc_coroutines__ (docs/Coroutines_in_C.md).  Without this header the reserved spellings still
+ * work: _Defer, _Coro(Y), _Yield, _Await, _Coro_frame(Y, T), _Coro_ptr(Y, T) and
  * __co_init ... __co_alignof.
  */
 #ifndef _CORO_H

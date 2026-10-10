@@ -424,6 +424,7 @@ protected:
         ASSERT_EQ(body->kind, TAC_INSTRUCTION_COPY);
         ASSERT_NE(body->u.copy.src, nullptr);
         EXPECT_EQ(body->u.copy.src->u.constant->kind, TAC_CONST_LONG_DOUBLE);
-        EXPECT_DOUBLE_EQ(f128_to_double(body->u.copy.src->u.constant->u.long_double_val), (double)expected);
+        EXPECT_DOUBLE_EQ(f128_to_double(body->u.copy.src->u.constant->u.long_double_val),
+                         (double)expected);
     }
 };

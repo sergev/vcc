@@ -37,13 +37,13 @@ static int assign_args(const Tac_Type *const *types, int n, int stack_from, ArgL
     int next = 12, stack = 0;
     bool used_stack = false;
     for (int i = 0; i < n; i++) {
-        ArgLoc *l = &locs[i];
-        *l        = (ArgLoc){ 0 };
-        l->agg    = !msp_is_scalar(types[i]);
+        ArgLoc *l     = &locs[i];
+        *l            = (ArgLoc){ 0 };
+        l->agg        = !msp_is_scalar(types[i]);
         l->parts      = l->agg ? 1 : msp_words(types[i]);
         bool variadic = i >= stack_from;
         int left      = 16 - next;
-        bool regs = !variadic && l->parts <= left;
+        bool regs     = !variadic && l->parts <= left;
         if (!variadic && !used_stack && l->parts == 2 && left == 1) {
             l->reg[0]   = next++;
             l->stack[1] = stack;
@@ -154,8 +154,7 @@ void store_params(Gen *g)
             continue;
         emit2(g, MSP_MOV, l->reg[0] ? mem_at(g, p->name, 0) : incoming_at(g, l->stack[0]),
               msp_reg(MSP_SCRATCH));
-        copy_ptr(g, true, MSP_SCRATCH, p->name, 0, msp_type_size(p->type),
-                 msp_type_align(p->type));
+        copy_ptr(g, true, MSP_SCRATCH, p->name, 0, msp_type_size(p->type), msp_type_align(p->type));
     }
     xfree(locs);
 }
@@ -164,8 +163,8 @@ void store_params(Gen *g)
 // `n` of them; free the result.
 typedef const Tac_Type *(*TypeOf)(const Gen *g, const void *arg, const Tac_Val *v);
 
-static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, TypeOf type_of,
-                         const void *arg, int *n, int *stack)
+static ArgLoc *call_locs(const Gen *g, const Tac_Instruction *in, TypeOf type_of, const void *arg,
+                         int *n, int *stack)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type;
     *n                 = 0;
@@ -321,7 +320,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     Msp_Instr *call = in->u.fun_call.indirect
                           ? emit1(g, MSP_CALL, msp_reg(11))
                           : emit1(g, MSP_CALL, msp_imm_sym(in->u.fun_call.fun_name, 0));
-    call->args = args;
+    call->args      = args;
 
     const Tac_Val *dst = in->u.fun_call.dst;
     if (dst) {

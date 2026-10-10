@@ -4,12 +4,12 @@
 //
 #include "x86_test.h"
 
-#define EXPECT_HAS(name, expected, src)                                    \
-    TEST_F(X86Test, name)                                                  \
-    {                                                                      \
-        NaiveSelection();                                                  \
-        std::string code = Code(CompileToX86(src));                        \
-        EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
+#define EXPECT_HAS(name, expected, src)                            \
+    TEST_F(X86Test, name)                                          \
+    {                                                              \
+        NaiveSelection();                                          \
+        std::string code = Code(CompileToX86(src));                \
+        EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
 
 // A load extends by the pointee's type; a store writes its width.
@@ -17,8 +17,7 @@ EXPECT_HAS(LoadSignedChar, "movq -8(%rbp), %r10\nmovsbl (%r10), %eax\n",
            "int f(signed char *p) { return *p; }")
 EXPECT_HAS(LoadUnsignedShort, "movq -8(%rbp), %r10\nmovzwl (%r10), %eax\n",
            "int f(unsigned short *p) { return *p; }")
-EXPECT_HAS(StoreConstant, "movq -8(%rbp), %r10\nmovq $-7, (%r10)\n",
-           "void f(long *p) { *p = -7; }")
+EXPECT_HAS(StoreConstant, "movq -8(%rbp), %r10\nmovq $-7, (%r10)\n", "void f(long *p) { *p = -7; }")
 EXPECT_HAS(StoreVariable, "movq -8(%rbp), %r10\nmovsbl -13(%rbp), %eax\nmovb %al, (%r10)\n",
            "void f(char *p, int c) { *p = c; }")
 EXPECT_HAS(LoadDouble, "movq -8(%rbp), %r10\nmovsd (%r10), %xmm14\n",
@@ -26,8 +25,9 @@ EXPECT_HAS(LoadDouble, "movq -8(%rbp), %r10\nmovsd (%r10), %xmm14\n",
 
 // The index scaled by lea; a constant index folds into the displacement; another
 // scale multiplies.
-EXPECT_HAS(IndexInt, "movslq -12(%rbp), %rax\nmovq %rax, -24(%rbp)\nmovq -8(%rbp), %rax\n"
-                     "movq -24(%rbp), %r10\nleaq (%rax,%r10,4), %rax\n",
+EXPECT_HAS(IndexInt,
+           "movslq -12(%rbp), %rax\nmovq %rax, -24(%rbp)\nmovq -8(%rbp), %rax\n"
+           "movq -24(%rbp), %r10\nleaq (%rax,%r10,4), %rax\n",
            "int f(int *p, int i) { return p[i]; }")
 EXPECT_HAS(IndexConstant, "movq -8(%rbp), %rax\nleaq 24(%rax), %rax\n",
            "long f(long *p) { return p[3]; }")

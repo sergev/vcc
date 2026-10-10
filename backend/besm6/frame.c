@@ -17,9 +17,9 @@
 #define SLOT_TEMP(v) ((((int)(v)) >> 20) & 1)
 
 struct Frame {
-    StringMap slots;     // name -> SLOT_ENCODE(reg, offset, temp)
+    StringMap slots; // name -> SLOT_ENCODE(reg, offset, temp)
     int num_autos;
-    bool *auto_is_temp;  // size num_autos; true if that auto slot holds a '%'+digit temporary
+    bool *auto_is_temp; // size num_autos; true if that auto slot holds a '%'+digit temporary
 };
 
 // A TAC name denotes a compiler temporary (new_temp) when it is '%' followed by a digit;
@@ -279,9 +279,9 @@ Frame *frame_build(const Tac_TopLevel *fn, const Tac_TopLevel *program)
 {
     (void)program; // local/global is now encoded in the name (leading '%')
 
-    Frame *f         = (Frame *)xalloc(sizeof(Frame), __func__, __FILE__, __LINE__);
-    f->num_autos     = 0;
-    f->auto_is_temp  = NULL;
+    Frame *f        = (Frame *)xalloc(sizeof(Frame), __func__, __FILE__, __LINE__);
+    f->num_autos    = 0;
+    f->auto_is_temp = NULL;
     map_init(&f->slots);
 
     // Assign params first (REG_PAR, 0..N-1). Param names are '%'-prefixed too, but a
@@ -306,8 +306,7 @@ Frame *frame_build(const Tac_TopLevel *fn, const Tac_TopLevel *program)
 
     // Build the reverse auto-slot -> temp? lookup the peephole pass consults.
     if (f->num_autos > 0) {
-        f->auto_is_temp =
-            (bool *)xalloc(f->num_autos * sizeof(bool), __func__, __FILE__, __LINE__);
+        f->auto_is_temp = (bool *)xalloc(f->num_autos * sizeof(bool), __func__, __FILE__, __LINE__);
         for (int i = 0; i < f->num_autos; i++)
             f->auto_is_temp[i] = false;
         TempFill tf = { f->auto_is_temp, f->num_autos };

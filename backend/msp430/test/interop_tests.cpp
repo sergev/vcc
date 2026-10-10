@@ -10,16 +10,16 @@
 #include <cstdint>
 #include <cstring>
 
-#include "msp430_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "msp430_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -200,8 +200,7 @@ TEST_F(Msp430Test, RunSignatureTableWithGcc)
 {
     SKIP_IF_NO_MSP430_TOOLS();
     SKIP_IF_NO_MSP430_GCC();
-    std::string ours =
-        BothSides(true, sig_types, sig_decls, sig_defs, "our", "their") + sig_main;
+    std::string ours   = BothSides(true, sig_types, sig_decls, sig_defs, "our", "their") + sig_main;
     std::string theirs = BothSides(true, sig_types, sig_decls, sig_defs, "their", "our");
     EXPECT_EQ("0000 0000", GccRun(theirs, CompileToMsp430(ours.c_str())));
 }
@@ -210,8 +209,7 @@ TEST_F(Msp430Test, RunSignatureTableWithGcc)
 TEST_F(Msp430Test, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_MSP430_CLANG();
-    std::string ours =
-        BothSides(false, sig_types, sig_decls, sig_defs, "our", "their") + sig_main;
+    std::string ours = BothSides(false, sig_types, sig_decls, sig_defs, "our", "their") + sig_main;
     std::string theirs = BothSides(false, sig_types, sig_decls, sig_defs, "their", "our");
     EXPECT_EQ("0000 0000", ClangRun(theirs, CompileToMsp430(ours.c_str())));
 }
@@ -229,13 +227,12 @@ check:
     for (int r = 4; r <= 10; r++)
         check += "    push    r" + std::to_string(r) + "\n";
     for (int r = 4; r <= 10; r++)
-        check += "    mov     #" + std::to_string(0x1111 * (r - 3)) + ", r" + std::to_string(r) +
-                 "\n";
+        check +=
+            "    mov     #" + std::to_string(0x1111 * (r - 3)) + ", r" + std::to_string(r) + "\n";
     check += "    mov     #123, r12\n    mov     #45, r13\n    call    #work\n    clr     r12\n";
     for (int r = 4; r <= 10; r++)
         check += "    cmp     #" + std::to_string(0x1111 * (r - 3)) + ", r" + std::to_string(r) +
-                 "\n    jeq     1f\n    bis     #" + std::to_string(1 << (r - 4)) +
-                 ", r12\n1:\n";
+                 "\n    jeq     1f\n    bis     #" + std::to_string(1 << (r - 4)) + ", r12\n1:\n";
     for (int r = 10; r >= 4; r--)
         check += "    pop     r" + std::to_string(r) + "\n";
     check += "    ret\n";
@@ -260,7 +257,7 @@ TEST_F(Msp430Test, RunPreservedRegisters)
 {
     SKIP_IF_NO_MSP430_TOOLS();
     SKIP_IF_NO_MSP430_GCC();
-    std::string ours = CompileToMsp430(R"(
+    std::string ours     = CompileToMsp430(R"(
 int work(int a, int b)
 {
     volatile long long x = a;
@@ -270,7 +267,7 @@ int work(int a, int b)
     return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000) + (int)(d * 100);
 }
 )");
-    std::string check = PreservedCheck();
+    std::string check    = PreservedCheck();
     std::string main_src = kPreservedMain;
     EXPECT_EQ("00", GccRun(main_src, ours + check));
 }
@@ -406,8 +403,8 @@ std::string RuntimeExpected(bool nan_order)
                  (fn != fn) << 5,
              2);
     if (nan_order)
-        s += Hex((qn < dx) | (qn <= dx) << 1 | (qn > dx) << 2 | (qn >= dx) << 3 |
-                     (fn < fx) << 4 | (fn <= fx) << 5 | (fn > fx) << 6 | (fn >= fx) << 7,
+        s += Hex((qn < dx) | (qn <= dx) << 1 | (qn > dx) << 2 | (qn >= dx) << 3 | (fn < fx) << 4 |
+                     (fn <= fx) << 5 | (fn > fx) << 6 | (fn >= fx) << 7,
                  2);
     s += Hex((dx < dy) | (dx <= dy) << 1 | (dx > dy) << 2 | (dx >= dy) << 3 | (fx < fy) << 4 |
                  (fx <= fy) << 5 | (fx > fy) << 6 | (fx >= fy) << 7,
@@ -831,7 +828,7 @@ TEST_F(Msp430Test, RunOurCodeWithNewlib)
 {
     SKIP_IF_NO_MSP430_TOOLS();
     SKIP_IF_NO_MSP430_GCC();
-    std::string ours = CompileToMsp430(R"(
+    std::string ours   = CompileToMsp430(R"(
 #include <stdio.h>
 #include <stdlib.h>
 struct pt { int x; long y; };
@@ -924,7 +921,8 @@ int main(void)
     double of[NF], tf[NF];
     our_values(oi, of);
     their_values(ti, tf);
-    for (int k = )" + from + R"(; k < NI; k++)
+    for (int k = )" +
+           from + R"(; k < NI; k++)
         if (oi[k] != ti[k])
             return 1 + k;
     for (int k = 0; k < NF; k++)
@@ -1046,17 +1044,18 @@ int NAME(int n, int a, int b, int c, int d, int e, int f, int g)
     return s + b + c + d + e + f + g;
 }
 )";
-    auto named = [&](const char *name) {
+    auto named      = [&](const char *name) {
         std::string t = sum;
         t.replace(t.find("NAME"), 4, name);
         return t;
     };
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned int);
 int their_sum(int n, int a, int b, int c, int d, int e, int f, int g);
 int their_check(void);
 void putbyte(int c);
-)") + named("our_sum") + R"(
+)") + named("our_sum") +
+                         R"(
 int main(void)
 {
     int *q = __builtin_alloca(16);
@@ -1069,7 +1068,8 @@ int main(void)
     std::string theirs = std::string(R"(
 int our_sum(int n, int a, int b, int c, int d, int e, int f, int g);
 volatile int seed = 7;
-)") + named("their_sum") + R"(
+)") + named("their_sum") +
+                         R"(
 int their_check(void)
 {
     int s = seed;

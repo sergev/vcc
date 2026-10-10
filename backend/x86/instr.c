@@ -150,7 +150,8 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
         if (sign && w == X86_Q)
             emit2(g, X86_MOVSL, X86_Q, m, x86_reg(r, X86_Q));
         else
-            emit2(g, X86_MOV, X86_L, m, x86_reg(r, X86_L))->zext = w == X86_Q; // the upper half zero
+            emit2(g, X86_MOV, X86_L, m, x86_reg(r, X86_L))->zext =
+                w == X86_Q; // the upper half zero
         break;
     default:
         load_val(g, r, src);
@@ -222,8 +223,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     // In the destination's register, unless that is of another width.
-    X86_Width w   = x86_op_width(t);
-    int reg       = T0;
+    X86_Width w = x86_op_width(t);
+    int reg     = T0;
     if (in->u.unary.op != TAC_UNARY_NOT && x86_size(val_type(g, in->u.unary.dst)) == x86_size(t))
         reg = def_reg(g, T0, in->u.unary.dst);
     X86_Operand r = x86_reg(reg, w);
@@ -269,7 +270,7 @@ static void gen_divide(Gen *g, const Tac_Instruction *in, const Tac_Type *t, boo
         emit0(g, w == X86_Q ? X86_CQTO : X86_CLTD, w);
     emit1(g, is_unsigned ? X86_DIV : X86_IDIV, w, d);
     Tac_BinaryOperator op = in->u.binary.op;
-    bool rem = op == TAC_BINARY_REMAINDER || op == TAC_BINARY_REMAINDER_UNSIGNED;
+    bool rem              = op == TAC_BINARY_REMAINDER || op == TAC_BINARY_REMAINDER_UNSIGNED;
     store_val(g, rem ? X86_RDX : T0, in->u.binary.dst);
 }
 
@@ -291,9 +292,9 @@ static void gen_shift(Gen *g, const Tac_Instruction *in, const Tac_Type *t, bool
 {
     X86_Width w           = x86_op_width(t);
     Tac_BinaryOperator op = in->u.binary.op;
-    X86_Op sh = op == TAC_BINARY_LEFT_SHIFT ? X86_SHL : is_unsigned ? X86_SHR : X86_SAR;
+    X86_Op sh             = op == TAC_BINARY_LEFT_SHIFT ? X86_SHL : is_unsigned ? X86_SHR : X86_SAR;
     const Tac_Val *count  = in->u.binary.src2;
-    int r = result_reg(g, in, t, count->kind == TAC_VAL_CONSTANT ? 0 : X86_RCX);
+    int r                 = result_reg(g, in, t, count->kind == TAC_VAL_CONSTANT ? 0 : X86_RCX);
     if (r != T0 && r == var_reg(g, count))
         r = T0;
     load_int_as(g, r, in->u.binary.src1, t);
@@ -324,8 +325,7 @@ static bool commutes(Tac_BinaryOperator op)
     }
 }
 
-bool clobbers_regs(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                   const Tac_Val **dst)
+bool clobbers_regs(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst)
 {
     if (in->kind != TAC_INSTRUCTION_BINARY)
         return false;
@@ -606,7 +606,8 @@ static void gen_get_address(Gen *g, const Tac_Val *src, const Tac_Val *dst)
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
 {
     if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
-        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
     if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)

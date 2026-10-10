@@ -1,9 +1,9 @@
 #include "target.h"
 
-#include "tac.h"
-
 #include <stdio.h>
 #include <string.h>
+
+#include "tac.h"
 
 //
 // The <besm6.h> intrinsics with an immediate first argument (backend/besm6/Besm6_Intrinsics.md

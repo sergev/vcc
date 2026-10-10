@@ -244,8 +244,7 @@ TEST_F(Float128Test, CallsRuntime)
     std::string s = CompileToWasm("long double f(long double a, long double b) { return a + b; }");
     EXPECT_NE(std::string::npos, s.find("\t.functype\t__addtf3 (i32, i64, i64, i64, i64) -> ()\n"))
         << s;
-    EXPECT_NE(std::string::npos, s.find("\t.functype\tf (i32, i64, i64, i64, i64) -> ()\n"))
-        << s;
+    EXPECT_NE(std::string::npos, s.find("\t.functype\tf (i32, i64, i64, i64, i64) -> ()\n")) << s;
     EXPECT_NE(std::string::npos, Code(s).find("call __addtf3\n")) << s;
 }
 

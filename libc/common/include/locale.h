@@ -26,12 +26,12 @@ struct lconv {
     char *positive_sign;
     char *negative_sign;
     char *currency_symbol;
-    char  frac_digits;
-    char  p_cs_precedes;
-    char  n_cs_precedes;
+    char frac_digits;
+    char p_cs_precedes;
+    char n_cs_precedes;
 };
 
-char         *setlocale(int category, const char *locale);
+char *setlocale(int category, const char *locale);
 struct lconv *localeconv(void);
 
 #endif /* _LOCALE_H */

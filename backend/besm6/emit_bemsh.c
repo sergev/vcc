@@ -33,32 +33,62 @@
 // of besm_latin_mnem[].  NULL for BESM_SHAPE_SPECIAL kinds (directives / data / UTM / CALL /
 // BASE), whose Bemsh spelling lives in emit_bemsh_special.
 static const char *const besm_cyr_mnem[] = {
-    [BESM_MEM_XTA] = "сч",     [BESM_MEM_ATX] = "зп",     [BESM_MEM_STX] = "зпм",
-    [BESM_MEM_XTS] = "счм",    [BESM_MEM_ITA] = "счи",    [BESM_MEM_ATI] = "уи",
-    [BESM_MEM_ITS] = "счим",   [BESM_MEM_STI] = "уим",    [BESM_MEM_MTJ] = "уии",
+    [BESM_MEM_XTA] = "сч",
+    [BESM_MEM_ATX] = "зп",
+    [BESM_MEM_STX] = "зпм",
+    [BESM_MEM_XTS] = "счм",
+    [BESM_MEM_ITA] = "счи",
+    [BESM_MEM_ATI] = "уи",
+    [BESM_MEM_ITS] = "счим",
+    [BESM_MEM_STI] = "уим",
+    [BESM_MEM_MTJ] = "уии",
 
-    [BESM_ARITH_ADD] = "сл",   [BESM_ARITH_SUB] = "вч",   [BESM_ARITH_RSUB] = "вчоб",
-    [BESM_ARITH_ABSSUB] = "вчаб", [BESM_ARITH_MUL] = "умн", [BESM_ARITH_DIV] = "дел",
-    [BESM_ARITH_CNEG] = "знак",
+    [BESM_ARITH_ADD]    = "сл",
+    [BESM_ARITH_SUB]    = "вч",
+    [BESM_ARITH_RSUB]   = "вчоб",
+    [BESM_ARITH_ABSSUB] = "вчаб",
+    [BESM_ARITH_MUL]    = "умн",
+    [BESM_ARITH_DIV]    = "дел",
+    [BESM_ARITH_CNEG]   = "знак",
 
-    [BESM_LOG_AAX] = "и",      [BESM_LOG_AOX] = "или",    [BESM_LOG_AEX] = "нтж",
-    [BESM_LOG_ARX] = "слц",    [BESM_LOG_APX] = "сбр",    [BESM_LOG_AUX] = "рзб",
-    [BESM_LOG_ACX] = "чед",    [BESM_LOG_ANX] = "нед",
+    [BESM_LOG_AAX] = "и",
+    [BESM_LOG_AOX] = "или",
+    [BESM_LOG_AEX] = "нтж",
+    [BESM_LOG_ARX] = "слц",
+    [BESM_LOG_APX] = "сбр",
+    [BESM_LOG_AUX] = "рзб",
+    [BESM_LOG_ACX] = "чед",
+    [BESM_LOG_ANX] = "нед",
 
-    [BESM_EXP_EADDX] = "слп",  [BESM_EXP_ESUBX] = "вчп",  [BESM_EXP_SHIFTX] = "сд",
-    [BESM_EXP_SETRMEM] = "рж", [BESM_EXP_GETR] = "счрж",  [BESM_EXP_YTA] = "счмр",
-    [BESM_EXP_EADDN] = "слпа", [BESM_EXP_ESUBN] = "вчпа", [BESM_EXP_SHIFTN] = "сда",
-    [BESM_EXP_SETR] = "ржа",
+    [BESM_EXP_EADDX]   = "слп",
+    [BESM_EXP_ESUBX]   = "вчп",
+    [BESM_EXP_SHIFTX]  = "сд",
+    [BESM_EXP_SETRMEM] = "рж",
+    [BESM_EXP_GETR]    = "счрж",
+    [BESM_EXP_YTA]     = "счмр",
+    [BESM_EXP_EADDN]   = "слпа",
+    [BESM_EXP_ESUBN]   = "вчпа",
+    [BESM_EXP_SHIFTN]  = "сда",
+    [BESM_EXP_SETR]    = "ржа",
 
-    [BESM_REG_VTM] = "уиа",    [BESM_REG_UTM] = "слиа",   [BESM_REG_JADDM] = "сли",
+    [BESM_REG_VTM]   = "уиа",
+    [BESM_REG_UTM]   = "слиа",
+    [BESM_REG_JADDM] = "сли",
 
-    [BESM_MOD_UTC] = "мода",   [BESM_MOD_WTC] = "мод",
+    [BESM_MOD_UTC] = "мода",
+    [BESM_MOD_WTC] = "мод",
 
-    [BESM_BRANCH_UZA] = "по",  [BESM_BRANCH_U1A] = "пе",  [BESM_BRANCH_UJ] = "пб",
-    [BESM_BRANCH_VJM] = "пв",  [BESM_BRANCH_VZM] = "пио", [BESM_BRANCH_V1M] = "пино",
-    [BESM_BRANCH_VLM] = "цикл", [BESM_BRANCH_STOP] = "стоп",
+    [BESM_BRANCH_UZA]  = "по",
+    [BESM_BRANCH_U1A]  = "пе",
+    [BESM_BRANCH_UJ]   = "пб",
+    [BESM_BRANCH_VJM]  = "пв",
+    [BESM_BRANCH_VZM]  = "пио",
+    [BESM_BRANCH_V1M]  = "пино",
+    [BESM_BRANCH_VLM]  = "цикл",
+    [BESM_BRANCH_STOP] = "стоп",
 
-    [BESM_IO_EXT] = "увв",     [BESM_IO_MOD] = "рег",
+    [BESM_IO_EXT] = "увв",
+    [BESM_IO_MOD] = "рег",
 
     // Directives / data / UTM / CALL / BASE are BESM_SHAPE_SPECIAL — no shared entry.
     [BESM_DATA_Z00] = NULL,
@@ -95,9 +125,9 @@ static void bemsh_format_real(char *buf, size_t n, double val)
 }
 
 // Encode a C double as a native BESM-6 48-bit floating-point word (see
-// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41 =
-// sign, bits 40-1 = 40-bit two's-complement mantissa.  Copied from emit_unix.c's
-// unix_real_word so the two emitters stay decoupled; used only for the octal fallback below.
+// backend/besm6/Besm6_Data_Representation.md §6): bits 48-42 = 7-bit exponent biased by 64, bit 41
+// = sign, bits 40-1 = 40-bit two's-complement mantissa.  Copied from emit_unix.c's unix_real_word
+// so the two emitters stay decoupled; used only for the octal fallback below.
 static uint64_t bemsh_real_word(double v)
 {
     if (v == 0.0)
@@ -165,19 +195,16 @@ static const struct {
     const char *ir;    // canonical b$… name in the IR
     const char *bemsh; // libbem.bin export symbol
 } bemsh_helper_map[] = {
-    { "b$save", "_save" },   { "b$save0", "_save0" }, { "b$ret", "_ret" },
-    { "b$mul", "_mul" },     { "b$div", "_div" },     { "b$mod", "_mod" },
-    { "b$uadd", "_uadd" },   { "b$usub", "_usub" },   { "b$umul", "_umul" },
-    { "b$udiv", "_udiv" },   { "b$umod", "_umod" },   { "b$uneg", "_uneg" },
-    { "b$lsh", "_lsh" },     { "b$rsh", "_rsh" },     { "b$eq", "_eq" },
-    { "b$ne", "_ne" },       { "b$lt", "_lt" },       { "b$le", "_le" },
-    { "b$gt", "_gt" },       { "b$ge", "_ge" },       { "b$not", "_not" },
-    { "b$ult", "_ult" },     { "b$ule", "_ule" },     { "b$ugt", "_ugt" },
-    { "b$uge", "_uge" },     { "b$flt", "_flt" },     { "b$fle", "_fle" },
-    { "b$fgt", "_fgt" },     { "b$fge", "_fge" },     { "b$dtoi", "_dtoi" },
-    { "b$dtou", "_dtou" },   { "b$utod", "_utod" },   { "b$padd", "_padd" },
-    { "b$pinc", "_pinc" },   { "b$pdec", "_pdec" },   { "b$pdiff", "_pdiff" },
-    { "b$stb", "_stb" },     { "b$tout", "_tout" },
+    { "b$save", "_save" }, { "b$save0", "_save0" }, { "b$ret", "_ret" },   { "b$mul", "_mul" },
+    { "b$div", "_div" },   { "b$mod", "_mod" },     { "b$uadd", "_uadd" }, { "b$usub", "_usub" },
+    { "b$umul", "_umul" }, { "b$udiv", "_udiv" },   { "b$umod", "_umod" }, { "b$uneg", "_uneg" },
+    { "b$lsh", "_lsh" },   { "b$rsh", "_rsh" },     { "b$eq", "_eq" },     { "b$ne", "_ne" },
+    { "b$lt", "_lt" },     { "b$le", "_le" },       { "b$gt", "_gt" },     { "b$ge", "_ge" },
+    { "b$not", "_not" },   { "b$ult", "_ult" },     { "b$ule", "_ule" },   { "b$ugt", "_ugt" },
+    { "b$uge", "_uge" },   { "b$flt", "_flt" },     { "b$fle", "_fle" },   { "b$fgt", "_fgt" },
+    { "b$fge", "_fge" },   { "b$dtoi", "_dtoi" },   { "b$dtou", "_dtou" }, { "b$utod", "_utod" },
+    { "b$padd", "_padd" }, { "b$pinc", "_pinc" },   { "b$pdec", "_pdec" }, { "b$pdiff", "_pdiff" },
+    { "b$stb", "_stb" },   { "b$tout", "_tout" },
 };
 
 // Mangle a name into a valid Bemsh label: ≤6 chars, begins with a letter (a leading `_`
@@ -244,7 +271,7 @@ void bemsh_mangle(char *dst, size_t n, const char *src)
 static void bemsh_madlen_literal(char *buf, size_t n, const char *lit)
 {
     const char *p = lit + 1; // skip '='
-    int leftjust = 0;
+    int leftjust  = 0;
     if (*p == ':') { // Madlen =: — OCT: the digits are left-justified in the 48-bit word
         leftjust = 1;
         p++;
@@ -328,8 +355,7 @@ static void bemsh_operand(char *buf, size_t n, const Besm_Instr *i)
 // mnemonic, then the operand.  The index register (mreg) is appended parenthesized to the
 // operand — `уиа масс(13)`, or `(13)` when there is no address.
 //
-static void emit_line(FILE *out, const char *label, int mreg, const char *mnem,
-                      const char *addr)
+static void emit_line(FILE *out, const char *label, int mreg, const char *mnem, const char *addr)
 {
     char operand[80] = "";
     if (addr && addr[0])
@@ -543,12 +569,12 @@ static void emit_bemsh_func(FILE *out, const char *comment, const Besm_Func *fun
     }
 }
 
-static void emit_bemsh_data_section(FILE *out, const char *comment,
-                                    const Besm_DataSection *section)
+static void emit_bemsh_data_section(FILE *out, const char *comment, const Besm_DataSection *section)
 {
     for (; section; section = section->next) {
         deck_open(out, comment);
-        emit_line(out, section->name, 0, "старт", "1"); // start-address operand (see BESM_STMT_NAME)
+        emit_line(out, section->name, 0, "старт",
+                  "1"); // start-address operand (see BESM_STMT_NAME)
         emit_bemsh_instr(out, section->items);
         emit_line(out, NULL, 0, "финиш", "");
         deck_close(out);

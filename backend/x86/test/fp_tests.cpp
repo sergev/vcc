@@ -4,12 +4,12 @@
 //
 #include "x86_test.h"
 
-#define EXPECT_HAS(name, expected, src)                                    \
-    TEST_F(X86Test, name)                                                  \
-    {                                                                      \
-        NaiveSelection();                                                  \
-        std::string code = Code(CompileToX86(src));                        \
-        EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
+#define EXPECT_HAS(name, expected, src)                            \
+    TEST_F(X86Test, name)                                          \
+    {                                                              \
+        NaiveSelection();                                          \
+        std::string code = Code(CompileToX86(src));                \
+        EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
 
 // A parameter comes in xmm0, the result goes back in xmm0; the second operand of an
@@ -36,8 +36,9 @@ TEST_F(X86Test, ConstantOperand)
     NaiveSelection();
     std::string s = CompileToX86("double f(double a) { return a / 3.0; }");
     EXPECT_NE(std::string::npos, Code(s).find("divsd .LC0(%rip), %xmm14\n")) << s;
-    EXPECT_NE(std::string::npos,
-              s.find("    .section .rodata\n    .p2align 3\n.LC0:\n    .quad   0x4008000000000000\n"))
+    EXPECT_NE(
+        std::string::npos,
+        s.find("    .section .rodata\n    .p2align 3\n.LC0:\n    .quad   0x4008000000000000\n"))
         << s;
 }
 
@@ -47,8 +48,10 @@ TEST_F(X86Test, NegateFloat)
     NaiveSelection();
     std::string s = CompileToX86("float f(float a) { return -a; }");
     EXPECT_NE(std::string::npos, Code(s).find("xorps .LC0(%rip), %xmm14\n")) << s;
-    EXPECT_NE(std::string::npos,
-              s.find(".p2align 4\n.LC0:\n    .quad   0x0000000080000000\n    .quad   0x0000000000000000\n"))
+    EXPECT_NE(
+        std::string::npos,
+        s.find(
+            ".p2align 4\n.LC0:\n    .quad   0x0000000080000000\n    .quad   0x0000000000000000\n"))
         << s;
 }
 

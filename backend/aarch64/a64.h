@@ -101,12 +101,12 @@ typedef struct {
     A64_OperandKind kind;
     int reg;
     A64_Width width;
-    int64_t imm; // immediate, offset, or shift/extend amount
-    int sub;     // A64_Shift, A64_Extend, A64_MemMode or A64_Cond, by kind
+    int64_t imm;     // immediate, offset, or shift/extend amount
+    int sub;         // A64_Shift, A64_Extend, A64_MemMode or A64_Cond, by kind
     A64_Reloc reloc; // A64_OPND_SYM: how it is relocated
     bool label;      // A64_OPND_SYM: a local code label, not a C name
     char *sym;       // owned
-    int index;   // A64_MEM_INDEX: the index register, at index_width
+    int index;       // A64_MEM_INDEX: the index register, at index_width
     A64_Width index_width;
     int ext; // A64_MEM_INDEX with a W index: A64_Extend
 } A64_Operand;
@@ -194,11 +194,11 @@ void a64_free_func(A64_Func *fn);
 A64_Operand a64_reg(int reg, A64_Width width);
 A64_Operand a64_imm(int64_t imm);
 A64_Operand a64_sym(const char *sym, int64_t offset);
-A64_Operand a64_label(const char *label);                // a local code label
-A64_Operand a64_page(const char *sym);                   // adrp: sym's page
-A64_Operand a64_lo12(const char *sym, int64_t offset);   // add: the low 12 bits
-A64_Operand a64_gotpage(const char *sym);                // adrp: the page of sym's GOT entry
-A64_Operand a64_mem_got(int base, const char *sym);      // ldr: sym's GOT entry
+A64_Operand a64_label(const char *label);              // a local code label
+A64_Operand a64_page(const char *sym);                 // adrp: sym's page
+A64_Operand a64_lo12(const char *sym, int64_t offset); // add: the low 12 bits
+A64_Operand a64_gotpage(const char *sym);              // adrp: the page of sym's GOT entry
+A64_Operand a64_mem_got(int base, const char *sym);    // ldr: sym's GOT entry
 A64_Operand a64_mem(int base, int64_t offset);
 A64_Operand a64_mem_pre(int base, int64_t offset);
 A64_Operand a64_mem_post(int base, int64_t offset);

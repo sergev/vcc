@@ -16,10 +16,10 @@
 // an argument of its own (bit-fields by their storage unit, a nested structure, union
 // or array whole), so a structure may even be split between registers and the stack.
 typedef struct {
-    int arg;  // the argument's index
-    int off;  // the piece's offset in the argument
-    int size; // its bytes
-    int reg;  // the first (lowest) register, or 0 on the stack
+    int arg;   // the argument's index
+    int off;   // the piece's offset in the argument
+    int size;  // its bytes
+    int reg;   // the first (lowest) register, or 0 on the stack
     int stack; // the offset in the stack argument area
 } Piece;
 
@@ -347,8 +347,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         if (!p->reg || !avr_is_scalar(types[p->arg]))
             continue;
         // A char extended to its pair.
-        loads[nl++] = (Load){ args[p->arg], regs_range(p->reg, p->size == 1 ? 2 : p->size),
-                              EXT_TYPE };
+        loads[nl++] =
+            (Load){ args[p->arg], regs_range(p->reg, p->size == 1 ? 2 : p->size), EXT_TYPE };
     }
     Tac_Val fp = { .kind = TAC_VAL_VAR, .u.var_name = in->u.fun_call.fun_name };
     if (in->u.fun_call.indirect)
@@ -391,7 +391,7 @@ void gen_return(Gen *g, const Tac_Val *v, bool last)
     if (v) {
         const Tac_Type *fn = g->tl->u.function.type;
         const Tac_Type *t  = fn ? fn->u.fun_type.ret_type : val_type(g, v);
-        int size = avr_type_size(t);
+        int size           = avr_type_size(t);
         if (!avr_is_scalar(t) && size > 8) {
             // The frontend returns a larger one through the hidden pointer it returns
             // here; under this ABI the address does not come back.

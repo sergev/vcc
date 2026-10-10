@@ -22,7 +22,10 @@ OptFlags LoopFlags()
 
 struct TargetGuard {
     const Target *saved;
-    explicit TargetGuard(const char *name) : saved(target_config) { target_config = target_lookup(name); }
+    explicit TargetGuard(const char *name) : saved(target_config)
+    {
+        target_config = target_lookup(name);
+    }
     ~TargetGuard() { target_config = saved; }
 };
 
@@ -63,7 +66,7 @@ int count(int n)
     return k;
 }
 )",
-                                 flags);
+                                  flags);
     EXPECT_EQ(1, Count(y, "kind: jump_if_zero")) << y;
     EXPECT_EQ(1, Count(y, "kind: jump_if_not_zero")) << y;
     EXPECT_EQ(0, Count(y, "kind: jump\n")) << y;
@@ -75,8 +78,8 @@ TEST_F(PipelineTest, LoopNotRotated)
     OptFlags flags    = LoopFlags();
     flags.loop_rotate = false;
     flags.ivsr        = false;
-    std::string y     = OptimizeYaml("int f(int n) { int k = 0; while (n > 0) { k++; n--; } return k; }",
-                                 flags);
+    std::string y =
+        OptimizeYaml("int f(int n) { int k = 0; while (n > 0) { k++; n--; } return k; }", flags);
     EXPECT_EQ(1, Count(y, "kind: jump\n")) << y;
     EXPECT_EQ(0, Count(y, "kind: jump_if_not_zero")) << y;
 }
@@ -130,7 +133,8 @@ int find(int *p, int n, int x)
 )",
                                  LoopFlags());
     EXPECT_NE(std::string::npos, y.find("name: %i\n")) << y;
-    EXPECT_EQ(std::string::npos, y.find("    name: %p\n  index:\n    kind: var\n    name: %i")) << y;
+    EXPECT_EQ(std::string::npos, y.find("    name: %p\n  index:\n    kind: var\n    name: %i"))
+        << y;
 }
 
 // p[i] and p[i + 1] share one pointer: the second is that pointer plus one element.
@@ -225,13 +229,15 @@ TEST_F(PipelineTest, LoopPointerSteppedInPlace)
 {
     std::string y = OptimizeYaml(bubble_src, LoopFlags());
     // The step of the inner pointer, in place.
-    EXPECT_EQ(1, Count(y, "    name: %1000\n  index:\n    kind: constant\n    const:\n"
-                          "      kind: long\n      value: 1\n  scale: 4\n  dst:\n"
-                          "    kind: var\n    name: %1000\n"))
+    EXPECT_EQ(1, Count(y,
+                       "    name: %1000\n  index:\n    kind: constant\n    const:\n"
+                       "      kind: long\n      value: 1\n  scale: 4\n  dst:\n"
+                       "    kind: var\n    name: %1000\n"))
         << y;
     // v[j], stored to behind the step.
-    EXPECT_EQ(1, Count(y, "    name: %1000\n  index:\n    kind: constant\n    const:\n"
-                          "      kind: long\n      value: -1\n"))
+    EXPECT_EQ(1, Count(y,
+                       "    name: %1000\n  index:\n    kind: constant\n    const:\n"
+                       "      kind: long\n      value: -1\n"))
         << y;
     // No second pointer: the end pointer and its step, and these two.
     EXPECT_EQ(4, Count(y, "kind: add_ptr")) << y;
@@ -247,7 +253,8 @@ TEST_F(PipelineTest, LoopCountdownBoundReduced)
     // Only ahead of the loops is v indexed by a variable.
     EXPECT_EQ(1, Count(y, "    name: %v\n  index:\n    kind: var")) << y;
     // The end pointer, stepped down and compared twice: by the guard and by the test.
-    EXPECT_EQ(1, Count(y, "      value: -1\n  scale: 4\n  dst:\n    kind: var\n    name: %1004\n")) << y;
+    EXPECT_EQ(1, Count(y, "      value: -1\n  scale: 4\n  dst:\n    kind: var\n    name: %1004\n"))
+        << y;
     EXPECT_EQ(2, Count(y, "op: greater_than\n  src1:\n    kind: var\n    name: %1004\n")) << y;
 }
 

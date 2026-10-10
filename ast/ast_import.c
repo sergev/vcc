@@ -298,7 +298,7 @@ Param *import_param(WFILE *input)
         bad_input("tag 0x%zx where TAG_PARAM belongs", tag);
     }
     Param *param = new_param();
-    param->loc = import_loc(input);
+    param->loc   = import_loc(input);
     param->name  = wgetstr(input);
     check_input(input, "param name");
     param->type       = import_type(input);
@@ -320,7 +320,7 @@ Declaration *import_declaration(WFILE *input)
     }
     DeclarationKind kind = (DeclarationKind)(tag - TAG_DECLARATION);
     Declaration *decl    = new_declaration(kind);
-    decl->loc = import_loc(input);
+    decl->loc            = import_loc(input);
     switch (kind) {
     case DECL_VAR:
         decl->u.var.specifiers      = import_decl_spec(input);
@@ -431,7 +431,7 @@ InitDeclarator *import_init_declarator(WFILE *input)
         bad_input("tag 0x%zx where TAG_INITDECLARATOR belongs", tag);
     }
     InitDeclarator *idecl = new_init_declarator();
-    idecl->loc = import_loc(input);
+    idecl->loc            = import_loc(input);
     idecl->type           = import_type(input);
     idecl->name           = wgetstr(input);
     check_input(input, "init declarator name");
@@ -450,7 +450,7 @@ Initializer *import_initializer(WFILE *input)
         return NULL;
     InitializerKind kind = (InitializerKind)(tag - TAG_INITIALIZER);
     Initializer *init    = new_initializer(kind);
-    init->loc = import_loc(input);
+    init->loc            = import_loc(input);
     switch (kind) {
     case INITIALIZER_SINGLE:
         init->u.expr = import_expr(input);
@@ -534,7 +534,7 @@ Expr *import_expr(WFILE *input)
     }
     ExprKind kind = (ExprKind)(tag - TAG_EXPR);
     Expr *expr    = new_expression(kind);
-    expr->loc = import_loc(input);
+    expr->loc     = import_loc(input);
     switch (kind) {
     case EXPR_LITERAL:
         expr->u.literal = import_literal(input);
@@ -760,7 +760,7 @@ Stmt *import_stmt(WFILE *input)
     }
     StmtKind kind = (StmtKind)(tag - TAG_STMT);
     Stmt *stmt    = new_stmt(kind);
-    stmt->loc = import_loc(input);
+    stmt->loc     = import_loc(input);
     switch (kind) {
     case STMT_EXPR:
         stmt->u.expr = import_expr(input);
@@ -885,7 +885,7 @@ ExternalDecl *import_external_decl(WFILE *input)
         return NULL;
     ExternalDeclKind kind = (ExternalDeclKind)(tag - TAG_EXTERNALDECL);
     ExternalDecl *exdecl  = new_external_decl(kind);
-    exdecl->loc = import_loc(input);
+    exdecl->loc           = import_loc(input);
     switch (kind) {
     case EXTERNAL_DECL_FUNCTION:
         exdecl->u.function.type = import_type(input);

@@ -8,7 +8,7 @@
 
 char *strchr(const char *s, int c)
 {
-    char ch = (char)c;
+    char ch       = (char)c;
     const char *p = s;
     for (;;) {
         if (*p == ch) {

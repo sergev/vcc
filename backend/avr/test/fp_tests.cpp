@@ -13,9 +13,8 @@
 // Operands: zeros, ordinary values, rounding ties, the extremes, subnormals, the
 // infinities and a NaN.
 static const uint32_t fvals[] = {
-    0x00000000, 0x80000000, 0x3f800000, 0xbfc00000, 0x40400000, 0x3dcccccd,
-    0x3f800001, 0x33800000, 0x7f7fffff, 0x00800000, 0x00000001, 0x807fffff,
-    0x7f800000, 0xff800000, 0x7fc00000, 0x4b800001,
+    0x00000000, 0x80000000, 0x3f800000, 0xbfc00000, 0x40400000, 0x3dcccccd, 0x3f800001, 0x33800000,
+    0x7f7fffff, 0x00800000, 0x00000001, 0x807fffff, 0x7f800000, 0xff800000, 0x7fc00000, 0x4b800001,
 };
 
 static float FromBits(uint32_t u)
@@ -70,8 +69,8 @@ static void hex(float v)
 }
 int main(void)
 {
-    for (int i = )" + std::to_string(from) +
-           "; i < " + std::to_string(to) + R"(; i++)
+    for (int i = )" +
+           std::to_string(from) + "; i < " + std::to_string(to) + R"(; i++)
         for (int j = 0; j < )" +
            std::to_string(sizeof fvals / sizeof fvals[0]) + R"(; j++) {
             float x = f(vals[i]), y = f(vals[j]);
@@ -123,11 +122,12 @@ TEST_F(AvrTest, RunFloatArithmetic2)
 TEST_F(AvrTest, RunFloatConversions)
 {
     SKIP_IF_NO_AVR_TOOLS();
-    static const int32_t ints[] = { 0, 1, -1, 16777217, -16777217, 2147483647,
-                                    -2147483647 - 1, 123456789, 0x7fffff80, 33554435 };
-    static const float floats[] = { 0.0f, -0.0f, 0.5f, -0.99f, 2.5f, -2.5f, 32767.9f,
-                                    -32768.0f, 1e9f, -2147483648.0f, 16777216.0f };
-    std::string src = R"(
+    static const int32_t ints[] = {
+        0, 1, -1, 16777217, -16777217, 2147483647, -2147483647 - 1, 123456789, 0x7fffff80, 33554435
+    };
+    static const float floats[] = { 0.0f,     -0.0f,     0.5f, -0.99f,         2.5f,       -2.5f,
+                                    32767.9f, -32768.0f, 1e9f, -2147483648.0f, 16777216.0f };
+    std::string src             = R"(
 void putbyte(int c);
 static void hex(unsigned long u)
 {
@@ -194,8 +194,7 @@ ldd r20, Y+7
 ldd r21, Y+8
 call __addsf3
 std Y+9, r22
-)"))
-        << s;
+)")) << s;
 }
 
 // Negation flips the sign bit inline.
@@ -215,7 +214,8 @@ TEST_F(AvrTest, FloatCompare)
     EXPECT_NE(std::string::npos, s.find(R"(call __gtsf2
 cp r1, r24
 ldi r24, 1
-brlt )")) << s;
+brlt )"))
+        << s;
 }
 
 // The truth test ignores the sign: -0.0 is false.
@@ -223,14 +223,12 @@ TEST_F(AvrTest, FloatTruthTest)
 {
     NaiveSelection();
     std::string s = Body(CompileToAvr("int f(float a) { return !a; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(andi r25, 127
+    EXPECT_NE(std::string::npos, s.find(R"(andi r25, 127
 cp r22, r1
 cpc r23, r1
 cpc r24, r1
 cpc r25, r1
-)"))
-        << s;
+)")) << s;
 }
 
 // A 16-bit int is widened to 32 bits before __floatsisf, an unsigned with zeros.
@@ -269,14 +267,23 @@ int main(void)
 // sticky bits far below the kept ones, and the top of the range; against the host.
 static std::string LongLongProgram()
 {
-    static const int64_t lls[] = { 0, 1, -1, 16777217, 0x100000080LL, 0x100000081LL,
-                                   0x180000080LL, 0x7fffff8000000000LL,
-                                   0x7fffffbfffffffffLL, (int64_t)0x8000008000000001ULL,
-                                   (int64_t)0xffffff8000000000ULL, -0x100000081LL,
-                                   0x123456789abcdefLL, (int64_t)0x8000000000000000ULL };
-    static const float fls[] = { 0.0f, 0.75f, -0.75f, 4294967296.0f, 1.5e18f, -1.5e18f,
-                                 9.2233715e18f, 1.8446743e19f };
-    std::string src = R"(
+    static const int64_t lls[] = { 0,
+                                   1,
+                                   -1,
+                                   16777217,
+                                   0x100000080LL,
+                                   0x100000081LL,
+                                   0x180000080LL,
+                                   0x7fffff8000000000LL,
+                                   0x7fffffbfffffffffLL,
+                                   (int64_t)0x8000008000000001ULL,
+                                   (int64_t)0xffffff8000000000ULL,
+                                   -0x100000081LL,
+                                   0x123456789abcdefLL,
+                                   (int64_t)0x8000000000000000ULL };
+    static const float fls[]   = { 0.0f,    0.75f,    -0.75f,        4294967296.0f,
+                                   1.5e18f, -1.5e18f, 9.2233715e18f, 1.8446743e19f };
+    std::string src            = R"(
 void putbyte(int c);
 static void hex(unsigned long u)
 {
@@ -322,17 +329,26 @@ volatile long long lls[] = { )";
 
 static std::string LongLongExpected()
 {
-    static const int64_t lls[] = { 0, 1, -1, 16777217, 0x100000080LL, 0x100000081LL,
-                                   0x180000080LL, 0x7fffff8000000000LL,
-                                   0x7fffffbfffffffffLL, (int64_t)0x8000008000000001ULL,
-                                   (int64_t)0xffffff8000000000ULL, -0x100000081LL,
-                                   0x123456789abcdefLL, (int64_t)0x8000000000000000ULL };
-    static const float fls[] = { 0.0f, 0.75f, -0.75f, 4294967296.0f, 1.5e18f, -1.5e18f,
-                                 9.2233715e18f, 1.8446743e19f };
+    static const int64_t lls[] = { 0,
+                                   1,
+                                   -1,
+                                   16777217,
+                                   0x100000080LL,
+                                   0x100000081LL,
+                                   0x180000080LL,
+                                   0x7fffff8000000000LL,
+                                   0x7fffffbfffffffffLL,
+                                   (int64_t)0x8000008000000001ULL,
+                                   (int64_t)0xffffff8000000000ULL,
+                                   -0x100000081LL,
+                                   0x123456789abcdefLL,
+                                   (int64_t)0x8000000000000000ULL };
+    static const float fls[]   = { 0.0f,    0.75f,    -0.75f,        4294967296.0f,
+                                   1.5e18f, -1.5e18f, 9.2233715e18f, 1.8446743e19f };
     std::string s;
     for (int64_t v : lls)
-        s += Hex(Bits((float)v)) + " " + Hex(Bits((float)(uint64_t)v)) + " " +
-             Hex(Bits((float)v)) + " \n";
+        s += Hex(Bits((float)v)) + " " + Hex(Bits((float)(uint64_t)v)) + " " + Hex(Bits((float)v)) +
+             " \n";
     for (float f : fls) {
         int64_t i  = f < 9.2e18f ? (int64_t)f : 0;
         uint64_t u = f >= 0 ? (uint64_t)f : 0;

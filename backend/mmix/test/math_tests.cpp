@@ -117,7 +117,8 @@ TEST_F(MmixTest, FrexpLdexpRoundTrip)
     EXPECT_EQ(R"(M=0.750000 E=4
 BACK=12.000000
 BACK=100.000000
-)", CompileAndRunMmix(R"PROG(
+)",
+              CompileAndRunMmix(R"PROG(
 #include <stdio.h>
 #include <math.h>
 static void body(void) {
@@ -280,5 +281,6 @@ int main(void)
     printf("%d\n", m != m);
     return 0;
 }
-)"), "crt0.o", &gcc, { "-O1" }, ".gcc"));
+)"),
+                  "crt0.o", &gcc, { "-O1" }, ".gcc"));
 }

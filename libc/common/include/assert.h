@@ -17,7 +17,6 @@
 /* TODO: provide __assert_fail in the runtime. */
 _Noreturn void __assert_fail(const char *expr, const char *file, int line);
 
-#define assert(expr) \
-    ((expr) ? (void)0 : __assert_fail(#expr, __FILE__, __LINE__))
+#define assert(expr) ((expr) ? (void)0 : __assert_fail(#expr, __FILE__, __LINE__))
 
 #endif

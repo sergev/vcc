@@ -64,15 +64,18 @@ pop 1, 0
 
 EXPECT_OPT(IndexedLoad, R"(ldb $0, $0, $1
 pop 1, 0
-)", "char f(char *p, long i) { return p[i]; }")
+)",
+           "char f(char *p, long i) { return p[i]; }")
 
 EXPECT_OPT(OffsetLoad, R"(ldo $0, $0, 24
 pop 1, 0
-)", "long f(long *p) { return p[3]; }")
+)",
+           "long f(long *p) { return p[3]; }")
 
 EXPECT_OPT(ConstantFirstOperand, R"(addu $0, $0, 5
 pop 1, 0
-)", "long f(long a) { return 5 + a; }")
+)",
+           "long f(long a) { return 5 + a; }")
 
 // *d++ = *s++: each pointer read, then stepped; the loop entered at its test, the body
 // empty, its back edge pbnz.
@@ -172,7 +175,8 @@ pop 1, 0
 // A constant of -1..-255 added is subtracted, as an immediate.
 EXPECT_OPT(NegativeConstant, R"(subu $0, $0, 5
 pop 1, 0
-)", "long f(long a) { return a + -5; }")
+)",
+           "long f(long a) { return a + -5; }")
 
 // Run: choices by conditional sets, against the plain answers.
 TEST_F(MmixTest, RunConditionalSets)
@@ -226,7 +230,7 @@ pop 1, 0
 TEST_F(MmixTest, RunTailCalls)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string gcc = R"(
+    std::string gcc  = R"(
 long down_ours(long n, long acc);
 long down_gcc(long n, long acc) { if (n == 0) return acc; return down_ours(n - 1, acc + 2); }
 )";

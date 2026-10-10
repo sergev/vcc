@@ -103,7 +103,8 @@ TEST(AvrPeephole, ReloadIsMove)
 mov r24, r22
 mov r25, r1
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A store of what the slot already holds goes.
@@ -114,7 +115,8 @@ TEST(AvrPeephole, StoreOfSameValueGoes)
     EXPECT_EQ(R"(ldd r24, Y+1
 inc r25
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A volatile access stays as it is.
@@ -127,7 +129,8 @@ TEST(AvrPeephole, VolatileStays)
 ldd r24, Y+1
 ldd r20, Y+2
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A store through a pointer may write any slot: the next load stays.
@@ -140,7 +143,8 @@ TEST(AvrPeephole, PointerStoreForgetsSlots)
 st Z, r23
 ldd r24, Y+1
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A copy back of a copy goes, and then the first copy, now dead.
@@ -152,7 +156,8 @@ TEST(AvrPeephole, CopyBackGoes)
     EXPECT_EQ(R"(ldd r24, Z+0
 mov r25, r1
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A constant a register already holds is not loaded again.
@@ -164,7 +169,8 @@ TEST(AvrPeephole, KnownConstant)
     EXPECT_EQ(R"(ldi r24, 5
 mov r25, r1
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // The flags dead after it: subi/sbci of a small constant on r24 is adiw; with a branch
@@ -175,13 +181,15 @@ TEST(AvrPeephole, AdiwWhenFlagsDead)
     f.op(AVR_SUBI, r(24), imm(0xfe)).op(AVR_SBCI, r(25), imm(0xff)).op(AVR_RET);
     EXPECT_EQ(R"(adiw r24, 2
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 
     Fn g;
     g.op(AVR_SUBI, r(24), imm(3)).op(AVR_SBCI, r(25), imm(0)).op(AVR_RET);
     EXPECT_EQ(R"(sbiw r24, 3
 ret
-)", g.Peephole());
+)",
+              g.Peephole());
 
     Fn h;
     h.op(AVR_SUBI, r(24), imm(0xfe)).op(AVR_SBCI, r(25), imm(0xff));
@@ -192,7 +200,8 @@ brlo .L1
 inc r24
 .L1:
 ret
-)", h.Peephole());
+)",
+              h.Peephole());
 }
 
 // ldi into a dead temporary, then cp: cpi.
@@ -206,7 +215,8 @@ breq .L1
 inc r24
 .L1:
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // A branch over a jump is the inverse branch; a jump to the next instruction goes.
@@ -222,7 +232,8 @@ brne .L2
 inc r24
 .L2:
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // Code after an unconditional jump, up to a label something jumps to, goes.
@@ -234,7 +245,8 @@ TEST(AvrPeephole, UnreachableGoes)
     EXPECT_EQ(R"(.L1:
 .L2:
 ret
-)", f.Peephole());
+)",
+              f.Peephole());
 }
 
 // After the frame: a call then ret is a tail jump; a jump to a lone ret is ret.
@@ -250,7 +262,8 @@ jmp g
 inc r24
 .Lx:
 ret
-)", f.Peephole(true));
+)",
+              f.Peephole(true));
 }
 
 // A comparison read only by the branch after it: no 0 or 1 in between.
@@ -293,8 +306,7 @@ int main(void)
 TEST_F(AvrTest, VolatileKept)
 {
     std::string s = Code(CompileToAvr("int f(void) { volatile int v = 1; v = 2; return v + v; }"));
-    EXPECT_NE(std::string::npos,
-              s.find(R"(ldi r26, 1
+    EXPECT_NE(std::string::npos, s.find(R"(ldi r26, 1
 std Y+1, r26
 std Y+2, r1
 ldi r26, 2
@@ -304,6 +316,5 @@ ldd r22, Y+1
 ldd r23, Y+2
 ldd r24, Y+1
 ldd r25, Y+2
-)"))
-        << s;
+)")) << s;
 }

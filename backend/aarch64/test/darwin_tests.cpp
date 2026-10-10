@@ -22,8 +22,7 @@ int f(int n)
 )"));
     EXPECT_EQ(0u, code.find("stp x29, x30, [sp, #-16]!\nmov x29, sp\n")) << code;
     EXPECT_NE(std::string::npos, code.find("sub sp, sp, x9\nadd x19, sp, #16\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("mov sp, x29\nldp x29, x30, [sp], #16\nret\n"))
-        << code;
+    EXPECT_NE(std::string::npos, code.find("mov sp, x29\nldp x29, x30, [sp], #16\nret\n")) << code;
 }
 
 // C names take a `_`, local labels an `L`; no ELF directives.
@@ -55,8 +54,7 @@ int zeroes[10];
 const char *msg(void) { return "text"; }
 )");
     EXPECT_NE(std::string::npos, s.find("    .data\n    .globl  _data\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("    .section __DATA,__bss\n    .globl  _zeroes\n"))
-        << s;
+    EXPECT_NE(std::string::npos, s.find("    .section __DATA,__bss\n    .globl  _zeroes\n")) << s;
     EXPECT_NE(std::string::npos, s.find("    .const\n    .p2align 0\n__str")) << s;
     EXPECT_NE(std::string::npos, s.find(".ascii  \"text\"")) << s;
 }

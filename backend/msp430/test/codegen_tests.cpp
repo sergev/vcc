@@ -33,13 +33,16 @@ EXPECT_CODE(VoidFallOff, "ret\n", "void f(void) { }")
 // extended to int, as clang's callers expect.
 EXPECT_CODE(ReturnSignedChar, R"(mov #-1, r12
 ret
-)", "signed char f(void) { return -1; }")
+)",
+            "signed char f(void) { return -1; }")
 EXPECT_CODE(ReturnPlainChar, R"(mov #255, r12
 ret
-)", "char f(void) { return -1; }")
+)",
+            "char f(void) { return -1; }")
 EXPECT_CODE(ReturnInt, R"(mov #4660, r12
 ret
-)", "int f(void) { return 0x1234; }")
+)",
+            "int f(void) { return 0x1234; }")
 EXPECT_CODE(ReturnLong, R"(mov #772, r12
 mov #258, r13
 ret

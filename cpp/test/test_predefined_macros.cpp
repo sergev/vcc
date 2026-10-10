@@ -4,18 +4,21 @@
 using Predefined = PreprocessorTest;
 
 // §6.10.8.1: __STDC__ expands to 1.
-TEST_F(Predefined, StdcIsOne) {
+TEST_F(Predefined, StdcIsOne)
+{
     EXPECT_TOKENS("__STDC__\n", "1");
 }
 
 // §6.10.8.1: __STDC_VERSION__ is 201112L for C11 — the defining evidence that
 // the tool is operating in C11 mode.
-TEST_F(Predefined, StdcVersionIsC11) {
+TEST_F(Predefined, StdcVersionIsC11)
+{
     EXPECT_TOKENS("__STDC_VERSION__\n", "201112L");
 }
 
 // §6.10.8.1: __STDC_HOSTED__ is defined (1 for a hosted implementation).
-TEST_F(Predefined, StdcHostedDefined) {
+TEST_F(Predefined, StdcHostedDefined)
+{
     EXPECT_TOKENS("#ifdef __STDC_HOSTED__\nHOSTED\n#endif\n", "HOSTED");
 }
 
@@ -25,38 +28,45 @@ TEST_F(Predefined, StdcHostedDefined) {
 // native float format and no complex type, no atomic instructions, and no
 // threads under this kernel -- so each absence must be announced here, which is
 // what lets a portable source #ifdef past it rather than fail to find a header.
-TEST_F(Predefined, StdcNoComplexIsOne) {
+TEST_F(Predefined, StdcNoComplexIsOne)
+{
     EXPECT_TOKENS("__STDC_NO_COMPLEX__\n", "1");
 }
 
-TEST_F(Predefined, StdcNoAtomicsIsOne) {
+TEST_F(Predefined, StdcNoAtomicsIsOne)
+{
     EXPECT_TOKENS("__STDC_NO_ATOMICS__\n", "1");
 }
 
-TEST_F(Predefined, StdcNoThreadsIsOne) {
+TEST_F(Predefined, StdcNoThreadsIsOne)
+{
     EXPECT_TOKENS("__STDC_NO_THREADS__\n", "1");
 }
 
 // Not §4p6 -- there is no <vla.h> to miss -- but the front end folds every array
 // dimension to a literal and dies on one it cannot ("Size is not a literal"), so
 // the absence is real and worth announcing on the same footing.
-TEST_F(Predefined, StdcNoVlaIsOne) {
+TEST_F(Predefined, StdcNoVlaIsOne)
+{
     EXPECT_TOKENS("__STDC_NO_VLA__\n", "1");
 }
 
 // §6.10.8.4 covers these too: they are predefined, so neither #define nor #undef.
-TEST_F(Predefined, UndefStdcNoComplexDiagnosed) {
+TEST_F(Predefined, UndefStdcNoComplexDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#undef __STDC_NO_COMPLEX__\n");
 }
 
 // §6.10.8.1: __LINE__ is the current source line number.
-TEST_F(Predefined, LineNumber) {
+TEST_F(Predefined, LineNumber)
+{
     // __LINE__ appears on the third line of the snippet.
     EXPECT_TOKENS("\n\n__LINE__\n", "3");
 }
 
 // §6.10.8.1: __FILE__ is a string literal naming the current source file.
-TEST_F(Predefined, FileIsStringLiteral) {
+TEST_F(Predefined, FileIsStringLiteral)
+{
     Result r = Preprocess("__FILE__\n");
     ASSERT_EQ(r.exit_code, 0) << r.err;
     std::string out = Normalize(r.out);
@@ -72,33 +82,40 @@ TEST_F(Predefined, FileIsStringLiteral) {
 // whitespace-normalized here — extract the quoted spans directly.
 // Drop lines whose first non-blank character is '#' (GNU line markers carry
 // quoted file names that would otherwise be mistaken for the date literal).
-static std::string StripDirectiveLines(const std::string& s) {
+static std::string StripDirectiveLines(const std::string &s)
+{
     std::string out;
     std::istringstream is(s);
     std::string line;
     while (std::getline(is, line)) {
         std::size_t p = line.find_first_not_of(" \t");
-        if (p != std::string::npos && line[p] == '#') continue;
+        if (p != std::string::npos && line[p] == '#')
+            continue;
         out += line;
         out.push_back('\n');
     }
     return out;
 }
 
-static std::string NthQuotedSpan(const std::string& s, int n) {
+static std::string NthQuotedSpan(const std::string &s, int n)
+{
     std::size_t pos = 0;
     for (int i = 0; i <= n; ++i) {
         std::size_t open = s.find('"', pos);
-        if (open == std::string::npos) return {};
+        if (open == std::string::npos)
+            return {};
         std::size_t close = s.find('"', open + 1);
-        if (close == std::string::npos) return {};
-        if (i == n) return s.substr(open, close - open + 1);
+        if (close == std::string::npos)
+            return {};
+        if (i == n)
+            return s.substr(open, close - open + 1);
         pos = close + 1;
     }
     return {};
 }
 
-TEST_F(Predefined, DateAndTimeShape) {
+TEST_F(Predefined, DateAndTimeShape)
+{
     Result r = Preprocess("__DATE__\n__TIME__\n");
     ASSERT_EQ(r.exit_code, 0) << r.err;
     std::string body = StripDirectiveLines(r.out);
@@ -106,185 +123,238 @@ TEST_F(Predefined, DateAndTimeShape) {
     std::string time = NthQuotedSpan(body, 1);
     ASSERT_FALSE(date.empty()) << "no date literal in: " << r.out;
     ASSERT_FALSE(time.empty()) << "no time literal in: " << r.out;
-    EXPECT_EQ(date.size() - 2, 11u) << "date: " << date;  // "Mmm dd yyyy"
-    EXPECT_EQ(time.size() - 2, 8u) << "time: " << time;    // "hh:mm:ss"
+    EXPECT_EQ(date.size() - 2, 11u) << "date: " << date; // "Mmm dd yyyy"
+    EXPECT_EQ(time.size() - 2, 8u) << "time: " << time;  // "hh:mm:ss"
 }
 
 // §6.10.8.4: none of the predefined macros (nor `defined`) may be redefined.
-TEST_F(Predefined, RedefiningLineDiagnosed) {
+TEST_F(Predefined, RedefiningLineDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#define __LINE__ 7\n");
 }
 
-TEST_F(Predefined, DefiningDefinedDiagnosed) {
+TEST_F(Predefined, DefiningDefinedDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#define defined 1\n");
 }
 
 // §6.10.8.4: #define of a predefined macro is an error even when the
 // replacement list matches the built-in body (task 7 only caught mismatches).
-TEST_F(Predefined, RedefiningStdcDiagnosed) {
+TEST_F(Predefined, RedefiningStdcDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#define __STDC__ 1\n");
 }
 
 // §6.10.8.4: none of the predefined macros (nor `defined`) may be #undef'd.
-TEST_F(Predefined, UndefLineDiagnosed) {
+TEST_F(Predefined, UndefLineDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#undef __LINE__\n");
 }
 
-TEST_F(Predefined, UndefFileDiagnosed) {
+TEST_F(Predefined, UndefFileDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#undef __FILE__\n");
 }
 
-TEST_F(Predefined, UndefStdcDiagnosed) {
+TEST_F(Predefined, UndefStdcDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#undef __STDC__\n");
 }
 
 // `defined` is not a symbol-table entry, yet §6.10.8.4 still forbids #undef'ing it.
-TEST_F(Predefined, UndefDefinedDiagnosed) {
+TEST_F(Predefined, UndefDefinedDiagnosed)
+{
     EXPECT_PP_DIAGNOSES("#undef defined\n");
 }
 
 // Scope guard: the non-standard platform macros are ordinary and stay
 // freely #undef'able (matching §6.10.8.4 and GCC/Clang).
-TEST_F(Predefined, UndefPlatformMacroAllowed) {
+TEST_F(Predefined, UndefPlatformMacroAllowed)
+{
     EXPECT_PP_OK("#undef unix\n");
 }
 
 // The target macros (-t).  The default target is riscv64, like lower's.
-TEST_F(Predefined, DefaultTargetIsRiscv64) {
-    EXPECT_TOKENS("#if __riscv && __riscv_xlen == 64 && __LP64__ && !defined(besm6)\n"
-                  "TARGET\n#endif\n", "TARGET");
+TEST_F(Predefined, DefaultTargetIsRiscv64)
+{
+    EXPECT_TOKENS(
+        "#if __riscv && __riscv_xlen == 64 && __LP64__ && !defined(besm6)\n"
+        "TARGET\n#endif\n",
+        "TARGET");
 }
 
-TEST_F(Predefined, Riscv64Target) {
+TEST_F(Predefined, Riscv64Target)
+{
     EXPECT_TRUE(TokensAre("#if __riscv_xlen == 64 && __riscv_float_abi_double\nTARGET\n#endif\n",
-                          "TARGET", {"-t", "riscv64"}));
-    EXPECT_TRUE(TokensAre("#ifdef __riscv\nTARGET\n#endif\n", "TARGET", {"--target=riscv64"}));
+                          "TARGET", { "-t", "riscv64" }));
+    EXPECT_TRUE(TokensAre("#ifdef __riscv\nTARGET\n#endif\n", "TARGET", { "--target=riscv64" }));
 }
 
-TEST_F(Predefined, Riscv32Target) {
-    EXPECT_TRUE(TokensAre("#if __riscv && __riscv_xlen == 32 && __ILP32__ && !defined(__LP64__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "riscv32"}));
+TEST_F(Predefined, Riscv32Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __riscv && __riscv_xlen == 32 && __ILP32__ && !defined(__LP64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "riscv32" }));
 }
 
-TEST_F(Predefined, Aarch64Target) {
-    EXPECT_TRUE(TokensAre("#if __aarch64__ && __ARM_ARCH == 8 && __ARM_64BIT_STATE && __LP64__ && "
-                          "_LP64 && __CHAR_UNSIGNED__ && __ELF__ && !defined(__riscv)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64"}));
+TEST_F(Predefined, Aarch64Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __aarch64__ && __ARM_ARCH == 8 && __ARM_64BIT_STATE && __LP64__ && "
+                  "_LP64 && __CHAR_UNSIGNED__ && __ELF__ && !defined(__riscv)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "aarch64" }));
 }
 
-TEST_F(Predefined, Arm32Target) {
-    EXPECT_TRUE(TokensAre("#if __arm__ && __ARM_ARCH == 7 && __ARM_ARCH_PROFILE == 'A' && "
-                          "__ARM_PCS_VFP && __ARM_FEATURE_IDIV && __ILP32__ && _ILP32 && "
-                          "__CHAR_UNSIGNED__ && __WCHAR_UNSIGNED__ && __ELF__ && "
-                          "!defined(__aarch64__) && !defined(__LP64__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "arm32"}));
+TEST_F(Predefined, Arm32Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __arm__ && __ARM_ARCH == 7 && __ARM_ARCH_PROFILE == 'A' && "
+                  "__ARM_PCS_VFP && __ARM_FEATURE_IDIV && __ILP32__ && _ILP32 && "
+                  "__CHAR_UNSIGNED__ && __WCHAR_UNSIGNED__ && __ELF__ && "
+                  "!defined(__aarch64__) && !defined(__LP64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "arm32" }));
 }
 
 // Signed plain char: no __CHAR_UNSIGNED__.
-TEST_F(Predefined, X86_64Target) {
-    EXPECT_TRUE(TokensAre("#if __x86_64__ && __x86_64 && __amd64__ && __LP64__ && _LP64 && "
-                          "__SSE2__ && __SSE2_MATH__ && __code_model_small__ && __ELF__ && "
-                          "!defined(__CHAR_UNSIGNED__) && !defined(__aarch64__) && "
-                          "!defined(__riscv) && !defined(__linux__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "x86_64"}));
+TEST_F(Predefined, X86_64Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __x86_64__ && __x86_64 && __amd64__ && __LP64__ && _LP64 && "
+                  "__SSE2__ && __SSE2_MATH__ && __code_model_small__ && __ELF__ && "
+                  "!defined(__CHAR_UNSIGNED__) && !defined(__aarch64__) && "
+                  "!defined(__riscv) && !defined(__linux__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "x86_64" }));
 }
 
 // The hosted targets: the architecture's macros, and GCC's Linux ones in C11 mode
 // (no bare `linux` or `unix`, which a program may use as names).
-TEST_F(Predefined, X86_64LinuxTarget) {
-    EXPECT_TRUE(TokensAre("#if __x86_64__ && __LP64__ && __ELF__ && __linux__ && __linux && "
-                          "__gnu_linux__ && __unix__ && __unix && !defined(__CHAR_UNSIGNED__)\n"
-                          "TARGET linux unix\n#endif\n", "TARGET linux unix",
-                          {"-t", "x86_64-linux"}));
+TEST_F(Predefined, X86_64LinuxTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __x86_64__ && __LP64__ && __ELF__ && __linux__ && __linux && "
+                  "__gnu_linux__ && __unix__ && __unix && !defined(__CHAR_UNSIGNED__)\n"
+                  "TARGET linux unix\n#endif\n",
+                  "TARGET linux unix", { "-t", "x86_64-linux" }));
 }
 
-TEST_F(Predefined, Aarch64LinuxTarget) {
-    EXPECT_TRUE(TokensAre("#if __aarch64__ && __LP64__ && __CHAR_UNSIGNED__ && __linux__ && "
-                          "__gnu_linux__ && __unix__\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64-linux"}));
+TEST_F(Predefined, Aarch64LinuxTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __aarch64__ && __LP64__ && __CHAR_UNSIGNED__ && __linux__ && "
+                  "__gnu_linux__ && __unix__\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "aarch64-linux" }));
 }
 
 // macOS on Apple silicon: Apple's signed plain char, no ELF and no Linux.
-TEST_F(Predefined, Aarch64DarwinTarget) {
-    EXPECT_TRUE(TokensAre("#if __aarch64__ && __arm64__ && __LP64__ && __APPLE__ && __MACH__ && "
-                          "!defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
-                          "!defined(__linux__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "aarch64-darwin"}));
+TEST_F(Predefined, Aarch64DarwinTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __aarch64__ && __arm64__ && __LP64__ && __APPLE__ && __MACH__ && "
+                  "!defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
+                  "!defined(__linux__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "aarch64-darwin" }));
 }
 
 // The ATmega1280 (avr51): signed plain char, no __CHAR_UNSIGNED__.
-TEST_F(Predefined, AvrTarget) {
-    EXPECT_TRUE(TokensAre("#if __AVR && __AVR__ && __AVR_ARCH__ == 51 && __AVR_ATmega1280__ && "
-                          "__AVR_HAVE_MUL__ && __AVR_HAVE_MOVW__ && __AVR_HAVE_JMP_CALL__ && "
-                          "__AVR_2_BYTE_PC__ && __ELF__ && !defined(__CHAR_UNSIGNED__) && "
-                          "!defined(AVR) && !defined(__riscv) && !defined(__LP64__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "avr"}));
+TEST_F(Predefined, AvrTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __AVR && __AVR__ && __AVR_ARCH__ == 51 && __AVR_ATmega1280__ && "
+                  "__AVR_HAVE_MUL__ && __AVR_HAVE_MOVW__ && __AVR_HAVE_JMP_CALL__ && "
+                  "__AVR_2_BYTE_PC__ && __ELF__ && !defined(__CHAR_UNSIGNED__) && "
+                  "!defined(AVR) && !defined(__riscv) && !defined(__LP64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "avr" }));
 }
 
 // The classic MSP430: unsigned plain char; clang's non-reserved MSP430 is left out.
-TEST_F(Predefined, Msp430Target) {
-    EXPECT_TRUE(TokensAre("#if __MSP430__ && __CHAR_UNSIGNED__ && __ELF__ && !defined(MSP430) && "
-                          "!defined(__AVR__) && !defined(__riscv) && !defined(__LP64__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "msp430"}));
+TEST_F(Predefined, Msp430Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __MSP430__ && __CHAR_UNSIGNED__ && __ELF__ && !defined(MSP430) && "
+                  "!defined(__AVR__) && !defined(__riscv) && !defined(__LP64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "msp430" }));
 }
 
 // MMIX: GCC's set, signed plain char, LP64, and no __ELF__ (GCC defines none).
-TEST_F(Predefined, MmixTarget) {
-    EXPECT_TRUE(TokensAre("#if __mmix__ && __MMIX__ && __MMIX_ABI_MMIXWARE__ && __LP64__ && "
-                          "_LP64 && !defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
-                          "!defined(__riscv) && !defined(__x86_64__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "mmix"}));
+TEST_F(Predefined, MmixTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __mmix__ && __MMIX__ && __MMIX_ABI_MMIXWARE__ && __LP64__ && "
+                  "_LP64 && !defined(__CHAR_UNSIGNED__) && !defined(__ELF__) && "
+                  "!defined(__riscv) && !defined(__x86_64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "mmix" }));
 }
 
 // wasm32: clang's set with Braam's features, ILP32, signed plain char, no __ELF__; and
 // vcc's coroutines.
-TEST_F(Predefined, Wasm32Target) {
-    EXPECT_TRUE(TokensAre("#if __wasm__ && __wasm && __wasm32__ && __wasm32 && __ILP32__ && "
-                          "_ILP32 && __wasm_sign_ext__ && __wasm_bulk_memory__ && "
-                          "__wasm_nontrapping_fptoint__ && !defined(__CHAR_UNSIGNED__) && "
-                          "!defined(__ELF__) && !defined(__riscv) && __vcc_coroutines__\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "wasm32"}));
+TEST_F(Predefined, Wasm32Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __wasm__ && __wasm && __wasm32__ && __wasm32 && __ILP32__ && "
+                  "_ILP32 && __wasm_sign_ext__ && __wasm_bulk_memory__ && "
+                  "__wasm_nontrapping_fptoint__ && !defined(__CHAR_UNSIGNED__) && "
+                  "!defined(__ELF__) && !defined(__riscv) && __vcc_coroutines__\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "wasm32" }));
 }
 
 // wasm32-braam: wasm32's set and __braam__, which plain wasm32 has not got.
-TEST_F(Predefined, Wasm32BraamTarget) {
-    EXPECT_TRUE(TokensAre("#if __wasm32__ && __ILP32__ && __vcc_coroutines__ && __braam__\n"
-                          "TARGET\n#endif\n", "TARGET", {"-t", "wasm32-braam"}));
-    EXPECT_TRUE(TokensAre("#ifndef __braam__\nTARGET\n#endif\n", "TARGET", {"-t", "wasm32"}));
+TEST_F(Predefined, Wasm32BraamTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __wasm32__ && __ILP32__ && __vcc_coroutines__ && __braam__\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "wasm32-braam" }));
+    EXPECT_TRUE(TokensAre("#ifndef __braam__\nTARGET\n#endif\n", "TARGET", { "-t", "wasm32" }));
 }
 
 // `besm6' is what the v7besm sources key on; no RISC-V macro leaks in.
-TEST_F(Predefined, Besm6Target) {
-    EXPECT_TRUE(TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv) && "
-                          "!defined(__vcc_coroutines__)\n"
-                          "TARGET\n#endif\n", "TARGET", {"-tbesm6"}));
-    EXPECT_TRUE(TokensAre("#ifdef besm6\nTARGET\n#endif\n", "TARGET", {"--target", "besm6"}));
+TEST_F(Predefined, Besm6Target)
+{
+    EXPECT_TRUE(
+        TokensAre("#if defined(besm6) && defined(__besm6__) && !defined(__riscv) && "
+                  "!defined(__vcc_coroutines__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-tbesm6" }));
+    EXPECT_TRUE(TokensAre("#ifdef besm6\nTARGET\n#endif\n", "TARGET", { "--target", "besm6" }));
 }
 
 // vcc's coroutines: on every target but BESM-6.
-TEST_F(Predefined, CoroutinesTargets) {
-    for (const char *t : {"riscv64", "riscv32", "aarch64", "arm32", "x86_64", "x86_64-linux",
-                          "aarch64-linux", "aarch64-darwin", "avr", "msp430", "mmix", "wasm32",
-                          "wasm32-braam"})
-        EXPECT_TRUE(TokensAre("#ifdef __vcc_coroutines__\nTARGET\n#endif\n", "TARGET",
-                              {"-t", t}))
+TEST_F(Predefined, CoroutinesTargets)
+{
+    for (const char *t :
+         { "riscv64", "riscv32", "aarch64", "arm32", "x86_64", "x86_64-linux", "aarch64-linux",
+           "aarch64-darwin", "avr", "msp430", "mmix", "wasm32", "wasm32-braam" })
+        EXPECT_TRUE(TokensAre("#ifdef __vcc_coroutines__\nTARGET\n#endif\n", "TARGET", { "-t", t }))
             << t;
 }
 
-TEST_F(Predefined, UnknownTargetFails) {
-    Result r = Preprocess("x\n", {"-t", "pdp11"});
+TEST_F(Predefined, UnknownTargetFails)
+{
+    Result r = Preprocess("x\n", { "-t", "pdp11" });
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("unknown target 'pdp11'"), std::string::npos) << r.err;
 }
 
 // The target macros are ordinary, not §6.10.8.4 ones.
-TEST_F(Predefined, UndefTargetMacroAllowed) {
-    EXPECT_TRUE(Succeeds("#undef besm6\n", {"-t", "besm6"}));
+TEST_F(Predefined, UndefTargetMacroAllowed)
+{
+    EXPECT_TRUE(Succeeds("#undef besm6\n", { "-t", "besm6" }));
     EXPECT_PP_OK("#undef __riscv\n");
 }
 
 // Up to 200 -D options (NPREDEF) are accepted, and every one takes effect.
-TEST_F(Predefined, ManyDefineOptions) {
+TEST_F(Predefined, ManyDefineOptions)
+{
     std::vector<std::string> args;
     std::string cond = "#if 1";
     for (int i = 0; i < 200; ++i) {
@@ -296,17 +366,21 @@ TEST_F(Predefined, ManyDefineOptions) {
 
 // One more is an error, and an error on the command line counts toward the
 // exit status like any other.
-TEST_F(Predefined, TooManyDefineOptionsFails) {
+TEST_F(Predefined, TooManyDefineOptionsFails)
+{
     std::vector<std::string> args;
-    for (int i = 0; i < 201; ++i) args.push_back("-DM" + std::to_string(i));
+    for (int i = 0; i < 201; ++i)
+        args.push_back("-DM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("too many '-D' options"), std::string::npos) << r.err;
 }
 
-TEST_F(Predefined, TooManyUndefOptionsFails) {
+TEST_F(Predefined, TooManyUndefOptionsFails)
+{
     std::vector<std::string> args;
-    for (int i = 0; i < 201; ++i) args.push_back("-UM" + std::to_string(i));
+    for (int i = 0; i < 201; ++i)
+        args.push_back("-UM" + std::to_string(i));
     Result r = Preprocess("x\n", args);
     EXPECT_NE(r.exit_code, 0);
     EXPECT_NE(r.err.find("too many '-U' options"), std::string::npos) << r.err;

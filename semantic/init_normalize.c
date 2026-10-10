@@ -181,11 +181,12 @@ static void designate(const Type *t, Initializer *node, InitItem *item, InitItem
 static void fill(const Type *t, Initializer *node, InitItem **cur, bool braced, bool designated,
                  InitMode mode)
 {
-    InitItem **slot       = &node->u.items;
+    InitItem **slot = &node->u.items;
     // The member of the slot at hand; NULL for an array.  A struct's canonical node has
     // one slot per member, so the member never runs out before the slots do.
-    const FieldDef *field = t->kind == TYPE_ARRAY ? NULL : structtab_find(t->u.struct_t.name)->members;
-    bool unsized          = t->kind == TYPE_ARRAY && !t->u.array.size;
+    const FieldDef *field =
+        t->kind == TYPE_ARRAY ? NULL : structtab_find(t->u.struct_t.name)->members;
+    bool unsized = t->kind == TYPE_ARRAY && !t->u.array.size;
 
     while (*cur) {
         if ((*cur)->designators) {
@@ -275,7 +276,7 @@ static Initializer *normalize_compound(const Type *t, Initializer *init, InitMod
 
 static Initializer *normalize_compound_at(const Type *t, Initializer *init, InitMode mode)
 {
-    const Type *ut = unalias(t);
+    const Type *ut  = unalias(t);
     InitItem *items = init->u.items;
     init->u.items   = NULL;
     free_initializer(init);
@@ -303,9 +304,9 @@ static Initializer *normalize_compound_at(const Type *t, Initializer *init, Init
 // normalize_compound with diag_loc at the node, for the errors found in it.
 static Initializer *normalize_compound(const Type *t, Initializer *init, InitMode mode)
 {
-    SrcLoc saved = diag_enter(init ? init->loc : diag_loc);
+    SrcLoc saved        = diag_enter(init ? init->loc : diag_loc);
     Initializer *result = normalize_compound_at(t, init, mode);
-    diag_loc = saved;
+    diag_loc            = saved;
     return result;
 }
 

@@ -4,9 +4,10 @@
 // (translator/coro.c).  See dead_store.c for the analysis itself.
 // ============================================================================
 
+#include "liveness.h"
+
 #include <stdbool.h>
 
-#include "liveness.h"
 #include "optimize.h"
 #include "xalloc.h"
 
@@ -181,11 +182,10 @@ const char *opt_live_def(const Tac_Instruction *ins)
 // x live: x is removed as the def, then re-added as a use.
 // ============================================================================
 
-void opt_live_transfer(StringMap *ls, const Tac_Instruction *ins,
-                                   const StringMap *static_names, const StringMap *address_taken)
+void opt_live_transfer(StringMap *ls, const Tac_Instruction *ins, const StringMap *static_names,
+                       const StringMap *address_taken)
 {
-    if (ins->kind == TAC_INSTRUCTION_FUN_CALL ||
-        ins->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
+    if (ins->kind == TAC_INSTRUCTION_FUN_CALL || ins->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {
         // Callee may read any static or address-taken variable.
         opt_live_union(ls, static_names);
         opt_live_union(ls, address_taken);
@@ -305,10 +305,9 @@ void opt_live_solve(const OptCfg *cfg, const StringMap *static_names,
         int cnt = 0;
         for (const Tac_Instruction *ins = cfg->blocks[i]->first; ins; ins = ins->next)
             cnt++;
-        block_nins[i]  = cnt;
-        block_insts[i] = cnt ? xalloc(cnt * sizeof(Tac_Instruction *), __func__, __FILE__,
-                                      __LINE__)
-                             : NULL;
+        block_nins[i] = cnt;
+        block_insts[i] =
+            cnt ? xalloc(cnt * sizeof(Tac_Instruction *), __func__, __FILE__, __LINE__) : NULL;
         int k = 0;
         for (const Tac_Instruction *ins = cfg->blocks[i]->first; ins; ins = ins->next)
             block_insts[i][k++] = ins;

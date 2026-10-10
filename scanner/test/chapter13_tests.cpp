@@ -10,8 +10,7 @@
 // return 1.ex; — "1.ex" is a pp-number whose 'e' exponent has no digits.
 TEST(ScannerChapter13, AnotherBadConstant_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void) {\n    return 1.ex;\n}\n"),
-                 "missing exponent");
+    EXPECT_DEATH(LexToEnd("int main(void) {\n    return 1.ex;\n}\n"), "missing exponent");
 }
 
 // double foo = 1E2x; — "1E2x" ends in a stray letter.
@@ -52,6 +51,5 @@ TEST(ScannerChapter13, MissingExponent_Neg)
 // double foo = 24e-; — the exponent is just a sign, no digits.
 TEST(ScannerChapter13, MissingNegativeExponent_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void) {\n    double foo = 24e-;\n}\n"),
-                 "missing exponent");
+    EXPECT_DEATH(LexToEnd("int main(void) {\n    double foo = 24e-;\n}\n"), "missing exponent");
 }

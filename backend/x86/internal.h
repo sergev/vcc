@@ -64,20 +64,20 @@ typedef struct {
     const Tac_TopLevel *program; // the translation unit
     const Tac_TopLevel *tl;      // the function
     X86_Block *prologue;
-    StringMap frame;   // name → Slot *
-    StringMap globals; // name → const Tac_Type *
-    int locals_size;   // bytes of slots below the saved rbp
-    int outgoing;      // bytes of the outgoing argument area
-    bool moves_sp;     // calls a stack builtin (alloca): rsp moves in the body
+    StringMap frame;    // name → Slot *
+    StringMap globals;  // name → const Tac_Type *
+    int locals_size;    // bytes of slots below the saved rbp
+    int outgoing;       // bytes of the outgoing argument area
+    bool moves_sp;      // calls a stack builtin (alloca): rsp moves in the body
     bool frame_pointer; // the frame is addressed from rbp: --frame-pointer, or moves_sp
-    int x87_tmp;       // the x87 scratch slot, or 0 (x87.c)
-    int ret_ptr;       // the slot of the result address that came in rdi, or 0
+    int x87_tmp;        // the x87 scratch slot, or 0 (x87.c)
+    int ret_ptr;        // the slot of the result address that came in rdi, or 0
     struct {
-        int save;      // the slot of the register save area, or 0 (not variadic)
-        int gp, fp;    // va_list's initial gp_offset and fp_offset
-        int overflow;  // the first variadic stack argument, from rbp
+        int save;     // the slot of the register save area, or 0 (not variadic)
+        int gp, fp;   // va_list's initial gp_offset and fp_offset
+        int overflow; // the first variadic stack argument, from rbp
     } va;
-    FpConst *consts;   // the function's .rodata constants
+    FpConst *consts; // the function's .rodata constants
     int nconsts, maxconsts;
     StringMap regs;    // name → allocated register (regalloc.c)
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)

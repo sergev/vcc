@@ -9,7 +9,7 @@
 
 char *strncpy(char *dest, const char *src, size_t n)
 {
-    char *d = dest;
+    char *d       = dest;
     const char *s = src;
     while (n > 0 && *s != 0) {
         *d = *s;

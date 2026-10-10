@@ -8,7 +8,9 @@
 
 TEST_F(BookTest, Chapter16_AccessThroughCharPointerBigEndian)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can read an object through a pointer to a character type */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we can read an object through a pointer to a character type */
 
 int main(void) {
 

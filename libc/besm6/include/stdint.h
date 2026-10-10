@@ -17,31 +17,31 @@
 #define _STDINT_H
 
 /* Exact-width (only the 8-bit byte exists). */
-typedef signed char   int8_t;
+typedef signed char int8_t;
 typedef unsigned char uint8_t;
 
 /* Minimum-width: smallest type holding at least N bits.  One word covers all. */
-typedef signed char   int_least8_t;
+typedef signed char int_least8_t;
 typedef unsigned char uint_least8_t;
-typedef int           int_least16_t;
-typedef unsigned int  uint_least16_t;
-typedef int           int_least32_t;
-typedef unsigned int  uint_least32_t;
+typedef int int_least16_t;
+typedef unsigned int uint_least16_t;
+typedef int int_least32_t;
+typedef unsigned int uint_least32_t;
 
 /* Fastest type holding at least N bits — the native word is fastest. */
-typedef int           int_fast8_t;
-typedef unsigned int  uint_fast8_t;
-typedef int           int_fast16_t;
-typedef unsigned int  uint_fast16_t;
-typedef int           int_fast32_t;
-typedef unsigned int  uint_fast32_t;
+typedef int int_fast8_t;
+typedef unsigned int uint_fast8_t;
+typedef int int_fast16_t;
+typedef unsigned int uint_fast16_t;
+typedef int int_fast32_t;
+typedef unsigned int uint_fast32_t;
 
 /* Pointer-sized: a pointer holds a 15-bit word address, fits in one word. */
-typedef int          intptr_t;
+typedef int intptr_t;
 typedef unsigned int uintptr_t;
 
 /* Greatest-width: bounded by the machine word. */
-typedef long long          intmax_t;
+typedef long long intmax_t;
 typedef unsigned long long uintmax_t;
 
 /* --- limits --- */
@@ -87,12 +87,12 @@ typedef unsigned long long uintmax_t;
 #define WINT_MAX  1099511627775L
 
 /* --- constant-expression macros --- */
-#define INT8_C(v)   (v)
-#define UINT8_C(v)  (v##U)
-#define INT16_C(v)  (v##L)
-#define UINT16_C(v) (v##UL)
-#define INT32_C(v)  (v##L)
-#define UINT32_C(v) (v##UL)
+#define INT8_C(v)    (v)
+#define UINT8_C(v)   (v##U)
+#define INT16_C(v)   (v##L)
+#define UINT16_C(v)  (v##UL)
+#define INT32_C(v)   (v##L)
+#define UINT32_C(v)  (v##UL)
 #define INTMAX_C(v)  (v##LL)
 #define UINTMAX_C(v) (v##ULL)
 

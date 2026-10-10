@@ -91,8 +91,7 @@ TEST_F(AvrTest, SavedRegistersPushed)
 push r10
 push r11
 push r12
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(pop r11
 pop r10
 adiw r28, 16
@@ -110,8 +109,7 @@ rcall .
 rcall .
 in r28, __SP_L__
 in r29, __SP_H__
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(pop r0
 pop r0
 pop r0
@@ -119,8 +117,7 @@ pop r0
 pop r29
 pop r28
 ret
-)"))
-        << s;
+)")) << s;
 }
 
 // alloca: a frame from Y always (here without slots), SP lowered by the size through Z
@@ -231,8 +228,8 @@ int main(void) { return f(1, 2) == 1000 + 200 + 20 + 3 ? 0 : 1; }
     EXPECT_EQ(0, exit_status);
 }
 
-// A frame over 63 bytes (40 ints and a temporary) is reserved with subi/sbci; a slot past Y+63, or straddling
-// it, is reached through Z.
+// A frame over 63 bytes (40 ints and a temporary) is reserved with subi/sbci; a slot past Y+63, or
+// straddling it, is reached through Z.
 TEST_F(AvrTest, LargeFrame)
 {
     NaiveSelection();
@@ -255,16 +252,13 @@ std Y+62, r25
 adiw r30, 63
 st Z+, r24
 st Z+, r25
-)"))
-        << s;
-    EXPECT_NE(std::string::npos,
-              s.find(R"(movw r30, r28
+)")) << s;
+    EXPECT_NE(std::string::npos, s.find(R"(movw r30, r28
 subi r30, 191
 sbci r31, 255
 st Z+, r24
 st Z+, r25
-)"))
-        << s;
+)")) << s;
 }
 
 // A copy chain through 40 slots, across Y+63.
@@ -275,8 +269,7 @@ TEST_F(AvrTest, RunLargeFrame)
     volatile int v0 = 0x1234;
 )";
     for (int i = 1; i < 40; i++)
-        src += "    volatile int v" + std::to_string(i) + " = v" + std::to_string(i - 1) +
-               ";\n";
+        src += "    volatile int v" + std::to_string(i) + " = v" + std::to_string(i - 1) + ";\n";
     src += "    return v39; }\n";
     EXPECT_EQ("4660\n", CompileAndRunBook(src));
 }

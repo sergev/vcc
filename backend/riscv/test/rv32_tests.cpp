@@ -54,8 +54,8 @@ long g;
 long *p = &g;
 long f(long *a, long n, unsigned long u) { return a[n] + (long)u + *p + (int)(short)n; }
 )"));
-    for (const char *op : { "ld ", "sd ", "addw ", "addiw ", "subw ", "sext.w ", "sllw ",
-                            "slliw " })
+    for (const char *op :
+         { "ld ", "sd ", "addw ", "addiw ", "subw ", "sext.w ", "sllw ", "slliw " })
         EXPECT_EQ(std::string::npos, code.find(std::string("\n") + op)) << op << "in:\n" << code;
 }
 
@@ -66,14 +66,14 @@ TEST_F(Rv32Test, PointerInitializer)
 
 TEST_F(Rv32Test, DoubleLiteral)
 {
-    std::string s = CompileToRiscv("double f(void) { return 2.5; }\n"
-                                   "double g(void) { return 2.5 + 0.0 * f(); }");
+    std::string s = CompileToRiscv(
+        "double f(void) { return 2.5; }\n"
+        "double g(void) { return 2.5 + 0.0 * f(); }");
     EXPECT_NE(std::string::npos, Code(s).find("la t6, .LC0\nfld fa0, 0(t6)\n")) << s;
     EXPECT_NE(std::string::npos, s.find(".LC0:\n    .word   0x00000000\n    .word   0x40040000\n"))
         << s;
     EXPECT_EQ(std::string::npos, s.find(".LC2")) << "one literal per value and function:\n" << s;
 }
-
 
 TEST_F(Rv32Test, IntegerWidths)
 {
@@ -110,9 +110,10 @@ int main(void)
     return 0;
 }
 )";
-    EXPECT_EQ("4 4 4 2147483647 -2147483648 1 2147483647 -56 4464 255 65535 -3 -1 0 -4 15 1 "
-              "591751040 ",
-              CompileAndRunRiscv(src));
+    EXPECT_EQ(
+        "4 4 4 2147483647 -2147483648 1 2147483647 -56 4464 255 65535 -3 -1 0 -4 15 1 "
+        "591751040 ",
+        CompileAndRunRiscv(src));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -431,7 +432,8 @@ long long mix(long long a, int i) { long long x = a * i; return x < 0 ? -x : x <
 // registers it arrives in, and a result is computed in a0/a1.
 TEST_F(Rv32Test, LongLongPairMoves)
 {
-    std::string s = Code(CompileToRiscv("long long add(long long a, long long b) { return a + b; }"));
+    std::string s =
+        Code(CompileToRiscv("long long add(long long a, long long b) { return a + b; }"));
     EXPECT_NE(std::string::npos,
               s.find("add a0, a0, a2\nsltu t0, a0, a2\nadd t1, a1, a3\nadd a1, t1, t0\nret\n"))
         << s;

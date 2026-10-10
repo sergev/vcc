@@ -8,11 +8,12 @@ TEST_F(Arm32Test, IfElse)
 {
     NaiveSelection();
     DisableOptimization();
-    std::string code = Code(CompileToArm32(
-        "int f(void) { int a = 3; int r; if (a) r = 1; else r = 2; return r; }"));
+    std::string code = Code(
+        CompileToArm32("int f(void) { int a = 3; int r; if (a) r = 1; else r = 2; return r; }"));
     EXPECT_NE(std::string::npos, code.find(R"(ldr r12, [r11, #-4]
 cmp r12, #0
-beq .L)")) << code;
+beq .L)"))
+        << code;
     EXPECT_NE(std::string::npos, code.find(R"(
 b .L)")) << code;
 }
@@ -33,7 +34,8 @@ TEST_F(Arm32Test, LongLongCondition)
     std::string code =
         Code(CompileToArm32("int f(void) { long long a = 3; if (a) return 1; return 2; }"));
     EXPECT_NE(std::string::npos, code.find(R"(orrs r12, r12, lr
-beq .L)")) << code;
+beq .L)"))
+        << code;
 }
 
 TEST_F(Arm32Test, RunLoops)

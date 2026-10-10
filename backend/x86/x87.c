@@ -126,7 +126,7 @@ void gen_ld_binary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2, *dst = in->u.binary.dst;
     X86_Op op;
-    int cond = -1;
+    int cond  = -1;
     bool swap = false;
     switch (in->u.binary.op) {
     case TAC_BINARY_ADD:
@@ -261,7 +261,7 @@ void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
         if (r)
             load_mem(g, r, dt, x86_mem(X86_FRAME, x87_tmp(g)));
     } else if (x86_is_ld(dt)) {
-        bool u = kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
+        bool u  = kind == TAC_INSTRUCTION_UINT_TO_LONG_DOUBLE;
         int tmp = x87_tmp(g);
         load_val(g, T0, src); // a 32-bit load zero-extends to 64
         if (!u && x86_size(st) <= 4)

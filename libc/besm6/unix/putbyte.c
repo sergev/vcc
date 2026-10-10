@@ -39,5 +39,5 @@ void putbyte(int b)
     }
 
     if (b == '\n')
-        flush();        /* emit the line, newline included */
+        flush(); /* emit the line, newline included */
 }

@@ -74,7 +74,7 @@ static void gen_char_array_string_init(TacCtx *ctx, const char *var_name, int ba
     size_t len;
     char *decoded = c_decode_string_literal(str_expr->u.literal->u.string_val, &len);
     for (int i = 0; i < array_bytes; i++) {
-        int byte                    = (size_t)i < len ? (unsigned char)decoded[i] : 0;
+        int byte = (size_t)i < len ? (unsigned char)decoded[i] : 0;
         if (skip_zero && byte == 0)
             continue;
         Tac_Instruction *in         = tac_new_instruction(TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET);
@@ -91,8 +91,7 @@ static void gen_char_array_string_init(TacCtx *ctx, const char *var_name, int ba
 static bool is_char_array_string_init(const Type *type, const Initializer *init)
 {
     return init->kind == INITIALIZER_SINGLE && type && unalias(type)->kind == TYPE_ARRAY &&
-           init->u.expr->kind == EXPR_LITERAL &&
-           init->u.expr->u.literal->kind == LITERAL_STRING;
+           init->u.expr->kind == EXPR_LITERAL && init->u.expr->u.literal->kind == LITERAL_STRING;
 }
 
 // Objects with at least this many zero stores (word or byte) are zeroed by a loop first.
@@ -236,9 +235,9 @@ static void gen_init(TacCtx *ctx, const char *var_name, int base_offset, const I
         // A char/signed char/unsigned char leaf occupies a single packed byte;
         // its element offset is a byte offset, so it must use the byte-store kind
         // (the word-store kind rejects a sub-word offset).
-        bool byte_leaf              = init->type && get_size(init->type) == 1;
-        Tac_Instruction *in         = tac_new_instruction(
-            byte_leaf ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET : TAC_INSTRUCTION_COPY_TO_OFFSET);
+        bool byte_leaf      = init->type && get_size(init->type) == 1;
+        Tac_Instruction *in = tac_new_instruction(byte_leaf ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
+                                                            : TAC_INSTRUCTION_COPY_TO_OFFSET);
         in->u.copy_to_offset.src    = src;
         in->u.copy_to_offset.dst    = xstrdup(var_name);
         in->u.copy_to_offset.offset = base_offset;
@@ -341,8 +340,8 @@ static void gen_local_decl(TacCtx *ctx, const Declaration *decl)
         // alignment.
         int align   = (int)get_alignment(id->type);
         int alignas = alignas_bytes(decl->u.var.specifiers);
-        if ((idt && (idt->kind == TYPE_ARRAY || idt->kind == TYPE_STRUCT ||
-                     idt->kind == TYPE_UNION)) ||
+        if ((idt &&
+             (idt->kind == TYPE_ARRAY || idt->kind == TYPE_STRUCT || idt->kind == TYPE_UNION)) ||
             alignas > align) {
             int bytes = (int)get_size(id->type);
             if (bytes > 0) {
@@ -402,7 +401,8 @@ static bool jump_to_test(const Expr *cond)
 // would jump to the next instruction, so it falls in instead.
 static bool is_empty_stmt(const Stmt *s)
 {
-    return !s || (s->kind == STMT_EXPR && !s->u.expr) || (s->kind == STMT_COMPOUND && !s->u.compound);
+    return !s || (s->kind == STMT_EXPR && !s->u.expr) ||
+           (s->kind == STMT_COMPOUND && !s->u.compound);
 }
 
 //
@@ -473,8 +473,8 @@ void tac_scope_add(TacCtx *ctx, ExitAction action)
 {
     TacScope *sc = &ctx->scopes[ctx->nscopes - 1];
     if (sc->count == sc->cap) {
-        sc->cap        = sc->cap ? 2 * sc->cap : 4;
-        ExitAction *a  = xalloc(sc->cap * sizeof *a, __func__, __FILE__, __LINE__);
+        sc->cap       = sc->cap ? 2 * sc->cap : 4;
+        ExitAction *a = xalloc(sc->cap * sizeof *a, __func__, __FILE__, __LINE__);
         for (int i = 0; i < sc->count; i++)
             a[i] = sc->actions[i];
         xfree(sc->actions);
@@ -509,19 +509,19 @@ static void gen_sub(TacCtx *ctx, Stmt *stmt);
 // Lower a deferred statement afresh, with blocks, loops and labels of its own.
 static void gen_deferred(TacCtx *ctx, Stmt *body)
 {
-    TacScope *scopes  = ctx->scopes;
-    int nscopes       = ctx->nscopes;
-    int scopes_cap    = ctx->scopes_cap;
-    TacBreak *breaks  = ctx->breaks;
-    int nbreaks       = ctx->nbreaks;
-    int breaks_cap    = ctx->breaks_cap;
-    StringMap labels  = ctx->user_labels;
-    char *where       = ctx->where;
-    ctx->scopes       = NULL;
-    ctx->nscopes      = ctx->scopes_cap = 0;
-    ctx->breaks       = NULL;
-    ctx->nbreaks      = ctx->breaks_cap = 0;
-    ctx->where        = NULL; // its own, should an exit inside it share a cleanup
+    TacScope *scopes = ctx->scopes;
+    int nscopes      = ctx->nscopes;
+    int scopes_cap   = ctx->scopes_cap;
+    TacBreak *breaks = ctx->breaks;
+    int nbreaks      = ctx->nbreaks;
+    int breaks_cap   = ctx->breaks_cap;
+    StringMap labels = ctx->user_labels;
+    char *where      = ctx->where;
+    ctx->scopes      = NULL;
+    ctx->nscopes = ctx->scopes_cap = 0;
+    ctx->breaks                    = NULL;
+    ctx->nbreaks = ctx->breaks_cap = 0;
+    ctx->where                     = NULL; // its own, should an exit inside it share a cleanup
     map_init(&ctx->user_labels);
 
     label_loops_stmt(body, &ctx->temp_id);
@@ -711,7 +711,7 @@ static void leave(TacCtx *ctx, int depth, ExitDest d, int min)
             xfree(sc->dests);
             sc->dests = n;
         }
-        d.id                  = ctx->ndest_ids++;
+        d.id                    = ctx->ndest_ids++;
         sc->dests[sc->ndests++] = d;
     } else {
         xfree(d.label);
@@ -753,9 +753,9 @@ static void emit_chain(TacCtx *ctx)
         run_action(ctx, &a);
     }
     const TacScope *sc = &ctx->scopes[i];
-    int nd          = sc->ndests;
-    bool cont       = sc->continues;
-    char **handlers = xalloc((nd + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+    int nd             = sc->ndests;
+    bool cont          = sc->continues;
+    char **handlers    = xalloc((nd + 1) * sizeof(char *), __func__, __FILE__, __LINE__);
     for (int k = 0; k < nd; k++) {
         const ExitDest *d = &ctx->scopes[i].dests[k];
         handlers[k]       = d->kind == DEST_LABEL ? NULL : new_temp(ctx);
@@ -764,12 +764,12 @@ static void emit_chain(TacCtx *ctx)
             emit_jump(ctx, to);
             break;
         }
-        Tac_Val *c           = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
-        Tac_Instruction *eq  = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-        eq->u.binary.op      = TAC_BINARY_EQUAL;
-        eq->u.binary.src1    = val_var(ctx->where);
-        eq->u.binary.src2    = val_int(d->id);
-        eq->u.binary.dst     = c;
+        Tac_Val *c          = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
+        Tac_Instruction *eq = tac_new_instruction(TAC_INSTRUCTION_BINARY);
+        eq->u.binary.op     = TAC_BINARY_EQUAL;
+        eq->u.binary.src1   = val_var(ctx->where);
+        eq->u.binary.src2   = val_int(d->id);
+        eq->u.binary.dst    = c;
         tac_append(ctx, eq);
         Tac_Instruction *j              = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_NOT_ZERO);
         j->u.jump_if_not_zero.condition = val_var(c->u.var_name);
@@ -827,8 +827,8 @@ static void emit_break(TacCtx *ctx, const char *target, bool is_continue)
     for (int i = ctx->nbreaks - 1; i >= 0; i--) {
         const char *l = is_continue ? ctx->breaks[i].cont_label : ctx->breaks[i].break_label;
         if (l && strcmp(l, target) == 0) {
-            leave(ctx, ctx->breaks[i].depth, (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(target) },
-                  CHAIN_MIN);
+            leave(ctx, ctx->breaks[i].depth,
+                  (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(target) }, CHAIN_MIN);
             return;
         }
     }
@@ -853,7 +853,8 @@ static void emit_goto(TacCtx *ctx, const char *label)
         while (k < ctx->nscopes && k < to->depth && ctx->scopes[k].key == to->scopes[k].key)
             k++;
         if (k == 0 || ctx->scopes[k - 1].count <= to->scopes[k - 1].count) {
-            leave(ctx, k, (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(user_label_name(ctx, label)) },
+            leave(ctx, k,
+                  (ExitDest){ .kind = DEST_LABEL, .label = xstrdup(user_label_name(ctx, label)) },
                   CHAIN_MIN);
             return;
         }
@@ -923,7 +924,7 @@ static void emit_return(TacCtx *ctx, Stmt *stmt)
     // Through a shared cleanup, a scalar goes into the one return variable first.
     const Type *rt = stmt->u.expr ? unalias(stmt->u.expr->type) : NULL;
     bool scalar    = !rt || (rt->kind != TYPE_STRUCT && rt->kind != TYPE_UNION &&
-                          rt->kind != TYPE_ARRAY && rt->kind != TYPE_LONG_DOUBLE);
+                             rt->kind != TYPE_ARRAY && rt->kind != TYPE_LONG_DOUBLE);
     if (scalar && have_exits(ctx) && may_share() && exit_size(ctx, 0) >= CHAIN_MIN) {
         if (v) {
             if (!ctx->ret_var)
@@ -981,9 +982,9 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
             gen_cond_jump(ctx, stmt->u.if_stmt.condition, false, else_l);
         } else {
             // The labels after the condition's temporaries, as they always were.
-            Tac_Val *cond = gen_cond_val(ctx, stmt->u.if_stmt.condition);
-            else_l        = new_temp(ctx);
-            end_l         = new_temp(ctx);
+            Tac_Val *cond                = gen_cond_val(ctx, stmt->u.if_stmt.condition);
+            else_l                       = new_temp(ctx);
+            end_l                        = new_temp(ctx);
             Tac_Instruction *jz          = tac_new_instruction(TAC_INSTRUCTION_JUMP_IF_ZERO);
             jz->u.jump_if_zero.condition = cond;
             jz->u.jump_if_zero.target    = xstrdup(else_l);
@@ -1104,8 +1105,8 @@ static void gen_stmt_at(TacCtx *ctx, Stmt *stmt)
         cases.tail     = &cases.head;
         collect_cases(ctx, stmt->u.switch_stmt.body, &cases);
 
-        Tac_Val *ctrl_raw     = gen_expr(ctx, stmt->u.switch_stmt.expr);
-        Tac_Val *ctrl_dst     = new_var_val(ctx, ast_type_to_tac_type(stmt->u.switch_stmt.expr->type));
+        Tac_Val *ctrl_raw = gen_expr(ctx, stmt->u.switch_stmt.expr);
+        Tac_Val *ctrl_dst = new_var_val(ctx, ast_type_to_tac_type(stmt->u.switch_stmt.expr->type));
         const char *ctrl_name = ctrl_dst->u.var_name; // save before ownership transfer
         Tac_Instruction *cp   = tac_new_instruction(TAC_INSTRUCTION_COPY);
         cp->u.copy.src        = ctrl_raw;

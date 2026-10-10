@@ -223,7 +223,8 @@ TEST_F(ParserTest, CharConstant_badUtf8Sequence_negative)
 TEST_F(ParserTest, IntegerConstant_spelling)
 {
     Declaration *decl = GetDeclaration(
-        "int a = 10, b = 0x10, c = 010, d = 10u, e = 0x10L, f = 10ULL, g = 'a', h = 'ab', i = L'a';");
+        "int a = 10, b = 0x10, c = 010, d = 10u, e = 0x10L, f = 10ULL, g = 'a', h = 'ab', i = "
+        "L'a';");
     const unsigned expected[] = {
         LITERAL_SPELLED | LITERAL_DECIMAL,
         LITERAL_SPELLED,

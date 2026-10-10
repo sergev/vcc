@@ -18,7 +18,7 @@ static Besm_Dialect dialect = BESM_UNIX;
 static void set_flag(int index)
 {
     static const Besm_Dialect dialects[] = { BESM_MADLEN, BESM_UNIX, BESM_BEMSH };
-    dialect = dialects[index];
+    dialect                              = dialects[index];
 }
 
 // Default output-file extension for each dialect.

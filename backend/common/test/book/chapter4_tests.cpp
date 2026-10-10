@@ -13,7 +13,8 @@
 // return (10 && 0) + (0 && 4) + (0 && 0);
 TEST_F(BookTest, Chapter4_AndFalse)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook("int main(void) { return (10 && 0) + (0 && 4) + (0 && 0); }"));
+    EXPECT_EQ("0\n",
+              CompileAndRunBook("int main(void) { return (10 && 0) + (0 && 4) + (0 && 0); }"));
 }
 
 // return 0 && (1 / 0); — short-circuits before the divide-by-zero: 0.
@@ -181,7 +182,8 @@ TEST_F(BookTest, Chapter4_OrShortCircuit)
 // return (4 || 0) + (0 || 3) + (5 || 5);
 TEST_F(BookTest, Chapter4_OrTrue)
 {
-    EXPECT_EQ("3\n", CompileAndRunBook("int main(void) { return (4 || 0) + (0 || 3) + (5 || 5); }"));
+    EXPECT_EQ("3\n",
+              CompileAndRunBook("int main(void) { return (4 || 0) + (0 || 3) + (5 || 5); }"));
 }
 
 // --- valid: precedence ------------------------------------------------------
@@ -207,7 +209,8 @@ TEST_F(BookTest, Chapter4_Precedence4)
 // return (0 == 0 && 3 == 2 + 1 > 1) + 1; — (1 && (3 == ((2+1)>1))) + 1 = (1 && 0) + 1 = 1.
 TEST_F(BookTest, Chapter4_Precedence5)
 {
-    EXPECT_EQ("1\n", CompileAndRunBook("int main(void) { return (0 == 0 && 3 == 2 + 1 > 1) + 1; }"));
+    EXPECT_EQ("1\n",
+              CompileAndRunBook("int main(void) { return (0 == 0 && 3 == 2 + 1 > 1) + 1; }"));
 }
 
 // return 1 || 0 && 2; — '&&' binds tighter than '||': 1 || (0 && 2) = 1.

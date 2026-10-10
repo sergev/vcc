@@ -242,10 +242,17 @@ static int mode_flags(const char *mode)
 {
     int flags;
     switch (mode[0]) {
-    case 'r': flags = O_RDONLY; break;
-    case 'w': flags = O_WRONLY | O_CREAT | O_TRUNC; break;
-    case 'a': flags = O_WRONLY | O_CREAT | O_APPEND; break;
-    default: return 0;
+    case 'r':
+        flags = O_RDONLY;
+        break;
+    case 'w':
+        flags = O_WRONLY | O_CREAT | O_TRUNC;
+        break;
+    case 'a':
+        flags = O_WRONLY | O_CREAT | O_APPEND;
+        break;
+    default:
+        return 0;
     }
     for (const char *m = mode + 1; *m; m++) {
         if (*m == '+')

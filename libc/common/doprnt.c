@@ -24,10 +24,10 @@ enum {
     DEF_PREC = 6, /* default precision for %f/%e and significant digits for %g     */
 };
 
-static int g_to_buf;  /* 1 = store into g_buf, 0 = emit via putbyte */
-static char *g_buf;   /* target buffer when g_to_buf                */
-static int g_size;    /* capacity of g_buf                          */
-static int g_len;     /* characters produced so far                 */
+static int g_to_buf; /* 1 = store into g_buf, 0 = emit via putbyte */
+static char *g_buf;  /* target buffer when g_to_buf                */
+static int g_size;   /* capacity of g_buf                          */
+static int g_len;    /* characters produced so far                 */
 
 static void emit(int c)
 {
@@ -60,8 +60,7 @@ static void emit_str(const char *s)
  * produced (zero padded).  Returns a pointer to the most-significant digit and
  * stores the digit count in *lenp.
  */
-static char *ksprintn(char *nbuf, unsigned long long ul, int base, int prec, int upper,
-                      int *lenp)
+static char *ksprintn(char *nbuf, unsigned long long ul, int base, int prec, int upper, int *lenp)
 {
     const char *digits = upper ? "0123456789ABCDEF" : "0123456789abcdef";
     char *p            = nbuf;
@@ -406,8 +405,7 @@ done:
  * otherwise an f-format carry extends left into the reserved slot and moves
  * *startp back one.
  */
-static void cvtround(double fract, int *expo, char **startp, char *end, int ch, int tie,
-                     int *negp)
+static void cvtround(double fract, int *expo, char **startp, char *end, int ch, int tie, int *negp)
 {
     double tmp;
     char *start, *p, *last;
@@ -612,7 +610,7 @@ static int cvt(double number, int precin, int sharpflag, int *negp, int fmtch, c
                 --t;
             ++t;
         }
-        t = exponent(t, expcnt, lower ? ftc + ('a' - 'A') : ftc);
+        t         = exponent(t, expcnt, lower ? ftc + ('a' - 'A') : ftc);
         *startidx = (int)(start - b);
         return (int)(t - start);
     }

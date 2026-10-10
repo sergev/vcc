@@ -178,7 +178,7 @@ static Besm_Instr *char_array_log_items(const Tac_StaticInit *init, bool zero_as
                 buf[pos] = it->u.uchar_val;
             pos++;
             data_end = pos;
-        } else { // TAC_STATIC_INIT_ZERO
+        } else {                             // TAC_STATIC_INIT_ZERO
             pos += (size_t)it->u.zero_bytes; // buffer already zeroed; not counted as data
         }
     }
@@ -521,9 +521,9 @@ void codegen_static_variable(const Tac_TopLevel *program, const Tac_TopLevel *tl
     // .data label with .bss storage would count as zero data bytes and, in the Unix dialect,
     // alias the first `.comm` common (placed at data_origin + data_size).  Only a truly
     // tentative def becomes a `.comm` common; a zero-initialized def is a strong .bss symbol.
-    bool tentative           = (init == NULL);
-    bool zero_bss            = tentative || static_init_all_zero(init);
-    Besm_Module *module      = besm_new_module(name);
+    bool tentative            = (init == NULL);
+    bool zero_bss             = tentative || static_init_all_zero(init);
+    Besm_Module *module       = besm_new_module(name);
     Besm_DataSection *section = besm_new_data_section(zero_bss ? BESM_SK_BSS : BESM_SK_DATA);
     section->name             = xstrdup(name);
     section->global           = tl->u.static_variable.global;
@@ -532,9 +532,9 @@ void codegen_static_variable(const Tac_TopLevel *program, const Tac_TopLevel *tl
     // dialect its zero fill must also be `.data` words, since a `.bss` gap would land in a
     // separate section and split the object (see static_data_items).  A whole-object BSS
     // (zero_bss) or a single contiguous Madlen module keeps the compact `,bss,` reservation.
-    bool zero_words = !zero_bss && dialect == BESM_UNIX;
-    section->items = static_data_items(tl->u.static_variable.type, init, zero_words, dialect);
-    module->sections          = section;
+    bool zero_words  = !zero_bss && dialect == BESM_UNIX;
+    section->items   = static_data_items(tl->u.static_variable.type, init, zero_words, dialect);
+    module->sections = section;
 
     besm_fold_string_constants(module, program, dialect);
     besm_emit_module(out, module, dialect);

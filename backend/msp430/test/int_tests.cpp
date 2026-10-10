@@ -11,15 +11,13 @@
 TEST_F(Msp430Test, AddLongChain)
 {
     std::string code = Code(CompileToMsp430("long g1, g2, g3; void f(void) { g3 = g1 + g2; }"));
-    EXPECT_NE(std::string::npos,
-              code.find(R"(mov &g1, r13
+    EXPECT_NE(std::string::npos, code.find(R"(mov &g1, r13
 mov &g1+2, r12
 add &g2, r13
 addc &g2+2, r12
 mov r13, &g3
 mov r12, &g3+2
-)"))
-        << code;
+)")) << code;
 }
 
 // A signed 32-bit compare, in place: the high words signed, then the low words
@@ -33,7 +31,8 @@ clr r12
 ret
 mov #1, r12
 ret
-)", "int f(long a, long b) { return a < b; }")
+)",
+            "int f(long a, long b) { return a < b; }")
 
 EXPECT_CODE(CompareLongUnsigned, R"(cmp r15, r13
 jlo .Lv3
@@ -44,7 +43,8 @@ clr r12
 ret
 mov #1, r12
 ret
-)", "int f(unsigned long a, unsigned long b) { return a >= b; }")
+)",
+            "int f(unsigned long a, unsigned long b) { return a >= b; }")
 
 // A shift by a small constant is unrolled, through the carry.
 TEST_F(Msp430Test, ShiftLeftLongUnrolled)
@@ -66,8 +66,7 @@ rla r13
 subc r13, r13
 inv r13
 mov #4, r15
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(rra r13
 rrc r12
 dec r15
@@ -95,9 +94,8 @@ TEST_F(Msp430Test, HelpersByWidth)
         unsigned long d(unsigned long x, unsigned long y) { return x * y; }
         long long e(long long x, long long y) { return x / y; }
     )"));
-    for (const char *h : { "br #__mspabi_mpyi\n", "br #__mspabi_divu\n",
-                           "br #__mspabi_remli\n", "br #__mspabi_mpyl\n",
-                           "call #__mspabi_divlli\n" })
+    for (const char *h : { "br #__mspabi_mpyi\n", "br #__mspabi_divu\n", "br #__mspabi_remli\n",
+                           "br #__mspabi_mpyl\n", "call #__mspabi_divlli\n" })
         EXPECT_NE(std::string::npos, code.find(h)) << h << code;
 }
 
@@ -124,14 +122,14 @@ TEST_F(Msp430Test, SignExtendIntToLong)
 rla r13
 subc r13, r13
 inv r13
-)"))
-        << code;
+)")) << code;
 }
 
 EXPECT_CODE(ZeroExtendCharToLong, R"(mov.b r12, r12
 clr r13
 ret
-)", "long f(unsigned char a) { return a; }")
+)",
+            "long f(unsigned char a) { return a; }")
 
 // The output routines our run tests share, compiled by us.
 static const char print_c[] = R"(
@@ -159,8 +157,8 @@ static void puti(long v)
 )";
 
 static const int16_t ops16[] = { 32767, -32768, 1000, -1000, 7, -7, 0, 1, -1, 12345, 255, -129 };
-static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7,
-                                 0, 1, -1, 123456789, 65536, -65537 };
+static const int32_t ops32[] = { 2147483647, -2147483647 - 1, 100000, -100000, 7, -7, 0, 1,
+                                 -1,         123456789,       65536,  -65537 };
 
 // The arithmetic of int and long, compiled by us, against the host: + - * / % & | ^ and
 // the comparisons, over operands with every sign and the extremes.
@@ -271,7 +269,8 @@ inv r15
 inc r15
 mov r15, r12
 ret
-)", "unsigned f(unsigned x) { return x * 0xfffdu; }")
+)",
+            "unsigned f(unsigned x) { return x * 0xfffdu; }")
 
 // 25173 is inline, not a call: 14 shifts and 6 adds.
 TEST_F(Msp430Test, MultiplyBy25173Inline)
@@ -311,7 +310,7 @@ int main(void)
 TEST_F(Msp430Test, RunShifts)
 {
     SKIP_IF_NO_MSP430_TOOLS();
-    std::string src = std::string(print_c) + R"(
+    std::string src           = std::string(print_c) + R"(
 volatile int vi[] = { -12345, 0x5a5a };
 volatile long vl[] = { -2023406815L, 0x12345678L };
 static void sp(void) { putbyte(' '); }
@@ -354,7 +353,8 @@ int main(void)
         }
         for (int n = 0; n < 32; n++) {
             num((int32_t)((uint32_t)y << n));
-            // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift is the expectation
+            // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift
+            // is the expectation
             num(y >> n);
             num((uint32_t)y >> n);
         }
@@ -424,7 +424,8 @@ int main(void)
     hex(y >> 40);
     hex((uint64_t)y >> 40);
     for (int n = 0; n < 64; n += 9)
-        // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift is the expectation
+        // cppcheck-suppress [shiftNegativeLHS, shiftTooManyBitsSigned] ; the arithmetic shift is
+        // the expectation
         hex(y >> n);
     hex((int64_t)-5);
     hex(200);

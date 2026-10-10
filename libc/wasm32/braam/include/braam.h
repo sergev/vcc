@@ -20,10 +20,10 @@
 
 /* One request, from the call to the answer. */
 typedef struct braam_call {
-    unsigned op, token;    /* the op word; the token the runtime gave it */
-    const void *ptr;       /* the request's payload */
+    unsigned op, token; /* the op word; the token the runtime gave it */
+    const void *ptr;    /* the request's payload */
     unsigned len;
-    void *reply;           /* the block the host placed: an i32 status, then the data */
+    void *reply; /* the block the host placed: an i32 status, then the data */
     unsigned reply_len;
 } braam_call;
 
@@ -136,8 +136,8 @@ int braam_spawn(braam_task *frame);
  * says whether `sig` came, and forgets it.  A signal reaches a process only while it
  * is parked: a loop that awaits nothing cannot be interrupted.
  */
-coro(braam_call *) int sig_catch(int sig, int on);  /* 0, or -1 with errno set */
+coro(braam_call *) int sig_catch(int sig, int on); /* 0, or -1 with errno set */
 int sig_take(int sig);
-unsigned sig_pending(void);                          /* the bits 1 << sig not taken */
+unsigned sig_pending(void); /* the bits 1 << sig not taken */
 
 #endif /* _BRAAM_H */

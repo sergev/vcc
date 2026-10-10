@@ -86,15 +86,16 @@ extern const Type *typecheck_function;
 
 // Coroutines — coroutines.c
 struct Symbol;
-extern int coro_defer_depth;     // deferred statements around the expression checked
-extern int coro_loop_head_depth; // loop heads around it: no co_alloca there
-bool is_frame_type(const Type *t);                  // _Coro_frame(Y, T)
-bool is_coro_struct(const Type *t);                 // _Coro_frame(Y, T) or the struct of _Coro_ptr(Y, T)
-const Type *coro_desc_target(const Type *t);        // a _Coro_ptr(Y, T)'s struct, else NULL
-bool coroutine_has_coro_ptr(const Type *fn_type);   // takes (void) or (void *)
-bool coroutine_value(Expr *e, const struct Symbol *sym); // a coroutine's name as a value: its coro_ptr
+extern int coro_defer_depth;                 // deferred statements around the expression checked
+extern int coro_loop_head_depth;             // loop heads around it: no co_alloca there
+bool is_frame_type(const Type *t);           // _Coro_frame(Y, T)
+bool is_coro_struct(const Type *t);          // _Coro_frame(Y, T) or the struct of _Coro_ptr(Y, T)
+const Type *coro_desc_target(const Type *t); // a _Coro_ptr(Y, T)'s struct, else NULL
+bool coroutine_has_coro_ptr(const Type *fn_type); // takes (void) or (void *)
+bool coroutine_value(Expr *e,
+                     const struct Symbol *sym); // a coroutine's name as a value: its coro_ptr
 const Type *typecheck_coro_ptr_call(Expr *call, const Type *desc); // await p(arg): the result type
-bool same_frame_type(const Type *a, const Type *b); // two frame types: Y and T agree
+bool same_frame_type(const Type *a, const Type *b);                // two frame types: Y and T agree
 void check_frame_type(const Type *t);
 void reject_coro_spec(const DeclSpec *spec, const char *name);
 // The yield type of a function declared _Coro(Y), its declaration checked; else NULL.
@@ -107,10 +108,10 @@ void check_coroutine_name(const struct Symbol *sym); // a coroutine named as a v
 bool coroutine_call_allowed(const Expr *call);       // the call an arena await makes
 void check_alloca_call(void);                        // a call of __builtin_alloca
 // The lint for frames in automatic storage (coroutines.c).
-void coro_lint_function(const char *name);          // the function checked next
+void coro_lint_function(const char *name);                          // the function checked next
 void coro_lint_bind(const char *var, int level, const Expr *value); // var (NULL: wider) = value
-void coro_lint_statement(const Expr *e);            // an expression statement
-void coro_lint_scope_exit(int level);               // the block at `level` ends
+void coro_lint_statement(const Expr *e);                            // an expression statement
+void coro_lint_scope_exit(int level);                               // the block at `level` ends
 Expr *typecheck_yield(Expr *e);
 Expr *typecheck_await(Expr *e);
 Expr *typecheck_co_op(Expr *e);

@@ -919,8 +919,9 @@ TEST_F(TranslateTest, StaticMatrixBraceElision)
 // A braced scalar initializer, static and automatic (C11 §6.7.9p11).
 TEST_F(TranslateTest, BracedScalarInit)
 {
-    std::string yaml = CompileToYaml("int x = { 5 };"
-                                     "int f(void) { int y = { 6 }; return y; }");
+    std::string yaml = CompileToYaml(
+        "int x = { 5 };"
+        "int f(void) { int y = { 6 }; return y; }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: static_variable
   name: x
@@ -958,8 +959,9 @@ TEST_F(TranslateTest, BracedScalarInit)
 // tab[1], whose v is zero.
 TEST_F(TranslateTest, AutoStructArrayBraceElision)
 {
-    std::string yaml = CompileToYaml("struct s { char *name; int v; };"
-                                     "void f(void) { struct s tab[2] = { \"AB\", 1, \"CD\" }; }");
+    std::string yaml = CompileToYaml(
+        "struct s { char *name; int v; };"
+        "void f(void) { struct s tab[2] = { \"AB\", 1, \"CD\" }; }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: static_constant
   name: _str1
@@ -1049,8 +1051,9 @@ TEST_F(TranslateTest, AutoStructArrayBraceElision)
 // and the undesignated member b is zeroed.
 TEST_F(TranslateTest, AutoStructFieldDesignators)
 {
-    std::string yaml = CompileToYaml("struct s { int a, b, c; };"
-                                     "void f(void) { struct s x = { .c = 3, .a = 1 }; }");
+    std::string yaml = CompileToYaml(
+        "struct s { int a, b, c; };"
+        "void f(void) { struct s x = { .c = 3, .a = 1 }; }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: function
   name: f
@@ -1131,10 +1134,11 @@ TEST_F(TranslateTest, FileScopeCompoundLiteral)
 // nested in another; each object follows the one that references it.
 TEST_F(TranslateTest, FileScopeCompoundLiteralNested)
 {
-    std::string yaml = CompileToYaml("struct s { int a, b; };"
-                                     "int *qb = &(struct s){ 1, 2 }.b;"
-                                     "char *c = &(char){ 67 };"
-                                     "int **pp = (int *[]){ (int[]){ 3 } + 1, 0 };");
+    std::string yaml = CompileToYaml(
+        "struct s { int a, b; };"
+        "int *qb = &(struct s){ 1, 2 }.b;"
+        "char *c = &(char){ 67 };"
+        "int **pp = (int *[]){ (int[]){ 3 } + 1, 0 };");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: static_variable
   name: _cl0
@@ -1239,8 +1243,9 @@ TEST_F(TranslateTest, FileScopeCompoundLiteralNested)
 // non-zero leaves are stored.
 TEST_F(TranslateTest, BulkZeroFill)
 {
-    std::string yaml = CompileToYaml("void g(int *p);"
-                                     "void f(void) { int a[9] = { [8] = 1 }; g(a); }");
+    std::string yaml = CompileToYaml(
+        "void g(int *p);"
+        "void f(void) { int a[9] = { [8] = 1 }; g(a); }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: function
   name: f
@@ -1346,8 +1351,9 @@ TEST_F(TranslateTest, BulkZeroFill)
 // Below the threshold every zero is stored, as before.
 TEST_F(TranslateTest, BulkZeroFillBelowThreshold)
 {
-    std::string yaml = CompileToYaml("void g(int *p);"
-                                     "void f(void) { int a[8] = { [7] = 1 }; g(a); }");
+    std::string yaml = CompileToYaml(
+        "void g(int *p);"
+        "void f(void) { int a[8] = { [7] = 1 }; g(a); }");
     EXPECT_EQ(yaml.find("jump_if_not_zero"), std::string::npos);
     size_t stores = 0;
     for (size_t pos = 0; (pos = yaml.find("kind: copy_to_offset", pos)) != std::string::npos; pos++)
@@ -1359,8 +1365,9 @@ TEST_F(TranslateTest, BulkZeroFillBelowThreshold)
 // string's bytes are stored (the NUL comes from the zeroing).
 TEST_F(TranslateTest, BulkZeroFillString)
 {
-    std::string yaml = CompileToYaml("void g(char *p);"
-                                     "void f(void) { char b[60] = \"AB\"; g(b); }");
+    std::string yaml = CompileToYaml(
+        "void g(char *p);"
+        "void f(void) { char b[60] = \"AB\"; g(b); }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: function
   name: f
@@ -1475,8 +1482,9 @@ TEST_F(TranslateTest, BulkZeroFillString)
 // A string that fills its array stores every byte, with no loop.
 TEST_F(TranslateTest, BulkZeroFillStringExact)
 {
-    std::string yaml = CompileToYaml("void g(char *p);"
-                                     "void f(void) { char b[4] = \"CDE\"; g(b); }");
+    std::string yaml = CompileToYaml(
+        "void g(char *p);"
+        "void f(void) { char b[4] = \"CDE\"; g(b); }");
     EXPECT_EQ(yaml.find("jump_if_not_zero"), std::string::npos);
     size_t stores = 0;
     for (size_t pos = 0; (pos = yaml.find("kind: copy_byte_to_offset", pos)) != std::string::npos;
@@ -1511,8 +1519,9 @@ TEST_F(TranslateTest, StaticZeroRunsMerge)
 // Zero tails of array elements merge with the zero elements that follow them.
 TEST_F(TranslateTest, StaticZeroRunsMergeAcrossElements)
 {
-    std::string yaml = CompileToYaml("struct p { int a, b, c; };"
-                                     "struct p t[4] = { { 1 }, { 0 }, { 0, 0, 3 } };");
+    std::string yaml = CompileToYaml(
+        "struct p { int a, b, c; };"
+        "struct p t[4] = { { 1 }, { 0 }, { 0, 0, 3 } };");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: static_variable
   name: t

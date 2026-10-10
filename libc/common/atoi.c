@@ -10,11 +10,10 @@
 int atoi(const char *nptr)
 {
     const char *p = nptr;
-    int neg = 0;
-    int n = 0;
+    int neg       = 0;
+    int n         = 0;
 
-    while (*p == ' ' || *p == '\t' || *p == '\n' ||
-           *p == '\r' || *p == '\v' || *p == '\f') {
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\v' || *p == '\f') {
         p++;
     }
     if (*p == '-') {

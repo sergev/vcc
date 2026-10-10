@@ -208,7 +208,8 @@ static void gen_add_ptr(Gen *g, const Tac_Instruction *in)
         shift = 0;
     }
     int p = use_val(g, T0, in->u.add_ptr.ptr);
-    emit3(g, A32_ADD, a32_reg(d), a32_reg(p), shift ? a32_shift(i, A32_SHIFT_LSL, shift) : a32_reg(i));
+    emit3(g, A32_ADD, a32_reg(d), a32_reg(p),
+          shift ? a32_shift(i, A32_SHIFT_LSL, shift) : a32_reg(i));
     store_val(g, d, dst);
 }
 
@@ -572,7 +573,8 @@ static int invert_cond(int cond)
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
 {
     if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
-        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
     if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)

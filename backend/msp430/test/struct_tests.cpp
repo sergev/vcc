@@ -11,13 +11,15 @@ EXPECT_CODE(StructCopyChunks, R"(mov @r13, 0(r12)
 mov 2(r13), 2(r12)
 mov 4(r13), 4(r12)
 ret
-)", "struct P { int x; long y; }; void f(struct P *p, struct P *q) { *p = *q; }")
+)",
+            "struct P { int x; long y; }; void f(struct P *p, struct P *q) { *p = *q; }")
 
 EXPECT_CODE(StructCopyBytes, R"(mov.b @r13, 0(r12)
 mov.b 1(r13), 1(r12)
 mov.b 2(r13), 2(r12)
 ret
-)", "struct C { char c[3]; }; void f(struct C *p, struct C *q) { *p = *q; }")
+)",
+            "struct C { char c[3]; }; void f(struct C *p, struct C *q) { *p = *q; }")
 
 // The callee copies a structure parameter into its slot on entry, from the address that
 // came in r12 (kept meanwhile in the slot's first word): a large one through a counted
@@ -66,7 +68,8 @@ mov #1, r12
 EXPECT_CODE(StructParamFromStack, R"(mov 2(r1), r15
 mov 2(r15), r12
 ret
-)", "struct S { int a, b; }; int w(int a, int b, int c, int d, struct S s) { return s.b; }")
+)",
+            "struct S { int a, b; }; int w(int a, int b, int c, int d, struct S s) { return s.b; }")
 
 // One the callee writes is copied into its slot first.
 TEST_F(Msp430Test, StructParamWrittenCopied)
@@ -99,7 +102,8 @@ mov 2(r1), r12
 // and the function no frame.
 EXPECT_CODE(StructParamInRegisterFrameless, R"(mov 2(r12), r12
 ret
-)", "struct S { int a, b, c; }; int f(struct S s) { return s.b; }")
+)",
+            "struct S { int a, b, c; }; int f(struct S s) { return s.b; }")
 
 // A structure parameter written and passed on: the copy of the member overwritten is
 // dead, and so is the slot's first word, which held the incoming address.  The call
@@ -112,7 +116,8 @@ mov r1, r12
 call #g
 add #6, r1
 ret
-)", R"(
+)",
+            R"(
     struct S { int a, b, c; };
     int g(struct S s);
     int f(struct S s, int k) { s.a = k; return g(s); }
@@ -152,7 +157,8 @@ TEST_F(Msp430Test, RunStructParamByReference)
 // from its register, so its slot is never read, and the store to it goes.
 EXPECT_CODE(StructResultPointerReturned, R"(mov r13, 0(r12)
 ret
-)", "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }")
+)",
+            "struct S { int a; }; struct S f(int x) { struct S s = { x }; return s; }")
 
 // Structures of every size passed and returned, a union, nested members, arrays of
 // structures and their copies.
@@ -274,7 +280,7 @@ TEST_F(Msp430Test, RunStructsWithGcc)
             return r == 'q' + 'y' + 5 + 1 + 'c' ? 0 : 4;
         }
     )");
-    std::string gcc = R"(
+    std::string gcc  = R"(
         struct S3 { char c[3]; };
         struct S4 { int a, b; };
         struct S10 { char c; long l; double d; };

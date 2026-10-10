@@ -7,9 +7,8 @@
 // argument types the prototype checks against, the _Noreturn-ness of
 // __besm6_stop, and the constant-folded opcode of __besm6_extracode.
 //
-#include "typecheck_fixture.h"
-
 #include "target.h"
+#include "typecheck_fixture.h"
 
 // The immediate-argument checks belong to the BESM-6 target descriptor.
 class Besm6IntrinsicsTest : public PipelineTest {

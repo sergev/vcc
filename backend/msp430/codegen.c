@@ -36,7 +36,7 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     gen_init(&g, program, tl);
     g.moves_sp = msp_moves_sp(tl);
     g.fp       = msp430_frame_pointer || g.moves_sp;
-    g.fn->fp = g.fp;
+    g.fn->fp   = g.fp;
     if (msp430_regalloc)
         gen_regalloc(&g);
     if (msp430_peephole)
@@ -106,9 +106,8 @@ void msp430_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *o
     case TAC_TOPLEVEL_STATIC_VARIABLE:
         if (tac_static_superseded(program, tl))
             break;
-        emit_static_variable(out, program, tl->u.static_variable.name,
-                             tl->u.static_variable.global, tl->u.static_variable.type,
-                             tl->u.static_variable.init_list, false,
+        emit_static_variable(out, program, tl->u.static_variable.name, tl->u.static_variable.global,
+                             tl->u.static_variable.type, tl->u.static_variable.init_list, false,
                              declared_alignment(program, tl->u.static_variable.name));
         break;
     case TAC_TOPLEVEL_STATIC_CONSTANT:

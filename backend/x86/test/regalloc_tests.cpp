@@ -10,7 +10,7 @@
 // where it arrives; nothing goes through the frame.
 TEST_F(X86Test, LoopInRegisters)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 long sum(long *p, int n)
 {
@@ -32,7 +32,7 @@ leaq 8(%rdi), %rdi
 // rsp 16-byte aligned for the call.
 TEST_F(X86Test, CalleeSavedAcrossCall)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
@@ -62,7 +62,7 @@ TEST_F(X86Test, DoublesInRegisters)
 // one not live across it stays in a register.
 TEST_F(X86Test, DoubleAcrossCallInSlot)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 double h(double);
 double across(double a, double b) { double x = h(a); return x + b; }
@@ -80,12 +80,13 @@ ret
 // Arguments trading registers: a cycle, broken through rax.
 TEST_F(X86Test, ArgumentsMovedAtOnce)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 int g2(int, int);
 int swap(int a, int b) { return g2(b, a); }
 )"));
-    EXPECT_NE(std::string::npos, code.find("movl %esi, %eax\nmovl %edi, %esi\nmovl %eax, %edi\ncall g2\n"))
+    EXPECT_NE(std::string::npos,
+              code.find("movl %esi, %eax\nmovl %edi, %esi\nmovl %eax, %edi\ncall g2\n"))
         << code;
 }
 
@@ -93,7 +94,7 @@ int swap(int a, int b) { return g2(b, a); }
 // register is extended again in place.
 TEST_F(X86Test, NarrowValuesCanonical)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 signed char narrow(signed char c, int k) { signed char d = c + k; return d; }
 )"));
@@ -107,7 +108,7 @@ signed char narrow(signed char c, int k) { signed char d = c + k; return d; }
 // live across the divide is kept out of the argument registers.
 TEST_F(X86Test, DivideAvoidsRdx)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86("int divc(int a, int b, int c) { return a / c + b; }"));
     EXPECT_NE(std::string::npos, code.find(R"(movl %esi, %ebx
 movl %edi, %eax
@@ -123,7 +124,7 @@ addl %ebx, %edi
 // live across the shift is kept out of the argument registers.
 TEST_F(X86Test, ShiftAvoidsRcx)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 long shx(int a, int b, int c, long x, int n) { return (x << n) + a; }
 )"));
@@ -146,7 +147,7 @@ TEST_F(X86Test, DestinationIsSecondOperand)
 // nothing is saved.
 TEST_F(X86Test, StackParameterInRegister)
 {
-    x86_peephole = false;
+    x86_peephole     = false;
     std::string code = Code(CompileToX86(R"(
 long seventh(long a, long b, long c, long d, long e, long f, long g) { return g * a; }
 )"));
@@ -187,9 +188,9 @@ int main(void)
     std::string expected;
     char line[128];
     int a = 1000, b = 7;
-#define EXPECT_LINE(name, op)                                                               \
-    snprintf(line, sizeof line, "%s %d %d %d %d %ld\n", #name, a op b, a op b, a op b,       \
-             3 op (b + 2), (3000L op 5L) + 3);                                              \
+#define EXPECT_LINE(name, op)                                                          \
+    snprintf(line, sizeof line, "%s %d %d %d %d %ld\n", #name, a op b, a op b, a op b, \
+             3 op(b + 2), (3000L op 5L) + 3);                                          \
     expected += line;
     EXPECT_LINE(add, +)
     EXPECT_LINE(sub, -)

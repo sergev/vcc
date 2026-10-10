@@ -82,7 +82,10 @@ int main(void) {
 // nonzero (no wrap, well under 2^48).  main returns 0.
 TEST_F(BookTest, Chapter12_PromoteConstants)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(long negative_one = 1l; // can't use negative static initializers; negate this in main
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(long negative_one = 1l; // can't use negative static initializers; negate this in main
 long zero = 0l;
 
 int main(void) {
@@ -120,7 +123,9 @@ int main(void) {
 // and twelve interfering int locals; all values small, main returns 0.
 TEST_F(BookTest, Chapter12_RewriteMovzRegression)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(int check_12_ints(int start, int a, int b, int c, int d, int e, int f, int g,
                   int h, int i, int j, int k, int l);
 
 unsigned glob = 5000u;
@@ -1121,7 +1126,10 @@ TEST_F(BookTest, Chapter12_UnsignedIncrDecr)
 // c keeps the "max unsigned" check as UINT_MAX (2^48-1).
 TEST_F(BookTest, Chapter12_UnsignedArgsLibrary)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int accept_unsigned(unsigned int a, unsigned int b, unsigned long c, unsigned long d,
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(int accept_unsigned(unsigned int a, unsigned int b, unsigned long c, unsigned long d,
                  unsigned int e, unsigned int f, unsigned long g, unsigned int h,
                  unsigned long i);
 

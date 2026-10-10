@@ -20,8 +20,7 @@
 // return '\y'; — '\y' is not a valid escape sequence.
 TEST(ScannerChapter16, CharBadEscapeSequence_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return '\\y';\n}\n"),
-                 "invalid escape sequence");
+    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return '\\y';\n}\n"), "invalid escape sequence");
 }
 
 // char *str = "foo\ybar"; — '\y' is not a valid escape sequence.
@@ -34,15 +33,15 @@ TEST(ScannerChapter16, StringBadEscapeSequence_Neg)
 // char *s = "hello<newline>world "; — a string literal may not span a newline.
 TEST(ScannerChapter16, Newline_Neg)
 {
-    EXPECT_DEATH(LexToEnd("char *s = \"hello\n    world \";\n"),
-                 "unterminated string");
+    EXPECT_DEATH(LexToEnd("char *s = \"hello\n    world \";\n"), "unterminated string");
 }
 
 // char *ptr = "foo"bar"; — the stray '"' opens a string that runs to EOF.
 TEST(ScannerChapter16, UnescapedDoubleQuote_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    char *ptr = \"foo\"bar\";\n        return 0;\n}\n"),
-                 "unterminated string");
+    EXPECT_DEATH(
+        LexToEnd("int main(void)\n{\n    char *ptr = \"foo\"bar\";\n        return 0;\n}\n"),
+        "unterminated string");
 }
 
 // char *ptr = "foo\"; — the escaped quote leaves the string unterminated.
@@ -69,6 +68,5 @@ TEST(ScannerChapter16, UnterminatedCharConstant_Neg)
 // return '''; — '' is an empty character literal.
 TEST(ScannerChapter16, UnescapedSingleQuote_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return ''';\n}\n"),
-                 "empty character literal");
+    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return ''';\n}\n"), "empty character literal");
 }

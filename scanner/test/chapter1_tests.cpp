@@ -8,8 +8,7 @@
 // return 0@1; — '@' is not part of any C token outside a literal.
 TEST(ScannerChapter1, AtSign_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void) {\n    return 0@1;\n}\n"),
-                 "invalid character '@'");
+    EXPECT_DEATH(LexToEnd("int main(void) {\n    return 0@1;\n}\n"), "invalid character '@'");
 }
 
 // A lone backslash is not a valid token.
@@ -27,8 +26,7 @@ TEST(ScannerChapter1, Backtick_Neg)
 // return @b; — stray '@' before an identifier.
 TEST(ScannerChapter1, InvalidIdentifier2_Neg)
 {
-    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return @b;\n}\n"),
-                 "invalid character '@'");
+    EXPECT_DEATH(LexToEnd("int main(void)\n{\n    return @b;\n}\n"), "invalid character '@'");
 }
 
 // return 1foo; — an identifier may not start with a digit; '1foo' is a single

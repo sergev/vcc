@@ -6,7 +6,10 @@ namespace {
 // (so a width-specific fold does not leak into later, target-agnostic tests).
 struct TargetGuard {
     const Target *saved;
-    explicit TargetGuard(const char *name) : saved(target_config) { target_config = target_lookup(name); }
+    explicit TargetGuard(const char *name) : saved(target_config)
+    {
+        target_config = target_lookup(name);
+    }
     ~TargetGuard() { target_config = saved; }
 };
 } // namespace
@@ -38,16 +41,17 @@ TEST_F(PipelineTest, StructDecl)
 // which used to drop every interior member (`g.tok_ptr` then failed to resolve).
 TEST_F(PipelineTest, StructMultipleDeclarators)
 {
-    RunPipeline("struct S { char *a, *tok_ptr, *c; int p; };"
-                " struct S g;"
-                " int main(void) { g.tok_ptr = 0; return 0; }");
+    RunPipeline(
+        "struct S { char *a, *tok_ptr, *c; int p; };"
+        " struct S g;"
+        " int main(void) { g.tok_ptr = 0; return 0; }");
 
     const StructDef *sd = structtab_find("S");
     ASSERT_NE(sd, nullptr);
 
     // All four members must survive, in declaration order and at distinct,
     // increasing offsets (exact offsets are target-dependent).
-    const char *names[] = { "a", "tok_ptr", "c", "p" };
+    const char *names[]    = { "a", "tok_ptr", "c", "p" };
     const TypeKind kinds[] = { TYPE_POINTER, TYPE_POINTER, TYPE_POINTER, TYPE_INT };
     const FieldDef *m      = sd->members;
     int prev_offset        = -1;
@@ -544,13 +548,15 @@ TEST_F(PipelineTest, BareRealIsNotIntegerConstExpr_Neg)
 // The new floating-scalar path must not accept a non-constant initializer.
 TEST_F(PipelineTest, RealStaticInitFromVariable_Neg)
 {
-    EXPECT_DEATH(RunPipeline("double a; double b = -a;"), "initializer element is not a constant expression");
+    EXPECT_DEATH(RunPipeline("double a; double b = -a;"),
+                 "initializer element is not a constant expression");
 }
 
 // Division by zero is not a constant expression: reject rather than fold an infinity.
 TEST_F(PipelineTest, RealStaticInitDivideByZero_Neg)
 {
-    EXPECT_DEATH(RunPipeline("double z = 1.0 / 0.0;"), "initializer element is not a constant expression");
+    EXPECT_DEATH(RunPipeline("double z = 1.0 / 0.0;"),
+                 "initializer element is not a constant expression");
 }
 
 //
@@ -610,8 +616,9 @@ TEST_F(PipelineTest, AnonStructBlockScopeDeclaratorList)
 //
 TEST_F(PipelineTest, AnonStructMembersShareType)
 {
-    RunPipeline("struct W { struct { int x; } p, q; };  struct W w;"
-                " int f(void) { w.p = w.q; return w.p.x; }");
+    RunPipeline(
+        "struct W { struct { int x; } p, q; };  struct W w;"
+        " int f(void) { w.p = w.q; return w.p.x; }");
 }
 
 //
@@ -619,8 +626,9 @@ TEST_F(PipelineTest, AnonStructMembersShareType)
 //
 TEST_F(PipelineTest, AnonTypedefDeclaratorList)
 {
-    RunPipeline("typedef struct { int x; } T1, T2;  T1 a;  T2 b;"
-                " int f(void) { a = b; return a.x; }");
+    RunPipeline(
+        "typedef struct { int x; } T1, T2;  T1 a;  T2 b;"
+        " int f(void) { a = b; return a.x; }");
 }
 
 //

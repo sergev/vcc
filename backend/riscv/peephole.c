@@ -197,27 +197,27 @@ static bool immediate_form(Rv_Instr *in, int64_t imm)
         op = RV_SLTIU;
         break;
     case RV_SLL:
-        op  = RV_SLLI;
+        op = RV_SLLI;
         imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SRL:
-        op  = RV_SRLI;
+        op = RV_SRLI;
         imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SRA:
-        op  = RV_SRAI;
+        op = RV_SRAI;
         imm &= 8 * riscv_xlen - 1;
         break;
     case RV_SLLW:
-        op  = RV_SLLIW;
+        op = RV_SLLIW;
         imm &= 31;
         break;
     case RV_SRLW:
-        op  = RV_SRLIW;
+        op = RV_SRLIW;
         imm &= 31;
         break;
     case RV_SRAW:
-        op  = RV_SRAIW;
+        op = RV_SRAIW;
         imm &= 31;
         break;
     default:
@@ -234,10 +234,10 @@ static bool immediate_form(Rv_Instr *in, int64_t imm)
 static bool fold_li(Rv_Instr **link)
 {
     Rv_Instr *li = *link, *next = li->next;
-    int r        = li->opnd[0].reg;
+    int r = li->opnd[0].reg;
     if (!next || !reads(next, r) || !last_read(next, r) || reads_as_base(next, r))
         return false;
-    int64_t imm = li->opnd[1].imm;
+    int64_t imm   = li->opnd[1].imm;
     Rv_Operand *o = next->opnd;
     if (o[0].kind == RV_OPND_REG && o[1].kind == RV_OPND_REG && o[2].kind == RV_OPND_REG) {
         if (commutes(next->op) && o[1].reg == r && o[2].reg != r) {
@@ -264,8 +264,7 @@ static bool is_move(Rv_Op op)
 
 static bool is_store(Rv_Op op)
 {
-    return op == RV_SB || op == RV_SH || op == RV_SW || op == RV_SD || op == RV_FSW ||
-           op == RV_FSD;
+    return op == RV_SB || op == RV_SH || op == RV_SW || op == RV_SD || op == RV_FSW || op == RV_FSD;
 }
 
 // Delete a later `load` of what store `st` wrote, into the same register, when nothing
@@ -301,8 +300,8 @@ static bool delete_reload(Rv_Instr *st, Rv_Op load)
 // `mv t, r`: the reads of t up to its next write read r instead, if r is not written
 // before the last of them.  A scratch t may reach the end of the block instead, and an
 // argument register a return; any other register must be written again before a
-// branch, or its value may be read beyond.  This takes the operand and result copies around a register pair, which come
-// four together, not one by one.
+// branch, or its value may be read beyond.  This takes the operand and result copies around a
+// register pair, which come four together, not one by one.
 static bool forward_move(Rv_Instr **link)
 {
     Rv_Instr *mv = *link;
@@ -434,10 +433,9 @@ static bool rewrite(Rv_Instr **link)
 
     // The reload of what was stored, into the same register.
     // A word reload restores the register only on rv32, where a word is all of it.
-    static const Rv_Op reload[][2] = { { RV_SD, RV_LD },
-                                       { RV_FSD, RV_FLD },
-                                       { RV_FSW, RV_FLW },
-                                       { RV_SW, RV_LW } };
+    static const Rv_Op reload[][2] = {
+        { RV_SD, RV_LD }, { RV_FSD, RV_FLD }, { RV_FSW, RV_FLW }, { RV_SW, RV_LW }
+    };
     size_t nreload = sizeof(reload) / sizeof(reload[0]) - (riscv_xlen == 8);
     for (size_t k = 0; k < nreload; k++)
         if (in->op == reload[k][0] && o[1].reg != o[0].reg && delete_reload(in, reload[k][1]))
@@ -489,8 +487,8 @@ static bool rewrite_block_end(Rv_Block *b)
         Rv_Instr *br = *bl;
         br->op       = br->op == RV_BEQZ ? RV_BNEZ : RV_BEQZ;
         xfree(br->opnd[1].sym);
-        br->opnd[1]     = (*jl)->opnd[0];
-        (*jl)->opnd[0]  = (Rv_Operand){ 0 };
+        br->opnd[1]    = (*jl)->opnd[0];
+        (*jl)->opnd[0] = (Rv_Operand){ 0 };
         delete_at(&br->next);
         return true;
     }

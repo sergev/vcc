@@ -123,7 +123,7 @@ static void layout(const Gen *g, const Tac_Instruction *in, Layout *L)
 
     // The buffer of variable arguments first, at the area's start.
     const Tac_Type *p = ft->u.fun_type.param_types;
-    int i             = 0, size = 0;
+    int i = 0, size = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         L->copy[i] = L->slot[i] = -1;
         if (p) {
@@ -391,9 +391,9 @@ void gen_runtime(Gen *g, const char *name, const Tac_Type *ret, const Tac_Val *c
 {
     Tac_Val vals[4];
     Tac_Type params[4];
-    Tac_Type rt  = *ret;
-    rt.next      = NULL;
-    Tac_Type ft  = { .kind = TAC_TYPE_FUN_TYPE };
+    Tac_Type rt            = *ret;
+    rt.next                = NULL;
+    Tac_Type ft            = { .kind = TAC_TYPE_FUN_TYPE };
     ft.u.fun_type.ret_type = &rt;
     for (int i = n - 1; i >= 0; i--) {
         vals[i]        = *args[i];

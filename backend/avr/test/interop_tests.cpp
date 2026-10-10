@@ -7,16 +7,16 @@
 #include <cstdint>
 #include <cstring>
 
-#include "avr_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "avr_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -149,7 +149,7 @@ TEST_F(AvrTest, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_AVR_TOOLS();
     SKIP_IF_NO_AVR_CLANG();
-    std::string ours = BothSides(sig_types, sig_decls, sig_defs, "our", "their") + R"(
+    std::string ours   = BothSides(sig_types, sig_decls, sig_defs, "our", "their") + R"(
 void putbyte(int c);
 static void hex(long v)
 {
@@ -216,7 +216,7 @@ TEST_F(AvrTest, RunPreservedRegisters)
 {
     SKIP_IF_NO_AVR_TOOLS();
     SKIP_IF_NO_AVR_CLANG();
-    std::string ours = CompileToAvr(R"(
+    std::string ours      = CompileToAvr(R"(
 int work(int a, int b)
 {
     volatile long long x = a;
@@ -225,7 +225,7 @@ int work(int a, int b)
     return (int)(y >> 3) + a * b + (int)q + (int)(y / 1000);
 }
 )");
-    std::string check = PreservedCheck();
+    std::string check     = PreservedCheck();
     std::string clang_src = kPreservedMain;
     EXPECT_EQ("0", Run(ours + check, "crt0.o", &clang_src, { "-O1" }, ".clang"));
 }
@@ -256,8 +256,9 @@ int main(void)
     if (a / b != -123456) return 2;
     if (a % b != -418644) return 3;
     if (ua / ub != 0xe0004fa01c4dULL || ua % ub != 0x10a4f) return 4;
-    if (bits(x * y) != )" + bits(x * y) + R"( || bits(x / y) != )" + bits(x / y) +
-                                 R"( || bits(x + y) != )" + bits(x + y) + R"() return 5;
+    if (bits(x * y) != )" + bits(x * y) +
+                             R"( || bits(x / y) != )" + bits(x / y) + R"( || bits(x + y) != )" +
+                             bits(x + y) + R"() return 5;
     if ((long)(x * 1000) != 1750 || (float)l != -100000.0f) return 6;
     if ((long long)(x * 1e9f) != 1750000000LL) return 7;
     putbyte('o');
@@ -369,7 +370,7 @@ TEST_F(AvrTest, RunPreservedRegistersAlloca)
 {
     SKIP_IF_NO_AVR_TOOLS();
     SKIP_IF_NO_AVR_CLANG();
-    std::string ours = CompileToAvr(R"(
+    std::string ours      = CompileToAvr(R"(
 void *__builtin_alloca(unsigned int);
 int sum10(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 {
@@ -409,17 +410,18 @@ int NAME(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i)
     return s + b + c + d + e + f + g + h + i;
 }
 )";
-    auto named = [&](const char *name) {
+    auto named      = [&](const char *name) {
         std::string t = sum;
         t.replace(t.find("NAME"), 4, name);
         return t;
     };
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned int);
 int their_sum(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i);
 int their_check(void);
 void putbyte(int c);
-)") + named("our_sum") + R"(
+)") + named("our_sum") +
+                         R"(
 int main(void)
 {
     int *q = __builtin_alloca(16);
@@ -432,7 +434,8 @@ int main(void)
     std::string theirs = std::string(R"(
 int our_sum(int n, int a, int b, int c, int d, int e, int f, int g, int h, int i);
 volatile int seed = 7;
-)") + named("their_sum") + R"(
+)") + named("their_sum") +
+                         R"(
 int their_check(void)
 {
     int s = seed;

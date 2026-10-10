@@ -84,9 +84,9 @@ char *do_define(char *p)
     int va_num   = 0; // 1-based number of the variadic formal (the last one), else 0
     struct symtab *np;
     char *oldval, *oldsavch;
-    char *hashpos = NULL; // side-buffer position of a pending '#' (stringize) operator
+    char *hashpos = NULL;   // side-buffer position of a pending '#' (stringize) operator
     const char *body_start; // side-buffer position where the replacement text begins
-    int paste_pending = 0; // a '##' was just seen; its right operand pastes onto the left
+    int paste_pending = 0;  // a '##' was just seen; its right operand pastes onto the left
 
     if (cpp.side_ptr > side_buf + SBSIZE - BUFSIZ) {
         pperror("macro definition is too long");
@@ -135,9 +135,9 @@ char *do_define(char *p)
     pin                       = cpp.tok_ptr;
     // If the name is immediately followed by '(' this is a function-like macro:
     // collect the parameter names into formal[] / formtxt.
-    if (*pin == '(') { // with parameters; identify the formals
+    if (*pin == '(') {           // with parameters; identify the formals
         int prev_was_formal = 0; // previous token was a normal named formal
-        cf = formtxt;
+        cf                  = formtxt;
         for (;;) {
             p   = skip_blanks(p);
             pin = cpp.tok_ptr;
@@ -161,7 +161,7 @@ char *do_define(char *p)
                     // GNU named varargs `#define P(args...)`: the identifier just
                     // before '...' becomes the variadic name; do not add a
                     // separate __VA_ARGS__ formal.
-                    variadic = 1;
+                    variadic        = 1;
                     prev_was_formal = 0;
                     p += 2;
                     continue;
@@ -184,13 +184,13 @@ char *do_define(char *p)
                 c  = *p;
                 *p = '\0';
                 pperror("invalid macro parameter '%s'", pin);
-                *p = c;
+                *p              = c;
                 prev_was_formal = 0;
             } else if (pf >= &formal[MAXFRM]) {
                 c  = *p;
                 *p = '\0';
                 pperror("too many macro parameters at '%s'", pin);
-                *p = c;
+                *p              = c;
                 prev_was_formal = 0;
             } else {
                 *pf++ = cf;
@@ -248,14 +248,15 @@ char *do_define(char *p)
                     continue;
                 }
                 if (*pin == '#' && (p - pin) == 1) { // '##' token-paste operator
-                    psav = hp;                        // drop the pending '#'
+                    psav = hp;                       // drop the pending '#'
                     while (psav > body_start && (psav[-1] == ' ' || psav[-1] == '\t'))
                         --psav; // strip white space preceding the '##'
                     if (psav <= body_start) {
                         pperror("'##' at start of macro replacement list");
                         continue; // no left operand to paste onto
                     }
-                    if ((unsigned char)psav[-1] == WARN_MARK) // left operand is a parameter: keep it raw
+                    if ((unsigned char)psav[-1] ==
+                        WARN_MARK) // left operand is a parameter: keep it raw
                         psav[-1] = (char)PASTE_MARK;
                     paste_pending = 1; // the next token is the right operand
                     continue;
@@ -301,7 +302,8 @@ char *do_define(char *p)
                     // operand is a literal comma and the right operand is the
                     // variadic formal, drop the comma here; expand_macro re-emits
                     // it only when the variadic actual is non-empty.
-                    // cppcheck-suppress knownConditionTrueFalse ; va_num is set for a variadic macro
+                    // cppcheck-suppress knownConditionTrueFalse ; va_num is set for a variadic
+                    // macro
                     if (paste_now && num == va_num && // num != 0 here, so va_num != 0
                         psav > body_start && psav[-1] == ',') {
                         --psav;
@@ -559,8 +561,8 @@ char *expand_text(const char *a0, const char *a1, char *out, int cap)
     // ceiling need not fault, and the exit status must not say it did.
     if (cpp.arg_depth >= MAXARGDEPTH) {
         if (!cpp.opt_no_warnings)
-            ppwarn("an argument of macro '%s' is not pre-expanded: nesting deeper than %d", cpp.macro_name,
-                   MAXARGDEPTH);
+            ppwarn("an argument of macro '%s' is not pre-expanded: nesting deeper than %d",
+                   cpp.macro_name, MAXARGDEPTH);
         return raw_text(a0, a1, out, cap);
     }
 
@@ -671,7 +673,7 @@ static char *pragma_operator(char *p)
     // expand_macro, which nests, and a _Pragma cannot appear inside its own
     // argument, so one buffer for the run is enough.
     static char text[BUFSIZ]; // destringized pragma text
-    char *w        = text;
+    char *w       = text;
     const char *s = 0, *e = 0;
 
     SET_SLOW_SCAN();
@@ -919,7 +921,7 @@ char *expand_macro(char *p, struct symtab *sp)
                 *--p = *ca;
             }
         } else if ((unsigned char)*vp == STRINGIZE_MARK) { // '#param': push the quoted raw actual
-            char *strbuf   = exptxt + EXPTXT_SIZE; // the third slice of `scratch'
+            char *strbuf   = exptxt + EXPTXT_SIZE;         // the third slice of `scratch'
             const char *a1 = actual[*--vp - 1];
             const char *a0 = a1;
             const char *ce;
@@ -933,7 +935,8 @@ char *expand_macro(char *p, struct symtab *sp)
                 }
                 *--p = *--ce;
             }
-        } else if ((unsigned char)*vp == PASTE_MARK) { // '##' operand: push the RAW actual, unexpanded
+        } else if ((unsigned char)*vp ==
+                   PASTE_MARK) { // '##' operand: push the RAW actual, unexpanded
             const char *a1 = actual[*--vp - 1];
             const char *a0 = a1;
             while (a0[-1] != '\0') // walk back to the start of this actual's text
@@ -952,7 +955,7 @@ char *expand_macro(char *p, struct symtab *sp)
                 *--p = *--a1;
             }
         } else if ((unsigned char)*vp == COMMA_PASTE_MARK) { // GNU ", ## __VA_ARGS__": raw actual,
-            const char *a1 = actual[*--vp - 1]; // with the comma dropped when empty
+            const char *a1 = actual[*--vp - 1];              // with the comma dropped when empty
             const char *a0 = a1;
             while (a0[-1] != '\0') // walk back to the start of this actual's text
                 --a0;

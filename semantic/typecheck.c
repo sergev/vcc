@@ -617,8 +617,8 @@ static void cv_set_int(ConstVal *out, TypeKind k, uint64_t bits)
         return;
     }
     int width = kind_value_bits(k);
-    out->u    = kind_is_unsigned(k) ? unsigned_narrow(bits, width)
-                                    : (uint64_t)sign_narrow(bits, width);
+    out->u =
+        kind_is_unsigned(k) ? unsigned_narrow(bits, width) : (uint64_t)sign_narrow(bits, width);
 }
 
 // The folded integer converted to integer kind `k` (C11 §6.3.1.3), as canonical bits.
@@ -749,7 +749,7 @@ static bool fold_real_binop(BinaryOp op, double left, double right, ConstVal *ou
 static bool fold_ld_binop(BinaryOp op, const ConstVal *l, const ConstVal *r, ConstVal *out)
 {
     Float128 a = const_as_ld(l), b = const_as_ld(r);
-    int c      = f128_cmp(a, b); // 2 when unordered
+    int c = f128_cmp(a, b); // 2 when unordered
     switch (op) {
     case BINARY_MUL:
         cv_set_ld(out, f128_mul(a, b));
@@ -955,12 +955,12 @@ static bool eval_const(const Expr *e, ConstVal *out)
         // pattern either way and re-narrow through cv_set_int.  The shifts are the
         // exception: each operand converts independently and the result has the
         // promoted *left* operand's kind (C11 §6.5.7p3).
-        TypeKind k    = common_kind(promote_kind(l.kind), promote_kind(r.kind));
-        bool uns      = kind_is_unsigned(k);
-        uint64_t ul   = cv_convert(&l, k);
-        uint64_t ur   = cv_convert(&r, k);
-        int64_t  sl   = (int64_t)ul;
-        int64_t  sr   = (int64_t)ur;
+        TypeKind k  = common_kind(promote_kind(l.kind), promote_kind(r.kind));
+        bool uns    = kind_is_unsigned(k);
+        uint64_t ul = cv_convert(&l, k);
+        uint64_t ur = cv_convert(&r, k);
+        int64_t sl  = (int64_t)ul;
+        int64_t sr  = (int64_t)ur;
         switch (e->u.binary_op.op) {
         case BINARY_MUL:
             cv_set_int(out, k, ul * ur);

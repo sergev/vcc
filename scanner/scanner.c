@@ -1,12 +1,12 @@
 #include "scanner.h"
 
-#include "srcloc.h"
-
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "srcloc.h"
 
 // Global variables
 static FILE *input_file;
@@ -805,122 +805,239 @@ char *get_yytext(void)
 const char *token_name(int token)
 {
     switch (token) {
-    case TOKEN_EOF:                  return "end of file";
-    case TOKEN_UNKNOWN:              return "unknown token";
-    case TOKEN_AUTO:                 return "'auto'";
-    case TOKEN_BREAK:                return "'break'";
-    case TOKEN_CASE:                 return "'case'";
-    case TOKEN_CHAR:                 return "'char'";
-    case TOKEN_CONST:                return "'const'";
-    case TOKEN_CONTINUE:             return "'continue'";
-    case TOKEN_DEFAULT:              return "'default'";
-    case TOKEN_DO:                   return "'do'";
-    case TOKEN_DOUBLE:               return "'double'";
-    case TOKEN_ELSE:                 return "'else'";
-    case TOKEN_ENUM:                 return "'enum'";
-    case TOKEN_EXTERN:               return "'extern'";
-    case TOKEN_FLOAT:                return "'float'";
-    case TOKEN_FOR:                  return "'for'";
-    case TOKEN_GOTO:                 return "'goto'";
-    case TOKEN_IF:                   return "'if'";
-    case TOKEN_INLINE:               return "'inline'";
-    case TOKEN_INT:                  return "'int'";
-    case TOKEN_LONG:                 return "'long'";
-    case TOKEN_REGISTER:             return "'register'";
-    case TOKEN_RESTRICT:             return "'restrict'";
-    case TOKEN_RETURN:               return "'return'";
-    case TOKEN_SHORT:                return "'short'";
-    case TOKEN_SIGNED:               return "'signed'";
-    case TOKEN_SIZEOF:               return "'sizeof'";
-    case TOKEN_STATIC:               return "'static'";
-    case TOKEN_STRUCT:               return "'struct'";
-    case TOKEN_SWITCH:               return "'switch'";
-    case TOKEN_TYPEDEF:              return "'typedef'";
-    case TOKEN_UNION:                return "'union'";
-    case TOKEN_UNSIGNED:             return "'unsigned'";
-    case TOKEN_VOID:                 return "'void'";
-    case TOKEN_VOLATILE:             return "'volatile'";
-    case TOKEN_WHILE:                return "'while'";
-    case TOKEN_ALIGNAS:              return "'_Alignas'";
-    case TOKEN_ALIGNOF:              return "'_Alignof'";
-    case TOKEN_VA_CLASS:             return "'__builtin_va_class'";
-    case TOKEN_ATOMIC:               return "'_Atomic'";
-    case TOKEN_AWAIT:                return "'_Await'";
-    case TOKEN_BOOL:                 return "'_Bool'";
-    case TOKEN_COMPLEX:              return "'_Complex'";
-    case TOKEN_CORO:                 return "'_Coro'";
-    case TOKEN_CORO_FRAME:           return "'_Coro_frame'";
-    case TOKEN_CORO_PTR:             return "'_Coro_ptr'";
-    case TOKEN_DEFER:                return "'_Defer'";
-    case TOKEN_GENERIC:              return "'_Generic'";
-    case TOKEN_IMAGINARY:            return "'_Imaginary'";
-    case TOKEN_NORETURN:             return "'_Noreturn'";
-    case TOKEN_STATIC_ASSERT:        return "'_Static_assert'";
-    case TOKEN_THREAD_LOCAL:         return "'_Thread_local'";
-    case TOKEN_YIELD:                return "'_Yield'";
-    case TOKEN_CO_INIT:              return "'__co_init'";
-    case TOKEN_CO_ALLOCA:            return "'__co_alloca'";
-    case TOKEN_CO_RESUME:            return "'__co_resume'";
-    case TOKEN_CO_CANCEL:            return "'__co_cancel'";
-    case TOKEN_CO_DESTROY:           return "'__co_destroy'";
-    case TOKEN_CO_DONE:              return "'__co_done'";
-    case TOKEN_CO_VALUE:             return "'__co_value'";
-    case TOKEN_CO_RESULT:            return "'__co_result'";
-    case TOKEN_CO_SIZEOF:            return "'__co_sizeof'";
-    case TOKEN_CO_ALIGNOF:           return "'__co_alignof'";
-    case TOKEN_FUNC_NAME:            return "'__func__'";
-    case TOKEN_IDENTIFIER:           return "identifier";
-    case TOKEN_I_CONSTANT:           return "integer constant";
-    case TOKEN_F_CONSTANT:           return "floating constant";
-    case TOKEN_STRING_LITERAL:       return "string literal";
-    case TOKEN_ELLIPSIS:             return "'...'";
-    case TOKEN_RIGHT_ASSIGN:         return "'>>='";
-    case TOKEN_LEFT_ASSIGN:          return "'<<='";
-    case TOKEN_ADD_ASSIGN:           return "'+='";
-    case TOKEN_SUB_ASSIGN:           return "'-='";
-    case TOKEN_MUL_ASSIGN:           return "'*='";
-    case TOKEN_DIV_ASSIGN:           return "'/='";
-    case TOKEN_MOD_ASSIGN:           return "'%='";
-    case TOKEN_AND_ASSIGN:           return "'&='";
-    case TOKEN_XOR_ASSIGN:           return "'^='";
-    case TOKEN_OR_ASSIGN:            return "'|='";
-    case TOKEN_RIGHT_OP:             return "'>>'";
-    case TOKEN_LEFT_OP:              return "'<<'";
-    case TOKEN_INC_OP:               return "'++'";
-    case TOKEN_DEC_OP:               return "'--'";
-    case TOKEN_PTR_OP:               return "'->'";
-    case TOKEN_AND_OP:               return "'&&'";
-    case TOKEN_OR_OP:                return "'||'";
-    case TOKEN_LE_OP:                return "'<='";
-    case TOKEN_GE_OP:                return "'>='";
-    case TOKEN_EQ_OP:                return "'=='";
-    case TOKEN_NE_OP:                return "'!='";
-    case TOKEN_SEMICOLON:            return "';'";
-    case TOKEN_LBRACE:               return "'{'";
-    case TOKEN_RBRACE:               return "'}'";
-    case TOKEN_COMMA:                return "','";
-    case TOKEN_COLON:                return "':'";
-    case TOKEN_ASSIGN:               return "'='";
-    case TOKEN_LPAREN:               return "'('";
-    case TOKEN_RPAREN:               return "')'";
-    case TOKEN_LBRACKET:             return "'['";
-    case TOKEN_RBRACKET:             return "']'";
-    case TOKEN_DOT:                  return "'.'";
-    case TOKEN_AMPERSAND:            return "'&'";
-    case TOKEN_NOT:                  return "'!'";
-    case TOKEN_TILDE:                return "'~'";
-    case TOKEN_MINUS:                return "'-'";
-    case TOKEN_PLUS:                 return "'+'";
-    case TOKEN_STAR:                 return "'*'";
-    case TOKEN_SLASH:                return "'/'";
-    case TOKEN_PERCENT:              return "'%'";
-    case TOKEN_LT:                   return "'<'";
-    case TOKEN_GT:                   return "'>'";
-    case TOKEN_CARET:                return "'^'";
-    case TOKEN_PIPE:                 return "'|'";
-    case TOKEN_QUESTION:             return "'?'";
-    case TOKEN_TYPEDEF_NAME:         return "typedef name";
-    case TOKEN_ENUMERATION_CONSTANT: return "enumeration constant";
-    default:                         return "token";
+    case TOKEN_EOF:
+        return "end of file";
+    case TOKEN_UNKNOWN:
+        return "unknown token";
+    case TOKEN_AUTO:
+        return "'auto'";
+    case TOKEN_BREAK:
+        return "'break'";
+    case TOKEN_CASE:
+        return "'case'";
+    case TOKEN_CHAR:
+        return "'char'";
+    case TOKEN_CONST:
+        return "'const'";
+    case TOKEN_CONTINUE:
+        return "'continue'";
+    case TOKEN_DEFAULT:
+        return "'default'";
+    case TOKEN_DO:
+        return "'do'";
+    case TOKEN_DOUBLE:
+        return "'double'";
+    case TOKEN_ELSE:
+        return "'else'";
+    case TOKEN_ENUM:
+        return "'enum'";
+    case TOKEN_EXTERN:
+        return "'extern'";
+    case TOKEN_FLOAT:
+        return "'float'";
+    case TOKEN_FOR:
+        return "'for'";
+    case TOKEN_GOTO:
+        return "'goto'";
+    case TOKEN_IF:
+        return "'if'";
+    case TOKEN_INLINE:
+        return "'inline'";
+    case TOKEN_INT:
+        return "'int'";
+    case TOKEN_LONG:
+        return "'long'";
+    case TOKEN_REGISTER:
+        return "'register'";
+    case TOKEN_RESTRICT:
+        return "'restrict'";
+    case TOKEN_RETURN:
+        return "'return'";
+    case TOKEN_SHORT:
+        return "'short'";
+    case TOKEN_SIGNED:
+        return "'signed'";
+    case TOKEN_SIZEOF:
+        return "'sizeof'";
+    case TOKEN_STATIC:
+        return "'static'";
+    case TOKEN_STRUCT:
+        return "'struct'";
+    case TOKEN_SWITCH:
+        return "'switch'";
+    case TOKEN_TYPEDEF:
+        return "'typedef'";
+    case TOKEN_UNION:
+        return "'union'";
+    case TOKEN_UNSIGNED:
+        return "'unsigned'";
+    case TOKEN_VOID:
+        return "'void'";
+    case TOKEN_VOLATILE:
+        return "'volatile'";
+    case TOKEN_WHILE:
+        return "'while'";
+    case TOKEN_ALIGNAS:
+        return "'_Alignas'";
+    case TOKEN_ALIGNOF:
+        return "'_Alignof'";
+    case TOKEN_VA_CLASS:
+        return "'__builtin_va_class'";
+    case TOKEN_ATOMIC:
+        return "'_Atomic'";
+    case TOKEN_AWAIT:
+        return "'_Await'";
+    case TOKEN_BOOL:
+        return "'_Bool'";
+    case TOKEN_COMPLEX:
+        return "'_Complex'";
+    case TOKEN_CORO:
+        return "'_Coro'";
+    case TOKEN_CORO_FRAME:
+        return "'_Coro_frame'";
+    case TOKEN_CORO_PTR:
+        return "'_Coro_ptr'";
+    case TOKEN_DEFER:
+        return "'_Defer'";
+    case TOKEN_GENERIC:
+        return "'_Generic'";
+    case TOKEN_IMAGINARY:
+        return "'_Imaginary'";
+    case TOKEN_NORETURN:
+        return "'_Noreturn'";
+    case TOKEN_STATIC_ASSERT:
+        return "'_Static_assert'";
+    case TOKEN_THREAD_LOCAL:
+        return "'_Thread_local'";
+    case TOKEN_YIELD:
+        return "'_Yield'";
+    case TOKEN_CO_INIT:
+        return "'__co_init'";
+    case TOKEN_CO_ALLOCA:
+        return "'__co_alloca'";
+    case TOKEN_CO_RESUME:
+        return "'__co_resume'";
+    case TOKEN_CO_CANCEL:
+        return "'__co_cancel'";
+    case TOKEN_CO_DESTROY:
+        return "'__co_destroy'";
+    case TOKEN_CO_DONE:
+        return "'__co_done'";
+    case TOKEN_CO_VALUE:
+        return "'__co_value'";
+    case TOKEN_CO_RESULT:
+        return "'__co_result'";
+    case TOKEN_CO_SIZEOF:
+        return "'__co_sizeof'";
+    case TOKEN_CO_ALIGNOF:
+        return "'__co_alignof'";
+    case TOKEN_FUNC_NAME:
+        return "'__func__'";
+    case TOKEN_IDENTIFIER:
+        return "identifier";
+    case TOKEN_I_CONSTANT:
+        return "integer constant";
+    case TOKEN_F_CONSTANT:
+        return "floating constant";
+    case TOKEN_STRING_LITERAL:
+        return "string literal";
+    case TOKEN_ELLIPSIS:
+        return "'...'";
+    case TOKEN_RIGHT_ASSIGN:
+        return "'>>='";
+    case TOKEN_LEFT_ASSIGN:
+        return "'<<='";
+    case TOKEN_ADD_ASSIGN:
+        return "'+='";
+    case TOKEN_SUB_ASSIGN:
+        return "'-='";
+    case TOKEN_MUL_ASSIGN:
+        return "'*='";
+    case TOKEN_DIV_ASSIGN:
+        return "'/='";
+    case TOKEN_MOD_ASSIGN:
+        return "'%='";
+    case TOKEN_AND_ASSIGN:
+        return "'&='";
+    case TOKEN_XOR_ASSIGN:
+        return "'^='";
+    case TOKEN_OR_ASSIGN:
+        return "'|='";
+    case TOKEN_RIGHT_OP:
+        return "'>>'";
+    case TOKEN_LEFT_OP:
+        return "'<<'";
+    case TOKEN_INC_OP:
+        return "'++'";
+    case TOKEN_DEC_OP:
+        return "'--'";
+    case TOKEN_PTR_OP:
+        return "'->'";
+    case TOKEN_AND_OP:
+        return "'&&'";
+    case TOKEN_OR_OP:
+        return "'||'";
+    case TOKEN_LE_OP:
+        return "'<='";
+    case TOKEN_GE_OP:
+        return "'>='";
+    case TOKEN_EQ_OP:
+        return "'=='";
+    case TOKEN_NE_OP:
+        return "'!='";
+    case TOKEN_SEMICOLON:
+        return "';'";
+    case TOKEN_LBRACE:
+        return "'{'";
+    case TOKEN_RBRACE:
+        return "'}'";
+    case TOKEN_COMMA:
+        return "','";
+    case TOKEN_COLON:
+        return "':'";
+    case TOKEN_ASSIGN:
+        return "'='";
+    case TOKEN_LPAREN:
+        return "'('";
+    case TOKEN_RPAREN:
+        return "')'";
+    case TOKEN_LBRACKET:
+        return "'['";
+    case TOKEN_RBRACKET:
+        return "']'";
+    case TOKEN_DOT:
+        return "'.'";
+    case TOKEN_AMPERSAND:
+        return "'&'";
+    case TOKEN_NOT:
+        return "'!'";
+    case TOKEN_TILDE:
+        return "'~'";
+    case TOKEN_MINUS:
+        return "'-'";
+    case TOKEN_PLUS:
+        return "'+'";
+    case TOKEN_STAR:
+        return "'*'";
+    case TOKEN_SLASH:
+        return "'/'";
+    case TOKEN_PERCENT:
+        return "'%'";
+    case TOKEN_LT:
+        return "'<'";
+    case TOKEN_GT:
+        return "'>'";
+    case TOKEN_CARET:
+        return "'^'";
+    case TOKEN_PIPE:
+        return "'|'";
+    case TOKEN_QUESTION:
+        return "'?'";
+    case TOKEN_TYPEDEF_NAME:
+        return "typedef name";
+    case TOKEN_ENUMERATION_CONSTANT:
+        return "enumeration constant";
+    default:
+        return "token";
     }
 }

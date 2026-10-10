@@ -6,7 +6,6 @@
 
 #include "riscv_test.h"
 
-
 // Selection over operands in memory: register allocation off, slots from s0.
 class InstrTest : public RiscvTest {
 protected:
@@ -38,7 +37,10 @@ protected:
 
 TEST_F(InstrTest, IntUsesWordOps)
 {
-    std::string s = Ops({ { "int", "+" }, { "int", "/" }, { "int", ">>" }, { "unsigned", "%" },
+    std::string s = Ops({ { "int", "+" },
+                          { "int", "/" },
+                          { "int", ">>" },
+                          { "unsigned", "%" },
                           { "unsigned", ">>" } });
     EXPECT_TRUE(Has(s, "addw t0, t0, t1\n"));
     EXPECT_TRUE(Has(s, "divw t0, t0, t1\n"));
@@ -73,8 +75,8 @@ seqz t0, t0
 TEST_F(InstrTest, ZeroExtend)
 {
     DisableOptimization();
-    std::string s = Code(CompileToRiscv(
-        "unsigned long f(void) { unsigned u = 4000000000u; return u; }"));
+    std::string s =
+        Code(CompileToRiscv("unsigned long f(void) { unsigned u = 4000000000u; return u; }"));
     EXPECT_TRUE(Has(s, R"(lw t0, -20(s0)
 slli t0, t0, 32
 srli t0, t0, 32
@@ -85,7 +87,8 @@ srli t0, t0, 32
 TEST_F(InstrTest, Branches)
 {
     DisableOptimization();
-    std::string s = Code(CompileToRiscv("int main(void) { int a = 3; while (a) a = a - 1; return a; }"));
+    std::string s =
+        Code(CompileToRiscv("int main(void) { int a = 3; while (a) a = a - 1; return a; }"));
     EXPECT_TRUE(Has(s, R"(lw t0, -20(s0)
 beqz t0, .LL0
 )")) << s;
@@ -166,7 +169,8 @@ ld a1, -24(s0)
 )")) << s;
     EXPECT_TRUE(Has(s, R"(addi a2, s0, )")) << s;
     EXPECT_TRUE(Has(s, R"(call f
-sd a0, )")) << s;
+sd a0, )"))
+        << s;
 }
 
 // A struct of a float and an int goes in fa0 and a0, one of two doubles in two FP

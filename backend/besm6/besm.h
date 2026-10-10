@@ -162,7 +162,7 @@ typedef enum {
 //
 struct Besm_Func {
     struct Besm_Func *next;
-    char *name; // heap-owned
+    char *name;  // heap-owned
     bool global; // external linkage; false for a `static` function
     Besm_CallConv cc;
     Besm_Block *blocks;

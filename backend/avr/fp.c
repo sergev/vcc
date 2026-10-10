@@ -163,8 +163,7 @@ void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instruct
             store_val(g, dst, 18, 8);
         } else {
             // A 32-bit unsigned through __fixunssfsi; narrower ones fit __fixsfsi.
-            emit1(g, AVR_CALL,
-                  avr_label(is_unsigned && dsize == 4 ? "__fixunssfsi" : "__fixsfsi"));
+            emit1(g, AVR_CALL, avr_label(is_unsigned && dsize == 4 ? "__fixunssfsi" : "__fixsfsi"));
             store_val(g, dst, 22, dsize);
         }
         break;

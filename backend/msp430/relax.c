@@ -24,9 +24,9 @@ static void label_addresses(const Msp_Func *fn, StringMap *labels)
 static void relax_jump(Msp_Func *fn, Msp_Block *b, Msp_Instr *in)
 {
     if (in->op == MSP_JMP) {
-        in->op         = MSP_BR;
-        Msp_Operand l  = in->opnd[0];
-        in->opnd[0]    = msp_imm_sym(l.sym, 0);
+        in->op        = MSP_BR;
+        Msp_Operand l = in->opnd[0];
+        in->opnd[0]   = msp_imm_sym(l.sym, 0);
         xfree(l.sym);
         return;
     }

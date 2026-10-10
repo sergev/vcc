@@ -94,7 +94,7 @@ bool uses_scratch(const Tac_Instruction *in, TypeOf type_of, const void *arg)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_BINARY: {
-        const Tac_Type *t = type_of(arg, typed_operand(in->u.binary.src1, in->u.binary.src2));
+        const Tac_Type *t     = type_of(arg, typed_operand(in->u.binary.src1, in->u.binary.src2));
         Tac_BinaryOperator op = in->u.binary.op;
         if (avr_is_fp(t) || avr_type_size(t) > 4 || is_mul_div(op))
             return true;
@@ -442,7 +442,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
     switch (in->u.unary.op) {
     case TAC_UNARY_NEGATE:
     case TAC_UNARY_NEGATE_UNSIGNED: {
-        int n = avr_type_size(val_type(g, dst));
+        int n  = avr_type_size(val_type(g, dst));
         Regs a = regs_range(block_a(n), n);
         load_regs(g, src, &a, EXT_TYPE);
         negate(g, a.r, n);
@@ -598,8 +598,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *name, int
 }
 
 // dst = member `offset` of aggregate `name`, of `size` bytes.
-static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst,
-                                 int size)
+static void gen_copy_from_offset(Gen *g, const char *name, int offset, const Tac_Val *dst, int size)
 {
     if (!avr_is_scalar(val_type(g, dst))) {
         copy_aggregate(g, name, offset, dst->u.var_name, 0, size);
@@ -961,8 +960,8 @@ static void clean_test(Gen *g, const Tac_Val *v)
 static void clean_unary(Gen *g, const Tac_Instruction *in)
 {
     const Tac_Val *src = in->u.unary.src, *dst = in->u.unary.dst;
-    bool fp            = avr_is_fp(val_type(g, src));
-    int n              = avr_type_size(val_type(g, dst));
+    bool fp = avr_is_fp(val_type(g, src));
+    int n   = avr_type_size(val_type(g, dst));
     bool own;
     Regs w;
     switch (in->u.unary.op) {
@@ -1127,9 +1126,8 @@ static void clean_store(Gen *g, const Tac_Val *src, const Tac_Val *ptr, int size
 // dst = ptr + index * scale, the scale a power of two when the index is a variable.
 static void clean_add_ptr(Gen *g, const Tac_Instruction *in)
 {
-    const Tac_Val *index = in->u.add_ptr.index, *ptr = in->u.add_ptr.ptr,
-                  *dst   = in->u.add_ptr.dst;
-    int scale            = in->u.add_ptr.scale, k;
+    const Tac_Val *index = in->u.add_ptr.index, *ptr = in->u.add_ptr.ptr, *dst = in->u.add_ptr.dst;
+    int scale = in->u.add_ptr.scale, k;
     bool own;
     if (index->kind == TAC_VAL_CONSTANT) {
         int off = (int)(const_bits(index->u.constant) * (uint64_t)scale);
@@ -1246,12 +1244,10 @@ static void gen_clean(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_COPY_TO_OFFSET:
     case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET: {
         const Tac_Val *src = in->u.copy_to_offset.src;
-        int size           = in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
-                                 ? 1
-                                 : avr_type_size(val_type(g, src));
+        int size =
+            in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET ? 1 : avr_type_size(val_type(g, src));
         if (src->kind == TAC_VAL_VAR && !avr_is_scalar(val_type(g, src)))
-            gen_copy_to_offset(g, src, in->u.copy_to_offset.dst, in->u.copy_to_offset.offset,
-                               size);
+            gen_copy_to_offset(g, src, in->u.copy_to_offset.dst, in->u.copy_to_offset.offset, size);
         else
             copy_to_mem(g, src, in->u.copy_to_offset.dst, in->u.copy_to_offset.offset, size,
                         EXT_TYPE);
@@ -1296,7 +1292,8 @@ static bool is_clean(const Gen *g, const Tac_Instruction *in)
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
 {
     if (!g->uses || !next || in->kind != TAC_INSTRUCTION_BINARY ||
-        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO && next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
         return false;
     const Tac_Val *c = next->u.jump_if_zero.condition, *dst = in->u.binary.dst;
     if (c->kind != TAC_VAL_VAR || strcmp(c->u.var_name, dst->u.var_name) != 0)

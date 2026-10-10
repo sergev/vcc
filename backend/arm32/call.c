@@ -132,8 +132,7 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
 // Whether a result of type `t` is written through the address passed in r0.
 static bool indirect_result(const Tac_Type *t, bool vfp)
 {
-    return t && a32_is_aggregate(t) && a32_size(t) > 4 &&
-           vfp_class(t, vfp) == TAC_AAPCS32_CORE;
+    return t && a32_is_aggregate(t) && a32_size(t) > 4 && vfp_class(t, vfp) == TAC_AAPCS32_CORE;
 }
 
 // Whether `t` is an aggregate in VFP registers, as an argument or a result.
@@ -290,8 +289,8 @@ void gen_params(Gen *g)
         if (a.esize && a32_is_aggregate(t)) {
             int off = alloc_slot(g, p->name, t, a32_size(t), a32_align(t));
             for (int k = 0; k < a.nregs; k++)
-                store_mem(g, elem_reg(a.reg, a.esize, k), elem_type(a.esize), FB,
-                          off + k * a.esize, T0);
+                store_mem(g, elem_reg(a.reg, a.esize, k), elem_type(a.esize), FB, off + k * a.esize,
+                          T0);
             continue;
         }
         if (a32_is_aggregate(t)) {
@@ -301,8 +300,7 @@ void gen_params(Gen *g)
             for (int i = 0; i < a.nregs; i++)
                 emit2(g, A32_STR, a32_reg(a.reg + i), mem(g, A32_STR, FB, off + 4 * i, T0));
             if (size > 4 * a.nregs)
-                gen_memcopy(g, FB, off + 4 * a.nregs, FB, 8 + a.stack, size - 4 * a.nregs,
-                            4);
+                gen_memcopy(g, FB, off + 4 * a.nregs, FB, 8 + a.stack, size - 4 * a.nregs, 4);
             continue;
         }
         int off = alloc_slot(g, p->name, t, a32_size(t), a32_align(t));
@@ -508,7 +506,8 @@ static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 void reserve_outgoing(Gen *g)
 {
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
-        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL &&
+             in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
             a32_stack_builtin(in))
             continue;
         int n = stack_bytes(g, in);
@@ -635,11 +634,10 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     const Tac_Type *t = val_type(g, dst);
     if (vfp_aggregate(t, vfp)) {
         int64_t off;
-        int base = piece_base(g, dst->u.var_name, T1, &off);
+        int base  = piece_base(g, dst->u.var_name, T1, &off);
         int esize = elem_size(t);
         for (int k = 0; k < a32_size(t) / esize; k++)
-            store_mem(g, elem_reg(A32_S0, esize, k), elem_type(esize), base, off + k * esize,
-                      T0);
+            store_mem(g, elem_reg(A32_S0, esize, k), elem_type(esize), base, off + k * esize, T0);
         return;
     }
     if (a32_is_aggregate(t)) {

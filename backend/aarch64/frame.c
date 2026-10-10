@@ -555,7 +555,7 @@ void store_val(Gen *g, int reg, const Tac_Val *v)
 
 void store_int(Gen *g, int reg, const Tac_Val *v)
 {
-    int r = var_reg(g, v);
+    int r             = var_reg(g, v);
     const Tac_Type *t = val_type(g, v);
     if (r && a64_size(t) < 4)
         gen_canon(g, r, reg, t);
@@ -837,8 +837,9 @@ static bool is_leaf(const Gen *g)
 // The bytes an ldr/str-family instruction accesses, from its opcode and register view.
 static int access_size(const A64_Instr *in)
 {
-    static const int width_bytes[] = { [A64_W] = 4, [A64_X] = 8, [A64_S] = 4, [A64_D] = 8,
-                                       [A64_Q] = 16 };
+    static const int width_bytes[] = {
+        [A64_W] = 4, [A64_X] = 8, [A64_S] = 4, [A64_D] = 8, [A64_Q] = 16
+    };
     switch (in->op) {
     case A64_LDRB:
     case A64_LDRSB:
@@ -903,8 +904,8 @@ static bool rebase(A64_Instr *in, int i, int64_t off, bool apply)
     if (!addsub && !(in->op == A64_MOV && o->width == A64_X))
         return false;
     if (apply) {
-        in->op     = A64_ADD;
-        o->reg     = A64_SP;
+        in->op      = A64_ADD;
+        o->reg      = A64_SP;
         in->opnd[2] = a64_imm(off);
     }
     return true;
@@ -963,8 +964,8 @@ static bool saves_fit(const Gen *g, const Frame *fr)
 // lowest.
 void gen_prologue(Gen *g)
 {
-    bool calls      = has_calls(g);
-    Frame fr        = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, calls, -1 };
+    bool calls = has_calls(g);
+    Frame fr   = { FRAME_NONE, 0, (g->locals_size + g->outgoing + 15) / 16 * 16, calls, -1 };
     // alloca's memory starts at the outgoing area rounded to 16, below the slots; the
     // frame is from x29, which the epilogue puts sp back from.
     if (g->moves_sp)
@@ -972,7 +973,7 @@ void gen_prologue(Gen *g)
     Frame sp        = fr;
     A64_Block *tail = redirect(g, g->prologue);
     fr.size         = fr.rest + (calls ? 16 : 0);
-    int ngpr = 0;
+    int ngpr        = 0;
     while (ngpr < g->nsaved && !a64_is_fpreg(g->saved_reg[ngpr]))
         ngpr++;
     if (calls && ngpr % 2 == 1) {
@@ -980,12 +981,11 @@ void gen_prologue(Gen *g)
         if (g->saved_off[sp.lone] == -g->locals_size)
             sp.rest = (g->locals_size - 16 + g->outgoing + 15) / 16 * 16;
     }
-    sp.size = sp.rest + (calls ? 16 : 0);
+    sp.size       = sp.rest + (calls ? 16 : 0);
     bool fp_frame = aarch64_frame_pointer || g->moves_sp;
     if (!fp_frame && is_leaf(g)) {
         // nothing
-    } else if (!fp_frame && sp.size <= 4095 && saves_fit(g, &sp) &&
-               rebase_to_sp(g, &sp)) {
+    } else if (!fp_frame && sp.size <= 4095 && saves_fit(g, &sp) && rebase_to_sp(g, &sp)) {
         fr      = sp;
         fr.kind = FRAME_SP;
         sp_frame(g, &fr, false);

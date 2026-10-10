@@ -1597,7 +1597,8 @@ int main(void) {
     return 0;
 }
 )SRC")),
-              "binary=17 fun_call=17 jump_if_zero=17 label=17 return=35 sign_extend=8 unary=8 zero_extend=5");
+              "binary=17 fun_call=17 jump_if_zero=17 label=17 return=35 sign_extend=8 unary=8 "
+              "zero_extend=5");
 }
 
 TEST_F(PipelineTest, Chapter19_CF_AllTypes_FoldUint)

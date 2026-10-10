@@ -21,8 +21,8 @@
  * sprintf/snprintf family.  g_len always counts the total length that would be
  * produced, which is the return value.
  */
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
 
 enum {
     MAXNBUF  = 32, /* digits buffer: 48-bit octal (16) + sign + prefix + slack  */
@@ -36,10 +36,10 @@ enum {
  * char* is encoded as a fat pointer (marker bit set), so its truthiness is not a
  * reliable mode switch.
  */
-static int g_to_buf;  /* 1 = store into g_buf, 0 = emit via putbyte         */
-static char *g_buf;   /* target buffer when g_to_buf                        */
-static int g_size;    /* capacity of g_buf                                  */
-static int g_len;     /* characters produced so far (the would-be length)   */
+static int g_to_buf; /* 1 = store into g_buf, 0 = emit via putbyte         */
+static char *g_buf;  /* target buffer when g_to_buf                        */
+static int g_size;   /* capacity of g_buf                                  */
+static int g_len;    /* characters produced so far (the would-be length)   */
 
 static void emit(int c)
 {
@@ -590,7 +590,7 @@ static int cvt(double number, int precin, int sharpflag, int *negp, int fmtch, c
                 --t;
             ++t;
         }
-        t = exponent(t, expcnt, ftc);
+        t         = exponent(t, expcnt, ftc);
         *startidx = (int)(start - b);
         return (int)(t - start);
     }

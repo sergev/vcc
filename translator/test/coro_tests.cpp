@@ -29,8 +29,8 @@ TEST_F(TranslateTestWasm32, CoroutineSplit)
     EXPECT_TRUE(Has(yaml, "name: %co.resume1")) << yaml;
     EXPECT_FALSE(Has(yaml, "name: %co.resume2")) << yaml;
     // range$resume's one parameter, the frame, and no other.
-    size_t at = yaml.find("name: range$resume");
-    size_t pe = yaml.find("name: range$init");
+    size_t at        = yaml.find("name: range$resume");
+    size_t pe        = yaml.find("name: range$init");
     std::string head = yaml.substr(at, pe - at);
     EXPECT_TRUE(Has(head, "name: %.fp")) << head;
     EXPECT_FALSE(Has(head, "name: %lo")) << head;
@@ -52,10 +52,11 @@ int f(void)
         n += __co_value(p);
     return n + __co_done(p) + (int)__co_sizeof(range);
 }
-)").c_str());
-    for (const char *call : { "fun_name: __coro_setup", "fun_name: range$init",
-                              "fun_name: __coro_resume", "fun_name: __coro_value",
-                              "fun_name: __coro_done", "name: range$co" })
+)")
+                                         .c_str());
+    for (const char *call :
+         { "fun_name: __coro_setup", "fun_name: range$init", "fun_name: __coro_resume",
+           "fun_name: __coro_value", "fun_name: __coro_done", "name: range$co" })
         EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
 }
 
@@ -69,7 +70,8 @@ void f(void)
     _Coro_frame(int, void) *p = __co_alloca(range, 0, 1, 2);
     __co_resume(p);
 }
-)").c_str());
+)")
+                                         .c_str());
     for (const char *call : { "fun_name: __builtin_stack_save", "fun_name: __builtin_alloca",
                               "fun_name: __builtin_stack_restore" })
         EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
@@ -80,12 +82,11 @@ void f(void)
 // the runtime's __coro_resume), then popped; one suspension of its own.
 TEST_F(TranslateTestWasm32, CoroutineAwait)
 {
-    std::string yaml = CompileToYaml((std::string(range) +
-                                      "_Coro(int) void g(void) { _Await range(0, 1); }")
-                                         .c_str());
-    for (const char *call : { "fun_name: __coro_push", "fun_name: __coro_setup",
-                              "fun_name: range$init", "fun_name: range$resume",
-                              "fun_name: __coro_pop", "name: %co.resume1" })
+    std::string yaml = CompileToYaml(
+        (std::string(range) + "_Coro(int) void g(void) { _Await range(0, 1); }").c_str());
+    for (const char *call :
+         { "fun_name: __coro_push", "fun_name: __coro_setup", "fun_name: range$init",
+           "fun_name: range$resume", "fun_name: __coro_pop", "name: %co.resume1" })
         EXPECT_TRUE(Has(yaml, call)) << call << "\n" << yaml;
     size_t at = yaml.find("name: g$resume");
     ASSERT_NE(std::string::npos, at) << yaml;
@@ -97,9 +98,9 @@ TEST_F(TranslateTestWasm32, CoroutineAwait)
 // runtime.
 TEST_F(TranslateTestWasm32, CoroutineAwaitFrame)
 {
-    std::string yaml = CompileToYaml((std::string(range) +
-                                      "_Coro(int) void g(_Coro_frame(int, void) *p) { _Await p; }")
-                                         .c_str());
+    std::string yaml = CompileToYaml(
+        (std::string(range) + "_Coro(int) void g(_Coro_frame(int, void) *p) { _Await p; }")
+            .c_str());
     size_t at = yaml.find("name: g$resume");
     ASSERT_NE(std::string::npos, at) << yaml;
     EXPECT_TRUE(Has(yaml.substr(at), "fun_name: __coro_resume")) << yaml.substr(at);
@@ -108,9 +109,8 @@ TEST_F(TranslateTestWasm32, CoroutineAwaitFrame)
 // co_alloca in a coroutine takes the arena, not the shadow stack.
 TEST_F(TranslateTestWasm32, CoroutineAllocaInCoroutine)
 {
-    std::string yaml = CompileToYaml((std::string(range) +
-                                      "_Coro(int) void g(void) { __co_alloca(range, 0, 0, 1); }")
-                                         .c_str());
+    std::string yaml = CompileToYaml(
+        (std::string(range) + "_Coro(int) void g(void) { __co_alloca(range, 0, 0, 1); }").c_str());
     size_t at = yaml.find("name: g$resume");
     ASSERT_NE(std::string::npos, at) << yaml;
     std::string g = yaml.substr(at);
@@ -138,7 +138,8 @@ TEST_F(TranslateTestWasm32, CoroutineDispatchChain)
 TEST_F(TranslateTestWasm32, CoroutineDispatchTable)
 {
     std::string three = CompileToYaml("_Coro(int) void h(void) { _Yield 1; _Yield 2; _Yield 3; }");
-    for (const char *s : { "kind: jump_table", "- %co.start", "- %co.resume3", "default: %co.start" })
+    for (const char *s :
+         { "kind: jump_table", "- %co.start", "- %co.resume3", "default: %co.start" })
         EXPECT_TRUE(Has(three, s)) << s << "\n" << three;
 }
 
@@ -147,8 +148,9 @@ TEST_F(TranslateTestWasm32, CoroutineDispatchTable)
 // coroutines of a unit share the assembler's namespace.
 TEST_F(TranslateTestX86, CoroutineDispatchChainOnly)
 {
-    std::string yaml = CompileToYaml("_Coro(int) void h(void) { _Yield 1; _Yield 2; _Yield 3; }\n"
-                                     "_Coro(int) void k(void) { _Yield 1; }");
+    std::string yaml = CompileToYaml(
+        "_Coro(int) void h(void) { _Yield 1; _Yield 2; _Yield 3; }\n"
+        "_Coro(int) void k(void) { _Yield 1; }");
     EXPECT_FALSE(Has(yaml, "kind: jump_table")) << yaml;
     for (const char *s : { "name: %co.resume3.h", "name: %co.resume1.k" })
         EXPECT_TRUE(Has(yaml, s)) << s << "\n" << yaml;

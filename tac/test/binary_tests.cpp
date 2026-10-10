@@ -102,11 +102,11 @@ TEST_F(TacBinaryTest, EmptyFunction)
 
 TEST_F(TacBinaryTest, FunctionNoreturnFlag)
 {
-    Tac_Program *orig          = tac_new_program();
-    orig->decls                = make_empty_function("die", true);
+    Tac_Program *orig                = tac_new_program();
+    orig->decls                      = make_empty_function("die", true);
     orig->decls->u.function.noret    = true;
     orig->decls->u.function.variadic = true;
-    Tac_Program *copy = roundtrip(orig);
+    Tac_Program *copy                = roundtrip(orig);
 
     ASSERT_NE(nullptr, copy);
     EXPECT_TRUE(copy->decls->u.function.noret);
@@ -452,8 +452,8 @@ TEST_F(TacBinaryTest, LoadAndStore)
 TEST_F(TacBinaryTest, ByteAndDecayKinds)
 {
     const Tac_InstructionKind kinds[] = {
-        TAC_INSTRUCTION_GET_ADDRESS_BYTE,  TAC_INSTRUCTION_GET_ADDRESS_DECAY,
-        TAC_INSTRUCTION_LOAD_BYTE,         TAC_INSTRUCTION_STORE_BYTE,
+        TAC_INSTRUCTION_GET_ADDRESS_BYTE,    TAC_INSTRUCTION_GET_ADDRESS_DECAY,
+        TAC_INSTRUCTION_LOAD_BYTE,           TAC_INSTRUCTION_STORE_BYTE,
         TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET, TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET,
     };
     for (Tac_InstructionKind kind : kinds) {
@@ -687,18 +687,18 @@ TEST_F(TacBinaryTest, JumpInstructions)
     {
         // A jump table: the index, three targets, the default; and one that differs in a
         // target is not the same.
-        Tac_Program *orig                = tac_new_program();
-        orig->decls                      = make_empty_function("f", true);
-        Tac_Instruction *instr           = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
-        instr->u.jump_table.index        = make_var("state");
-        instr->u.jump_table.count        = 3;
+        Tac_Program *orig         = tac_new_program();
+        orig->decls               = make_empty_function("f", true);
+        Tac_Instruction *instr    = tac_new_instruction(TAC_INSTRUCTION_JUMP_TABLE);
+        instr->u.jump_table.index = make_var("state");
+        instr->u.jump_table.count = 3;
         instr->u.jump_table.targets =
             static_cast<char **>(xalloc(3 * sizeof(char *), __func__, __FILE__, __LINE__));
-        instr->u.jump_table.targets[0]   = xstrdup("start");
-        instr->u.jump_table.targets[1]   = xstrdup("one");
-        instr->u.jump_table.targets[2]   = xstrdup("two");
+        instr->u.jump_table.targets[0]     = xstrdup("start");
+        instr->u.jump_table.targets[1]     = xstrdup("one");
+        instr->u.jump_table.targets[2]     = xstrdup("two");
         instr->u.jump_table.default_target = xstrdup("start");
-        orig->decls->u.function.body     = instr;
+        orig->decls->u.function.body       = instr;
 
         Tac_Program *copy = roundtrip(orig);
         EXPECT_TRUE(tac_compare_program(orig, copy));
@@ -793,9 +793,9 @@ TEST_F(TacBinaryTest, InstructionSequence)
 TEST_F(TacBinaryTest, AllScalarTypes)
 {
     Tac_TypeKind kinds[] = {
-        TAC_TYPE_SCHAR,      TAC_TYPE_UCHAR,     TAC_TYPE_SHORT,  TAC_TYPE_INT,
-        TAC_TYPE_LONG,       TAC_TYPE_LONG_LONG, TAC_TYPE_USHORT, TAC_TYPE_UINT,  TAC_TYPE_ULONG,
-        TAC_TYPE_ULONG_LONG, TAC_TYPE_FLOAT,     TAC_TYPE_DOUBLE, TAC_TYPE_VOID,
+        TAC_TYPE_SCHAR,     TAC_TYPE_UCHAR,  TAC_TYPE_SHORT, TAC_TYPE_INT,   TAC_TYPE_LONG,
+        TAC_TYPE_LONG_LONG, TAC_TYPE_USHORT, TAC_TYPE_UINT,  TAC_TYPE_ULONG, TAC_TYPE_ULONG_LONG,
+        TAC_TYPE_FLOAT,     TAC_TYPE_DOUBLE, TAC_TYPE_VOID,
     };
 
     for (auto kind : kinds) {
@@ -1095,40 +1095,40 @@ TEST_F(TacBinaryTest, AllocateLocal)
 
 static Tac_Type *fun_type_int_variadic()
 {
-    Tac_Type *ft                 = tac_new_type(TAC_TYPE_FUN_TYPE);
-    ft->u.fun_type.param_types   = tac_new_type(TAC_TYPE_INT);
-    ft->u.fun_type.ret_type      = tac_new_type(TAC_TYPE_VOID);
-    ft->u.fun_type.variadic      = true;
+    Tac_Type *ft               = tac_new_type(TAC_TYPE_FUN_TYPE);
+    ft->u.fun_type.param_types = tac_new_type(TAC_TYPE_INT);
+    ft->u.fun_type.ret_type    = tac_new_type(TAC_TYPE_VOID);
+    ft->u.fun_type.variadic    = true;
     return ft;
 }
 
 TEST_F(TacBinaryTest, TypedFunctionRoundTrip)
 {
-    Tac_Program *orig = tac_new_program();
-    Tac_TopLevel *fn  = make_empty_function("f", true);
+    Tac_Program *orig   = tac_new_program();
+    Tac_TopLevel *fn    = make_empty_function("f", true);
     fn->u.function.type = fun_type_int_variadic();
 
-    Tac_Param *p                     = tac_new_param();
-    p->name                          = xstrdup("%x");
-    p->type                          = tac_new_type(TAC_TYPE_INT);
-    fn->u.function.params            = p;
-    Tac_Param *l                     = tac_new_param();
-    l->name                          = xstrdup("%1");
-    l->type                          = tac_new_type(TAC_TYPE_POINTER);
-    l->type->u.pointer.target_type   = tac_new_type(TAC_TYPE_UCHAR);
-    fn->u.function.locals            = l;
+    Tac_Param *p                   = tac_new_param();
+    p->name                        = xstrdup("%x");
+    p->type                        = tac_new_type(TAC_TYPE_INT);
+    fn->u.function.params          = p;
+    Tac_Param *l                   = tac_new_param();
+    l->name                        = xstrdup("%1");
+    l->type                        = tac_new_type(TAC_TYPE_POINTER);
+    l->type->u.pointer.target_type = tac_new_type(TAC_TYPE_UCHAR);
+    fn->u.function.locals          = l;
 
-    Tac_Instruction *call          = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
-    call->u.fun_call.fun_name      = xstrdup("printf");
-    call->u.fun_call.args          = make_var("%x");
-    call->u.fun_call.fun_type      = fun_type_int_variadic();
-    fn->u.function.body            = call;
-    orig->decls                    = fn;
+    Tac_Instruction *call     = tac_new_instruction(TAC_INSTRUCTION_FUN_CALL);
+    call->u.fun_call.fun_name = xstrdup("printf");
+    call->u.fun_call.args     = make_var("%x");
+    call->u.fun_call.fun_type = fun_type_int_variadic();
+    fn->u.function.body       = call;
+    orig->decls               = fn;
 
-    Tac_TopLevel *ext     = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
-    ext->u.extern_.name   = xstrdup("errno");
-    ext->u.extern_.type   = tac_new_type(TAC_TYPE_INT);
-    fn->next              = ext;
+    Tac_TopLevel *ext   = tac_new_toplevel(TAC_TOPLEVEL_EXTERN);
+    ext->u.extern_.name = xstrdup("errno");
+    ext->u.extern_.type = tac_new_type(TAC_TYPE_INT);
+    fn->next            = ext;
 
     Tac_Program *result = roundtrip(orig);
     EXPECT_TRUE(tac_compare_program(orig, result));
@@ -1162,14 +1162,14 @@ TEST_F(TacBinaryTest, TypeStr)
     xfree(s);
     tac_free_type(ft);
 
-    Tac_Type *arr                = tac_new_type(TAC_TYPE_ARRAY);
-    arr->u.array.size            = 4;
-    arr->u.array.elem_type       = tac_new_type(TAC_TYPE_POINTER);
+    Tac_Type *arr                                 = tac_new_type(TAC_TYPE_ARRAY);
+    arr->u.array.size                             = 4;
+    arr->u.array.elem_type                        = tac_new_type(TAC_TYPE_POINTER);
     arr->u.array.elem_type->u.pointer.target_type = tac_new_type(TAC_TYPE_STRUCTURE);
-    arr->u.array.elem_type->u.pointer.target_type->u.structure.tag  = xstrdup("S");
+    arr->u.array.elem_type->u.pointer.target_type->u.structure.tag       = xstrdup("S");
     arr->u.array.elem_type->u.pointer.target_type->u.structure.size      = 12;
     arr->u.array.elem_type->u.pointer.target_type->u.structure.alignment = 4;
-    s = tac_type_str(arr);
+    s                                                                    = tac_type_str(arr);
     EXPECT_STREQ(s, "[4]*struct S(12,4)");
     xfree(s);
     tac_free_type(arr);

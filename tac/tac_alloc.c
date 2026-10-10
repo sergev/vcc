@@ -17,8 +17,8 @@ Tac_Instruction *tac_new_instruction(Tac_InstructionKind kind)
     Tac_Instruction *instr =
         (Tac_Instruction *)xalloc(sizeof(Tac_Instruction), __func__, __FILE__, __LINE__);
     instr->kind = kind;
-    // Integer-width and floating→integer conversions default to "no destination kind supplied" (-1); the
-    // calloc above would otherwise leave dst_kind == 0 (TAC_CONST_INT, a valid kind),
+    // Integer-width and floating→integer conversions default to "no destination kind supplied"
+    // (-1); the calloc above would otherwise leave dst_kind == 0 (TAC_CONST_INT, a valid kind),
     // which would change folding for conversions built without an explicit dst_kind
     // (e.g. unit-test fixtures and imported TAC). emit_cast overrides it with the real
     // destination kind.

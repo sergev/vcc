@@ -8,7 +8,8 @@
 // No slots: no frame at all; a leaf returns straight in $0.
 EXPECT_CODE(FramelessConstant, R"(setl $0, #7
 pop 1, 0
-)", "int f(void) { return 7; }")
+)",
+            "int f(void) { return 7; }")
 
 // Register parameters go to their slots; the frame is reserved and released around the
 // body.
@@ -134,19 +135,20 @@ long f(long n, long k)
         << code;
 }
 
-static const char seventeen[] = "long a0, long a1, long a2, long a3, long a4, long a5, long a6, "
-                                "long a7, long a8, long a9, long a10, long a11, long a12, "
-                                "long a13, long a14, long a15";
+static const char seventeen[] =
+    "long a0, long a1, long a2, long a3, long a4, long a5, long a6, "
+    "long a7, long a8, long a9, long a10, long a11, long a12, "
+    "long a13, long a14, long a15";
 
 // The 17th parameter and later stay where they came in, 8 bytes each above the frame,
 // a narrow one in the last bytes of its slot (big-endian).
 TEST_F(MmixTest, StackParamsAboveFrame)
 {
     NaiveSelection();
-    std::string code = Code(CompileToMmix(
-        (std::string("long f(") + seventeen + ", long a16, int a17) { return a16; }\n" +
-         "int g(" + seventeen + ", long a16, int a17) { return a17; }\n")
-            .c_str()));
+    std::string code = Code(CompileToMmix((std::string("long f(") + seventeen +
+                                           ", long a16, int a17) { return a16; }\n" + "int g(" +
+                                           seventeen + ", long a16, int a17) { return a17; }\n")
+                                              .c_str()));
     EXPECT_NE(std::string::npos, code.find("subu $254, $254, 128\n")) << code;
     EXPECT_NE(std::string::npos, code.find("ldo $0, $254, 128\n")) << code;
     EXPECT_NE(std::string::npos, code.find("ldt $0, $254, 140\n")) << code;

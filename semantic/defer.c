@@ -22,12 +22,12 @@
 #include "xalloc.h"
 
 typedef struct {
-    DeferScope *stack;  // blocks from the root down to the statement being walked
+    DeferScope *stack; // blocks from the root down to the statement being walked
     int depth, cap;
-    const Stmt *defer;  // innermost deferred statement being walked, or NULL
-    int switch_base;    // depth at the innermost switch inside it, or -1
-    StringMap *labels;  // label name -> DeferPos *
-    bool check_gotos;   // second walk: labels known, check every goto
+    const Stmt *defer; // innermost deferred statement being walked, or NULL
+    int switch_base;   // depth at the innermost switch inside it, or -1
+    StringMap *labels; // label name -> DeferPos *
+    bool check_gotos;  // second walk: labels known, check every goto
 } Walk;
 
 static void walk_stmt(Walk *w, const Stmt *s);
@@ -186,9 +186,10 @@ static void register_co_alloca(Walk *w, int n)
 static void check_case(const Walk *w, const char *what)
 {
     if (w->switch_base < 0) {
-        fatal_error("'%s' label inside a deferred statement cannot belong to a switch "
-                    "outside it",
-                    what);
+        fatal_error(
+            "'%s' label inside a deferred statement cannot belong to a switch "
+            "outside it",
+            what);
     }
     for (int i = w->switch_base; i < w->depth; i++) {
         if (w->stack[i].count > 0)
@@ -322,8 +323,8 @@ static bool has_defer(const Stmt *s)
     case STMT_EXPR:
         return count_co_alloca(s->u.expr) > 0;
     case STMT_IF:
-        return count_co_alloca(s->u.if_stmt.condition) > 0 ||
-               has_defer(s->u.if_stmt.then_stmt) || has_defer(s->u.if_stmt.else_stmt);
+        return count_co_alloca(s->u.if_stmt.condition) > 0 || has_defer(s->u.if_stmt.then_stmt) ||
+               has_defer(s->u.if_stmt.else_stmt);
     case STMT_WHILE:
         return has_defer(s->u.while_stmt.body);
     case STMT_DO_WHILE:

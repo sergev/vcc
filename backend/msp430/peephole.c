@@ -36,9 +36,9 @@ typedef uint32_t Set; // r0-r15, and SR as bit 16
 #define SR_BIT  (1u << 16)
 #define R(r)    (1u << (r))
 #define TRACKED (0xfff0u | SR_BIT) // r4-r15 and SR
-#define ARGS    (0xf000u)           // r12-r15: the arguments of a call
-#define ARGS_R8 (0x0f00u)           // r8-r11: the first operand of an r8 helper
-#define CLOBBER (0xf800u | SR_BIT)  // r11-r15 and SR: what a call writes
+#define ARGS    (0xf000u)          // r12-r15: the arguments of a call
+#define ARGS_R8 (0x0f00u)          // r8-r11: the first operand of an r8 helper
+#define CLOBBER (0xf800u | SR_BIT) // r11-r15 and SR: what a call writes
 
 static bool is_branch(Msp_Op op)
 {
@@ -55,8 +55,10 @@ static bool is_jump(Msp_Op op)
 static bool r8_helper(const Msp_Instr *in)
 {
     static const char *const names[] = {
-        "__mspabi_addd",   "__mspabi_subd",   "__mspabi_mpyd",   "__mspabi_divd",
-        "__mspabi_mpyll",  "__mspabi_divlli", "__mspabi_divull", "__mspabi_remlli",
+        "__mspabi_addd",   "__mspabi_subd",
+        "__mspabi_mpyd",   "__mspabi_divd",
+        "__mspabi_mpyll",  "__mspabi_divlli",
+        "__mspabi_divull", "__mspabi_remlli",
         "__mspabi_remull", NULL,
     };
     const char *s = in->opnd[0].sym;
@@ -288,7 +290,7 @@ static void relink(Blk *k)
 {
     Msp_Block *b = k->b;
     b->head = b->tail = NULL;
-    int j            = 0;
+    int j             = 0;
     for (int i = 0; i < k->n; i++) {
         Msp_Instr *in = k->in[i];
         if (!in)
@@ -667,8 +669,7 @@ static void step(Facts *f, const Msp_Instr *in, unsigned result)
     const Msp_Operand *wr = written(in);
     if (in->op == MSP_CALL) {
         f->nm = 0;
-    } else if (in->op == MSP_PUSH || in->op == MSP_POP ||
-               (wr && is_reg(wr) && wr->reg == MSP_SP)) {
+    } else if (in->op == MSP_PUSH || in->op == MSP_POP || (wr && is_reg(wr) && wr->reg == MSP_SP)) {
         forget_slots(f);
     } else if (wr && !is_reg(wr)) {
         mem_forget(f, wr);
@@ -974,10 +975,9 @@ static bool base_only(const Msp_Instr *in, int b)
     if (in->op == MSP_CALL || in->op == MSP_PUSH || in->op == MSP_BR)
         return false;
     bool based = false;
-    int n      = msp_form[in->op] == MSP_FORM_DOUBLE ? 2 : msp_form[in->op] == MSP_FORM_JUMP ||
-                                                       msp_form[in->op] == MSP_FORM_NONE
-                                                   ? 0
-                                                   : 1;
+    int n      = msp_form[in->op] == MSP_FORM_DOUBLE                                      ? 2
+                 : msp_form[in->op] == MSP_FORM_JUMP || msp_form[in->op] == MSP_FORM_NONE ? 0
+                                                                                          : 1;
     for (int o = 0; o < n; o++) {
         const Msp_Operand *x = &in->opnd[o];
         if (!(opnd_regs(x) & R(b)))
@@ -1070,14 +1070,13 @@ static bool backward(Cfg *c)
             // A tst of what the instruction before set the flags from, read only by the
             // jumps right after.
             if (in->op == MSP_TST && prev && !prev->vol && sets_nz(prev->op) &&
-                prev->byte == in->byte && written(prev) &&
-                same_opnd(written(prev), &in->opnd[0])) {
+                prev->byte == in->byte && written(prev) && same_opnd(written(prev), &in->opnd[0])) {
                 int j   = i + 1;
                 bool ok = j < k->n;
                 for (; ok && j < k->n && k->in[j] && is_branch(k->in[j]->op); j++) {
                     Msp_Op op = k->in[j]->op;
                     ok        = op == MSP_JEQ || op == MSP_JNE || op == MSP_JN ||
-                         ((op == MSP_JL || op == MSP_JGE) && clears_v(prev->op));
+                                ((op == MSP_JL || op == MSP_JGE) && clears_v(prev->op));
                 }
                 if (ok && j > i + 1 && (j == k->n || k->in[j]) && !(after[j - 1] & SR_BIT)) {
                     drop(k, i);
@@ -1128,7 +1127,7 @@ static bool backward(Cfg *c)
             if (next && !next->vol && adds_constant(in, &kk, &sign) && !(after[i] & SR_BIT)) {
                 int b                 = written(in)->reg;
                 const Msp_Operand *nw = written(next);
-                bool redefined = nw && is_reg(nw) && nw->reg == b && next->op == MSP_MOV;
+                bool redefined        = nw && is_reg(nw) && nw->reg == b && next->op == MSP_MOV;
                 if (b >= 4 && base_only(next, b) && (redefined || !(after[i + 1] & R(b))) &&
                     fold_offset(next, b, &kk, sign)) {
                     drop(k, i);
@@ -1186,9 +1185,9 @@ static bool backward(Cfg *c)
 // A slot is read by an x(r1) operand, and by whatever could hold its address: on a path
 // past a read of r1 as a value (`mov r1, r12`), an access through any other register
 // may read every slot.  Otherwise a call reads only the outgoing arguments, the first
-// `out` bytes of the frame, below the slots; nothing is live after the function returns.  Offsets into the incoming
-// arguments are not slots.  A body that moves SP itself (a push, a pop) is left alone,
-// since its offsets do not name one slot throughout.
+// `out` bytes of the frame, below the slots; nothing is live after the function returns.  Offsets
+// into the incoming arguments are not slots.  A body that moves SP itself (a push, a pop) is left
+// alone, since its offsets do not name one slot throughout.
 //
 
 typedef uint64_t Bytes;
@@ -1294,7 +1293,7 @@ static bool sp_moves(const Cfg *c)
 {
     for (int bi = 0; bi < c->n; bi++)
         for (int i = 0; i < c->blk[bi].n; i++) {
-            const Msp_Instr *in = c->blk[bi].in[i];
+            const Msp_Instr *in  = c->blk[bi].in[i];
             const Msp_Operand *w = written(in);
             if (in->op == MSP_PUSH || in->op == MSP_POP ||
                 (w && w->kind == MSP_OPND_REG && w->reg == MSP_SP))
@@ -1453,8 +1452,8 @@ void msp_peephole_frame(Msp_Func *fn, unsigned result)
             Msp_Instr *in = k->in[i];
             if (!in || in->op != MSP_CALL)
                 continue;
-            bool then_ret = i + 1 < k->n ? k->in[i + 1]->op == MSP_RET
-                                         : lone_ret(&c, next_nonempty(&c, bi));
+            bool then_ret =
+                i + 1 < k->n ? k->in[i + 1]->op == MSP_RET : lone_ret(&c, next_nonempty(&c, bi));
             if (!then_ret)
                 continue;
             in->op = MSP_BR;

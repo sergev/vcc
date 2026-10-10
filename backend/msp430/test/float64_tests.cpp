@@ -237,8 +237,8 @@ TEST(Float64Host, TiesToEven)
         double s = std::ldexp(o, -1030);
         ASSERT_TRUE(Same(f64_muldf3(s, 0.75), s * 0.75)) << s;
         // A double halfway between two floats.
-        float f      = (float)a;
-        double tie   = (double)f + std::ldexp(1.0, -24);
+        float f    = (float)a;
+        double tie = (double)f + std::ldexp(1.0, -24);
         ASSERT_EQ(Bits32(f64_truncdfsf2(tie)), Bits32((float)tie)) << tie;
     }
 }

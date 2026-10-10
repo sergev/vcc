@@ -36,6 +36,6 @@ typedef double max_align_t;
 #endif
 
 /* Byte offset of MEMBER within struct/union TYPE. */
-#define offsetof(type, member) ((size_t) & (((type *)0)->member))
+#define offsetof(type, member) ((size_t)&(((type *)0)->member))
 
 #endif /* _STDDEF_H */

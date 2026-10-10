@@ -7,8 +7,9 @@
 // __co_frame that is never defined (the parser builds it); two are the same type when
 // their Y and T are.  _Coro_ptr(Y, T) is a pointer to another such struct, tagged
 // __co_desc: the descriptor f$co of a coroutine that takes (void) or (void *), which is
-// what the coroutine's name converts to when it is used as a value.  Every compile-time rule of §2.4 is here, but for the jumps past
-// a co_alloca, which semantic/defer.c checks with those past a defer.
+// what the coroutine's name converts to when it is used as a value.  Every compile-time rule of
+// §2.4 is here, but for the jumps past a co_alloca, which semantic/defer.c checks with those past a
+// defer.
 //
 #include <stdarg.h>
 #include <stdio.h>
@@ -154,8 +155,8 @@ void reject_coro_spec(const DeclSpec *spec, const char *name)
 static void check_braam_main(const Type *yield, const Type *fn_type)
 {
     static const char shape[] = "on Braam, main is coro(braam_call *) int main(int, char **)";
-    const Type *y = unalias(yield);
-    const Type *t = y->kind == TYPE_POINTER ? unalias(y->u.pointer.target) : NULL;
+    const Type *y             = unalias(yield);
+    const Type *t             = y->kind == TYPE_POINTER ? unalias(y->u.pointer.target) : NULL;
     if (!t || t->kind != TYPE_STRUCT || !t->u.struct_t.name ||
         strcmp(t->u.struct_t.name, "braam_call") != 0)
         fatal_error("%s: the yield type is not braam_call *", shape);
@@ -619,9 +620,10 @@ void coro_lint_bind(const char *var, int level, const Expr *value)
     if (!f)
         return;
     if (!var || level < f->level) {
-        lint_warning("the frame of '%s' outlives its storage '%s', an automatic object: "
-                     "use static or allocated storage",
-                     f->coro, f->storage);
+        lint_warning(
+            "the frame of '%s' outlives its storage '%s', an automatic object: "
+            "use static or allocated storage",
+            f->coro, f->storage);
         return;
     }
     xfree(f->frame);
@@ -651,9 +653,10 @@ void coro_lint_scope_exit(int level)
     while (nauto > 0 && auto_frames[nauto - 1].level >= level) {
         AutoFrame *f = &auto_frames[--nauto];
         if (f->resumed && !f->settled)
-            lint_warning("the frame of '%s' in '%s' may be left suspended at the end of the "
-                         "block, its defers never run: co_destroy it, or use co_alloca",
-                         f->coro, f->storage);
+            lint_warning(
+                "the frame of '%s' in '%s' may be left suspended at the end of the "
+                "block, its defers never run: co_destroy it, or use co_alloca",
+                f->coro, f->storage);
         xfree(f->storage);
         xfree(f->frame);
         xfree(f->coro);

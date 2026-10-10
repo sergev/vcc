@@ -25,7 +25,8 @@ extern "C" void fatal_error(const char *message, ...)
     exit(1);
 }
 
-template <typename F> static std::string Capture(F write)
+template <typename F>
+static std::string Capture(F write)
 {
     FILE *f = tmpfile();
     EXPECT_NE(nullptr, f);
@@ -51,7 +52,7 @@ protected:
 
 TEST_F(EmitTest, Operands)
 {
-    Rv_Func *fn = rv_new_func("f", false);
+    Rv_Func *fn  = rv_new_func("f", false);
     Rv_Instr *in = rv_append(fn, RV_LI);
     in->opnd[0]  = rv_reg(RV_A0);
     in->opnd[1]  = rv_imm(-5);
@@ -60,9 +61,9 @@ TEST_F(EmitTest, Operands)
     in->opnd[1]  = rv_reg(RV_FA0 + 1);
     rv_new_block(fn, ".L7");
     rv_append(fn, RV_J)->opnd[0] = rv_sym("g", 8);
-    in          = rv_append(fn, RV_FLD);
-    in->opnd[0] = rv_reg(RV_F0);
-    in->opnd[1] = rv_mem(RV_S0, -24);
+    in                           = rv_append(fn, RV_FLD);
+    in->opnd[0]                  = rv_reg(RV_F0);
+    in->opnd[1]                  = rv_mem(RV_S0, -24);
     rv_append(fn, RV_RET);
     std::string s = Capture([&](FILE *f) { rv_emit_func(f, fn); });
     rv_free_func(fn);
@@ -93,7 +94,7 @@ TEST_F(EmitTest, LabelsAndJumps)
     j->u.jump.target      = xstrdup("%L1");
     l->next               = j;
     tl->u.function.body   = l;
-    std::string s = Capture([&](FILE *f) { riscv_codegen(tl, tl, f); });
+    std::string s         = Capture([&](FILE *f) { riscv_codegen(tl, tl, f); });
     tac_free_toplevel(tl);
     EXPECT_EQ(R"(    .text
     .globl  loop

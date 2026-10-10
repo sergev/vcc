@@ -23,4 +23,3 @@ enum {
     TAG_TYPE           = 0x74797065, // 'type' - for struct Type
     TAG_TYPEQUALIFIER  = 0x7175616c, // 'qual' - for struct TypeQualifier
 };
-

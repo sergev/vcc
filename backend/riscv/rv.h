@@ -55,36 +55,83 @@ typedef struct {
 } Rv_Operand;
 
 // Opcode and mnemonic.
-#define RV_OPS(X)                                                                          \
-    X(LI, "li") X(LA, "la") X(MV, "mv") X(ADD, "add") X(ADDI, "addi") X(ADDW, "addw")     \
-    X(ADDIW, "addiw") X(ORI, "ori") X(SLTI, "slti") X(SLTIU, "sltiu") X(SLLIW, "slliw")  \
-    X(SRLIW, "srliw") X(SRAIW, "sraiw")                                                   \
-    X(SUB, "sub") X(SUBW, "subw") X(MUL, "mul") X(MULHU, "mulhu") X(MULW, "mulw")         \
-    X(DIV, "div") X(DIVW, "divw") X(DIVU, "divu") X(DIVUW, "divuw") X(REM, "rem")         \
-    X(REMW, "remw") X(REMU, "remu") X(REMUW, "remuw") X(AND, "and") X(ANDI, "andi")       \
-    X(OR, "or")                                                                           \
-    X(XOR, "xor") X(XORI, "xori") X(SLL, "sll") X(SLLW, "sllw") X(SLLI, "slli")           \
-    X(SRL, "srl") X(SRLW, "srlw") X(SRLI, "srli") X(SRA, "sra") X(SRAW, "sraw")           \
-    X(SRAI, "srai") X(SLT, "slt") X(SLTU, "sltu") X(SEQZ, "seqz") X(SNEZ, "snez")         \
-    X(NEG, "neg") X(NEGW, "negw") X(NOT, "not") X(SEXTW, "sext.w")                        \
-    X(LB, "lb") X(LBU, "lbu") X(LH, "lh") X(LHU, "lhu") X(LW, "lw") X(LD, "ld")           \
-    X(SB, "sb") X(SH, "sh") X(SW, "sw") X(SD, "sd")                                       \
-    X(FLW, "flw") X(FLD, "fld") X(FSW, "fsw") X(FSD, "fsd")                               \
-    X(FADDS, "fadd.s") X(FADDD, "fadd.d") X(FSUBS, "fsub.s") X(FSUBD, "fsub.d")           \
-    X(FMULS, "fmul.s") X(FMULD, "fmul.d") X(FDIVS, "fdiv.s") X(FDIVD, "fdiv.d")           \
-    X(FNEGS, "fneg.s") X(FNEGD, "fneg.d") X(FSQRTD, "fsqrt.d")                            \
-    X(FEQS, "feq.s") X(FEQD, "feq.d")                                                     \
-    X(FLTS, "flt.s") X(FLTD, "flt.d") X(FLES, "fle.s") X(FLED, "fle.d")                   \
-    X(FCVTSW, "fcvt.s.w") X(FCVTSWU, "fcvt.s.wu") X(FCVTSL, "fcvt.s.l")                   \
-    X(FCVTSLU, "fcvt.s.lu") X(FCVTDW, "fcvt.d.w") X(FCVTDWU, "fcvt.d.wu")                 \
-    X(FCVTDL, "fcvt.d.l") X(FCVTDLU, "fcvt.d.lu") X(FCVTWS, "fcvt.w.s")                   \
-    X(FCVTWUS, "fcvt.wu.s") X(FCVTLS, "fcvt.l.s") X(FCVTLUS, "fcvt.lu.s")                 \
-    X(FCVTWD, "fcvt.w.d") X(FCVTWUD, "fcvt.wu.d") X(FCVTLD, "fcvt.l.d")                   \
-    X(FCVTLUD, "fcvt.lu.d") X(FCVTSD, "fcvt.s.d") X(FCVTDS, "fcvt.d.s")                   \
-    X(FMVXW, "fmv.x.w") X(FMVWX, "fmv.w.x") X(FMVXD, "fmv.x.d") X(FMVDX, "fmv.d.x")       \
-    X(FMVS, "fmv.s") X(FMVD, "fmv.d")                                                     \
-    X(J, "j") X(BEQZ, "beqz") X(BNEZ, "bnez") X(CALL, "call") X(JALR, "jalr")             \
-    X(RET, "ret") X(EPILOGUE, "#epilogue")
+#define RV_OPS(X)                                                                                           \
+    X(LI, "li")                                                                                             \
+    X(LA, "la") X(MV, "mv") X(ADD, "add") X(ADDI, "addi") X(ADDW, "addw") X(ADDIW, "addiw") X(              \
+        ORI, "ori") X(SLTI, "slti") X(SLTIU, "sltiu") X(SLLIW, "slliw") X(SRLIW, "srliw")                   \
+        X(SRAIW, "sraiw") X(SUB, "sub") X(SUBW, "subw") X(MUL, "mul") X(MULHU, "mulhu") X(                  \
+            MULW, "mulw") X(DIV, "div") X(DIVW, "divw") X(DIVU, "divu") X(DIVUW, "divuw")                   \
+            X(REM, "rem") X(REMW, "remw") X(REMU, "remu") X(REMUW, "remuw") X(AND, "and") X(                \
+                ANDI, "andi") X(OR, "or") X(XOR, "xor") X(XORI, "xori")                                     \
+                X(SLL, "sll") X(SLLW, "sllw") X(SLLI, "slli") X(SRL, "srl") X(SRLW, "srlw") X(              \
+                    SRLI,                                                                                   \
+                    "srli")                                                                                 \
+                    X(SRA, "sra") X(SRAW, "sraw") X(SRAI, "srai") X(SLT, "slt") X(SLTU, "sltu") X(          \
+                        SEQZ,                                                                               \
+                        "seqz") X(SNEZ, "snez")                                                             \
+                        X(NEG, "neg") X(NEGW, "negw") X(NOT, "not") X(SEXTW, "sext.w") X(LB, "lb")          \
+                            X(LBU, "lbu") X(LH, "lh") X(                                                    \
+                                LHU,                                                                        \
+                                "lhu") X(LW,                                                                \
+                                         "lw") X(LD,                                                        \
+                                                 "ld") X(SB,                                                \
+                                                         "sb") X(SH,                                        \
+                                                                 "sh") X(SW,                                \
+                                                                         "sw") X(SD,                        \
+                                                                                 "sd") X(FLW,               \
+                                                                                         "flw")             \
+                                X(FLD, "fld") X(                                                            \
+                                    FSW, "fsw") X(FSD, "fsd")                                               \
+                                    X(FADDS, "fadd.s") X(FADDD, "fadd.d") X(FSUBS, "fsub.s") X(             \
+                                        FSUBD, "fsub.d") X(FMULS, "fmul.s")                                 \
+                                        X(FMULD, "fmul.d") X(FDIVS, "fdiv.s") X(FDIVD, "fdiv.d") X(         \
+                                            FNEGS, "fneg.s") X(FNEGD, "fneg.d")                             \
+                                            X(FSQRTD, "fsqrt.d") X(FEQS, "feq.s") X(                        \
+                                                FEQD,                                                       \
+                                                "feq.d") X(FLTS,                                            \
+                                                           "flt.s") X(FLTD, "flt.d")                        \
+                                                X(FLES, "fle.s") X(FLED, "fle.d") X(                        \
+                                                    FCVTSW,                                                 \
+                                                    "fcvt.s.w") X(FCVTSWU, "fcvt.s.wu")                     \
+                                                    X(FCVTSL, "fcvt.s.l") X(FCVTSLU, "fcvt.s.lu") X(        \
+                                                        FCVTDW,                                             \
+                                                        "fcvt.d.w") X(FCVTDWU, "fcvt.d.wu")                 \
+                                                        X(FCVTDL, "fcvt.d.l") X(FCVTDLU, "fcvt.d."          \
+                                                                                         "lu") X(           \
+                                                            FCVTWS,                                         \
+                                                            "fcvt.w.s") X(FCVTWUS, "fcvt.wu.s")             \
+                                                            X(FCVTLS, "fcvt.l.s") X(                        \
+                                                                FCVTLUS, "fcvt.lu.s")                       \
+                                                                X(FCVTWD, "fcvt.w.d") X(                    \
+                                                                    FCVTWUD, "fcvt.wu.d")                   \
+                                                                    X(FCVTLD, "fcvt.l.d") X(                \
+                                                                        FCVTLUD,                            \
+                                                                        "fcvt.lu.d") X(FCVTSD,              \
+                                                                                       "fcvt.s.d")          \
+                                                                        X(FCVTDS, "fcvt.d.s") X(            \
+                                                                            FMVXW,                          \
+                                                                            "fmv.x.w") X(FMVWX,             \
+                                                                                         "fmv.w."           \
+                                                                                         "x")               \
+                                                                            X(FMVXD, "fmv.x.d") X(          \
+                                                                                FMVDX, "fmv.d.x")           \
+                                                                                X(FMVS, "fmv.s") X(         \
+                                                                                    FMVD,                   \
+                                                                                    "fmv.d")                \
+                                                                                    X(J, "j") X(            \
+                                                                                        BEQZ,               \
+                                                                                        "beqz") X(BNEZ,     \
+                                                                                                  "bnez")   \
+                                                                                        X(                  \
+                                                                                            CALL,           \
+                                                                                            "cal"           \
+                                                                                            "l") X(JALR,    \
+                                                                                                   "jalr")  \
+                                                                                            X(RET,          \
+                                                                                              "re"          \
+                                                                                              "t")          \
+                                                                                                X(EPILOGUE, \
+                                                                                                  "#epilogue")
 
 typedef enum {
 #define RV_ENUM(op, mnem) RV_##op,

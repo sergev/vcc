@@ -15,9 +15,8 @@
 // without them.  The assembler commands they expect in the -v echo are those CMake
 // found (scripts/CrossTools.cmake), so the driver's flags must agree with CMake's.
 //
-#include <gtest/gtest.h>
-
 #include <fcntl.h>
+#include <gtest/gtest.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/stat.h>
@@ -112,24 +111,22 @@ bool HaveWasm32Run()
 bool HaveX86Run()
 {
     return X86_TOOLS_FOUND && HaveAssembler(X86_ASSEMBLER) && HaveTool(X86_LD) &&
-           HaveTool(X86_QEMU) &&
-           access((std::string(X86_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+           HaveTool(X86_QEMU) && access((std::string(X86_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The same for AVR, run on qemu `arduino-mega`.
 bool HaveAvrRun()
 {
     return AVR_TOOLS_FOUND && HaveAssembler(AVR_ASSEMBLER) && HaveTool(AVR_LD) &&
-           HaveTool(AVR_QEMU) &&
-           access((std::string(AVR_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+           HaveTool(AVR_QEMU) && access((std::string(AVR_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The GNU MSP430 binutils, mspsim and the build's MSP430 runtime.
 bool HaveMsp430Run()
 {
     return MSP430_TOOLS_FOUND && MSP430_GNU && HaveAssembler(MSP430_ASSEMBLER) &&
-           HaveTool(MSP430_LD) &&
-           HaveTool(MSPSIM) && access((std::string(MSP430_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
+           HaveTool(MSP430_LD) && HaveTool(MSPSIM) &&
+           access((std::string(MSP430_LIB_DIR) + "/libc.a").c_str(), R_OK) == 0;
 }
 
 // The GNU MMIX binutils, Knuth's mmix and the build's MMIX runtime.
@@ -188,7 +185,7 @@ bool HaveHostedRun()
 void StageLibvcc(const std::string &prefix)
 {
     fs::create_symlink(HostLibDir() + "/libvcc.a",
-                           prefix + "/share/vcc/" + HOST_TARGET + "/lib/libvcc.a");
+                       prefix + "/share/vcc/" + HOST_TARGET + "/lib/libvcc.a");
 }
 
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
@@ -248,8 +245,8 @@ int RunProcess(const std::vector<std::string> &argv, const std::string &stdout_f
     return WEXITSTATUS(status);
 }
 
-const char *const kOverrides[] = { "VCC_CPP", "VCC_PARSE", "VCC_LOWER", "VCC_GEN",
-                                   "VCC_AS",  "VCC_LD" };
+const char *const kOverrides[] = { "VCC_CPP", "VCC_PARSE", "VCC_LOWER",
+                                   "VCC_GEN", "VCC_AS",    "VCC_LD" };
 
 class CcDriver : public ::testing::Test {
 protected:
@@ -296,8 +293,8 @@ protected:
         if (target == "besm6")
             return { BESM6_INCLUDE_DIR, COMMON_INCLUDE_DIR };
         if (target == "x86_64-linux")
-            return { LINUX_X86_64_INCLUDE_DIR, LINUX_INCLUDE_DIR, X86_INCLUDE_DIR,
-                     LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+            return { LINUX_X86_64_INCLUDE_DIR, LINUX_INCLUDE_DIR, X86_INCLUDE_DIR, LP64_INCLUDE_DIR,
+                     COMMON_INCLUDE_DIR };
         if (target == "aarch64-linux")
             return { LINUX_AARCH64_INCLUDE_DIR, LINUX_INCLUDE_DIR, AARCH64_INCLUDE_DIR,
                      LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
@@ -330,16 +327,16 @@ protected:
             if (args[i] == "-t")
                 target = args[i + 1];
         setenv("VCC_GEN",
-               target == "besm6"                                    ? VCC_GENBESM_PATH
-               : target == "aarch64" || target == "aarch64-linux" ||
-                       target == "aarch64-darwin"                   ? VCC_GENAARCH64_PATH
-               : target == "arm32"                                  ? VCC_GENARM32_PATH
-               : target == "x86_64" || target == "x86_64-linux"     ? VCC_GENX86_PATH
-               : target == "avr"                                    ? VCC_GENAVR_PATH
-               : target == "msp430"                                 ? VCC_GENMSP430_PATH
-               : target == "mmix"                                   ? VCC_GENMMIX_PATH
-               : target == "wasm32"                                 ? VCC_GENWASM_PATH
-                                                                    : VCC_GENRISCV_PATH,
+               target == "besm6" ? VCC_GENBESM_PATH
+               : target == "aarch64" || target == "aarch64-linux" || target == "aarch64-darwin"
+                   ? VCC_GENAARCH64_PATH
+               : target == "arm32"                              ? VCC_GENARM32_PATH
+               : target == "x86_64" || target == "x86_64-linux" ? VCC_GENX86_PATH
+               : target == "avr"                                ? VCC_GENAVR_PATH
+               : target == "msp430"                             ? VCC_GENMSP430_PATH
+               : target == "mmix"                               ? VCC_GENMMIX_PATH
+               : target == "wasm32"                             ? VCC_GENWASM_PATH
+                                                                : VCC_GENRISCV_PATH,
                1);
 
         std::vector<std::string> argv = { VCC_COMMAND };
@@ -417,8 +414,8 @@ protected:
     std::string RunQemu(const std::string &elf, const char *qemu = RISCV_QEMU)
     {
         std::string out = Path("qemu.out");
-        int rc = RunProcess({ qemu, "-M", "virt", "-bios", "none", "-display", "none",
-                              "-serial", "stdio", "-monitor", "none", "-kernel", elf },
+        int rc = RunProcess({ qemu, "-M", "virt", "-bios", "none", "-display", "none", "-serial",
+                              "stdio", "-monitor", "none", "-kernel", elf },
                             out, Path("qemu.err"), 10);
         EXPECT_GE(rc, 0) << "qemu failed:\n" << ReadFile(Path("qemu.err"));
         return ReadFile(out);
@@ -429,9 +426,10 @@ protected:
     std::string RunQemuAarch64(const std::string &elf, int *status)
     {
         std::string out = Path("qemu.out");
-        *status = RunProcess({ AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display", "none",
-                               "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
-                             out, Path("qemu.err"), 10);
+        *status =
+            RunProcess({ AARCH64_QEMU, "-M", "virt", "-cpu", "cortex-a57", "-display", "none",
+                         "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
+                       out, Path("qemu.err"), 10);
         return ReadFile(out);
     }
 
@@ -447,9 +445,10 @@ protected:
     std::string RunQemuArm32(const std::string &elf, int *status)
     {
         std::string out = Path("qemu.out");
-        *status = RunProcess({ ARM32_QEMU, "-M", "virt", "-cpu", "cortex-a15", "-display", "none",
-                               "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
-                             out, Path("qemu.err"), 10);
+        *status =
+            RunProcess({ ARM32_QEMU, "-M", "virt", "-cpu", "cortex-a15", "-display", "none",
+                         "-serial", "stdio", "-monitor", "none", "-semihosting", "-kernel", elf },
+                       out, Path("qemu.err"), 10);
         return ReadFile(out);
     }
 
@@ -464,7 +463,7 @@ protected:
                      "file:" + con, "-kernel", elf },
                    out, Path("qemu.err"), 10);
         std::string code = ReadFile(con);
-        *status = code.empty() ? -1 : (unsigned char)code[0];
+        *status          = code.empty() ? -1 : (unsigned char)code[0];
         return ReadFile(out);
     }
 
@@ -477,7 +476,7 @@ protected:
                      "-serial", "stdio", "-serial", "file:" + con, "-bios", elf },
                    out, Path("qemu.err"), 10, con);
         std::string code = ReadFile(con);
-        *status = code.empty() ? -1 : (unsigned char)code[0];
+        *status          = code.empty() ? -1 : (unsigned char)code[0];
         return ReadFile(out);
     }
 
@@ -486,8 +485,8 @@ protected:
     std::string RunMspsim(const std::string &firmware, int *status)
     {
         std::string out = Path("mspsim.out");
-        *status = RunProcess({ MSPSIM, "-q", "-n", "100000000", firmware }, out,
-                             Path("mspsim.err"), 10);
+        *status =
+            RunProcess({ MSPSIM, "-q", "-n", "100000000", firmware }, out, Path("mspsim.err"), 10);
         return ReadFile(out);
     }
 
@@ -495,36 +494,38 @@ protected:
     std::string RunMmix(const std::string &mmo, int *status)
     {
         std::string out = Path("mmix.out");
-        *status = RunProcess({ MMIX_SIM, "-q", mmo }, out, Path("mmix.err"), 10);
+        *status         = RunProcess({ MMIX_SIM, "-q", mmo }, out, Path("mmix.err"), 10);
         return ReadFile(out);
     }
 };
 
-const char kHello[] = "#include <stdio.h>\n"
-                      "int main(void)\n"
-                      "{\n"
-                      "    printf(\"hello %d\\n\", 42);\n"
-                      "    return 0;\n"
-                      "}\n";
+const char kHello[] =
+    "#include <stdio.h>\n"
+    "int main(void)\n"
+    "{\n"
+    "    printf(\"hello %d\\n\", 42);\n"
+    "    return 0;\n"
+    "}\n";
 
-const char kTargetProbe[] = "#ifdef __riscv\n"
-                            "RISCV __riscv_xlen\n"
-                            "#endif\n"
-                            "#ifdef besm6\n"
-                            "BESM6\n"
-                            "#endif\n"
-                            "#ifdef __x86_64__\n"
-                            "X86_64\n"
-                            "#endif\n"
-                            "#ifdef __aarch64__\n"
-                            "AARCH64\n"
-                            "#endif\n"
-                            "#ifdef __linux__\n"
-                            "LINUX\n"
-                            "#endif\n"
-                            "#ifdef __APPLE__\n"
-                            "APPLE\n"
-                            "#endif\n";
+const char kTargetProbe[] =
+    "#ifdef __riscv\n"
+    "RISCV __riscv_xlen\n"
+    "#endif\n"
+    "#ifdef besm6\n"
+    "BESM6\n"
+    "#endif\n"
+    "#ifdef __x86_64__\n"
+    "X86_64\n"
+    "#endif\n"
+    "#ifdef __aarch64__\n"
+    "AARCH64\n"
+    "#endif\n"
+    "#ifdef __linux__\n"
+    "LINUX\n"
+    "#endif\n"
+    "#ifdef __APPLE__\n"
+    "APPLE\n"
+    "#endif\n";
 
 //
 // Preprocessing and target selection.
@@ -603,10 +604,11 @@ TEST_F(CcDriver, PreprocessDefines)
 // __ASSEMBLER__ defined.
 TEST_F(CcDriver, PreprocessDotS)
 {
-    WriteSource("x.S", "#define REG 0\n"
-                       "#ifdef __ASSEMBLER__\n"
-                       "        xta REG\n"
-                       "#endif\n");
+    WriteSource("x.S",
+                "#define REG 0\n"
+                "#ifdef __ASSEMBLER__\n"
+                "        xta REG\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "besm6", "-E", "-o", "x.i", "x.S" }), 0) << Stderr();
     std::string text = ReadFile(Path("x.i"));
     EXPECT_NE(text.find("xta 0"), std::string::npos) << text;
@@ -650,16 +652,20 @@ TEST_F(CcDriver, LinkAndRunAarch64)
 {
     if (!HaveAarch64Run())
         GTEST_SKIP() << "AArch64 assembler/linker/qemu not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
-    WriteSource("twice.S", "#ifdef __aarch64__\n"
-                           "        .globl  twice\n"
-                           "twice:  add     w0, w0, w0\n"
-                           "        ret\n"
-                           "#endif\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S",
+                "#ifdef __aarch64__\n"
+                "        .globl  twice\n"
+                "twice:  add     w0, w0, w0\n"
+                "        ret\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "aarch64", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = AARCH64_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "aarch64", "-nostdlib", "-T", AARCH64_LINK_SCRIPT, "-o", "t.elf",
                     lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
@@ -686,16 +692,20 @@ TEST_F(CcDriver, LinkAndRunArm32)
 {
     if (!HaveArm32Run())
         GTEST_SKIP() << "ARM32 assembler/linker/qemu not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
-    WriteSource("twice.S", "#ifdef __arm__\n"
-                           "        .globl  twice\n"
-                           "twice:  add     r0, r0, r0\n"
-                           "        bx      lr\n"
-                           "#endif\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S",
+                "#ifdef __arm__\n"
+                "        .globl  twice\n"
+                "twice:  add     r0, r0, r0\n"
+                "        bx      lr\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "arm32", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = ARM32_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "arm32", "-nostdlib", "-T", ARM32_LINK_SCRIPT, "-o", "t.elf",
                     lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
@@ -723,20 +733,21 @@ TEST_F(CcDriver, LinkAndRunWasm32)
     if (!HaveWasm32Run())
         GTEST_SKIP() << "clang/wasm-ld/node not found";
     WriteSource("main.c", "int main(void) { return 3; }\n");
-    WriteSource("seven.S", "#ifdef __wasm32__\n"
-                           "        .section .text.seven,\"\",@\n"
-                           "        .globl  seven\n"
-                           "        .type   seven,@function\n"
-                           "seven:\n"
-                           "        .functype seven () -> (i32)\n"
-                           "        i32.const 7\n"
-                           "        end_function\n"
-                           "#endif\n");
+    WriteSource("seven.S",
+                "#ifdef __wasm32__\n"
+                "        .section .text.seven,\"\",@\n"
+                "        .globl  seven\n"
+                "        .type   seven,@function\n"
+                "seven:\n"
+                "        .functype seven () -> (i32)\n"
+                "        i32.const 7\n"
+                "        end_function\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "wasm32", "-c", "main.c", "seven.S" }), 0) << Stderr();
     EXPECT_EQ(ReadFile(Path("seven.o")).substr(0, 4), std::string("\0asm", 4));
     std::string lib = WASM32_LIB_DIR;
-    ASSERT_EQ(Vcc({ "-t", "wasm32", "-nostdlib", "-o", "t.wasm", lib + "/crt0-status.o",
-                    "main.o", "seven.o", lib + "/libc.a" }),
+    ASSERT_EQ(Vcc({ "-t", "wasm32", "-nostdlib", "-o", "t.wasm", lib + "/crt0-status.o", "main.o",
+                    "seven.o", lib + "/libc.a" }),
               0)
         << Stderr();
     int status;
@@ -759,16 +770,20 @@ TEST_F(CcDriver, LinkAndRunX86)
 {
     if (!HaveX86Run())
         GTEST_SKIP() << "x86-64 assembler/linker/qemu not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
-    WriteSource("twice.S", "#ifdef __x86_64__\n"
-                           "        .globl  twice\n"
-                           "twice:  leal    (%rdi,%rdi), %eax\n"
-                           "        ret\n"
-                           "#endif\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("twice.S",
+                "#ifdef __x86_64__\n"
+                "        .globl  twice\n"
+                "twice:  leal    (%rdi,%rdi), %eax\n"
+                "        ret\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "x86_64", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = X86_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "x86_64", "-nostdlib", "-T", X86_LINK_SCRIPT, "-o", "t.elf",
                     lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
@@ -794,9 +809,10 @@ TEST_F(CcDriver, LinkAndRunAvr)
 {
     if (!HaveAvrRun())
         GTEST_SKIP() << "AVR assembler/linker/qemu not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
     WriteSource("twice.S", R"(#ifdef __AVR__
         .globl  twice
 twice:  lsl     r24
@@ -805,10 +821,12 @@ twice:  lsl     r24
 #endif
 )");
     ASSERT_EQ(Vcc({ "-t", "avr", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = AVR_LIB_DIR;
-    ASSERT_EQ(Vcc({ "-t", "avr", "-nostdlib", "-T", AVR_LINK_SCRIPT, "-o", "t.elf",
-                    lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
+    ASSERT_EQ(Vcc({ "-t", "avr", "-nostdlib", "-T", AVR_LINK_SCRIPT, "-o", "t.elf", lib + "/crt0.o",
+                    "main.o", "twice.o", lib + "/libc.a" }),
               0)
         << Stderr();
     int status;
@@ -832,9 +850,10 @@ TEST_F(CcDriver, LinkAndRunMsp430)
     // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
     if (!HaveMsp430Run())
         GTEST_SKIP() << "MSP430 binutils or mspsim not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 3; }\n");
     WriteSource("twice.S", R"(#ifdef __MSP430__
         .globl  twice
 twice:  rla     r12
@@ -842,7 +861,9 @@ twice:  rla     r12
 #endif
 )");
     ASSERT_EQ(Vcc({ "-t", "msp430", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = MSP430_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "msp430", "-nostdlib", "-T", MSP430_LINK_SCRIPT, "-o", "t.elf",
                     lib + "/crt0.o", "main.o", "twice.o", lib + "/libc.a" }),
@@ -861,8 +882,7 @@ twice:  rla     r12
 TEST_F(CcDriver, LinkAndRunMsp430Clang)
 {
     // cppcheck-suppress knownConditionTrueFalse ; MSP430_TOOLS_FOUND is per configuration
-    if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(MSP430_CLANG) ||
-        !HaveTool(MSP430_LLD))
+    if (!HaveMsp430Run() || !MSP430_CLANG_FOUND || !HaveTool(MSP430_CLANG) || !HaveTool(MSP430_LLD))
         GTEST_SKIP() << "MSP430 clang/ld.lld or mspsim not found";
     WriteSource("t.c", kHello);
     setenv("VCC_AS", (std::string(MSP430_CLANG) + " --target=msp430 -c").c_str(), 1);
@@ -899,9 +919,10 @@ TEST_F(CcDriver, LinkAndRunMmix)
     // cppcheck-suppress knownConditionTrueFalse ; MMIX_TOOLS_FOUND is per configuration
     if (!HaveMmixRun())
         GTEST_SKIP() << "mmix-knuth-mmixware-as/ld or mmix not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "long twice(long);\n"
-                          "int main(void) { printf(\"%ld\\n\", twice(21)); return 3; }\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "long twice(long);\n"
+                "int main(void) { printf(\"%ld\\n\", twice(21)); return 3; }\n");
     WriteSource("twice.S", R"(#ifdef __MMIX__
         .text
         .global twice
@@ -910,7 +931,9 @@ twice   SLU     $0,$0,1
 #endif
 )");
     ASSERT_EQ(Vcc({ "-t", "mmix", "-c", "main.c", "twice.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("twice.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
     std::string lib = MMIX_LIB_DIR;
     ASSERT_EQ(Vcc({ "-t", "mmix", "-v", "-nostdlib", "-o", "t.mmo", lib + "/crt0.o", "main.o",
                     "twice.o", lib + "/libc.a" }),
@@ -1048,7 +1071,8 @@ TEST_F(CcDriver, RejectsLinkScriptForBesm6)
 {
     WriteSource("t.o", "");
     EXPECT_NE(Vcc({ "-t", "besm6", "-T", "x.ld", "t.o" }), 0);
-    EXPECT_NE(Stderr().find("'-T' is not supported on target 'besm6'"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("'-T' is not supported on target 'besm6'"), std::string::npos)
+        << Stderr();
 }
 
 TEST_F(CcDriver, RejectsNoInputs)
@@ -1097,13 +1121,18 @@ TEST_F(CcDriver, CompileObjectRiscv64)
     if (!HaveRiscvLink())
         GTEST_SKIP() << "RISC-V assembler/linker not found";
     WriteSource("t.c", kHello);
-    WriteSource("u.S", "#ifdef __riscv\n"
-                       "        .globl  u\n"
-                       "u:      ret\n"
-                       "#endif\n");
+    WriteSource("u.S",
+                "#ifdef __riscv\n"
+                "        .globl  u\n"
+                "u:      ret\n"
+                "#endif\n");
     ASSERT_EQ(Vcc({ "-t", "riscv64", "-c", "t.c", "u.S" }), 0) << Stderr();
-    EXPECT_EQ(ReadFile(Path("t.o")).substr(0, 4), "\x7f" "ELF");
-    EXPECT_EQ(ReadFile(Path("u.o")).substr(0, 4), "\x7f" "ELF");
+    EXPECT_EQ(ReadFile(Path("t.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
+    EXPECT_EQ(ReadFile(Path("u.o")).substr(0, 4),
+              "\x7f"
+              "ELF");
 }
 
 // The whole pipeline down to a qemu `virt` ELF, from the build tree: the
@@ -1127,9 +1156,10 @@ TEST_F(CcDriver, SeparateCompilationRiscv64)
 {
     if (!HaveRiscvRun())
         GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
-    WriteSource("main.c", "#include <stdio.h>\n"
-                          "int twice(int);\n"
-                          "int main(void) { printf(\"%d\\n\", twice(21)); return 0; }\n");
+    WriteSource("main.c",
+                "#include <stdio.h>\n"
+                "int twice(int);\n"
+                "int main(void) { printf(\"%d\\n\", twice(21)); return 0; }\n");
     WriteSource("twice.c", "int twice(int x) { return 2 * x; }\n");
     ASSERT_EQ(Vcc({ "-t", "riscv64", "-c", "main.c", "twice.c" }), 0) << Stderr();
     std::string lib = RISCV_LIB_DIR;
@@ -1147,7 +1177,7 @@ TEST_F(CcDriver, StagedPrefixRiscv64)
     if (!HaveRiscvRun())
         GTEST_SKIP() << "RISC-V assembler/linker/qemu not found";
     std::string prefix = StagePrefix("riscv64");
-    std::string lib = prefix + "/share/vcc/riscv64/lib";
+    std::string lib    = prefix + "/share/vcc/riscv64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(RISCV_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(RISCV_LINK_SCRIPT, lib + "/link.ld");
@@ -1175,18 +1205,19 @@ TEST_F(CcDriver, StagedPrefixRiscv32)
         access((std::string(RISCV32_LIB_DIR) + "/libc.a").c_str(), R_OK) != 0)
         GTEST_SKIP() << "RISC-V assembler/linker/qemu-system-riscv32 not found";
     std::string prefix = StagePrefix("riscv32");
-    std::string lib = prefix + "/share/vcc/riscv32/lib";
+    std::string lib    = prefix + "/share/vcc/riscv32/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(RISCV32_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(RISCV_LINK_SCRIPT, lib + "/link.ld");
 
-    WriteSource("t.c", "#include <stdio.h>\n"
-                       "int main(void)\n"
-                       "{\n"
-                       "    long long x = 1LL << 40;\n"
-                       "    printf(\"%d %d %lld\\n\", (int)sizeof(long), __riscv_xlen, x);\n"
-                       "    return 0;\n"
-                       "}\n");
+    WriteSource("t.c",
+                "#include <stdio.h>\n"
+                "int main(void)\n"
+                "{\n"
+                "    long long x = 1LL << 40;\n"
+                "    printf(\"%d %d %lld\\n\", (int)sizeof(long), __riscv_xlen, x);\n"
+                "    return 0;\n"
+                "}\n");
     ASSERT_EQ(StagedVcc(prefix, { "-t", "riscv32", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
     EXPECT_EQ(RunQemu(Path("t.elf"), RISCV32_QEMU), "4 32 1099511627776\n");
 
@@ -1205,19 +1236,20 @@ TEST_F(CcDriver, StagedPrefixAarch64)
     if (!HaveAarch64Run())
         GTEST_SKIP() << "AArch64 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("aarch64");
-    std::string lib = prefix + "/share/vcc/aarch64/lib";
+    std::string lib    = prefix + "/share/vcc/aarch64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(AARCH64_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(AARCH64_LINK_SCRIPT, lib + "/link.ld");
 
-    WriteSource("t.c", "#include <stdio.h>\n"
-                       "#include <limits.h>\n"
-                       "#include <stddef.h>\n"
-                       "int main(void)\n"
-                       "{\n"
-                       "    printf(\"%d %d %Lg\\n\", (int)sizeof(long), (int)sizeof(wchar_t), 2.5L);\n"
-                       "    return CHAR_MAX == 255 ? 7 : 1;\n"
-                       "}\n");
+    WriteSource("t.c",
+                "#include <stdio.h>\n"
+                "#include <limits.h>\n"
+                "#include <stddef.h>\n"
+                "int main(void)\n"
+                "{\n"
+                "    printf(\"%d %d %Lg\\n\", (int)sizeof(long), (int)sizeof(wchar_t), 2.5L);\n"
+                "    return CHAR_MAX == 255 ? 7 : 1;\n"
+                "}\n");
     ASSERT_EQ(StagedVcc(prefix, { "-t", "aarch64", "-v", "-o", "t.elf", "t.c" }), 0) << Stderr();
     int status;
     EXPECT_EQ(RunQemuAarch64(Path("t.elf"), &status), "8 4 2.5\n");
@@ -1240,7 +1272,7 @@ TEST_F(CcDriver, StagedPrefixArm32)
     if (!HaveArm32Run())
         GTEST_SKIP() << "ARM32 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("arm32");
-    std::string lib = prefix + "/share/vcc/arm32/lib";
+    std::string lib    = prefix + "/share/vcc/arm32/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(ARM32_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(ARM32_LINK_SCRIPT, lib + "/link.ld");
@@ -1278,7 +1310,7 @@ TEST_F(CcDriver, StagedPrefixWasm32)
     if (!HaveWasm32Run())
         GTEST_SKIP() << "clang/wasm-ld/node not found";
     std::string prefix = StagePrefix("wasm32");
-    std::string lib = prefix + "/share/vcc/wasm32/lib";
+    std::string lib    = prefix + "/share/vcc/wasm32/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(WASM32_LIB_DIR) + "/" + name, lib + "/" + name);
 
@@ -1314,7 +1346,7 @@ TEST_F(CcDriver, StagedPrefixX86)
     if (!HaveX86Run())
         GTEST_SKIP() << "x86-64 assembler/linker/qemu not found";
     std::string prefix = StagePrefix("x86_64");
-    std::string lib = prefix + "/share/vcc/x86_64/lib";
+    std::string lib    = prefix + "/share/vcc/x86_64/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(X86_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(X86_LINK_SCRIPT, lib + "/link.ld");
@@ -1352,7 +1384,7 @@ TEST_F(CcDriver, StagedPrefixAvr)
     if (!HaveAvrRun())
         GTEST_SKIP() << "AVR assembler/linker/qemu not found";
     std::string prefix = StagePrefix("avr");
-    std::string lib = prefix + "/share/vcc/avr/lib";
+    std::string lib    = prefix + "/share/vcc/avr/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(AVR_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(AVR_LINK_SCRIPT, lib + "/link.ld");
@@ -1373,9 +1405,9 @@ int main(void)
     EXPECT_EQ(status, 7);
 
     std::string echo = Stdout();
-    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t avr -nostdinc -I" + prefix +
-                        "/share/vcc/avr/include "),
-              std::string::npos)
+    EXPECT_NE(
+        echo.find(prefix + "/bin/vcpp -t avr -nostdinc -I" + prefix + "/share/vcc/avr/include "),
+        std::string::npos)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t avr "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenavr "), std::string::npos) << echo;
@@ -1393,14 +1425,15 @@ TEST_F(CcDriver, StagedPrefixMsp430)
     if (!HaveMsp430Run() || !HaveTool(MSP430_GCC) || access(MSP430_LIBGCC, R_OK) != 0)
         GTEST_SKIP() << "MSP430 binutils, libgcc.a or mspsim not found";
     std::string prefix = StagePrefix("msp430");
-    std::string lib = prefix + "/share/vcc/msp430/lib";
+    std::string lib    = prefix + "/share/vcc/msp430/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(MSP430_LIB_DIR) + "/" + name, lib + "/" + name);
     fs::create_symlink(MSP430_LINK_SCRIPT, lib + "/link.ld");
 
     WriteSource("lz.c", "int lz(unsigned x) { return __builtin_clz(x); }\n");
-    ASSERT_EQ(RunProcess({ MSP430_GCC, "-mcpu=msp430", "-O2", "-c", "-o", Path("lz.o"), Path("lz.c") }),
-              0);
+    ASSERT_EQ(
+        RunProcess({ MSP430_GCC, "-mcpu=msp430", "-O2", "-c", "-o", Path("lz.o"), Path("lz.c") }),
+        0);
     WriteSource("t.c", R"(#include <stdio.h>
 #include <limits.h>
 #include <float.h>
@@ -1444,7 +1477,7 @@ TEST_F(CcDriver, StagedPrefixMmix)
     if (!HaveMmixRun() || !HaveTool(MMIX_GCC) || access(MMIX_LIBGCC, R_OK) != 0)
         GTEST_SKIP() << "mmix-knuth-mmixware-gcc/as/ld, libgcc.a or mmix not found";
     std::string prefix = StagePrefix("mmix");
-    std::string lib = prefix + "/share/vcc/mmix/lib";
+    std::string lib    = prefix + "/share/vcc/mmix/lib";
     for (const char *name : { "crt0.o", "libc.a" })
         fs::create_symlink(std::string(MMIX_LIB_DIR) + "/" + name, lib + "/" + name);
 
@@ -1469,9 +1502,9 @@ int main(void)
     EXPECT_EQ(status, 7);
 
     std::string echo = Stdout();
-    EXPECT_NE(echo.find(prefix + "/bin/vcpp -t mmix -nostdinc -I" + prefix +
-                        "/share/vcc/mmix/include "),
-              std::string::npos)
+    EXPECT_NE(
+        echo.find(prefix + "/bin/vcpp -t mmix -nostdinc -I" + prefix + "/share/vcc/mmix/include "),
+        std::string::npos)
         << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vlower -t mmix "), std::string::npos) << echo;
     EXPECT_NE(echo.find(prefix + "/bin/vgenmmix "), std::string::npos) << echo;
@@ -1533,8 +1566,7 @@ TEST_F(CcDriver, HostedLinkLine)
         << Stderr();
     EXPECT_EQ(Stdout(), "true -no-pie -o t t.o -lm -L" + lib + " -lvcc \n");
 
-    ASSERT_EQ(StagedVcc(prefix, { "-t", "x86_64-linux", "-v", "-nostdlib", "t.o" }), 0)
-        << Stderr();
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "x86_64-linux", "-v", "-nostdlib", "t.o" }), 0) << Stderr();
     EXPECT_EQ(Stdout(), "true -no-pie -nostdlib -o a.out t.o \n");
 }
 
@@ -1575,58 +1607,60 @@ TEST_F(CcDriver, StagedPrefixHost)
     std::string lib    = prefix + "/share/vcc/" + target + "/lib";
     StageLibvcc(prefix);
 
-    WriteSource("main.c", "#include <alloca.h>\n"
-                          "#include <errno.h>\n"
-                          "#include <math.h>\n"
-                          "#include <setjmp.h>\n"
-                          "#include <stdarg.h>\n"
-                          "#include <stdio.h>\n"
-                          "#include <stdlib.h>\n"
-                          "#include <string.h>\n"
-                          "int twice(int);\n"
-                          "static void say(const char *fmt, ...)\n"
-                          "{\n"
-                          "    va_list ap;\n"
-                          "    va_start(ap, fmt);\n"
-                          "    vprintf(fmt, ap);\n"
-                          "    va_end(ap);\n"
-                          "}\n"
-                          "static int cmp(const void *a, const void *b)\n"
-                          "{\n"
-                          "    return *(const int *)a - *(const int *)b;\n"
-                          "}\n"
-                          "static jmp_buf env;\n"
-                          "int main(void)\n"
-                          "{\n"
-                          "    say(\"%d %s %.2f %ld\\n\", twice(21), \"str\", 2.5, 1L << 40);\n"
-                          "    errno = 0;\n"
-                          "    strtol(\"99999999999999999999\", NULL, 10);\n"
-                          "    printf(\"%d\\n\", errno == ERANGE);\n"
-                          "    int r = setjmp(env);\n"
-                          "    if (r == 0)\n"
-                          "        longjmp(env, 7);\n"
-                          "    int a[] = { 3, 1, 2 };\n"
-                          "    qsort(a, 3, sizeof a[0], cmp);\n"
-                          "    printf(\"%d %d%d%d\\n\", r, a[0], a[1], a[2]);\n"
-                          "    int (*p)(const char *) = puts;\n"
-                          "    p(\"puts\");\n"
-                          "    char *s = alloca(6);\n"
-                          "    strcpy(s, \"stack\");\n"
-                          "    p(s);\n"
-                          "    ldiv_t d = ldiv(-17L, 5L);\n"
-                          "    printf(\"%ld %ld %.4Lf %.4f\\n\", d.quot, d.rem, 1.0L / 3, sqrt(2.0));\n"
-                          "    return 3;\n"
-                          "}\n");
+    WriteSource("main.c",
+                "#include <alloca.h>\n"
+                "#include <errno.h>\n"
+                "#include <math.h>\n"
+                "#include <setjmp.h>\n"
+                "#include <stdarg.h>\n"
+                "#include <stdio.h>\n"
+                "#include <stdlib.h>\n"
+                "#include <string.h>\n"
+                "int twice(int);\n"
+                "static void say(const char *fmt, ...)\n"
+                "{\n"
+                "    va_list ap;\n"
+                "    va_start(ap, fmt);\n"
+                "    vprintf(fmt, ap);\n"
+                "    va_end(ap);\n"
+                "}\n"
+                "static int cmp(const void *a, const void *b)\n"
+                "{\n"
+                "    return *(const int *)a - *(const int *)b;\n"
+                "}\n"
+                "static jmp_buf env;\n"
+                "int main(void)\n"
+                "{\n"
+                "    say(\"%d %s %.2f %ld\\n\", twice(21), \"str\", 2.5, 1L << 40);\n"
+                "    errno = 0;\n"
+                "    strtol(\"99999999999999999999\", NULL, 10);\n"
+                "    printf(\"%d\\n\", errno == ERANGE);\n"
+                "    int r = setjmp(env);\n"
+                "    if (r == 0)\n"
+                "        longjmp(env, 7);\n"
+                "    int a[] = { 3, 1, 2 };\n"
+                "    qsort(a, 3, sizeof a[0], cmp);\n"
+                "    printf(\"%d %d%d%d\\n\", r, a[0], a[1], a[2]);\n"
+                "    int (*p)(const char *) = puts;\n"
+                "    p(\"puts\");\n"
+                "    char *s = alloca(6);\n"
+                "    strcpy(s, \"stack\");\n"
+                "    p(s);\n"
+                "    ldiv_t d = ldiv(-17L, 5L);\n"
+                "    printf(\"%ld %ld %.4Lf %.4f\\n\", d.quot, d.rem, 1.0L / 3, sqrt(2.0));\n"
+                "    return 3;\n"
+                "}\n");
     WriteSource("twice.c", "int twice(int x) { return 2 * x; }\n");
     ASSERT_EQ(StagedVcc(prefix, { "-c", "twice.c" }), 0) << Stderr();
     ASSERT_EQ(StagedVcc(prefix, { "-v", "-o", "t", "main.c", "twice.o", "-lm" }), 0) << Stderr();
     EXPECT_EQ(RunProcess({ Path("t") }, Path("t.out"), Path("t.err")), 3);
-    EXPECT_EQ(ReadFile(Path("t.out")), "42 str 2.50 1099511627776\n"
-                                       "1\n"
-                                       "7 123\n"
-                                       "puts\n"
-                                       "stack\n"
-                                       "-3 -2 0.3333 1.4142\n");
+    EXPECT_EQ(ReadFile(Path("t.out")),
+              "42 str 2.50 1099511627776\n"
+              "1\n"
+              "7 123\n"
+              "puts\n"
+              "stack\n"
+              "-3 -2 0.3333 1.4142\n");
 
     std::string echo = Stdout();
     EXPECT_NE(echo.find(prefix + "/bin/vcpp -t " + target + " -nostdinc -I" + prefix +
@@ -1721,11 +1755,12 @@ TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
 TEST_F(CcDriver, Besm6LinkLine)
 {
     std::string prefix = StagePrefix("besm6");
-    std::string lib = prefix + "/share/vcc/besm6/lib";
+    std::string lib    = prefix + "/share/vcc/besm6/lib";
     WriteSource(lib.substr(dir.size() + 1) + "/crt0.o", "");
     WriteSource("t.o", "");
     setenv("VCC_LD", "true", 1);
-    ASSERT_EQ(StagedVcc(prefix, { "-t", "besm6", "-v", "-o", "t.b6", "t.o", "-lm" }), 0) << Stderr();
+    ASSERT_EQ(StagedVcc(prefix, { "-t", "besm6", "-v", "-o", "t.b6", "t.o", "-lm" }), 0)
+        << Stderr();
     EXPECT_EQ(Stdout(), "true -X -e _start -o t.b6 -L" + lib + " " + lib +
                             "/crt0.o t.o -lm -lc -lruntime \n");
 }

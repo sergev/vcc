@@ -125,7 +125,8 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
     if (!is_sqrt && in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
         internal_error("arm32: %s: bad floating-point unary operator", gen_name(g));
     int a = use_val(g, F0, in->u.unary.src), d = def_reg(g, F0, dst);
-    emit2(g, is_sqrt ? A32_VSQRT_F64 : fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d), fp_reg(t, a));
+    emit2(g, is_sqrt ? A32_VSQRT_F64 : fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d),
+          fp_reg(t, a));
     store_val(g, d, dst);
 }
 
@@ -152,13 +153,13 @@ void gen_fp_convert32(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_Instru
         emit2(g, A32_VMOV, a32_sreg(F0), a32_reg(use_val(g, T0, src)));
         A32_Op op = a32_is_double(dt) ? (u ? A32_VCVT_F64_U32 : A32_VCVT_F64_S32)
                                       : (u ? A32_VCVT_F32_U32 : A32_VCVT_F32_S32);
-        int d = def_reg(g, F0, dst);
+        int d     = def_reg(g, F0, dst);
         emit2(g, op, fp_reg(dt, d), a32_sreg(F0));
         store_val(g, d, dst);
         return;
     }
-    bool u = a32_is_unsigned(dt);
-    int a  = use_val(g, F0, src);
+    bool u    = a32_is_unsigned(dt);
+    int a     = use_val(g, F0, src);
     A32_Op op = a32_is_double(st) ? (u ? A32_VCVT_U32_F64 : A32_VCVT_S32_F64)
                                   : (u ? A32_VCVT_U32_F32 : A32_VCVT_S32_F32);
     emit2(g, op, a32_sreg(F0), fp_reg(st, a));

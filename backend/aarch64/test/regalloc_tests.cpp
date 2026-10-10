@@ -146,7 +146,8 @@ int pick(int i) { int a[3] = { 4, 5, 6 }; return a[i]; }
 TEST_F(Aarch64Test, FramePointerFlag)
 {
     aarch64_frame_pointer = true;
-    EXPECT_EQ(R"(stp x29, x30, [sp, #-16]!
+    EXPECT_EQ(
+        R"(stp x29, x30, [sp, #-16]!
 mov x29, sp
 fmul d0, d0, d1
 fadd d0, d0, d2
@@ -154,7 +155,7 @@ mov sp, x29
 ldp x29, x30, [sp], #16
 ret
 )",
-              Code(CompileToAarch64("double dot(double a, double b, double c) { return a * b + c; }")));
+        Code(CompileToAarch64("double dot(double a, double b, double c) { return a * b + c; }")));
 }
 
 // A frame too large for sp offsets keeps x29; stack arguments and big arrays run right

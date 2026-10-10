@@ -960,13 +960,13 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
         int rd, od;
         lookup(f, dst->u.var_name, &rd, &od);
         emit_xta_val(block, tail, f, src);
-        Besm_Instr *aox = emit(block, tail, BESM_LOG_AOX);
-        aox->name       = xstrdup("=:64"); // OR the INT-format exponent (0150) → unnormalized FP
+        Besm_Instr *aox    = emit(block, tail, BESM_LOG_AOX);
+        aox->name          = xstrdup("=:64"); // OR the INT-format exponent (0150) → unnormalized FP
         Besm_Instr *ntr_on = emit(block, tail, BESM_EXP_SETR);
         ntr_on->addr       = 0;            // NTR 0: enable normalization + rounding
         emit(block, tail, BESM_ARITH_ADD); // A+X 0 (mem[0]=0): normalize to canonical FP
         Besm_Instr *ntr_off = emit(block, tail, BESM_EXP_SETR);
-        ntr_off->addr       = 7;           // NTR 7: restore integer mode for the caller
+        ntr_off->addr       = 7; // NTR 7: restore integer mode for the caller
         emit_atx(block, tail, rd, od);
         break;
     }
@@ -1034,7 +1034,7 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
                 (index->u.constant->u.int_val == 1 || index->u.constant->u.int_val == -1)) {
                 emit_xta_val(block, tail, f, ptr); // A = fat pointer
                 Besm_Instr *call = emit(block, tail, BESM_BRANCH_CALL);
-                call->name = xstrdup(index->u.constant->u.int_val == 1 ? "b$pinc" : "b$pdec");
+                call->name       = xstrdup(index->u.constant->u.int_val == 1 ? "b$pinc" : "b$pdec");
             } else {
                 emit_xta_val(block, tail, f, ptr);   // A = base
                 emit_xts_val(block, tail, f, index); // push base; A = signed byte delta
@@ -1087,7 +1087,7 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
                     // index back to the 41-bit two's-complement range first (the
                     // power-of-two path above already masks after its shift).
                     Besm_Instr *aax = emit(block, tail, BESM_LOG_AAX);
-                    aax->name        = xstrdup("=37777777777777");
+                    aax->name       = xstrdup("=37777777777777");
                     // Runtime-helper multiply: push the index, load =word_scale, b/mul.
                     Besm_Instr *xts = emit(block, tail, BESM_MEM_XTS);
                     char buf[32];

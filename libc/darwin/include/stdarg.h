@@ -22,10 +22,10 @@ void __va_start(va_list *ap);
 #define __va_align(ap, T) \
     ((ap) = (char *)(((unsigned long)(ap) + _Alignof(T) - 1) & -(unsigned long)_Alignof(T)))
 
-#define va_arg(ap, T)                                                                  \
-    (*(__builtin_va_class(T) == 1 ? *(T **)(((ap) += 8) - 8)                           \
-                      : (__va_align(ap, T), (T *)(((ap) += (sizeof(T) + 7) & ~7UL) -    \
-                                                  ((sizeof(T) + 7) & ~7UL)))))
+#define va_arg(ap, T)                                                                            \
+    (*(__builtin_va_class(T) == 1 ? *(T **)(((ap) += 8) - 8)                                     \
+                                  : (__va_align(ap, T), (T *)(((ap) += (sizeof(T) + 7) & ~7UL) - \
+                                                              ((sizeof(T) + 7) & ~7UL)))))
 
 #define va_end(ap) ((void)(ap))
 

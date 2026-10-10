@@ -27,38 +27,38 @@ enum {
 };
 
 // The special registers, by their number in get and put.
-#define MMIX_SPECIALS(X)                                                                   \
-    X(rB, 0)                                                                               \
-    X(rD, 1)                                                                               \
-    X(rE, 2)                                                                               \
-    X(rH, 3)                                                                               \
-    X(rJ, 4)                                                                               \
-    X(rM, 5)                                                                               \
-    X(rR, 6)                                                                               \
-    X(rBB, 7)                                                                              \
-    X(rC, 8)                                                                               \
-    X(rN, 9)                                                                               \
-    X(rO, 10)                                                                              \
-    X(rS, 11)                                                                              \
-    X(rI, 12)                                                                              \
-    X(rT, 13)                                                                              \
-    X(rTT, 14)                                                                             \
-    X(rK, 15)                                                                              \
-    X(rQ, 16)                                                                              \
-    X(rU, 17)                                                                              \
-    X(rV, 18)                                                                              \
-    X(rG, 19)                                                                              \
-    X(rL, 20)                                                                              \
-    X(rA, 21)                                                                              \
-    X(rF, 22)                                                                              \
-    X(rP, 23)                                                                              \
-    X(rW, 24)                                                                              \
-    X(rX, 25)                                                                              \
-    X(rY, 26)                                                                              \
-    X(rZ, 27)                                                                              \
-    X(rWW, 28)                                                                             \
-    X(rXX, 29)                                                                             \
-    X(rYY, 30)                                                                             \
+#define MMIX_SPECIALS(X) \
+    X(rB, 0)             \
+    X(rD, 1)             \
+    X(rE, 2)             \
+    X(rH, 3)             \
+    X(rJ, 4)             \
+    X(rM, 5)             \
+    X(rR, 6)             \
+    X(rBB, 7)            \
+    X(rC, 8)             \
+    X(rN, 9)             \
+    X(rO, 10)            \
+    X(rS, 11)            \
+    X(rI, 12)            \
+    X(rT, 13)            \
+    X(rTT, 14)           \
+    X(rK, 15)            \
+    X(rQ, 16)            \
+    X(rU, 17)            \
+    X(rV, 18)            \
+    X(rG, 19)            \
+    X(rL, 20)            \
+    X(rA, 21)            \
+    X(rF, 22)            \
+    X(rP, 23)            \
+    X(rW, 24)            \
+    X(rX, 25)            \
+    X(rY, 26)            \
+    X(rZ, 27)            \
+    X(rWW, 28)           \
+    X(rXX, 29)           \
+    X(rYY, 30)           \
     X(rZZ, 31)
 
 typedef enum {
@@ -107,124 +107,124 @@ typedef enum {
 } Mmix_Form;
 
 // Opcode, mnemonic, form.  The mnemonics are lowercase, as everywhere in this project.
-#define MMIX_OPS(X)                                                                        \
-    X(ADD, "add", XYZ)                                                                     \
-    X(ADDU, "addu", XYZ)                                                                   \
-    X(SUB, "sub", XYZ)                                                                     \
-    X(SUBU, "subu", XYZ)                                                                   \
-    X(MUL, "mul", XYZ)                                                                     \
-    X(MULU, "mulu", XYZ)                                                                   \
-    X(DIV, "div", XYZ)                                                                     \
-    X(DIVU, "divu", XYZ)                                                                   \
-    X(NEG, "neg", NEG)                                                                     \
-    X(NEGU, "negu", NEG)                                                                   \
-    X(ADDU2, "2addu", XYZ)                                                                 \
-    X(ADDU4, "4addu", XYZ)                                                                 \
-    X(ADDU8, "8addu", XYZ)                                                                 \
-    X(ADDU16, "16addu", XYZ)                                                               \
-    X(CMP, "cmp", XYZ)                                                                     \
-    X(CMPU, "cmpu", XYZ)                                                                   \
-    X(SL, "sl", XYZ)                                                                       \
-    X(SLU, "slu", XYZ)                                                                     \
-    X(SR, "sr", XYZ)                                                                       \
-    X(SRU, "sru", XYZ)                                                                     \
-    X(AND, "and", XYZ)                                                                     \
-    X(OR, "or", XYZ)                                                                       \
-    X(XOR, "xor", XYZ)                                                                     \
-    X(ANDN, "andn", XYZ)                                                                   \
-    X(ORN, "orn", XYZ)                                                                     \
-    X(NAND, "nand", XYZ)                                                                   \
-    X(NOR, "nor", XYZ)                                                                     \
-    X(NXOR, "nxor", XYZ)                                                                   \
-    X(FADD, "fadd", FP)                                                                   \
-    X(FSUB, "fsub", FP)                                                                   \
-    X(FMUL, "fmul", FP)                                                                   \
-    X(FDIV, "fdiv", FP)                                                                   \
-    X(FCMP, "fcmp", FP)                                                                   \
-    X(FEQL, "feql", FP)                                                                   \
-    X(FUN, "fun", FP)                                                                     \
-    X(FSQRT, "fsqrt", ROUND)                                                                  \
-    X(FIX, "fix", ROUND)                                                                     \
-    X(FIXU, "fixu", ROUND)                                                                   \
-    X(FLOT, "flot", XZ)                                                                    \
-    X(FLOTU, "flotu", XZ)                                                                  \
-    X(SFLOT, "sflot", XZ)                                                                  \
-    X(SFLOTU, "sflotu", XZ)                                                                \
-    X(ZSN, "zsn", XYZ)                                                                     \
-    X(ZSZ, "zsz", XYZ)                                                                     \
-    X(ZSP, "zsp", XYZ)                                                                     \
-    X(ZSOD, "zsod", XYZ)                                                                   \
-    X(ZSNN, "zsnn", XYZ)                                                                   \
-    X(ZSNZ, "zsnz", XYZ)                                                                   \
-    X(ZSNP, "zsnp", XYZ)                                                                   \
-    X(ZSEV, "zsev", XYZ)                                                                   \
-    X(CSN, "csn", XYZ)                                                                     \
-    X(CSZ, "csz", XYZ)                                                                     \
-    X(CSP, "csp", XYZ)                                                                     \
-    X(CSOD, "csod", XYZ)                                                                   \
-    X(CSNN, "csnn", XYZ)                                                                   \
-    X(CSNZ, "csnz", XYZ)                                                                   \
-    X(CSNP, "csnp", XYZ)                                                                   \
-    X(CSEV, "csev", XYZ)                                                                   \
-    X(LDB, "ldb", MEM)                                                                     \
-    X(LDBU, "ldbu", MEM)                                                                   \
-    X(LDW, "ldw", MEM)                                                                     \
-    X(LDWU, "ldwu", MEM)                                                                   \
-    X(LDT, "ldt", MEM)                                                                     \
-    X(LDTU, "ldtu", MEM)                                                                   \
-    X(LDO, "ldo", MEM)                                                                     \
-    X(LDSF, "ldsf", MEM)                                                                   \
-    X(STB, "stb", MEM)                                                                     \
-    X(STBU, "stbu", MEM)                                                                   \
-    X(STW, "stw", MEM)                                                                     \
-    X(STWU, "stwu", MEM)                                                                   \
-    X(STT, "stt", MEM)                                                                     \
-    X(STTU, "sttu", MEM)                                                                   \
-    X(STO, "sto", MEM)                                                                     \
-    X(STSF, "stsf", MEM)                                                                   \
-    X(SET, "set", XY)                                                                      \
-    X(SETH, "seth", WYDE)                                                                  \
-    X(SETMH, "setmh", WYDE)                                                                \
-    X(SETML, "setml", WYDE)                                                                \
-    X(SETL, "setl", WYDE)                                                                  \
-    X(INCH, "inch", WYDE)                                                                  \
-    X(INCMH, "incmh", WYDE)                                                                \
-    X(INCML, "incml", WYDE)                                                                \
-    X(INCL, "incl", WYDE)                                                                  \
-    X(ORH, "orh", WYDE)                                                                    \
-    X(ORMH, "ormh", WYDE)                                                                  \
-    X(ORML, "orml", WYDE)                                                                  \
-    X(ORL, "orl", WYDE)                                                                    \
-    X(ANDNH, "andnh", WYDE)                                                                \
-    X(ANDNMH, "andnmh", WYDE)                                                              \
-    X(ANDNML, "andnml", WYDE)                                                              \
-    X(ANDNL, "andnl", WYDE)                                                                \
-    X(LDA, "lda", ADDR)                                                                    \
-    X(GETA, "geta", ADDR)                                                                  \
-    X(BN, "bn", BRANCH)                                                                    \
-    X(BZ, "bz", BRANCH)                                                                    \
-    X(BP, "bp", BRANCH)                                                                    \
-    X(BOD, "bod", BRANCH)                                                                  \
-    X(BNN, "bnn", BRANCH)                                                                  \
-    X(BNZ, "bnz", BRANCH)                                                                  \
-    X(BNP, "bnp", BRANCH)                                                                  \
-    X(BEV, "bev", BRANCH)                                                                  \
-    X(PBN, "pbn", BRANCH)                                                                  \
-    X(PBZ, "pbz", BRANCH)                                                                  \
-    X(PBP, "pbp", BRANCH)                                                                  \
-    X(PBOD, "pbod", BRANCH)                                                                \
-    X(PBNN, "pbnn", BRANCH)                                                                \
-    X(PBNZ, "pbnz", BRANCH)                                                                \
-    X(PBNP, "pbnp", BRANCH)                                                                \
-    X(PBEV, "pbev", BRANCH)                                                                \
-    X(JMP, "jmp", JUMP)                                                                    \
-    X(GO, "go", XYZ)                                                                       \
-    X(PUSHJ, "pushj", PUSHJ)                                                               \
-    X(PUSHGO, "pushgo", XYZ)                                                               \
-    X(POP, "pop", POP)                                                                     \
-    X(GET, "get", GET)                                                                     \
-    X(PUT, "put", PUT)                                                                     \
-    X(TRAP, "trap", TRAP)                                                                  \
+#define MMIX_OPS(X)           \
+    X(ADD, "add", XYZ)        \
+    X(ADDU, "addu", XYZ)      \
+    X(SUB, "sub", XYZ)        \
+    X(SUBU, "subu", XYZ)      \
+    X(MUL, "mul", XYZ)        \
+    X(MULU, "mulu", XYZ)      \
+    X(DIV, "div", XYZ)        \
+    X(DIVU, "divu", XYZ)      \
+    X(NEG, "neg", NEG)        \
+    X(NEGU, "negu", NEG)      \
+    X(ADDU2, "2addu", XYZ)    \
+    X(ADDU4, "4addu", XYZ)    \
+    X(ADDU8, "8addu", XYZ)    \
+    X(ADDU16, "16addu", XYZ)  \
+    X(CMP, "cmp", XYZ)        \
+    X(CMPU, "cmpu", XYZ)      \
+    X(SL, "sl", XYZ)          \
+    X(SLU, "slu", XYZ)        \
+    X(SR, "sr", XYZ)          \
+    X(SRU, "sru", XYZ)        \
+    X(AND, "and", XYZ)        \
+    X(OR, "or", XYZ)          \
+    X(XOR, "xor", XYZ)        \
+    X(ANDN, "andn", XYZ)      \
+    X(ORN, "orn", XYZ)        \
+    X(NAND, "nand", XYZ)      \
+    X(NOR, "nor", XYZ)        \
+    X(NXOR, "nxor", XYZ)      \
+    X(FADD, "fadd", FP)       \
+    X(FSUB, "fsub", FP)       \
+    X(FMUL, "fmul", FP)       \
+    X(FDIV, "fdiv", FP)       \
+    X(FCMP, "fcmp", FP)       \
+    X(FEQL, "feql", FP)       \
+    X(FUN, "fun", FP)         \
+    X(FSQRT, "fsqrt", ROUND)  \
+    X(FIX, "fix", ROUND)      \
+    X(FIXU, "fixu", ROUND)    \
+    X(FLOT, "flot", XZ)       \
+    X(FLOTU, "flotu", XZ)     \
+    X(SFLOT, "sflot", XZ)     \
+    X(SFLOTU, "sflotu", XZ)   \
+    X(ZSN, "zsn", XYZ)        \
+    X(ZSZ, "zsz", XYZ)        \
+    X(ZSP, "zsp", XYZ)        \
+    X(ZSOD, "zsod", XYZ)      \
+    X(ZSNN, "zsnn", XYZ)      \
+    X(ZSNZ, "zsnz", XYZ)      \
+    X(ZSNP, "zsnp", XYZ)      \
+    X(ZSEV, "zsev", XYZ)      \
+    X(CSN, "csn", XYZ)        \
+    X(CSZ, "csz", XYZ)        \
+    X(CSP, "csp", XYZ)        \
+    X(CSOD, "csod", XYZ)      \
+    X(CSNN, "csnn", XYZ)      \
+    X(CSNZ, "csnz", XYZ)      \
+    X(CSNP, "csnp", XYZ)      \
+    X(CSEV, "csev", XYZ)      \
+    X(LDB, "ldb", MEM)        \
+    X(LDBU, "ldbu", MEM)      \
+    X(LDW, "ldw", MEM)        \
+    X(LDWU, "ldwu", MEM)      \
+    X(LDT, "ldt", MEM)        \
+    X(LDTU, "ldtu", MEM)      \
+    X(LDO, "ldo", MEM)        \
+    X(LDSF, "ldsf", MEM)      \
+    X(STB, "stb", MEM)        \
+    X(STBU, "stbu", MEM)      \
+    X(STW, "stw", MEM)        \
+    X(STWU, "stwu", MEM)      \
+    X(STT, "stt", MEM)        \
+    X(STTU, "sttu", MEM)      \
+    X(STO, "sto", MEM)        \
+    X(STSF, "stsf", MEM)      \
+    X(SET, "set", XY)         \
+    X(SETH, "seth", WYDE)     \
+    X(SETMH, "setmh", WYDE)   \
+    X(SETML, "setml", WYDE)   \
+    X(SETL, "setl", WYDE)     \
+    X(INCH, "inch", WYDE)     \
+    X(INCMH, "incmh", WYDE)   \
+    X(INCML, "incml", WYDE)   \
+    X(INCL, "incl", WYDE)     \
+    X(ORH, "orh", WYDE)       \
+    X(ORMH, "ormh", WYDE)     \
+    X(ORML, "orml", WYDE)     \
+    X(ORL, "orl", WYDE)       \
+    X(ANDNH, "andnh", WYDE)   \
+    X(ANDNMH, "andnmh", WYDE) \
+    X(ANDNML, "andnml", WYDE) \
+    X(ANDNL, "andnl", WYDE)   \
+    X(LDA, "lda", ADDR)       \
+    X(GETA, "geta", ADDR)     \
+    X(BN, "bn", BRANCH)       \
+    X(BZ, "bz", BRANCH)       \
+    X(BP, "bp", BRANCH)       \
+    X(BOD, "bod", BRANCH)     \
+    X(BNN, "bnn", BRANCH)     \
+    X(BNZ, "bnz", BRANCH)     \
+    X(BNP, "bnp", BRANCH)     \
+    X(BEV, "bev", BRANCH)     \
+    X(PBN, "pbn", BRANCH)     \
+    X(PBZ, "pbz", BRANCH)     \
+    X(PBP, "pbp", BRANCH)     \
+    X(PBOD, "pbod", BRANCH)   \
+    X(PBNN, "pbnn", BRANCH)   \
+    X(PBNZ, "pbnz", BRANCH)   \
+    X(PBNP, "pbnp", BRANCH)   \
+    X(PBEV, "pbev", BRANCH)   \
+    X(JMP, "jmp", JUMP)       \
+    X(GO, "go", XYZ)          \
+    X(PUSHJ, "pushj", PUSHJ)  \
+    X(PUSHGO, "pushgo", XYZ)  \
+    X(POP, "pop", POP)        \
+    X(GET, "get", GET)        \
+    X(PUT, "put", PUT)        \
+    X(TRAP, "trap", TRAP)     \
     X(SWYM, "swym", NONE)
 
 typedef enum {

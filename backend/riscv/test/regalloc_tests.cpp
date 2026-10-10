@@ -41,8 +41,8 @@ ret
 // and the callee's address is taken out first.
 TEST_F(RiscvTest, RegallocArgumentSwap)
 {
-    std::string s = Code(CompileToRiscv(
-        "long f(long a, long b, long (*h)(long, long)) { return h(b, a); }"));
+    std::string s =
+        Code(CompileToRiscv("long f(long a, long b, long (*h)(long, long)) { return h(b, a); }"));
     EXPECT_NE(std::string::npos, s.find(R"(mv t1, a2
 mv t0, a1
 mv a1, a0
@@ -83,8 +83,8 @@ TEST_F(RiscvTest, RegallocFloat)
 // With a call: fs registers, saved with fsd.
 TEST_F(RiscvTest, RegallocFloatCalls)
 {
-    std::string s = Code(CompileToRiscv(
-        "double h(double);\ndouble g(double x) { double y = h(x); return y + x; }"));
+    std::string s = Code(
+        CompileToRiscv("double h(double);\ndouble g(double x) { double y = h(x); return y + x; }"));
     EXPECT_NE(std::string::npos, s.find("fsd fs0, 0(sp)\n")) << s;
     EXPECT_NE(std::string::npos, s.find("fld fs0, 0(sp)\n")) << s;
 }
@@ -120,7 +120,8 @@ int main(void)
 TEST_F(RiscvTest, RegallocCoalesce)
 {
     DisableOptimization();
-    std::string s = Code(CompileToRiscv("long f(long a) { long b = a; long c = b; return c + 1; }"));
+    std::string s =
+        Code(CompileToRiscv("long f(long a) { long b = a; long c = b; return c + 1; }"));
     EXPECT_EQ(std::string::npos, s.find("mv ")) << s;
 }
 

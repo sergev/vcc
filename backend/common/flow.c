@@ -36,8 +36,7 @@ static void visit_val(const Flow *f, const Tac_Val *v, NameVisitor fn, void *arg
 }
 
 // Visit the names `in` reads (`defs` false) or writes (`defs` true).
-static void operands(const Flow *f, const Tac_Instruction *in, bool defs, NameVisitor fn,
-                     void *arg)
+static void operands(const Flow *f, const Tac_Instruction *in, bool defs, NameVisitor fn, void *arg)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_RETURN:
@@ -169,8 +168,8 @@ void flow_step(const Flow *f, const Tac_Instruction *in, Flow_Set *live)
 
 Flow_Set *flow_set_new(const Flow *f)
 {
-    Flow_Set *s = xalloc((f->words ? f->words : 1) * sizeof(Flow_Set), __func__, __FILE__,
-                         __LINE__);
+    Flow_Set *s =
+        xalloc((f->words ? f->words : 1) * sizeof(Flow_Set), __func__, __FILE__, __LINE__);
     memset(s, 0, (f->words ? f->words : 1) * sizeof(Flow_Set));
     return s;
 }
@@ -237,8 +236,8 @@ static int count_list(const Tac_Param *p)
 static void build_vars(Flow *f)
 {
     const Tac_TopLevel *fn = f->fn;
-    int max  = count_list(fn->u.function.params) + count_list(fn->u.function.locals);
-    f->names = xalloc((max ? max : 1) * sizeof(char *), __func__, __FILE__, __LINE__);
+    int max                = count_list(fn->u.function.params) + count_list(fn->u.function.locals);
+    f->names               = xalloc((max ? max : 1) * sizeof(char *), __func__, __FILE__, __LINE__);
     f->types = xalloc((max ? max : 1) * sizeof(Tac_Type *), __func__, __FILE__, __LINE__);
     map_init(&f->index);
     int n = 0;
@@ -314,7 +313,8 @@ static void build_blocks(Flow *f)
             xfree(blk->succ);
             blk->succ = xalloc(k * sizeof(int), __func__, __FILE__, __LINE__);
             for (int j = 0; j < k; j++) {
-                const char *l = j < k - 1 ? in->u.jump_table.targets[j] : in->u.jump_table.default_target;
+                const char *l =
+                    j < k - 1 ? in->u.jump_table.targets[j] : in->u.jump_table.default_target;
                 intptr_t t;
                 if (!map_get(&labels, l, &t))
                     internal_error("flow: %s: no label %s", f->fn->u.function.name, l);
@@ -396,7 +396,7 @@ Flow *flow_build(const Tac_TopLevel *fn)
         f->ninstrs++;
     f->instrs = xalloc((f->ninstrs ? f->ninstrs : 1) * sizeof(Tac_Instruction *), __func__,
                        __FILE__, __LINE__);
-    int i = 0;
+    int i     = 0;
     for (const Tac_Instruction *in = fn->u.function.body; in; in = in->next)
         f->instrs[i++] = in;
     build_vars(f);

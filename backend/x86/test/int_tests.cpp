@@ -5,12 +5,12 @@
 #include "x86_test.h"
 
 // A test of one translation unit: its code contains `expected`.
-#define EXPECT_HAS(name, expected, src)                                         \
-    TEST_F(X86Test, name)                                                    \
-    {                                                                           \
-        NaiveSelection();                                                       \
-        std::string code = Code(CompileToX86(src));                             \
-        EXPECT_NE(std::string::npos, code.find(expected)) << code;              \
+#define EXPECT_HAS(name, expected, src)                            \
+    TEST_F(X86Test, name)                                          \
+    {                                                              \
+        NaiveSelection();                                          \
+        std::string code = Code(CompileToX86(src));                \
+        EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
 
 // Parameters are stored to slots; the second operand comes straight from memory.
@@ -27,8 +27,7 @@ leave
 ret
 )",
             "int f(int a, int b) { return a + b; }")
-EXPECT_HAS(SubImmediate, "movq -8(%rbp), %rax\nsubq $5, %rax\n",
-           "long f(long a) { return a - 5; }")
+EXPECT_HAS(SubImmediate, "movq -8(%rbp), %rax\nsubq $5, %rax\n", "long f(long a) { return a - 5; }")
 // A 64-bit constant beyond 32 bits is no immediate: it goes through r10.
 EXPECT_HAS(WideImmediate, "movabsq $4886718345, %r10\nandq %r10, %rax\n",
            "long f(long a) { return a & 0x123456789L; }")

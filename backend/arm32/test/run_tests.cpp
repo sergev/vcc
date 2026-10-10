@@ -49,20 +49,20 @@ main:
     movw    r0, #:lower16:buf
     movt    r0, #:upper16:buf
     ldr     r1, [r0, #1]
-)" // bytes 1-4 of {1, 4}
-                              "    lsr     r1, r1, #24\n"  // 4
+)"                                                        // bytes 1-4 of {1, 4}
+                              "    lsr     r1, r1, #24\n" // 4
                               R"(    vmov.f64 d0, #1.5
     vadd.f64 d0, d0, d0
     vcvt.s32.f64 s0, d0
     vmov    r2, s0
-)" // 3
+)"                                                        // 3
                               R"(    mov     r3, #-42
     mov     r12, #21
     sdiv    r3, r3, r12
-)" // -2
+)"                                                        // -2
                               R"(    add     r0, r1, r2
     add     r0, r0, r3
-)" // 4 + 3 - 2
+)"                                                        // 4 + 3 - 2
                               R"(    bx      lr
     .data
 buf:

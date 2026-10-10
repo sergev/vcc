@@ -19,8 +19,8 @@ extern "C" {
 // (d<k> is s<2k> used at double width), then virtual registers.
 enum {
     A32_R0   = 0,
-    A32_R4   = 4,  // first callee-saved
-    A32_R9   = 9,  // platform register: callee-saved on bare-metal EABI
+    A32_R4   = 4, // first callee-saved
+    A32_R9   = 9, // platform register: callee-saved on bare-metal EABI
     A32_R10  = 10,
     A32_FP   = 11, // frame pointer (ARM state)
     A32_IP   = 12, // scratch, may be clobbered by linker veneers
@@ -86,29 +86,50 @@ typedef struct {
 
 // Opcode and mnemonic.  A condition and the S suffix go before any `.type` suffix.
 // EPILOGUE is a marker the frame pass replaces by the function's return sequence.
-#define A32_OPS(X)                                                                         \
-    X(MOV, "mov") X(MVN, "mvn") X(MOVW, "movw") X(MOVT, "movt") X(ADD, "add") X(SUB, "sub") \
-    X(LDR, "ldr") X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh")       \
-    X(STR, "str") X(STRB, "strb") X(STRH, "strh") X(LDRD, "ldrd") X(STRD, "strd")           \
-    X(PUSH, "push") X(POP, "pop")                                                           \
-    X(BX, "bx") X(VLDR, "vldr") X(VSTR, "vstr") X(VMOV, "vmov") X(VPUSH, "vpush")           \
-    X(VPOP, "vpop") X(SXTB, "sxtb") X(SXTH, "sxth") X(UXTB, "uxtb") X(UXTH, "uxth")       \
-    X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc") X(AND, "and") X(ORR, "orr")     \
-    X(EOR, "eor") X(BIC, "bic") X(MUL, "mul") X(MLA, "mla") X(MLS, "mls")                   \
-    X(UMULL, "umull") X(SDIV, "sdiv") X(UDIV, "udiv") X(LSL, "lsl") X(LSR, "lsr")           \
-    X(ASR, "asr") X(UBFX, "ubfx") X(SBFX, "sbfx") X(BFI, "bfi") X(BFC, "bfc")               \
-    X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(BL, "bl") X(BLX, "blx")           \
-    X(VADD_F32, "vadd.f32") X(VADD_F64, "vadd.f64")                                         \
-    X(VSUB_F32, "vsub.f32") X(VSUB_F64, "vsub.f64") X(VMUL_F32, "vmul.f32")                 \
-    X(VMUL_F64, "vmul.f64") X(VDIV_F32, "vdiv.f32") X(VDIV_F64, "vdiv.f64")                 \
-    X(VNEG_F32, "vneg.f32") X(VNEG_F64, "vneg.f64") X(VSQRT_F64, "vsqrt.f64")              \
-    X(VCMP_F32, "vcmp.f32")                                                                 \
-    X(VCMP_F64, "vcmp.f64") X(VMRS, "vmrs") X(VMOV_F32, "vmov.f32") X(VMOV_F64, "vmov.f64") \
-    X(VCVT_F64_F32, "vcvt.f64.f32") X(VCVT_F32_F64, "vcvt.f32.f64")                         \
-    X(VCVT_F32_S32, "vcvt.f32.s32") X(VCVT_F32_U32, "vcvt.f32.u32")                         \
-    X(VCVT_F64_S32, "vcvt.f64.s32") X(VCVT_F64_U32, "vcvt.f64.u32")                         \
-    X(VCVT_S32_F32, "vcvt.s32.f32") X(VCVT_U32_F32, "vcvt.u32.f32")                         \
-    X(VCVT_S32_F64, "vcvt.s32.f64") X(VCVT_U32_F64, "vcvt.u32.f64") X(EPILOGUE, "<epilogue>")
+#define A32_OPS(X)                                                                                  \
+    X(MOV, "mov")                                                                                   \
+    X(MVN, "mvn") X(MOVW, "movw") X(MOVT, "movt") X(ADD, "add") X(SUB, "sub") X(LDR, "ldr")         \
+        X(LDRB, "ldrb") X(LDRSB, "ldrsb") X(LDRH, "ldrh") X(LDRSH, "ldrsh") X(STR, "str")           \
+            X(STRB, "strb") X(STRH, "strh") X(LDRD, "ldrd") X(STRD, "strd") X(PUSH, "push") X(      \
+                POP, "pop") X(BX, "bx") X(VLDR, "vldr") X(VSTR, "vstr") X(VMOV, "vmov")             \
+                X(VPUSH, "vpush") X(VPOP, "vpop") X(SXTB, "sxtb") X(SXTH, "sxth") X(UXTB, "uxtb")   \
+                    X(UXTH, "uxth") X(ADC, "adc") X(SBC, "sbc") X(RSB, "rsb") X(RSC, "rsc")         \
+                        X(AND, "and") X(ORR, "orr") X(EOR, "eor") X(BIC, "bic") X(MUL, "mul")       \
+                            X(MLA, "mla") X(MLS, "mls") X(UMULL, "umull") X(SDIV, "sdiv")           \
+                                X(UDIV, "udiv") X(LSL, "lsl") X(LSR, "lsr") X(ASR, "asr")           \
+                                    X(UBFX, "ubfx") X(SBFX, "sbfx") X(BFI, "bfi") X(BFC, "bfc")     \
+                                        X(CMP, "cmp") X(CMN, "cmn") X(TST, "tst") X(B, "b") X(      \
+                                            BL, "bl") X(BLX, "blx") X(VADD_F32, "vadd.f32")         \
+                                            X(VADD_F64, "vadd.f64") X(VSUB_F32, "vsub.f32") X(      \
+                                                VSUB_F64, "vsub.f64") X(VMUL_F32, "vmul.f32")       \
+                                                X(VMUL_F64, "vmul.f64") X(VDIV_F32, "vdiv.f32") X(  \
+                                                    VDIV_F64, "vdiv.f64") X(VNEG_F32, "vneg.f32")   \
+                                                    X(VNEG_F64, "vneg.f64") X(                      \
+                                                        VSQRT_F64,                                  \
+                                                        "vsqrt.f64") X(VCMP_F32, "vcmp.f32")        \
+                                                        X(VCMP_F64, "vcmp.f64") X(VMRS, "vmrs") X(  \
+                                                            VMOV_F32, "vmov.f32") X(VMOV_F64,       \
+                                                                                    "vmov.f64")     \
+                                                            X(VCVT_F64_F32, "vcvt.f64.f32") X(      \
+                                                                VCVT_F32_F64, "vcvt.f32.f64")       \
+                                                                X(VCVT_F32_S32, "vcvt.f32.s32") X(  \
+                                                                    VCVT_F32_U32, "vcvt.f32.u32")   \
+                                                                    X(VCVT_F64_S32, "vcvt.f64."     \
+                                                                                    "s32") X(       \
+                                                                        VCVT_F64_U32,               \
+                                                                        "vcvt.f64.u32")             \
+                                                                        X(VCVT_S32_F32,             \
+                                                                          "vcvt.s32.f32")           \
+                                                                            X(VCVT_U32_F32,         \
+                                                                              "vcvt.u32.f32")       \
+                                                                                X(VCVT_S32_F64,     \
+                                                                                  "vcvt.s32.f64")   \
+                                                                                    X(VCVT_U32_F64, \
+                                                                                      "vcvt.u32."   \
+                                                                                      "f64")        \
+                                                                                        X(EPILOGUE, \
+                                                                                          "<epilo"  \
+                                                                                          "gue>")
 
 typedef enum {
 #define A32_ENUM(op, mnem) A32_##op,
@@ -150,9 +171,9 @@ A32_Block *a32_new_block(A32_Func *fn, const char *label);
 A32_Instr *a32_append(A32_Func *fn, A32_Op op);
 void a32_free_func(A32_Func *fn);
 
-A32_Operand a32_reg(int reg);              // a core register
-A32_Operand a32_sreg(int reg);             // reg at single precision
-A32_Operand a32_dreg(int reg);             // reg (an even single) at double precision
+A32_Operand a32_reg(int reg);  // a core register
+A32_Operand a32_sreg(int reg); // reg at single precision
+A32_Operand a32_dreg(int reg); // reg (an even single) at double precision
 A32_Operand a32_imm(int64_t imm);
 A32_Operand a32_fpimm(double value);
 // Whether `value` is a VFP immediate: ±n/16 * 2^e with n in 16..31 and e in -3..4.

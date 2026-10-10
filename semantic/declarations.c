@@ -137,9 +137,9 @@ static const char *auto_local_name(const char *source, const Type *type)
 
 static bool valid_alignment(long a)
 {
-    size_t max = target_config->ldouble_align;
-    const size_t aligns[] = { target_config->int_align,    target_config->long_align,
-                              target_config->llong_align,  target_config->double_align,
+    size_t max            = target_config->ldouble_align;
+    const size_t aligns[] = { target_config->int_align, target_config->long_align,
+                              target_config->llong_align, target_config->double_align,
                               target_config->pointer_align };
     for (size_t i = 0; i < sizeof(aligns) / sizeof(aligns[0]); i++)
         if (aligns[i] > max)
@@ -176,10 +176,10 @@ static int alignment_spec_value(AlignmentSpec *as)
     }
     if (a != 0 && !valid_alignment(a))
         fatal_error("invalid alignment %ld in '_Alignas'", a);
-    as->kind                           = ALIGN_SPEC_EXPR;
-    as->u.expr                         = new_expression(EXPR_LITERAL);
-    as->u.expr->u.literal              = new_literal(LITERAL_INT);
-    as->u.expr->u.literal->u.int_val   = a;
+    as->kind                         = ALIGN_SPEC_EXPR;
+    as->u.expr                       = new_expression(EXPR_LITERAL);
+    as->u.expr->u.literal            = new_literal(LITERAL_INT);
+    as->u.expr->u.literal->u.int_val = a;
     return (int)a;
 }
 
@@ -268,9 +268,8 @@ static void adjust_function_params(Type *fn_type)
         reject_alignas(p->specifiers, "a parameter");
         const Type *pt = unalias(p->type);
         if (pt->kind == TYPE_ARRAY) {
-            Type *ptr = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
-            ptr->u.pointer.target =
-                clone_type(pt->u.array.element, __func__, __FILE__, __LINE__);
+            Type *ptr             = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
+            ptr->u.pointer.target = clone_type(pt->u.array.element, __func__, __FILE__, __LINE__);
             // pt aliases p->type and its element is already cloned, so free the
             // original (cloned) array type before replacing it with the pointer.
             free_type(p->type);
@@ -404,7 +403,7 @@ static void register_enum_constants(const Type *enum_type)
         next_val = val + 1;
         // C11 §6.7.2.2p2: the value is representable as an int.  One that fits only
         // unsigned int wraps, as gcc and clang accept it.
-        int bits = target_config->int_bits;
+        int bits      = target_config->int_bits;
         uint64_t umax = unsigned_narrow(~(uint64_t)0, (int)target_config->int_size * 8);
         if (bits < 64 && (val < 0 ? val < -(1L << (bits - 1)) : (uint64_t)val > umax))
             fatal_error("value %ld of enumerator '%s' does not fit in 'int'", val, e->name);
@@ -530,8 +529,8 @@ static void place_bitfield(FieldDef *m, int size, int alignment)
 {
     int start = m->offset;
     int width = m->bf.width;
-    int first = start / 8;                  // first byte holding the field
-    int end   = (start + width + 7) / 8;    // past its last byte
+    int first = start / 8;               // first byte holding the field
+    int end   = (start + width + 7) / 8; // past its last byte
     int base  = first;
     int unit  = end - first;
     bool fits = false;
@@ -561,11 +560,11 @@ static void place_bitfield(FieldDef *m, int size, int alignment)
             fits = true;
         }
     }
-    int bit           = start - base * 8; // from the unit's first byte in memory
-    m->offset         = base;
-    m->bf.unit_size   = unit;
-    m->bf.bytewise    = !fits;
-    m->bf.pos         = target_config && target_config->big_endian ? unit * 8 - bit - width : bit;
+    int bit         = start - base * 8; // from the unit's first byte in memory
+    m->offset       = base;
+    m->bf.unit_size = unit;
+    m->bf.bytewise  = !fits;
+    m->bf.pos       = target_config && target_config->big_endian ? unit * 8 - bit - width : bit;
 }
 
 // Register a struct/union type definition in the struct table.
@@ -610,18 +609,18 @@ static void register_struct_type(const Type *t)
             fatal_error("'%s' was declared as a different kind of tag", t->u.struct_t.name);
     }
     validate_struct_definition(t->u.struct_t.name, t->u.struct_t.fields);
-    FieldDef *members     = NULL;
-    FieldDef **tail       = &members;
+    FieldDef *members = NULL;
+    FieldDef **tail   = &members;
     // The layout advances in bits, for the bit-fields; every other member starts on a
     // byte, at the next multiple of its alignment.
-    int current_bits      = 0;
+    int current_bits = 0;
     // The unnamed bit-fields, for a target whose ABI sees them (Target.bitfield_unit_per_field,
     // Target.bitfield_access_bits).
-    bool keep_unnamed     = target_config && (target_config->bitfield_unit_per_field ||
-                                              target_config->bitfield_access_bits);
-    FieldDef *unnamed     = NULL;
+    bool keep_unnamed       = target_config && (target_config->bitfield_unit_per_field ||
+                                                target_config->bitfield_access_bits);
+    FieldDef *unnamed       = NULL;
     FieldDef **unnamed_tail = &unnamed;
-    int declared          = 0; // fields declared so far
+    int declared            = 0; // fields declared so far
     // On a word-addressed target every aggregate is padded to at least one machine word
     // (Target.aggregate_align) so array element strides stay word multiples and &arr[i]
     // never lands mid-word; byte-addressed targets use natural C packing (align 1).
@@ -642,22 +641,21 @@ static void register_struct_type(const Type *t)
         if (alignas > member_alignment)
             member_alignment = alignas;
         if (f->u.member.bitfield) {
-            int start = layout_bitfield(f, kind == TYPE_STRUCT ? current_bits : 0,
-                                        &current_alignment);
+            int start =
+                layout_bitfield(f, kind == TYPE_STRUCT ? current_bits : 0, &current_alignment);
             int width = bitfield_width(f);
             if (f->u.member.name) {
                 // The storage unit is chosen once the struct's size is known.
-                *tail = new_member(f->u.member.name,
-                                   clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
-                                   start);
+                *tail =
+                    new_member(f->u.member.name,
+                               clone_type(f->u.member.type, __func__, __FILE__, __LINE__), start);
                 (*tail)->bf.width = width;
                 (*tail)->index    = declared;
                 tail              = &(*tail)->next;
             } else if (keep_unnamed) {
-                *unnamed_tail = new_member(NULL,
-                                           clone_type(f->u.member.type, __func__, __FILE__,
-                                                      __LINE__),
-                                           width ? start : start / 8);
+                *unnamed_tail =
+                    new_member(NULL, clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
+                               width ? start : start / 8);
                 (*unnamed_tail)->bf.width = width;
                 (*unnamed_tail)->index    = declared;
                 unnamed_tail              = &(*unnamed_tail)->next;
@@ -669,9 +667,8 @@ static void register_struct_type(const Type *t)
         int offset = 0;
         if (kind == TYPE_STRUCT)
             offset = round_away_from_zero(member_alignment, (current_bits + 7) / 8);
-        *tail          = new_member(f->u.member.name,
-                                    clone_type(f->u.member.type, __func__, __FILE__, __LINE__),
-                                    offset);
+        *tail = new_member(f->u.member.name,
+                           clone_type(f->u.member.type, __func__, __FILE__, __LINE__), offset);
         (*tail)->index = declared;
         tail           = &(*tail)->next;
         current_alignment =
@@ -859,7 +856,7 @@ static void typecheck_local_var_decl(const Declaration *d)
             // it a backend name unique within this function; the symbol is keyed by the source
             // name so in-scope references still resolve, while its display name carries the
             // (possibly suffixed) backend name that typecheck_var propagates to references.
-            const char *backend = static_locals_add(decl->name, var_type, static_init);
+            const char *backend             = static_locals_add(decl->name, var_type, static_init);
             static_locals_head()->alignment = declared_alignment(d->u.var.specifiers, var_type);
             symtab_add_static_var_scoped(decl->name, var_type, false, INIT_INITIALIZED, NULL,
                                          scope_level);
@@ -892,9 +889,9 @@ static void typecheck_local_var_decl(const Declaration *d)
         }
         bool unsized = unalias(var_type)->kind == TYPE_ARRAY && !unalias(var_type)->u.array.size;
         symtab_add_automatic_var_type(decl->name, var_type, scope_level);
-        Symbol *sym          = symtab_get(decl->name);
-        const char *backend  = auto_local_name(decl->name, unsized ? NULL : var_type);
-        bool renamed         = strcmp(decl->name, backend) != 0;
+        Symbol *sym         = symtab_get(decl->name);
+        const char *backend = auto_local_name(decl->name, unsized ? NULL : var_type);
+        bool renamed        = strcmp(decl->name, backend) != 0;
         if (renamed) {
             // Set before the initializer, which may refer to the variable itself.
             xfree(sym->name);
@@ -1038,9 +1035,8 @@ static bool stmt_falls_through(const Stmt *s)
         // A non-constant guard may be false on entry, so the loop is skippable
         // and certainly falls through.  An always-true guard falls through only
         // via a break that exits this loop.
-        return is_const_true(s->u.while_stmt.condition)
-                   ? contains_own_break(s->u.while_stmt.body)
-                   : true;
+        return is_const_true(s->u.while_stmt.condition) ? contains_own_break(s->u.while_stmt.body)
+                                                        : true;
     case STMT_FOR:
         // for(;;) has a NULL condition, an always-true guard.
         return (!s->u.for_stmt.condition || is_const_true(s->u.for_stmt.condition))
@@ -1053,8 +1049,7 @@ static bool stmt_falls_through(const Stmt *s)
         if (is_const_true(s->u.do_while.condition)) {
             return contains_own_break(s->u.do_while.body);
         }
-        return stmt_falls_through(s->u.do_while.body) ||
-               contains_own_break(s->u.do_while.body);
+        return stmt_falls_through(s->u.do_while.body) || contains_own_break(s->u.do_while.body);
     case STMT_LABELED:
         return stmt_falls_through(s->u.labeled.stmt);
     case STMT_CASE:
@@ -1176,8 +1171,7 @@ static void typecheck_fn_decl(ExternalDecl *d)
         // which by §5.1.2.2.3 implicitly returns 0: synthesize the return instead.
         const Type *rt = unalias(fun_type->u.function.return_type);
         if (rt->kind != TYPE_VOID && d->u.function.body &&
-            d->u.function.body->kind == STMT_COMPOUND &&
-            stmt_falls_through(d->u.function.body)) {
+            d->u.function.body->kind == STMT_COMPOUND && stmt_falls_through(d->u.function.body)) {
             if (strcmp(d->u.function.name, "main") == 0) {
                 Expr *zero                 = new_expression(EXPR_LITERAL);
                 zero->u.literal            = new_literal(LITERAL_INT);
@@ -1186,8 +1180,8 @@ static void typecheck_fn_decl(ExternalDecl *d)
                 ret_stmt->u.expr           = zero;
                 ret_stmt                   = typecheck_statement(rt, ret_stmt);
 
-                DeclOrStmt *item   = new_decl_or_stmt(DECL_OR_STMT_STMT);
-                item->u.stmt       = ret_stmt;
+                DeclOrStmt *item  = new_decl_or_stmt(DECL_OR_STMT_STMT);
+                item->u.stmt      = ret_stmt;
                 DeclOrStmt **tail = &d->u.function.body->u.compound;
                 while (*tail) {
                     tail = &(*tail)->next;
@@ -1328,7 +1322,8 @@ static void typecheck_file_scope_var_decl(Declaration *d)
                 global    = is_extern(d->u.var.specifiers) ? existing->u.static_var.global : global;
             }
         }
-        int alignment = existing && existing->kind == SYM_STATIC ? existing->u.static_var.alignment : 0;
+        int alignment =
+            existing && existing->kind == SYM_STATIC ? existing->u.static_var.alignment : 0;
         symtab_add_static_var(decl->name, var_type, global, init_kind, init_list);
         note_alignment(decl->name, alignment);
         note_alignment(decl->name, declared_alignment(d->u.var.specifiers, var_type));

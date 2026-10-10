@@ -35,7 +35,7 @@ protected:
     {
         // The translator backend of record is BESM-6 (6-byte word); pin the target so
         // sizes/offsets/alignments in the expected YAML match that machine.
-        target_config  = target_lookup("besm6");
+        target_config    = target_lookup("besm6");
         tac_yaml_types   = false; // expected output shows the instructions only
         translate_verify = 1;
         input_file       = tmpfile();
@@ -155,8 +155,8 @@ protected:
             return "not a struct";
         for (const Tac_Member *m = t->u.structure.members; m; m = m->next) {
             char *ts = tac_type_str(m->type);
-            out += std::string(out.empty() ? "" : " ") + (m->name ? m->name : "") + "@" + std::to_string(m->offset) +
-                   ":" + ts;
+            out += std::string(out.empty() ? "" : " ") + (m->name ? m->name : "") + "@" +
+                   std::to_string(m->offset) + ":" + ts;
             xfree(ts);
         }
         return out;

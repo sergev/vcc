@@ -78,7 +78,7 @@ static void build_graph(const Wasm_Func *fn, Graph *g)
     }
 
     // The successors, at most two but for br_table.
-    int cap  = 2 * n + 1;
+    int cap = 2 * n + 1;
     for (i = 0; i < n; i++)
         if (g->code[i]->op == WASM_BR_TABLE)
             cap += g->code[i]->ntable;
@@ -92,11 +92,11 @@ static void build_graph(const Wasm_Func *fn, Graph *g)
         switch (in->op) {
         case WASM_BLOCK:
         case WASM_LOOP:
-            stack[sp++] = i;
+            stack[sp++]  = i;
             g->succ[k++] = i + 1;
             break;
         case WASM_IF:
-            stack[sp++] = i;
+            stack[sp++]  = i;
             g->succ[k++] = i + 1;
             g->succ[k++] = els[i] >= 0 ? els[i] + 1 : end[i];
             break;
@@ -212,9 +212,9 @@ void wasm_coalesce_locals(Wasm_Func *fn)
         int x = (int)in->imm, copy = -1;
         const Wasm_Instr *p = i > 0 ? g.code[i - 1] : NULL;
         if (p && (p->op == WASM_LOCAL_GET || p->op == WASM_LOCAL_TEE) && p->imm != x) {
-            copy                = (int)p->imm;
-            copies[ncopies++]   = x;
-            copies[ncopies++]   = copy;
+            copy              = (int)p->imm;
+            copies[ncopies++] = x;
+            copies[ncopies++] = copy;
         }
         // Live after i: the union over its successors.
         memset(out, 0, words * sizeof(Set));
@@ -270,7 +270,7 @@ void wasm_coalesce_locals(Wasm_Func *fn)
     // local of its type that no group it interferes with holds.
     int *color          = xalloc((nv + 1) * sizeof(int), __func__, __FILE__, __LINE__);
     Wasm_ValType *ctype = xalloc((nv + 1) * sizeof(Wasm_ValType), __func__, __FILE__, __LINE__);
-    Set *held = xalloc(((size_t)nv * words + 1) * sizeof(Set), __func__, __FILE__, __LINE__);
+    Set *held   = xalloc(((size_t)nv * words + 1) * sizeof(Set), __func__, __FILE__, __LINE__);
     int ncolors = fn->nparams;
     for (int v = 0; v < nv; v++)
         color[v] = -1;

@@ -279,13 +279,13 @@ static void widen_long_literal(Literal *lit)
     int bits = (int)target_config->long_size * 8;
     if (lit->kind == LITERAL_LONG &&
         (lit->u.long_val > (1LL << (bits - 1)) - 1 || lit->u.long_val < -(1LL << (bits - 1)))) {
-        long long v              = lit->u.long_val;
-        lit->kind                = LITERAL_LONG_LONG;
-        lit->u.long_long_val     = v;
+        long long v          = lit->u.long_val;
+        lit->kind            = LITERAL_LONG_LONG;
+        lit->u.long_long_val = v;
     } else if (lit->kind == LITERAL_ULONG && lit->u.ulong_val > (1ULL << bits) - 1) {
-        unsigned long long v     = lit->u.ulong_val;
-        lit->kind                = LITERAL_ULONG_LONG;
-        lit->u.ulong_long_val    = v;
+        unsigned long long v  = lit->u.ulong_val;
+        lit->kind             = LITERAL_ULONG_LONG;
+        lit->u.ulong_long_val = v;
     }
 }
 
@@ -397,8 +397,8 @@ static Expr *fold_immediate_arg0(Expr *args, const char *name)
 // C11 §6.5.2.2: default argument promotions for variadic trailing arguments.
 static Expr *promote_variadic_arg(Expr *e)
 {
-    e                = typecheck_and_decay(e);
-    const Type *et   = unalias(e->type);
+    e              = typecheck_and_decay(e);
+    const Type *et = unalias(e->type);
     if (is_promotable_narrow(et))
         e = convert_to_kind(e, promoted_kind(et));
     else if (et->kind == TYPE_FLOAT)
@@ -474,7 +474,7 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_LITERAL:
         return typecheck_literal(e);
     case EXPR_CAST: {
-        e->u.cast.type = check_type_name(e->u.cast.type);
+        e->u.cast.type       = check_type_name(e->u.cast.type);
         Expr *inner          = typecheck_and_decay(e->u.cast.expr);
         const Type *cast_ty  = unalias(e->u.cast.type);
         const Type *inner_ty = unalias(inner->type);
@@ -551,8 +551,8 @@ static Expr *typecheck_expr_at(Expr *e)
             Expr *inner = typecheck_expr(e->u.unary_op.expr);
             // A string literal is an lvalue (an array object with static storage), so
             // &"..." yields a pointer to its char[N] type.  inner->type is already char[N].
-            bool is_string_literal = inner->kind == EXPR_LITERAL &&
-                                     inner->u.literal->kind == LITERAL_STRING;
+            bool is_string_literal =
+                inner->kind == EXPR_LITERAL && inner->u.literal->kind == LITERAL_STRING;
             if (!is_lvalue(inner) && !is_string_literal) {
                 fatal_error("cannot take the address of an rvalue of type '%s'", type_of(inner));
             }
@@ -840,12 +840,12 @@ static Expr *typecheck_expr_at(Expr *e)
             // valid int.
             // A bit-field lvalue takes part with its promoted type (`unsigned u:3; u /= -2`
             // divides as int), and is always converted back.
-            TypeKind bpk       = bitfield_promoted_kind(lhs);
-            Type promoted      = { .kind = bpk };
-            const Type *common = get_common_type(bpk != TYPE_VOID ? &promoted : lhs->type,
-                                                 rhs->type);
-            bool additive      = e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB ||
-                            e->u.assign.op == ASSIGN_MUL;
+            TypeKind bpk  = bitfield_promoted_kind(lhs);
+            Type promoted = { .kind = bpk };
+            const Type *common =
+                get_common_type(bpk != TYPE_VOID ? &promoted : lhs->type, rhs->type);
+            bool additive    = e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB ||
+                               e->u.assign.op == ASSIGN_MUL;
             bool same_as_lhs = bpk == TYPE_VOID && is_integer(common) && is_integer(lt) &&
                                get_size(common) == get_size(lt) &&
                                (additive || is_signed(common) == is_signed(lt)) &&
@@ -1044,7 +1044,7 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_CO_OP:
         return typecheck_co_op(e);
     case EXPR_FIELD_ACCESS: {
-        Expr *strct        = typecheck_and_decay(e->u.field_access.expr);
+        Expr *strct          = typecheck_and_decay(e->u.field_access.expr);
         const Type *strct_ty = unalias(strct->type);
         if (strct_ty->kind != TYPE_STRUCT && strct_ty->kind != TYPE_UNION) {
             fatal_error("member reference base type '%s' is not a structure or union",
@@ -1077,9 +1077,8 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_PTR_ACCESS: {
         Expr *strct_ptr      = typecheck_and_decay(e->u.ptr_access.expr);
         const Type *ptr_type = unalias(strct_ptr->type);
-        if (!is_pointer(ptr_type) ||
-            (unalias(ptr_type->u.pointer.target)->kind != TYPE_STRUCT &&
-             unalias(ptr_type->u.pointer.target)->kind != TYPE_UNION)) {
+        if (!is_pointer(ptr_type) || (unalias(ptr_type->u.pointer.target)->kind != TYPE_STRUCT &&
+                                      unalias(ptr_type->u.pointer.target)->kind != TYPE_UNION)) {
             fatal_error("member reference type '%s' is not a pointer to a structure or union",
                         type_of(strct_ptr));
         }
@@ -1165,8 +1164,7 @@ static Expr *typecheck_expr_at(Expr *e)
             if (ga->kind == GENERIC_ASSOC_TYPE) {
                 ga->u.type_assoc.type = check_type_name(ga->u.type_assoc.type);
                 ga->u.type_assoc.expr = typecheck_and_decay(ga->u.type_assoc.expr);
-                if (!selected &&
-                    compare_type(unalias(ctrl_type), unalias(ga->u.type_assoc.type))) {
+                if (!selected && compare_type(unalias(ctrl_type), unalias(ga->u.type_assoc.type))) {
                     selected = ga;
                 }
             } else {
@@ -1251,7 +1249,7 @@ static Expr *typecheck_expr(Expr *e)
 {
     SrcLoc saved = diag_enter(e ? e->loc : diag_loc);
     Expr *result = typecheck_expr_at(e);
-    diag_loc = saved;
+    diag_loc     = saved;
     return result;
 }
 

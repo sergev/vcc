@@ -3,16 +3,16 @@
 // one copy compiled by us (names prefixed our_) and one by clang -O1 (their_), each
 // calling the other's.
 //
-#include "arm32_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "arm32_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -34,7 +34,7 @@ TEST_F(Arm32Test, RunSignatureTableWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 struct s3 { char a, b, c; };
 struct s12 { int a, b, c; };
 struct s40 { int a[10]; };
@@ -42,7 +42,7 @@ struct f1 { float x; };
 struct f2 { float x, y; };
 struct d4 { double d[4]; };
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e);
 unsigned short PFX_unarrow(unsigned k);
 double PFX_backfill(float a, double b, float c, double d, float e, struct f2 f, float g);
@@ -61,7 +61,7 @@ struct s40 PFX_r40(int k, struct s40 v);
 long long PFX_rll(long long a, int b);
 int PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e)
 {
     return (signed char)(a + (b >> 8) + c + d + e);
@@ -133,7 +133,7 @@ TEST_F(Arm32Test, RunVariadicTableWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };
 struct s3 { char a, b, c; };
@@ -141,14 +141,14 @@ struct f3 { float x, y, z; };
 struct d2 { double d[2]; };
 struct al { long long a; int b; };
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 long long PFX_vsum(int n, va_list ap);
 long long PFX_add(int n, ...);
 long long PFX_add_own(int n, ...);
 double PFX_vdouble(int n, ...);
 int PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 long long PFX_vsum(int n, va_list ap)
 {
     long long t = 0;
@@ -339,7 +339,7 @@ TEST_F(Arm32Test, RunAllocaWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *sum = R"(
+    const char *sum    = R"(
 long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
              long j)
 {
@@ -352,12 +352,13 @@ long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long
     return s + b + c + d + e + f + g + h + i + j;
 }
 )";
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned int);
 long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
                long j);
 int their_check(void);
-)") + Subst(sum, "our", "") + R"(
+)") + Subst(sum, "our", "") +
+                         R"(
 int main(void)
 {
     long *q = __builtin_alloca(64);
@@ -370,7 +371,8 @@ int main(void)
 long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h, long i,
              long j);
 volatile long seed = 7;
-)") + Subst(sum, "their", "") + R"(
+)") + Subst(sum, "their", "") +
+                         R"(
 int their_check(void)
 {
     long s = seed;

@@ -12,19 +12,22 @@ call #g
 add r10, r12
 pop r10
 ret
-)", "int g(int); int f(int a) { return g(a) + a; }")
+)",
+            "int g(int); int f(int a) { return g(a) + a; }")
 
 // Arguments that trade registers: the cycle broken by three xors, no temporary.
 EXPECT_CODE(SwappedArgsByXor, R"(xor r13, r12
 xor r12, r13
 xor r13, r12
 br #g
-)", "int g(int, int); int f(int a, int b) { return g(b, a); }")
+)",
+            "int g(int, int); int f(int a, int b) { return g(b, a); }")
 
 // An unused parameter is left where it came: its register serves the result.
 EXPECT_CODE(DeadParamLeft, R"(mov r13, r12
 ret
-)", "int f(int a, int b) { return b; }")
+)",
+            "int f(int a, int b) { return b; }")
 
 // With a helper that takes r8-r11, a value live across it avoids r8-r10.
 TEST_F(Msp430Test, R8HelperKeepsR8Free)

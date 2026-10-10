@@ -88,10 +88,10 @@ void tac_record_local(TacCtx *ctx, const char *name, const Type *type)
 // stay queryable via symtab).
 void tac_record_array_local(TacCtx *ctx, const char *name)
 {
-    Tac_Param *p        = tac_new_param();
-    p->name             = xstrdup(name);
-    p->next             = ctx->array_locals;
-    ctx->array_locals   = p;
+    Tac_Param *p      = tac_new_param();
+    p->name           = xstrdup(name);
+    p->next           = ctx->array_locals;
+    ctx->array_locals = p;
 }
 
 void tac_record_extern(TacCtx *ctx, const char *name, const Type *type)
@@ -400,7 +400,7 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
             bool to_fat   = is_fat_pointer(to);
             if (!from_fat && to_fat) {
                 // word pointer → char*/void*: set the fat marker and byte offset.
-                Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_PTR_TO_CHAR_PTR);
+                Tac_Instruction *in       = tac_new_instruction(TAC_INSTRUCTION_PTR_TO_CHAR_PTR);
                 in->u.ptr_to_char_ptr.src = src;
                 in->u.ptr_to_char_ptr.dst = dst;
                 tac_append(ctx, in);
@@ -470,9 +470,9 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
         size_t from_size = get_size(from);
         size_t to_size   = get_size(to);
         if (to_size < from_size) {
-            Tac_Instruction *in     = tac_new_instruction(TAC_INSTRUCTION_TRUNCATE);
-            in->u.truncate.src      = src;
-            in->u.truncate.dst      = dst;
+            Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_TRUNCATE);
+            in->u.truncate.src  = src;
+            in->u.truncate.dst  = dst;
             // A truncation to a type with no constant kind (a short narrower than
             // int) must not fold as the folder's legacy int→char.
             int kind                = const_kind_of_int_type(to);
@@ -510,21 +510,21 @@ Tac_Val *emit_cast(TacCtx *ctx, Tac_Val *src, const Type *from, const Type *to)
         bool from_float       = (from->kind == TYPE_FLOAT);
         bool from_long_double = (from->kind == TYPE_LONG_DOUBLE);
         if (is_signed(to)) {
-            Tac_InstructionKind op  = from_float         ? TAC_INSTRUCTION_FLOAT_TO_INT
-                                      : from_long_double ? TAC_INSTRUCTION_LONG_DOUBLE_TO_INT
-                                                         : TAC_INSTRUCTION_DOUBLE_TO_INT;
-            Tac_Instruction *in     = tac_new_instruction(op);
-            in->u.double_to_int.src = src;
-            in->u.double_to_int.dst = dst;
+            Tac_InstructionKind op       = from_float         ? TAC_INSTRUCTION_FLOAT_TO_INT
+                                           : from_long_double ? TAC_INSTRUCTION_LONG_DOUBLE_TO_INT
+                                                              : TAC_INSTRUCTION_DOUBLE_TO_INT;
+            Tac_Instruction *in          = tac_new_instruction(op);
+            in->u.double_to_int.src      = src;
+            in->u.double_to_int.dst      = dst;
             in->u.double_to_int.dst_kind = const_kind_of_int_type(to);
             tac_append(ctx, in);
         } else {
-            Tac_InstructionKind op   = from_float         ? TAC_INSTRUCTION_FLOAT_TO_UINT
-                                       : from_long_double ? TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT
-                                                          : TAC_INSTRUCTION_DOUBLE_TO_UINT;
-            Tac_Instruction *in      = tac_new_instruction(op);
-            in->u.double_to_uint.src = src;
-            in->u.double_to_uint.dst = dst;
+            Tac_InstructionKind op        = from_float         ? TAC_INSTRUCTION_FLOAT_TO_UINT
+                                            : from_long_double ? TAC_INSTRUCTION_LONG_DOUBLE_TO_UINT
+                                                               : TAC_INSTRUCTION_DOUBLE_TO_UINT;
+            Tac_Instruction *in           = tac_new_instruction(op);
+            in->u.double_to_uint.src      = src;
+            in->u.double_to_uint.dst      = dst;
             in->u.double_to_uint.dst_kind = const_kind_of_int_type(to);
             tac_append(ctx, in);
         }
@@ -733,8 +733,8 @@ void gen_aggregate_copy(TacCtx *ctx, const AggPlace *dst, const AggPlace *src, c
     for (int i = 0; i * chunk < size; i++) {
         Tac_Val *t = new_var_val(ctx, tac_type_unsigned(chunk));
         if (src->name) {
-            Tac_Instruction *ld           = tac_new_instruction(
-                byte ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET : TAC_INSTRUCTION_COPY_FROM_OFFSET);
+            Tac_Instruction *ld = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET
+                                                           : TAC_INSTRUCTION_COPY_FROM_OFFSET);
             ld->u.copy_from_offset.src    = xstrdup(src->name);
             ld->u.copy_from_offset.offset = src->offset + i * chunk;
             ld->u.copy_from_offset.dst    = t;
@@ -747,8 +747,8 @@ void gen_aggregate_copy(TacCtx *ctx, const AggPlace *dst, const AggPlace *src, c
             tac_append(ctx, ld);
         }
         if (dst->name) {
-            Tac_Instruction *st         = tac_new_instruction(
-                byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET : TAC_INSTRUCTION_COPY_TO_OFFSET);
+            Tac_Instruction *st = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
+                                                           : TAC_INSTRUCTION_COPY_TO_OFFSET);
             st->u.copy_to_offset.src    = val_var(t->u.var_name);
             st->u.copy_to_offset.dst    = xstrdup(dst->name);
             st->u.copy_to_offset.offset = dst->offset + i * chunk;
@@ -792,8 +792,8 @@ static Tac_Param *params_from_type(const Type *fun_type)
         tail          = &tp->next;
 
         // On a struct_args_split target a struct parameter wider than a word is passed
-        // as N consecutive machine words (see the call-site decomposition in expr.c).  The real param above is
-        // the struct's base slot; append N-1 filler params so frame_build reserves N
+        // as N consecutive machine words (see the call-site decomposition in expr.c).  The real
+        // param above is the struct's base slot; append N-1 filler params so frame_build reserves N
         // contiguous slots and the body's `base + i*word` member accesses resolve
         // correctly.  The fillers are never referenced by name.
         if (type_is_split_arg(p->type)) {
@@ -827,21 +827,21 @@ Tac_Type *tac_type_ptr_to(const Type *t)
 
 void tac_layout_of_target(Tac_Layout *l)
 {
-    const Target *t                  = target_config;
-    l->scalar[TAC_TYPE_SCHAR]        = 1;
-    l->scalar[TAC_TYPE_UCHAR]        = 1;
-    l->scalar[TAC_TYPE_SHORT]        = (int)t->short_size;
-    l->scalar[TAC_TYPE_USHORT]       = (int)t->short_size;
-    l->scalar[TAC_TYPE_INT]          = (int)t->int_size;
-    l->scalar[TAC_TYPE_UINT]         = (int)t->int_size;
-    l->scalar[TAC_TYPE_LONG]         = (int)t->long_size;
-    l->scalar[TAC_TYPE_ULONG]        = (int)t->long_size;
-    l->scalar[TAC_TYPE_LONG_LONG]    = (int)t->llong_size;
-    l->scalar[TAC_TYPE_ULONG_LONG]   = (int)t->llong_size;
-    l->scalar[TAC_TYPE_FLOAT]        = (int)t->float_size;
-    l->scalar[TAC_TYPE_DOUBLE]       = (int)t->double_size;
-    l->scalar[TAC_TYPE_LONG_DOUBLE]  = (int)t->ldouble_size;
-    l->pointer                       = (int)t->pointer_size;
+    const Target *t                 = target_config;
+    l->scalar[TAC_TYPE_SCHAR]       = 1;
+    l->scalar[TAC_TYPE_UCHAR]       = 1;
+    l->scalar[TAC_TYPE_SHORT]       = (int)t->short_size;
+    l->scalar[TAC_TYPE_USHORT]      = (int)t->short_size;
+    l->scalar[TAC_TYPE_INT]         = (int)t->int_size;
+    l->scalar[TAC_TYPE_UINT]        = (int)t->int_size;
+    l->scalar[TAC_TYPE_LONG]        = (int)t->long_size;
+    l->scalar[TAC_TYPE_ULONG]       = (int)t->long_size;
+    l->scalar[TAC_TYPE_LONG_LONG]   = (int)t->llong_size;
+    l->scalar[TAC_TYPE_ULONG_LONG]  = (int)t->llong_size;
+    l->scalar[TAC_TYPE_FLOAT]       = (int)t->float_size;
+    l->scalar[TAC_TYPE_DOUBLE]      = (int)t->double_size;
+    l->scalar[TAC_TYPE_LONG_DOUBLE] = (int)t->ldouble_size;
+    l->pointer                      = (int)t->pointer_size;
 }
 
 Tac_Type *tac_type_char(void)
@@ -942,20 +942,20 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         tl->u.function.name = xalloc(n + sizeof "$resume", __func__, __FILE__, __LINE__);
         memcpy(tl->u.function.name, name, n);
         memcpy(tl->u.function.name + n, "$resume", sizeof "$resume");
-        Tac_Param *fp       = tac_new_param();
-        fp->name            = xstrdup(coro.fp);
-        fp->type            = tac_type_ptr(tac_type_char());
-        fp->next            = tl->u.function.params;
-        tl->u.function.params = fp;
-        Tac_Type *ft          = tl->u.function.type;
-        Tac_Type *fpt         = tac_type_ptr(tac_type_char());
-        fpt->next             = ft->u.fun_type.param_types;
+        Tac_Param *fp              = tac_new_param();
+        fp->name                   = xstrdup(coro.fp);
+        fp->type                   = tac_type_ptr(tac_type_char());
+        fp->next                   = tl->u.function.params;
+        tl->u.function.params      = fp;
+        Tac_Type *ft               = tl->u.function.type;
+        Tac_Type *fpt              = tac_type_ptr(tac_type_char());
+        fpt->next                  = ft->u.fun_type.param_types;
         ft->u.fun_type.param_types = fpt;
         tac_free_type(ft->u.fun_type.ret_type);
         ft->u.fun_type.ret_type = tac_new_type(TAC_TYPE_INT);
         coro_pending_fn         = tl;
-        coro_pending            = (CoroSplit){ name, sym->u.func.global, end, align,
-                                               coroutine_has_coro_ptr(sym->type) };
+        coro_pending =
+            (CoroSplit){ name, sym->u.func.global, end, align, coroutine_has_coro_ptr(sym->type) };
     }
 
     // A struct return too wide to return by value (type_is_byval_sret) uses the
@@ -964,13 +964,13 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
     // param list so it lands in frame slot 0 (this shifts the user params' slots by one,
     // which body references pick up automatically by name).
     const char *sret_name = NULL;
-    if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION &&
-        !sym->u.func.coro && type_is_byval_sret(ast->u.function.type->u.function.return_type)) {
-        sret_name      = ".ret";
-        Tac_Param *hp  = tac_new_param();
-        hp->name       = xstrdup(sret_name);
-        hp->type       = tac_type_ptr_to(ast->u.function.type->u.function.return_type);
-        hp->next       = tl->u.function.params;
+    if (ast->u.function.type && ast->u.function.type->kind == TYPE_FUNCTION && !sym->u.func.coro &&
+        type_is_byval_sret(ast->u.function.type->u.function.return_type)) {
+        sret_name             = ".ret";
+        Tac_Param *hp         = tac_new_param();
+        hp->name              = xstrdup(sret_name);
+        hp->type              = tac_type_ptr_to(ast->u.function.type->u.function.return_type);
+        hp->next              = tl->u.function.params;
         tl->u.function.params = hp;
     }
 
@@ -978,7 +978,7 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         // Seed this function's temp/label counter from the unit-wide sequence so
         // its `%N` names never collide with another function's in a single-file
         // backend (see translate.h); write the advanced value back afterwards.
-        TacCtx ctx = { NULL, NULL, *label_seq, NULL, NULL, NULL, NULL, NULL };
+        TacCtx ctx    = { NULL, NULL, *label_seq, NULL, NULL, NULL, NULL, NULL };
         ctx.sret_name = sret_name;
         ctx.body      = ast->u.function.body;
         ctx.coro      = sym->u.func.coro ? &coro : NULL;
@@ -1005,19 +1005,20 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         for (StaticLocalRec *r = static_locals_head(); r; r = r->next) {
             if (strcmp(r->func, name) != 0)
                 continue;
-            Tac_StaticLocal *sl = tac_new_static_local();
-            sl->name            = xstrdup(r->name);
-            sl->type            = ast_type_to_tac_type(r->type);
-            sl->init_list       = r->init_list;
-            sl->alignment       = r->alignment;
-            r->init_list        = NULL; // transferred
-            sl->next            = tl->u.function.static_locals;
+            Tac_StaticLocal *sl          = tac_new_static_local();
+            sl->name                     = xstrdup(r->name);
+            sl->type                     = ast_type_to_tac_type(r->type);
+            sl->init_list                = r->init_list;
+            sl->alignment                = r->alignment;
+            r->init_list                 = NULL; // transferred
+            sl->next                     = tl->u.function.static_locals;
             tl->u.function.static_locals = sl;
         }
 
         // String literals used to initialize a static local (e.g. `static char *p = "ABC";`)
         // are referenced only from the static-local init list, not the body, so emit their
-        // data constants here.  Append after the body's expression constants (ctx.static_constants).
+        // data constants here.  Append after the body's expression constants
+        // (ctx.static_constants).
         Tac_TopLevel **ctail = &ctx.static_constants;
         while (*ctail)
             ctail = &(*ctail)->next;

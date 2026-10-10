@@ -122,12 +122,12 @@ OptCfg *cfg_build(Tac_Instruction *body)
             }
         } else if (term->kind == TAC_INSTRUCTION_JUMP_TABLE) {
             // A jump table: an edge to each distinct target, the default among them.
-            int n = term->u.jump_table.count + 1;
+            int n                 = term->u.jump_table.count + 1;
             cfg->blocks[i]->succs = xalloc(n * sizeof(OptBlock *), __func__, __FILE__, __LINE__);
             cfg->blocks[i]->nsucc = 0;
             for (int k = 0; k < n; k++) {
-                const char *t = k < n - 1 ? term->u.jump_table.targets[k]
-                                          : term->u.jump_table.default_target;
+                const char *t =
+                    k < n - 1 ? term->u.jump_table.targets[k] : term->u.jump_table.default_target;
                 intptr_t target_id;
                 map_get(&label_map, t, &target_id);
                 OptBlock *to = cfg->blocks[target_id];

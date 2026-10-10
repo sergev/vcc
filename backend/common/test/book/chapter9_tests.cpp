@@ -206,7 +206,8 @@ int main(void) {
 // Eight arguments, all read in the callee.
 TEST_F(BookTest, Chapter9_LotsOfArguments)
 {
-    EXPECT_EQ("1\n", CompileAndRunBook(R"(int foo(int a, int b, int c, int d, int e, int f, int g, int h) {
+    EXPECT_EQ("1\n",
+              CompileAndRunBook(R"(int foo(int a, int b, int c, int d, int e, int f, int g, int h) {
     return (a == 1 && b == 2 && c == 3 && d == 4 && e == 5
             && f == 6 && g == 7 && h == 8);
 }
@@ -239,7 +240,10 @@ int main(void) {
 // call and stack-frame restore.
 TEST_F(BookTest, Chapter9_TestForMemoryLeaks)
 {
-    EXPECT_EQ("1\n", CompileAndRunBook(R"(int lots_of_args(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l, int m, int n, int o) {
+    EXPECT_EQ(
+        "1\n",
+        CompileAndRunBook(
+            R"(int lots_of_args(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l, int m, int n, int o) {
     return l + o;
 }
 
@@ -343,7 +347,8 @@ int f(int a, int b, int c, int d) {
 // the callee reads its stack arguments and updates one, returning 100.
 TEST_F(BookTest, Chapter9_LibraryLocalStackVariables)
 {
-    EXPECT_EQ("100\n", CompileAndRunBook(R"(int f(int reg1, int reg2, int reg3, int reg4, int reg5, int reg6,
+    EXPECT_EQ("100\n",
+              CompileAndRunBook(R"(int f(int reg1, int reg2, int reg3, int reg4, int reg5, int reg6,
     int stack1, int stack2, int stack3);
 
 int main(void) {

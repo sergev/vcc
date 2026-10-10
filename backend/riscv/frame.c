@@ -117,9 +117,9 @@ static void add_global(Gen *g, const char *name, const Tac_Type *type)
 void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
 {
     memset(g, 0, sizeof(*g));
-    g->program = program;
-    g->tl      = tl;
-    g->fn      = rv_new_func(tl->u.function.name, tl->u.function.global);
+    g->program  = program;
+    g->tl       = tl;
+    g->fn       = rv_new_func(tl->u.function.name, tl->u.function.global);
     g->prologue = g->fn->tail;
     rv_new_block(g->fn, NULL); // the body
     map_init(&g->frame);
@@ -176,8 +176,7 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg,
-                        int hi)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg, int hi)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
@@ -258,17 +257,17 @@ const Tac_Type *name_type(const Gen *g, const char *name)
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
 {
     static const Tac_Type types[] = {
-        [TAC_CONST_INT] = { .kind = TAC_TYPE_INT },
-        [TAC_CONST_LONG] = { .kind = TAC_TYPE_LONG },
-        [TAC_CONST_LONG_LONG] = { .kind = TAC_TYPE_LONG_LONG },
-        [TAC_CONST_UINT] = { .kind = TAC_TYPE_UINT },
-        [TAC_CONST_ULONG] = { .kind = TAC_TYPE_ULONG },
-        [TAC_CONST_ULONG_LONG] = { .kind = TAC_TYPE_ULONG_LONG },
-        [TAC_CONST_FLOAT] = { .kind = TAC_TYPE_FLOAT },
-        [TAC_CONST_DOUBLE] = { .kind = TAC_TYPE_DOUBLE },
+        [TAC_CONST_INT]         = { .kind = TAC_TYPE_INT },
+        [TAC_CONST_LONG]        = { .kind = TAC_TYPE_LONG },
+        [TAC_CONST_LONG_LONG]   = { .kind = TAC_TYPE_LONG_LONG },
+        [TAC_CONST_UINT]        = { .kind = TAC_TYPE_UINT },
+        [TAC_CONST_ULONG]       = { .kind = TAC_TYPE_ULONG },
+        [TAC_CONST_ULONG_LONG]  = { .kind = TAC_TYPE_ULONG_LONG },
+        [TAC_CONST_FLOAT]       = { .kind = TAC_TYPE_FLOAT },
+        [TAC_CONST_DOUBLE]      = { .kind = TAC_TYPE_DOUBLE },
         [TAC_CONST_LONG_DOUBLE] = { .kind = TAC_TYPE_LONG_DOUBLE },
-        [TAC_CONST_SCHAR] = { .kind = TAC_TYPE_SCHAR },
-        [TAC_CONST_UCHAR] = { .kind = TAC_TYPE_UCHAR },
+        [TAC_CONST_SCHAR]       = { .kind = TAC_TYPE_SCHAR },
+        [TAC_CONST_UCHAR]       = { .kind = TAC_TYPE_UCHAR },
     };
     if (v->kind == TAC_VAL_CONSTANT)
         return &types[v->u.constant->kind];
@@ -656,7 +655,7 @@ void gen_memcopy(Gen *g, int dst, int64_t dst_off, int src, int64_t src_off, int
 {
     static const Rv_Op loads[]  = { [1] = RV_LBU, [2] = RV_LHU, [4] = RV_LW, [8] = RV_LD };
     static const Rv_Op stores[] = { [1] = RV_SB, [2] = RV_SH, [4] = RV_SW, [8] = RV_SD };
-    int chunk = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
+    int chunk                   = align >= 8 ? 8 : align >= 4 ? 4 : align >= 2 ? 2 : 1;
     if (chunk > riscv_xlen)
         chunk = riscv_xlen;
     for (int i = 0; i < size;) {

@@ -159,7 +159,7 @@ TEST_F(Msp430Test, RunVaListAcross)
     std::string decls = std::string(va_decls) + R"(long cwrap(int n, ...);
 long clist(int n, va_list ap);
 )";
-    std::string ours = decls + R"(
+    std::string ours  = decls + R"(
 long vlist(int n, va_list ap)
 {
     long s = 0;
@@ -184,7 +184,7 @@ int main(void)
     return 0;
 }
 )";
-    std::string gcc = decls + R"(
+    std::string gcc   = decls + R"(
 long cwrap(int n, ...)
 {
     va_list ap;
@@ -213,9 +213,9 @@ TEST_F(Msp430Test, RunPrintf)
     snprintf(expected, sizeof expected,
              "[%d] [%u] [%ld] [%lu] [%lld] [%x] [%X] [%o] [%5d|%-5d|%05d] [%s|%8s|%-8s|%.2s] "
              "[%c%c] [%zu %td] [%hhd %hd] [%%] [%.3f] [%e] [%g] [%g] [%8.2f]\n",
-             -32768, 65535u, -2147483647L - 1, 4294967295UL, -1234567890123LL, 0xbeef, 0xbeef,
-             0777, 42, 42, -42, "msp", "msp", "msp", "msp", 'o', 'k', (size_t)65535,
-             (ptrdiff_t)-3, (signed char)-1, (short)-2, 1.5, 0.125, 1024.0, 0.0001, -3.25);
+             -32768, 65535u, -2147483647L - 1, 4294967295UL, -1234567890123LL, 0xbeef, 0xbeef, 0777,
+             42, 42, -42, "msp", "msp", "msp", "msp", 'o', 'k', (size_t)65535, (ptrdiff_t)-3,
+             (signed char)-1, (short)-2, 1.5, 0.125, 1024.0, 0.0001, -3.25);
     std::string out = CompileAndRunMsp430(R"(
 #include <stdio.h>
 #include <stddef.h>
@@ -236,6 +236,7 @@ int main(void)
 )");
     EXPECT_EQ(std::string(expected) + R"(abcdefghij-1234 16
 00ab
-)", out);
+)",
+              out);
     EXPECT_EQ(0, exit_status);
 }

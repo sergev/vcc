@@ -120,12 +120,12 @@ TEST_F(Arm32Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_ARM32_TOOLS();
     SKIP_IF_NO_ARM32_CLANG();
-    const char *decls = R"(
+    const char *decls  = R"(
 #include <stdarg.h>
 struct f2 { float a, b; };
 struct s5 { char a[5]; };
 )";
-    std::string ours  = std::string(decls) + R"(
+    std::string ours   = std::string(decls) + R"(
 double theirs(int n, ...);
 double theirs_v(int n, va_list ap);
 float theirs_f(int n, ...);

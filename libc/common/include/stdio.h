@@ -29,29 +29,29 @@ int puts(const char *s);
 int putchar(int c);
 
 /* ---- declared for future implementation (TODO) ---- */
-int   fprintf(FILE *stream, const char *fmt, ...);
-int   vprintf(const char *fmt, va_list ap);
-int   vfprintf(FILE *stream, const char *fmt, va_list ap);
-int   vsprintf(char *buf, const char *fmt, va_list ap);
-int   vsnprintf(char *buf, size_t size, const char *fmt, va_list ap);
+int fprintf(FILE *stream, const char *fmt, ...);
+int vprintf(const char *fmt, va_list ap);
+int vfprintf(FILE *stream, const char *fmt, va_list ap);
+int vsprintf(char *buf, const char *fmt, va_list ap);
+int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap);
 
-int   scanf(const char *fmt, ...);
-int   sscanf(const char *str, const char *fmt, ...);
-int   fscanf(FILE *stream, const char *fmt, ...);
+int scanf(const char *fmt, ...);
+int sscanf(const char *str, const char *fmt, ...);
+int fscanf(FILE *stream, const char *fmt, ...);
 
-int   getchar(void);
-int   fputs(const char *s, FILE *stream);
-int   fputc(int c, FILE *stream);
-int   fgetc(FILE *stream);
+int getchar(void);
+int fputs(const char *s, FILE *stream);
+int fputc(int c, FILE *stream);
+int fgetc(FILE *stream);
 char *fgets(char *s, int n, FILE *stream);
 
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 
 FILE *fopen(const char *path, const char *mode);
-int   fclose(FILE *stream);
-int   fflush(FILE *stream);
-void  perror(const char *s);
+int fclose(FILE *stream);
+int fflush(FILE *stream);
+void perror(const char *s);
 
 /* ---- runtime extensions ---- */
 /*
@@ -61,7 +61,7 @@ void  perror(const char *s);
  */
 void putbyte(int b);
 void putch(unsigned ch);
-int  getch(void);
+int getch(void);
 void flush(void);
 
 #endif /* _STDIO_H */

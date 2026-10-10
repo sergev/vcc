@@ -37,10 +37,10 @@ typedef enum { DEST_LABEL, DEST_RETURN, DEST_FINISH } DestKind;
 
 typedef struct {
     DestKind kind;
-    char *label;     // DEST_LABEL
-    bool value;      // DEST_RETURN: returns the return variable
-    unsigned state;  // DEST_FINISH
-    int id;          // the value of the "where next" variable that picks it
+    char *label;    // DEST_LABEL
+    bool value;     // DEST_RETURN: returns the return variable
+    unsigned state; // DEST_FINISH
+    int id;         // the value of the "where next" variable that picks it
 } ExitDest;
 
 // A block being lowered, and the exit actions registered in it so far.  When an exit
@@ -56,7 +56,7 @@ typedef struct {
     bool continues;         // and some goes on past this block
     char **entries;         // entries[j]: the label in front of action j, or NULL
     int nentries;
-    ExitDest *dests;        // the exits that end after this block's chain
+    ExitDest *dests; // the exits that end after this block's chain
     int ndests, dests_cap;
 } TacScope;
 
@@ -129,8 +129,9 @@ extern int translator_debug;
 // problem.  Always on in a build without NDEBUG.
 extern int translate_verify;
 extern int translate_rotate_loops; // set by translate() from OptFlags.loop_rotate
-extern bool translate_cond_jumps;     // && || ! in a condition as jumps (expr.c); --no-cond-jumps
-extern bool translate_shared_cleanup; // an exit may share a large cleanup (stmt.c); --no-shared-cleanup
+extern bool translate_cond_jumps;  // && || ! in a condition as jumps (expr.c); --no-cond-jumps
+extern bool
+    translate_shared_cleanup; // an exit may share a large cleanup (stmt.c); --no-shared-cleanup
 extern int import_debug;
 extern int export_debug;
 extern int wio_debug;
@@ -256,7 +257,7 @@ void gen_aggregate_init(TacCtx *ctx, const char *var_name, const Initializer *in
 void gen_string_array_init(TacCtx *ctx, const char *var_name, const Expr *str_expr, int bytes);
 
 // Blocks and their exit actions (stmt.c), for the coroutines.
-void tac_scope_add(TacCtx *ctx, ExitAction action); // to the innermost block
+void tac_scope_add(TacCtx *ctx, ExitAction action);     // to the innermost block
 void tac_scope_entry(TacCtx *ctx, Tac_Instruction *in); // run on entering the innermost block
 void gen_exits_all(TacCtx *ctx); // the exit actions of every open block, innermost first
 // Leave every open block and end the coroutine with `state`, returning 1: its exit
@@ -278,7 +279,7 @@ Tac_Val *gen_co_op(TacCtx *ctx, Expr *e);
 Tac_Val *gen_await(TacCtx *ctx, Expr *e);
 void gen_coro_return(TacCtx *ctx, Tac_Val *value, const Type *type); // value may be NULL
 void gen_co_release(TacCtx *ctx, const ExitAction *a);
-Tac_Val *gen_alloca(TacCtx *ctx, Expr *e); // a call of __builtin_alloca
+Tac_Val *gen_alloca(TacCtx *ctx, Expr *e);         // a call of __builtin_alloca
 void gen_finish_code(TacCtx *ctx, unsigned state); // a coroutine's state set, and return 1
 
 // A coroutine after the optimizer: the split pass (stage 2) makes f$resume a state
@@ -287,14 +288,15 @@ void gen_finish_code(TacCtx *ctx, unsigned state); // a coroutine's state set, a
 typedef struct {
     const char *name; // f
     bool global;
-    int frame_start;  // the end of the value and the result: where the rest goes
+    int frame_start; // the end of the value and the result: where the rest goes
     int frame_align;
-    bool with_ptr;    // takes (void) or (void *): f$co holds init and resume too
+    bool with_ptr; // takes (void) or (void *): f$co holds init and resume too
 } CoroSplit;
 Tac_TopLevel *coro_split(Tac_TopLevel *fn, const CoroSplit *info);
 extern int coro_table_min; // suspension points from which the dispatch is a jump table,
                            // on a target with jump_tables
-Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g, const Type *type); // a coroutine's name as a value
+Tac_Val *gen_coro_ptr(TacCtx *ctx, const char *g,
+                      const Type *type); // a coroutine's name as a value
 
 //
 // Convert one external declaration to TAC and optimize each function it yields.

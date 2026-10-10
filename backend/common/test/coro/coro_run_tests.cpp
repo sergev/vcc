@@ -1,8 +1,8 @@
 //
 // Coroutines run on every target but BESM-6 (docs/Coroutines_in_C.md;
 // docs/Coroutines_Internals.md §5): the split pass's state machines, the runtime of
-// libc/common/co.c, and co_alloca's memory in a function, on the stack.  Each backend's coro_test.h defines the
-// fixture CoroTest: Compile(src), CompileAndRunCoro(src) with main's result in
+// libc/common/co.c, and co_alloca's memory in a function, on the stack.  Each backend's coro_test.h
+// defines the fixture CoroTest: Compile(src), CompileAndRunCoro(src) with main's result in
 // exit_status, and AddUnit(asm, tag) for a second unit.  The programs print nothing
 // that depends on the target's sizes.
 //
@@ -149,9 +149,10 @@ int main(void)
 // CO_CANCEL at its yield.
 TEST_F(CoroTest, CoroAllocaReleases)
 {
-    EXPECT_EQ("loop 50 kept 1\n[1 gone]\nfirst over 3: 4\n[7 gone]\n[7 gone]\n[8 cancelled]\n"
-              "[8 gone]\ncancel 1\n[9 gone]\n",
-              CompileAndRunCoro(R"(
+    EXPECT_EQ(
+        "loop 50 kept 1\n[1 gone]\nfirst over 3: 4\n[7 gone]\n[7 gone]\n[8 cancelled]\n"
+        "[8 gone]\ncancel 1\n[9 gone]\n",
+        CompileAndRunCoro(R"(
 #include <coro.h>
 #include <stdio.h>
 
@@ -372,8 +373,9 @@ TEST_F(CoroTest, CoroTraps)
 // in the program that serves the requests out of a string, a few bytes at a time.
 TEST_F(CoroTest, CoroAwaitReadHeader)
 {
-    EXPECT_EQ("req 0 8\nreq 0 5\nreq 0 2\nheader 0: 1234 abcd\nreq 0 8\nreq 0 5\nreq 0 3\nshort -1\n",
-              CompileAndRunCoro(R"(
+    EXPECT_EQ(
+        "req 0 8\nreq 0 5\nreq 0 2\nheader 0: 1234 abcd\nreq 0 8\nreq 0 5\nreq 0 3\nshort -1\n",
+        CompileAndRunCoro(R"(
 #include <coro.h>
 #include <stdio.h>
 #include <string.h>
@@ -582,9 +584,10 @@ int main(void)
 // of co_alloca.
 TEST_F(CoroTest, CoroAllocaInCoroutine)
 {
-    EXPECT_EQ("a b c |[letters gone]  a b c |[letters gone]  a b c x\n"
-              "[digits 2 gone] [letters gone] [root gone]\n",
-              CompileAndRunCoro(R"(
+    EXPECT_EQ(
+        "a b c |[letters gone]  a b c |[letters gone]  a b c x\n"
+        "[digits 2 gone] [letters gone] [root gone]\n",
+        CompileAndRunCoro(R"(
 #include <coro.h>
 #include <stdio.h>
 
@@ -641,7 +644,8 @@ int main(void)
 // names the coroutine.
 TEST_F(CoroTest, CoroArenaOverflow)
 {
-    EXPECT_EQ("depth 0\ndepth 1\ndepth 2\ncoroutine trap: CO_TRAP_NO_SPACE: deep\n", CompileAndRunCoro(R"(
+    EXPECT_EQ("depth 0\ndepth 1\ndepth 2\ncoroutine trap: CO_TRAP_NO_SPACE: deep\n",
+              CompileAndRunCoro(R"(
 #include <coro.h>
 #include <stdio.h>
 
@@ -710,11 +714,12 @@ int main(void)
 // coroutine; co_alloca through one; pointers compared.
 TEST_F(CoroTest, CoroPtr)
 {
-    EXPECT_EQ("task 0: header 1 align 1\ntask 1: header 1 align 1\ntask 2: header 1 align 1\n"
-              "  0 yields 1\n  1 yields 100\n  2 yields 1\n  0 yields 2\n  1 yields 200\n"
-              "  2 yields 2\n  0 yields 3\n  1 returns 7\n  2 returns 21\n  0 returns 30\n"
-              "alloca'd: 100, same 1, null 1\n",
-              CompileAndRunCoro(R"(
+    EXPECT_EQ(
+        "task 0: header 1 align 1\ntask 1: header 1 align 1\ntask 2: header 1 align 1\n"
+        "  0 yields 1\n  1 yields 100\n  2 yields 1\n  0 yields 2\n  1 yields 200\n"
+        "  2 yields 2\n  0 yields 3\n  1 returns 7\n  2 returns 21\n  0 returns 30\n"
+        "alloca'd: 100, same 1, null 1\n",
+        CompileAndRunCoro(R"(
 #include <coro.h>
 #include <stdio.h>
 

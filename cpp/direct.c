@@ -56,7 +56,7 @@ static void add_once_file(int fd)
 //
 static int in_assembler(void)
 {
-    static char name[] = "__ASSEMBLER__";
+    static char name[]      = "__ASSEMBLER__";
     const struct symtab *sp = lookup(name, 0);
 
     return sp->name && (unsigned char)sp->name[0] != DROP && sp->value;
@@ -164,7 +164,7 @@ static char *do_include(char *p)
     if (filok == 0)
         pperror("'%s' file not found", filname);
     else {
-        cpp.line_no[cpp.inc_level]  = 1;
+        cpp.line_no[cpp.inc_level]    = 1;
         cpp.trig_nhold[cpp.inc_level] = 0; // fresh file: no trigraph '?' carried in
         cpp.inc_file[cpp.inc_level] = cp = nfil;
         while (*cp++)
@@ -428,7 +428,8 @@ char *process_directives(char *p)
                 while (*e == ' ' || *e == '\t')
                     ++e;
                 if (*e < '0' || *e > '9')
-                    pperror("expected a line number after '#line'", 0); // §6.10.4: first operand must be a digit sequence
+                    pperror("expected a line number after '#line'",
+                            0); // §6.10.4: first operand must be a digit sequence
                 else {
                     const char *fname = 0;
                     int num           = (int)strtol(e, &e, 10);

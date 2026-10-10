@@ -37,8 +37,7 @@ TEST_F(MmixTest, RunBookStatusMax)
 TEST_F(MmixTest, RunBookStatusMin)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("-2147483648\n",
-              CompileAndRunBook("int main(void) { return -2147483647 - 1; }"));
+    EXPECT_EQ("-2147483648\n", CompileAndRunBook("int main(void) { return -2147483647 - 1; }"));
 }
 
 // GCC's main leaves its int result unextended; crt0 extends it before printing.
@@ -60,8 +59,7 @@ TEST_F(MmixTest, RunHaltWithoutReportFails)
     std::string out;
     {
         ::testing::ScopedFakeTestPartResultReporter intercept(
-            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD,
-            &results);
+            ::testing::ScopedFakeTestPartResultReporter::INTERCEPT_ONLY_CURRENT_THREAD, &results);
         out = RunAssembly(R"(    .text
     .global main
 main:
@@ -158,7 +156,7 @@ TEST_F(MmixTest, RunSetjmpLongjmpGcc)
 TEST_F(MmixTest, RunSetjmpLongjmpAcrossGcc)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string gcc = R"(
+    std::string gcc  = R"(
 #include <setjmp.h>
 extern jmp_buf env;
 long our_dive(long n, int val);

@@ -96,8 +96,7 @@ TEST_F(NormalizeTest, ElidedStructArray)
 // Elision stops at the end of the inner array; the next value goes to the next member.
 TEST_F(NormalizeTest, ElisionBoundary)
 {
-    const Initializer *init =
-        Normalize("struct s { int a[2]; int b; }; struct s g = { 1, 2, 3 };");
+    const Initializer *init = Normalize("struct s { int a[2]; int b; }; struct s g = { 1, 2, 3 };");
     ASSERT_EQ(item_count(init), 2u);
     const Initializer *a = item_at(init, 0);
     EXPECT_EQ(int_value(item_at(a, 0)), 1);
@@ -138,8 +137,7 @@ TEST_F(NormalizeTest, BracedString)
 // A union takes a single item, for its first member.
 TEST_F(NormalizeTest, UnionElision)
 {
-    const Initializer *init =
-        Normalize("union u { int i[2]; char *p; }; union u g = { 1, 2 };");
+    const Initializer *init = Normalize("union u { int i[2]; char *p; }; union u g = { 1, 2 };");
     ASSERT_EQ(item_count(init), 1u);
     const Initializer *i = item_at(init, 0);
     EXPECT_EQ(int_value(item_at(i, 0)), 1);
@@ -206,7 +204,8 @@ TEST_F(PipelineTest, NormalizeAutomaticExcessStructDies)
 
 TEST_F(PipelineTest, NormalizeAutomaticEmptyScalarDies)
 {
-    EXPECT_DEATH(RunPipeline("void f(void) { int x = { }; }"), "scalar initializer cannot be empty");
+    EXPECT_DEATH(RunPipeline("void f(void) { int x = { }; }"),
+                 "scalar initializer cannot be empty");
 }
 
 // --- Field designators -------------------------------------------------------
@@ -227,8 +226,7 @@ TEST_F(NormalizeTest, FieldDesignatorsOutOfOrder)
 // Positional initialization resumes after the designated member (§6.7.9p17).
 TEST_F(NormalizeTest, PositionalAfterDesignator)
 {
-    const Initializer *init =
-        Normalize("struct s { int a, b, c; }; struct s g = { .b = 1, 2 };");
+    const Initializer *init = Normalize("struct s { int a, b, c; }; struct s g = { .b = 1, 2 };");
     EXPECT_EQ(item_at(init, 0), nullptr);
     EXPECT_EQ(int_value(item_at(init, 1)), 1);
     EXPECT_EQ(int_value(item_at(init, 2)), 2);
@@ -246,8 +244,8 @@ TEST_F(NormalizeTest, FieldOverride)
 // A designator ends brace elision: it belongs to the enclosing brace level.
 TEST_F(NormalizeTest, DesignatorEndsElision)
 {
-    const Initializer *init = Normalize(
-        "struct s { struct in { int a, b; } in; int c; }; struct s g = { 1, .c = 3 };");
+    const Initializer *init =
+        Normalize("struct s { struct in { int a, b; } in; int c; }; struct s g = { 1, .c = 3 };");
     const Initializer *in = item_at(init, 0);
     EXPECT_EQ(int_value(item_at(in, 0)), 1);
     EXPECT_EQ(item_at(in, 1), nullptr);
@@ -280,9 +278,10 @@ TEST_F(NormalizeTest, UnionFirstMemberDesignator)
 // Positional re-entry into a union picks the first member again, dropping another's value.
 TEST_F(NormalizeTest, UnionPositionalReentry)
 {
-    const Initializer *init = Normalize("union u { int i; char *p; };"
-                                        "struct s { int a; union u x; };"
-                                        "struct s g = { .x = { .p = \"AB\" }, .a = 1, 5 };");
+    const Initializer *init = Normalize(
+        "union u { int i; char *p; };"
+        "struct s { int a; union u x; };"
+        "struct s g = { .x = { .p = \"AB\" }, .a = 1, 5 };");
     const Initializer *x = item_at(init, 1);
     EXPECT_EQ(x->u.items->designators, nullptr);
     EXPECT_EQ(int_value(x->u.items->init), 5);
@@ -308,7 +307,8 @@ TEST_F(NormalizeTest, UnionExcessAfterDesignatorDies)
 
 TEST_F(NormalizeTest, FieldDesignatorOnArrayDies)
 {
-    EXPECT_DEATH(Normalize("int a[2] = { .x = 1 };"), "field designator '\\.x' in an initializer of 'int \\[2\\]'");
+    EXPECT_DEATH(Normalize("int a[2] = { .x = 1 };"),
+                 "field designator '\\.x' in an initializer of 'int \\[2\\]'");
 }
 
 TEST_F(NormalizeTest, ArrayDesignatorOnStructDies)
@@ -325,8 +325,9 @@ TEST_F(NormalizeTest, DesignatorOnScalarDies)
 // A field designator chain.
 TEST_F(NormalizeTest, FieldDesignatorChain)
 {
-    const Initializer *init = Normalize("struct in { int a, b; }; struct s { struct in x; };"
-                                        "struct s g = { .x.b = 1 };");
+    const Initializer *init = Normalize(
+        "struct in { int a, b; }; struct s { struct in x; };"
+        "struct s g = { .x.b = 1 };");
     const Initializer *x = item_at(init, 0);
     EXPECT_EQ(item_at(x, 0), nullptr);
     EXPECT_EQ(int_value(item_at(x, 1)), 1);
@@ -514,8 +515,9 @@ TEST_F(NormalizeTest, ChainRefinesInPlace)
 // A later whole-element initializer replaces an earlier chained one.
 TEST_F(NormalizeTest, ChainThenWholeElement)
 {
-    const Initializer *init = Normalize("struct s { char *name; int v; };"
-                                        "struct s tab[2] = { [1].v = 2, [0] = { \"AB\", 1 } };");
+    const Initializer *init = Normalize(
+        "struct s { char *name; int v; };"
+        "struct s tab[2] = { [1].v = 2, [0] = { \"AB\", 1 } };");
     const Initializer *e0 = item_at(init, 0);
     const Initializer *e1 = item_at(init, 1);
     EXPECT_EQ(item_at(e0, 0)->u.expr->u.literal->kind, LITERAL_STRING);
@@ -535,10 +537,11 @@ TEST_F(NormalizeTest, ChainSizesUnsizedArray)
 // positional initialization continues after the union.
 TEST_F(NormalizeTest, ChainThroughUnion)
 {
-    const Initializer *init = Normalize("struct p { int x, y; };"
-                                        "union u { int i; struct p p; };"
-                                        "struct s { union u u; int z; };"
-                                        "struct s g = { .u.p.y = 2, 3 };");
+    const Initializer *init = Normalize(
+        "struct p { int x, y; };"
+        "union u { int i; struct p p; };"
+        "struct s { union u u; int z; };"
+        "struct s g = { .u.p.y = 2, 3 };");
     const Initializer *u = item_at(init, 0);
     ASSERT_NE(u->u.items->designators, nullptr);
     EXPECT_STREQ(u->u.items->designators->u.name, "p");
@@ -551,9 +554,10 @@ TEST_F(NormalizeTest, ChainThroughUnion)
 // Switching a union to another member drops the old member's value.
 TEST_F(NormalizeTest, ChainSwitchesUnionMember)
 {
-    const Initializer *init = Normalize("struct p { int x, y; };"
-                                        "union u { struct p q; struct p p; };"
-                                        "union u g = { .q.x = 1, .p.y = 2 };");
+    const Initializer *init = Normalize(
+        "struct p { int x, y; };"
+        "union u { struct p q; struct p p; };"
+        "union u g = { .q.x = 1, .p.y = 2 };");
     EXPECT_STREQ(init->u.items->designators->u.name, "p");
     const Initializer *p = init->u.items->init;
     EXPECT_EQ(item_at(p, 0), nullptr);

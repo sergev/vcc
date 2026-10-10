@@ -192,9 +192,9 @@ Expr *parse_primary_expression()
         // C11 §6.4.2.2: the function's name as a string; not concatenated, it is no literal.
         if (!current_function_name)
             fatal_error("'__func__' used outside a function");
-        size_t len                    = strlen(current_function_name);
-        char *quoted                  = xalloc(len + 3, __func__, __FILE__, __LINE__);
-        quoted[0]                     = '"';
+        size_t len   = strlen(current_function_name);
+        char *quoted = xalloc(len + 3, __func__, __FILE__, __LINE__);
+        quoted[0]    = '"';
         memcpy(quoted + 1, current_function_name, len);
         quoted[len + 1]               = '"';
         quoted[len + 2]               = '\0';
@@ -408,9 +408,9 @@ Expr *parse_constant()
         } else {
             // A target whose double is single takes strtof's value: rounding v again
             // could round twice.
-            expr->u.literal->u.real_val   = v;
-            expr->u.literal->spelling     = LITERAL_SPELLED;
-            expr->u.literal->single_val   = strtof(current_lexeme, NULL);
+            expr->u.literal->u.real_val = v;
+            expr->u.literal->spelling   = LITERAL_SPELLED;
+            expr->u.literal->single_val = strtof(current_lexeme, NULL);
         }
         break;
     }

@@ -8,7 +8,7 @@
 
 char *strcpy(char *dest, const char *src)
 {
-    char *d = dest;
+    char *d       = dest;
     const char *s = src;
     while (*s != 0) {
         *d = *s;

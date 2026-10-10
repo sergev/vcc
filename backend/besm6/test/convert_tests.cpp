@@ -179,7 +179,8 @@ TEST_F(CodegenTest, IntToDoubleMadlen)
 // unsigned -> double: the b/utod runtime helper (full 48-bit range).
 TEST_F(CodegenTest, UintToDoubleMadlen)
 {
-    std::string output = CompileToMadlen("extern unsigned g; double foo(unsigned a) { return (double)a; }");
+    std::string output =
+        CompileToMadlen("extern unsigned g; double foo(unsigned a) { return (double)a; }");
     EXPECT_EQ(R"(c
       foo:   ,name,
     b/ret:   ,subp,
@@ -215,7 +216,8 @@ TEST_F(CodegenTest, DoubleToIntMadlen)
 // double -> unsigned: the b/dtou runtime helper (full 48-bit extraction).
 TEST_F(CodegenTest, DoubleToUintMadlen)
 {
-    std::string output = CompileToMadlen("extern double d; unsigned foo(void) { return (unsigned)d; }");
+    std::string output =
+        CompileToMadlen("extern double d; unsigned foo(void) { return (unsigned)d; }");
     EXPECT_EQ(R"(c
       foo:   ,name,
     b/ret:   ,subp,
@@ -265,10 +267,11 @@ TEST_F(CodegenTest, IntToDoubleBits)
             show((double)0);     /* 0.0 */
         }
     )");
-    EXPECT_EQ("4050000000000000\n" /* 1.0 */
-              "4110000000000000\n" /* 2.0 */
-              "0\n"                 /* 0.0 prints as a single 0 in octal */,
-              result);
+    EXPECT_EQ(
+        "4050000000000000\n" /* 1.0 */
+        "4110000000000000\n" /* 2.0 */
+        "0\n" /* 0.0 prints as a single 0 in octal */,
+        result);
 }
 
 // int -> double -> int round-trips for positive, negative, and zero values.

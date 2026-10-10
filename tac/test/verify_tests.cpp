@@ -130,8 +130,9 @@ TEST_F(TacVerifyTest, UntypedName)
     Local("%i", Type(TAC_TYPE_INT));
     Unary2(TAC_INSTRUCTION_COPY, Var("%i"), Var("%x"));
     Unary2(TAC_INSTRUCTION_COPY, Var("%i"), Var("g")); // no resolver: globals unknown too
-    EXPECT_EQ(Verify(), "verify: f: #1 copy: %x has no type\n"
-                        "verify: f: #2 copy: g has no type\n");
+    EXPECT_EQ(Verify(),
+              "verify: f: #1 copy: %x has no type\n"
+              "verify: f: #2 copy: g has no type\n");
 }
 
 TEST_F(TacVerifyTest, WidthMismatch)
@@ -140,8 +141,9 @@ TEST_F(TacVerifyTest, WidthMismatch)
     Local("%l", Type(TAC_TYPE_LONG));
     Binary(TAC_BINARY_ADD, Var("%i"), Var("%l"), Var("%l"));
     Unary2(TAC_INSTRUCTION_SIGN_EXTEND, Var("%l"), Var("%i"));
-    EXPECT_EQ(Verify(), "verify: f: #1 binary: src1 has 4 bytes but dst has 8\n"
-                        "verify: f: #2 sign_extend: extends 8 bytes to 4\n");
+    EXPECT_EQ(Verify(),
+              "verify: f: #1 binary: src1 has 4 bytes but dst has 8\n"
+              "verify: f: #2 sign_extend: extends 8 bytes to 4\n");
 }
 
 TEST_F(TacVerifyTest, FloatingKindMismatch)
@@ -152,9 +154,10 @@ TEST_F(TacVerifyTest, FloatingKindMismatch)
     Binary(TAC_BINARY_ADD_DOUBLE, Var("%d"), Var("%f"), Var("%d"));
     Binary(TAC_BINARY_NOT_EQUAL, Var("%d"), Const(TAC_CONST_INT), Var("%i"));
     Unary2(TAC_INSTRUCTION_FLOAT_TO_DOUBLE, Var("%d"), Var("%d"));
-    EXPECT_EQ(Verify(), "verify: f: #1 binary: src2 is float but dst is double\n"
-                        "verify: f: #2 binary: src1 is double but src2 is integer\n"
-                        "verify: f: #3 float_to_double: src is double\n");
+    EXPECT_EQ(Verify(),
+              "verify: f: #1 binary: src2 is float but dst is double\n"
+              "verify: f: #2 binary: src1 is double but src2 is integer\n"
+              "verify: f: #3 float_to_double: src is double\n");
 }
 
 TEST_F(TacVerifyTest, MemoryThroughNonPointer)
@@ -173,12 +176,13 @@ TEST_F(TacVerifyTest, OffsetOutsideAggregate)
     s->u.structure.alignment = 4;
     Local("%s", s);
     Local("%l", Type(TAC_TYPE_ULONG));
-    Tac_Instruction *in            = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
-    in->u.copy_from_offset.src     = xstrdup("%s");
-    in->u.copy_from_offset.offset  = 8;
-    in->u.copy_from_offset.dst     = Var("%l");
+    Tac_Instruction *in           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
+    in->u.copy_from_offset.src    = xstrdup("%s");
+    in->u.copy_from_offset.offset = 8;
+    in->u.copy_from_offset.dst    = Var("%l");
     Emit(in);
-    EXPECT_EQ(Verify(), "verify: f: #1 copy_from_offset: 8 bytes at offset 8 of %s, which has 12\n");
+    EXPECT_EQ(Verify(),
+              "verify: f: #1 copy_from_offset: 8 bytes at offset 8 of %s, which has 12\n");
 }
 
 // tac_verify_program resolves globals against the chain: definitions and externs.

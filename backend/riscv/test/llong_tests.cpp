@@ -217,7 +217,7 @@ int main(void)
 }
 
 static const double kDoubles[] = {
-    0.0,  0.5,  -0.5, 1.5,  -1.5, 4294967296.5, -4294967297.75, 123456789012.9,
+    0.0,  0.5,   -0.5,   1.5,     -1.5, 4294967296.5, -4294967297.75, 123456789012.9,
     1e18, -1e18, 9.2e18, -9.2e18,
 };
 
@@ -269,8 +269,8 @@ int main(void)
     std::string expect;
     for (uint64_t a : kValues) {
         int64_t s = (int64_t)a;
-        expect += Hex(DoubleBits((double)a)) + Hex(DoubleBits((double)s)) + Hex(FloatBits((float)a)) +
-                  Hex(FloatBits((float)s));
+        expect += Hex(DoubleBits((double)a)) + Hex(DoubleBits((double)s)) +
+                  Hex(FloatBits((float)a)) + Hex(FloatBits((float)s));
         expect += Hex((uint64_t)(int64_t)(int32_t)a) + Hex((uint32_t)a) +
                   Hex((uint64_t)(int64_t)(int16_t)a) + Hex((uint8_t)a) +
                   Hex((uint64_t)(int64_t)(int8_t)a) + "\n";
@@ -407,7 +407,7 @@ int main(void)
     return 0;
 }
 )";
-    uint64_t sw  = 0x0123456789abcdefull;
+    uint64_t sw     = 0x0123456789abcdefull;
     uint64_t fib = 0, b = 1;
     for (int i = 0; i < 90; i++) {
         uint64_t t = fib + b;

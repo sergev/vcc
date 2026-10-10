@@ -18,13 +18,13 @@ typedef char *va_list;
 
 #define va_start(ap, last) ((ap) = (char *)&(last) + __va_size(sizeof(last)))
 
-#define __va_align(ap, T)                                                              \
+#define __va_align(ap, T) \
     (_Alignof(T) > 8 ? ((ap) = (char *)(((unsigned long)(ap) + 15) & ~15UL)) : (ap))
 
-#define va_arg(ap, T)                                                                  \
-    (*(sizeof(T) > 16 ? *(T **)(((ap) += 8) - 8)                                        \
-                      : (__va_align(ap, T),                                             \
-                         (T *)(((ap) += __va_size(sizeof(T))) - __va_size(sizeof(T))))))
+#define va_arg(ap, T)                 \
+    (*(sizeof(T) > 16                 \
+           ? *(T **)(((ap) += 8) - 8) \
+           : (__va_align(ap, T), (T *)(((ap) += __va_size(sizeof(T))) - __va_size(sizeof(T))))))
 
 #define va_end(ap) ((void)(ap))
 

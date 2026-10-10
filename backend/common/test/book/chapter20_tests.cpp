@@ -30,22 +30,28 @@
 #include "book_test.h"
 
 // --- inlined helper_libs/util.c check_* / id helpers (exit on mismatch) ---
-static const std::string EX  = "#include <stdlib.h>\n";
-static const std::string ID  = "int id(int x) { return x; }\n";
+static const std::string EX    = "#include <stdlib.h>\n";
+static const std::string ID    = "int id(int x) { return x; }\n";
 static const std::string DBLID = "double dbl_id(double x) { return x; }\n";
-static const std::string UID = "unsigned unsigned_id(unsigned u) { return u; }\n";
-static const std::string UCID = "unsigned char uchar_id(unsigned char uc) { return uc; }\n";
-static const std::string C1I = R"H(int check_one_int(int actual, int expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string UID   = "unsigned unsigned_id(unsigned u) { return u; }\n";
+static const std::string UCID  = "unsigned char uchar_id(unsigned char uc) { return uc; }\n";
+static const std::string C1I =
+    R"H(int check_one_int(int actual, int expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1U = R"H(int check_one_uint(unsigned int actual, unsigned int expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1U =
+    R"H(int check_one_uint(unsigned int actual, unsigned int expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1UC = R"H(int check_one_uchar(unsigned char actual, unsigned char expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1UC =
+    R"H(int check_one_uchar(unsigned char actual, unsigned char expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1L = R"H(int check_one_long(long actual, long expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1L =
+    R"H(int check_one_long(long actual, long expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1UL = R"H(int check_one_ulong(unsigned long actual, unsigned long expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1UL =
+    R"H(int check_one_ulong(unsigned long actual, unsigned long expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1D = R"H(int check_one_double(double actual, double expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1D =
+    R"H(int check_one_double(double actual, double expected) { if (actual != expected) exit(-1); return 0; }
 )H";
 static const std::string C5I = R"H(int check_5_ints(int a, int b, int c, int d, int e, int start) {
     int args[5] = {a, b, c, d, e};
@@ -53,27 +59,31 @@ static const std::string C5I = R"H(int check_5_ints(int a, int b, int c, int d, 
     return 0;
 }
 )H";
-static const std::string C12I = R"H(int check_12_ints(int a, int b, int c, int d, int e, int f, int g, int h, int i,
+static const std::string C12I =
+    R"H(int check_12_ints(int a, int b, int c, int d, int e, int f, int g, int h, int i,
                   int j, int k, int l, int start) {
     int args[12] = {a, b, c, d, e, f, g, h, i, j, k, l};
     for (int n = 0; n < 12; n++) { if (args[n] != start + n) exit(-1); }
     return 0;
 }
 )H";
-static const std::string C12L = R"H(int check_12_longs(long a, long b, long c, long d, long e, long f, long g,
+static const std::string C12L =
+    R"H(int check_12_longs(long a, long b, long c, long d, long e, long f, long g,
                    long h, long i, long j, long k, long l, long start) {
     long args[12] = {a, b, c, d, e, f, g, h, i, j, k, l};
     for (int n = 0; n < 12; n++) { if (args[n] != start + n) exit(-1); }
     return 0;
 }
 )H";
-static const std::string C6C = R"H(int check_six_chars(char a, char b, char c, char d, char e, char f, int start) {
+static const std::string C6C =
+    R"H(int check_six_chars(char a, char b, char c, char d, char e, char f, int start) {
     char args[6] = {a, b, c, d, e, f};
     for (int i = 0; i < 6; i++) { if (args[i] != start + i) exit(-1); }
     return 0;
 }
 )H";
-static const std::string C14D = R"H(int check_14_doubles(double a, double b, double c, double d, double e, double f,
+static const std::string C14D =
+    R"H(int check_14_doubles(double a, double b, double c, double d, double e, double f,
                      double g, double h, double i, double j, double k, double l,
                      double m, double n, double start) {
     double args[14] = {a, b, c, d, e, f, g, h, i, j, k, l, m, n};
@@ -81,7 +91,8 @@ static const std::string C14D = R"H(int check_14_doubles(double a, double b, dou
     return 0;
 }
 )H";
-static const std::string C12V = R"H(int check_12_vals(int a, int b, int c, int d, int e, int f, int g, int h, int i,
+static const std::string C12V =
+    R"H(int check_12_vals(int a, int b, int c, int d, int e, int f, int g, int h, int i,
                   int j, long* k, double* l, int start) {
     int args[10] = {a, b, c, d, e, f, g, h, i, j};
     for (int n = 0; n < 10; n++) { if (args[n] != start + n) exit(-1); }
@@ -1941,8 +1952,8 @@ int main(void) { return target(1.0, 2.0, 3.0); }
 // sign extension.
 TEST_F(BookTest, Chapter20_AllNoCoal_TypeConversionInterference)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(EX + ID + DBLID + UID + UCID + C1I +
-                                            C1U + C1UC + C1L + C1UL + C1D + C14D + R"WP(
+    EXPECT_EQ("0\n", CompileAndRunBook(EX + ID + DBLID + UID + UCID + C1I + C1U + C1UC + C1L +
+                                       C1UL + C1D + C14D + R"WP(
 int glob;
 int test_movsx_src(int i) {
     check_one_int(i - 10, -5);

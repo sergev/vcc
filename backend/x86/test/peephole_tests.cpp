@@ -72,7 +72,8 @@ double rootp(const double *p) { return sqrt(*p); }
 // A mask computed only to be tested is test with the mask.
 TEST_F(X86Test, MaskTest)
 {
-    std::string code = Code(CompileToX86("int bits(unsigned x) { if (x & 8) return 1; return 2; }"));
+    std::string code =
+        Code(CompileToX86("int bits(unsigned x) { if (x & 8) return 1; return 2; }"));
     EXPECT_EQ(0u, code.find("testl $8, %edi\nje .L2\n")) << code;
 }
 
@@ -99,8 +100,7 @@ TEST_F(X86Test, CmovTriangle)
 // A diamond of two moves: one made, the other conditional.
 TEST_F(X86Test, CmovDiamond)
 {
-    EXPECT_EQ("testl %edi, %edi\ncmove %edx, %esi\nmovl %esi, %eax\nret\n",
-              Code(CompileToX86(R"(
+    EXPECT_EQ("testl %edi, %edi\ncmove %edx, %esi\nmovl %esi, %eax\nret\n", Code(CompileToX86(R"(
 int pick(int c, int a, int b) { int x; if (c) x = a; else x = b; return x; }
 )")));
 }
@@ -158,20 +158,23 @@ TEST_F(X86Test, NoCmovThroughPointer)
 // its inverse, `!=` two for the branch over its inverse.
 TEST_F(X86Test, FpCompareBranch)
 {
-    EXPECT_EQ(0u, Code(CompileToX86("int lt(double a, double b) { if (a < b) return 1; return 2; }"))
-                      .find("ucomisd %xmm0, %xmm1\njbe .L1\n"));
+    EXPECT_EQ(0u,
+              Code(CompileToX86("int lt(double a, double b) { if (a < b) return 1; return 2; }"))
+                  .find("ucomisd %xmm0, %xmm1\njbe .L1\n"));
 }
 
 TEST_F(X86Test, FpEqualBranch)
 {
-    EXPECT_EQ(0u, Code(CompileToX86("int eq(double a, double b) { if (a == b) return 1; return 2; }"))
-                      .find("ucomisd %xmm1, %xmm0\njne .L1\njp .L1\n"));
+    EXPECT_EQ(0u,
+              Code(CompileToX86("int eq(double a, double b) { if (a == b) return 1; return 2; }"))
+                  .find("ucomisd %xmm1, %xmm0\njne .L1\njp .L1\n"));
 }
 
 TEST_F(X86Test, FpNotEqualBranch)
 {
-    EXPECT_EQ(0u, Code(CompileToX86("int ne(double a, double b) { if (a != b) return 1; return 2; }"))
-                      .find("ucomisd %xmm1, %xmm0\njp .Lx0\nje .L1\n"));
+    EXPECT_EQ(0u,
+              Code(CompileToX86("int ne(double a, double b) { if (a != b) return 1; return 2; }"))
+                  .find("ucomisd %xmm1, %xmm0\njp .Lx0\nje .L1\n"));
 }
 
 // The rewrites keep their meaning: selects of every kind, FP branches with NaN, folded
@@ -179,9 +182,10 @@ TEST_F(X86Test, FpNotEqualBranch)
 TEST_F(X86Test, RunPeephole)
 {
     SKIP_IF_NO_X86_TOOLS();
-    EXPECT_EQ("7 -3 7 0 5 9\n1 0 0 1 1 0 0 1\n10 30 6\n"
-              "123456789a 7 123456789a 5 0 1 1\n",
-              CompileAndRunX86(R"(
+    EXPECT_EQ(
+        "7 -3 7 0 5 9\n1 0 0 1 1 0 0 1\n10 30 6\n"
+        "123456789a 7 123456789a 5 0 1 1\n",
+        CompileAndRunX86(R"(
 #include <stdio.h>
 
 int max(int a, int b) { return a > b ? a : b; }

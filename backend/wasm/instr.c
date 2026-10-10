@@ -589,7 +589,8 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
 // Long double: binary128 in memory, its operations calls of the runtime (float128.c,
 // with libgcc's names), each operand two i64 and an arithmetic result through memory.
 //
-static const Tac_Type ld_type = { .kind = TAC_TYPE_LONG_DOUBLE }, int_type = { .kind = TAC_TYPE_INT };
+static const Tac_Type ld_type  = { .kind = TAC_TYPE_LONG_DOUBLE },
+                      int_type = { .kind = TAC_TYPE_INT };
 
 static bool is_ld(const Tac_Type *t)
 {
@@ -665,8 +666,8 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
             name = ops[i].name;
     if (!name)
         internal_error("wasm: %s: long double operator %d", g->fn->name, op);
-    const Tac_Val *dst            = in->u.binary.dst;
-    const Tac_Val *const args[2]  = { in->u.binary.src1, in->u.binary.src2 };
+    const Tac_Val *dst             = in->u.binary.dst;
+    const Tac_Val *const args[2]   = { in->u.binary.src1, in->u.binary.src2 };
     const Tac_Type *const types[2] = { &ld_type, &ld_type };
     check_ld_operand(g, args[0]);
     check_ld_operand(g, args[1]);
@@ -701,9 +702,9 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     case TAC_UNARY_NOT: {
-        Tac_Const zero               = { .kind = TAC_CONST_LONG_DOUBLE };
-        Tac_Val z                    = { .kind = TAC_VAL_CONSTANT, .u.constant = &zero };
-        const Tac_Val *const args[2] = { src, &z };
+        Tac_Const zero                 = { .kind = TAC_CONST_LONG_DOUBLE };
+        Tac_Val z                      = { .kind = TAC_VAL_CONSTANT, .u.constant = &zero };
+        const Tac_Val *const args[2]   = { src, &z };
         const Tac_Type *const types[2] = { &ld_type, &ld_type };
         begin_dst(g, dst);
         gen_runtime(g, "__eqtf2", &int_type, args, types, 2, NULL);

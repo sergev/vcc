@@ -5,16 +5,16 @@
 // $254, rD and its own locals around a call), GCC's code on our runtime and libgcc, and
 // our code under newlib.
 //
-#include "mmix_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "mmix_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -306,7 +306,7 @@ TEST_F(MmixTest, RunSignatureTableWithGcc)
 TEST_F(MmixTest, RunRegcheckCatchesClobber)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string bad = R"(
+    std::string bad  = R"(
 	.text
 	.global	clobber
 	.p2align 2
@@ -342,19 +342,21 @@ long NAME(long n, long a, long b, long c, long d, long e, long f, long g, long h
     return s + b + c + d + e + f + g + h + i + j + k + l + m + o + p + q + r;
 }
 )";
-    auto named = [&](const char *name) {
+    auto named      = [&](const char *name) {
         std::string t = sum;
         t.replace(t.find("NAME"), 4, name);
         return t;
     };
-    const char *decl = "(long, long, long, long, long, long, long, long, long, long, long, "
-                       "long, long, long, long, long, long, long);\n";
-    std::string ours = std::string(R"(
+    const char *decl =
+        "(long, long, long, long, long, long, long, long, long, long, long, "
+        "long, long, long, long, long, long, long);\n";
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned long);
 long regcheck(long (*f)(long), long a);
 long their_check(void);
 void putbyte(int c);
-long their_sum)") + decl + named("our_sum") + R"(
+long their_sum)") + decl +
+                         named("our_sum") + R"(
 long our_one(long n)
 {
     long *v = __builtin_alloca(n * sizeof(long));
@@ -381,8 +383,8 @@ long their_check(void)
     return our_sum(10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17) == 207;
 }
 )";
-    EXPECT_EQ("f", Run(CompileToMmix(ours.c_str()) + regcheck_asm, "crt0.o", &theirs, { "-O2" },
-                       ".gcc"));
+    EXPECT_EQ(
+        "f", Run(CompileToMmix(ours.c_str()) + regcheck_asm, "crt0.o", &theirs, { "-O2" }, ".gcc"));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -411,10 +413,10 @@ int main(void)
 }
 )";
     char want[128];
-    snprintf(want, sizeof want, "%s %d %d %ld %g %.3f\n%lx %d\n", "gcc on ours", 11, -42,
-             -1234567890123L, 0.5, 3.14159,
-             (unsigned long)(((unsigned __int128)0x123456789abcdef0UL * 0xfedcba9876543210UL) >> 64),
-             1);
+    snprintf(
+        want, sizeof want, "%s %d %d %ld %g %.3f\n%lx %d\n", "gcc on ours", 11, -42,
+        -1234567890123L, 0.5, 3.14159,
+        (unsigned long)(((unsigned __int128)0x123456789abcdef0UL * 0xfedcba9876543210UL) >> 64), 1);
     EXPECT_EQ(want, GccOnOurRuntime(gcc));
     EXPECT_EQ(7, exit_status);
 }
@@ -522,7 +524,7 @@ int main(void)
 TEST_F(MmixTest, RunSqrtWithGcc)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string gcc = R"(
+    std::string gcc  = R"(
 #include <math.h>
 int gcc_check(void)
 {
@@ -554,7 +556,8 @@ int main(void)
 TEST_F(MmixTest, RunBitfieldsWeCallGcc)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCaller.c_str()), "crt0.o", &kBitfieldCallee, { "-O2" }, ".gcc"));
+    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCaller.c_str()), "crt0.o", &kBitfieldCallee, { "-O2" },
+                      ".gcc"));
     EXPECT_EQ(0, exit_status);
 }
 
@@ -562,6 +565,7 @@ TEST_F(MmixTest, RunBitfieldsWeCallGcc)
 TEST_F(MmixTest, RunBitfieldsGccCallsUs)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCallee.c_str()), "crt0.o", &kBitfieldCaller, { "-O2" }, ".gcc"));
+    EXPECT_EQ("", Run(CompileToMmix(kBitfieldCallee.c_str()), "crt0.o", &kBitfieldCaller, { "-O2" },
+                      ".gcc"));
     EXPECT_EQ(0, exit_status);
 }

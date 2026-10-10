@@ -59,12 +59,12 @@ class WasmTest : public QemuTest {
 protected:
     WasmTest() : QemuTest("wasm32", wasm32_config())
     {
-        wasm_structure = true;
-        wasm_regional  = true;
+        wasm_structure           = true;
+        wasm_regional            = true;
         translate_shared_cleanup = true;
-        wasm_peephole  = true;
-        wasm_stackify  = true;
-        wasm_coalesce  = true;
+        wasm_peephole            = true;
+        wasm_stackify            = true;
+        wasm_coalesce            = true;
     }
 
     // Pin instruction selection itself: no rewrites of the finished code.

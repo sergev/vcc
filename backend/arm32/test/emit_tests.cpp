@@ -41,8 +41,8 @@ static std::string Capture(F write)
 
 // One instruction line.  The operand syntax does not depend on the opcode, so the
 // operand tests below all use `mov`.
-static std::string Line(A32_Op op, std::initializer_list<A32_Operand> opnds,
-                        A32_Cond cond = A32_AL, bool set_flags = false)
+static std::string Line(A32_Op op, std::initializer_list<A32_Operand> opnds, A32_Cond cond = A32_AL,
+                        bool set_flags = false)
 {
     A32_Instr in{};
     in.op        = op;
@@ -86,8 +86,8 @@ TEST_F(EmitTest, RegisterNames)
 
 TEST_F(EmitTest, ModifiedImmediates)
 {
-    for (uint32_t v : { 0u, 1u, 0xffu, 0x100u, 0x3fcu, 0xff000000u, 0xf000000fu, 0x00ab0000u,
-                        0xc0000034u })
+    for (uint32_t v :
+         { 0u, 1u, 0xffu, 0x100u, 0x3fcu, 0xff000000u, 0xf000000fu, 0x00ab0000u, 0xc0000034u })
         EXPECT_TRUE(a32_operand2_imm(v)) << std::hex << v;
     // Not 8 significant bits, or an odd rotation.
     for (uint32_t v : { 0x101u, 0xc06u, 0x1feu, 0xffffu, 0x12345678u, 0xffffffffu, 0x00ff00ffu })
@@ -105,12 +105,18 @@ TEST_F(EmitTest, ConditionAndFlags)
 
 TEST_F(EmitTest, Operands)
 {
-    EXPECT_EQ("    movw    r1, #:lower16:counter\n", Line(A32_MOVW, { a32_reg(1), a32_lower16("counter", 0) }));
-    EXPECT_EQ("    movt    r1, #:upper16:table+8\n", Line(A32_MOVT, { a32_reg(1), a32_upper16("table", 8) }));
-    EXPECT_EQ("    mov     r0, r1, lsl #2\n", Line(A32_MOV, { a32_reg(0), a32_shift(1, A32_SHIFT_LSL, 2) }));
-    EXPECT_EQ("    mov     r0, r1, asr r2\n", Line(A32_MOV, { a32_reg(0), a32_shift_reg(1, A32_SHIFT_ASR, 2) }));
-    EXPECT_EQ("    mov     s2, d3\n", Line(A32_MOV, { a32_sreg(A32_S0 + 2), a32_dreg(A32_S0 + 6) }));
-    EXPECT_EQ("    mov     %r0, %d1\n", Line(A32_MOV, { a32_reg(A32_VREG), a32_dreg(A32_VREG + 1) }));
+    EXPECT_EQ("    movw    r1, #:lower16:counter\n",
+              Line(A32_MOVW, { a32_reg(1), a32_lower16("counter", 0) }));
+    EXPECT_EQ("    movt    r1, #:upper16:table+8\n",
+              Line(A32_MOVT, { a32_reg(1), a32_upper16("table", 8) }));
+    EXPECT_EQ("    mov     r0, r1, lsl #2\n",
+              Line(A32_MOV, { a32_reg(0), a32_shift(1, A32_SHIFT_LSL, 2) }));
+    EXPECT_EQ("    mov     r0, r1, asr r2\n",
+              Line(A32_MOV, { a32_reg(0), a32_shift_reg(1, A32_SHIFT_ASR, 2) }));
+    EXPECT_EQ("    mov     s2, d3\n",
+              Line(A32_MOV, { a32_sreg(A32_S0 + 2), a32_dreg(A32_S0 + 6) }));
+    EXPECT_EQ("    mov     %r0, %d1\n",
+              Line(A32_MOV, { a32_reg(A32_VREG), a32_dreg(A32_VREG + 1) }));
 }
 
 TEST_F(EmitTest, MemoryOperands)
@@ -131,7 +137,7 @@ TEST_F(EmitTest, RegisterList)
 
 TEST_F(EmitTest, Function)
 {
-    A32_Func *fn = a32_new_func("main", true);
+    A32_Func *fn  = a32_new_func("main", true);
     A32_Instr *in = a32_append(fn, A32_MOV);
     in->opnd[0]   = a32_reg(A32_R0);
     in->opnd[1]   = a32_imm(2);

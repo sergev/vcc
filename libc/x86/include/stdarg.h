@@ -25,8 +25,7 @@ void *__va_arg(va_list ap, unsigned long size, unsigned long align, int cls, voi
 
 #define va_start(ap, last) __va_start(ap)
 
-#define va_arg(ap, T)                                                                  \
-    (*(T *)__va_arg(ap, sizeof(T), _Alignof(T), __builtin_va_class(T), &(T){ 0 }))
+#define va_arg(ap, T) (*(T *)__va_arg(ap, sizeof(T), _Alignof(T), __builtin_va_class(T), &(T){ 0 }))
 
 #define va_end(ap) ((void)(ap))
 

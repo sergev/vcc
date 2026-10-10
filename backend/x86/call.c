@@ -58,7 +58,7 @@ static bool aggregate_regs(ArgState *s, int cls, ArgLoc *a)
         return false;
     a->cls = cls;
     for (int i = 0; i < 2; i++) {
-        int e = TAC_SYSV64_EIGHTBYTE(cls, i);
+        int e     = TAC_SYSV64_EIGHTBYTE(cls, i);
         a->reg[i] = e == TAC_SYSV64_INTEGER ? int_regs[s->next_int++]
                     : e == TAC_SYSV64_SSE   ? X86_XMM0 + s->next_sse++
                                             : -1;
@@ -210,13 +210,15 @@ static void save_varargs(Gen *g)
 {
     g->va.save = alloc_slot(g, NULL, NULL, 176, 16);
     for (int i = 0; i < 6; i++)
-        emit2(g, X86_MOV, X86_Q, x86_reg(int_regs[i], X86_Q), x86_mem(X86_FRAME, g->va.save + 8 * i));
+        emit2(g, X86_MOV, X86_Q, x86_reg(int_regs[i], X86_Q),
+              x86_mem(X86_FRAME, g->va.save + 8 * i));
     char skip[32];
     new_label(skip);
     emit2(g, X86_TEST, X86_B, x86_reg(X86_RAX, X86_B), x86_reg(X86_RAX, X86_B));
     emit1(g, X86_J, X86_Q, x86_label(skip))->cond = X86_CC_E;
     for (int i = 0; i < 8; i++)
-        emit2(g, X86_MOVSD, X86_Q, x86_xmm(X86_XMM0 + i), x86_mem(X86_FRAME, g->va.save + 48 + 16 * i));
+        emit2(g, X86_MOVSD, X86_Q, x86_xmm(X86_XMM0 + i),
+              x86_mem(X86_FRAME, g->va.save + 48 + 16 * i));
     x86_new_block(g->fn, skip);
 }
 
@@ -349,7 +351,6 @@ void gen_params(Gen *g)
     }
 }
 
-
 // The type an argument is passed as: the declared parameter type of an integer, when
 // there is one (a constant's own kind may differ), else its own.
 static const Tac_Type *arg_type(const Tac_Type *t, const Tac_Type *want)
@@ -440,7 +441,8 @@ static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 void reserve_outgoing(Gen *g)
 {
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
-        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL &&
+             in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
             x86_stack_builtin(in))
             continue;
         int n = stack_bytes(g, in);
@@ -455,8 +457,8 @@ void reserve_outgoing(Gen *g)
 static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
 {
     static const Tac_Type t_ptr = { .kind = TAC_TYPE_ULONG };
-    const char *name   = in->u.fun_call.fun_name;
-    const Tac_Val *dst = in->u.fun_call.dst;
+    const char *name            = in->u.fun_call.fun_name;
+    const Tac_Val *dst          = in->u.fun_call.dst;
     if (strcmp(name, "__builtin_stack_save") == 0) {
         if (dst)
             emit2(g, X86_MOV, X86_Q, x86_reg(X86_RSP, X86_Q), x86_reg(T0, X86_Q));
@@ -554,15 +556,15 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         gen_li(g, X86_RAX, X86_L, s.next_sse);
     // The result's address in rdi: the destination, or a slot for an unused one.
     if (struct_result(rt)) {
-        X86_Operand m = dst ? name_mem(g, dst->u.var_name, 0)
-                            : x86_mem(X86_FRAME, alloc_slot(g, NULL, NULL, x86_size(rt),
-                                                          x86_align(rt)));
+        X86_Operand m =
+            dst ? name_mem(g, dst->u.var_name, 0)
+                : x86_mem(X86_FRAME, alloc_slot(g, NULL, NULL, x86_size(rt), x86_align(rt)));
         emit2(g, X86_LEA, X86_Q, m, x86_reg(X86_RDI, X86_Q));
     }
     X86_Instr *call = in->u.fun_call.indirect
                           ? emit1(g, X86_CALL, X86_Q, x86_indirect(T2))
                           : emit1(g, X86_CALL, X86_Q, x86_label(in->u.fun_call.fun_name));
-    call->wide = wide;
+    call->wide      = wide;
     // A result in st(0) must be popped even when unused.
     if (struct_result(rt))
         return;

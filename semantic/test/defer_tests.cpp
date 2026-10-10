@@ -60,8 +60,9 @@ TEST_F(PipelineTest, DeferBreakLeaves_Neg)
 
 TEST_F(PipelineTest, DeferContinueLeaves_Neg)
 {
-    EXPECT_DEATH(RunPipeline("void f(void) { for (;;) { _Defer { switch (1) { default: continue; } } } }"),
-                 "'continue' statement not in a loop");
+    EXPECT_DEATH(
+        RunPipeline("void f(void) { for (;;) { _Defer { switch (1) { default: continue; } } } }"),
+        "'continue' statement not in a loop");
 }
 
 TEST_F(PipelineTest, DeferGotoOut_Neg)
@@ -101,8 +102,9 @@ void f(int x) { switch (x) { case 1: _Defer g(); case 2: g(); } }
 
 TEST_F(PipelineTest, DeferDefaultPast_Neg)
 {
-    EXPECT_DEATH(RunPipeline("void g(void); void f(int x) { switch (x) { _Defer g(); default: g(); } }"),
-                 "'default' label past a defer or co_alloca in its switch");
+    EXPECT_DEATH(
+        RunPipeline("void g(void); void f(int x) { switch (x) { _Defer g(); default: g(); } }"),
+        "'default' label past a defer or co_alloca in its switch");
 }
 
 TEST_F(PipelineTest, DeferCaseInside_Neg)

@@ -110,8 +110,8 @@ static int translate_trigraphs(char *buf, int n)
 {
     static const struct {
         char t, r;
-    } map[] = { { '=', '#' }, { '(', '[' }, { ')', ']' }, { '<', '{' }, { '>', '}' },
-                { '!', '|' }, { '\'', '^' }, { '-', '~' }, { '/', '\\' } };
+    } map[]   = { { '=', '#' }, { '(', '[' },  { ')', ']' }, { '<', '{' }, { '>', '}' },
+                  { '!', '|' }, { '\'', '^' }, { '-', '~' }, { '/', '\\' } };
     char *src = buf, *dst = buf;
     const char *end = buf + n;
 
@@ -246,7 +246,8 @@ char *refill_buffer(char *p)
                 if (cpp.in_block_comment)
                     pperror("unterminated comment");
                 for (int i = 1; i <= cpp.if_top && i <= MAXIF; i++)
-                    pperror_at(cpp.if_file[i], cpp.if_line[i], "unterminated conditional directive");
+                    pperror_at(cpp.if_file[i], cpp.if_line[i],
+                               "unterminated conditional directive");
                 cpp.tok_ptr = p;
                 flush_output();
                 exit_cpp();
@@ -275,7 +276,8 @@ char *spill_buffer(char *p)
     int d;
 
     if (cpp.push_top >= MAXFRE) {
-        pperror("expanding macro '%s' needs more pushback than the preprocessor has", cpp.macro_name);
+        pperror("expanding macro '%s' needs more pushback than the preprocessor has",
+                cpp.macro_name);
         p = cpp.tok_ptr = cpp.buf_end;
         flush_output(); // begin flushing pushback
         while (cpp.push_top > cpp.inc_push_top[cpp.inc_level]) {

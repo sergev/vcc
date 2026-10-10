@@ -3,16 +3,16 @@
 // source, one copy compiled by us (names prefixed our_) and one by clang -O1 (their_),
 // each calling the other's.
 //
-#include "x86_test.h"
 #include "../../common/test/bitfield_interop.h"
+#include "x86_test.h"
 
 namespace {
 
 // `text` with every PFX replaced by `pfx` and every OTHER by `other`.
 std::string Subst(std::string text, const std::string &pfx, const std::string &other)
 {
-    for (const auto &[from, to] : { std::pair{ std::string("PFX"), pfx },
-                                    std::pair{ std::string("OTHER"), other } })
+    for (const auto &[from, to] :
+         { std::pair{ std::string("PFX"), pfx }, std::pair{ std::string("OTHER"), other } })
         for (size_t at; (at = text.find(from)) != std::string::npos;)
             text.replace(at, from.size(), to);
     return text;
@@ -35,8 +35,8 @@ TEST_F(X86Test, RunScalarTableWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
     SKIP_IF_NO_X86_CLANG();
-    const char *types = "";
-    const char *decls = R"(
+    const char *types  = "";
+    const char *decls  = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e);
 unsigned short PFX_unarrow(int k);
 long PFX_mixed(int a, double b, long c, float d, char e, double f, short g, float h, long i,
@@ -45,7 +45,7 @@ long PFX_mixed(int a, double b, long c, float d, char e, double f, short g, floa
 long double PFX_rld(int pick, long double a, double x, long double b, int y);
 int PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 signed char PFX_narrow(signed char a, unsigned short b, short c, unsigned char d, _Bool e)
 {
     return (signed char)(a + (b >> 8) + c + d + e);
@@ -92,7 +92,7 @@ TEST_F(X86Test, RunStructTableWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
     SKIP_IF_NO_X86_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 struct ld { long l; double d; };
 struct dl { double d; long l; };
 struct ffi { float a, b; int c; };
@@ -103,7 +103,7 @@ struct dd { double a, b; };
 struct q1 { long double q; };
 struct qi { long double q; int i; };
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 long PFX_args(struct ld a, struct dl b, struct ffi c, struct c3 d, struct s17 e, struct q1 f,
               struct qi g, int h);
 long PFX_aon(long a, long b, long c, long d, long e, struct s16 x, long f);
@@ -120,7 +120,7 @@ struct q1 PFX_rq1(long double k);
 struct qi PFX_rqi(int k);
 int PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 long PFX_args(struct ld a, struct dl b, struct ffi c, struct c3 d, struct s17 e, struct q1 f,
               struct qi g, int h)
 {
@@ -194,7 +194,7 @@ TEST_F(X86Test, RunVariadicInteropWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
     SKIP_IF_NO_X86_CLANG();
-    const char *types = R"(
+    const char *types  = R"(
 #include <stdarg.h>
 struct s12 { int a, b, c; };
 struct s24 { long a, b, c; };
@@ -204,13 +204,13 @@ struct ld { long l; double d; };
 struct q1 { long double q; };
 struct al { _Alignas(16) long a; long b; };
 )";
-    const char *decls = R"(
+    const char *decls  = R"(
 long PFX_vsum(int n, va_list ap);
 long PFX_add(int n, ...);
 long PFX_add_own(int n, ...);
 long PFX_check(void);
 )";
-    const char *defs  = R"(
+    const char *defs   = R"(
 long PFX_vsum(int n, va_list ap)
 {
     long t = 0;
@@ -357,7 +357,7 @@ TEST_F(X86Test, RunAllocaWithClang)
 {
     SKIP_IF_NO_X86_TOOLS();
     SKIP_IF_NO_X86_CLANG();
-    const char *sum = R"(
+    const char *sum    = R"(
 long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h)
 {
     long *p = __builtin_alloca(n * sizeof(long));
@@ -369,11 +369,12 @@ long PFX_sum(int n, long a, long b, long c, long d, long e, long f, long g, long
     return s + b + c + d + e + f + g + h;
 }
 )";
-    std::string ours = std::string(R"(
+    std::string ours   = std::string(R"(
 void *__builtin_alloca(unsigned long);
 long their_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h);
 int their_check(void);
-)") + Subst(sum, "our", "") + R"(
+)") + Subst(sum, "our", "") +
+                         R"(
 int main(void)
 {
     long *q = __builtin_alloca(64);
@@ -385,7 +386,8 @@ int main(void)
     std::string theirs = std::string(R"(
 long our_sum(int n, long a, long b, long c, long d, long e, long f, long g, long h);
 volatile long seed = 7;
-)") + Subst(sum, "their", "") + R"(
+)") + Subst(sum, "their", "") +
+                         R"(
 int their_check(void)
 {
     long s = seed;

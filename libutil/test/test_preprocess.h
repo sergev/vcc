@@ -32,7 +32,8 @@
 #error "TEST_INCLUDE_DIR must be defined (the target's standard headers) to use test_preprocess.h"
 #endif
 #ifndef TEST_COMMON_INCLUDE_DIR
-#error "TEST_COMMON_INCLUDE_DIR must be defined (the shared standard headers) to use test_preprocess.h"
+#error \
+    "TEST_COMMON_INCLUDE_DIR must be defined (the shared standard headers) to use test_preprocess.h"
 #endif
 
 // True if some line of SRC has '#' as its first non-whitespace character, i.e.

@@ -528,9 +528,9 @@ TEST_F(TranslateTestX86, AlignofDouble)
 // of 4-byte elements, 4 * 8 + 2).
 TEST_F(TranslateTest, VaClassAarch64)
 {
-    target_config    = target_lookup("aarch64");
-    std::string yaml = CompileToYaml(
-        "int f(void) { return __builtin_va_class(struct { float a, b; }); }");
+    target_config = target_lookup("aarch64");
+    std::string yaml =
+        CompileToYaml("int f(void) { return __builtin_va_class(struct { float a, b; }); }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: function
   name: f
@@ -1062,8 +1062,9 @@ TEST_F(TranslateTest, CommaChainRunsEveryOperandInOrder)
 // is zeroed and the value is copied out of the slot, not out of its address.
 TEST_F(TranslateTest, CompoundLiteralDesignator)
 {
-    std::string yaml = CompileToYaml("struct s { int a, b; };"
-                                     "void f(void) { struct s x; x = (struct s){ .b = 2 }; }");
+    std::string yaml = CompileToYaml(
+        "struct s { int a, b; };"
+        "void f(void) { struct s x; x = (struct s){ .b = 2 }; }");
     EXPECT_EQ(yaml, R"(- toplevel:
   kind: function
   name: f

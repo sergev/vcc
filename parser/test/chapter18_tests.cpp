@@ -13,7 +13,6 @@
 //
 #include "fixture.h"
 
-
 // --- invalid_lex ---
 
 TEST_F(ParserTest, Chapter18_InvalidLexDotBadToken_Neg)
@@ -48,7 +47,6 @@ int main(void) {
 )SRC")),
                  "invalid suffix on numeric constant '\\.0fo'");
 }
-
 
 // --- invalid_parse ---
 
@@ -129,7 +127,6 @@ int main(void) {
     EXPECT_EQ(INITIALIZER_COMPOUND, init->kind);
     EXPECT_EQ(nullptr, init->u.items);
 }
-
 
 // --- invalid_parse/extra_credit ---
 
@@ -430,7 +427,6 @@ int main(void) {
 )SRC")),
                  "expected ';' before 'var'");
 }
-
 
 // --- invalid_parse ---
 

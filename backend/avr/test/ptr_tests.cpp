@@ -51,15 +51,15 @@ lsl r24
 rol r25
 add r24, r30
 adc r25, r31
-)"))
-        << s;
+)")) << s;
 }
 
 TEST_F(AvrTest, AddPtrMultiplied)
 {
     NaiveSelection();
-    std::string s = Body(CompileToAvr("struct s { char c[3]; };\n"
-                                      "struct s *f(struct s *p, int i) { return p + i; }"));
+    std::string s =
+        Body(CompileToAvr("struct s { char c[3]; };\n"
+                          "struct s *f(struct s *p, int i) { return p + i; }"));
     EXPECT_NE(std::string::npos, s.find(R"(ldi r22, 3
 ldi r23, 0
 mul r24, r22
@@ -139,7 +139,8 @@ TEST_F(AvrTest, RunStringLibrary)
     SKIP_IF_NO_AVR_TOOLS();
     EXPECT_EQ(R"(hello, world
 0
-)", CompileAndRunBook(R"(
+)",
+              CompileAndRunBook(R"(
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

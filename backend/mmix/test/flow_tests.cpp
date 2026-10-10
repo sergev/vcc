@@ -12,7 +12,8 @@ TEST_F(MmixTest, BranchOnValue)
     NaiveSelection();
     std::string code = Code(CompileToMmix("long f(long a) { if (a) return 1; return 2; }"));
     EXPECT_NE(std::string::npos, code.find(R"(ldo $248, $254, 0
-bz $248, L:)")) << code;
+bz $248, L:)"))
+        << code;
 }
 
 // A loop jumps back to its top; every label is L: and defined once in the unit.
@@ -26,7 +27,8 @@ TEST_F(MmixTest, LabelsUniqueInUnit)
     std::set<std::string> labels;
     size_t pos = 0;
     while ((pos = s.find(R"(
-L:)", pos)) != std::string::npos) {
+L:)",
+                         pos)) != std::string::npos) {
         size_t end        = s.find(":\n", pos + 3);
         std::string label = s.substr(pos + 1, end - pos - 1);
         EXPECT_TRUE(labels.insert(label).second) << "defined twice: " << label << "\n" << s;

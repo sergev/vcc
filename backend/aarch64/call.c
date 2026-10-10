@@ -244,7 +244,8 @@ static void emit_move(Gen *g, const Move *m)
 // destination; a cycle is broken through a scratch register.
 static void parallel_move(Gen *g, Move *m, int n)
 {
-    static const Tac_Type wide_int = { .kind = TAC_TYPE_LONG }, wide_fp = { .kind = TAC_TYPE_DOUBLE };
+    static const Tac_Type wide_int = { .kind = TAC_TYPE_LONG },
+                          wide_fp  = { .kind = TAC_TYPE_DOUBLE };
     while (n > 0) {
         int pick = -1;
         for (int i = 0; i < n && pick < 0; i++) {
@@ -461,7 +462,8 @@ static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 void reserve_outgoing(Gen *g)
 {
     for (const Tac_Instruction *in = g->tl->u.function.body; in; in = in->next) {
-        if ((in->kind != TAC_INSTRUCTION_FUN_CALL && in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
+        if ((in->kind != TAC_INSTRUCTION_FUN_CALL &&
+             in->kind != TAC_INSTRUCTION_FUN_CALL_NORETURN) ||
             a64_stack_builtin(in))
             continue;
         int n = stack_bytes(g, in);
@@ -476,9 +478,9 @@ void reserve_outgoing(Gen *g)
 static void gen_stack_builtin(Gen *g, const Tac_Instruction *in)
 {
     static const Tac_Type t_ptr = { .kind = TAC_TYPE_ULONG };
-    const char *name   = in->u.fun_call.fun_name;
-    const Tac_Val *dst = in->u.fun_call.dst;
-    A64_Operand t0     = a64_reg(T0, A64_X), sp = a64_reg(A64_SP, A64_X);
+    const char *name            = in->u.fun_call.fun_name;
+    const Tac_Val *dst          = in->u.fun_call.dst;
+    A64_Operand t0 = a64_reg(T0, A64_X), sp = a64_reg(A64_SP, A64_X);
     if (strcmp(name, "__builtin_stack_save") == 0) {
         if (dst)
             emit2(g, A64_MOV, t0, sp);
@@ -577,8 +579,9 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         used |= a64_reg_bit(A64_X8);
     }
 
-    A64_Instr *call = in->u.fun_call.indirect ? emit1(g, A64_BLR, a64_reg(T4, A64_X))
-                                              : emit1(g, A64_BL, a64_sym(in->u.fun_call.fun_name, 0));
+    A64_Instr *call  = in->u.fun_call.indirect
+                           ? emit1(g, A64_BLR, a64_reg(T4, A64_X))
+                           : emit1(g, A64_BL, a64_sym(in->u.fun_call.fun_name, 0));
     call->args_known = true;
     call->args       = used;
     if (!dst || indirect_result(ret))

@@ -262,7 +262,8 @@ static uint64_t const_to_uint64(const Tac_Const *c)
     case TAC_CONST_LONG:
         return unsigned_narrow((uint64_t)c->u.long_val, target_signed_bits(TAC_CONST_LONG));
     case TAC_CONST_LONG_LONG:
-        return unsigned_narrow((uint64_t)c->u.long_long_val, target_signed_bits(TAC_CONST_LONG_LONG));
+        return unsigned_narrow((uint64_t)c->u.long_long_val,
+                               target_signed_bits(TAC_CONST_LONG_LONG));
     case TAC_CONST_UINT:
         return c->u.uint_val;
     case TAC_CONST_ULONG:
@@ -428,7 +429,8 @@ static Tac_Val *make_int_const_val(Tac_ConstKind kind, uint64_t bits)
         rc->u.ulong_val = (unsigned long)unsigned_narrow(bits, target_unsigned_bits(kind));
         break;
     case TAC_CONST_ULONG_LONG:
-        rc->u.ulong_long_val = (unsigned long long)unsigned_narrow(bits, target_unsigned_bits(kind));
+        rc->u.ulong_long_val =
+            (unsigned long long)unsigned_narrow(bits, target_unsigned_bits(kind));
         break;
     case TAC_CONST_SCHAR:
         rc->u.char_val = (int)(int8_t)bits;
@@ -522,7 +524,7 @@ static Tac_Val *fold_binary_float(Tac_BinaryOperator op, const Tac_Const *c1, co
 
     if (c1->kind == TAC_CONST_LONG_DOUBLE) {
         Float128 a = ld_value(c1), b = ld_value(c2);
-        int c      = f128_cmp(a, b); // 2 when unordered
+        int c = f128_cmp(a, b); // 2 when unordered
         switch (op) {
         case TAC_BINARY_ADD:
         case TAC_BINARY_ADD_DOUBLE:
@@ -773,9 +775,9 @@ static Tac_Val *fold_binary_const(Tac_BinaryOperator op, const Tac_Const *c1, co
     // The result has the destination's type: the first operand's constant can have
     // another, through a same-width cast that emitted nothing (`unsigned u = 5; u << 45`
     // has an int 5, and its result would be narrowed to a BESM-6 int's 41 bits).
-    Tac_ConstKind result_kind = dst_kind >= 0                ? (Tac_ConstKind)dst_kind
-                                : binop_is_unsigned(op)      ? const_kind_to_unsigned(c1->kind)
-                                                             : c1->kind;
+    Tac_ConstKind result_kind = dst_kind >= 0           ? (Tac_ConstKind)dst_kind
+                                : binop_is_unsigned(op) ? const_kind_to_unsigned(c1->kind)
+                                                        : c1->kind;
     return make_int_const_val(result_kind, result);
 }
 
@@ -786,7 +788,7 @@ static int var_const_kind(const Tac_TopLevel *fn, const Tac_Val *v)
         return -1;
     for (int list = 0; list < 2; list++) {
         for (const Tac_Param *p = list ? fn->u.function.locals : fn->u.function.params; p;
-             p = p->next) {
+             p                  = p->next) {
             if (!p->type || strcmp(p->name, v->u.var_name) != 0)
                 continue;
             switch (p->type->kind) {
@@ -906,7 +908,7 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         if (dst_kind >= 0 && const_is_integer_kind(src->kind))
             return make_int_const_val((Tac_ConstKind)dst_kind,
                                       sign_extend_bits(const_to_int64(src), dst_kind));
-        rc = tac_new_const(src->kind == TAC_CONST_SCHAR   ? TAC_CONST_INT
+        rc = tac_new_const(src->kind == TAC_CONST_SCHAR  ? TAC_CONST_INT
                            : src->kind == TAC_CONST_INT  ? TAC_CONST_LONG
                            : src->kind == TAC_CONST_LONG ? TAC_CONST_LONG_LONG
                                                          : TAC_CONST_INT);
@@ -960,13 +962,15 @@ static Tac_Val *fold_conversion(Tac_InstructionKind kind, const Tac_Const *src, 
         switch (src->kind) {
         case TAC_CONST_LONG:
         case TAC_CONST_LONG_LONG:
-            rc            = tac_new_const(TAC_CONST_INT);
-            rc->u.int_val = sign_narrow((uint64_t)const_to_int64(src), target_signed_bits(TAC_CONST_INT));
+            rc = tac_new_const(TAC_CONST_INT);
+            rc->u.int_val =
+                sign_narrow((uint64_t)const_to_int64(src), target_signed_bits(TAC_CONST_INT));
             break;
         case TAC_CONST_ULONG:
         case TAC_CONST_ULONG_LONG:
-            rc             = tac_new_const(TAC_CONST_UINT);
-            rc->u.uint_val = unsigned_narrow(const_to_uint64(src), target_unsigned_bits(TAC_CONST_UINT));
+            rc = tac_new_const(TAC_CONST_UINT);
+            rc->u.uint_val =
+                unsigned_narrow(const_to_uint64(src), target_unsigned_bits(TAC_CONST_UINT));
             break;
         case TAC_CONST_INT:
             // A truncation to plain `char` cannot be distinguished from one to
@@ -1248,10 +1252,10 @@ Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *
             Tac_BinaryOperator m = mirror_comparison(cur->u.binary.op);
             if (m != (Tac_BinaryOperator)-1) {
                 opt_trace_instr("[const-fold] mirror:", cur);
-                Tac_Val *t          = cur->u.binary.src1;
-                cur->u.binary.src1  = cur->u.binary.src2;
-                cur->u.binary.src2  = t;
-                cur->u.binary.op    = m;
+                Tac_Val *t         = cur->u.binary.src1;
+                cur->u.binary.src1 = cur->u.binary.src2;
+                cur->u.binary.src2 = t;
+                cur->u.binary.op   = m;
                 opt_trace_instr("[const-fold]       →", cur);
             }
         }
@@ -1352,7 +1356,7 @@ Tac_Instruction *constant_fold_typed(Tac_Instruction *body, const Tac_TopLevel *
                 continue;
             }
             char **slot = k < (uint64_t)cur->u.jump_table.count ? &cur->u.jump_table.targets[k]
-                                                                 : &cur->u.jump_table.default_target;
+                                                                : &cur->u.jump_table.default_target;
             opt_trace_instr("[const-fold] jump table on a constant:", cur);
             Tac_Instruction *jmp = tac_new_instruction(TAC_INSTRUCTION_JUMP);
             jmp->u.jump.target   = *slot; // steal

@@ -75,13 +75,17 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --no-copy-prop      Disable copy propagation\n");
     fprintf(stderr, "    --no-cse            Disable common-subexpression elimination\n");
     fprintf(stderr, "    --no-dead-store     Disable dead store elimination\n");
-    fprintf(stderr, "    --no-loop-rotate    Disable loop rotation (a loop tested at its bottom)\n");
+    fprintf(stderr,
+            "    --no-loop-rotate    Disable loop rotation (a loop tested at its bottom)\n");
     fprintf(stderr, "    --no-ivsr           Disable induction-variable strength reduction\n");
-    fprintf(stderr, "    --no-shared-cleanup Lower a defer on every way out, never sharing one copy\n");
-    fprintf(stderr, "    --no-cond-jumps     Lower && || ! in a condition as a 0/1 value, and copy\n");
+    fprintf(stderr,
+            "    --no-shared-cleanup Lower a defer on every way out, never sharing one copy\n");
+    fprintf(stderr,
+            "    --no-cond-jumps     Lower && || ! in a condition as a 0/1 value, and copy\n");
     fprintf(stderr, "                        any loop condition into the guard\n");
     fprintf(stderr, "    --opt-debug         Trace optimizer passes to stdout\n");
-    fprintf(stderr, "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
+    fprintf(stderr,
+            "    --opt-max-iter N    Run at most N optimizer rounds (0: to a fixed point)\n");
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
     fprintf(stderr, "    -t, --target NAME   Target architecture (default: riscv64)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
@@ -96,24 +100,24 @@ static void print_usage(const char *prog_name)
 //
 static void init_args(Args *args)
 {
-    args->verbose        = 0;
-    args->help           = 0;
-    args->debug          = 0;
-    args->format         = FORMAT_TAC; // Default format
-    args->target_name    = "riscv64";
-    args->input_file     = NULL;
-    args->output_file    = NULL;
-    args->no_unreachable = 0;
-    args->no_copy_prop   = 0;
-    args->no_cse         = 0;
-    args->opt_max_iter   = -1;
-    args->no_dead_store  = 0;
-    args->no_loop_rotate = 0;
-    args->no_ivsr        = 0;
+    args->verbose           = 0;
+    args->help              = 0;
+    args->debug             = 0;
+    args->format            = FORMAT_TAC; // Default format
+    args->target_name       = "riscv64";
+    args->input_file        = NULL;
+    args->output_file       = NULL;
+    args->no_unreachable    = 0;
+    args->no_copy_prop      = 0;
+    args->no_cse            = 0;
+    args->opt_max_iter      = -1;
+    args->no_dead_store     = 0;
+    args->no_loop_rotate    = 0;
+    args->no_ivsr           = 0;
     args->no_shared_cleanup = 0;
     args->no_cond_jumps     = 0;
-    args->verify         = 0;
-    args->opt_debug      = 0;
+    args->verify            = 0;
+    args->opt_debug         = 0;
 }
 
 //
@@ -148,25 +152,25 @@ static char *generate_output_filename(const char *input_file, OutputFormat forma
 static int parse_args(int argc, char *argv[], Args *args)
 {
     static struct option long_options[] = {
-        { "verbose", no_argument, 0, 'v' },        //
-        { "help", no_argument, 0, 'h' },           //
-        { "debug", no_argument, 0, 'D' },          //
-        { "tac", no_argument, 0, 'T' },            //
-        { "yaml", no_argument, 0, 'y' },           //
-        { "dot", no_argument, 0, 'd' },            //
-        { "target", required_argument, 0, 't' },   //
-        { "no-unreachable", no_argument, 0, 256 }, //
-        { "no-copy-prop", no_argument, 0, 257 },   //
-        { "no-dead-store", no_argument, 0, 258 },  //
-        { "opt-debug", no_argument, 0, 259 },      //
-        { "verify", no_argument, 0, 260 },         //
-        { "no-cse", no_argument, 0, 261 },         //
+        { "verbose", no_argument, 0, 'v' },            //
+        { "help", no_argument, 0, 'h' },               //
+        { "debug", no_argument, 0, 'D' },              //
+        { "tac", no_argument, 0, 'T' },                //
+        { "yaml", no_argument, 0, 'y' },               //
+        { "dot", no_argument, 0, 'd' },                //
+        { "target", required_argument, 0, 't' },       //
+        { "no-unreachable", no_argument, 0, 256 },     //
+        { "no-copy-prop", no_argument, 0, 257 },       //
+        { "no-dead-store", no_argument, 0, 258 },      //
+        { "opt-debug", no_argument, 0, 259 },          //
+        { "verify", no_argument, 0, 260 },             //
+        { "no-cse", no_argument, 0, 261 },             //
         { "opt-max-iter", required_argument, 0, 262 }, //
-        { "no-loop-rotate", no_argument, 0, 263 }, //
-        { "no-ivsr", no_argument, 0, 264 },        //
-        { "no-shared-cleanup", no_argument, 0, 265 }, //
-        { "no-cond-jumps", no_argument, 0, 266 },     //
-        {},                                        //
+        { "no-loop-rotate", no_argument, 0, 263 },     //
+        { "no-ivsr", no_argument, 0, 264 },            //
+        { "no-shared-cleanup", no_argument, 0, 265 },  //
+        { "no-cond-jumps", no_argument, 0, 266 },      //
+        {},                                            //
     };
 
     int opt;
@@ -337,14 +341,14 @@ void process_file(const Args *args)
         flags.max_iterations = args->opt_max_iter;
     else if (getenv("VCC_OPT_MAX_ITER")) // for bisecting a whole build
         flags.max_iterations = atoi(getenv("VCC_OPT_MAX_ITER"));
-    flags.dead_store_elim  = !args->no_dead_store;
-    flags.loop_rotate      = !args->no_loop_rotate;
-    flags.ivsr             = !args->no_ivsr;
+    flags.dead_store_elim    = !args->no_dead_store;
+    flags.loop_rotate        = !args->no_loop_rotate;
+    flags.ivsr               = !args->no_ivsr;
     translate_shared_cleanup = !args->no_shared_cleanup;
     translate_cond_jumps     = !args->no_cond_jumps;
     if (args->verify)
         translate_verify = 1;
-    flags.debug            = args->opt_debug;
+    flags.debug = args->opt_debug;
 
     if (args->verbose) {
         printf("Processing %s in verbose mode\n", args->input_file);

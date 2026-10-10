@@ -56,7 +56,8 @@ TEST_F(MmixTest, RegallocSignedNotReextended)
 {
     EXPECT_EQ(R"(addu $0, $0, 1
 pop 1, 0
-)", Code(CompileToMmix("int inc(int a) { return a + 1; }")));
+)",
+              Code(CompileToMmix("int inc(int a) { return a + 1; }")));
 }
 
 // Run: arithmetic wraps in its type in a register as it does in memory; a narrow result
@@ -134,23 +135,19 @@ TEST_F(MmixTest, RunRegallocPressure)
     EXPECT_EQ("", CompileAndRunMmix(R"(long id(long x) { return x; }
 long across(void)
 {
-)" +
-                                    decl + "    return 0" + use +
+)" + decl + "    return 0" + use +
                                     R"(;
 }
 long leaf(long a, long b)
 {
-)" +
-                                    mix + "    return 0" + wsum +
+)" + mix + "    return 0" + wsum +
                                     R"(;
 }
 int main(void)
 {
-    if (across() != )" +
-                                    std::to_string(want) +
+    if (across() != )" + std::to_string(want) +
                                     R"(L) return 1;
-    if (leaf(5, 2) != )" +
-                                    std::to_string(wwant) +
+    if (leaf(5, 2) != )" + std::to_string(wwant) +
                                     R"(L) return 2;
     return 0;
 }

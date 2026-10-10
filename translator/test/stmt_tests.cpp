@@ -343,7 +343,8 @@ static int count(const std::string &s, const std::string &what)
 
 TEST_F(TranslateTestRiscv, IfAndOrAsJumps)
 {
-    std::string yaml = CompileToYaml("int f(int a, int b, int c) { if ((a && b) || !c) return 1; return 2; }");
+    std::string yaml =
+        CompileToYaml("int f(int a, int b, int c) { if ((a && b) || !c) return 1; return 2; }");
     EXPECT_EQ(0, count(yaml, "kind: copy")) << yaml;
     EXPECT_EQ(0, count(yaml, "op: not_equal")) << yaml;
     EXPECT_EQ(0, count(yaml, "op: not\n")) << yaml;
@@ -370,7 +371,8 @@ int f(int *p)
 TEST_F(TranslateTestRiscv, SimpleLoopKeepsItsGuard)
 {
     rotate           = true;
-    std::string yaml = CompileToYaml("int f(int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }");
+    std::string yaml = CompileToYaml(
+        "int f(int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }");
     EXPECT_EQ(2, count(yaml, "op: less_than")) << yaml;
     EXPECT_EQ(0, count(yaml, "kind: jump\n")) << yaml;
 }

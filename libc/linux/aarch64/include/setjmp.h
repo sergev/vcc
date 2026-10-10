@@ -8,11 +8,11 @@
 
 typedef struct __jmp_buf_tag {
     unsigned long long __jmpbuf[22];
-    int                __mask_was_saved;
-    unsigned long      __saved_mask[16];
+    int __mask_was_saved;
+    unsigned long __saved_mask[16];
 } jmp_buf[1];
 
-int            _setjmp(jmp_buf env);
+int _setjmp(jmp_buf env);
 _Noreturn void longjmp(jmp_buf env, int val);
 #define setjmp(env) _setjmp(env)
 

@@ -2,8 +2,8 @@
 // ARM32 peephole pass and compare-and-branch fusion: what each rewrite makes of
 // typical code, and programs whose results must not change.
 //
-#include "arm32_test.h"
 #include "../../common/test/bitfield_run.h"
+#include "arm32_test.h"
 
 // A loop: the compare fused with its branch, the index folded into the load.
 TEST_F(Arm32Test, PeepholeLoop)
@@ -40,7 +40,8 @@ int sel(int c, int a, int b) { int r; if (c) r = a + 1; else r = b - 1; return r
 int clamp(int x) { if (x < 0) x = 0; return x; }
 double fmax2(double a, double b) { return a > b ? a : b; }
 )"));
-    EXPECT_NE(std::string::npos, code.find("cmp r0, #0\naddne r0, r1, #1\nsubeq r0, r2, #1\nbx lr\n"))
+    EXPECT_NE(std::string::npos,
+              code.find("cmp r0, #0\naddne r0, r1, #1\nsubeq r0, r2, #1\nbx lr\n"))
         << code;
     EXPECT_NE(std::string::npos, code.find("cmp r0, #0\nmovlt r0, #0\nbx lr\n")) << code;
     EXPECT_NE(std::string::npos,
@@ -132,9 +133,10 @@ int main(void)
 // two accesses are two, not an ldrd/strd.
 TEST_F(Arm32Test, PeepholeKeepsVolatileReload)
 {
-    EXPECT_NE(std::string::npos,
-              Code(CompileToArm32("int f(int a) { volatile int x = a; return x; }"))
-                  .find("sub sp, sp, #8\nstr r0, [sp, #4]\nldr r0, [sp, #4]\nadd sp, sp, #8\nbx lr\n"));
+    EXPECT_NE(
+        std::string::npos,
+        Code(CompileToArm32("int f(int a) { volatile int x = a; return x; }"))
+            .find("sub sp, sp, #8\nstr r0, [sp, #4]\nldr r0, [sp, #4]\nadd sp, sp, #8\nbx lr\n"));
 }
 TEST_F(Arm32Test, PeepholeKeepsVolatileUnpaired)
 {
@@ -162,9 +164,11 @@ void bump_d(struct S *p) { p->d++; }
     EXPECT_NE(std::string::npos, code.find("ldrb r0, [r0]\nsbfx r0, r0, #3, #5\nbx lr\n")) << code;
     EXPECT_NE(std::string::npos, code.find("ldr r0, [r2]\nbfi r0, r1, #8, #12\nstr r0, [r2]\n"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("ldrb r0, [r3]\nbfi r0, r1, #3, #5\nstrb r0, [r3]\nbx lr\n"))
+    EXPECT_NE(std::string::npos,
+              code.find("ldrb r0, [r3]\nbfi r0, r1, #3, #5\nstrb r0, [r3]\nbx lr\n"))
         << code;
-    EXPECT_NE(std::string::npos, code.find("ldr r0, [r1]\nbfc r0, #8, #12\nstr r0, [r1]\n")) << code;
+    EXPECT_NE(std::string::npos, code.find("ldr r0, [r1]\nbfc r0, #8, #12\nstr r0, [r1]\n"))
+        << code;
     EXPECT_NE(std::string::npos,
               code.find("ubfx r0, r2, #4, #12\nadd r0, r0, #1\nbfi r2, r0, #4, #12\n"))
         << code;
@@ -191,8 +195,12 @@ unsigned low(unsigned x) { return x & 0xff; }
     EXPECT_NE(std::string::npos, code.find("ubfx r0, r0, #13, #11\nbx lr\n")) << code;
     EXPECT_NE(std::string::npos, code.find("sbfx r0, r0, #13, #12\nbx lr\n")) << code;
     EXPECT_NE(std::string::npos, code.find("bfi r0, r1, #8, #12\nbx lr\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("push {lr}\nlsr r0, r0, #4\nmovw lr, #1285\nand r0, r0, lr\npop {pc}\n")) << code;
-    EXPECT_NE(std::string::npos, code.find("lsr r1, r0, #4\nubfx r0, r1, #0, #12\nadd r0, r0, r1\n")) << code;
+    EXPECT_NE(std::string::npos,
+              code.find("push {lr}\nlsr r0, r0, #4\nmovw lr, #1285\nand r0, r0, lr\npop {pc}\n"))
+        << code;
+    EXPECT_NE(std::string::npos,
+              code.find("lsr r1, r0, #4\nubfx r0, r1, #0, #12\nadd r0, r0, r1\n"))
+        << code;
     EXPECT_NE(std::string::npos, code.find("and r0, r0, #255\nbx lr\n")) << code;
 }
 

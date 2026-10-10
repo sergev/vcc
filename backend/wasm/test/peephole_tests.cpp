@@ -45,7 +45,8 @@ EXPECT_OPT(VolatileInOrder,
            "int f(volatile int *p) { int a = *p; int b = *p; return b - a; }")
 
 // A value set and read at once, then read again: local.tee.
-EXPECT_OPT(Tee, "local.get 0\ni32.const 3\ni32.mul\nlocal.tee 0\nlocal.get 0\ni32.mul\nend_function\n",
+EXPECT_OPT(Tee,
+           "local.get 0\ni32.const 3\ni32.mul\nlocal.tee 0\nlocal.get 0\ni32.mul\nend_function\n",
            "int f(int x) { int y = x * 3; return y * y; }")
 
 // A result nobody reads is dropped.
@@ -53,7 +54,8 @@ EXPECT_OPT(DropResult, "call h\ndrop\ni32.const 0\nend_function\n",
            "int h(void); int f(void) { h(); return 0; }")
 
 // An index times a power of two is a shift; == 0 is eqz.
-EXPECT_OPT(ShiftAndEqz, "local.get 0\ni64.const 3\ni64.shl\ni64.eqz\ni64.extend_i32_s\nend_function\n",
+EXPECT_OPT(ShiftAndEqz,
+           "local.get 0\ni64.const 3\ni64.shl\ni64.eqz\ni64.extend_i32_s\nend_function\n",
            "long long f(long long a) { return a * 8 == 0; }")
 
 // A constant index goes into the store's offset.

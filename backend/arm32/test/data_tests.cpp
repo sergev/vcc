@@ -43,8 +43,7 @@ zeros:
     .byte   1
     .byte   2
     .byte   3
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(d:
     .word   0x00000000, 0x3ff80000
 )")) << s;
@@ -52,8 +51,7 @@ zeros:
     EXPECT_NE(std::string::npos, s.find(R"(    .size   ld, 8
 ld:
     .word   0x9999999a, 0x3fb99999
-)"))
-        << s;
+)")) << s;
     EXPECT_NE(std::string::npos, s.find(R"(p:
     .word   counter
 )")) << s;
@@ -88,8 +86,8 @@ TEST_F(Arm32Test, StaticLocal)
 int next(void) { static int n = 10; n = n + 1; return n; }
 int other(void) { static int n = 20; return n; }
 )");
-    size_t fn = s.find(".size   next, .-next");
-    size_t n  = s.find(R"(
+    size_t fn     = s.find(".size   next, .-next");
+    size_t n      = s.find(R"(
 n:
     .word   10
 )");

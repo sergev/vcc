@@ -326,8 +326,7 @@ static void codegen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl
                 // declared SUBP.  A frame-resident name (function pointer) is skipped by
                 // declare_global_name.  An indirect call reads its callee's address out of
                 // a variable — `,wtc, name` — so that name needs the same declaration.
-                if (instr->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN ||
-                    instr->u.fun_call.indirect)
+                if (instr->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN || instr->u.fun_call.indirect)
                     declare_global_name(block, &tail, f, &declared, instr->u.fun_call.fun_name);
                 break;
             // All width/int-FP/pointer-representation conversions share the {src, dst}

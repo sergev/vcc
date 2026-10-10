@@ -131,7 +131,7 @@ TEST_F(EmitTest, Sizes)
 
 TEST_F(EmitTest, Function)
 {
-    AVR_Func *fn = avr_new_func("main", true);
+    AVR_Func *fn  = avr_new_func("main", true);
     AVR_Instr *in = avr_append(fn, AVR_LDI);
     in->opnd[0]   = avr_reg(24);
     in->opnd[1]   = avr_imm(200);

@@ -97,7 +97,8 @@ ret
 }
 TEST_F(Aarch64Test, FrameSpX30Paired)
 {
-    EXPECT_EQ(R"(stp x30, x19, [sp, #-16]!
+    EXPECT_EQ(
+        R"(stp x30, x19, [sp, #-16]!
 mov w0, w0
 mov w19, w1
 bl g
@@ -105,7 +106,7 @@ add w0, w0, w19
 ldp x30, x19, [sp], #16
 ret
 )",
-              Code(CompileToAarch64("int g(int); int f(int a, int b) { int x = g(a); return x + b; }")));
+        Code(CompileToAarch64("int g(int); int f(int a, int b) { int x = g(a); return x + b; }")));
 }
 TEST_F(Aarch64Test, FrameSpWithSlots)
 {
@@ -226,8 +227,8 @@ ldr x30, [sp, #16]
 ldp d8, d9, [sp], #32
 ret
 )",
-              Code(CompileToAarch64(
-                  "double g(double); double f(double a, double b) { double x = g(a); return x + b + a; }")));
+              Code(CompileToAarch64("double g(double); double f(double a, double b) { double x = "
+                                    "g(a); return x + b + a; }")));
 }
 TEST_F(Aarch64Test, FrameSpMixedSaves)
 {

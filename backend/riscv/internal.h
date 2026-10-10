@@ -2,9 +2,10 @@
 // RISC-V code generator internals.
 //
 // A scalar `%` name that is never in memory may get a register (regalloc.c): an
-// argument register unless it is live across a call, else a callee-saved one; any other `%` name lives in a slot at a fixed offset from the frame
-// pointer s0, any other name at its symbol.  An instruction works on registers
-// directly, and goes through scratch registers for operands in memory.
+// argument register unless it is live across a call, else a callee-saved one; any other `%` name
+// lives in a slot at a fixed offset from the frame pointer s0, any other name at its symbol.  An
+// instruction works on registers directly, and goes through scratch registers for operands in
+// memory.
 //
 // Frame (s0 = sp at entry, 16-byte aligned):
 //   s0 + 0 ...       incoming stack arguments
@@ -64,7 +65,7 @@ typedef struct {
     int nconsts;       // double literals (rv32), emitted after the function
     int consts_cap;
     uint64_t *const_bits;
-    int *const_label;  // .LC<n>
+    int *const_label; // .LC<n>
 } Gen;
 
 //
@@ -199,8 +200,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in);
 // on rv32 long long division and conversions); `type_of(arg, v)` gives the type of
 // operand `v`.  Sets *dst to its result.
 typedef const Tac_Type *TypeOf(const void *arg, const Tac_Val *v);
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst);
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst);
 
 //
 // 64-bit integers on rv32, in register pairs (llong.c)

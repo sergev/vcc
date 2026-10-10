@@ -540,8 +540,7 @@ void copy_ptr(Gen *g, bool load, int ptr, const char *name, int off, int size, i
     }
 }
 
-void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, int size,
-                int align)
+void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, int size, int align)
 {
     if ((doff | soff) & 1)
         align = 1;
@@ -555,9 +554,9 @@ void copy_named(Gen *g, const char *dst, int doff, const char *src, int soff, in
     if (is_byref(g, src))
         load_byref(g, src);
     for (int k = 0; k < n; k++) {
-        Msp_Instr *in = emit2(g, MSP_MOV, mem_at(g, src, soff + k * unit),
-                              mem_at(g, dst, doff + k * unit));
-        in->byte      = !words;
+        Msp_Instr *in =
+            emit2(g, MSP_MOV, mem_at(g, src, soff + k * unit), mem_at(g, dst, doff + k * unit));
+        in->byte = !words;
     }
 }
 
@@ -600,7 +599,7 @@ void parallel_moves(Gen *g, Move *m, int n)
         // A cycle: swap the first destination with its source; the moves that read the
         // destination now read the source.
         const Msp_Operand *a = &m[0].dst, *b = &m[0].src;
-        bool byte      = m[0].byte && (a->kind != MSP_OPND_REG || b->kind != MSP_OPND_REG);
+        bool byte = m[0].byte && (a->kind != MSP_OPND_REG || b->kind != MSP_OPND_REG);
         emit2(g, MSP_XOR, msp_copy(b), msp_copy(a))->byte = byte;
         emit2(g, MSP_XOR, msp_copy(a), msp_copy(b))->byte = byte;
         emit2(g, MSP_XOR, msp_copy(b), msp_copy(a))->byte = byte;
@@ -660,8 +659,7 @@ void load_vals(Gen *g, const Load *l, int n)
             }
             for (int i = 0; i < l[j].n; i++)
                 m[k++] = (Move){ msp_reg(l[j].reg + i),
-                                 msp_imm(i < 4 ? (int64_t)(bits >> (16 * i) & 0xffff) : 0),
-                                 false };
+                                 msp_imm(i < 4 ? (int64_t)(bits >> (16 * i) & 0xffff) : 0), false };
             continue;
         }
         int w = size == 1 ? 1 : size / 2;

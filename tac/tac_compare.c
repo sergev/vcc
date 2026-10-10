@@ -398,8 +398,7 @@ static bool tac_compare_one_toplevel(const Tac_TopLevel *a, const Tac_TopLevel *
         return tac_compare_type(a->u.function.type, b->u.function.type) &&
                tac_compare_param(a->u.function.params, b->u.function.params) &&
                tac_compare_param(a->u.function.locals, b->u.function.locals) &&
-               tac_compare_static_local(a->u.function.static_locals,
-                                        b->u.function.static_locals) &&
+               tac_compare_static_local(a->u.function.static_locals, b->u.function.static_locals) &&
                tac_compare_instruction(a->u.function.body, b->u.function.body);
     case TAC_TOPLEVEL_STATIC_VARIABLE:
         if ((a->u.static_variable.name == NULL) != (b->u.static_variable.name == NULL))

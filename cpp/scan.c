@@ -62,7 +62,7 @@ char *scan_token(char *p)
             cpp.tok_ptr = p - 1; // the marker
             flush_output();      // emit finished text up to it
             if (cpp.paint_top > 0)
-                --cpp.paint_top; // region closes: the macro may expand again
+                --cpp.paint_top;           // region closes: the macro may expand again
             cpp.out_ptr = cpp.tok_ptr = p; // skip the marker (never emitted)
             goto again;
         // Two-character operators in a #if expression (||, &&, ==, !=, <=, >=,

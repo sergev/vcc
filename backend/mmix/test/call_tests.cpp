@@ -31,8 +31,7 @@ TEST_F(MmixTest, IndirectCall)
     EXPECT_NE(std::string::npos, code.find(R"(ldo $249, $254, 0
 setl $2, #3
 pushgo $1, $249, 0
-)"))
-        << code;
+)")) << code;
 }
 
 // The 17th and 18th arguments go on the stack at 0 and 8 of the caller's frame, below
@@ -71,7 +70,8 @@ TEST_F(MmixTest, FloatArgument)
     std::string code = Code(CompileToMmix("float g(float); float f(float x) { return g(x); }"));
     EXPECT_NE(std::string::npos, code.find(R"(ldt $2, $254, 0
 pushj $1, g
-sttu $1, )")) << code;
+sttu $1, )"))
+        << code;
 }
 
 // Run: a caller's values survive a callee that writes all 32 local registers: the
@@ -114,14 +114,15 @@ static const char eighteen_params[] =
 static const char eighteen_body[] =
     "{ return a0 + 2 * a1 + 3 * (long)a2 + 4 * a3 + 5 * a4 + 6 * a5 + 7 * a6 + a7 + a8 + a9 "
     "+ a10 + a11 + a12 + a13 + a14 + (long)(4 * a15) + 1000 * a16 + 10000 * a17; }\n";
-static const char eighteen_args[] = "(-1, -2, 4000000000u, -3, 60000, -4, 200, 1, 2, 3, 4, 5, 6, 7, "
-                                    "8, 10, -5, 250)";
+static const char eighteen_args[] =
+    "(-1, -2, 4000000000u, -3, 60000, -4, 200, 1, 2, 3, 4, 5, 6, 7, "
+    "8, 10, -5, 250)";
 
 // The expected sum of eighteen_args, on the host.
 static long Eighteen()
 {
-    return -1 + 2 * -2 + 3 * 4000000000L + 4 * -3 + 5 * 60000 + 6 * -4 + 7 * 200 + 1 + 2 + 3 +
-           4 + 5 + 6 + 7 + 8 + 40 + 1000 * -5 + 10000 * 250;
+    return -1 + 2 * -2 + 3 * 4000000000L + 4 * -3 + 5 * 60000 + 6 * -4 + 7 * 200 + 1 + 2 + 3 + 4 +
+           5 + 6 + 7 + 8 + 40 + 1000 * -5 + 10000 * 250;
 }
 
 // Run: eighteen arguments of every width, two of them on the stack, our caller and our
@@ -130,8 +131,8 @@ TEST_F(MmixTest, RunEighteenArguments)
 {
     SKIP_IF_NO_MMIX_TOOLS();
     std::string src = std::string("long f(") + eighteen_params + ")\n" + eighteen_body +
-                      "int main(void) { return f" + eighteen_args + " == " +
-                      std::to_string(Eighteen()) + "L ? 0 : 1; }\n";
+                      "int main(void) { return f" + eighteen_args +
+                      " == " + std::to_string(Eighteen()) + "L ? 0 : 1; }\n";
     EXPECT_EQ("", CompileAndRunMmix(src));
     EXPECT_EQ(0, exit_status);
 }
@@ -142,16 +143,16 @@ TEST_F(MmixTest, RunEighteenArgumentsWithGcc)
 {
     SKIP_IF_NO_MMIX_TOOLS();
     std::string expected = std::to_string(Eighteen()) + "L";
-    std::string gcc = std::string("long gf(") + eighteen_params + ")\n" + eighteen_body +
-                      "long of(" + eighteen_params + ");\n" +
-                      "long gcall(void) { return of" + eighteen_args + "; }\n";
-    std::string ours = CompileToMmix(
-        (std::string("long gf(") + eighteen_params + R"();
+    std::string gcc      = std::string("long gf(") + eighteen_params + ")\n" + eighteen_body +
+                           "long of(" + eighteen_params + ");\n" + "long gcall(void) { return of" +
+                           eighteen_args + "; }\n";
+    std::string ours = CompileToMmix((std::string("long gf(") + eighteen_params + R"();
 long gcall(void);
-)" + "long of(" +
-         eighteen_params + ")\n" + eighteen_body + "int main(void) { if (gf" + eighteen_args +
-         " != " + expected + ") return 1; if (gcall() != " + expected + ") return 2; return 0; }\n")
-            .c_str());
+)" + "long of(" + eighteen_params + ")\n" +
+                                      eighteen_body + "int main(void) { if (gf" + eighteen_args +
+                                      " != " + expected + ") return 1; if (gcall() != " + expected +
+                                      ") return 2; return 0; }\n")
+                                         .c_str());
     EXPECT_EQ("", Run(ours, "crt0.o", &gcc, { "-O2" }, ".gcc"));
     EXPECT_EQ(0, exit_status);
 }
@@ -160,7 +161,7 @@ long gcall(void);
 TEST_F(MmixTest, RunNarrowResultsFromGcc)
 {
     SKIP_IF_NO_MMIX_TOOLS();
-    std::string gcc = R"(
+    std::string gcc  = R"(
         signed char gsc(int x) { return x; }
         unsigned char guc(int x) { return x; }
         short gs(int x) { return x; }

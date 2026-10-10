@@ -33,7 +33,8 @@ bl g
 TEST_F(Arm32Test, CallVfpClosed)
 {
     NaiveSelection();
-    std::string src = R"(void g(double, double, double, double, double, double, double, double, double, float);
+    std::string src =
+        R"(void g(double, double, double, double, double, double, double, double, double, float);
 void f(void) { g(1, 2, 3, 4, 5, 6, 7, 8, 9, 10.0f); })";
     std::string code = Code(CompileToArm32(src.c_str()));
     EXPECT_NE(std::string::npos, code.find(R"(str r12, [sp]

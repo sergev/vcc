@@ -262,11 +262,10 @@ static const Tac_Type *scalar_at(const Tac_Type *t, int offset, int size)
 
 // Member store: aggregate `dst` at byte `offset` = src.  A constant takes the width of
 // the member there (its own kind may be wider); a byte copy is one byte.
-static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int offset,
-                               bool byte)
+static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int offset, bool byte)
 {
     static const Tac_Type uchar = { .kind = TAC_TYPE_UCHAR };
-    const Tac_Type *t = val_type(g, src);
+    const Tac_Type *t           = val_type(g, src);
     if (byte) {
         t = &uchar;
     } else if (src->kind == TAC_VAL_CONSTANT) {
@@ -293,8 +292,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
 }
 
 // Member load: dst = aggregate `src` at byte `offset`.
-static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_Val *dst,
-                                 bool byte)
+static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_Val *dst, bool byte)
 {
     const Tac_Type *t = val_type(g, dst);
     if (byte && rv_size(t) != 1)
@@ -356,8 +354,8 @@ static void gen_int_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
         gen_ll_int_convert(g, src, dst, kind);
         return;
     }
-    int s = use_val(g, RV_T0, src);
-    int d = def_reg(g, RV_T0, dst);
+    int s              = use_val(g, RV_T0, src);
+    int d              = def_reg(g, RV_T0, dst);
     const Tac_Type *st = val_type(g, src);
     if (kind == TAC_INSTRUCTION_ZERO_EXTEND) {
         gen_zext(g, d, s, rv_size(st));
@@ -482,8 +480,8 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
 
 // d = a op b for an integer operator; `word` selects the 32-bit forms.  The sources
 // are read before d is written.
-static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsigned,
-                          Rv_Operand d, Rv_Operand a, Rv_Operand b)
+static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsigned, Rv_Operand d,
+                          Rv_Operand a, Rv_Operand b)
 {
     switch (op) {
     case TAC_BINARY_ADD:
@@ -581,11 +579,11 @@ bool rv_unsigned_op(Tac_BinaryOperator op)
 // A floating-point operator; a comparison leaves 0/1 in t0, arithmetic its result in ft0.
 static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
 {
-    bool d          = rv_is_double(t);
+    bool d             = rv_is_double(t);
     const Tac_Val *dst = in->u.binary.dst;
-    Rv_Operand a    = rv_reg(use_val(g, RV_F0, in->u.binary.src1));
-    Rv_Operand b    = rv_reg(use_val(g, RV_F0 + 1, in->u.binary.src2));
-    int dreg        = def_reg(g, rv_is_fp(val_type(g, dst)) ? RV_F0 : RV_T0, dst);
+    Rv_Operand a       = rv_reg(use_val(g, RV_F0, in->u.binary.src1));
+    Rv_Operand b       = rv_reg(use_val(g, RV_F0 + 1, in->u.binary.src2));
+    int dreg           = def_reg(g, rv_is_fp(val_type(g, dst)) ? RV_F0 : RV_T0, dst);
     Rv_Operand r = rv_reg(dreg), f = r;
     switch (in->u.binary.op) {
     case TAC_BINARY_ADD:
@@ -763,8 +761,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     // propagation has removed a cast.  Only pointers compare unsigned under a plain one.
     int d = def_reg(g, RV_T0, in->u.binary.dst);
     gen_int_binop(g, in->u.binary.op, rv_size(t) <= 4 && riscv_xlen == 8,
-                  t->kind == TAC_TYPE_POINTER || rv_unsigned_op(in->u.binary.op), rv_reg(d), a,
-                  b);
+                  t->kind == TAC_TYPE_POINTER || rv_unsigned_op(in->u.binary.op), rv_reg(d), a, b);
     store_int_result(g, d, in->u.binary.dst);
 }
 
@@ -814,7 +811,8 @@ static void gen_fp_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
 }
 
 // A conversion to or from long double: a call to the runtime.
-static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind);
+static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
+                             Tac_InstructionKind kind);
 
 static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
 {
@@ -832,7 +830,7 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
             return;
         }
         bool w = rv_size(dt) <= 4, u = rv_is_unsigned(dt);
-        name   = w ? (u ? "__fixunstfsi" : "__fixtfsi") : (u ? "__fixunstfdi" : "__fixtfdi");
+        name = w ? (u ? "__fixunstfsi" : "__fixtfsi") : (u ? "__fixunstfdi" : "__fixtfdi");
         call_runtime(g, name);
         store_int_result(g, RV_A0, dst);
         return;
@@ -843,14 +841,15 @@ static void gen_ld_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_I
     } else {
         load_val(g, RV_A0, src);
         bool w = rv_size(st) <= 4, u = rv_from_unsigned(kind);
-        name   = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
+        name = w ? (u ? "__floatunsitf" : "__floatsitf") : (u ? "__floatunditf" : "__floatditf");
     }
     call_runtime(g, name);
     pair_result(g, dst);
 }
 
 // On rv32, by the calling convention: the routine's own types decide the registers.
-static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac_InstructionKind kind)
+static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst,
+                             Tac_InstructionKind kind)
 {
     static const Tac_Type ld = { .kind = TAC_TYPE_LONG_DOUBLE }, d = { .kind = TAC_TYPE_DOUBLE },
                           f = { .kind = TAC_TYPE_FLOAT }, i = { .kind = TAC_TYPE_INT },
@@ -874,13 +873,12 @@ static void gen_ld32_convert(Gen *g, const Tac_Val *src, const Tac_Val *dst, Tac
         name = rv_is_double(st) ? "__extenddftf2" : "__extendsftf2";
     } else {
         bool w = rv_size(st) <= 4, un = rv_from_unsigned(kind);
-        name   = w ? (un ? "__floatunsitf" : "__floatsitf") : (un ? "__floatunditf" : "__floatditf");
+        name = w ? (un ? "__floatunsitf" : "__floatsitf") : (un ? "__floatunditf" : "__floatditf");
     }
     gen_runtime_call(g, name, ret, &src, NULL, 1, dst);
 }
 
-bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg,
-                  const Tac_Val **dst)
+bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, const Tac_Val **dst)
 {
     switch (in->kind) {
     case TAC_INSTRUCTION_INT_TO_DOUBLE:

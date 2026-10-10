@@ -356,8 +356,8 @@ static bool is_c_setter(const Besm_Instr *i)
 // group (setters plus consumer), which is what a deletion must splice out.
 static Besm_Instr *c_group_consumer(Besm_Instr *first, int *count)
 {
-    int n            = 0;
-    Besm_Instr *i    = first;
+    int n         = 0;
+    Besm_Instr *i = first;
     while (i != NULL && is_c_setter(i)) {
         n++;
         i = i->next;
@@ -802,7 +802,7 @@ static bool try_invert_branch_over_jump(Besm_Block *block, Besm_Instr *cur)
 {
     if (cur->kind != BESM_BRANCH_UZA && cur->kind != BESM_BRANCH_U1A)
         return false;
-    Besm_Instr *uj  = cur->next;
+    Besm_Instr *uj = cur->next;
     if (uj == NULL || uj->kind != BESM_BRANCH_UJ || uj->name == NULL)
         return false;
     const Besm_Instr *lbl = uj->next;
@@ -1002,7 +1002,8 @@ static int try_io_memory_address(Besm_Instr *cur)
 // The repair is one instruction: `aex` with no operand XORs memory word 0 — architecturally
 // zero — into A.  A is unchanged, the R suppress bits are unchanged, and the ω group
 // becomes logical.  AEX is the cheapest of the logical ops; the runtime library writes the
-// same no-op as `,aox,` (backend/besm6/Besm6_Runtime_Library.md, "ω mode and the AU mode register R").
+// same no-op as `,aox,` (backend/besm6/Besm6_Runtime_Library.md, "ω mode and the AU mode register
+// R").
 //
 // It is inserted only where the tracked group is not already logical, so the common cases —
 // a surviving `xta`, a relational runtime helper (rule #30's fusion), a read-address `ext` —
@@ -1126,9 +1127,9 @@ static bool peephole_sweep(Besm_Block *block, const Frame *frame, const bool *mu
     PeepState st;
     state_reset(&st);
 
-    bool changed       = false;
-    Besm_Instr *prev   = NULL;
-    Besm_Instr *cur    = block->body;
+    bool changed     = false;
+    Besm_Instr *prev = NULL;
+    Besm_Instr *cur  = block->body;
 
     while (cur) {
         // Rule #31(b): unreachable tail.  Code after an unconditional transfer and

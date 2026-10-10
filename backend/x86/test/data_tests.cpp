@@ -15,13 +15,13 @@ double d = 1.5;
 float fl = 0.5f;
 int *p = &counter + 1;
 )");
-    for (const char *want : {
-             "    .data\n    .globl  counter\n    .p2align 2\n    .type   counter, @object\n"
-             "    .size   counter, 4\ncounter:\n    .long   5\n",
-             "    .bss\n    .p2align 3\n    .type   zeros, @object\n    .size   zeros, 32\n"
-             "zeros:\n    .zero   32\n",
-             "    .short  -2\n", "    .byte   200\n", "    .quad   0x3ff8000000000000\n",
-             "    .long   0x3f000000\n", "    .quad   counter+4\n", "    .ascii  \"hi\"\n" })
+    for (const char *want :
+         { "    .data\n    .globl  counter\n    .p2align 2\n    .type   counter, @object\n"
+           "    .size   counter, 4\ncounter:\n    .long   5\n",
+           "    .bss\n    .p2align 3\n    .type   zeros, @object\n    .size   zeros, 32\n"
+           "zeros:\n    .zero   32\n",
+           "    .short  -2\n", "    .byte   200\n", "    .quad   0x3ff8000000000000\n",
+           "    .long   0x3f000000\n", "    .quad   counter+4\n", "    .ascii  \"hi\"\n" })
         EXPECT_NE(std::string::npos, s.find(want)) << want << " in\n" << s;
     EXPECT_NE(std::string::npos, s.find("    .section .rodata\n")) << s;
 }

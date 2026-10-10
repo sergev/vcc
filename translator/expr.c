@@ -188,37 +188,37 @@ static Tac_BinaryOperator map_binary_op(BinaryOp op, const Type *operand_type)
     bool is_float    = is_floating_type(operand_type);
     switch (op) {
     case BINARY_ADD:
-        return is_float ? TAC_BINARY_ADD_DOUBLE
+        return is_float      ? TAC_BINARY_ADD_DOUBLE
                : is_unsigned ? TAC_BINARY_ADD_UNSIGNED
                              : TAC_BINARY_ADD;
     case BINARY_SUB:
-        return is_float ? TAC_BINARY_SUBTRACT_DOUBLE
+        return is_float      ? TAC_BINARY_SUBTRACT_DOUBLE
                : is_unsigned ? TAC_BINARY_SUBTRACT_UNSIGNED
                              : TAC_BINARY_SUBTRACT;
     case BINARY_MUL:
-        return is_float ? TAC_BINARY_MULTIPLY_DOUBLE
+        return is_float      ? TAC_BINARY_MULTIPLY_DOUBLE
                : is_unsigned ? TAC_BINARY_MULTIPLY_UNSIGNED
                              : TAC_BINARY_MULTIPLY;
     case BINARY_DIV:
-        return is_float ? TAC_BINARY_DIVIDE_DOUBLE
+        return is_float      ? TAC_BINARY_DIVIDE_DOUBLE
                : is_unsigned ? TAC_BINARY_DIVIDE_UNSIGNED
                              : TAC_BINARY_DIVIDE;
     case BINARY_MOD:
         return is_unsigned ? TAC_BINARY_REMAINDER_UNSIGNED : TAC_BINARY_REMAINDER;
     case BINARY_LT:
-        return is_float ? TAC_BINARY_LESS_THAN_DOUBLE
+        return is_float      ? TAC_BINARY_LESS_THAN_DOUBLE
                : is_unsigned ? TAC_BINARY_LESS_THAN_UNSIGNED
                              : TAC_BINARY_LESS_THAN;
     case BINARY_GT:
-        return is_float ? TAC_BINARY_GREATER_THAN_DOUBLE
+        return is_float      ? TAC_BINARY_GREATER_THAN_DOUBLE
                : is_unsigned ? TAC_BINARY_GREATER_THAN_UNSIGNED
                              : TAC_BINARY_GREATER_THAN;
     case BINARY_LE:
-        return is_float ? TAC_BINARY_LESS_OR_EQUAL_DOUBLE
+        return is_float      ? TAC_BINARY_LESS_OR_EQUAL_DOUBLE
                : is_unsigned ? TAC_BINARY_LESS_OR_EQUAL_UNSIGNED
                              : TAC_BINARY_LESS_OR_EQUAL;
     case BINARY_GE:
-        return is_float ? TAC_BINARY_GREATER_OR_EQUAL_DOUBLE
+        return is_float      ? TAC_BINARY_GREATER_OR_EQUAL_DOUBLE
                : is_unsigned ? TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED
                              : TAC_BINARY_GREATER_OR_EQUAL;
     case BINARY_EQ:
@@ -268,19 +268,19 @@ static Tac_BinaryOperator map_assign_op(AssignOp op, const Type *operand_type)
     bool is_float    = is_floating_type(operand_type);
     switch (op) {
     case ASSIGN_ADD:
-        return is_float ? TAC_BINARY_ADD_DOUBLE
+        return is_float      ? TAC_BINARY_ADD_DOUBLE
                : is_unsigned ? TAC_BINARY_ADD_UNSIGNED
                              : TAC_BINARY_ADD;
     case ASSIGN_SUB:
-        return is_float ? TAC_BINARY_SUBTRACT_DOUBLE
+        return is_float      ? TAC_BINARY_SUBTRACT_DOUBLE
                : is_unsigned ? TAC_BINARY_SUBTRACT_UNSIGNED
                              : TAC_BINARY_SUBTRACT;
     case ASSIGN_MUL:
-        return is_float ? TAC_BINARY_MULTIPLY_DOUBLE
+        return is_float      ? TAC_BINARY_MULTIPLY_DOUBLE
                : is_unsigned ? TAC_BINARY_MULTIPLY_UNSIGNED
                              : TAC_BINARY_MULTIPLY;
     case ASSIGN_DIV:
-        return is_float ? TAC_BINARY_DIVIDE_DOUBLE
+        return is_float      ? TAC_BINARY_DIVIDE_DOUBLE
                : is_unsigned ? TAC_BINARY_DIVIDE_UNSIGNED
                              : TAC_BINARY_DIVIDE;
     case ASSIGN_MOD:
@@ -345,10 +345,10 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
 {
     switch (e->kind) {
     case EXPR_VAR: {
-        Tac_Val *dst        = new_var_val(ctx, tac_type_ptr_to(e->type));
-        Tac_Instruction *in = tac_new_instruction(
-            byte_access_for(e->type) ? TAC_INSTRUCTION_GET_ADDRESS_BYTE
-                                     : TAC_INSTRUCTION_GET_ADDRESS);
+        Tac_Val *dst = new_var_val(ctx, tac_type_ptr_to(e->type));
+        Tac_Instruction *in =
+            tac_new_instruction(byte_access_for(e->type) ? TAC_INSTRUCTION_GET_ADDRESS_BYTE
+                                                         : TAC_INSTRUCTION_GET_ADDRESS);
         in->u.get_address.src = val_var(e->u.var);
         in->u.get_address.dst = dst;
         tac_append(ctx, in);
@@ -411,14 +411,14 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
         Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
         ap->u.add_ptr.ptr   = base_addr;
         emit_member_offset(ap, offset, mt);
-        ap->u.add_ptr.dst   = dst;
+        ap->u.add_ptr.dst = dst;
         tac_append(ctx, ap);
         return val_var(dst->u.var_name);
     }
     case EXPR_PTR_ACCESS: {
-        Expr *ptr_expr      = e->u.ptr_access.expr;
-        Tac_Val *ptr_val    = gen_expr(ctx, ptr_expr);
-        int offset          = e->u.ptr_access.offset;
+        Expr *ptr_expr   = e->u.ptr_access.expr;
+        Tac_Val *ptr_val = gen_expr(ctx, ptr_expr);
+        int offset       = e->u.ptr_access.offset;
         // Same fat-byte-#0 base conversion as FIELD_ACCESS for a byte-addressed member.
         const Type *mt = field_member_type(e);
         if (member_is_byte_addressed(mt))
@@ -427,7 +427,7 @@ static Tac_Val *gen_lval(TacCtx *ctx, Expr *e)
         Tac_Instruction *ap = tac_new_instruction(TAC_INSTRUCTION_ADD_PTR);
         ap->u.add_ptr.ptr   = ptr_val;
         emit_member_offset(ap, offset, mt);
-        ap->u.add_ptr.dst   = dst;
+        ap->u.add_ptr.dst = dst;
         tac_append(ctx, ap);
         return val_var(dst->u.var_name);
     }
@@ -520,8 +520,8 @@ static Tac_Val *gen_aggregate_assign(TacCtx *ctx, Expr *target, Expr *value, Tac
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL; // owned materialised rvalue (freed below)
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
-        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
-            value->kind == EXPR_CO_OP || value->kind == EXPR_AWAIT) {
+        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND || value->kind == EXPR_CO_OP ||
+            value->kind == EXPR_AWAIT) {
             // An rvalue aggregate: gen_expr leaves it in a named temporary.
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
@@ -557,8 +557,8 @@ void gen_aggregate_init_from_expr(TacCtx *ctx, const char *dname, int doff, Expr
     Tac_Val *sptr         = NULL;
     Tac_Val *src_material = NULL;
     if (!aggregate_named_base(value, &src.name, &src.offset)) {
-        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND ||
-            value->kind == EXPR_CO_OP || value->kind == EXPR_AWAIT) {
+        if (value->kind == EXPR_CALL || value->kind == EXPR_COMPOUND || value->kind == EXPR_CO_OP ||
+            value->kind == EXPR_AWAIT) {
             src_material = gen_expr(ctx, value);
             src.name     = src_material->u.var_name;
         } else {
@@ -661,8 +661,8 @@ static Tac_Val *gen_logical_or(TacCtx *ctx, Expr *l, Expr *r)
 // §7.1.3 reserves the name with external linkage, so a program cannot mean another
 // function by it; still, it must be the external function by that name (a static one, a
 // definition seen in this unit, or a variable holding a function pointer is left alone),
-// with a double result and one double argument (as converted by the prototype).  The result is the correctly rounded IEEE square root,
-// as sqrt's is, and sqrt sets no errno here.
+// with a double result and one double argument (as converted by the prototype).  The result is the
+// correctly rounded IEEE square root, as sqrt's is, and sqrt sets no errno here.
 static bool is_hw_sqrt(const Expr *e)
 {
     const Expr *func = e->u.call.func, *arg = e->u.call.args;
@@ -863,10 +863,10 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
             // helper b/pdiff), then divide by the pointee byte size to get the element
             // count.  sizeof(char) == 1, so plain char*/void* needs no divide; a pointer
             // to a char-innermost array (char(*)[N]) divides by the row size N.
-            Tac_Val *vl         = gen_expr(ctx, l);
-            Tac_Val *vr         = gen_expr(ctx, r);
-            Tac_Val *vd         = new_var_val(ctx, tac_type_ptrdiff());
-            Tac_Instruction *pd = tac_new_instruction(TAC_INSTRUCTION_PTR_DIFF);
+            Tac_Val *vl          = gen_expr(ctx, l);
+            Tac_Val *vr          = gen_expr(ctx, r);
+            Tac_Val *vd          = new_var_val(ctx, tac_type_ptrdiff());
+            Tac_Instruction *pd  = tac_new_instruction(TAC_INSTRUCTION_PTR_DIFF);
             pd->u.ptr_diff.ptr_a = vl;
             pd->u.ptr_diff.ptr_b = vr;
             pd->u.ptr_diff.dst   = vd;
@@ -904,7 +904,7 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
             sub->u.binary.dst    = vd;
             tac_append(ctx, sub);
             // The difference is in addressing units: words, or bytes.
-            int unit = target_word_addressed() ? target_word_bytes() : 1;
+            int unit  = target_word_addressed() ? target_word_bytes() : 1;
             int elems = wide_ptr_scale(l->type) / unit;
             if (elems == 1)
                 return val_var(vd->u.var_name);
@@ -973,14 +973,15 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
     // pointer to its word address and compare that against 0; a fat pointer is null iff
     // its address part is 0.  (Two real pointers fall through to the full-word compare,
     // which correctly distinguishes distinct byte positions.)
-    if ((op == BINARY_EQ || op == BINARY_NE) && (is_byte_pointer(l->type) || is_byte_pointer(r->type)) &&
+    if ((op == BINARY_EQ || op == BINARY_NE) &&
+        (is_byte_pointer(l->type) || is_byte_pointer(r->type)) &&
         (is_null_ptr_operand(l) || is_null_ptr_operand(r))) {
         Tac_Val *vl       = gen_expr(ctx, l); // keep source evaluation order
         Tac_Val *vr       = gen_expr(ctx, r);
         bool r_is_null    = is_null_ptr_operand(r);
         Tac_Val *ptr_addr = gen_ptr_addr_word(ctx, r_is_null ? vl : vr);
         tac_free_val(r_is_null ? vr : vl); // unused null-constant side
-        Tac_Val *vd       = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
+        Tac_Val *vd         = new_var_val(ctx, tac_new_type(TAC_TYPE_INT));
         Tac_Instruction *in = tac_new_instruction(TAC_INSTRUCTION_BINARY);
         in->u.binary.op     = op == BINARY_EQ ? TAC_BINARY_EQUAL : TAC_BINARY_NOT_EQUAL;
         in->u.binary.src1   = ptr_addr;
@@ -1141,8 +1142,7 @@ static BfPlace bf_place(TacCtx *ctx, Expr *e)
 }
 
 // A binary operation of type `t` on two owned values.
-static Tac_Val *bf_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b,
-                          const Type *t)
+static Tac_Val *bf_binary(TacCtx *ctx, Tac_BinaryOperator op, Tac_Val *a, Tac_Val *b, const Type *t)
 {
     Tac_Val *dst         = new_var_val(ctx, ast_type_to_tac_type(t));
     Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
@@ -1204,7 +1204,7 @@ static Tac_Val *bf_load_part(TacCtx *ctx, const BfPlace *p, int offset, const Ty
         in->u.copy_from_offset.dst    = dst;
     } else {
         Tac_Val *ptr = bf_part_address(ctx, p, offset, t);
-        in = tac_new_instruction(byte ? TAC_INSTRUCTION_LOAD_BYTE : TAC_INSTRUCTION_LOAD);
+        in           = tac_new_instruction(byte ? TAC_INSTRUCTION_LOAD_BYTE : TAC_INSTRUCTION_LOAD);
         in->u.load.src_ptr = ptr;
         in->u.load.dst     = dst;
     }
@@ -1219,8 +1219,8 @@ static void bf_store_part(TacCtx *ctx, const BfPlace *p, int offset, const Type 
     bool byte = byte_access_for(t);
     Tac_Instruction *in;
     if (p->var) {
-        in = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
-                                      : TAC_INSTRUCTION_COPY_TO_OFFSET);
+        in                          = tac_new_instruction(byte ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
+                                                               : TAC_INSTRUCTION_COPY_TO_OFFSET);
         in->u.copy_to_offset.src    = v;
         in->u.copy_to_offset.dst    = xstrdup(p->var);
         in->u.copy_to_offset.offset = offset;
@@ -1281,8 +1281,8 @@ static void bf_store_unit(TacCtx *ctx, const BfPlace *p, Tac_Val *u)
 static Tac_Val *bf_extract(TacCtx *ctx, Tac_Val *u, const Type *ut, int pos, int width,
                            const Type *t)
 {
-    int ubits   = (int)get_size(ut) * 8;
-    bool sign   = is_signed(t);
+    int ubits = (int)get_size(ut) * 8;
+    bool sign = is_signed(t);
     if (sign && !target_config->right_shift_is_logical) {
         // Shift the field to the top of the unit, then arithmetically down to the bottom.
         Type st = { .kind = signed_kind_of(unalias(ut)->kind) };
@@ -1303,7 +1303,7 @@ static Tac_Val *bf_extract(TacCtx *ctx, Tac_Val *u, const Type *ut, int pos, int
     // bit, in the signed type, at least an int.  The field's bits fit it as a value: a
     // BESM-6 int has 41 value bits in a 48-bit word, and a negative one leaves the top 7
     // clear, so the unsigned word cannot be reinterpreted as one.
-    Type st = { .kind = get_size(t) < target_config->int_size ? TYPE_INT : unalias(t)->kind };
+    Type st    = { .kind = get_size(t) < target_config->int_size ? TYPE_INT : unalias(t)->kind };
     uint64_t m = (uint64_t)1 << (width - 1);
     u          = emit_cast(ctx, u, ut, &st);
     u          = bf_binary(ctx, TAC_BINARY_BITWISE_XOR, u, bf_const(&st, m), &st);
@@ -1353,9 +1353,8 @@ void gen_bitfield_init(TacCtx *ctx, const char *var, int offset, const BitField 
 // Read bit-field `e`.
 static Tac_Val *gen_bitfield_read(TacCtx *ctx, Expr *e)
 {
-    BfPlace p    = bf_place(ctx, e);
-    Tac_Val *r   = bf_extract(ctx, bf_load_unit(ctx, &p), &p.work, p.bf->pos, p.bf->width,
-                              p.type);
+    BfPlace p  = bf_place(ctx, e);
+    Tac_Val *r = bf_extract(ctx, bf_load_unit(ctx, &p), &p.work, p.bf->pos, p.bf->width, p.type);
     if (p.addr)
         tac_free_val(p.addr);
     return r;
@@ -1372,7 +1371,7 @@ static Tac_Val *gen_bitfield_assign(TacCtx *ctx, Expr *e, Tac_Val *src)
         // promotions) and converted back to the field's type.
         const Type *op_type = e->u.assign.value->type;
         bool widen          = unalias(op_type)->kind != unalias(p.type)->kind;
-        Tac_Val *cur = bf_extract(ctx, dup_val(u), &p.work, p.bf->pos, p.bf->width, p.type);
+        Tac_Val *cur        = bf_extract(ctx, dup_val(u), &p.work, p.bf->pos, p.bf->width, p.type);
         if (widen)
             cur = emit_cast(ctx, cur, p.type, op_type);
         v = bf_binary(ctx, map_assign_op(e->u.assign.op, op_type), cur, src, op_type);
@@ -1486,12 +1485,12 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         if (unalias(e->type)->kind == TYPE_POINTER) {
             const Symbol *sym = symtab_get_opt(e->u.var);
             bool sym_is_array = (sym && unalias(sym->type)->kind == TYPE_ARRAY) ||
-                            tac_is_array_local(ctx, e->u.var);
+                                tac_is_array_local(ctx, e->u.var);
             if (sym_is_array) {
-                Tac_Val *dst          = new_var_val(ctx, ast_type_to_tac_type(e->type));
-                Tac_Instruction *in   = tac_new_instruction(
-                    is_byte_pointer(e->type) ? TAC_INSTRUCTION_GET_ADDRESS_DECAY
-                                             : TAC_INSTRUCTION_GET_ADDRESS);
+                Tac_Val *dst = new_var_val(ctx, ast_type_to_tac_type(e->type));
+                Tac_Instruction *in =
+                    tac_new_instruction(is_byte_pointer(e->type) ? TAC_INSTRUCTION_GET_ADDRESS_DECAY
+                                                                 : TAC_INSTRUCTION_GET_ADDRESS);
                 in->u.get_address.src = val_var(e->u.var);
                 in->u.get_address.dst = dst;
                 tac_append(ctx, in);
@@ -1526,8 +1525,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             // the fat pointer its decayed-value path already materializes.  gen_lval has
             // no string-literal case, so route it through gen_expr.
             Expr *operand = e->u.unary_op.expr;
-            if (operand->kind == EXPR_LITERAL &&
-                operand->u.literal->kind == LITERAL_STRING)
+            if (operand->kind == EXPR_LITERAL && operand->u.literal->kind == LITERAL_STRING)
                 return gen_expr(ctx, operand);
             return gen_lval(ctx, operand);
         }
@@ -1555,8 +1553,9 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             if (access_bitfield(inner))
                 return gen_bitfield_step(ctx, inner, inc, false);
             if (inner->kind == EXPR_VAR) {
-                const char *var     = inner->u.var;
-                const Tac_Val *vd   = gen_step(ctx, inner->type, read_var(ctx, var, inner->type), inc);
+                const char *var = inner->u.var;
+                const Tac_Val *vd =
+                    gen_step(ctx, inner->type, read_var(ctx, var, inner->type), inc);
                 Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 cp->is_volatile     = type_is_volatile(inner->type);
                 cp->u.copy.src      = val_var(vd->u.var_name);
@@ -1564,20 +1563,21 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                 tac_append(ctx, cp);
                 return val_var(vd->u.var_name);
             } else {
-                bool vol            = type_is_volatile(inner->type);
-                Tac_Val *addr_raw   = gen_lval(ctx, inner);
-                Tac_Val *loaded     = new_var_val(ctx, ast_type_to_tac_type(inner->type));
-                Tac_Instruction *ld = tac_new_instruction(
-                    byte_access_for(inner->type) ? TAC_INSTRUCTION_LOAD_BYTE
-                                                 : TAC_INSTRUCTION_LOAD);
+                bool vol          = type_is_volatile(inner->type);
+                Tac_Val *addr_raw = gen_lval(ctx, inner);
+                Tac_Val *loaded   = new_var_val(ctx, ast_type_to_tac_type(inner->type));
+                Tac_Instruction *ld =
+                    tac_new_instruction(byte_access_for(inner->type) ? TAC_INSTRUCTION_LOAD_BYTE
+                                                                     : TAC_INSTRUCTION_LOAD);
                 ld->is_volatile    = vol;
                 ld->u.load.src_ptr = addr_raw;
                 ld->u.load.dst     = loaded;
                 tac_append(ctx, ld);
-                const Tac_Val *result = gen_step(ctx, inner->type, val_var(loaded->u.var_name), inc);
-                Tac_Instruction *st = tac_new_instruction(
-                    byte_access_for(inner->type) ? TAC_INSTRUCTION_STORE_BYTE
-                                                 : TAC_INSTRUCTION_STORE);
+                const Tac_Val *result =
+                    gen_step(ctx, inner->type, val_var(loaded->u.var_name), inc);
+                Tac_Instruction *st =
+                    tac_new_instruction(byte_access_for(inner->type) ? TAC_INSTRUCTION_STORE_BYTE
+                                                                     : TAC_INSTRUCTION_STORE);
                 st->is_volatile     = vol;
                 st->u.store.src     = val_var(result->u.var_name);
                 st->u.store.dst_ptr = val_var(addr_raw->u.var_name);
@@ -1629,8 +1629,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                 // += n (element-scaled), not a raw word add.
                 int pscale   = is_byte_pointer(target->type) ? 1 : wide_ptr_scale(target->type);
                 Tac_Val *res = gen_ptr_add(ctx, read_var(ctx, dst, target->type), src,
-                                           e->u.assign.op == ASSIGN_SUB,
-                                           pscale, target->type, e->u.assign.value->type);
+                                           e->u.assign.op == ASSIGN_SUB, pscale, target->type,
+                                           e->u.assign.value->type);
                 Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 cp->is_volatile     = vol;
                 cp->u.copy.src      = res;
@@ -1643,19 +1643,20 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                 // result back to the lvalue type.  For shift/bitwise (op_type ==
                 // target type) `widen` is false and this is byte-identical to before.
                 const Type *op_type = e->u.assign.value->type;
-                bool widen = unalias(op_type)->kind != unalias(target->type)->kind;
-                Tac_Val *cur = read_var(ctx, dst, target->type);
-                Tac_Val *opnd = widen ? emit_cast(ctx, cur, target->type, op_type) : cur;
-                Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
+                bool widen          = unalias(op_type)->kind != unalias(target->type)->kind;
+                Tac_Val *cur        = read_var(ctx, dst, target->type);
+                Tac_Val *opnd       = widen ? emit_cast(ctx, cur, target->type, op_type) : cur;
+                Tac_Val *vd         = new_var_val(
+                    ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
                 Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-                bin->u.binary.op   = map_assign_op(e->u.assign.op, op_type);
-                bin->u.binary.src1 = opnd;
-                bin->u.binary.src2 = src;
-                bin->u.binary.dst  = vd;
+                bin->u.binary.op     = map_assign_op(e->u.assign.op, op_type);
+                bin->u.binary.src1   = opnd;
+                bin->u.binary.src2   = src;
+                bin->u.binary.dst    = vd;
                 tac_append(ctx, bin);
-                Tac_Val *result = widen ? emit_cast(ctx, val_var(vd->u.var_name), op_type,
-                                                    target->type)
-                                        : val_var(vd->u.var_name);
+                Tac_Val *result =
+                    widen ? emit_cast(ctx, val_var(vd->u.var_name), op_type, target->type)
+                          : val_var(vd->u.var_name);
                 Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
                 cp->is_volatile     = vol;
                 cp->u.copy.src      = result;
@@ -1668,18 +1669,18 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         } else if (target->kind == EXPR_FIELD_ACCESS &&
                    target->u.field_access.expr->kind == EXPR_VAR &&
                    e->u.assign.op == ASSIGN_SIMPLE) {
-            const char *var_name        = target->u.field_access.expr->u.var;
-            int offset          = target->u.field_access.offset;
+            const char *var_name = target->u.field_access.expr->u.var;
+            int offset           = target->u.field_access.offset;
             // The value of `s.f = v' is the value stored (C11 6.5.16p3), NOT the aggregate
             // it went into: returning the base would name field 0 whatever `offset' says.
-            Tac_Val *result     = dup_val(src);
-            Tac_Instruction *in = tac_new_instruction(
-                byte_access_for(target->type) ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
-                                              : TAC_INSTRUCTION_COPY_TO_OFFSET);
-            in->is_volatile             = type_is_volatile(target->type) ||
-                                          type_is_volatile(target->u.field_access.expr->type);
-            in->u.copy_to_offset.src    = src;
-            in->u.copy_to_offset.dst    = xstrdup(var_name);
+            Tac_Val *result          = dup_val(src);
+            Tac_Instruction *in      = tac_new_instruction(byte_access_for(target->type)
+                                                               ? TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET
+                                                               : TAC_INSTRUCTION_COPY_TO_OFFSET);
+            in->is_volatile          = type_is_volatile(target->type) ||
+                                       type_is_volatile(target->u.field_access.expr->type);
+            in->u.copy_to_offset.src = src;
+            in->u.copy_to_offset.dst = xstrdup(var_name);
             in->u.copy_to_offset.offset = offset;
             tac_append(ctx, in);
             return result;
@@ -1692,20 +1693,20 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                 // so `while ((*p = *q))' would branch on whatever the frame slot held.
                 // Not a re-read through `p' either: that would be wrong for a volatile
                 // lvalue, and would cost a load.
-                Tac_Val *result     = dup_val(src);
-                Tac_Instruction *st = tac_new_instruction(
-                    byte_access_for(target->type) ? TAC_INSTRUCTION_STORE_BYTE
-                                                  : TAC_INSTRUCTION_STORE);
+                Tac_Val *result = dup_val(src);
+                Tac_Instruction *st =
+                    tac_new_instruction(byte_access_for(target->type) ? TAC_INSTRUCTION_STORE_BYTE
+                                                                      : TAC_INSTRUCTION_STORE);
                 st->is_volatile     = vol;
                 st->u.store.src     = src;
                 st->u.store.dst_ptr = addr_raw;
                 tac_append(ctx, st);
                 return result;
             } else {
-                Tac_Val *loaded     = new_var_val(ctx, ast_type_to_tac_type(target->type));
-                Tac_Instruction *ld = tac_new_instruction(
-                    byte_access_for(target->type) ? TAC_INSTRUCTION_LOAD_BYTE
-                                                  : TAC_INSTRUCTION_LOAD);
+                Tac_Val *loaded = new_var_val(ctx, ast_type_to_tac_type(target->type));
+                Tac_Instruction *ld =
+                    tac_new_instruction(byte_access_for(target->type) ? TAC_INSTRUCTION_LOAD_BYTE
+                                                                      : TAC_INSTRUCTION_LOAD);
                 ld->is_volatile    = vol;
                 ld->u.load.src_ptr = addr_raw;
                 ld->u.load.dst     = loaded;
@@ -1724,24 +1725,25 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                     // the loaded lvalue, operate, narrow back.  No-op when op_type ==
                     // target type (shift/bitwise, same-type arithmetic).
                     const Type *op_type = e->u.assign.value->type;
-                    bool widen = unalias(op_type)->kind != unalias(target->type)->kind;
-                    Tac_Val *opnd = widen ? emit_cast(ctx, val_var(loaded->u.var_name),
-                                                      target->type, op_type)
-                                          : val_var(loaded->u.var_name);
-                    Tac_Val *vd          = new_var_val(ctx, ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
+                    bool widen          = unalias(op_type)->kind != unalias(target->type)->kind;
+                    Tac_Val *opnd =
+                        widen ? emit_cast(ctx, val_var(loaded->u.var_name), target->type, op_type)
+                              : val_var(loaded->u.var_name);
+                    Tac_Val *vd = new_var_val(
+                        ctx,
+                        ast_type_to_tac_type(is_pointer(target->type) ? target->type : op_type));
                     Tac_Instruction *bin = tac_new_instruction(TAC_INSTRUCTION_BINARY);
-                    bin->u.binary.op   = map_assign_op(e->u.assign.op, op_type);
-                    bin->u.binary.src1 = opnd;
-                    bin->u.binary.src2 = src;
-                    bin->u.binary.dst  = vd;
+                    bin->u.binary.op     = map_assign_op(e->u.assign.op, op_type);
+                    bin->u.binary.src1   = opnd;
+                    bin->u.binary.src2   = src;
+                    bin->u.binary.dst    = vd;
                     tac_append(ctx, bin);
-                    result = widen ? emit_cast(ctx, val_var(vd->u.var_name), op_type,
-                                               target->type)
+                    result = widen ? emit_cast(ctx, val_var(vd->u.var_name), op_type, target->type)
                                    : val_var(vd->u.var_name);
                 }
-                Tac_Instruction *st = tac_new_instruction(
-                    byte_access_for(target->type) ? TAC_INSTRUCTION_STORE_BYTE
-                                                  : TAC_INSTRUCTION_STORE);
+                Tac_Instruction *st =
+                    tac_new_instruction(byte_access_for(target->type) ? TAC_INSTRUCTION_STORE_BYTE
+                                                                      : TAC_INSTRUCTION_STORE);
                 st->is_volatile     = vol;
                 st->u.store.src     = result;
                 st->u.store.dst_ptr = val_var(addr_raw->u.var_name);
@@ -1835,7 +1837,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             tac_append(ctx, in);
             return val_var(vd->u.var_name);
         }
-        if (e->u.call.func->kind == EXPR_VAR && strcmp(e->u.call.func->u.var, "__builtin_alloca") == 0)
+        if (e->u.call.func->kind == EXPR_VAR &&
+            strcmp(e->u.call.func->u.var, "__builtin_alloca") == 0)
             return gen_alloca(ctx, e);
         Tac_Val *args_head  = NULL;
         Tac_Val **args_tail = &args_head;
@@ -1849,8 +1852,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
                 int w       = target_word_bytes();
                 int nwords  = ((int)get_size(arg->type) + w - 1) / w;
                 for (int i = 0; i < nwords; i++) {
-                    Tac_Val *t = new_var_val(ctx, tac_type_word());
-                    Tac_Instruction *ld           = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
+                    Tac_Val *t          = new_var_val(ctx, tac_type_word());
+                    Tac_Instruction *ld = tac_new_instruction(TAC_INSTRUCTION_COPY_FROM_OFFSET);
                     ld->u.copy_from_offset.src    = xstrdup(sv->u.var_name);
                     ld->u.copy_from_offset.offset = i * w;
                     ld->u.copy_from_offset.dst    = t; // owned by the COPY_FROM_OFFSET
@@ -1873,10 +1876,10 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         // The call expression's value is then the slot itself.
         char *sret_slot = NULL;
         if (type_is_byval_sret(e->type)) {
-            char *slot = new_typed_temp(ctx, ast_type_to_tac_type(e->type));
-            Tac_Instruction *al        = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
-            al->u.allocate_local.name  = xstrdup(slot);
-            al->u.allocate_local.size  = (int)get_size(e->type);
+            char *slot                     = new_typed_temp(ctx, ast_type_to_tac_type(e->type));
+            Tac_Instruction *al            = tac_new_instruction(TAC_INSTRUCTION_ALLOCATE_LOCAL);
+            al->u.allocate_local.name      = xstrdup(slot);
+            al->u.allocate_local.size      = (int)get_size(e->type);
             al->u.allocate_local.alignment = (int)get_alignment(e->type);
             tac_append(ctx, al);
 
@@ -1897,7 +1900,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         Expr *func = e->u.call.func;
         const char *fun_name;
         Tac_Val *fn_ptr = NULL;
-        bool indirect = true;
+        bool indirect   = true;
         if (func->kind == EXPR_VAR) {
             // A bare name: the callee itself, or a *variable* holding its address.  Either
             // way the name is what the call names, so this arm is shared; what differs is
@@ -1930,8 +1933,9 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
 
         // With the sret ABI the struct result lives in the slot we allocated, not in a
         // scalar destination register, so the call has no scalar `dst`.
-        Tac_Val *dst            = (unalias(e->type)->kind != TYPE_VOID && !sret_slot) ? new_var_val(ctx, ast_type_to_tac_type(e->type))
-                                                                            : NULL;
+        Tac_Val *dst = (unalias(e->type)->kind != TYPE_VOID && !sret_slot)
+                           ? new_var_val(ctx, ast_type_to_tac_type(e->type))
+                           : NULL;
         // A direct call to a _Noreturn function never returns, so emit the dedicated kind:
         // the backend tail-jumps to it and drops the dead post-call path.  (Indirect calls
         // through a function pointer stay a plain FUN_CALL — the callee is not known here,
@@ -1981,8 +1985,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             cp1->u.copy.dst      = old;
             tac_append(ctx, cp1);
             // A volatile variable is read once, into `old`.
-            const Tac_Val *vd    = gen_step(ctx, inner->type,
-                                            vol ? val_var(old->u.var_name) : val_var(var), inc);
+            const Tac_Val *vd =
+                gen_step(ctx, inner->type, vol ? val_var(old->u.var_name) : val_var(var), inc);
             Tac_Instruction *cp2 = tac_new_instruction(TAC_INSTRUCTION_COPY);
             cp2->is_volatile     = vol;
             cp2->u.copy.src      = val_var(vd->u.var_name);
@@ -2000,7 +2004,7 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
             ld->u.load.dst     = old;
             tac_append(ctx, ld);
             const Tac_Val *result = gen_step(ctx, inner->type, val_var(old->u.var_name), inc);
-            Tac_Instruction *st = tac_new_instruction(
+            Tac_Instruction *st   = tac_new_instruction(
                 byte_access_for(inner->type) ? TAC_INSTRUCTION_STORE_BYTE : TAC_INSTRUCTION_STORE);
             st->is_volatile     = vol;
             st->u.store.src     = val_var(result->u.var_name);
@@ -2016,8 +2020,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         // If the subscript selects a sub-array of a multi-dimensional array, its
         // value is the address of that sub-array (array-to-pointer decay), not a
         // load of a scalar.
-        const Expr *ptr_exp = is_pointer(e->u.subscript.left->type) ? e->u.subscript.left
-                                                                    : e->u.subscript.right;
+        const Expr *ptr_exp =
+            is_pointer(e->u.subscript.left->type) ? e->u.subscript.left : e->u.subscript.right;
         if (unalias(unalias(ptr_exp->type)->u.pointer.target)->kind == TYPE_ARRAY)
             return addr;
         Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(e->type));
@@ -2054,10 +2058,10 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
         if (type_needs_slot(e->type))
             return gen_aggregate_rvalue(ctx, e);
         if (base->kind == EXPR_VAR) {
-            Tac_Val *dst        = new_var_val(ctx, ast_type_to_tac_type(e->type));
-            Tac_Instruction *in = tac_new_instruction(
-                byte_access_for(e->type) ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET
-                                         : TAC_INSTRUCTION_COPY_FROM_OFFSET);
+            Tac_Val *dst = new_var_val(ctx, ast_type_to_tac_type(e->type));
+            Tac_Instruction *in =
+                tac_new_instruction(byte_access_for(e->type) ? TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET
+                                                             : TAC_INSTRUCTION_COPY_FROM_OFFSET);
             in->is_volatile            = type_is_volatile(e->type) || type_is_volatile(base->type);
             in->u.copy_from_offset.src = xstrdup(base->u.var);
             in->u.copy_from_offset.offset = offset;
@@ -2131,8 +2135,8 @@ static Tac_Val *gen_expr_at(TacCtx *ctx, Expr *e)
 // gen_expr with diag_loc at the node, for the errors found in it.
 Tac_Val *gen_expr(TacCtx *ctx, Expr *e)
 {
-    SrcLoc saved = diag_enter(e ? e->loc : diag_loc);
+    SrcLoc saved    = diag_enter(e ? e->loc : diag_loc);
     Tac_Val *result = gen_expr_at(ctx, e);
-    diag_loc = saved;
+    diag_loc        = saved;
     return result;
 }

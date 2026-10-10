@@ -22,14 +22,20 @@
 
 static uint32_t bits(float f)
 {
-    union { float f; uint32_t u; } v;
+    union {
+        float f;
+        uint32_t u;
+    } v;
     v.f = f;
     return v.u;
 }
 
 static float from_bits(uint32_t u)
 {
-    union { float f; uint32_t u; } v;
+    union {
+        float f;
+        uint32_t u;
+    } v;
     v.u = u;
     return v.f;
 }
@@ -260,8 +266,8 @@ float sqrtf(float x)
             d2 = (unsigned)((m >> (j + 1)) & 1) << 1;
         if (j >= 0)
             d2 |= (unsigned)((m >> j) & 1);
-        r            = (r << 2) | d2;
-        uint32_t t   = (q << 2) | 1;
+        r          = (r << 2) | d2;
+        uint32_t t = (q << 2) | 1;
         if (r >= t) {
             r -= t;
             q = (q << 1) | 1;

@@ -61,10 +61,10 @@
 // ============================================================================
 
 typedef struct {
-    char *key;      // owned; the expression's spelling, == the map key
-    char *holder;   // owned; the variable that holds the expression's value
-    char *reads[2]; // owned; the variables the expression reads, or NULL
-    bool load;      // a read through a pointer: any write to memory may change it
+    char *key;        // owned; the expression's spelling, == the map key
+    char *holder;     // owned; the variable that holds the expression's value
+    char *reads[2];   // owned; the variables the expression reads, or NULL
+    bool load;        // a read through a pointer: any write to memory may change it
     Tac_Const *konst; // owned; when the holder is a constant (forwarded from a
                       // store), that constant; `holder` is then its spelling
 } Fact;
@@ -321,8 +321,7 @@ static void spell_val(StrBuf *sb, const Tac_Val *v)
         memcpy(&bits, &c->u.double_val, sizeof bits);
         break;
     case TAC_CONST_LONG_DOUBLE:
-        sb_printf(sb, "|c%d:%llx:%llx", (int)c->kind,
-                  (unsigned long long)c->u.long_double_val.hi,
+        sb_printf(sb, "|c%d:%llx:%llx", (int)c->kind, (unsigned long long)c->u.long_double_val.hi,
                   (unsigned long long)c->u.long_double_val.lo);
         return;
     case TAC_CONST_SCHAR:
@@ -588,9 +587,9 @@ static void gen_store(StringMap *es, const Tac_Instruction *ins, const CseCtx *c
     } else {
         StrBuf sb = { 0 };
         spell_val(&sb, v);
-        f->holder  = sb.buf;
-        f->konst   = tac_new_const(v->u.constant->kind);
-        *f->konst  = *v->u.constant;
+        f->holder = sb.buf;
+        f->konst  = tac_new_const(v->u.constant->kind);
+        *f->konst = *v->u.constant;
     }
     map_insert_free(es, f->key, (intptr_t)f, 0, fact_free);
 }
@@ -698,15 +697,15 @@ static Tac_Instruction *rewrite(Tac_Instruction *ins, const StringMap *es, const
         if (!is_private(ctx, name) || !const_fits(ctx, f->konst, name))
             return ins;
         opt_trace_instr("[cse] forward before:", ins);
-        Tac_Instruction *cp  = tac_new_instruction(TAC_INSTRUCTION_COPY);
-        Tac_Val *src         = tac_new_val(TAC_VAL_CONSTANT);
-        src->next            = NULL;
-        src->u.constant      = tac_new_const(f->konst->kind);
-        *src->u.constant     = *f->konst;
-        cp->u.copy.src       = src;
-        cp->u.copy.dst       = *c.dst;
-        *c.dst               = NULL;
-        cp->next             = ins->next;
+        Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
+        Tac_Val *src        = tac_new_val(TAC_VAL_CONSTANT);
+        src->next           = NULL;
+        src->u.constant     = tac_new_const(f->konst->kind);
+        *src->u.constant    = *f->konst;
+        cp->u.copy.src      = src;
+        cp->u.copy.dst      = *c.dst;
+        *c.dst              = NULL;
+        cp->next            = ins->next;
         opt_trace_instr("[cse] forward after: ", cp);
         return cp;
     }
@@ -719,14 +718,14 @@ static Tac_Instruction *rewrite(Tac_Instruction *ins, const StringMap *es, const
         return ins;
 
     opt_trace_instr("[cse] rewrite before:", ins);
-    Tac_Instruction *cp  = tac_new_instruction(TAC_INSTRUCTION_COPY);
-    Tac_Val *src         = tac_new_val(TAC_VAL_VAR);
-    src->next            = NULL;
-    src->u.var_name      = xstrdup(f->holder);
-    cp->u.copy.src       = src;
-    cp->u.copy.dst       = *c.dst; // take over the destination
-    *c.dst               = NULL;
-    cp->next             = ins->next;
+    Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
+    Tac_Val *src        = tac_new_val(TAC_VAL_VAR);
+    src->next           = NULL;
+    src->u.var_name     = xstrdup(f->holder);
+    cp->u.copy.src      = src;
+    cp->u.copy.dst      = *c.dst; // take over the destination
+    *c.dst              = NULL;
+    cp->next            = ins->next;
     opt_trace_instr("[cse] rewrite after: ", cp);
     return cp;
 }

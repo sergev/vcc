@@ -83,11 +83,11 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
         coro_loop_head_depth++;
         s->u.while_stmt.condition = typecheck_scalar(s->u.while_stmt.condition);
         coro_loop_head_depth--;
-        s->u.while_stmt.body      = typecheck_statement(ret_type, s->u.while_stmt.body);
+        s->u.while_stmt.body = typecheck_statement(ret_type, s->u.while_stmt.body);
         return s;
     }
     case STMT_DO_WHILE: {
-        s->u.do_while.body      = typecheck_statement(ret_type, s->u.do_while.body);
+        s->u.do_while.body = typecheck_statement(ret_type, s->u.do_while.body);
         coro_loop_head_depth++;
         s->u.do_while.condition = typecheck_scalar(s->u.do_while.condition);
         coro_loop_head_depth--;
@@ -205,6 +205,6 @@ Stmt *typecheck_statement(const Type *ret_type, Stmt *s)
 {
     SrcLoc saved = diag_enter(s ? s->loc : diag_loc);
     Stmt *result = typecheck_statement_at(ret_type, s);
-    diag_loc = saved;
+    diag_loc     = saved;
     return result;
 }

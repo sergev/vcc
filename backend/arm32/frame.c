@@ -147,8 +147,7 @@ const char *gen_name(const Gen *g)
     return g->tl->u.function.name;
 }
 
-static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg,
-                        int hi)
+static void insert_slot(Gen *g, const char *name, const Tac_Type *type, int offset, int reg, int hi)
 {
     Slot *s   = xalloc(sizeof(Slot), __func__, __FILE__, __LINE__);
     s->type   = type;
@@ -708,7 +707,7 @@ void parallel_move(Gen *g, Move *m, int n)
                 if (j != k && (src_set(&m[k]) & dst_set(&m[j])))
                     i = k;
         bool vfp = a32_is_vfp(m[i].src), d = m[i].kind == MOVE_D;
-        int tmp  = -1;
+        int tmp           = -1;
         const int cand[2] = { vfp ? F0 : T0, vfp ? F1 : T1 };
         for (int c = 0; c < 2 && tmp < 0; c++) {
             bool busy = false;
@@ -919,7 +918,8 @@ static bool rebase_to_sp(const Gen *g, const Frame *fr, bool apply)
                 if (i != 1 || (in->op != A32_ADD && in->op != A32_SUB) ||
                     in->opnd[2].kind != A32_OPND_IMM || in->opnd[3].kind != A32_OPND_NONE)
                     return false;
-                int64_t off = sp_offset(g, fr, in->op == A32_SUB ? -in->opnd[2].imm : in->opnd[2].imm);
+                int64_t off =
+                    sp_offset(g, fr, in->op == A32_SUB ? -in->opnd[2].imm : in->opnd[2].imm);
                 if (off < 0 || !a32_operand2_imm((uint32_t)off))
                     return false;
                 if (apply) {

@@ -1,9 +1,9 @@
 /*
  * The MSP430 EABI helper names GCC's and clang's code calls for binary32 floating
  * point and its conversions to integers, over the libgcc-named runtime this compiler's
- * own code calls (libc/common/float32.c, libc/ilp32/int64conv.c).  These take the ordinary ABI; the ones with a 64-bit first
- * operand in r8-r11 are in mspabi64.s.  Binary32 and binary64 are apart, so that a
- * program takes in only the runtime it uses.
+ * own code calls (libc/common/float32.c, libc/ilp32/int64conv.c).  These take the ordinary ABI; the
+ * ones with a 64-bit first operand in r8-r11 are in mspabi64.s.  Binary32 and binary64 are apart,
+ * so that a program takes in only the runtime it uses.
  *
  * __mspabi_cmpf returns -1, 0 or 1, and 1 for an unordered pair: clang tests that one
  * result against zero for every comparison, so for a NaN its `>` and `>=` come out

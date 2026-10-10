@@ -19,8 +19,8 @@ extern "C" {
 // The MSP430 tools, from CMake; a missing one names a path that does not exist.
 inline bool msp430_tools_available()
 {
-    return MSP430_TOOLS_FOUND && command_available(MSP430_ASSEMBLER) &&
-           tool_available(MSP430_LD) && tool_available(MSPSIM);
+    return MSP430_TOOLS_FOUND && command_available(MSP430_ASSEMBLER) && tool_available(MSP430_LD) &&
+           tool_available(MSPSIM);
 }
 
 // msp430-elf-gcc, the second compiler, with its libgcc.a and newlib.
@@ -38,23 +38,23 @@ inline bool msp430_clang_available()
 }
 
 // Skip a run test when the MSP430 binutils or mspsim is absent.
-#define SKIP_IF_NO_MSP430_TOOLS()                                                        \
-    do {                                                                                 \
-        if (!msp430_tools_available())                                                   \
+#define SKIP_IF_NO_MSP430_TOOLS()                                                             \
+    do {                                                                                      \
+        if (!msp430_tools_available())                                                        \
             GTEST_SKIP() << "MSP430 assembler/linker or mspsim not found; skipping run test"; \
     } while (0)
 
 // Skip a test that needs msp430-elf-gcc as well.
-#define SKIP_IF_NO_MSP430_GCC()                                              \
-    do {                                                                     \
-        if (!msp430_gcc_available())                                         \
+#define SKIP_IF_NO_MSP430_GCC()                                            \
+    do {                                                                   \
+        if (!msp430_gcc_available())                                       \
             GTEST_SKIP() << "msp430-elf-gcc not found; skipping GCC test"; \
     } while (0)
 
 // Skip a test that needs clang's MSP430 target and ld.lld as well.
-#define SKIP_IF_NO_MSP430_CLANG()                                                  \
-    do {                                                                           \
-        if (!msp430_clang_available())                                             \
+#define SKIP_IF_NO_MSP430_CLANG()                                                 \
+    do {                                                                          \
+        if (!msp430_clang_available())                                            \
             GTEST_SKIP() << "MSP430 clang/ld.lld not found; skipping clang test"; \
     } while (0)
 
@@ -158,9 +158,9 @@ protected:
             std::ofstream f(base + ".s");
             f << asm_text;
         }
-        EXPECT_EQ(0, RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o", base + ".o",
-                               base + ".s" },
-                             base + ".log"))
+        EXPECT_EQ(0,
+                  RunTool({ MSP430_CLANG, "--target=msp430", "-c", "-o", base + ".o", base + ".s" },
+                          base + ".log"))
             << "clang's assembler rejects our output:\n"
             << ReadFile(base + ".log");
     }
@@ -274,8 +274,8 @@ protected:
     }
 
     // Run a program on our libc.a, and once more built by GCC (-O1 -fno-builtin) with
-    // newlib, when msp430-elf-gcc is present: the two outputs and results must agree.  Returns ours, with main's result in
-    // exit_status.
+    // newlib, when msp430-elf-gcc is present: the two outputs and results must agree.  Returns
+    // ours, with main's result in exit_status.
     std::string RunAgainstNewlib(const std::string &src)
     {
         std::string ours = CompileAndRunMsp430(src);
@@ -317,8 +317,8 @@ int __wrap_main(void)
 
 // A golden test of the instruction lines of a translation unit's one function (each
 // test compiles one: the fixture's symbol table lives per test).
-#define EXPECT_CODE(name, expected, src)                \
-    TEST_F(Msp430Test, name)                            \
-    {                                                   \
+#define EXPECT_CODE(name, expected, src)                 \
+    TEST_F(Msp430Test, name)                             \
+    {                                                    \
         EXPECT_EQ(expected, Code(CompileToMsp430(src))); \
     }

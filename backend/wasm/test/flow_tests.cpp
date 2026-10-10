@@ -21,7 +21,8 @@ EXPECT_CODE(IfElse,
 TEST_F(WasmTest, MergeNode)
 {
     NaiveSelection();
-    std::string s = Code(CompileToWasm("int f(int a) { int r = 3; if (a) r = a * 2; return r + 1; }"));
+    std::string s =
+        Code(CompileToWasm("int f(int a) { int r = 3; if (a) r = a * 2; return r + 1; }"));
     EXPECT_EQ(s.find("block\n"), 0u) << s;
     EXPECT_NE(s.find("if\n"), std::string::npos) << s;
     EXPECT_NE(s.find("br 1\n"), std::string::npos) << s;
@@ -47,9 +48,10 @@ TEST_F(WasmTest, DispatchForward)
 {
     NaiveSelection();
     wasm_structure = false;
-    EXPECT_EQ("block\nblock\nlocal.get 0\ni32.eqz\nbr_if 1\nend_block\ni32.const 1\nreturn\n"
-              "end_block\ni32.const 2\nreturn\nend_function\n",
-              Code(CompileToWasm("int f(int a) { if (a) return 1; return 2; }")));
+    EXPECT_EQ(
+        "block\nblock\nlocal.get 0\ni32.eqz\nbr_if 1\nend_block\ni32.const 1\nreturn\n"
+        "end_block\ni32.const 2\nreturn\nend_function\n",
+        Code(CompileToWasm("int f(int a) { if (a) return 1; return 2; }")));
 }
 
 // The dispatch skeleton's loop: a backward jump sets the state and restarts it.
@@ -91,15 +93,16 @@ int f(int a)
 TEST_F(WasmTest, IrreducibleRegion)
 {
     NaiveSelection();
-    EXPECT_EQ("block\ni32.const 0\nlocal.set 1\nlocal.get 0\ni32.eqz\nif\ni32.const 0\n"
-              "local.set 5\nbr 1\nelse\ni32.const 1\nlocal.set 5\nbr 1\nend_if\nend_block\n"
-              "loop\nblock\nblock\nlocal.get 5\nbr_table {0, 1, 0}\nend_block\n"
-              "local.get 1\ni32.const 3\ni32.add\nlocal.set 2\nlocal.get 2\nlocal.set 1\n"
-              "br 0\nend_block\n"
-              "local.get 1\ni32.const 5\ni32.add\nlocal.set 3\nlocal.get 3\nlocal.set 1\n"
-              "local.get 3\ni32.const 100\ni32.lt_s\nlocal.set 4\ni32.const 0\nlocal.set 5\n"
-              "local.get 4\nbr_if 0\nlocal.get 3\nreturn\nend_loop\nunreachable\nend_function\n",
-              Code(CompileToWasm(irreducible_src)));
+    EXPECT_EQ(
+        "block\ni32.const 0\nlocal.set 1\nlocal.get 0\ni32.eqz\nif\ni32.const 0\n"
+        "local.set 5\nbr 1\nelse\ni32.const 1\nlocal.set 5\nbr 1\nend_if\nend_block\n"
+        "loop\nblock\nblock\nlocal.get 5\nbr_table {0, 1, 0}\nend_block\n"
+        "local.get 1\ni32.const 3\ni32.add\nlocal.set 2\nlocal.get 2\nlocal.set 1\n"
+        "br 0\nend_block\n"
+        "local.get 1\ni32.const 5\ni32.add\nlocal.set 3\nlocal.get 3\nlocal.set 1\n"
+        "local.get 3\ni32.const 100\ni32.lt_s\nlocal.set 4\ni32.const 0\nlocal.set 5\n"
+        "local.get 4\nbr_if 0\nlocal.get 3\nreturn\nend_loop\nunreachable\nend_function\n",
+        Code(CompileToWasm(irreducible_src)));
 }
 
 // Under --no-regional, the whole function is the dispatch skeleton.
@@ -146,9 +149,11 @@ TEST_F(WasmTest, DuffRegion)
     EXPECT_EQ(s.find("br_table", table + 1), std::string::npos) << s;
     std::string body = s.substr(table);
     size_t br_ifs = 0, brs = 0;
-    for (size_t at = body.find("\nbr_if "); at != std::string::npos; at = body.find("\nbr_if ", at + 1))
+    for (size_t at = body.find("\nbr_if "); at != std::string::npos;
+         at        = body.find("\nbr_if ", at + 1))
         br_ifs++;
-    for (size_t at = body.find("\nbr 0\n"); at != std::string::npos; at = body.find("\nbr 0\n", at + 1))
+    for (size_t at = body.find("\nbr 0\n"); at != std::string::npos;
+         at        = body.find("\nbr 0\n", at + 1))
         brs++;
     EXPECT_EQ(1u, br_ifs) << body;
     EXPECT_EQ(7u, brs) << body;
@@ -299,8 +304,9 @@ static std::string RandomGotos(unsigned seed)
             src += "    if ((x >> 9) & 1) goto L" + p + "; else goto L" + q + ";\n";
     }
     src += "    return x;\n}\n";
-    src += "int main(void) { unsigned s = 0; for (unsigned i = 0; i < 20; i++) s += f(i * 7919u);"
-           " printf(\"%u\\n\", s); return 0; }\n";
+    src +=
+        "int main(void) { unsigned s = 0; for (unsigned i = 0; i < 20; i++) s += f(i * 7919u);"
+        " printf(\"%u\\n\", s); return 0; }\n";
     return "#include <stdio.h>\n" + src;
 }
 

@@ -36,8 +36,8 @@ int f(void) {
     us = us;
     return m;
 })"));
-    for (const char *s : { "strb r12", "ldrsb r12", "ldrb r12", "strh r12", "ldrsh r12",
-                           "ldrh r12", "str r12", "ldr r12", "ldr r0" })
+    for (const char *s : { "strb r12", "ldrsb r12", "ldrb r12", "strh r12", "ldrsh r12", "ldrh r12",
+                           "str r12", "ldr r12", "ldr r0" })
         EXPECT_NE(std::string::npos, code.find(s)) << s << " in\n" << code;
 }
 
@@ -46,7 +46,8 @@ TEST_F(Arm32Test, LongLongCopy)
 {
     NaiveSelection();
     DisableOptimization();
-    EXPECT_EQ(R"(push {r11, lr}
+    EXPECT_EQ(
+        R"(push {r11, lr}
 mov r11, sp
 sub sp, sp, #16
 mov r12, #0
@@ -62,8 +63,8 @@ ldr r1, [r11, #-12]
 mov sp, r11
 pop {r11, pc}
 )",
-              Code(CompileToArm32(
-                  "long long f(void) { long long a = 0x100000000LL; long long b = a; return b; }")));
+        Code(CompileToArm32(
+            "long long f(void) { long long a = 0x100000000LL; long long b = a; return b; }")));
 }
 
 // A double needs no VFP register for a copy, and is returned in d0.
@@ -110,11 +111,13 @@ TEST_F(Arm32Test, LargeFrameOffsets)
     EXPECT_NE(std::string::npos, code.find(R"(sub sp, sp, #312
 sub sp, sp, #4096
 )")) << code;
-    EXPECT_TRUE(std::regex_search(code, std::regex("\nsub lr, r11, #[0-9]+\n(sub lr, lr, #[0-9]+\n)?"
-                                                   "str r12, \\[lr\\]\n")))
+    EXPECT_TRUE(
+        std::regex_search(code, std::regex("\nsub lr, r11, #[0-9]+\n(sub lr, lr, #[0-9]+\n)?"
+                                           "str r12, \\[lr\\]\n")))
         << code;
-    EXPECT_TRUE(std::regex_search(code, std::regex("\nsub r12, r11, #[0-9]+\n(sub r12, r12, #[0-9]+\n)?"
-                                                   "ldrsh r12, \\[r12\\]\n")))
+    EXPECT_TRUE(
+        std::regex_search(code, std::regex("\nsub r12, r11, #[0-9]+\n(sub r12, r12, #[0-9]+\n)?"
+                                           "ldrsh r12, \\[r12\\]\n")))
         << code;
 }
 
@@ -273,9 +276,10 @@ int slot(int x) { int y = x; take(&y); return y; }
 // callee-saved register it uses (r0-r3 holding the other parameters, all live).
 TEST_F(Arm32Test, StackArgumentFromSp)
 {
-    EXPECT_EQ("push {r4}\nldr r4, [sp, #4]\nadd r0, r0, r1\nadd r0, r0, r2\nadd r0, r0, r3\n"
-              "add r0, r0, r4\npop {r4}\nbx lr\n",
-              Code(CompileToArm32(R"(
+    EXPECT_EQ(
+        "push {r4}\nldr r4, [sp, #4]\nadd r0, r0, r1\nadd r0, r0, r2\nadd r0, r0, r3\n"
+        "add r0, r0, r4\npop {r4}\nbx lr\n",
+        Code(CompileToArm32(R"(
 int stackarg(int a, int b, int c, int d, int e) { return a + b + c + d + e; }
 )")));
 }

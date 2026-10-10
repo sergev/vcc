@@ -19,8 +19,8 @@
 // seeds the stack at HEAP_LIMIT — so the allocator is a Unix-only routine and is
 // not assembled into the Madlen libc.bin (see libc/besm6/CMakeLists.txt).
 //
-#include <stdlib.h>
 #include <malloc.h>
+#include <stdlib.h>
 
 //
 // Bytes per machine word.
@@ -109,10 +109,10 @@ static void heap_setup(void)
         return; // program fills memory up to the stack: no room for a heap
     }
 
-    free_list = h;
+    free_list  = h;
     free_words = HEAP_LIMIT - (size_t)h;
-    h->size = free_words;
-    NEXT(h) = NULL;
+    h->size    = free_words;
+    NEXT(h)    = NULL;
 }
 
 //
@@ -123,7 +123,7 @@ static heap_header_t *alloc_words(size_t nwords)
 {
     heap_setup();
 
-    heap_header_t *h = free_list;
+    heap_header_t *h      = free_list;
     heap_header_t **hprev = &free_list;
 
     while (h != NULL) {
@@ -131,7 +131,7 @@ static heap_header_t *alloc_words(size_t nwords)
             break;
         }
         hprev = NEXTP(h);
-        h = NEXT(h);
+        h     = NEXT(h);
     }
 
     if (h == NULL) {
@@ -142,10 +142,10 @@ static heap_header_t *alloc_words(size_t nwords)
     // stand on its own; otherwise hand out the whole block.
     if (h->size >= nwords + MIN_BLOCK_WORDS) {
         heap_header_t *newh = h + nwords;
-        newh->size = h->size - nwords;
-        h->size = nwords;
-        NEXT(newh) = NEXT(h);
-        *hprev = newh;
+        newh->size          = h->size - nwords;
+        h->size             = nwords;
+        NEXT(newh)          = NEXT(h);
+        *hprev              = newh;
     } else {
         *hprev = NEXT(h);
     }
@@ -181,7 +181,7 @@ void *calloc(size_t nmemb, size_t size)
     }
 
     size_t nbytes = nmemb * size;
-    void *p = malloc(nbytes);
+    void *p       = malloc(nbytes);
     if (p != NULL) {
         zero_words((size_t *)p, to_words(nbytes));
     }
@@ -195,12 +195,12 @@ static void make_free_block(heap_header_t *newh)
 {
     free_words += newh->size;
 
-    heap_header_t *h = free_list;
+    heap_header_t *h      = free_list;
     heap_header_t **hprev = &free_list;
     for (;;) {
         if (h == NULL) {
             // End of the list: append.
-            *hprev = newh;
+            *hprev     = newh;
             NEXT(newh) = NULL;
             break;
         }
@@ -229,7 +229,7 @@ static void make_free_block(heap_header_t *newh)
         }
 
         hprev = NEXTP(h);
-        h = NEXT(h);
+        h     = NEXT(h);
     }
 }
 

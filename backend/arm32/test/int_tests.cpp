@@ -21,8 +21,7 @@ str r12,)",
                "int f(void) { int a = 1; int b = 2; return a + b; }")
 // A constant operand is a modified immediate, or its negation with add and sub
 // swapped, or its complement with and turned into bic; else it is loaded.
-EXPECT_SELECTS(AddImmediate, "add r12, r12, #1020\n",
-               "int f(void) { int a = 1; return a + 1020; }")
+EXPECT_SELECTS(AddImmediate, "add r12, r12, #1020\n", "int f(void) { int a = 1; return a + 1020; }")
 EXPECT_SELECTS(AddNegatedImmediate, "sub r12, r12, #256\n",
                "unsigned f(void) { unsigned a = 1; return a + 0xffffff00u; }")
 EXPECT_SELECTS(SubtractNegatedImmediate, "add r12, r12, #1\n",
@@ -75,8 +74,7 @@ EXPECT_SELECTS(TruncateIntToChar, R"(ldr r12, [r11, #-4]
 strb r12,)",
                "char f(void) { int a = 300; char c = a; return c; }")
 // A narrow result is extended by the callee.
-EXPECT_SELECTS(NarrowResult, "ldrsh r0, [r11, #-2]\n",
-               "short f(void) { short a = -3; return a; }")
+EXPECT_SELECTS(NarrowResult, "ldrsh r0, [r11, #-2]\n", "short f(void) { short a = -3; return a; }")
 
 TEST_F(Arm32Test, RunDivisionAndRemainder)
 {

@@ -136,7 +136,8 @@ int target(void) {
     return 0;  // success
 }
 )SRC")),
-              "binary=57 copy=15 fun_call=5 jump=8 jump_if_not_zero=39 jump_if_zero=15 label=34 return=17");
+              "binary=57 copy=15 fun_call=5 jump=8 jump_if_not_zero=39 jump_if_zero=15 label=34 "
+              "return=17");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_IntOnly_PropagateIntoComplexExpressions)
@@ -2557,7 +2558,8 @@ int target(void) {
     return callee(s1, s2);
 }
 )SRC")),
-              "allocate_local=2 binary=4 copy_from_offset=6 copy_to_offset=6 fun_call=1 jump_if_zero=4 label=4 return=6");
+              "allocate_local=2 binary=4 copy_from_offset=6 copy_to_offset=6 fun_call=1 "
+              "jump_if_zero=4 label=4 return=6");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_AllTypes_FuncallKillsAliased)

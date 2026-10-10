@@ -134,8 +134,7 @@ bool is_type_specifier(int token)
            token == TOKEN_DOUBLE || token == TOKEN_SIGNED || token == TOKEN_UNSIGNED ||
            token == TOKEN_BOOL || token == TOKEN_COMPLEX || token == TOKEN_IMAGINARY ||
            token == TOKEN_STRUCT || token == TOKEN_UNION || token == TOKEN_ENUM ||
-           token == TOKEN_TYPEDEF_NAME || token == TOKEN_CORO_FRAME ||
-           token == TOKEN_CORO_PTR;
+           token == TOKEN_TYPEDEF_NAME || token == TOKEN_CORO_FRAME || token == TOKEN_CORO_PTR;
 }
 
 // Is this token a type qualifier?

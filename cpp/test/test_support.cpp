@@ -1,10 +1,10 @@
 #include "test_support.h"
 
+#include <fcntl.h>
+#include <ftw.h>
 #include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <ftw.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -14,7 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 
-extern char** environ;
+extern char **environ;
 
 // Configure-time injected strings (see CMakeLists.txt).  Fall back to a
 // conformant clang invocation if the build system did not define them.
@@ -31,59 +31,68 @@ extern char** environ;
 // Split a comma-separated argument string, dropping empty fields.  (Comma, not
 // ';', because ';' is CMake's list separator and would break the compile-time
 // -D definitions.)
-static std::vector<std::string> Split(const std::string& s) {
+static std::vector<std::string> Split(const std::string &s)
+{
     std::vector<std::string> out;
     std::string cur;
     std::istringstream is(s);
     while (std::getline(is, cur, ',')) {
-        if (!cur.empty()) out.push_back(cur);
+        if (!cur.empty())
+            out.push_back(cur);
     }
     return out;
 }
 
-static void WriteFile(const std::string& path, const std::string& content) {
+static void WriteFile(const std::string &path, const std::string &content)
+{
     std::ofstream f(path, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot write " + path);
+    if (!f)
+        throw std::runtime_error("cannot write " + path);
     f.write(content.data(), static_cast<std::streamsize>(content.size()));
 }
 
-static std::string ReadFile(const std::string& path) {
+static std::string ReadFile(const std::string &path)
+{
     std::ifstream f(path, std::ios::binary);
     std::ostringstream ss;
     ss << f.rdbuf();
     return ss.str();
 }
 
-static int RemoveEntry(const char* path, const struct stat*, int, struct FTW*) {
+static int RemoveEntry(const char *path, const struct stat *, int, struct FTW *)
+{
     return remove(path);
 }
 
-static void RemoveTree(const std::string& dir) {
+static void RemoveTree(const std::string &dir)
+{
     // Depth-first so directories are removed after their contents.
     nftw(dir.c_str(), RemoveEntry, 8, FTW_DEPTH | FTW_PHYS);
 }
 
-static Result RunPreprocessor(const std::string& source,
-                       const std::vector<std::string>& extraArgs,
-                       const std::vector<AuxFile>& aux,
-                       bool strict) {
+static Result RunPreprocessor(const std::string &source, const std::vector<std::string> &extraArgs,
+                              const std::vector<AuxFile> &aux, bool strict)
+{
     // Unique scratch directory under $TMPDIR.
-    const char* tmp = getenv("TMPDIR");
+    const char *tmp  = getenv("TMPDIR");
     std::string base = (tmp && *tmp) ? std::string(tmp) : std::string("/tmp");
-    if (!base.empty() && base.back() == '/') base.pop_back();
+    if (!base.empty() && base.back() == '/')
+        base.pop_back();
     std::string tmpl = base + "/c11pp.XXXXXX";
     std::vector<char> buf(tmpl.begin(), tmpl.end());
     buf.push_back('\0');
-    if (!mkdtemp(buf.data())) throw std::runtime_error("mkdtemp failed");
+    if (!mkdtemp(buf.data()))
+        throw std::runtime_error("mkdtemp failed");
     std::string dir(buf.data());
 
     const std::string mainFile = dir + "/input.c";
-    const std::string outFile = dir + "/stdout.txt";
-    const std::string errFile = dir + "/stderr.txt";
+    const std::string outFile  = dir + "/stdout.txt";
+    const std::string errFile  = dir + "/stderr.txt";
 
     try {
         WriteFile(mainFile, source);
-        for (const auto& a : aux) WriteFile(dir + "/" + a.name, a.content);
+        for (const auto &a : aux)
+            WriteFile(dir + "/" + a.name, a.content);
 
         // argv = command  base-args  [strict-args]  extra-args  -I<dir>  input.c
         std::vector<std::string> parts;
@@ -98,11 +107,10 @@ static Result RunPreprocessor(const std::string& source,
         parts.push_back("-I" + dir);
         parts.push_back(mainFile);
 
-        std::vector<char*> argv;
+        std::vector<char *> argv;
         argv.reserve(parts.size() + 1);
-        std::transform(
-            parts.begin(), parts.end(), std::back_inserter(argv),
-            [](const std::string& p) { return const_cast<char*>(p.c_str()); });
+        std::transform(parts.begin(), parts.end(), std::back_inserter(argv),
+                       [](const std::string &p) { return const_cast<char *>(p.c_str()); });
         argv.push_back(nullptr);
 
         // Redirect child stdout/stderr to files (no pipe-deadlock risk).
@@ -114,7 +122,7 @@ static Result RunPreprocessor(const std::string& source,
                                          O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
         pid_t pid = 0;
-        int rc = posix_spawnp(&pid, argv[0], &fa, nullptr, argv.data(), environ);
+        int rc    = posix_spawnp(&pid, argv[0], &fa, nullptr, argv.data(), environ);
         posix_spawn_file_actions_destroy(&fa);
         if (rc != 0)
             throw std::runtime_error(std::string("cannot spawn '") + C11PP_COMMAND +
@@ -140,32 +148,41 @@ static Result RunPreprocessor(const std::string& source,
     }
 }
 
-Result PreprocessorTest::Preprocess(const std::string& source,
-                                    const std::vector<std::string>& extraArgs,
-                                    const std::vector<AuxFile>& aux) {
+Result PreprocessorTest::Preprocess(const std::string &source,
+                                    const std::vector<std::string> &extraArgs,
+                                    const std::vector<AuxFile> &aux)
+{
     return RunPreprocessor(source, extraArgs, aux, false); // strict = false
 }
 
-Result PreprocessorTest::PreprocessStrict(const std::string& source,
-                                          const std::vector<std::string>& extraArgs,
-                                          const std::vector<AuxFile>& aux) {
+Result PreprocessorTest::PreprocessStrict(const std::string &source,
+                                          const std::vector<std::string> &extraArgs,
+                                          const std::vector<AuxFile> &aux)
+{
     return RunPreprocessor(source, extraArgs, aux, true); // strict = true
 }
 
-static bool IsWordChar(unsigned char c) { return std::isalnum(c) != 0 || c == '_'; }
+static bool IsWordChar(unsigned char c)
+{
+    return std::isalnum(c) != 0 || c == '_';
+}
 
 // Is `line` a GNU line marker ("# 12 \"file\"") or a #line marker?  Such lines
 // are preprocessor bookkeeping, not translated tokens, so they are dropped.
-static bool IsLineMarker(const std::string& line) {
+static bool IsLineMarker(const std::string &line)
+{
     std::size_t p = line.find_first_not_of(" \t");
-    if (p == std::string::npos || line[p] != '#') return false;
+    if (p == std::string::npos || line[p] != '#')
+        return false;
     std::size_t q = line.find_first_not_of(" \t", p + 1);
-    if (q == std::string::npos) return false;
+    if (q == std::string::npos)
+        return false;
     return std::isdigit(static_cast<unsigned char>(line[q])) != 0 ||
            line.compare(q, 4, "line") == 0;
 }
 
-std::string PreprocessorTest::Normalize(const std::string& out) {
+std::string PreprocessorTest::Normalize(const std::string &out)
+{
     // Pass 1: drop line-marker lines.
     std::string body;
     std::istringstream is(out);
@@ -195,7 +212,7 @@ std::string PreprocessorTest::Normalize(const std::string& out) {
                 const char d = body[i++];
                 tok.push_back(d);
                 if (d == '\\' && i < n) {
-                    tok.push_back(body[i++]);  // escaped char, keep verbatim
+                    tok.push_back(body[i++]); // escaped char, keep verbatim
                 } else if (d == quote) {
                     break;
                 }
@@ -223,7 +240,8 @@ std::string PreprocessorTest::Normalize(const std::string& out) {
 
     std::string result;
     for (std::size_t k = 0; k < tokens.size(); ++k) {
-        if (k) result.push_back(' ');
+        if (k)
+            result.push_back(' ');
         result += tokens[k];
     }
     return result;
@@ -231,38 +249,44 @@ std::string PreprocessorTest::Normalize(const std::string& out) {
 
 // --- Convenience matchers --------------------------------------------------
 
-::testing::AssertionResult PreprocessorTest::TokensAre(
-    const std::string& source, const std::string& expected,
-    const std::vector<std::string>& extraArgs, const std::vector<AuxFile>& aux) {
+::testing::AssertionResult PreprocessorTest::TokensAre(const std::string &source,
+                                                       const std::string &expected,
+                                                       const std::vector<std::string> &extraArgs,
+                                                       const std::vector<AuxFile> &aux)
+{
     Result r = Preprocess(source, extraArgs, aux);
     if (r.exit_code != 0) {
         return ::testing::AssertionFailure()
                << "preprocessor exited " << r.exit_code << "\n--- stderr ---\n"
                << r.err;
     }
-    std::string got = Normalize(r.out);
+    std::string got  = Normalize(r.out);
     std::string want = Normalize(expected);
-    if (got == want) return ::testing::AssertionSuccess();
+    if (got == want)
+        return ::testing::AssertionSuccess();
     return ::testing::AssertionFailure()
-           << "output mismatch\n  expected: [" << want << "]\n  actual:   [" << got
-           << "]";
+           << "output mismatch\n  expected: [" << want << "]\n  actual:   [" << got << "]";
 }
 
-::testing::AssertionResult PreprocessorTest::Succeeds(
-    const std::string& source, const std::vector<std::string>& extraArgs,
-    const std::vector<AuxFile>& aux) {
+::testing::AssertionResult PreprocessorTest::Succeeds(const std::string &source,
+                                                      const std::vector<std::string> &extraArgs,
+                                                      const std::vector<AuxFile> &aux)
+{
     Result r = Preprocess(source, extraArgs, aux);
-    if (r.exit_code == 0) return ::testing::AssertionSuccess();
+    if (r.exit_code == 0)
+        return ::testing::AssertionSuccess();
     return ::testing::AssertionFailure()
            << "expected success but exited " << r.exit_code << "\n--- stderr ---\n"
            << r.err;
 }
 
-::testing::AssertionResult PreprocessorTest::Diagnoses(
-    const std::string& source, const std::vector<std::string>& extraArgs,
-    const std::vector<AuxFile>& aux) {
+::testing::AssertionResult PreprocessorTest::Diagnoses(const std::string &source,
+                                                       const std::vector<std::string> &extraArgs,
+                                                       const std::vector<AuxFile> &aux)
+{
     Result r = PreprocessStrict(source, extraArgs, aux);
-    if (r.exit_code != 0) return ::testing::AssertionSuccess();
+    if (r.exit_code != 0)
+        return ::testing::AssertionSuccess();
     return ::testing::AssertionFailure()
            << "expected a diagnostic (nonzero exit) but tool exited 0\n--- stdout ---\n"
            << r.out;

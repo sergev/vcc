@@ -66,9 +66,10 @@ long long *use(void) { return &ll; })")));
 TEST_F(AvrTest, StaticPointers)
 {
     NaiveSelection();
-    std::string s = Data(CompileToAvr("int a[4]; int *p = &a[2];\n"
-                                      "int f(void);\nint (*fp)(void) = f;\n"
-                                      "const char *s = \"hi\";"));
+    std::string s =
+        Data(CompileToAvr("int a[4]; int *p = &a[2];\n"
+                          "int f(void);\nint (*fp)(void) = f;\n"
+                          "const char *s = \"hi\";"));
     EXPECT_NE(std::string::npos, s.find(R"(p:
     .short  a+4
 )")) << s;

@@ -20,16 +20,53 @@ typedef struct {
 } Verifier;
 
 static const char *const instr_names[] = {
-    "return", "sign_extend", "truncate", "zero_extend", "double_to_int", "double_to_uint",
-    "int_to_double", "uint_to_double", "float_to_double", "double_to_float", "int_to_float",
-    "uint_to_float", "float_to_int", "float_to_uint", "long_double_to_int",
-    "long_double_to_uint", "int_to_long_double", "uint_to_long_double",
-    "long_double_to_double", "double_to_long_double", "long_double_to_float",
-    "float_to_long_double", "ptr_to_char_ptr", "char_ptr_to_ptr", "unary", "binary", "copy",
-    "get_address", "get_address_byte", "get_address_decay", "load", "load_byte", "store",
-    "store_byte", "add_ptr", "ptr_diff", "copy_to_offset", "copy_byte_to_offset",
-    "copy_from_offset", "copy_byte_from_offset", "jump", "jump_if_zero", "jump_if_not_zero",
-    "label", "fun_call", "fun_call_noreturn", "allocate_local",
+    "return",
+    "sign_extend",
+    "truncate",
+    "zero_extend",
+    "double_to_int",
+    "double_to_uint",
+    "int_to_double",
+    "uint_to_double",
+    "float_to_double",
+    "double_to_float",
+    "int_to_float",
+    "uint_to_float",
+    "float_to_int",
+    "float_to_uint",
+    "long_double_to_int",
+    "long_double_to_uint",
+    "int_to_long_double",
+    "uint_to_long_double",
+    "long_double_to_double",
+    "double_to_long_double",
+    "long_double_to_float",
+    "float_to_long_double",
+    "ptr_to_char_ptr",
+    "char_ptr_to_ptr",
+    "unary",
+    "binary",
+    "copy",
+    "get_address",
+    "get_address_byte",
+    "get_address_decay",
+    "load",
+    "load_byte",
+    "store",
+    "store_byte",
+    "add_ptr",
+    "ptr_diff",
+    "copy_to_offset",
+    "copy_byte_to_offset",
+    "copy_from_offset",
+    "copy_byte_from_offset",
+    "jump",
+    "jump_if_zero",
+    "jump_if_not_zero",
+    "label",
+    "fun_call",
+    "fun_call_noreturn",
+    "allocate_local",
 };
 
 const char *tac_instruction_name(Tac_InstructionKind kind)
@@ -134,12 +171,17 @@ typedef struct {
 static bool val_type(Verifier *v, const Tac_Val *val, ValType *out)
 {
     static const Tac_TypeKind const_type[] = {
-        [TAC_CONST_INT] = TAC_TYPE_INT,         [TAC_CONST_LONG] = TAC_TYPE_LONG,
-        [TAC_CONST_LONG_LONG] = TAC_TYPE_LONG_LONG, [TAC_CONST_UINT] = TAC_TYPE_UINT,
-        [TAC_CONST_ULONG] = TAC_TYPE_ULONG,     [TAC_CONST_ULONG_LONG] = TAC_TYPE_ULONG_LONG,
-        [TAC_CONST_FLOAT] = TAC_TYPE_FLOAT,     [TAC_CONST_DOUBLE] = TAC_TYPE_DOUBLE,
-        [TAC_CONST_LONG_DOUBLE] = TAC_TYPE_LONG_DOUBLE, [TAC_CONST_SCHAR] = TAC_TYPE_SCHAR,
-        [TAC_CONST_UCHAR] = TAC_TYPE_UCHAR,
+        [TAC_CONST_INT]         = TAC_TYPE_INT,
+        [TAC_CONST_LONG]        = TAC_TYPE_LONG,
+        [TAC_CONST_LONG_LONG]   = TAC_TYPE_LONG_LONG,
+        [TAC_CONST_UINT]        = TAC_TYPE_UINT,
+        [TAC_CONST_ULONG]       = TAC_TYPE_ULONG,
+        [TAC_CONST_ULONG_LONG]  = TAC_TYPE_ULONG_LONG,
+        [TAC_CONST_FLOAT]       = TAC_TYPE_FLOAT,
+        [TAC_CONST_DOUBLE]      = TAC_TYPE_DOUBLE,
+        [TAC_CONST_LONG_DOUBLE] = TAC_TYPE_LONG_DOUBLE,
+        [TAC_CONST_SCHAR]       = TAC_TYPE_SCHAR,
+        [TAC_CONST_UCHAR]       = TAC_TYPE_UCHAR,
     };
     if (!val) {
         problem(v, "missing operand");
@@ -166,8 +208,8 @@ static bool both(Verifier *v, const Tac_Val *x, ValType *xt, const Tac_Val *y, V
 
 static const char *class_name(Class c)
 {
-    static const char *const names[] = { "integer", "pointer",   "float",   "double",
-                                         "long double", "aggregate", "void", "function" };
+    static const char *const names[] = { "integer",     "pointer",   "float", "double",
+                                         "long double", "aggregate", "void",  "function" };
     return names[c];
 }
 
@@ -182,9 +224,9 @@ static void expect_class(Verifier *v, const char *what, const ValType *vt, unsig
         problem(v, "%s is %s", what, class_name(c));
 }
 
-#define M(c)  (1u << (c))
-#define M_INT (M(C_INT) | M(C_PTR))
-#define M_FP  (M(C_FLOAT) | M(C_DOUBLE) | M(C_LDOUBLE))
+#define M(c)     (1u << (c))
+#define M_INT    (M(C_INT) | M(C_PTR))
+#define M_FP     (M(C_FLOAT) | M(C_DOUBLE) | M(C_LDOUBLE))
 #define M_SCALAR (M_INT | M_FP)
 
 // Two operands the operator treats as one type: same class family and, unless one is a

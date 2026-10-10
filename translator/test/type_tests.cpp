@@ -69,7 +69,7 @@ TEST_F(TranslateTestX86, CallCarriesCalleeType)
 // incomplete struct has size 0).  Unreferenced or defined later in the unit: not.
 TEST_F(TranslateTestX86, ExternListsUsedUndefinedNames)
 {
-    std::string yaml = CompileUnitToTypedYaml(R"(
+    std::string yaml    = CompileUnitToTypedYaml(R"(
         extern int used, unused;
         int defined_later(void);
         int helper(int);
@@ -198,7 +198,8 @@ static std::string ChunkStores(const Tac_TopLevel *tac, const char *fn)
                 in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET) {
                 src   = in->u.copy_to_offset.src;
                 where = std::to_string(in->u.copy_to_offset.offset);
-            } else if (in->kind == TAC_INSTRUCTION_STORE || in->kind == TAC_INSTRUCTION_STORE_BYTE) {
+            } else if (in->kind == TAC_INSTRUCTION_STORE ||
+                       in->kind == TAC_INSTRUCTION_STORE_BYTE) {
                 src   = in->u.store.src;
                 where = "ptr";
             } else {
@@ -375,7 +376,7 @@ static int CountArgs(const Tac_Instruction *call)
 
 TEST_F(TranslateTestRiscv, SixteenByteStructByValue)
 {
-    Tac_TopLevel *tac = CompileUnit(R"(
+    Tac_TopLevel *tac        = CompileUnit(R"(
         struct P { long a, b; };
         struct P make(long a) { struct P p = { a, a }; return p; }
         long use(void) { struct P q = make(1); return q.b; }
@@ -391,7 +392,7 @@ TEST_F(TranslateTestRiscv, SixteenByteStructByValue)
 
 TEST_F(TranslateTestRiscv, WideStructReturnThroughHiddenPointer)
 {
-    Tac_TopLevel *tac = CompileUnit(R"(
+    Tac_TopLevel *tac        = CompileUnit(R"(
         struct T { long a, b, c; };
         struct T make(long a) { struct T t = { a, a, a }; return t; }
         long use(void) { struct T q = make(1); return q.c; }
@@ -408,7 +409,7 @@ TEST_F(TranslateTestRiscv, WideStructReturnThroughHiddenPointer)
 // MSP430 returns every struct and union through a hidden pointer, a 1-byte one too.
 TEST_F(TranslateTestMsp430, EveryStructReturnThroughHiddenPointer)
 {
-    Tac_TopLevel *tac = CompileUnit(R"(
+    Tac_TopLevel *tac        = CompileUnit(R"(
         struct S1 { char c; };
         union U { int i; };
         struct S1 make(char c) { struct S1 s = { c }; return s; }
@@ -447,7 +448,7 @@ TEST_F(TranslateTestMmix, NoStructReturnThroughHiddenPointer)
 
 TEST_F(TranslateTestRiscv, StructArgumentPassedWhole)
 {
-    Tac_TopLevel *tac = CompileUnit(R"(
+    Tac_TopLevel *tac       = CompileUnit(R"(
         struct T { long a, b, c; };
         long get(struct T t) { return t.c; }
         long use(struct T *p) { return get(*p); }
@@ -457,8 +458,7 @@ TEST_F(TranslateTestRiscv, StructArgumentPassedWhole)
     EXPECT_EQ(get->u.function.params->next, nullptr); // no per-word fillers
     const Tac_Instruction *call = FirstCall(Function(tac, "use"));
     ASSERT_EQ(CountArgs(call), 1);
-    EXPECT_EQ(TypeStr(SymbolType(tac, "use", call->u.fun_call.args->u.var_name)),
-              "struct T(24,8)");
+    EXPECT_EQ(TypeStr(SymbolType(tac, "use", call->u.fun_call.args->u.var_name)), "struct T(24,8)");
     tac_free_toplevel(tac);
 }
 
@@ -470,7 +470,7 @@ TEST_F(TranslateTest, StructArgumentSplitIntoWords)
         long get(struct T t) { return t.c; }
         long use(struct T *p) { return get(*p); }
     )");
-    int nparams = 0;
+    int nparams       = 0;
     for (const Tac_Param *p = Function(tac, "get")->u.function.params; p; p = p->next)
         nparams++;
     EXPECT_EQ(nparams, 3);
@@ -586,7 +586,8 @@ TEST_F(TranslateTestRiscv, Alignas)
       alignment: 8
 )")) << yaml;
     EXPECT_FALSE(Has(yaml, "name: %z\n      size")) << yaml;
-    EXPECT_TRUE(Has(yaml, "  - name: s\n    type:\n      kind: uchar\n    alignment: 32\n")) << yaml;
+    EXPECT_TRUE(Has(yaml, "  - name: s\n    type:\n      kind: uchar\n    alignment: 32\n"))
+        << yaml;
     EXPECT_TRUE(Has(yaml, "  name: g\n  global: true\n  type:\n    kind: uchar\n  alignment: 64\n"))
         << yaml;
     // No stricter than the type's own: nothing recorded.
@@ -611,12 +612,14 @@ TEST_F(TranslateTestRiscv, AlignasNotConstant)
 
 TEST_F(TranslateTestRiscv, AlignasTypedef)
 {
-    EXPECT_DEATH(CompileUnit("typedef _Alignas(8) int T;"), "'_Alignas' cannot be applied to a typedef");
+    EXPECT_DEATH(CompileUnit("typedef _Alignas(8) int T;"),
+                 "'_Alignas' cannot be applied to a typedef");
 }
 
 TEST_F(TranslateTestRiscv, AlignasFunction)
 {
-    EXPECT_DEATH(CompileUnit("_Alignas(8) int f(void);"), "'_Alignas' cannot be applied to a function");
+    EXPECT_DEATH(CompileUnit("_Alignas(8) int f(void);"),
+                 "'_Alignas' cannot be applied to a function");
 }
 
 TEST_F(TranslateTestRiscv, AlignasRegister)
@@ -627,7 +630,8 @@ TEST_F(TranslateTestRiscv, AlignasRegister)
 
 TEST_F(TranslateTestRiscv, AlignasParameter)
 {
-    EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"), "'_Alignas' cannot be applied to a parameter");
+    EXPECT_DEATH(CompileUnit("void f(_Alignas(8) int p) {}"),
+                 "'_Alignas' cannot be applied to a parameter");
 }
 
 // _Alignas on a member: its offset, and the struct's alignment and size, follow it.
@@ -648,7 +652,8 @@ TEST_F(TranslateTestRiscv, AlignasMember)
 
 TEST_F(TranslateTestRiscv, AlignasBitField)
 {
-    EXPECT_DEATH(CompileUnit("struct B { _Alignas(8) int x : 3; };"), "'_Alignas' cannot be applied to a bit-field");
+    EXPECT_DEATH(CompileUnit("struct B { _Alignas(8) int x : 3; };"),
+                 "'_Alignas' cannot be applied to a bit-field");
 }
 
 TEST_F(TranslateTestRiscv, AlignasMemberLessStrict)
@@ -658,7 +663,8 @@ TEST_F(TranslateTestRiscv, AlignasMemberLessStrict)
 
 TEST_F(TranslateTestRiscv, AlignasTwice)
 {
-    EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"), "more than one '_Alignas' in a declaration is not supported");
+    EXPECT_DEATH(CompileUnit("_Alignas(8) _Alignas(16) long x;"),
+                 "more than one '_Alignas' in a declaration is not supported");
 }
 
 // Sibling blocks may declare the same name.  A repeat of another type gets its own

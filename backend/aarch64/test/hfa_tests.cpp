@@ -7,9 +7,9 @@
 // Three floats go in s0-s2, one member each; the result comes back the same way.
 TEST_F(Aarch64Test, HfaInVRegisters)
 {
-    aarch64_frame_pointer = true; // slots at x29 offsets
+    aarch64_frame_pointer = true;  // slots at x29 offsets
     aarch64_peephole      = false; // the ABI, not its clean-up
-    std::string code = Code(CompileToAarch64(R"(
+    std::string code      = Code(CompileToAarch64(R"(
 struct v3 { float x, y, z; };
 struct v3 f(struct v3 v);
 float g(void) { struct v3 v = { 1, 2, 3 }; struct v3 r = f(v); return r.z; }
@@ -23,9 +23,9 @@ float g(void) { struct v3 v = { 1, 2, 3 }; struct v3 r = f(v); return r.z; }
 // A long double goes in a q register, whole.
 TEST_F(Aarch64Test, LongDoubleInQRegister)
 {
-    aarch64_frame_pointer = true; // slots at x29 offsets
+    aarch64_frame_pointer = true;  // slots at x29 offsets
     aarch64_peephole      = false; // the ABI, not its clean-up
-    std::string code = Code(CompileToAarch64(R"(
+    std::string code      = Code(CompileToAarch64(R"(
 long double f(long double x);
 long double g(long double y) { return f(y); }
 )"));
@@ -62,7 +62,7 @@ long double their_ld(long double k);
 int call_ours(void);
 )";
     // Both sides define one of each with this text, renamed.
-    const char *defs   = R"(
+    const char *defs = R"(
 long NAME(struct f3 a, struct d4 b, struct q2 c, union u d, struct mixed e, struct d4 f,
           double g, long double h, int k)
 {
@@ -73,7 +73,7 @@ struct d4 PFX_d4(double k) { struct d4 r = { { k, k + 1 }, k + 2, k + 3 }; retur
 struct q2 PFX_q2(struct q2 k) { struct q2 r = { k.b, k.a }; return r; }
 long double PFX_ld(long double k) { return k; }
 )";
-    const char *args   = R"(
+    const char *args = R"(
     struct f3 a = { 1, 2, 3 };
     struct d4 b = { { 4, 5 }, 6, 7 };
     struct q2 c = { 8, 9 };
@@ -82,7 +82,7 @@ long double PFX_ld(long double k) { return k; }
     struct d4 f = { { 14, 15 }, 16, 17 };
     long expect = 30 + 7 + 11 + 13 + 1500 + 18 + 20 + 9 + 19000;
 )";
-    auto subst = [](std::string s, const std::string &name, const std::string &pfx) {
+    auto subst       = [](std::string s, const std::string &name, const std::string &pfx) {
         for (size_t at; (at = s.find("NAME")) != std::string::npos;)
             s.replace(at, 4, name);
         for (size_t at; (at = s.find("PFX")) != std::string::npos;)

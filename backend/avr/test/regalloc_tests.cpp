@@ -132,5 +132,6 @@ TEST_F(AvrTest, ParametersStayWhereTheyArrive)
     std::string s = Body(CompileToAvr("int f(int a, int b) { return a - b; }"));
     EXPECT_EQ(R"(sub r24, r22
 sbc r25, r23
-)", s);
+)",
+              s);
 }

@@ -129,16 +129,18 @@ TEST_F(FlowTest, AddressTaken)
 // A member store keeps the aggregate live: the other members survive it.
 TEST_F(FlowTest, MemberStoreIsUse)
 {
-    Build("struct S { int a, b; };\n"
-          "int f(int x) { struct S s; s.a = 1; s.b = x; return s.a; }");
+    Build(
+        "struct S { int a, b; };\n"
+        "int f(int x) { struct S s; s.a = 1; s.b = x; return s.a; }");
     EXPECT_TRUE(Has(flow->blocks[0].live_in, "%s"));
 }
 
 // Code after a call to a _Noreturn function starts a new block, not reached by fall-through.
 TEST_F(FlowTest, NoreturnEndsBlock)
 {
-    Build("_Noreturn void exit(int);\n"
-          "int f(int a) { if (a) exit(a); return 0; }");
+    Build(
+        "_Noreturn void exit(int);\n"
+        "int f(int a) { if (a) exit(a); return 0; }");
     for (int b = 0; b < flow->nblocks; b++) {
         const Flow_Block *blk = &flow->blocks[b];
         if (flow->instrs[blk->last]->kind == TAC_INSTRUCTION_FUN_CALL_NORETURN) {

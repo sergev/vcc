@@ -10,7 +10,7 @@
 
 char *strtok(char *str, const char *delim)
 {
-    static char *save;      /* start of the next token search (NULL-init) */
+    static char *save; /* start of the next token search (NULL-init) */
     char *p;
     char *tok;
 

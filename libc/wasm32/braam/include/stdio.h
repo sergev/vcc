@@ -18,8 +18,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define EOF      (-1)
-#define BUFSIZ   BRAAM_CHUNK
+#define EOF          (-1)
+#define BUFSIZ       BRAAM_CHUNK
 #define FILENAME_MAX 256
 
 #ifndef SEEK_SET
@@ -30,12 +30,12 @@
 
 typedef struct __FILE {
     int fd;
-    int flags;              /* __F_EOF, __F_ERR, __F_OPENED */
-    char *buf;              /* what is waiting to be written */
+    int flags; /* __F_EOF, __F_ERR, __F_OPENED */
+    char *buf; /* what is waiting to be written */
     size_t len, cap;
-    char *in;               /* what was read and not taken: in[pos] up to in[end] */
+    char *in; /* what was read and not taken: in[pos] up to in[end] */
     size_t pos, end;
-    struct __FILE *next;    /* the streams fopen made, for fflush(NULL) */
+    struct __FILE *next; /* the streams fopen made, for fflush(NULL) */
 } FILE;
 
 #define __F_EOF    1
@@ -79,10 +79,10 @@ coro(braam_call *) size_t fread(void *ptr, size_t size, size_t n, FILE *stream);
 /* One byte back, read again next; not EOF. */
 int ungetc(int c, FILE *stream);
 
-int  feof(FILE *stream);
-int  ferror(FILE *stream);
+int feof(FILE *stream);
+int ferror(FILE *stream);
 void clearerr(FILE *stream);
-int  fileno(FILE *stream);
+int fileno(FILE *stream);
 
 /* "r", "w", "a", with "+" for update, "x" for a new file only; "b" is ignored. */
 coro(braam_call *) FILE *fopen(const char *path, const char *mode);

@@ -20,10 +20,10 @@ typedef struct __va_list {
 
 #define va_start(ap, last) ((ap).__ap = (char *)&(last) + __va_size(sizeof(last)))
 
-#define __va_align(ap, T)                                                              \
+#define __va_align(ap, T) \
     (_Alignof(T) > 4 ? ((ap).__ap = (char *)(((unsigned)(ap).__ap + 7) & ~7U)) : (ap).__ap)
 
-#define va_arg(ap, T)                                                                  \
+#define va_arg(ap, T) \
     (*(__va_align(ap, T), (T *)(((ap).__ap += __va_size(sizeof(T))) - __va_size(sizeof(T)))))
 
 #define va_end(ap) ((void)(ap))

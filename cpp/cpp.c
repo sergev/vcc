@@ -5,11 +5,11 @@
 // written by John F. Reiser
 // July/August 1978
 //
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -44,9 +44,10 @@ struct symtab *paint_stack[SYMSIZ];
 //
 // The targets the compiler supports, and the macros each predefines.  The
 // RISC-V, AArch64, ARM32, x86-64, AVR, MSP430 and wasm32 sets are clang's, so a
-// header written for clang selects the same branches here; MMIX's is GCC's, since LLVM has no MMIX; `besm6' is what the v7besm
-// sources key on.  Every target but BESM-6 has the coroutines: __vcc_coroutines__.
-// Ordinary macros, freely #undef'able (§6.10.8.4 covers only the standard ones).
+// header written for clang selects the same branches here; MMIX's is GCC's, since LLVM has no MMIX;
+// `besm6' is what the v7besm sources key on.  Every target but BESM-6 has the coroutines:
+// __vcc_coroutines__. Ordinary macros, freely #undef'able (§6.10.8.4 covers only the standard
+// ones).
 //
 struct target {
     const char *name;
@@ -57,59 +58,58 @@ struct target {
 #define LINUX_MACROS "__linux__", "__linux", "__gnu_linux__", "__unix__", "__unix"
 
 static const struct target targets[] = {
-    { "besm6",   { "besm6", "__besm6__" } },
-    { "riscv64", { "__riscv", "__riscv_xlen=64", "__LP64__", "_LP64",
-                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div",
-                   "__vcc_coroutines__" } },
-    { "riscv32", { "__riscv", "__riscv_xlen=32", "__ILP32__", "_ILP32",
-                   "__riscv_float_abi_double", "__riscv_mul", "__riscv_div",
-                   "__vcc_coroutines__" } },
-    { "aarch64", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
-                   "__CHAR_UNSIGNED__", "__ELF__",
-                   "__vcc_coroutines__" } },
-    { "arm32",   { "__arm__", "__ARM_ARCH=7", "__ARM_ARCH_7A__", "__ARM_ARCH_PROFILE='A'",
-                   "__ARM_32BIT_STATE", "__ARM_EABI__", "__ARMEL__", "__ARM_PCS_VFP",
-                   "__VFP_FP__", "__ARM_FP=0xe", "__ARM_FEATURE_IDIV", "__ILP32__", "_ILP32",
-                   "__CHAR_UNSIGNED__", "__WCHAR_UNSIGNED__", "__ELF__",
-                   "__vcc_coroutines__" } },
-    { "x86_64",  { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
-                   "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
-                   "__code_model_small__", "__ELF__",
-                   "__vcc_coroutines__" } },
-    { "x86_64-linux", { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64",
-                   "__SSE__", "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__",
-                   "__code_model_small__", "__ELF__", LINUX_MACROS,
-                   "__vcc_coroutines__" } },
-    { "aarch64-linux", { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
-                   "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS,
-                   "__vcc_coroutines__" } },
-    { "aarch64-darwin", { "__aarch64__", "__arm64__", "__arm64", "__ARM_ARCH=8",
-                   "__ARM_64BIT_STATE", "__LP64__", "_LP64", "__APPLE__", "__MACH__",
-                   "__vcc_coroutines__" } },
-    { "avr",    { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__",
-                   "__AVR_HAVE_MUL__", "__AVR_HAVE_MOVW__", "__AVR_HAVE_LPMX__",
-                   "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__", "__AVR_HAVE_JMP_CALL__",
-                   "__AVR_2_BYTE_PC__", "__ELF__",
-                   "__vcc_coroutines__" } },
-    { "msp430",  { "__MSP430__", "__CHAR_UNSIGNED__", "__ELF__",
-                   "__vcc_coroutines__" } },
-    { "mmix",    { "__mmix__", "__MMIX__", "__MMIX_ABI_MMIXWARE__", "__LP64__", "_LP64",
-                   "__vcc_coroutines__" } },
-    { "wasm32",  { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
-                   "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
-                   "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",
-                   "__wasm_reference_types__", "__wasm_sign_ext__",
-                   "__vcc_coroutines__" } }, // _Coro, _Yield, _Await, __co_*
-    { "wasm32-braam", { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
-                   "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
-                   "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__",
-                   "__wasm_reference_types__", "__wasm_sign_ext__",
-                   "__vcc_coroutines__", "__braam__" } }, // Braam's process model
+    { "besm6", { "besm6", "__besm6__" } },
+    { "riscv64",
+      { "__riscv", "__riscv_xlen=64", "__LP64__", "_LP64", "__riscv_float_abi_double",
+        "__riscv_mul", "__riscv_div", "__vcc_coroutines__" } },
+    { "riscv32",
+      { "__riscv", "__riscv_xlen=32", "__ILP32__", "_ILP32", "__riscv_float_abi_double",
+        "__riscv_mul", "__riscv_div", "__vcc_coroutines__" } },
+    { "aarch64",
+      { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
+        "__CHAR_UNSIGNED__", "__ELF__", "__vcc_coroutines__" } },
+    { "arm32",
+      { "__arm__", "__ARM_ARCH=7", "__ARM_ARCH_7A__", "__ARM_ARCH_PROFILE='A'", "__ARM_32BIT_STATE",
+        "__ARM_EABI__", "__ARMEL__", "__ARM_PCS_VFP", "__VFP_FP__", "__ARM_FP=0xe",
+        "__ARM_FEATURE_IDIV", "__ILP32__", "_ILP32", "__CHAR_UNSIGNED__", "__WCHAR_UNSIGNED__",
+        "__ELF__", "__vcc_coroutines__" } },
+    { "x86_64",
+      { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64", "__SSE__",
+        "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__", "__code_model_small__", "__ELF__",
+        "__vcc_coroutines__" } },
+    { "x86_64-linux",
+      { "__x86_64__", "__x86_64", "__amd64__", "__amd64", "__LP64__", "_LP64", "__SSE__",
+        "__SSE2__", "__SSE_MATH__", "__SSE2_MATH__", "__code_model_small__", "__ELF__",
+        LINUX_MACROS, "__vcc_coroutines__" } },
+    { "aarch64-linux",
+      { "__aarch64__", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__", "_LP64",
+        "__CHAR_UNSIGNED__", "__ELF__", LINUX_MACROS, "__vcc_coroutines__" } },
+    { "aarch64-darwin",
+      { "__aarch64__", "__arm64__", "__arm64", "__ARM_ARCH=8", "__ARM_64BIT_STATE", "__LP64__",
+        "_LP64", "__APPLE__", "__MACH__", "__vcc_coroutines__" } },
+    { "avr",
+      { "__AVR", "__AVR__", "__AVR_ARCH__=51", "__AVR_ATmega1280__", "__AVR_HAVE_MUL__",
+        "__AVR_HAVE_MOVW__", "__AVR_HAVE_LPMX__", "__AVR_HAVE_ELPM__", "__AVR_HAVE_ELPMX__",
+        "__AVR_HAVE_JMP_CALL__", "__AVR_2_BYTE_PC__", "__ELF__", "__vcc_coroutines__" } },
+    { "msp430", { "__MSP430__", "__CHAR_UNSIGNED__", "__ELF__", "__vcc_coroutines__" } },
+    { "mmix",
+      { "__mmix__", "__MMIX__", "__MMIX_ABI_MMIXWARE__", "__LP64__", "_LP64",
+        "__vcc_coroutines__" } },
+    { "wasm32",
+      { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
+        "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
+        "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__", "__wasm_reference_types__",
+        "__wasm_sign_ext__", "__vcc_coroutines__" } }, // _Coro, _Yield, _Await, __co_*
+    { "wasm32-braam",
+      { "__wasm__", "__wasm", "__wasm32__", "__wasm32", "__ILP32__", "_ILP32",
+        "__wasm_bulk_memory__", "__wasm_bulk_memory_opt__", "__wasm_multivalue__",
+        "__wasm_mutable_globals__", "__wasm_nontrapping_fptoint__", "__wasm_reference_types__",
+        "__wasm_sign_ext__", "__vcc_coroutines__", "__braam__" } }, // Braam's process model
 };
 
-static const struct target *target;     // selected by -t; default riscv64, like lower
-static int opt_nostdinc;                // -nostdinc: no target include directory
-static char std_include[256];           // VCC_SHARE_DIR/<target>/include
+static const struct target *target; // selected by -t; default riscv64, like lower
+static int opt_nostdinc;            // -nostdinc: no target include directory
+static char std_include[256];       // VCC_SHARE_DIR/<target>/include
 
 //
 // Select the target by name, or fail listing the valid ones.
@@ -140,7 +140,9 @@ void usage()
     printf("Usage:\n");
     printf("    %s [options] [infile [outfile]]\n", cpp.prog_name ? cpp.prog_name : "cpp");
     printf("Options:\n");
-    printf("    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr, msp430, mmix, wasm32 or wasm32-braam (default riscv64)\n");
+    printf(
+        "    -t target           Target: besm6, riscv64, riscv32, aarch64, arm32, x86_64, avr, "
+        "msp430, mmix, wasm32 or wasm32-braam (default riscv64)\n");
     printf("    -I path             Add path to the search list for header files\n");
     printf("    -nostdinc           Do not search the target's standard include directory\n");
     printf("    -D macro[=value]    Fake a definition at the beginning\n");
@@ -202,9 +204,9 @@ static void build_scan_tables(void)
     // Marker bytes sit in the high range just marked as identifier chars, so
     // assign (=, not |=) to clear the IB bit off them: a marker must never be
     // treated as an identifier character.
-    cpp.fast_tab[WARN_MARK] = WB;
-    cpp.fast_tab[STRINGIZE_MARK] = WB;
-    cpp.fast_tab[PASTE_MARK] = WB;
+    cpp.fast_tab[WARN_MARK]        = WB;
+    cpp.fast_tab[STRINGIZE_MARK]   = WB;
+    cpp.fast_tab[PASTE_MARK]       = WB;
     cpp.fast_tab[COMMA_PASTE_MARK] = WB;
     // The blue-paint region-end marker only needs to stop the fast scanner (SB);
     // it must NOT carry WB/IB so the body-push loop and identifier scan ignore it.
@@ -377,9 +379,9 @@ static void register_builtins(void)
     // themselves on `besm6'.
     for (i = 0; i < sizeof(target->macros) / sizeof(target->macros[0]) && target->macros[i]; i++)
         define_symbol(target->macros[i]);
-    cpp.sym_line_macro = define_symbol("__LINE__");
-    cpp.sym_file_macro = define_symbol("__FILE__");
-    cpp.sym_pragma_op  = define_symbol("_Pragma");
+    cpp.sym_line_macro             = define_symbol("__LINE__");
+    cpp.sym_file_macro             = define_symbol("__FILE__");
+    cpp.sym_pragma_op              = define_symbol("_Pragma");
     cpp.sym_line_macro->predefined = 1; // §6.10.8.4: no #define/#undef
     cpp.sym_file_macro->predefined = 1;
 
@@ -387,9 +389,12 @@ static void register_builtins(void)
     // __LINE__/__FILE__ these need no per-expansion synthesis, so they are just
     // registered like ordinary macros.  Each is flagged predefined so §6.10.8.4
     // rejects any #define or #undef of it (including from a -D/-U option).
-    define_symbol("__STDC__=1");           cpp.last_sym->predefined = 1;
-    define_symbol("__STDC_VERSION__=201112L"); cpp.last_sym->predefined = 1;
-    define_symbol("__STDC_HOSTED__=1");    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC__=1");
+    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_VERSION__=201112L");
+    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_HOSTED__=1");
+    cpp.last_sym->predefined = 1;
 
     // C11 §6.10.8.3 conditional feature macros.  __STDC_HOSTED__ is 1 above, so
     // §4p6 would otherwise oblige this implementation to ship <complex.h>,
@@ -399,12 +404,16 @@ static void register_builtins(void)
     // portable source #ifdef its way past all three instead of failing to find
     // a header.  __STDC_NO_VLA__ likewise: the front end has no variable-length
     // arrays.
-    define_symbol("__STDC_NO_COMPLEX__=1"); cpp.last_sym->predefined = 1;
-    define_symbol("__STDC_NO_ATOMICS__=1"); cpp.last_sym->predefined = 1;
-    define_symbol("__STDC_NO_THREADS__=1"); cpp.last_sym->predefined = 1;
-    define_symbol("__STDC_NO_VLA__=1");     cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_NO_COMPLEX__=1");
+    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_NO_ATOMICS__=1");
+    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_NO_THREADS__=1");
+    cpp.last_sym->predefined = 1;
+    define_symbol("__STDC_NO_VLA__=1");
+    cpp.last_sym->predefined = 1;
     {
-        time_t now    = time((time_t *)0);
+        time_t now          = time((time_t *)0);
         const struct tm *tm = localtime(&now);
         char dtbuf[64];
         // "Mmm dd yyyy": %e is space-padded so days < 10 keep the 11-char shape.
@@ -469,9 +478,9 @@ int main(int argc, char *argv[])
 
     register_builtins();
 
-    cpp.buf_start               = arena + 8;
-    cpp.buf_mid                 = cpp.buf_start + BUFSIZ;
-    cpp.buf_end                 = cpp.buf_mid + BUFSIZ;
+    cpp.buf_start = arena + 8;
+    cpp.buf_mid   = cpp.buf_start + BUFSIZ;
+    cpp.buf_end   = cpp.buf_mid + BUFSIZ;
 
     // Point the buffer cursors at the (empty) buffer and run the main loop.
     // The first refill inside process_directives reads the actual input.

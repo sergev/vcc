@@ -198,12 +198,10 @@ bool wasm_stack_effect(const Wasm_Instr *in, int *pops, int *pushes)
     }
     // A comparison or a binary operation takes two; the rest (a test, a load, a unary
     // operation or a conversion) one; each leaves one.
-    bool binary = (op >= WASM_I32_EQ && op <= WASM_I32_GE_U) ||
-                  (op >= WASM_I64_EQ && op <= WASM_I64_GE_U) ||
-                  (op >= WASM_F32_EQ && op <= WASM_F64_GE) ||
-                  (op >= WASM_I32_ADD && op <= WASM_I64_SHR_U) ||
-                  (op >= WASM_F32_ADD && op <= WASM_F32_DIV) ||
-                  (op >= WASM_F64_ADD && op <= WASM_F64_DIV);
+    bool binary =
+        (op >= WASM_I32_EQ && op <= WASM_I32_GE_U) || (op >= WASM_I64_EQ && op <= WASM_I64_GE_U) ||
+        (op >= WASM_F32_EQ && op <= WASM_F64_GE) || (op >= WASM_I32_ADD && op <= WASM_I64_SHR_U) ||
+        (op >= WASM_F32_ADD && op <= WASM_F32_DIV) || (op >= WASM_F64_ADD && op <= WASM_F64_DIV);
     *pops   = binary ? 2 : 1;
     *pushes = 1;
     return true;

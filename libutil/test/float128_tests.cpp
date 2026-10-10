@@ -65,8 +65,7 @@ TEST_F(Float128Test, Format)
     EXPECT_STREQ("0x1.8p+0", f128_format(f128_from_string("1.5", nullptr), buf));
     EXPECT_STREQ("-0x1.999999999999999999999999999ap-4",
                  f128_format(f128_neg(f128_from_string("0.1", nullptr)), buf));
-    EXPECT_STREQ("0x0.0000000000000000000000000001p-16382",
-                 f128_format(Float128{ 1, 0 }, buf));
+    EXPECT_STREQ("0x0.0000000000000000000000000001p-16382", f128_format(Float128{ 1, 0 }, buf));
     EXPECT_STREQ("-0x0p+0", f128_format(f128_neg(f128_from_i64(0)), buf));
     EXPECT_STREQ("inf", f128_format(f128_from_string("1e5000", nullptr), buf));
     EXPECT_STREQ("nan", f128_format(f128_div(f128_from_i64(0), f128_from_i64(0)), buf));
@@ -78,7 +77,8 @@ TEST_F(Float128Test, Convert)
     Float128 third = f128_div(f128_from_i64(1), f128_from_i64(3));
     EXPECT_EQ(1.0 / 3, f128_to_double(third));
     EXPECT_EQ(1.0f / 3, f128_to_float(third));
-    EXPECT_EQ(0, f128_cmp(f128_from_double(0.1), f128_from_string("0x1.999999999999ap-4", nullptr)));
+    EXPECT_EQ(0,
+              f128_cmp(f128_from_double(0.1), f128_from_string("0x1.999999999999ap-4", nullptr)));
     EXPECT_EQ(-7, f128_to_i64(f128_from_string("-7.9", nullptr), 64));
     EXPECT_EQ(INT32_MAX, f128_to_i64(f128_from_string("1e10", nullptr), 32));
     EXPECT_EQ(UINT64_MAX, f128_to_u64(f128_from_string("1e30", nullptr), 64));
@@ -173,7 +173,8 @@ TEST_F(Float128Test, X87DoubleRounding)
 // f128_round to 53 bits gives double's values.
 TEST_F(Float128Test, RoundToDouble)
 {
-    for (const char *t : { "0.1", "3.14159265358979323846264338327950288", "1e300", "-7.25e-300" }) {
+    for (const char *t :
+         { "0.1", "3.14159265358979323846264338327950288", "1e300", "-7.25e-300" }) {
         Float128 f = f128_from_string(t, nullptr), r = f128_round(f, 53);
         EXPECT_EQ(0, f128_cmp(f128_from_double(f128_to_double(f)), r)) << t;
     }

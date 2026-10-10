@@ -18,9 +18,9 @@ TEST_F(CodegenTest, StaticLocalEmittedInsideFunctionModule)
     // the closing ,end,.  Inside a code module the storage must be an explicit ,log, 0
     // (not a ,bss, reservation) — the loader does not zero ,bss, space spliced into a code
     // module, so a zero-init static local would otherwise read back garbage.
-    size_t code   = m.find(",uj, b/ret");
-    size_t datum  = m.find("x:");
-    size_t end    = m.rfind(",end,");
+    size_t code  = m.find(",uj, b/ret");
+    size_t datum = m.find("x:");
+    size_t end   = m.rfind(",end,");
     ASSERT_NE(std::string::npos, code);
     ASSERT_NE(std::string::npos, datum);
     ASSERT_NE(std::string::npos, end);
@@ -406,8 +406,9 @@ TEST_F(CodegenTest, VarIntPtrInitArrayMemberElem)
 // Nested member chain: `&o.in.y` — a(word0), in(word1), in.y -> word2.
 TEST_F(CodegenTest, VarIntPtrInitNestedMember)
 {
-    std::string output = CompileToMadlen("struct I{int x,y;}; struct O{int a; struct I in;}; "
-                                         "extern struct O o; int *p = &o.in.y;");
+    std::string output = CompileToMadlen(
+        "struct I{int x,y;}; struct O{int a; struct I in;}; "
+        "extern struct O o; int *p = &o.in.y;");
     EXPECT_EQ(R"(c
         p:   ,name,
         o:   ,subp,

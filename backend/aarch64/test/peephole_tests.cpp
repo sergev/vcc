@@ -37,10 +37,12 @@ ret
                 "long f(long a) { return a & 12345; }")
 EXPECT_PEEPHOLE(PeepholeShiftImmediate, R"(lsl w0, w0, #3
 ret
-)", "int f(int a) { return a << 3; }")
+)",
+                "int f(int a) { return a << 3; }")
 EXPECT_PEEPHOLE(PeepholeStoreZero, R"(str wzr, [x0]
 ret
-)", "void f(int *p) { *p = 0; }")
+)",
+                "void f(int *p) { *p = 0; }")
 
 // mul + add/sub.
 EXPECT_PEEPHOLE(PeepholeMadd, R"(madd x0, x0, x1, x2
@@ -234,8 +236,8 @@ ret
 }
 TEST_F(Aarch64Test, PeepholeKeepsVolatileUnpaired)
 {
-    std::string code = Code(CompileToAarch64(
-        "long g(long a) { volatile long x = a, y = a; return x + y; }"));
+    std::string code =
+        Code(CompileToAarch64("long g(long a) { volatile long x = a, y = a; return x + y; }"));
     EXPECT_EQ(std::string::npos, code.find("ldp ")) << code;
     EXPECT_EQ(std::string::npos, code.find("stp ")) << code;
 }
@@ -303,29 +305,23 @@ ret
 sbfx w0, w0, #3, #5
 ret
 )")) << code;
-    EXPECT_NE(std::string::npos,
-              code.find(R"(ldr w0, [x2]
+    EXPECT_NE(std::string::npos, code.find(R"(ldr w0, [x2]
 bfi w0, w1, #8, #12
 str w0, [x2]
 ret
-)"))
-        << code;
-    EXPECT_NE(std::string::npos,
-              code.find(R"(ldrb w0, [x3]
+)")) << code;
+    EXPECT_NE(std::string::npos, code.find(R"(ldrb w0, [x3]
 bfi w0, w1, #3, #5
 strb w0, [x3]
 ret
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find("and w0, w0, #-1048321\n")) << code;
-    EXPECT_NE(std::string::npos,
-              code.find(R"(ubfx w0, w2, #4, #12
+    EXPECT_NE(std::string::npos, code.find(R"(ubfx w0, w2, #4, #12
 add w0, w0, #1
 bfi w2, w0, #4, #12
 strh w2, [x3]
 ret
-)"))
-        << code;
+)")) << code;
     EXPECT_EQ(std::string::npos, code.find("orr")) << code;
     EXPECT_EQ(std::string::npos, code.find("movk")) << code;
     EXPECT_EQ(std::string::npos, code.find("uxt")) << code;
@@ -602,12 +598,13 @@ ret
 
 // No madd past the load: the product overwrote a factor the load's new destination
 // would then hold.
-EXPECT_PEEPHOLE(PeepholeMaddFactorOverwritten, R"(mul w1, w0, w1
+EXPECT_PEEPHOLE(
+    PeepholeMaddFactorOverwritten, R"(mul w1, w0, w1
 ldr w0, [x2]
 add w0, w1, w0
 ret
 )",
-                "unsigned f(unsigned n, unsigned k, unsigned *p) { n = n * k; unsigned u = *p; return n + u; }")
+    "unsigned f(unsigned n, unsigned k, unsigned *p) { n = n * k; unsigned u = *p; return n + u; }")
 
 // The size rewrites, run: steps of every access size and sign, the loaded register
 // also the old pointer, loads extended either way.

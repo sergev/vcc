@@ -14,6 +14,6 @@ int getch(void)
     char ch;
 
     if (read(0, &ch, 1) <= 0)
-        return -1;              /* EOF */
+        return -1; /* EOF */
     return ch & 0377;
 }

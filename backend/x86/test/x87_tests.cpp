@@ -4,12 +4,12 @@
 //
 #include "x86_test.h"
 
-#define EXPECT_HAS(name, expected, src)                                    \
-    TEST_F(X86Test, name)                                                  \
-    {                                                                      \
-        NaiveSelection();                                                  \
-        std::string code = Code(CompileToX86(src));                        \
-        EXPECT_NE(std::string::npos, code.find(expected)) << code;         \
+#define EXPECT_HAS(name, expected, src)                            \
+    TEST_F(X86Test, name)                                          \
+    {                                                              \
+        NaiveSelection();                                          \
+        std::string code = Code(CompileToX86(src));                \
+        EXPECT_NE(std::string::npos, code.find(expected)) << code; \
     }
 
 // Parameters are on the stack, 16-byte aligned; the result goes back in st(0).
@@ -31,8 +31,8 @@ EXPECT_HAS(DivideLongDoubles, "fldt 16(%rbp)\nfldt 32(%rbp)\nfdivrp %st, %st(1)\
 // Zero and one have their own loads; another constant is a 10-byte .rodata literal.
 TEST_F(X86Test, LongDoubleConstants)
 {
-    std::string s = CompileToX86(
-        "long double f(long double a) { return a * 0.1L + 1.0L + (a == 0.0L); }");
+    std::string s =
+        CompileToX86("long double f(long double a) { return a * 0.1L + 1.0L + (a == 0.0L); }");
     std::string code = Code(s);
     EXPECT_NE(std::string::npos, code.find("fldt .LC0(%rip)\nfmulp %st, %st(1)\n")) << code;
     EXPECT_NE(std::string::npos, code.find("fld1\nfaddp %st, %st(1)\n")) << code;
@@ -44,7 +44,8 @@ TEST_F(X86Test, LongDoubleConstants)
 
 // `<` loads the right operand last, so that st(0) is the left one of fucomip; both
 // are popped.
-EXPECT_HAS(LongDoubleLessThan, "fldt 16(%rbp)\nfldt 32(%rbp)\nfucomip %st(1), %st\nfstp %st\nseta %al\n",
+EXPECT_HAS(LongDoubleLessThan,
+           "fldt 16(%rbp)\nfldt 32(%rbp)\nfucomip %st(1), %st\nfstp %st\nseta %al\n",
            "int f(long double a, long double b) { return a < b; }")
 
 // The truncating store switches the control word around fistpq.
@@ -61,7 +62,7 @@ EXPECT_HAS(LongDoubleToFloat, "fstps ", "float f(long double a) { return a; }")
 TEST_F(X86Test, LongDoubleCall)
 {
     x86_frame_pointer = true;
-    std::string code = Code(CompileToX86(R"(
+    std::string code  = Code(CompileToX86(R"(
 long double g(long a, long b, long c, long d, long e, long k, long x, long double y);
 void f(long double a) { g(1, 2, 3, 4, 5, 6, 7, a); }
 )"));

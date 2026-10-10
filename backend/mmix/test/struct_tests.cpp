@@ -24,13 +24,11 @@ or $2, $2, $248
 ldbu $248, $254, 10
 slu $2, $2, 8
 or $2, $2, $248
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find(R"(ldtu $2, $254, 8
 ldtu $248, $254, 12
 slu $2, $2, 32
-)"))
-        << code;
+)")) << code;
 }
 
 // The callee stores a small structure parameter back, its last piece first.
@@ -43,8 +41,7 @@ sru $0, $0, 8
 stbu $0, $254, 1
 sru $0, $0, 8
 stbu $0, $254, 0
-)"))
-        << code;
+)")) << code;
 }
 
 // A structure result goes through $251: the caller points it at the destination, the

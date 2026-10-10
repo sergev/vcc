@@ -187,8 +187,9 @@ f:
 // label, which sent `doprnt`'s format walk into an infinite loop under b6sim.
 TEST_F(CodegenTest, UnixLocalLabelsUniqueAcrossFunctions)
 {
-    std::string out = CompileToUnix("int f(int x) { if (x) return 1; return 2; }\n"
-                                    "int g(int y) { if (y) return 3; return 4; }");
+    std::string out = CompileToUnix(
+        "int f(int x) { if (x) return 1; return 2; }\n"
+        "int g(int y) { if (y) return 3; return 4; }");
     EXPECT_EQ(R"(    .text
     .globl f
 f:
@@ -222,8 +223,9 @@ g:
 // collide in b6ld.  The intra-object ` 13 vjm helper` still resolves against the local label.
 TEST_F(CodegenTest, UnixStaticFunction)
 {
-    std::string out = CompileToUnix("static int helper(int x) { return x + 1; }\n"
-                                    "int caller(int y) { return helper(y); }");
+    std::string out = CompileToUnix(
+        "static int helper(int x) { return x + 1; }\n"
+        "int caller(int y) { return helper(y); }");
     EXPECT_EQ(R"(    .text
 helper:
     its 13
@@ -249,9 +251,10 @@ caller:
 // across objects is only correct for external linkage.
 TEST_F(CodegenTest, UnixStaticVariable)
 {
-    std::string out = CompileToUnix("static int counter = 5;\n"
-                                    "static int pending;\n"
-                                    "int bump(void) { return counter + pending; }");
+    std::string out = CompileToUnix(
+        "static int counter = 5;\n"
+        "static int pending;\n"
+        "int bump(void) { return counter + pending; }");
     EXPECT_EQ(R"(    .data
 counter:
     .word 5

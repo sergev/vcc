@@ -222,7 +222,8 @@ double target(int flag, int flag2, struct s y) {
     return x.d + y.d + x.i + y.i;
 }
 )SRC")),
-              "allocate_local=1 binary=3 copy_from_offset=10 copy_to_offset=6 int_to_double=2 jump=2 jump_if_zero=2 label=4 return=1");
+              "allocate_local=1 binary=3 copy_from_offset=10 copy_to_offset=6 int_to_double=2 "
+              "jump=2 jump_if_zero=2 label=4 return=1");
 }
 
 // Structural assertion (instruction-kind histogram) — exact TAC
@@ -268,7 +269,8 @@ int target(int *ptr, int *ptr2) {
     return callee(ptr, ptr2);
 }
 )SRC")),
-              "binary=6 fun_call=6 jump=4 jump_if_not_zero=2 jump_if_zero=4 label=10 load=3 return=3 store=1");
+              "binary=6 fun_call=6 jump=4 jump_if_not_zero=2 jump_if_zero=4 label=10 load=3 "
+              "return=3 store=1");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_AllTypes_DontPropagate_CopyToOffset)
@@ -544,7 +546,8 @@ int main(void) {
     return 0;  // success
 }
 )SRC")),
-              "binary=8 copy=7 fun_call=4 get_address=6 jump=2 jump_if_zero=10 label=12 return=11 store=2");
+              "binary=8 copy=7 fun_call=4 get_address=6 jump=2 jump_if_zero=10 label=12 return=11 "
+              "store=2");
 }
 
 TEST_F(PipelineTest, Chapter19_CP_AllTypes_DontPropagate_TypeConversion)

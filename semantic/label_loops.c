@@ -94,47 +94,47 @@ static void label_statement_at(Stmt *stmt, LabelFrame *stack, int *depth)
         label_statement(stmt->u.if_stmt.else_stmt, stack, depth);
         break;
     case STMT_SWITCH: {
-        char *end                 = xstruniq("%L", label_seq);
+        char *end = xstruniq("%L", label_seq);
         set_label(&stmt->loop_end_label, end);
         set_label(&stmt->loop_continue_label, NULL);
-        stack[*depth].break_lbl   = end;
-        stack[*depth].cont_lbl    = NULL;
+        stack[*depth].break_lbl = end;
+        stack[*depth].cont_lbl  = NULL;
         (*depth)++;
         label_statement(stmt->u.switch_stmt.body, stack, depth);
         (*depth)--;
         break;
     }
     case STMT_WHILE: {
-        char *end                 = xstruniq("%L", label_seq);
-        char *cont                = xstruniq("%L", label_seq);
+        char *end  = xstruniq("%L", label_seq);
+        char *cont = xstruniq("%L", label_seq);
         set_label(&stmt->loop_end_label, end);
         set_label(&stmt->loop_continue_label, cont);
-        stack[*depth].break_lbl   = end;
-        stack[*depth].cont_lbl    = cont;
+        stack[*depth].break_lbl = end;
+        stack[*depth].cont_lbl  = cont;
         (*depth)++;
         label_statement(stmt->u.while_stmt.body, stack, depth);
         (*depth)--;
         break;
     }
     case STMT_DO_WHILE: {
-        char *end                 = xstruniq("%L", label_seq);
-        char *cont                = xstruniq("%L", label_seq);
+        char *end  = xstruniq("%L", label_seq);
+        char *cont = xstruniq("%L", label_seq);
         set_label(&stmt->loop_end_label, end);
         set_label(&stmt->loop_continue_label, cont);
-        stack[*depth].break_lbl   = end;
-        stack[*depth].cont_lbl    = cont;
+        stack[*depth].break_lbl = end;
+        stack[*depth].cont_lbl  = cont;
         (*depth)++;
         label_statement(stmt->u.do_while.body, stack, depth);
         (*depth)--;
         break;
     }
     case STMT_FOR: {
-        char *end                 = xstruniq("%L", label_seq);
-        char *cont                = xstruniq("%L", label_seq);
+        char *end  = xstruniq("%L", label_seq);
+        char *cont = xstruniq("%L", label_seq);
         set_label(&stmt->loop_end_label, end);
         set_label(&stmt->loop_continue_label, cont);
-        stack[*depth].break_lbl   = end;
-        stack[*depth].cont_lbl    = cont;
+        stack[*depth].break_lbl = end;
+        stack[*depth].cont_lbl  = cont;
         (*depth)++;
         label_statement(stmt->u.for_stmt.body, stack, depth);
         (*depth)--;

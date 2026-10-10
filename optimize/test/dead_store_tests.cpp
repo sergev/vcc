@@ -225,7 +225,7 @@ TEST_F(OptimizerTest, DeadStoreGlobalSurvivesWithFnContext)
 
     OptFlags flags          = opt_flags_default();
     flags.copy_propagation  = false;
-    Tac_TopLevel *tl = make_fn_tl({});
+    Tac_TopLevel *tl        = make_fn_tl({});
     Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     EXPECT_EQ(capture_instructions(result),
@@ -263,7 +263,7 @@ TEST_F(OptimizerTest, DeadStoreLocalRemovedWithFnContext)
 
     OptFlags flags          = opt_flags_default();
     flags.copy_propagation  = false;
-    Tac_TopLevel *tl = make_fn_tl({ "x" });
+    Tac_TopLevel *tl        = make_fn_tl({ "x" });
     Tac_Instruction *result = optimize_function(entry, flags, tl);
 
     EXPECT_EQ(capture_instructions(result),

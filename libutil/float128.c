@@ -470,8 +470,8 @@ F128_API Float128 f128_from_u64(uint64_t v)
 static Float128 widen(u64 bits, int fbits, int ebits)
 {
     int emax = (1 << ebits) - 1, bias = emax >> 1;
-    u64 s    = bits >> (fbits + ebits) << 63;
-    int e    = (int)(bits >> fbits) & emax;
+    u64 s = bits >> (fbits + ebits) << 63;
+    int e = (int)(bits >> fbits) & emax;
     U128 m;
     m.hi = 0;
     m.lo = bits & (((u64)1 << fbits) - 1);
@@ -599,8 +599,8 @@ static void big_reserve(Big *b, int n)
 {
     if (n <= b->cap)
         return;
-    int cap       = n * 2 + 4;
-    uint32_t *d   = xalloc(cap * sizeof(uint32_t), __func__, __FILE__, __LINE__);
+    int cap     = n * 2 + 4;
+    uint32_t *d = xalloc(cap * sizeof(uint32_t), __func__, __FILE__, __LINE__);
     if (b->n)
         memcpy(d, b->d, b->n * sizeof(uint32_t));
     xfree(b->d);
@@ -717,7 +717,7 @@ static Float128 from_ratio(int sign, Big *a, Big *b, long p)
 
 static int digit_value(char c, int base)
 {
-    int v = c >= '0' && c <= '9' ? c - '0'
+    int v = c >= '0' && c <= '9'   ? c - '0'
             : c >= 'a' && c <= 'f' ? c - 'a' + 10
             : c >= 'A' && c <= 'F' ? c - 'A' + 10
                                    : 99;
@@ -800,8 +800,8 @@ Float128 f128_from_string(const char *s, const char **end)
 char *f128_format(Float128 x, char *buf)
 {
     static const char hexdig[] = "0123456789abcdef";
-    const char *sign = x.hi & SIGN ? "-" : "";
-    int e            = (x.hi >> 48) & 0x7fff;
+    const char *sign           = x.hi & SIGN ? "-" : "";
+    int e                      = (x.hi >> 48) & 0x7fff;
     if (f128_is_nan(x)) {
         strcpy(buf, "nan");
         return buf;
@@ -823,7 +823,7 @@ char *f128_format(Float128 x, char *buf)
     int len = 28;
     while (len > 0 && frac[len - 1] == '0')
         len--;
-    frac[len] = 0;
+    frac[len]    = 0;
     int unbiased = e ? e - BIAS : 1 - BIAS;
     sprintf(buf, "%s0x%d%s%sp%+d", sign, e ? 1 : 0, len ? "." : "", frac, unbiased);
     return buf;

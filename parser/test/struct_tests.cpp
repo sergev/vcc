@@ -529,7 +529,7 @@ TEST_F(ParserTest, DistinctAnonStructDefsGetDistinctTags)
 TEST_F(ParserTest, StructMemberAlignas)
 {
     Type *type = TestType("struct A { char c; _Alignas(16) char d, e; _Alignas(long) int f; };");
-    Field *c = type->u.struct_t.fields;
+    Field *c   = type->u.struct_t.fields;
     Field *d = c->next, *e = d->next, *f = e->next;
     EXPECT_EQ(c->u.member.align_spec, nullptr);
     ASSERT_NE(d->u.member.align_spec, nullptr);

@@ -10,24 +10,31 @@
 class Besm6BookTest : public CodegenTest {};
 
 // Chapter 20 helpers.
-static const std::string EX  = "#include <stdlib.h>\n";
-static const std::string ID  = "int id(int x) { return x; }\n";
+static const std::string EX    = "#include <stdlib.h>\n";
+static const std::string ID    = "int id(int x) { return x; }\n";
 static const std::string DBLID = "double dbl_id(double x) { return x; }\n";
-static const std::string UID = "unsigned unsigned_id(unsigned u) { return u; }\n";
-static const std::string UCID = "unsigned char uchar_id(unsigned char uc) { return uc; }\n";
-static const std::string C1I = R"H(int check_one_int(int actual, int expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string UID   = "unsigned unsigned_id(unsigned u) { return u; }\n";
+static const std::string UCID  = "unsigned char uchar_id(unsigned char uc) { return uc; }\n";
+static const std::string C1I =
+    R"H(int check_one_int(int actual, int expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1U = R"H(int check_one_uint(unsigned int actual, unsigned int expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1U =
+    R"H(int check_one_uint(unsigned int actual, unsigned int expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1UC = R"H(int check_one_uchar(unsigned char actual, unsigned char expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1UC =
+    R"H(int check_one_uchar(unsigned char actual, unsigned char expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1L = R"H(int check_one_long(long actual, long expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1L =
+    R"H(int check_one_long(long actual, long expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1UL = R"H(int check_one_ulong(unsigned long actual, unsigned long expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1UL =
+    R"H(int check_one_ulong(unsigned long actual, unsigned long expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C1D = R"H(int check_one_double(double actual, double expected) { if (actual != expected) exit(-1); return 0; }
+static const std::string C1D =
+    R"H(int check_one_double(double actual, double expected) { if (actual != expected) exit(-1); return 0; }
 )H";
-static const std::string C14D = R"H(int check_14_doubles(double a, double b, double c, double d, double e, double f,
+static const std::string C14D =
+    R"H(int check_14_doubles(double a, double b, double c, double d, double e, double f,
                      double g, double h, double i, double j, double k, double l,
                      double m, double n, double start) {
     double args[14] = {a, b, c, d, e, f, g, h, i, j, k, l, m, n};
@@ -187,7 +194,8 @@ int main(void) {
 // long are both 41-bit, so they pass through unchanged.
 TEST_F(Besm6BookTest, Chapter11_ConvertFunctionArguments)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(int foo(long a, int b, int c, int d, long e, int f, long g, int h) {
     if (a != -1l)
         return 1;
     if (b != 4294967298l)
@@ -1032,7 +1040,9 @@ TEST_F(Besm6BookTest, Chapter14_IncrAndDecrThroughPointer)
 // with in-range ones; conversions recomputed for 41/48-bit widths.
 TEST_F(Besm6BookTest, Chapter15_Automatic)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test initialzing one-dimensional arrays with automatic storage duration */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test initialzing one-dimensional arrays with automatic storage duration */
 
 /* Initialize array with three constants */
 int test_simple(void) {
@@ -1151,7 +1161,8 @@ int main(void) {
 // set to 2^48-2 so += 2 wraps to 0, and the multiply wraps mod 2^48 (not 13).
 TEST_F(Besm6BookTest, Chapter15_CompoundAssignToSubscriptedVal)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test compound assignment where LHS is a subscript expression
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(// Test compound assignment where LHS is a subscript expression
 
 unsigned unsigned_arr[4] = {4294967295U, 281474976710654U, 4294967293U, 4294967292U};
 
@@ -1399,7 +1410,9 @@ int main(void) {
 // through an unsigned long lvalue yields their 41-bit patterns (2^41-1, 2^41-4).
 TEST_F(Besm6BookTest, Chapter15_ImplicitAndExplicitConversions)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly track both implicit type conversions via array decay
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we correctly track both implicit type conversions via array decay
  * and explicit casts
  */
 
@@ -1444,7 +1457,9 @@ int main(void) {
 // reading it through a char* inspects those six bytes rather than x86's four.
 TEST_F(Besm6BookTest, Chapter16_AccessThroughCharPointer)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we can read an object through a pointer to a character type */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we can read an object through a pointer to a character type */
 
 int main(void) {
 
@@ -1488,7 +1503,8 @@ int main(void) {
 // fix belongs in const-fold's ZERO_EXTEND result-kind handling, not here.
 TEST_F(Besm6BookTest, Chapter16_BitshiftChars)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test << and >> operators with chars (or mix of chars and other types)
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(// Test << and >> operators with chars (or mix of chars and other types)
 
 int main(void) {
     unsigned char uc = 255;
@@ -1523,7 +1539,10 @@ int main(void) {
 // analogue of x86's 2^32-659 is 2^41-659.
 TEST_F(Besm6BookTest, Chapter16_BitwiseOpsChars)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// make sure we perform integer promotions when performing bitwise operations on chars
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(// make sure we perform integer promotions when performing bitwise operations on chars
 
 int main(void) {
     unsigned char uc = 135;
@@ -1549,7 +1568,9 @@ int main(void) {
 // renamed c_lt_int/c_lt_uchar so they stay distinct within Madlen's 8-char limit.
 TEST_F(Besm6BookTest, Chapter16_CommonType)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly find the common type of character types and other
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we correctly find the common type of character types and other
  * types (it's always the other type - or, if both are character types, it's int) */
 
 long ternary(int flag, signed char c) { // plain char unsigned on BESM-6; keep c signed
@@ -1621,7 +1642,10 @@ int main(void) {
 // char is unsigned on BESM-6, so the negative-valued `array` is declared `signed char`.
 TEST_F(Besm6BookTest, Chapter16_ConvertByAssignment)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test implicit conversions to and from character types as if by assignment. */
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(/* Test implicit conversions to and from character types as if by assignment. */
 
 int check_int(int converted, int expected) { return (converted == expected); }
 int check_uint(unsigned int converted, unsigned int expected) { return (converted == expected); }
@@ -1701,7 +1725,8 @@ int main(void) {
 // word before the int->FP conversion.
 TEST_F(Besm6BookTest, Chapter16_ExplicitCasts)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test explicit conversions to and from character types */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(/* Test explicit conversions to and from character types */
 
 unsigned char c2uc(char c) { return (unsigned char)c; }
 signed char c2sc(char c) { return (signed char)c; }
@@ -1872,7 +1897,9 @@ int main(void) {
 // type / promoted left operand; all word types are 6 here).
 TEST_F(Besm6BookTest, Chapter17_SizeofBitwise)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of bitwise and bitshift expression
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(// Test that we correctly get the size of bitwise and bitshift expression
 int main(void) {
     long l = 0;
     int i = 0;
@@ -1914,7 +1941,9 @@ int main(void) {
 // are not evaluated (the type of the left operand; uc %= 2 stays char size 1).
 TEST_F(Besm6BookTest, Chapter17_SizeofCompound)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get size of compound expressions (and don't evaluate
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(// Test that we correctly get size of compound expressions (and don't evaluate
 // them)
 
 int main(void) {
@@ -1968,7 +1997,8 @@ int main(void) {
 // (not evaluated; left-operand type, signed-char results stay 1).
 TEST_F(Besm6BookTest, Chapter17_SizeofCompoundBitwise)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of compound bitwise operations
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(// Test that we correctly get the size of compound bitwise operations
 // (and don't evaluate them)
 
 int main(void) {
@@ -2013,7 +2043,9 @@ int main(void) {
 // int type; word types are 6 bytes).
 TEST_F(Besm6BookTest, Chapter17_SizeofConsts)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly determine the type, and size, of all constants */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Test that we correctly determine the type, and size, of all constants */
 
 int main(void) {
     // test that character constants have integer type, not character type;
@@ -2054,7 +2086,9 @@ int main(void) {
 // including the nested abstract declarator double(*([3][4]))[2].
 TEST_F(Besm6BookTest, Chapter17_SizeofDerivedTypes)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Make sure we accurately calculate the size of derived (pointer and array)
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(
+                  R"(/* Make sure we accurately calculate the size of derived (pointer and array)
  * types */
 
 int main(void) {
@@ -2100,7 +2134,8 @@ int main(void) {
 // BESM-6: static buffer instead of malloc; sizeof checks use BESM-6 word sizes.
 TEST_F(Besm6BookTest, Chapter17_SizeofExpressions)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that we correctly get the size of a range of expressions */
+    EXPECT_EQ("0\n", CompileAndRunBook(
+                         R"(/* Test that we correctly get the size of a range of expressions */
 
 int main(void) {
     double d;
@@ -2154,7 +2189,10 @@ int main(void) {
 // type, char results stay 1).  `static` dropped on arr.
 TEST_F(Besm6BookTest, Chapter17_SizeofIncr)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(// Test that we correctly get the size of ++ and -- expressions (and don't evaluate them)
 
 int main(void) {
     int i = 0;
@@ -2221,7 +2259,8 @@ int main(void) {
 // second check exercises its unsignedness, independent of the size value.
 TEST_F(Besm6BookTest, Chapter17_SizeofResultIsUlong)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
+    EXPECT_EQ("0\n",
+              CompileAndRunBook(R"(/* Test that sizeof expression results in an unsigned long */
 
 int main(void) {
 
@@ -2245,7 +2284,10 @@ int main(void) {
 // sizeof/simple: two forms of sizeof (type names and expressions).
 TEST_F(Besm6BookTest, Chapter17_SizeofSimple)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
+    EXPECT_EQ(
+        "0\n",
+        CompileAndRunBook(
+            R"(/* Basic test of two forms of sizeof: referring to type names and expressions */
 
 int main(void) {
     if (sizeof (int) != 6) {
@@ -4463,8 +4505,8 @@ int main(void) {
 // `(unsigned long)id(-1)` keeps the 41-bit signed pattern 0o37777777777777.
 TEST_F(Besm6BookTest, Chapter20_AllNoCoal_TypeConversionInterference)
 {
-    EXPECT_EQ("0\n", CompileAndRunBook(EX + ID + DBLID + UID + UCID + C1I +
-                                            C1U + C1UC + C1L + C1UL + C1D + C14D + R"WP(
+    EXPECT_EQ("0\n", CompileAndRunBook(EX + ID + DBLID + UID + UCID + C1I + C1U + C1UC + C1L +
+                                       C1UL + C1D + C14D + R"WP(
 int glob;
 int test_movsx_src(int i) {
     check_one_int(i - 10, -5);

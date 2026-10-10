@@ -112,8 +112,7 @@ TEST_F(EmitTest, Immediates)
 TEST_F(EmitTest, Control)
 {
     EXPECT_EQ(Line(MSP_JNE, { msp_label(".L3") }), "    jne     .L3\n");
-    EXPECT_EQ(Line(MSP_CALL, { msp_imm_sym("__mspabi_mpyi", 0) }),
-              "    call    #__mspabi_mpyi\n");
+    EXPECT_EQ(Line(MSP_CALL, { msp_imm_sym("__mspabi_mpyi", 0) }), "    call    #__mspabi_mpyi\n");
     EXPECT_EQ(Line(MSP_CALL, { msp_reg(11) }), "    call    r11\n");
     EXPECT_EQ(Line(MSP_BR, { msp_imm_sym("f", 0) }), "    br      #f\n");
     EXPECT_EQ(Line(MSP_RLA, { msp_indexed(MSP_SP, nullptr, 2) }), "    rla     2(r1)\n");
@@ -253,7 +252,8 @@ static void CheckSizesWith(const std::vector<std::string> &as, const std::string
     cmd.insert(cmd.end(), { "-o", o_path, s_path });
     ASSERT_EQ(0, RunTool(cmd, log_path)) << ReadFile(log_path);
     if (!ld.empty()) {
-        ASSERT_EQ(0, RunTool({ ld, "--no-relax", "-T", MSP430_LINK_SCRIPT, "-e", "0", "-o", exe_path, o_path },
+        ASSERT_EQ(0, RunTool({ ld, "--no-relax", "-T", MSP430_LINK_SCRIPT, "-e", "0", "-o",
+                               exe_path, o_path },
                              log_path))
             << ReadFile(log_path);
         o_path = exe_path;

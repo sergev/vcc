@@ -39,8 +39,7 @@ TEST_F(CodegenTest, StoreCharCallsStb)
 TEST_F(CodegenTest, IntPtrToCharPtrSetsOffset5)
 {
     DisableOptimization();
-    std::string output =
-        CompileToMadlen("char *f(int *q){ return (char*)q; }");
+    std::string output = CompileToMadlen("char *f(int *q){ return (char*)q; }");
     EXPECT_NE(output.find(",aox, =:64"), std::string::npos) << output;
 }
 
@@ -418,8 +417,8 @@ TEST_F(CodegenTest, ArrayDecaySetsOffset5)
 TEST_F(CodegenTest, StructCharMemberReadIsByte)
 {
     DisableOptimization();
-    std::string output = CompileToMadlen(
-        "struct S { char a; char b; int c; }; int f(struct S s){ return s.b; }");
+    std::string output =
+        CompileToMadlen("struct S { char a; char b; int c; }; int f(struct S s){ return s.b; }");
     EXPECT_NE(output.find(",aax, =377"), std::string::npos) << output;
 }
 
@@ -427,8 +426,8 @@ TEST_F(CodegenTest, StructCharMemberReadIsByte)
 TEST_F(CodegenTest, StructCharMemberWriteCallsStb)
 {
     DisableOptimization();
-    std::string output = CompileToMadlen(
-        "struct S { char a; char b; int c; }; void f(struct S *s){ s->b = 'X'; }");
+    std::string output =
+        CompileToMadlen("struct S { char a; char b; int c; }; void f(struct S *s){ s->b = 'X'; }");
     EXPECT_NE(output.find(",call, b/stb"), std::string::npos) << output;
 }
 
@@ -445,8 +444,8 @@ TEST_F(CodegenTest, WordPtrIncStaysInline)
 TEST_F(CodegenTest, StructIntMemberStaysWord)
 {
     DisableOptimization();
-    std::string output = CompileToMadlen(
-        "struct S { char a; char b; int c; }; int f(struct S s){ return s.c; }");
+    std::string output =
+        CompileToMadlen("struct S { char a; char b; int c; }; int f(struct S s){ return s.c; }");
     EXPECT_EQ(output.find(",call, b/stb"), std::string::npos) << output;
 }
 

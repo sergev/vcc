@@ -21,9 +21,9 @@ extern "C" {
 enum {
     MSP_PC   = 0,
     MSP_SP   = 1,
-    MSP_SR   = 2, // the status register, and constant generator 1
-    MSP_CG   = 3, // constant generator 2
-    MSP_FP   = 4, // the frame pointer, in a frame from it (--frame-pointer)
+    MSP_SR   = 2,  // the status register, and constant generator 1
+    MSP_CG   = 3,  // constant generator 2
+    MSP_FP   = 4,  // the frame pointer, in a frame from it (--frame-pointer)
     MSP_VREG = 16, // first virtual register
 };
 
@@ -59,47 +59,47 @@ typedef enum {
 } Msp_Form;
 
 // Opcode, mnemonic, form.
-#define MSP_OPS(X)                                                                         \
-    X(MOV, "mov", DOUBLE)                                                                  \
-    X(ADD, "add", DOUBLE)                                                                  \
-    X(ADDC, "addc", DOUBLE)                                                                \
-    X(SUB, "sub", DOUBLE)                                                                  \
-    X(SUBC, "subc", DOUBLE)                                                                \
-    X(CMP, "cmp", DOUBLE)                                                                  \
-    X(BIT, "bit", DOUBLE)                                                                  \
-    X(BIC, "bic", DOUBLE)                                                                  \
-    X(BIS, "bis", DOUBLE)                                                                  \
-    X(XOR, "xor", DOUBLE)                                                                  \
-    X(AND, "and", DOUBLE)                                                                  \
-    X(RRC, "rrc", SINGLE)                                                                  \
-    X(SWPB, "swpb", SINGLE)                                                                \
-    X(RRA, "rra", SINGLE)                                                                  \
-    X(SXT, "sxt", SINGLE)                                                                  \
-    X(PUSH, "push", SINGLE)                                                                \
-    X(CALL, "call", SINGLE)                                                                \
-    X(JNE, "jne", JUMP)                                                                    \
-    X(JEQ, "jeq", JUMP)                                                                    \
-    X(JLO, "jlo", JUMP)                                                                    \
-    X(JHS, "jhs", JUMP)                                                                    \
-    X(JN, "jn", JUMP)                                                                      \
-    X(JGE, "jge", JUMP)                                                                    \
-    X(JL, "jl", JUMP)                                                                      \
-    X(JMP, "jmp", JUMP)                                                                    \
-    X(CLR, "clr", DST)                                                                     \
-    X(INC, "inc", DST)                                                                     \
-    X(INCD, "incd", DST)                                                                   \
-    X(DEC, "dec", DST)                                                                     \
-    X(DECD, "decd", DST)                                                                   \
-    X(TST, "tst", DST)                                                                     \
-    X(INV, "inv", DST)                                                                     \
-    X(ADC, "adc", DST)                                                                     \
-    X(POP, "pop", DST)                                                                     \
-    X(RLA, "rla", TWICE)                                                                   \
-    X(RLC, "rlc", TWICE)                                                                   \
-    X(BR, "br", SRC)                                                                       \
-    X(RET, "ret", NONE)                                                                    \
-    X(NOP, "nop", NONE)                                                                    \
-    X(CLRC, "clrc", NONE)                                                                  \
+#define MSP_OPS(X)          \
+    X(MOV, "mov", DOUBLE)   \
+    X(ADD, "add", DOUBLE)   \
+    X(ADDC, "addc", DOUBLE) \
+    X(SUB, "sub", DOUBLE)   \
+    X(SUBC, "subc", DOUBLE) \
+    X(CMP, "cmp", DOUBLE)   \
+    X(BIT, "bit", DOUBLE)   \
+    X(BIC, "bic", DOUBLE)   \
+    X(BIS, "bis", DOUBLE)   \
+    X(XOR, "xor", DOUBLE)   \
+    X(AND, "and", DOUBLE)   \
+    X(RRC, "rrc", SINGLE)   \
+    X(SWPB, "swpb", SINGLE) \
+    X(RRA, "rra", SINGLE)   \
+    X(SXT, "sxt", SINGLE)   \
+    X(PUSH, "push", SINGLE) \
+    X(CALL, "call", SINGLE) \
+    X(JNE, "jne", JUMP)     \
+    X(JEQ, "jeq", JUMP)     \
+    X(JLO, "jlo", JUMP)     \
+    X(JHS, "jhs", JUMP)     \
+    X(JN, "jn", JUMP)       \
+    X(JGE, "jge", JUMP)     \
+    X(JL, "jl", JUMP)       \
+    X(JMP, "jmp", JUMP)     \
+    X(CLR, "clr", DST)      \
+    X(INC, "inc", DST)      \
+    X(INCD, "incd", DST)    \
+    X(DEC, "dec", DST)      \
+    X(DECD, "decd", DST)    \
+    X(TST, "tst", DST)      \
+    X(INV, "inv", DST)      \
+    X(ADC, "adc", DST)      \
+    X(POP, "pop", DST)      \
+    X(RLA, "rla", TWICE)    \
+    X(RLC, "rlc", TWICE)    \
+    X(BR, "br", SRC)        \
+    X(RET, "ret", NONE)     \
+    X(NOP, "nop", NONE)     \
+    X(CLRC, "clrc", NONE)   \
     X(SETC, "setc", NONE)
 
 typedef enum {

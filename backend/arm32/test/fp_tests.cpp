@@ -21,8 +21,7 @@ vmul.f64 d14, d14, d15
     EXPECT_NE(std::string::npos, code.find(R"(vpop {d14, d15}
 mov sp, r11
 pop {r11, pc}
-)"))
-        << code;
+)")) << code;
 }
 
 // vcmp and vmrs; a NaN sets C and V, so < and <= use mi and ls.
@@ -33,13 +32,11 @@ TEST_F(Arm32Test, FloatCompare)
     std::string code = Code(CompileToArm32(R"(
 int f(void) { float a = 1.0f; float b = 2.0f; return (a < b) + (a <= b); }
 )"));
-    EXPECT_NE(std::string::npos,
-              code.find(R"(vcmp.f32 s28, s30
+    EXPECT_NE(std::string::npos, code.find(R"(vcmp.f32 s28, s30
 vmrs APSR_nzcv, fpscr
 mov r12, #0
 movmi r12, #1
-)"))
-        << code;
+)")) << code;
     EXPECT_NE(std::string::npos, code.find("movls r12, #1\n")) << code;
 }
 
@@ -60,7 +57,7 @@ TEST_F(Arm32Test, FloatingPointConversions)
 {
     NaiveSelection();
     DisableOptimization();
-    std::string code = Code(CompileToArm32(R"(
+    std::string code                    = Code(CompileToArm32(R"(
 int f(void) {
     unsigned u = 7; double d = u; float x = d; int i = x; unsigned v = d;
     return i + v;

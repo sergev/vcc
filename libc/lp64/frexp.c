@@ -19,7 +19,7 @@ double frexp(double x, int *e)
         *e -= 64;
         return x;
     }
-    *e = be - 1022;
+    *e   = be - 1022;
     bits = (bits & 0x800fffffffffffffUL) | 0x3fe0000000000000UL;
     return *(double *)&bits;
 }

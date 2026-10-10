@@ -10,7 +10,7 @@
 // where it arrives.
 TEST_F(Arm32Test, LoopInRegisters)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 int sum(int *p, int n)
 {
@@ -31,7 +31,7 @@ add r0, r0, #4
 // with pc.
 TEST_F(Arm32Test, CalleeSavedAcrossCall)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 int g(int);
 int keep(int a, int b) { int x = g(a); return x + b; }
@@ -49,7 +49,7 @@ pop {r4, pc}
 // points at the saved r11.
 TEST_F(Arm32Test, CalleeSavedWithFrameRecord)
 {
-    arm32_peephole = false;
+    arm32_peephole      = false;
     arm32_frame_pointer = true;
     std::string code    = Code(CompileToArm32(R"(
 int g(int);
@@ -70,7 +70,7 @@ pop {r4, r11, pc}
 // Floating-point values in d registers, the result computed in place.
 TEST_F(Arm32Test, DoublesInRegisters)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 double dot(double a, double b, double c) { return a * b + c; }
 )"));
@@ -80,7 +80,7 @@ double dot(double a, double b, double c) { return a * b + c; }
 // Arguments trading registers: a cycle, broken through r12.
 TEST_F(Arm32Test, ArgumentsMovedAtOnce)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 int g2(int, int);
 int swap(int a, int b) { return g2(b, a); }
@@ -92,7 +92,7 @@ int swap(int a, int b) { return g2(b, a); }
 // Long longs trading pairs: two cycles, a word each.
 TEST_F(Arm32Test, PairsMovedAtOnce)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 long long l2(long long, long long);
 long long lswap(long long a, long long b) { return l2(b, a); }
@@ -111,7 +111,7 @@ bl l2
 // leaves d0 first; the cycle through s2 is broken through s28.
 TEST_F(Arm32Test, SinglesInsideDoublesMovedAtOnce)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 double fd(float, double, float);
 double back(double d, float f, float e) { return fd(e, d, f); }
@@ -128,7 +128,7 @@ bl fd
 // The callee's address, in an argument register, goes to r10 out of the way.
 TEST_F(Arm32Test, IndirectCalleeInArgumentRegister)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 int indirect(int (*p)(int), int x) { return p(x); }
 )"));
@@ -138,7 +138,7 @@ int indirect(int (*p)(int), int x) { return p(x); }
 // A narrow result in a register is kept extended.
 TEST_F(Arm32Test, NarrowValuesCanonical)
 {
-    arm32_peephole = false;
+    arm32_peephole   = false;
     std::string code = Code(CompileToArm32(R"(
 unsigned char next(unsigned char c) { return c + 1; }
 )"));

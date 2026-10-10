@@ -312,8 +312,9 @@ static Regs live_before(const A64_Block *b, Regs live)
     int n = 0;
     for (const A64_Instr *in = b->head; in; in = in->next)
         n++;
-    const A64_Instr **list = xalloc((n ? n : 1) * sizeof(A64_Instr *), __func__, __FILE__, __LINE__);
-    n                      = 0;
+    const A64_Instr **list =
+        xalloc((n ? n : 1) * sizeof(A64_Instr *), __func__, __FILE__, __LINE__);
+    n = 0;
     for (const A64_Instr *in = b->head; in; in = in->next)
         list[n++] = in;
     while (n > 0)
@@ -530,7 +531,7 @@ static void set_imm(A64_Instr *in, A64_Operand imm, A64_Operand shift)
 static bool fold_constant(A64_Instr **link)
 {
     A64_Instr *mv = *link, *n = mv->next;
-    int t         = mv->opnd[0].reg;
+    int t = mv->opnd[0].reg;
     if (!n || !is_scratch(t) || !reads(n, t) || !last_read(n, t))
         return false;
     A64_Operand *o = n->opnd;
@@ -541,8 +542,8 @@ static bool fold_constant(A64_Instr **link)
         v = (int32_t)v;
     // A constant index: an offset.
     A64_Operand *m = &o[1];
-    if (is_mem_op(n->op) && m->kind == A64_OPND_MEM && m->sub == A64_MEM_INDEX &&
-        m->index == t && m->reg != t && !(o[0].kind == A64_OPND_REG && o[0].reg == t)) {
+    if (is_mem_op(n->op) && m->kind == A64_OPND_MEM && m->sub == A64_MEM_INDEX && m->index == t &&
+        m->reg != t && !(o[0].kind == A64_OPND_REG && o[0].reg == t)) {
         int64_t index;
         if (m->index_width == A64_W)
             index = m->ext == A64_EXT_SXTW ? (int64_t)(int32_t)v : (int64_t)(uint32_t)v;
@@ -646,7 +647,7 @@ static bool fold_constant(A64_Instr **link)
         if (!regs3 || o[2].reg != t || o[1].reg == t || o[1].reg == A64_ZR || o[0].width != w)
             return false;
         if (n->op == A64_ADD || n->op == A64_SUB) {
-            bool neg = v < 0 && bits == width_bits(w);
+            bool neg   = v < 0 && bits == width_bits(w);
             uint64_t a = neg ? -(uint64_t)v : (uint64_t)v;
             if (bits != width_bits(w) && v < 0)
                 return false;
@@ -711,7 +712,8 @@ static bool can_substitute(const A64_Instr *in, int t, A64_Width w)
 {
     for (int i = 0; i < A64_MAX_OPERANDS; i++) {
         const A64_Operand *o = &in->opnd[i];
-        bool is_mem          = o->kind == A64_OPND_MEM && (o->reg == t || (o->sub == A64_MEM_INDEX && o->index == t));
+        bool is_mem =
+            o->kind == A64_OPND_MEM && (o->reg == t || (o->sub == A64_MEM_INDEX && o->index == t));
         if (is_mem && w != A64_X)
             return false;
         if (o->kind == A64_OPND_MEM && o->reg == t && o->sub != A64_MEM_OFFSET &&
@@ -747,7 +749,7 @@ static bool forward_move(A64_Instr **link)
 {
     A64_Instr *mv = *link;
     int t = mv->opnd[0].reg, r = mv->opnd[1].reg;
-    A64_Width w = mv->opnd[0].width;
+    A64_Width w  = mv->opnd[0].width;
     bool scratch = is_scratch(t);
     if (t == r || t == A64_SP || t == A64_ZR || r == A64_SP || r == A64_ZR)
         return false;
@@ -832,12 +834,13 @@ static bool compute_in_place(A64_Instr *in)
 static bool delete_reload(A64_Instr *st)
 {
     const A64_Operand *v = &st->opnd[0], *m = &st->opnd[1];
-    if (st->op != A64_STR || st->is_volatile || v->kind != A64_OPND_REG || v->width == A64_W || v->width == A64_S ||
-        v->reg == A64_ZR || m->kind != A64_OPND_MEM || m->sub != A64_MEM_OFFSET || m->reg == v->reg)
+    if (st->op != A64_STR || st->is_volatile || v->kind != A64_OPND_REG || v->width == A64_W ||
+        v->width == A64_S || v->reg == A64_ZR || m->kind != A64_OPND_MEM ||
+        m->sub != A64_MEM_OFFSET || m->reg == v->reg)
         return false;
     int size = width_bits(v->width) / 8;
     for (A64_Instr **link = &st->next; *link; link = &(*link)->next) {
-        A64_Instr *n = *link;
+        A64_Instr *n          = *link;
         const A64_Operand *nm = &n->opnd[1];
         if (n->op == A64_LDR && n->opnd[0].reg == v->reg && n->opnd[0].width == v->width &&
             nm->kind == A64_OPND_MEM && nm->sub == A64_MEM_OFFSET && nm->reg == m->reg &&
@@ -932,8 +935,8 @@ static bool fold_address(A64_Instr **link)
 static bool step_of(const A64_Instr *in, int p, int64_t *k)
 {
     const A64_Operand *o = in->opnd;
-    if ((in->op != A64_ADD && in->op != A64_SUB) || o[0].kind != A64_OPND_REG ||
-        o[0].reg != p || o[0].width != A64_X || o[1].kind != A64_OPND_REG || o[1].reg != p ||
+    if ((in->op != A64_ADD && in->op != A64_SUB) || o[0].kind != A64_OPND_REG || o[0].reg != p ||
+        o[0].width != A64_X || o[1].kind != A64_OPND_REG || o[1].reg != p ||
         o[2].kind != A64_OPND_IMM || o[3].kind != A64_OPND_NONE)
         return false;
     *k = in->op == A64_SUB ? -o[2].imm : o[2].imm;
@@ -988,7 +991,7 @@ static bool fold_index(A64_Instr **link)
         int p = in->opnd[1].reg;
         if (!may_index(in, p, p) || p == A64_SP)
             return false;
-        n = next_touch(in, p);
+        n              = next_touch(in, p);
         A64_Instr **nl = &in->next;
         while (*nl && *nl != n)
             nl = &(*nl)->next;
@@ -1016,7 +1019,7 @@ static bool fold_extend(A64_Instr **link)
     A64_Instr *ext = *link, *n = ext->next;
     if (!n || n->op != A64_ADD || ext->opnd[0].width != A64_X)
         return false;
-    int t = ext->opnd[0].reg;
+    int t          = ext->opnd[0].reg;
     A64_Operand *o = n->opnd;
     bool shifted   = o[2].kind == A64_OPND_SHIFT && o[2].sub == A64_SHIFT_LSL && o[2].imm <= 4;
     if (o[0].width != A64_X || o[1].kind != A64_OPND_REG || o[1].reg == t ||
@@ -1037,13 +1040,13 @@ static bool fold_multiply_past(A64_Instr **link)
     if (!n || n->op != A64_ADD || !computes(op) || op->is_volatile)
         return false;
     int t = mul->opnd[0].reg, u = op->opnd[0].reg, a = mul->opnd[1].reg, b = mul->opnd[2].reg;
-    A64_Width w      = mul->opnd[0].width;
+    A64_Width w          = mul->opnd[0].width;
     const A64_Operand *o = n->opnd;
-    if (mul->opnd[1].kind != A64_OPND_REG || mul->opnd[2].kind != A64_OPND_REG || u == t || a == t ||
-        b == t ||
-        op->opnd[0].width != w || reads(op, t) || o[0].kind != A64_OPND_REG ||
+    if (mul->opnd[1].kind != A64_OPND_REG || mul->opnd[2].kind != A64_OPND_REG || u == t ||
+        a == t || b == t || op->opnd[0].width != w || reads(op, t) || o[0].kind != A64_OPND_REG ||
         o[1].kind != A64_OPND_REG || o[2].kind != A64_OPND_REG || o[3].kind != A64_OPND_NONE ||
-        o[0].width != w || !((o[1].reg == t && o[2].reg == u) || (o[1].reg == u && o[2].reg == t)) ||
+        o[0].width != w ||
+        !((o[1].reg == t && o[2].reg == u) || (o[1].reg == u && o[2].reg == t)) ||
         o[0].reg == A64_SP || !last_read(n, t) || !last_read(n, u))
         return false;
     // op may overwrite a or b only by being u, which now goes to t: a and b survive.
@@ -1068,7 +1071,7 @@ static bool fold_multiply(A64_Instr **link)
     A64_Instr *mul = *link, *n = mul->next;
     if (!n || (n->op != A64_ADD && n->op != A64_SUB))
         return false;
-    int t = mul->opnd[0].reg;
+    int t          = mul->opnd[0].reg;
     A64_Operand *o = n->opnd;
     if (o[0].kind != A64_OPND_REG || o[1].kind != A64_OPND_REG || o[2].kind != A64_OPND_REG ||
         o[3].kind != A64_OPND_NONE || o[0].width != mul->opnd[0].width || !last_read(n, t))
@@ -1082,10 +1085,10 @@ static bool fold_multiply(A64_Instr **link)
         return false;
     if (c == A64_SP)
         return false;
-    n->op      = n->op == A64_ADD ? A64_MADD : A64_MSUB;
-    n->opnd[1] = mul->opnd[1];
-    n->opnd[2] = mul->opnd[2];
-    n->opnd[3] = a64_reg(c, o[0].width);
+    n->op            = n->op == A64_ADD ? A64_MADD : A64_MSUB;
+    n->opnd[1]       = mul->opnd[1];
+    n->opnd[2]       = mul->opnd[2];
+    n->opnd[3]       = a64_reg(c, o[0].width);
     mul->opnd[1].sym = mul->opnd[2].sym = NULL;
     delete_at(link);
     return true;
@@ -1108,20 +1111,20 @@ static bool pair(A64_Instr **link)
         xm->kind != A64_OPND_MEM || ym->kind != A64_OPND_MEM || xm->sub != A64_MEM_OFFSET ||
         ym->sub != A64_MEM_OFFSET || xm->reg != ym->reg)
         return false;
-    bool up            = ym->imm == xm->imm + size;
+    bool up               = ym->imm == xm->imm + size;
     const A64_Operand *lo = up ? xm : ym;
     if ((!up && ym->imm != xm->imm - size) || lo->imm % size != 0 || lo->imm < -64 * size ||
         lo->imm > 63 * size)
         return false;
-    if (x->op == A64_LDR &&
-        (x->opnd[0].reg == xm->reg || x->opnd[0].reg == y->opnd[0].reg || y->opnd[0].reg == xm->reg))
+    if (x->op == A64_LDR && (x->opnd[0].reg == xm->reg || x->opnd[0].reg == y->opnd[0].reg ||
+                             y->opnd[0].reg == xm->reg))
         return false;
     A64_Operand first = up ? x->opnd[0] : y->opnd[0], second = up ? y->opnd[0] : x->opnd[0];
-    A64_Operand addr  = *lo;
-    x->op             = x->op == A64_LDR ? A64_LDP : A64_STP;
-    x->opnd[0]        = first;
-    x->opnd[1]        = second;
-    x->opnd[2]        = addr;
+    A64_Operand addr = *lo;
+    x->op            = x->op == A64_LDR ? A64_LDP : A64_STP;
+    x->opnd[0]       = first;
+    x->opnd[1]       = second;
+    x->opnd[2]       = addr;
     delete_at(&x->next);
     return true;
 }
@@ -1139,7 +1142,8 @@ static bool upper_unread(const A64_Instr *in, int r)
         if (is_call(n->op) || reads_as_address(n, r))
             return false;
         for (int i = 0; i < A64_MAX_OPERANDS; i++)
-            if (reads_operand(n, i, r) && (n->opnd[i].kind != A64_OPND_REG || n->opnd[i].width != A64_W))
+            if (reads_operand(n, i, r) &&
+                (n->opnd[i].kind != A64_OPND_REG || n->opnd[i].width != A64_W))
                 return false;
         if (writes(n, r))
             return true;
@@ -1610,7 +1614,9 @@ static bool fold_narrow(A64_Instr **link)
     }
     // A byte or halfword load, and an extension of what it loaded after it.
     A64_Instr *ext = at->next;
-    int size       = at->op == A64_LDRB || at->op == A64_LDRSB ? 1 : at->op == A64_LDRH || at->op == A64_LDRSH ? 2 : 0;
+    int size       = at->op == A64_LDRB || at->op == A64_LDRSB   ? 1
+                     : at->op == A64_LDRH || at->op == A64_LDRSH ? 2
+                                                                 : 0;
     int esize      = ext ? ext_bytes(ext->op) : 0;
     if (!size || !esize || ext->is_volatile || !is_gpr(&at->opnd[0], A64_W) ||
         !is_gpr(&ext->opnd[1], A64_W) || ext->opnd[1].reg != at->opnd[0].reg ||
@@ -1631,8 +1637,8 @@ static bool fold_narrow(A64_Instr **link)
          at->opnd[1].reg == d))
         return false;
     // The load extends as the extension does, into its register.
-    at->op           = size == 1 ? (esigned ? A64_LDRSB : A64_LDRB) : (esigned ? A64_LDRSH : A64_LDRH);
-    at->opnd[0]      = ext->opnd[0];
+    at->op      = size == 1 ? (esigned ? A64_LDRSB : A64_LDRB) : (esigned ? A64_LDRSH : A64_LDRH);
+    at->opnd[0] = ext->opnd[0];
     delete_at(&at->next);
     return true;
 }
@@ -1710,8 +1716,9 @@ static bool dead_past_branch(const A64_Instr *br, int w)
 // Whether `in` is `cmp r, #0` at any width.
 static bool is_cmp_zero(const A64_Instr *in)
 {
-    return in->op == A64_CMP && in->opnd[0].kind == A64_OPND_REG && in->opnd[1].kind == A64_OPND_IMM &&
-           in->opnd[1].imm == 0 && in->opnd[2].kind == A64_OPND_NONE;
+    return in->op == A64_CMP && in->opnd[0].kind == A64_OPND_REG &&
+           in->opnd[1].kind == A64_OPND_IMM && in->opnd[1].imm == 0 &&
+           in->opnd[2].kind == A64_OPND_NONE;
 }
 
 static int instr_count; // of the function: a tbz/tbnz reaches 32 KiB only
@@ -1730,8 +1737,8 @@ static bool fold_flags(A64_Instr **link)
         return false;
     const A64_Operand *o = in->opnd;
     if (in->op == A64_CSET && o[0].kind == A64_OPND_REG) {
-        int w      = o[0].reg;
-        A64_Cond c = (A64_Cond)o[1].sub;
+        int w        = o[0].reg;
+        A64_Cond c   = (A64_Cond)o[1].sub;
         A64_Instr *r = n->next;
         A64_Operand *rc;
         if (is_cmp_zero(n) && n->opnd[0].reg == w && r && (rc = flag_cond(r)) &&
@@ -1742,7 +1749,8 @@ static bool fold_flags(A64_Instr **link)
                 delete_at(link);
             return true;
         }
-        if ((n->op == A64_CBZ || n->op == A64_CBNZ) && n->opnd[0].reg == w && dead_past_branch(n, w)) {
+        if ((n->op == A64_CBZ || n->op == A64_CBNZ) && n->opnd[0].reg == w &&
+            dead_past_branch(n, w)) {
             n->opnd[0] = a64_cond(n->op == A64_CBNZ ? c : (A64_Cond)(c ^ 1));
             n->op      = A64_BCOND;
             delete_at(link);
@@ -1750,27 +1758,28 @@ static bool fold_flags(A64_Instr **link)
         }
         A64_Operand *no = n->opnd;
         if (n->op == A64_ADD && no[0].kind == A64_OPND_REG && no[1].kind == A64_OPND_REG &&
-            no[2].kind == A64_OPND_REG && no[3].kind == A64_OPND_NONE && no[1].width == no[2].width &&
-            (no[1].reg == w) != (no[2].reg == w) && no[1].reg != A64_SP && no[2].reg != A64_SP &&
-            last_read(n, w)) {
+            no[2].kind == A64_OPND_REG && no[3].kind == A64_OPND_NONE &&
+            no[1].width == no[2].width && (no[1].reg == w) != (no[2].reg == w) &&
+            no[1].reg != A64_SP && no[2].reg != A64_SP && last_read(n, w)) {
             A64_Operand a = no[1].reg == w ? no[2] : no[1];
             if (a.reg == A64_ZR)
                 return false;
-            n->op    = A64_CINC;
-            no[1]    = a;
-            no[2]    = a64_cond(c);
+            n->op = A64_CINC;
+            no[1] = a;
+            no[2] = a64_cond(c);
             delete_at(link);
             return true;
         }
         return false;
     }
     if (in->op == A64_AND && o[0].kind == A64_OPND_REG && o[1].kind == A64_OPND_REG &&
-        o[2].kind == A64_OPND_IMM && o[3].kind == A64_OPND_NONE && (n->op == A64_CBZ || n->op == A64_CBNZ) &&
-        n->opnd[0].reg == o[0].reg && instr_count < 8000) {
+        o[2].kind == A64_OPND_IMM && o[3].kind == A64_OPND_NONE &&
+        (n->op == A64_CBZ || n->op == A64_CBNZ) && n->opnd[0].reg == o[0].reg &&
+        instr_count < 8000) {
         uint64_t m = (uint64_t)o[2].imm & (o[0].width == A64_W ? 0xffffffffull : ~0ull);
         if (m == 0 || (m & (m - 1)) != 0 || !dead_past_branch(n, o[0].reg))
             return false;
-        int k      = 0;
+        int k = 0;
         while (!(m >> k & 1))
             k++;
         n->op      = n->op == A64_CBZ ? A64_TBZ : A64_TBNZ;
@@ -1786,11 +1795,13 @@ static bool fold_flags(A64_Instr **link)
         (o[0].width == A64_X || cmp->opnd[0].width == A64_W)) {
         int t = o[0].reg, r = o[1].reg;
         if (r == A64_SP || r == A64_ZR || t == r || !writes(n, r) || reads(n, t) || writes(n, t) ||
-            sets_flags(n) || flag_cond(n) || is_branch(n->op) || n->op == A64_B || n->op == A64_RET ||
-            reads(cmp, r) || reads_operand(cmp, 1, t) || reads_operand(cmp, 2, t) || !dies_after(cmp, t))
+            sets_flags(n) || flag_cond(n) || is_branch(n->op) || n->op == A64_B ||
+            n->op == A64_RET || reads(cmp, r) || reads_operand(cmp, 1, t) ||
+            reads_operand(cmp, 2, t) || !dies_after(cmp, t))
             return false;
         for (int i = 1; i < A64_MAX_OPERANDS; i++)
-            if (cmp->opnd[i].kind != A64_OPND_IMM && cmp->opnd[i].reg && writes(n, cmp->opnd[i].reg))
+            if (cmp->opnd[i].kind != A64_OPND_IMM && cmp->opnd[i].reg &&
+                writes(n, cmp->opnd[i].reg))
                 return false;
         // The compare, of r, takes the move's place; r's write follows it.
         in->op      = A64_CMP;
@@ -1872,7 +1883,8 @@ static bool fits_q(int64_t off, bool paired)
     return paired ? off % 16 == 0 && off >= -1024 && off <= 1008 : fits_ldst(off, 16);
 }
 
-static A64_Instr *mem_instr(A64_Op op, A64_Operand r1, A64_Operand r2, A64_Operand m, A64_Instr *next)
+static A64_Instr *mem_instr(A64_Op op, A64_Operand r1, A64_Operand r2, A64_Operand m,
+                            A64_Instr *next)
 {
     A64_Instr *in = new_instr(op, next);
     in->opnd[0]   = r1;
@@ -1895,20 +1907,20 @@ static bool fold_copy_run(A64_Instr **link)
         in->opnd[0].width != A64_X || in->opnd[1].kind != A64_OPND_MEM ||
         in->opnd[1].sub != A64_MEM_OFFSET)
         return false;
-    int base = in->opnd[1].reg;
+    int base   = in->opnd[1].reg;
     int64_t s0 = in->opnd[1].imm, d0 = 0;
-    int n = 0;
+    int n         = 0;
     A64_Instr *ld = in, *last = NULL;
     for (;;) {
-        A64_Instr *st = ld->next;
+        A64_Instr *st         = ld->next;
         const A64_Operand *lm = &ld->opnd[1];
         if (ld->op != A64_LDR || ld->is_volatile || ld->opnd[0].kind != A64_OPND_REG ||
-            ld->opnd[0].width != A64_X || a64_is_fpreg(ld->opnd[0].reg) || lm->kind != A64_OPND_MEM ||
-            lm->sub != A64_MEM_OFFSET || lm->reg != base || lm->imm != s0 + 8 * n || !st ||
-            st->op != A64_STR || st->is_volatile || st->opnd[0].kind != A64_OPND_REG ||
-            st->opnd[0].reg != ld->opnd[0].reg || st->opnd[0].width != A64_X ||
-            st->opnd[1].kind != A64_OPND_MEM || st->opnd[1].sub != A64_MEM_OFFSET ||
-            st->opnd[1].reg != base || ld->opnd[0].reg == base)
+            ld->opnd[0].width != A64_X || a64_is_fpreg(ld->opnd[0].reg) ||
+            lm->kind != A64_OPND_MEM || lm->sub != A64_MEM_OFFSET || lm->reg != base ||
+            lm->imm != s0 + 8 * n || !st || st->op != A64_STR || st->is_volatile ||
+            st->opnd[0].kind != A64_OPND_REG || st->opnd[0].reg != ld->opnd[0].reg ||
+            st->opnd[0].width != A64_X || st->opnd[1].kind != A64_OPND_MEM ||
+            st->opnd[1].sub != A64_MEM_OFFSET || st->opnd[1].reg != base || ld->opnd[0].reg == base)
             break;
         if (n == 0)
             d0 = st->opnd[1].imm;
@@ -1918,7 +1930,7 @@ static bool fold_copy_run(A64_Instr **link)
             break;
         last = st;
         n++;
-        ld   = st->next;
+        ld = st->next;
         if (!ld)
             break;
     }
@@ -1931,7 +1943,7 @@ static bool fold_copy_run(A64_Instr **link)
         if (bytes - i >= 32) {
             bool paired = fits_q(s0 + i, true) && fits_q(d0 + i, true);
             if (!paired && !(fits_q(s0 + i, false) && fits_q(s0 + i + 16, false) &&
-                           fits_q(d0 + i, false) && fits_q(d0 + i + 16, false)))
+                             fits_q(d0 + i, false) && fits_q(d0 + i + 16, false)))
                 return false;
             i += 32;
         } else if (bytes - i >= 16) {
@@ -1944,14 +1956,14 @@ static bool fold_copy_run(A64_Instr **link)
     }
     // The new code, in place of the run; an 8-byte rest keeps its last pair.
     A64_Instr *after = last->next, *head = NULL, **tail = &head;
-    A64_Instr *keep  = NULL;
+    A64_Instr *keep = NULL;
     if (n % 2) { // the last pair stays: its ldr is the one before `last`
         for (A64_Instr *x = in; x->next; x = x->next)
             if (x->next->next == last)
                 keep = x->next;
     }
     A64_Operand q1 = a64_reg(F1, A64_Q), q2 = a64_reg(F2, A64_Q);
-    for (int64_t i = 0; i + 16 <= bytes; ) {
+    for (int64_t i = 0; i + 16 <= bytes;) {
         if (bytes - i >= 32 && fits_q(s0 + i, true) && fits_q(d0 + i, true)) {
             *tail = mem_instr(A64_LDP, q1, q2, a64_mem(base, s0 + i), NULL);
             tail  = &(*tail)->next;
@@ -2086,8 +2098,8 @@ static bool rewrite_block_end(A64_Block *b)
         else
             br->op = invert_branch(br->op);
         xfree(target(br)->sym);
-        *target(br)          = (*jl)->opnd[0];
-        (*jl)->opnd[0].sym   = NULL;
+        *target(br)        = (*jl)->opnd[0];
+        (*jl)->opnd[0].sym = NULL;
         delete_at(&br->next);
         return true;
     }
@@ -2156,8 +2168,9 @@ static bool fold_diamond_at(const A64_Func *fn, const A64_Block *b, A64_Instr **
     if (!lb || lb != b->next || !lb->head || label_refs(fn, l) != 1)
         return false;
     const A64_Instr *mc = lb->head;
-    bool jump = rest->op == A64_B && !rest->next;
-    if (jump ? mc->next || !falls_to(lb->next, rest->opnd[0].sym) : !same_return_tail(rest, mc->next))
+    bool jump           = rest->op == A64_B && !rest->next;
+    if (jump ? mc->next || !falls_to(lb->next, rest->opnd[0].sym)
+             : !same_return_tail(rest, mc->next))
         return false;
     A64_Operand d = mv->opnd[0];
     if (mc->op != A64_MOV || mc->opnd[0].kind != A64_OPND_REG || mc->opnd[0].reg != d.reg ||
@@ -2335,19 +2348,20 @@ static bool thread_jumps(const A64_Func *fn, A64_Block *b, bool fall_in)
         if (test_block(m, &test, false, &after) && test->opnd[0].reg == w &&
             !((live_at(branch_target(test)) | after) & bit_of(w))) {
             const A64_Block *n = test_block(m, &test, true, &after);
-            A64_Instr *jmp  = *jl;
-            A64_Instr *copy = new_instr(test->op, jmp);
-            copy->opnd[0]   = test->opnd[0];
-            copy->opnd[1]   = a64_label(branch_target(test));
-            (*sl)->next     = copy;
+            A64_Instr *jmp     = *jl;
+            A64_Instr *copy    = new_instr(test->op, jmp);
+            copy->opnd[0]      = test->opnd[0];
+            copy->opnd[1]      = a64_label(branch_target(test));
+            (*sl)->next        = copy;
             retarget(jmp, n->label);
             return true;
         }
     }
     // A constant tested: the jump, or the fall, into the test goes where it goes.
     A64_Instr **ml = jl && (*jl)->op == A64_B ? sl : jl;
-    A64_Block *m   = jl && (*jl)->op == A64_B ? block_of(fn, (*jl)->opnd[0].sym)
-                     : jl && (*jl)->op != A64_RET ? b->next : NULL;
+    A64_Block *m   = jl && (*jl)->op == A64_B     ? block_of(fn, (*jl)->opnd[0].sym)
+                     : jl && (*jl)->op != A64_RET ? b->next
+                                                  : NULL;
     Regs after;
     m = first_code(m);
     if (ml && test_block(m, &test, false, &after) && (*ml)->op == A64_MOV &&
@@ -2372,13 +2386,14 @@ static bool thread_jumps(const A64_Func *fn, A64_Block *b, bool fall_in)
     }
     // Falling into a lone jump, through labels nothing branches to: the jump itself,
     // here (that one then unreachable), which tail merging may share.
-    A64_Instr *lastin = jl ? *jl : NULL;
+    A64_Instr *lastin   = jl ? *jl : NULL;
     const A64_Block *jb = first_code(b->next);
     if (lastin && lastin->op != A64_B && lastin->op != A64_RET && jb && jb->head->op == A64_B &&
         !jb->head->next) {
         bool alone = true;
         for (const A64_Block *e = b->next; alone; e = e->next) {
-            if (e->label && (label_refs(fn, e->label) || strcmp(e->label, jb->head->opnd[0].sym) == 0))
+            if (e->label &&
+                (label_refs(fn, e->label) || strcmp(e->label, jb->head->opnd[0].sym) == 0))
                 alone = false;
             if (e == jb)
                 break;
@@ -2546,12 +2561,12 @@ static bool fold_eq_set(A64_Instr **link)
     const char *l = branch_target(in->next);
     enum { MAX = 32 };
     int64_t ks[MAX];
-    int n = 0;
+    int n           = 0;
     A64_Instr *last = NULL;
     for (A64_Instr *c = in; c && n < MAX && is_cmp_imm(c, &r2, &w2, &k) && r2 == r && w2 == w &&
                             c->next && c->next->op == A64_BCOND && c->next->opnd[0].sub == A64_EQ &&
                             strcmp(branch_target(c->next), l) == 0;
-         c = c->next->next) {
+         c            = c->next->next) {
         ks[n++] = k;
         last    = c->next;
     }
@@ -2608,7 +2623,7 @@ static bool fold_range(A64_Instr **link, const A64_Block *b)
         w2 != w || b1->op != A64_BCOND || b2->op != A64_BCOND || !fits_range(lo, hi))
         return false;
     A64_Cond k1 = (A64_Cond)b1->opnd[0].sub, k2 = (A64_Cond)b2->opnd[0].sub;
-    bool sgn    = k1 == A64_LT;
+    bool sgn = k1 == A64_LT;
     if (k1 != A64_LT && k1 != A64_LO)
         return false;
     const char *x = branch_target(b1), *to;
@@ -2647,10 +2662,10 @@ static bool fold_cond_op(const A64_Func *fn, A64_Block *b)
         return false;
     A64_Instr *br = *brl, *op = br->next;
     const A64_Operand *o = op->opnd;
-    bool neg = op->op == A64_NEG && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
-               o[1].width == o[0].width;
-    bool inc = op->op == A64_ADD && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
-               o[2].kind == A64_OPND_IMM && o[2].imm == 1 && o[3].kind == A64_OPND_NONE;
+    bool neg             = op->op == A64_NEG && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
+                           o[1].width == o[0].width;
+    bool inc             = op->op == A64_ADD && o[1].kind == A64_OPND_REG && o[1].reg == o[0].reg &&
+                           o[2].kind == A64_OPND_IMM && o[2].imm == 1 && o[3].kind == A64_OPND_NONE;
     if ((br->op != A64_CBZ && br->op != A64_CBNZ && br->op != A64_BCOND) || (!neg && !inc) ||
         o[0].reg == A64_SP || !falls_to(b->next, branch_target(br)) ||
         label_refs(fn, branch_target(br)) != 1)
@@ -2700,10 +2715,10 @@ static bool merge_blocks(A64_Func *fn)
 // hide a store from the deletion of its reload.
 void a64_peephole(A64_Func *fn, unsigned result_in)
 {
-    result       = result_in;
-    cur_fn       = fn;
-    split_count  = 0;
-    instr_count  = 0;
+    result      = result_in;
+    cur_fn      = fn;
+    split_count = 0;
+    instr_count = 0;
     for (const A64_Block *b = fn->blocks; b; b = b->next)
         for (const A64_Instr *in = b->head; in; in = in->next)
             instr_count++;

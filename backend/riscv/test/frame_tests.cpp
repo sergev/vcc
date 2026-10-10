@@ -11,7 +11,7 @@ TEST_F(RiscvTest, FrameSlots)
     riscv_regalloc      = false;
     riscv_peephole      = false;
     riscv_frame_pointer = true;
-    std::string s = CompileToRiscv(
+    std::string s       = CompileToRiscv(
         "int main(void) { char c = 1; long l = 2; int i = 3; double d = 0.5; return i; }");
     EXPECT_EQ(R"(addi sp, sp, -16
 sd ra, 8(sp)
@@ -54,12 +54,11 @@ TEST_F(RiscvTest, FrameLargeOffsets)
 {
     DisableOptimization();
     riscv_regalloc = false;
-    std::string s = Code(CompileToRiscv(ManyLocals().c_str()));
+    std::string s  = Code(CompileToRiscv(ManyLocals().c_str()));
     EXPECT_NE(std::string::npos, s.find(R"(addi s0, sp, 16
 li t0, 2400
 sub sp, sp, t0
-)"))
-        << s.substr(0, 200);
+)")) << s.substr(0, 200);
     EXPECT_NE(std::string::npos, s.find(R"(li t0, 599
 li t6, -2416
 add t6, s0, t6
@@ -67,14 +66,13 @@ sw t0, 0(t6)
 )"));
 }
 
-
 // A variadic function saves a0-a7 below the incoming stack arguments, its ra and s0
 // below those; the named parameter in a0 lives in its save slot.  With the frame
 // pointer kept, all of it is addressed from s0.
 TEST_F(RiscvTest, FrameVariadic)
 {
     riscv_frame_pointer = true;
-    std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
+    std::string s       = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
     EXPECT_EQ(0u, s.find(R"(addi sp, sp, -80
 sd ra, 8(sp)
 sd s0, 0(sp)

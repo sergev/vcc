@@ -28,12 +28,14 @@ pop r10
 pop r9
 pop r8
 ret
-)", "double f(double a, double b) { return a + b; }")
+)",
+            "double f(double a, double b) { return a + b; }")
 
 // A float's second operand goes in r15:r14, where it came: nothing to move, and the
 // call a tail jump.
 EXPECT_CODE(FloatMultiplyCallsHelper, R"(br #__mspabi_mpyf
-)", "float f(float a, float b) { return a * b; }")
+)",
+            "float f(float a, float b) { return a * b; }")
 
 // Each comparison through its own libgcc predicate, tested against zero: > as r >= 1.
 TEST_F(Msp430Test, DoubleCompare)
@@ -42,8 +44,7 @@ TEST_F(Msp430Test, DoubleCompare)
     EXPECT_NE(std::string::npos, code.find(R"(call #__gtdf2
 cmp #1, r12
 mov #1, r12
-jge )"))
-        << code;
+jge )")) << code;
 }
 
 // Negation flips the sign bit, inline, in the result's slot (a double stays in memory).
@@ -58,16 +59,14 @@ TEST_F(Msp430Test, DoubleNegateInline)
 TEST_F(Msp430Test, DoubleTruthTest)
 {
     std::string code = Code(CompileToMsp430("int f(double a) { return a ? 1 : 2; }"));
-    EXPECT_NE(std::string::npos,
-              code.find(R"(tst 0(r1)
+    EXPECT_NE(std::string::npos, code.find(R"(tst 0(r1)
 jne .Lv1
 tst 2(r1)
 jne .Lv1
 tst 4(r1)
 jne .Lv1
 bit #32767, 6(r1)
-jeq )"))
-        << code;
+jeq )")) << code;
 }
 
 // Conversions by the helpers GCC's code calls; an int widens to 32 bits first.  The
@@ -185,8 +184,8 @@ int main(void)
     std::string e;
     for (double a : dops) {
         for (double b : dops)
-            e += Hex(nan_bits(a + b), 16) + Hex(nan_bits(a - b), 16) +
-                 Hex(nan_bits(a * b), 16) + Hex(nan_bits(a / b), 16);
+            e += Hex(nan_bits(a + b), 16) + Hex(nan_bits(a - b), 16) + Hex(nan_bits(a * b), 16) +
+                 Hex(nan_bits(a / b), 16);
         e += Hex(Bits(std::sqrt(a < 0 ? -a : a)), 16) + "\n";
     }
     EXPECT_EQ(e, CompileAndRunMsp430(src));
@@ -225,7 +224,7 @@ int main(void)
 TEST_F(Msp430Test, RunComparisons)
 {
     SKIP_IF_NO_MSP430_TOOLS();
-    std::string src = std::string(print_c) + R"(
+    std::string src         = std::string(print_c) + R"(
 volatile double d[] = { -1.0, 0.0, -0.0, 2.0, 0.0 };
 volatile float f[] = { -1.0f, 0.0f, -0.0f, 2.0f, 0.0f };
 int main(void)
@@ -265,7 +264,7 @@ int main(void)
 TEST_F(Msp430Test, RunConversions)
 {
     SKIP_IF_NO_MSP430_TOOLS();
-    std::string src = std::string(print_c) + R"(
+    std::string src         = std::string(print_c) + R"(
 volatile double d[] = { 0.0, -0.5, 1.75, -32768.9, 65535.5, 123456789.75, -2147483648.0,
                         4294967295.0, 1.0e-320, 3.4028235677973366e38 };
 volatile int ii = -12345;
@@ -294,10 +293,10 @@ int main(void)
     return 0;
 }
 )";
-    static const double d[] = { 0.0,           -0.5,          1.75,
-                                -32768.9,      65535.5,       123456789.75,
-                                -2147483648.0, 4294967295.0,  1.0e-320,
-                                3.4028235677973366e38 };
+    static const double d[] = {
+        0.0,          -0.5,          1.75,         -32768.9, 65535.5,
+        123456789.75, -2147483648.0, 4294967295.0, 1.0e-320, 3.4028235677973366e38
+    };
     std::string e;
     for (double x : d) {
         e += Hex(Bits32((float)x), 8);
@@ -317,11 +316,11 @@ int main(void)
         e += Hex(Bits((double)(int64_t)(y < 9.0e18 && y > -9.0e18 ? y : 0.0)), 16);
         e += "\n";
     }
-    int16_t ii = -12345;
+    int16_t ii  = -12345;
     uint16_t uu = 54321;
-    int32_t ll = -1234567890;
+    int32_t ll  = -1234567890;
     uint32_t ul = 4000000000u;
-    int64_t qq = -1234567890123456789LL;
+    int64_t qq  = -1234567890123456789LL;
     uint64_t uq = 18000000000000000000ULL;
     e += Hex(Bits(ii), 16) + Hex(Bits(uu), 16) + Hex(Bits(ll), 16) + Hex(Bits(ul), 16) +
          Hex(Bits((double)qq), 16) + Hex(Bits((double)uq), 16);

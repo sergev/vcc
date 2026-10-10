@@ -91,7 +91,8 @@ TEST_F(RelaxTest, ForwardJumpInRange)
     jeq     .Lt
 .Lt:
     ret
-)", Relaxed(MSP_JEQ, 0, 511, false));
+)",
+              Relaxed(MSP_JEQ, 0, 511, false));
 }
 
 TEST_F(RelaxTest, ForwardJumpOutOfRange)
@@ -113,7 +114,8 @@ TEST_F(RelaxTest, BackwardJumpInRange)
 .Lt:
     jl      .Lt
     ret
-)", Relaxed(MSP_JL, 511, 0, true));
+)",
+              Relaxed(MSP_JL, 511, 0, true));
 }
 
 TEST_F(RelaxTest, BackwardJumpOutOfRange)
@@ -159,12 +161,14 @@ TEST_F(RelaxTest, UnconditionalJump)
     jmp     .Lt
 .Lt:
     ret
-)", Relaxed(MSP_JMP, 0, 511, false));
+)",
+              Relaxed(MSP_JMP, 0, 511, false));
     EXPECT_EQ(R"(f:
     br      #.Lt
 .Lt:
     ret
-)", Relaxed(MSP_JMP, 0, 512, false));
+)",
+              Relaxed(MSP_JMP, 0, 512, false));
 }
 
 // A loop of over 1 KB: its backward jump and its exit are relaxed.
@@ -178,11 +182,10 @@ TEST_F(Msp430Test, RunLongLoop)
         body += "        sum = sum + " + std::to_string(i % 7 + 10) + ";\n";
         sum += 2 * (i % 7 + 10);
     }
-    std::string src = R"(int main(void) {
+    std::string src      = R"(int main(void) {
     int sum = 0;
     for (int i = 0; i < 2; i++) {
-)" +
-                      body + R"(    }
+)" + body + R"(    }
     return sum;
 }
 )";

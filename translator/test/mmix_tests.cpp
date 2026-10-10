@@ -113,7 +113,7 @@ TEST_F(TranslateTestMmix, MixedWidthStaticInit)
     std::string yaml = CompileToYaml(R"(
         struct M { char c; short s; int i; long l; float f; double d; } m = { 1, 2, 3, 4, 5, 6 };
     )");
-    size_t at = yaml.find("  name: m\n");
+    size_t at        = yaml.find("  name: m\n");
     ASSERT_NE(at, std::string::npos) << yaml;
     std::string init = yaml.substr(yaml.find("init:", at));
     std::string kinds;
@@ -141,7 +141,7 @@ TEST_F(TranslateTestMmix, StructResultInExpressions)
     EXPECT_EQ(yaml.find("%.ret"), std::string::npos) << yaml;
     size_t calls = 0;
     for (size_t at = yaml.find("name: make"); at != std::string::npos;
-         at = yaml.find("name: make", at + 1))
+         at        = yaml.find("name: make", at + 1))
         calls++;
     EXPECT_EQ(calls, 4u) << yaml;
 }

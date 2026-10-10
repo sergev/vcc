@@ -39,12 +39,12 @@ typedef struct Symbol {
     SrcLoc loc;       // where it was declared, for a note after an error about it
     union {
         struct {
-            bool defined;  // True if function body is defined
-            bool global;   // True if function has global linkage
-            bool noret;    // True if declared/defined _Noreturn
-            bool coro;     // True if declared _Coro(Y): a coroutine
+            bool defined;     // True if function body is defined
+            bool global;      // True if function has global linkage
+            bool noret;       // True if declared/defined _Noreturn
+            bool coro;        // True if declared _Coro(Y): a coroutine
             Type *yield_type; // its Y (owned), void included; NULL for a function
-        } func;            // For SYM_FUNC
+        } func;               // For SYM_FUNC
 
         struct {
             bool global;               // True if variable has global linkage
@@ -88,8 +88,8 @@ void symtab_add_static_var(const char *name, const Type *t, bool global, InitKin
 
 // Add a static variable at a given scope level (block-scope statics, which must be purged on
 // block exit so the no-shadowing dup-check and visibility are correct).
-void symtab_add_static_var_scoped(const char *name, const Type *t, bool global,
-                                  InitKind init_kind, Tac_StaticInit *init_list, int level);
+void symtab_add_static_var_scoped(const char *name, const Type *t, bool global, InitKind init_kind,
+                                  Tac_StaticInit *init_list, int level);
 
 //
 // Block-scope static locals.  A `static` declared inside a function has static storage
@@ -122,7 +122,8 @@ void symtab_set_coro(const char *name, const Type *yield_type);
 // Add a function
 void symtab_add_fun(const char *name, const Type *t, bool global, bool defined, bool noret);
 // Precondition: name is a non-null string, t is a valid Type* (function type).
-// Postcondition: A Symbol with SYM_FUNC, name, t, global, defined, and noret is added/replaced in symtab.
+// Postcondition: A Symbol with SYM_FUNC, name, t, global, defined, and noret is added/replaced in
+// symtab.
 
 // Add a string literal: len decoded bytes, which may include embedded NULs.
 char *symtab_add_string(const char *s, size_t len);

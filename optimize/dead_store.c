@@ -121,9 +121,9 @@ void eliminate_dead_stores(const OptCfg *cfg, const Tac_TopLevel *fn)
             nins++;
         if (!b->reachable || nins == 0)
             continue;
-        Tac_Instruction **insts = xalloc(nins * sizeof(Tac_Instruction *), __func__, __FILE__,
-                                         __LINE__);
-        int k                   = 0;
+        Tac_Instruction **insts =
+            xalloc(nins * sizeof(Tac_Instruction *), __func__, __FILE__, __LINE__);
+        int k = 0;
         for (Tac_Instruction *ins = b->first; ins; ins = ins->next)
             insts[k++] = ins;
 

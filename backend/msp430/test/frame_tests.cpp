@@ -7,7 +7,8 @@
 // No slots: no frame at all.
 EXPECT_CODE(FramelessConstant, R"(mov #7, r12
 ret
-)", "int f(void) { return 7; }")
+)",
+            "int f(void) { return 7; }")
 
 // A leaf with no slots and no call-saved register: no frame, the compare fused with its
 // branch, which goes straight to the bare ret.
@@ -15,13 +16,14 @@ EXPECT_CODE(FramelessEarlyReturn, R"(cmp r12, r13
 jl .Lv0
 mov r13, r12
 ret
-)", "int max(int a, int b) { if (a > b) return a; return b; }")
+)",
+            "int max(int a, int b) { if (a > b) return a; return b; }")
 
 // With a frame, an early return still goes to the one epilogue.
 TEST_F(Msp430Test, EarlyReturnToEpilogue)
 {
-    std::string code = Code(CompileToMsp430(
-        "int g(int); int f(int a) { if (a) return g(a) + a; return 0; }"));
+    std::string code =
+        Code(CompileToMsp430("int g(int); int f(int a) { if (a) return g(a) + a; return 0; }"));
     EXPECT_NE(std::string::npos, code.find("jmp")) << code;
     EXPECT_NE(std::string::npos, code.find("pop r10\nret\n")) << code;
 }
@@ -29,7 +31,8 @@ TEST_F(Msp430Test, EarlyReturnToEpilogue)
 // Allocated: the parameters stay in the registers they came in, and the frame vanishes.
 EXPECT_CODE(ParamsInRegisters, R"(add r13, r12
 ret
-)", "int f(int a, int b) { return a + b; }")
+)",
+            "int f(int a, int b) { return a + b; }")
 
 // Without allocation, register parameters go to their slots; the frame is reserved and
 // released around the body, and the operation works on the slots.
@@ -52,13 +55,14 @@ ret
 // there is one), and is read where it lies.
 EXPECT_CODE(StackParamAboveFrame, R"(mov 2(r1), r12
 ret
-)", "int f(int a, int b, int c, int d, int e) { return e; }")
+)",
+            "int f(int a, int b, int c, int d, int e) { return e; }")
 
 TEST_F(Msp430Test, StackParamAboveSlots)
 {
     NaiveSelection();
-    std::string code = Code(CompileToMsp430(
-        "int f(int a, int b, int c, int d, int e) { return e; }"));
+    std::string code =
+        Code(CompileToMsp430("int f(int a, int b, int c, int d, int e) { return e; }"));
     EXPECT_NE(std::string::npos, code.find("sub #8, r1\n")) << code;
     EXPECT_NE(std::string::npos, code.find("mov 10(r1), r12\n")) << code;
 }
@@ -136,13 +140,13 @@ int f(int n, int k)
 EXPECT_CODE(SplitLongParam, R"(mov r15, r12
 mov 2(r1), r13
 ret
-)", "long f(int a, int b, int c, long d) { return d; }")
+)",
+            "long f(int a, int b, int c, long d) { return d; }")
 
 TEST_F(Msp430Test, SplitLongParamStored)
 {
     NaiveSelection();
-    std::string code =
-        Code(CompileToMsp430("long f(int a, int b, int c, long d) { return d; }"));
+    std::string code = Code(CompileToMsp430("long f(int a, int b, int c, long d) { return d; }"));
     EXPECT_NE(std::string::npos, code.find(R"(mov r15, 6(r1)
 mov 12(r1), 8(r1)
 )")) << code;
@@ -151,7 +155,8 @@ mov 12(r1), 8(r1)
 // A char parameter is extended where it is, or stored as a byte.
 EXPECT_CODE(CharParam, R"(sxt r12
 ret
-)", "int f(signed char c) { return c; }")
+)",
+            "int f(signed char c) { return c; }")
 
 TEST_F(Msp430Test, CharParamStored)
 {

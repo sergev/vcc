@@ -365,7 +365,8 @@ TEST_F(AvrTest, StrtokMultiToken)
     EXPECT_EQ(R"(AB
 CD
 EF
-)", CompileAndRunAvr(R"PROG(
+)",
+              CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 #include <string.h>
 static void body(void) {
@@ -389,7 +390,8 @@ TEST_F(AvrTest, StrtokLeadingDelims)
     SKIP_IF_NO_AVR_TOOLS();
     EXPECT_EQ(R"(AB
 CD
-)", CompileAndRunAvr(R"PROG(
+)",
+              CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 #include <string.h>
 static void body(void) {
@@ -450,7 +452,8 @@ TEST_F(AvrTest, StrSignedChar)
 1 1 1
 1 1 3
 1 4
-)", CompileAndRunAvr(R"PROG(
+)",
+              CompileAndRunAvr(R"PROG(
 #include <stdio.h>
 #include <string.h>
 int main(void) {

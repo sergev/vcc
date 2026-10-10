@@ -9,8 +9,8 @@
  */
 #include <stdio.h>
 
-extern int moncard_[25];  /* MONCARD* : current input line buffer */
-extern int kcount_[23];   /* KCOUNT*  : monitor input position */
+extern int moncard_[25]; /* MONCARD* : current input line buffer */
+extern int kcount_[23];  /* KCOUNT*  : monitor input position */
 extern void monread_(void);
 
 int read_idx; /* index of the next byte in MONCARD* */

@@ -63,9 +63,9 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
         gen_done(&g);
         prepare(&g, program, tl, false, false);
     }
-    g.frameless = !needs_frame(&g);
+    g.frameless  = !needs_frame(&g);
     g.fn->result = result_regs(tl);
-    Flow *flow  = NULL;
+    Flow *flow   = NULL;
     if (avr_peephole) {
         g.flow = flow = flow_build(tl);
         g.uses        = xalloc((flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
@@ -125,9 +125,8 @@ void avr_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
     case TAC_TOPLEVEL_STATIC_VARIABLE:
         if (tac_static_superseded(program, tl))
             break;
-        emit_static_variable(out, program, tl->u.static_variable.name,
-                             tl->u.static_variable.global, tl->u.static_variable.type,
-                             tl->u.static_variable.init_list, false,
+        emit_static_variable(out, program, tl->u.static_variable.name, tl->u.static_variable.global,
+                             tl->u.static_variable.type, tl->u.static_variable.init_list, false,
                              declared_alignment(program, tl->u.static_variable.name));
         break;
     case TAC_TOPLEVEL_STATIC_CONSTANT:

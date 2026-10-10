@@ -15,8 +15,8 @@
 static const int int_pool[] = { A64_X(0),  A64_X(1),  A64_X(2),  A64_X(3),  A64_X(4),  A64_X(5),
                                 A64_X(6),  A64_X(7),  A64_X(19), A64_X(20), A64_X(21), A64_X(22),
                                 A64_X(23), A64_X(24), A64_X(25), A64_X(26), A64_X(27), A64_X(28) };
-static const int fp_pool[]  = { A64_V(0),  A64_V(1),  A64_V(2),  A64_V(3),  A64_V(4),  A64_V(5),
-                                A64_V(6),  A64_V(7),  A64_V(8),  A64_V(9),  A64_V(10), A64_V(11),
+static const int fp_pool[]  = { A64_V(0),  A64_V(1),  A64_V(2),  A64_V(3), A64_V(4),  A64_V(5),
+                                A64_V(6),  A64_V(7),  A64_V(8),  A64_V(9), A64_V(10), A64_V(11),
                                 A64_V(12), A64_V(13), A64_V(14), A64_V(15) };
 
 #define NINT ((int)(sizeof(int_pool) / sizeof(int_pool[0])))

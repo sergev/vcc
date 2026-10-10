@@ -27,9 +27,9 @@ int iswxdigit(wint_t wc);
 wint_t towlower(wint_t wc);
 wint_t towupper(wint_t wc);
 
-wctype_t  wctype(const char *property);
-int       iswctype(wint_t wc, wctype_t desc);
+wctype_t wctype(const char *property);
+int iswctype(wint_t wc, wctype_t desc);
 wctrans_t wctrans(const char *property);
-wint_t    towctrans(wint_t wc, wctrans_t desc);
+wint_t towctrans(wint_t wc, wctrans_t desc);
 
 #endif /* _WCTYPE_H */
