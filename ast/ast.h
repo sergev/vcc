@@ -730,6 +730,10 @@ void print_declaration(FILE *fd, Declaration *decl, int indent);
 void print_external_decl(FILE *fd, ExternalDecl *ext, int indent);
 void print_initializer(FILE *fd, const Initializer *init, int indent);
 extern const char *type_kind_str[];
+
+// The type as C writes it, for a diagnostic: "const char *", "int (*)(int)",
+// "struct <anonymous>". The string is xalloc'ed.
+char *type_to_c(const Type *type);
 extern const char *co_op_name[]; // "__co_init" ... "__co_alignof", by CoOp
 
 #ifdef __cplusplus

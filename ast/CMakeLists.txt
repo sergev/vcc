@@ -11,6 +11,7 @@ add_library(ast STATIC
     ast_export.c
     ast_import.c
     ast_compare.c
+    type_to_c.c
 )
 target_include_directories(ast PUBLIC .)
 target_link_libraries(ast libutil)
@@ -20,6 +21,7 @@ target_link_libraries(ast libutil)
 #
 add_executable(ast-tests
     test/clone_tests.cpp
+    test/type_to_c_tests.cpp
 )
 target_link_libraries(ast-tests ast libutil GTest::gtest_main)
 test_chdir_to_bindir(ast-tests)
