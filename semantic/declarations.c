@@ -109,6 +109,13 @@ static void auto_locals_clear(void)
     }
 }
 
+void declarations_recover(void)
+{
+    typecheck_function = NULL;
+    param_scope_level  = -1;
+    auto_locals_clear();
+}
+
 // The backend name of automatic local `source` of type `type` (NULL when its size
 // comes from the initializer, so it matches no earlier one).
 static const char *auto_local_name(const char *source, const Type *type)

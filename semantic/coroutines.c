@@ -556,6 +556,25 @@ void coro_lint_function(const char *name)
     lint_fn = name ? xstrdup(name) : NULL;
 }
 
+void coro_recover(void)
+{
+    for (int i = 0; i < nauto; i++) {
+        xfree(auto_frames[i].storage);
+        xfree(auto_frames[i].frame);
+        xfree(auto_frames[i].coro);
+    }
+    xfree(auto_frames);
+    auto_frames          = NULL;
+    nauto                = 0;
+    cap_auto             = 0;
+    last_auto_init       = NULL;
+    arena_call           = NULL;
+    coro_defer_depth     = 0;
+    coro_loop_head_depth = 0;
+    coro_end_body();
+    coro_lint_function(NULL);
+}
+
 static const Expr *strip_casts(const Expr *e)
 {
     while (e && e->kind == EXPR_CAST)

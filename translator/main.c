@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -385,10 +386,19 @@ void process_file(const Args *args)
     // see translate.h).  Reset to 0 once, here, at the start of the unit.
     int label_seq = 0;
     translate_unit_begin();
+
+    // On an error in a declaration, drop it and check the rest; emit no more TAC.
+    jmp_buf here;
+    ExternalDecl *volatile current = NULL;
+    if (setjmp(here)) {
+        semantic_recover(current);
+    }
+    diag_recover = &here;
     for (;;) {
         ExternalDecl *ast = import_external_decl(&input);
         if (!ast)
             break;
+        current = ast;
 
         if (args->debug) {
             print_external_decl(stdout, ast, 0);
@@ -401,6 +411,10 @@ void process_file(const Args *args)
         // Annotate loops and break/continue statements — loop labels share the
         // unit-wide counter with the translator's temporaries.
         typecheck_decl(ast, &label_seq);
+        if (diag_errors) {
+            free_external_decl(ast);
+            continue;
+        }
 
         // Convert the AST to TAC and optimize. Each function carries its own
         // params + locals, so the optimizer needs no whole-program context.
@@ -416,7 +430,16 @@ void process_file(const Args *args)
             tac_free_toplevel(tac);
         }
     }
+    diag_recover = NULL;
     wclose(&input);
+    if (diag_errors) {
+        // All reported; leave no partial output behind.
+        if (output_file != stdout) {
+            fclose(output_file);
+            remove(args->output_file);
+        }
+        exit(1);
+    }
 
     // Names this unit references but does not define, with their types.
     Tac_TopLevel *externs = translate_unit_end();

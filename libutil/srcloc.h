@@ -95,6 +95,17 @@ _Noreturn
 void diag_unwind(void);
 
 //
+// Jump to the recovery point without a message, for an error that only follows
+// from one already reported; with no recovery point, exit.
+//
+#ifdef __cplusplus
+[[noreturn]]
+#else
+_Noreturn
+#endif
+void diag_abandon(void);
+
+//
 // Count an error that was reported without unwinding, and stop when there are
 // too many.
 //

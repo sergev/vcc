@@ -64,6 +64,9 @@ static void symtab_destroy_callback(intptr_t ptr)
 
 static void static_locals_clear(void);
 
+// Names whose declaration was dropped after an error.
+static StringMap poisoned;
+
 //
 // Initialize the symbol table (create an empty table)
 // Postcondition: Symbol table is empty and ready for use.
@@ -81,6 +84,7 @@ void symtab_destroy()
 {
     static_locals_clear();
     map_destroy_free(&symtab, symtab_destroy_callback);
+    map_destroy(&poisoned);
     str_id = 0;
     cl_id  = 0;
 }
@@ -300,9 +304,19 @@ Symbol *symtab_get(const char *name)
 {
     Symbol *sym = symtab_get_opt(name);
     if (!sym) {
+        if (map_get(&poisoned, name, NULL)) {
+            diag_abandon(); // its declaration was reported
+        }
         fatal_error("use of undeclared identifier '%s'", name);
     }
     return sym;
+}
+
+void symtab_poison(const char *name)
+{
+    if (name && !map_get(&poisoned, name, NULL)) {
+        map_insert(&poisoned, name, 0, 0);
+    }
 }
 
 //

@@ -138,6 +138,9 @@ void symtab_add_enum_const(const char *ident, int val, int level);
 
 // Get a symbol by name (fails if not found)
 Symbol *symtab_get(const char *name);
+
+// A name whose declaration failed: a use of it is no new error.
+void symtab_poison(const char *name);
 // Precondition: name is a non-null string.
 // Postcondition: Returns non-null Symbol* if found, else terminates with error.
 

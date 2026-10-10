@@ -119,6 +119,14 @@ void diag_unwind(void)
     longjmp(*diag_recover, 1);
 }
 
+void diag_abandon(void)
+{
+    if (!diag_recover) {
+        exit(1);
+    }
+    longjmp(*diag_recover, 1);
+}
+
 void diag_fatal_v(const char *fmt, va_list ap)
 {
     diag_vreport(diag_loc, "error", fmt, ap);

@@ -16,6 +16,11 @@ typedef struct SwitchCtx {
 
 static SwitchCtx *current_switch = NULL;
 
+void statements_recover(void)
+{
+    current_switch = NULL; // it was on the stack unwound
+}
+
 bool has_storage(const DeclSpec *spec)
 {
     return spec && (spec->storage != STORAGE_CLASS_NONE);

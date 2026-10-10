@@ -36,6 +36,24 @@ void scope_decrement(void)
     typetab_purge(scope_level);
 }
 
+void semantic_recover(const ExternalDecl *d)
+{
+    if (d && d->kind == EXTERNAL_DECL_FUNCTION) {
+        symtab_poison(d->u.function.name);
+    } else if (d && d->u.declaration->kind == DECL_VAR) {
+        for (const InitDeclarator *v = d->u.declaration->u.var.declarators; v; v = v->next)
+            symtab_poison(v->name);
+    }
+    coro_recover();
+    declarations_recover();
+    statements_recover();
+    static_locals_set_function(NULL);
+    scope_level = 0;
+    symtab_purge(0);
+    structtab_purge(0);
+    typetab_purge(0);
+}
+
 int round_away_from_zero(int alignment, int size)
 {
     if (semantic_debug) {

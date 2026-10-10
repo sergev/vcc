@@ -112,6 +112,10 @@ void coro_lint_function(const char *name);                          // the funct
 void coro_lint_bind(const char *var, int level, const Expr *value); // var (NULL: wider) = value
 void coro_lint_statement(const Expr *e);                            // an expression statement
 void coro_lint_scope_exit(int level);                               // the block at `level` ends
+// Drop the per-function state of each module, for semantic_recover().
+void coro_recover(void);
+void declarations_recover(void);
+void statements_recover(void);
 Expr *typecheck_yield(Expr *e);
 Expr *typecheck_await(Expr *e);
 Expr *typecheck_co_op(Expr *e);

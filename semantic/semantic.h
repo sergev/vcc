@@ -38,6 +38,11 @@ void resolve_labels(const ExternalDecl *ast);
 // goto, or be jumped past by a goto or a case label (docs/Coroutines_in_C.md, 1).
 void check_defers(const ExternalDecl *ast);
 
+// After an error unwound out of typecheck_decl(d), forget the declaration's block
+// scopes and per-function state, so the next declaration starts afresh; a name d
+// failed to declare is no new error where it is used.
+void semantic_recover(const ExternalDecl *d);
+
 // Error handling.
 #ifdef __cplusplus
 [[noreturn]]

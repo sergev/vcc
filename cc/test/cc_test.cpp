@@ -1117,6 +1117,56 @@ int g(void) { return 1;
               "t.c:11:1: error: expected '}' at end of file\n");
 }
 
+// Type errors: each declaration is checked on its own, a block or a switch left
+// half-checked does not disturb the next one, and a note follows its error.
+TEST_F(CcDriver, SeveralTypeErrors)
+{
+    WriteSource("t.c", R"(int f(int x)
+{
+    switch (x) {
+    case 1:
+        return y;
+    }
+    return 0;
+}
+int g(void)
+{
+    int *p;
+    {
+        int q = 1;
+        p = 3.5;
+    }
+    return 0;
+}
+int h(int a);
+int k(void) { return h(1, 2); }
+int m(void) { int q = 2; switch (q) { case 1: break; case 1: break; } return f(q) + g(); }
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(Stderr(),
+              "t.c:5:16: error: use of undeclared identifier 'y'\n"
+              "t.c:14:11: error: cannot convert 'double' to 'int *' when assigning\n"
+              "t.c:19:23: error: too many arguments to function 'h' (expected 1, have 2)\n"
+              "t.c:18:5: note: 'h' declared here\n"
+              "t.c:20:54: error: duplicate case value 1\n");
+    EXPECT_FALSE(fs::exists(Path("t.s")));
+}
+
+// A name whose declaration failed is no new error where it is used.
+TEST_F(CcDriver, NoErrorsFollowingFailedDeclaration)
+{
+    WriteSource("t.c", R"(struct T t;
+int k = 1.5 + "x";
+int a(void) { return t.x + k; }
+int b(void) { return w + 1; }
+)");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(Stderr(),
+              "t.c:1:10: error: variable 't' has incomplete type 'struct T'\n"
+              "t.c:2:13: error: invalid operands to '+' ('double' and 'char *')\n"
+              "t.c:4:22: error: use of undeclared identifier 'w'\n");
+}
+
 //
 // Usage errors.
 //
