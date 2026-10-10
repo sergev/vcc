@@ -55,22 +55,22 @@ optimizer   unchanged: the suspension is a call it may not move or drop; it lear
             JUMP_TABLE
 coro split  after the optimizer: liveness, frame layout, spills, the dispatch, f$init,
             the descriptor f$co (coro.c)
-genwasm     co_alloca's three builtins (call.c); a dispatch node per irreducible
-            region and JUMP_TABLE as br_table (structure.c)
-other gens  nothing: the coroutine reaches them as ordinary functions and calls
-            (avr-as wants f$resume quoted, emit.c)
+genwasm     a dispatch node per irreducible region and JUMP_TABLE as br_table
+            (structure.c)
+every gen   co_alloca's three stack builtins, in place (call.c); otherwise the
+            coroutine reaches them as ordinary functions and calls (avr-as wants
+            f$resume quoted, emit.c)
 runtime     libc/common/co.c in every target's libc.a (libvcc.a on the hosted
-            ones); libc/common/costack.c, co_alloca's memory off wasm32;
-            libc/wasm32/braam for Braam
+            ones); libc/wasm32/braam for Braam
 driver      the target wasm32-braam (cc/cc.c)
 ```
 
 The lowering is in shared code, and every target but BESM-6 has it.
 `Target.no_coroutines`, set for BESM-6 alone, gates it: `lower -t besm6` of a program
 with `_Coro` says "coroutines are not supported on target besm6". Two more fields say
-what the backend can do: `jump_tables` (§5.2), wasm32's alone, and `stack_alloca`
-(§5.1), set on every target (on BESM-6, which has no coroutines, for `alloca` alone,
-expanded by its `intrinsics.c`). `defer` has no target dependency and is not gated. BESM-6 output does not
+what the backend can do: `jump_tables` (§5.2), wasm32's alone. Every backend expands
+the stack builtins of §5.1 (BESM-6, which has no coroutines, `__builtin_alloca` alone,
+in its `intrinsics.c`). `defer` has no target dependency and is not gated. BESM-6 output does not
 change, since no BESM-6 program uses it and the shared cleanup (§4) is off there.
 
 ## 3. Front end
@@ -190,7 +190,7 @@ printed).
 
 ## 5. Lowering coroutines
 
-`translator/coro.c`, `libc/common/co.c` and `libc/common/costack.c`.
+`translator/coro.c` and `libc/common/co.c`.
 
 ### 5.1 The result
 
@@ -261,12 +261,11 @@ what catch a misused frame.
   [Riscv_Backend.md](Riscv_Backend.md#alloca),
   [Arm32_Backend.md](Arm32_Backend.md#alloca), [Avr_Backend.md](Avr_Backend.md#alloca),
   [Msp430_Backend.md](Msp430_Backend.md#alloca),
-  [Mmix_Backend.md](Mmix_Backend.md#alloca), [Wasm_Backend.md](Wasm_Backend.md#alloca)). The translator still has the fallback
-  for a target without `stack_alloca`, which none is now (docs/Plan.md, A11):
-  `__coro_stack_save`, `__coro_alloca` and `__coro_stack_restore`, calls of
-  `libc/common/costack.c`, a static arena (64 KiB, 1 KiB where `size_t` has 16 bits)
-  taken and given back in LIFO order, its overflow `CO_TRAP_NO_SPACE: co_alloca or
-  alloca`.
+  [Mmix_Backend.md](Mmix_Backend.md#alloca), [Wasm_Backend.md](Wasm_Backend.md#alloca)).
+  Until they did, the other targets took the memory from a static arena of the
+  runtime, `libc/common/costack.c` (64 KiB), taken and given back in LIFO order: a
+  fixed size, and a `longjmp` past one left it taken. It went once every backend had
+  the builtins (docs/Plan.md).
 - **In a coroutine**: `%p = __coro_push(fp, n, 16, "f")`, from the arena of the task
   the coroutine belongs to; the release is the same with `__coro_pop(fp, %p)` in place
   of the restore. A coroutine's shadow stack is unwound at every suspension, and the
@@ -399,8 +398,7 @@ Nothing else: the backend does not know what a coroutine is.
 ### 5.4 The runtime
 
 `co.c` is compiled into every target's `libc.a` but BESM-6's (and `wasm32-braam`'s),
-and into `libvcc.a` on the hosted targets, macOS included; `costack.c` likewise, but
-for wasm32. A program that uses no coroutine carries none of it. The header is private
+and into `libvcc.a` on the hosted targets, macOS included. A program that uses no coroutine carries none of it. The header is private
 to `co.c` and the translator (`coro.c`'s offsets, from the target's `int` and pointer
 sizes, matching `co.c`'s `struct co_header` as the target lays it out); `<coro.h>` has
 the user-facing macros and the two enums only. A trap prints `coroutine trap: <name>`

@@ -147,10 +147,9 @@ macro(wasm32_compile_libc_c name srcdir)
 endmacro()
 
 # The common sources but for those the bulk memory instructions replace (memory.s), and
-# the IEEE ones: the printf engine and the binary128 long double runtime.  No costack:
-# co_alloca takes the shadow stack here.
+# the IEEE ones: the printf engine and the binary128 long double runtime.
 set(WASM32_LIBC_C ${LIBC_C_COMMON} ${LIBC_C_IEEE})
-list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset costack)
+list(REMOVE_ITEM WASM32_LIBC_C memcpy memmove memset)
 foreach(name ${WASM32_LIBC_C})
     wasm32_compile_libc_c(${name} ${LIBC_COMMON_DIR})
 endforeach()

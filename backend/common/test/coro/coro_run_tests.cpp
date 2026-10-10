@@ -1,8 +1,7 @@
 //
 // Coroutines run on every target but BESM-6 (docs/Coroutines_in_C.md;
 // docs/Coroutines_Internals.md §5): the split pass's state machines, the runtime of
-// libc/common/co.c, and co_alloca's memory in a function (wasm32's shadow stack, the
-// arena of libc/common/costack.c elsewhere).  Each backend's coro_test.h defines the
+// libc/common/co.c, and co_alloca's memory in a function, on the stack.  Each backend's coro_test.h defines the
 // fixture CoroTest: Compile(src), CompileAndRunCoro(src) with main's result in
 // exit_status, and AddUnit(asm, tag) for a second unit.  The programs print nothing
 // that depends on the target's sizes.

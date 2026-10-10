@@ -987,7 +987,6 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         // The end of a coroutine's body: done.  (A non-void one cannot reach it.)
         if (ctx.coro && unalias(coro.result)->kind == TYPE_VOID)
             gen_coro_return(&ctx, NULL, NULL);
-        gen_alloca_release(&ctx);
         *label_seq            = ctx.temp_id;
         tl->u.function.body   = ctx.head;
         tl->u.function.locals = ctx.locals;
@@ -996,7 +995,6 @@ static Tac_TopLevel *translate_fn(const ExternalDecl *ast, int *label_seq)
         xfree(ctx.scopes);
         xfree(ctx.where);
         xfree(ctx.ret_var);
-        xfree(ctx.alloca_sp);
         xfree(ctx.breaks);
         if (ctx.label_pos_ready)
             defer_free_labels(&ctx.label_pos);

@@ -97,7 +97,7 @@ endmacro()
 
 # The shared C library with the printf engine, and the binary32 soft-float runtime;
 # from libc/ilp32 the long long division and conversions; the AVR's own C.
-foreach(name atoi co costack doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset printf
+foreach(name atoi co doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset printf
         puts putchar snprintf sprintf
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
         strtok float32 muldi3)

@@ -240,9 +240,9 @@ static void emit_return_int(TacCtx *ctx, int status)
 }
 
 // A call of routine `name` of return type `ret` (owned), with `n` arguments (owned) of
-// types `params` (owned); declared by an EXTERN.  Not yet in the list.
-static Tac_Instruction *make_call(TacCtx *ctx, const char *name, Tac_Type *ret, int n,
-                                  Tac_Val **args, Tac_Type **params)
+// types `params` (owned); declared by an EXTERN.  Its value, or NULL for void.
+static Tac_Val *emit_call(TacCtx *ctx, const char *name, Tac_Type *ret, int n, Tac_Val **args,
+                          Tac_Type **params)
 {
     Tac_Type *ft          = tac_kind(TAC_TYPE_FUN_TYPE);
     Tac_Type **pt         = &ft->u.fun_type.param_types;
@@ -260,14 +260,6 @@ static Tac_Instruction *make_call(TacCtx *ctx, const char *name, Tac_Type *ret, 
     if (ret->kind != TAC_TYPE_VOID)
         in->u.fun_call.dst = new_var_val(ctx, tac_clone_type(ret));
     tac_record_extern_tac(ctx, name, tac_clone_type(ft));
-    return in;
-}
-
-// The same call appended.  Its value, or NULL for void.
-static Tac_Val *emit_call(TacCtx *ctx, const char *name, Tac_Type *ret, int n, Tac_Val **args,
-                          Tac_Type **params)
-{
-    Tac_Instruction *in = make_call(ctx, name, ret, n, args, params);
     append(ctx, in);
     return in->u.fun_call.dst ? val_var(in->u.fun_call.dst->u.var_name) : NULL;
 }
@@ -530,19 +522,19 @@ static void emit_pop(TacCtx *ctx, Tac_Val *p)
     emit_call(ctx, "__coro_pop", tac_kind(TAC_TYPE_VOID), 2, args, params);
 }
 
-// co_alloca's and alloca's memory in a function: the stack where the backend expands
-// the builtins in place, else the runtime's LIFO arena (libc/common/costack.c).
+// co_alloca's and alloca's memory in a function: the stack, through the builtins every
+// backend expands in place.
 static const char *stack_builtin(const char *what)
 {
     if (strcmp(what, "stack_save") == 0)
-        return target_config->stack_alloca ? "__builtin_stack_save" : "__coro_stack_save";
+        return "__builtin_stack_save";
     if (strcmp(what, "alloca") == 0)
-        return target_config->stack_alloca ? "__builtin_alloca" : "__coro_alloca";
-    return target_config->stack_alloca ? "__builtin_stack_restore" : "__coro_stack_restore";
+        return "__builtin_alloca";
+    return "__builtin_stack_restore";
 }
 
-// bytes = (bytes + 15) & -16, in the variable `bytes`: a multiple of 16, as the arena
-// takes it.
+// bytes = (bytes + 15) & -16, in the variable `bytes`: a multiple of 16, as a
+// coroutine's frame and the task's arena take it.
 static void emit_round16(TacCtx *ctx, const Tac_Val *bytes)
 {
     Tac_Instruction *rnd = tac_new_instruction(TAC_INSTRUCTION_BINARY);
@@ -559,59 +551,13 @@ static void emit_round16(TacCtx *ctx, const Tac_Val *bytes)
     append(ctx, msk);
 }
 
-// alloca(n) (docs/Plan.md): memory until the function returns.  Where the backend
-// expands the builtins in place (stack_alloca), it rounds n and its epilogue gives the
-// memory back.  On the arena the mark is taken at the function's entry and restored at
-// each return, by gen_alloca_release.
+// alloca(n) (docs/Plan.md): memory until the function returns.  The backend rounds n,
+// and its epilogue gives the memory back.
 Tac_Val *gen_alloca(TacCtx *ctx, Expr *e)
 {
-    Tac_Val *n = gen_expr(ctx, e->u.call.args);
-    if (!target_config->stack_alloca) {
-        if (!ctx->alloca_sp)
-            ctx->alloca_sp = new_typed_temp(ctx, void_ptr());
-        Tac_Val *bytes      = new_var_val(ctx, size_type());
-        Tac_Instruction *cp = tac_new_instruction(TAC_INSTRUCTION_COPY);
-        cp->u.copy.src      = n;
-        cp->u.copy.dst      = dup_val(bytes);
-        append(ctx, cp);
-        emit_round16(ctx, bytes);
-        n = bytes;
-    }
-    Tac_Val *args[]    = { n };
+    Tac_Val *args[]    = { gen_expr(ctx, e->u.call.args) };
     Tac_Type *params[] = { size_type() };
     return emit_call(ctx, stack_builtin("alloca"), void_ptr(), 1, args, params);
-}
-
-// The arena's mark saved at the entry of a function that called alloca, and restored
-// before each of its returns and at its end, when that can be reached.
-void gen_alloca_release(TacCtx *ctx)
-{
-    if (!ctx->alloca_sp)
-        return;
-    Tac_Instruction *save = make_call(ctx, stack_builtin("stack_save"), void_ptr(), 0, NULL, NULL);
-    tac_free_val(save->u.fun_call.dst);
-    save->u.fun_call.dst = val_var(ctx->alloca_sp);
-    save->next           = ctx->head;
-    ctx->head            = save;
-    if (!ctx->tail)
-        ctx->tail = save;
-
-    for (Tac_Instruction *prev = save; prev->next; prev = prev->next) {
-        if (prev->next->kind != TAC_INSTRUCTION_RETURN)
-            continue;
-        Tac_Val *args[]     = { val_var(ctx->alloca_sp) };
-        Tac_Type *params[]  = { void_ptr() };
-        Tac_Instruction *in = make_call(ctx, stack_builtin("stack_restore"), tac_kind(TAC_TYPE_VOID),
-                                        1, args, params);
-        in->next   = prev->next;
-        prev->next = in;
-        prev       = in;
-    }
-    if (ctx->tail->kind != TAC_INSTRUCTION_RETURN && ctx->tail->kind != TAC_INSTRUCTION_JUMP) {
-        Tac_Val *args[]    = { val_var(ctx->alloca_sp) };
-        Tac_Type *params[] = { void_ptr() };
-        emit_call(ctx, stack_builtin("stack_restore"), tac_kind(TAC_TYPE_VOID), 1, args, params);
-    }
 }
 
 static Tac_Val *start_frame(TacCtx *ctx, Expr *e)

@@ -118,7 +118,7 @@ endmacro()
 # The shared C library, and the binary32 and binary64
 # soft-float runtimes; from libc/ilp32 the long long division and conversions and the
 # binary64 frexp/ldexp/modf; the MSP430 EABI names GCC and clang call, over all of them.
-foreach(name atoi co costack doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 printf
+foreach(name atoi co doprnt fabs fma fmax fmin memchr memcmp memcpy memmove memset muldi3 printf
         puts putchar snprintf sprintf
         strcat strchr strcmp strcpy strerror strlen strncat strncmp strncpy strrchr strstr
         strtok float32 float64)

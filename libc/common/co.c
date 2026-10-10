@@ -37,7 +37,7 @@ static void print(const char *s)
         putchar(*s);
 }
 
-/* The trap `name`, and the coroutine it concerns when there is one (costack.c too). */
+/* The trap `name`, and the coroutine it concerns when there is one. */
 _Noreturn void __coro_trap(const char *name, const char *coroutine)
 {
     print("coroutine trap: ");

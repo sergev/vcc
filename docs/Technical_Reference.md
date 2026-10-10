@@ -523,7 +523,7 @@ instruction selection on its own.
 | `libc/riscv64/sqrt.s` | `sqrt` and `sqrtf` (`fsqrt.d`, `fsqrt.s`), for both widths; each other target has its own |
 | `libc/common/doprnt.c` | The `printf` engine for the byte-addressed IEEE-754 targets |
 | `libc/common/float128.c` | binary128 `long double` soft-float (`__addtf3`, `__lttf2`, …), built on `libutil/float128.c` |
-| `libc/common/co.c`, `costack.c` | The coroutine runtime, in every target's `libc.a` but BESM-6's and in the hosted targets' `libvcc.a`; `costack.c`, the arena `co_alloca` takes in a function, everywhere but wasm32 ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
+| `libc/common/co.c` | The coroutine runtime, in every target's `libc.a` but BESM-6's and in the hosted targets' `libvcc.a` ([Coroutines_Internals.md](Coroutines_Internals.md) §5) |
 | `libc/lp64/frexp.c`, `ldexp.c`, `modf.c` | Bit-level math for LP64 targets |
 | `libc/ilp32/frexp.c`, `ldexp.c`, `modf.c`, `int64.c`, `int64conv.c` | Bit-level math, the `long long` division, and its conversions to and from floating point, for ILP32 targets |
 | `libc/riscv64/link.ld` | Linker script for qemu `virt` (load address 0x80000000) |

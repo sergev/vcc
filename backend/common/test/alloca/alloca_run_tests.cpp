@@ -1,10 +1,9 @@
 //
-// alloca (<alloca.h>, docs/Plan.md) run on every target but BESM-6: the memory lives
-// until the function returns, on wasm32's shadow stack or the arena of
-// libc/common/costack.c, which a target gives up as its backend learns the builtins.
-// Through each backend's coroutine fixture CoroTest (test/coro_test.h).  The programs
-// print nothing that depends on the target's sizes, and stay within the 1 KiB arena of
-// a 16-bit size_t.
+// alloca (<alloca.h>, docs/Plan.md) run on every target but BESM-6 (which has its own,
+// backend/besm6/test/alloca_tests.cpp): the memory lives on the stack until the function
+// returns.  Through each backend's coroutine fixture CoroTest (test/coro_test.h).  The
+// programs print nothing that depends on the target's sizes, and take little stack, for
+// AVR's and MSP430's sake.
 //
 #include <gtest/gtest.h>
 
@@ -218,36 +217,13 @@ int main(void)
     EXPECT_EQ(0, exit_status);
 }
 
-// On the arena, running out traps.  (On a stack it is a stack overflow.)
-TEST_F(AllocaTest, AllocaArenaOverflow)
-{
-    if (target_config->stack_alloca)
-        GTEST_SKIP() << "alloca on the stack";
-    EXPECT_EQ("coroutine trap: CO_TRAP_NO_SPACE: co_alloca or alloca\n", CompileAndRunCoro(R"(
-#include <alloca.h>
-#include <stdio.h>
-
-int main(void)
-{
-    for (;;)
-        if (!alloca(256))
-            break;
-    puts("not reached");
-    return 0;
-}
-)"));
-    EXPECT_EQ(255, exit_status);
-}
-
 // longjmp out of a function that took memory gives it back with the stack: twenty
-// thousand times 200 bytes would not fit otherwise.  Not on the arena, which only a
-// return gives back, nor where the runtime has no setjmp: wasm32, and the bare-metal
-// AArch64, ARM32 and RISC-V (aarch64-darwin has the system's).
+// thousand times 200 bytes would not fit otherwise.  Not where the runtime has no
+// setjmp: wasm32, and the bare-metal AArch64, ARM32 and RISC-V (aarch64-darwin has the
+// system's).
 TEST_F(AllocaTest, AllocaLongjmp)
 {
     static const char *const no_setjmp[] = { "wasm32", "aarch64", "arm32", "riscv32", "riscv64" };
-    if (!target_config->stack_alloca)
-        GTEST_SKIP() << "alloca on the arena";
     for (const char *name : no_setjmp)
         if (strcmp(target_config->name, name) == 0)
             GTEST_SKIP() << "no setjmp in the runtime";

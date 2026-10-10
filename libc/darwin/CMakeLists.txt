@@ -1,7 +1,7 @@
 #
 # The hosted macOS target aarch64-darwin: programs assembled and linked by the system C
 # compiler against libSystem, which supplies the C library and the startup.  Ours are
-# the headers, libSystem-compatible, and libvcc.a: the coroutine runtime (co, costack).
+# the headers, libSystem-compatible, and libvcc.a: the coroutine runtime (co).
 # No __va_arg: Apple's va_list is a pointer walked in the header.  The code generator is
 # genaarch64 --darwin: Mach-O, the GOT and Apple's arm64 calling convention.
 #
@@ -67,7 +67,7 @@ foreach(dir ${dirs})
     list(APPEND deps ${files})
 endforeach()
 set(objs "")
-foreach(src co costack)
+foreach(src co)
     add_custom_command(OUTPUT ${out}/${src}.o
         COMMAND ${SystemCpp} -E -nostdinc ${includes} ${LIBC_COMMON_DIR}/${src}.c
                 -o ${out}/${src}.i

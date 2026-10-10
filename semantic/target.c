@@ -61,8 +61,7 @@ static const Target targets[] = {
       16,       // bitfield_access_bits: clang's access units, at most an int
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from Y
+      0 },      // no_coroutines
 
     { "msp430",
       1, 1,   // _Bool
@@ -93,8 +92,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from r4
+      0 },      // no_coroutines
 
     { "arm32",
       1, 1,   // _Bool
@@ -124,8 +122,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from r11
+      0 },      // no_coroutines
 
     { "aarch64",
       1, 1,   // _Bool
@@ -155,8 +152,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from x29
+      0 },      // no_coroutines
 
     { "x86_64",
       1, 1,   // _Bool
@@ -187,8 +183,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from rbp
+      0 },      // no_coroutines
 
     { "riscv32",
       1, 1,   // _Bool
@@ -218,8 +213,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       1,        // bitfield_unit_per_field: the FP calling convention counts bit-fields
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from s0
+      0 },      // no_coroutines
 
     { "riscv64",
       1, 1,   // _Bool
@@ -248,8 +242,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       1,        // bitfield_unit_per_field: the FP calling convention counts bit-fields
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from s0
+      0 },      // no_coroutines
 
     { "mmix",
       1, 1,   // _Bool
@@ -279,8 +272,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from $253
+      0 },      // no_coroutines
 
     // BESM-6: 48-bit word-oriented machine.
     // sizeof() values are in 8-bit bytes (CHAR_BIT = 8).
@@ -315,8 +307,7 @@ static const Target targets[] = {
       1,    // no_loop_opt
       1,    // big-endian: chars are packed from the most significant end of the word,
             // and so are bit-fields
-      .no_coroutines = 1,
-      .stack_alloca  = 1 }, // alloca on the stack (r15), released by b/ret
+      .no_coroutines = 1 },
 
     // AArch64 on macOS: Apple's arm64 ABI.  As AArch64 but for a signed plain char and a
     // long double that is double; va_arg walks the stack, where every variadic argument is.
@@ -347,8 +338,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       0,        // bitfield_unit_per_field
       0,        // jump_tables
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the machine stack, the frame from x29
+      0 },      // no_coroutines
 
     // WebAssembly, as clang's wasm32-unknown-unknown: ILP32 with a signed plain char and a
     // software binary128 long double.
@@ -381,8 +371,7 @@ static const Target targets[] = {
       0,        // bitfield_access_bits
       1,        // bitfield_unit_per_field: clang's single-element rule counts bit-fields
       1,        // jump_tables: br_table
-      0,        // no_coroutines
-      1 },      // stack_alloca: on the shadow stack
+      0 },      // no_coroutines
 };
 // clang-format on
 

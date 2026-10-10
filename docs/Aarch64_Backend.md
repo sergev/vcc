@@ -277,8 +277,8 @@ and `a64_is_ld` does not. A conversion to or from it becomes the `double` one, o
 which a `long double` member is a `double` one.
 
 It links with the system's C compiler: `cc -o a.out objects… -lvcc`. There is no
-`-no-pie`, and `libvcc.a` holds only the coroutine runtime (`libc/common/co.c` and
-`costack.c`), this target needing no other of ours. The headers are
+`-no-pie`, and `libvcc.a` holds only the coroutine runtime (`libc/common/co.c`), this
+target needing no other of ours. The headers are
 `libc/darwin/include` ahead of the bare-metal ones. They agree with libSystem's on what a
 program hands to it:
 - `errno` is `(*__error())`;

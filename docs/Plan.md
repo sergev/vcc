@@ -10,10 +10,9 @@ stack, release on `longjmp`, and no runtime call.
 ## Where we start
 
 - **The front end is done.** `<alloca.h>` defines `alloca(n)` as `__builtin_alloca(n)`;
-  `semantic/` rejects it as a value, in a coroutine and on BESM-6. `gen_alloca`
-  (`translator/coro.c`) lowers a call: on a `stack_alloca` target to `__builtin_alloca(n)`
-  with the raw size, elsewhere to `__coro_alloca` on the arena, the mark saved at entry and
-  restored before every `RETURN` by `gen_alloca_release`. The shared run suite
+  `semantic/` rejects it as a value and in a coroutine. `gen_alloca`
+  (`translator/coro.c`) lowers a call to `__builtin_alloca(n)` with the raw size. The
+  shared run suite
   `backend/common/test/alloca/alloca_run_tests.cpp` runs in every backend's test binary.
   Its `AllocaLongjmp` case runs where alloca is on the stack and the runtime has
   `setjmp`: not wasm32, nor the bare-metal AArch64, ARM32 and RISC-V runtimes (the list
@@ -55,14 +54,11 @@ stack, release on `longjmp`, and no runtime call.
   unchanged. Run on all three paths (b6sim, and dubna for Madlen and Bemsh); no
   `longjmp` case, the BESM-6 runtime having no `setjmp`. `<alloca.h>` is installed
   with the compiler-owned headers.
-- **No target is left on the arena** (`libc/common/costack.c`): every coroutine target
-  sets `stack_alloca`. The translator's arena branch is dead code until A11 removes it.
-- **Every backend assumes the stack pointer is fixed after the prologue:**
-  - The outgoing stack arguments are stored at `sp + off` (riscv, aarch64, arm32, x86,
-    msp430, mmix). AVR and BESM-6 push them instead.
-  - The epilogues add the frame size back to sp.
-  - Several backends address slots from sp: the sp frame modes of riscv, aarch64, arm32 and
-    x86, and always on msp430 and mmix.
+- **The arena is gone** (A11). Until every backend had the builtins, the others took
+  the memory from `libc/common/costack.c`, a static LIFO arena, the translator saving
+  its mark at a function's entry and restoring it at each return. The file, the
+  translator's branch, its tests and `Target.stack_alloca`, which said which way a
+  target went, are removed; every backend now expands the builtins.
 
 ## Design
 
@@ -74,12 +70,9 @@ stack, release on `longjmp`, and no runtime call.
    The backend rounds `n` up to the target's stack alignment and returns an address aligned
    for `max_align_t`. `co_alloca` keeps rounding to 16 before the call, so on the native
    targets it uses the same builtin.
-3. **Release by the epilogue.** On a `stack_alloca` target the epilogue restores sp from the
-   frame pointer, so a plain `alloca` needs no save or restore in TAC.
-
-   On an arena target, until its backend learns the builtins, the translator saves the mark
-   at function entry and restores it before every `RETURN` and at a reachable end.
-4. **Backend contract.** A backend that sets `stack_alloca` supports all three builtins inline.
+3. **Release by the epilogue.** The epilogue restores sp from the frame pointer, so a
+   plain `alloca` needs no save or restore in TAC.
+4. **Backend contract.** Every backend supports all three builtins inline.
    They are not calls: no clobbers, and they do not end a leaf. A function containing any of
    them:
    - gets a frame-pointer frame and gives up frameless, red-zone, sp-addressed and tail-call
@@ -104,18 +97,7 @@ and the coroutine run suite, now on the stack; an interop test with the referenc
 compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack` in
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
-(`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A11. Retire the arena path
-
-Once every target sets `stack_alloca`:
-- Remove `gen_alloca_release` and the arena branch of `gen_alloca` from the translator,
-  with the run suite's `AllocaArenaOverflow`, now skipped everywhere (the translator's
-  `AllocaOnArena` went with A8).
-- Mark `co_alloca`'s arena use outside coroutines as gone in
-  `docs/Coroutines_Internals.md`.
-- Decide whether `costack.c`'s `__coro_stack_*` stay. They are still needed for coroutines'
-  task arena only if `__coro_push`/`__coro_pop` use them.
+(`docs/Coroutines_*.md`, `CLAUDE.md`) the target's name.
 
 ### A12. Documentation
 
