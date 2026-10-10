@@ -561,14 +561,14 @@ static char *find_pass(const char *envvar, const char *name)
         return own(strdup(override));
 
     if (!exe_dir) {
-        error("cannot find %s: the directory %s runs from is unknown (set %s)", name,
+        error("cannot find '%s': the directory %s runs from is unknown; set %s", name,
               progname, envvar);
         return NULL;
     }
     char *path = concat(exe_dir, "/");
     path = concat(path, name);
     if (access(path, X_OK) != 0) {
-        error("cannot find %s", path);
+        error("cannot find '%s'; set %s to its path", path, envvar);
         return NULL;
     }
     return path;
@@ -703,7 +703,7 @@ static int run(const char *tool, char *const argv[])
 
     pid_t pid = fork();
     if (pid < 0) {
-        error("cannot run %s: %s", tool, strerror(errno));
+        error("cannot run '%s': %s", tool, strerror(errno));
         return 1;
     }
     if (pid == 0) {
@@ -711,7 +711,7 @@ static int run(const char *tool, char *const argv[])
         // Only reached if the exec failed.  _exit(), not exit(): this is a copy of
         // the parent, and letting it flush the parent's buffers or run the parent's
         // atexit() handlers would unlink the very temp files still in use.
-        fprintf(stderr, "%s: error: cannot run %s: %s\n", progname, tool, strerror(errno));
+        fprintf(stderr, "%s: error: cannot run '%s': %s\n", progname, tool, strerror(errno));
         fflush(stderr);
         _exit(127);
     }
@@ -723,13 +723,23 @@ static int run(const char *tool, char *const argv[])
             return 1;
         }
     }
+    const char *slash = strrchr(tool, '/');
+    const char *name  = slash ? slash + 1 : tool;
     if (WIFSIGNALED(status)) {
-        error("%s killed by signal %d", tool, WTERMSIG(status));
+        error("'%s' was killed by signal %d", name, WTERMSIG(status));
         return 1;
     }
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-        error("%s exited with status %d", tool, WEXITSTATUS(status));
-        return WEXITSTATUS(status);
+        // A tool that fails has said why: 1 is an error in the input, 2 an
+        // internal compiler error, 127 a tool that could not be run. Anything
+        // else would leave the user without a message.
+        int code = WEXITSTATUS(status);
+        if (code == 1 || code == 2 || code == 127) {
+            errflag = 1;
+        } else {
+            error("'%s' failed with exit status %d", name, code);
+        }
+        return code;
     }
     return 0;
 }
@@ -916,7 +926,7 @@ static int compile_one(const char *src)
         // Guard against overwriting the source on a case-insensitive filesystem,
         // where replace_suffix("foo.S", "s") == "foo.s" names the same file.
         if ((opt_E || opt_S) && sfile && same_file(src, sfile)) {
-            error("%s: refusing to overwrite input; use -o", src);
+            error("'%s': refusing to overwrite the input; use '-o'", src);
             return 1;
         }
 
@@ -933,7 +943,7 @@ static int compile_one(const char *src)
     }
 
     if (suf != 'c') {
-        error("don't know how to compile %s", src);
+        error("'%s': unknown file type; name it .c, .S, .s, .o or .a, or use '-x'", src);
         return 1;
     }
 
@@ -1027,7 +1037,7 @@ static int link_hosted(const char *libdir)
     if (!opt_nostdlib) {
         char *lib = concat(libdir, "/libvcc.a");
         if (access(lib, R_OK) != 0) {
-            error("%s not found; or use -nostdlib", lib);
+            error("'%s' not found; install the runtime, or use '-nostdlib'", lib);
             vec_free(&av);
             return 1;
         }
@@ -1052,7 +1062,7 @@ static int braam_stamp(const char *path)
 {
     FILE *f = fopen(path, "rb");
     if (!f) {
-        error("cannot read %s", path);
+        error("cannot read '%s': %s", path, strerror(errno));
         return 1;
     }
     fseek(f, 0, SEEK_END);
@@ -1065,7 +1075,7 @@ static int braam_stamp(const char *path)
         fclose(f);
         free(data);
         free(out);
-        error("%s is not a wasm module", path);
+        error("'%s' is not a wasm module", path);
         return 1;
     }
     fclose(f);
@@ -1111,7 +1121,7 @@ static int braam_stamp(const char *path)
     free(data);
     free(out);
     if (!ok)
-        error("cannot write %s", path);
+        error("cannot write '%s'", path);
     return ok ? 0 : 1;
 }
 
@@ -1146,7 +1156,7 @@ static int link_objects(void)
             break;
         char *script = linkscript ? linkscript : concat(libdir, "/link.ld");
         if (access(script, R_OK) != 0) {
-            error("linker script %s not found; use -T", script);
+            error("linker script '%s' not found; use '-T'", script);
             vec_free(&av);
             return 1;
         }
@@ -1165,11 +1175,11 @@ static int link_objects(void)
         char *crt0 = concat(libdir, "/crt0.o");
         if (access(crt0, R_OK) != 0) {
             if (target->arch == ARCH_BESM6)
-                error("%s not found: the BESM-6 crt0.o and libc.a come from v7besm and "
-                      "must be installed into %s; or use -nostdlib",
+                error("'%s' not found: the BESM-6 crt0.o and libc.a come from v7besm and "
+                      "must be installed into %s; or use '-nostdlib'",
                       crt0, libdir);
             else
-                error("%s not found; or use -nostdlib", crt0);
+                error("'%s' not found; install the runtime, or use '-nostdlib'", crt0);
             vec_free(&av);
             return 1;
         }
@@ -1221,15 +1231,15 @@ static void select_target(const char *name)
     target = find_target(name);
     if (target)
         return;
-    error("unknown target %s", name);
-    fprintf(stderr, "Known targets:");
+    error("unknown target '%s'", name);
+    fprintf(stderr, "%s: note: the targets are", progname);
     for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++)
         fprintf(stderr, " %s", targets[i].name);
     fprintf(stderr, "\n");
     exit(1);
 }
 
-static void usage(void)
+static void usage(int status)
 {
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
@@ -1264,7 +1274,7 @@ static void usage(void)
     printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf("Inputs are dispatched by suffix: .c (compile), "
            ".S (preprocess + assemble), .s (assemble), .o and .a (link).\n");
-    exit(1);
+    exit(status);
 }
 
 int main(int argc, char *argv[])
@@ -1297,8 +1307,8 @@ int main(int argc, char *argv[])
             char *end;
             braam_pages = strtoul(arg + 16, &end, 10);
             if (*end || braam_pages == 0 || braam_pages > 1600) {
-                error("bad %s: 1 to 1600 pages of 64 KiB", arg);
-                usage();
+                error("invalid value in '%s': 1 to 1600 pages of 64 KiB", arg);
+                exit(1);
             }
             continue;
         }
@@ -1307,9 +1317,12 @@ int main(int argc, char *argv[])
                 select_target(arg + 9);
             } else if (arg[8] == '\0' && i + 1 < argc) {
                 select_target(argv[++i]);
+            } else if (arg[8] == '\0') {
+                error("missing argument to '%s'", arg);
+                exit(1);
             } else {
-                error("unknown option %s", arg);
-                usage();
+                error("unknown option '%s'", arg);
+                exit(1);
             }
             continue;
         }
@@ -1320,7 +1333,13 @@ int main(int argc, char *argv[])
                 i++;
             continue;
         }
-        if (strcmp(arg, "-x") == 0 && i + 1 < argc) {
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0)
+            usage(0);
+        if (strcmp(arg, "-x") == 0 && i + 1 >= argc) {
+            error("missing argument to '%s'", arg);
+            exit(1);
+        }
+        if (strcmp(arg, "-x") == 0) {
             const char *lang = argv[++i];
             if (strcmp(lang, "c") == 0)
                 opt_x = 'c';
@@ -1331,8 +1350,8 @@ int main(int argc, char *argv[])
             else if (strcmp(lang, "none") == 0)
                 opt_x = 0;
             else {
-                error("unknown language %s", lang);
-                usage();
+                error("unknown language '%s'", lang);
+                exit(1);
             }
             continue;
         }
@@ -1357,8 +1376,8 @@ int main(int argc, char *argv[])
             else if (strcmp(arg + 2, "madlen") == 0)
                 codegen_dialect = "--madlen";
             else {
-                error("unknown option %s", arg);
-                usage();
+                error("unknown option '%s'", arg);
+                exit(1);
             }
             break;
         case 'E':
@@ -1378,8 +1397,8 @@ int main(int argc, char *argv[])
         case 'T':
             // Options with a value, glued (-ofile) or separate (-o file).
             if (arg[2] == '\0' && i + 1 >= argc) {
-                error("%s requires an argument", arg);
-                usage();
+                error("missing argument to '%s'", arg);
+                exit(1);
             }
             {
                 char *val = arg[2] ? arg + 2 : argv[++i];
@@ -1403,8 +1422,8 @@ int main(int argc, char *argv[])
                 const char flag[3] = { '-', arg[1], '\0' };
                 vec_push(&cppflags, concat(flag, argv[++i]));
             } else {
-                error("%s requires an argument", arg);
-                usage();
+                error("missing argument to '%s'", arg);
+                exit(1);
             }
             break;
         case 'L':
@@ -1417,30 +1436,30 @@ int main(int argc, char *argv[])
                 const char flag[3] = { '-', arg[1], '\0' };
                 vec_push(&ldflags, concat(flag, argv[++i]));
             } else {
-                error("%s requires an argument", arg);
-                usage();
+                error("missing argument to '%s'", arg);
+                exit(1);
             }
             break;
         default:
-            error("unknown option %s", arg);
-            usage();
+            error("unknown option '%s'", arg);
+            exit(1);
         }
     }
 
     if (sources.len == 0) {
         error("no input files");
-        usage();
+        exit(1);
     }
     if ((opt_E || opt_S || opt_c) && outfile && sources.len > 1) {
-        error("cannot specify -o with -c, -S or -E and multiple input files");
+        error("cannot specify '-o' with '-c', '-S' or '-E' and multiple input files");
         return 1;
     }
     if (codegen_dialect && target->arch != ARCH_BESM6) {
-        error("-S%s needs -t besm6", codegen_dialect + 2);
+        error("'-S%s' requires target 'besm6'", codegen_dialect + 2);
         return 1;
     }
     if (linkscript && target->arch == ARCH_BESM6) {
-        error("-T is not supported for besm6");
+        error("'-T' is not supported on target 'besm6'");
         return 1;
     }
 

@@ -617,7 +617,7 @@ TEST_F(CcDriver, UnknownTargetFails)
 {
     WriteSource("t.c", "int x;\n");
     EXPECT_NE(Vcc({ "-t", "pdp11", "-E", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("unknown target pdp11"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("unknown target 'pdp11'"), std::string::npos) << Stderr();
     EXPECT_NE(Stderr().find("riscv64"), std::string::npos) << Stderr();
 }
 
@@ -961,7 +961,10 @@ TEST_F(CcDriver, CompileErrorFails)
 {
     WriteSource("t.c", "int main(void) { return x; }\n");
     EXPECT_NE(Vcc({ "-S", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("exited with status"), std::string::npos) << Stderr();
+    // The pass reports the error; the driver adds nothing of its own.
+    EXPECT_NE(Stderr().find("t.c:1:25: error: "), std::string::npos) << Stderr();
+    EXPECT_EQ(Stderr().find("exit status"), std::string::npos) << Stderr();
+    EXPECT_EQ(Stderr().find("vcc: error"), std::string::npos) << Stderr();
 }
 
 // The diagnostics of each pass name the file, line and column.
@@ -1008,14 +1011,14 @@ TEST_F(CcDriver, RejectsDialectForRiscv64)
 {
     WriteSource("t.c", "int x;\n");
     EXPECT_NE(Vcc({ "-t", "riscv64", "-Smadlen", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("-Smadlen needs -t besm6"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("'-Smadlen' requires target 'besm6'"), std::string::npos) << Stderr();
 }
 
 TEST_F(CcDriver, RejectsLinkScriptForBesm6)
 {
     WriteSource("t.o", "");
     EXPECT_NE(Vcc({ "-t", "besm6", "-T", "x.ld", "t.o" }), 0);
-    EXPECT_NE(Stderr().find("-T is not supported for besm6"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("'-T' is not supported on target 'besm6'"), std::string::npos) << Stderr();
 }
 
 TEST_F(CcDriver, RejectsNoInputs)
@@ -1035,7 +1038,25 @@ TEST_F(CcDriver, RejectsUnknownSuffix)
 {
     WriteSource("t.f", "");
     EXPECT_NE(Vcc({ "-c", "t.f" }), 0);
-    EXPECT_NE(Stderr().find("don't know how to compile t.f"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("'t.f': unknown file type"), std::string::npos) << Stderr();
+}
+
+TEST_F(CcDriver, HelpSucceeds)
+{
+    EXPECT_EQ(Vcc({ "--help" }), 0);
+    EXPECT_EQ(Vcc({ "-h" }), 0);
+}
+
+// An option missing its value says so, and the usage text is not dumped after it.
+TEST_F(CcDriver, MissingOptionArgument)
+{
+    EXPECT_NE(Vcc({ "-x" }), 0);
+    EXPECT_NE(Stderr().find("error: missing argument to '-x'"), std::string::npos) << Stderr();
+    EXPECT_NE(Vcc({ "--target" }), 0);
+    EXPECT_NE(Stderr().find("error: missing argument to '--target'"), std::string::npos)
+        << Stderr();
+    EXPECT_NE(Vcc({ "--bogus" }), 0);
+    EXPECT_NE(Stderr().find("error: unknown option '--bogus'"), std::string::npos) << Stderr();
 }
 
 //
@@ -1437,7 +1458,7 @@ TEST_F(CcDriver, StagedPrefixMissingPass)
     fs::remove(prefix + "/bin/vparse");
     WriteSource("t.c", "int x;\n");
     EXPECT_NE(StagedVcc(prefix, { "-t", "riscv64", "-S", "t.c" }), 0);
-    EXPECT_NE(Stderr().find("cannot find " + prefix + "/bin/vparse"), std::string::npos)
+    EXPECT_NE(Stderr().find("cannot find '" + prefix + "/bin/vparse'"), std::string::npos)
         << Stderr();
 }
 
@@ -1510,7 +1531,7 @@ TEST_F(CcDriver, HostedLinkWithoutLibvcc)
     WriteSource("t.o", "");
     setenv("VCC_LD", "true", 1);
     EXPECT_NE(StagedVcc(prefix, { "-t", "x86_64-linux", "t.o" }), 0);
-    EXPECT_NE(Stderr().find("libvcc.a not found"), std::string::npos) << Stderr();
+    EXPECT_NE(Stderr().find("libvcc.a' not found"), std::string::npos) << Stderr();
 }
 
 // A staged installation for the host, with no -t: a program built by the default
