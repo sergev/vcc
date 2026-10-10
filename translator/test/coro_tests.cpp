@@ -230,3 +230,8 @@ TEST_F(TranslateTestMmix, AllocaOnStack)
 {
     ExpectOnStack(CompileToYaml(alloca_fn));
 }
+
+TEST_F(TranslateTest, AllocaOnStackBesm6)
+{
+    ExpectOnStack(CompileToYaml(alloca_fn));
+}

@@ -246,7 +246,7 @@ static const Type *result_of(const Symbol *sym)
 // coroutine's frame outlives.  BESM-6 has neither the arena nor the builtin yet.
 void check_alloca_call(void)
 {
-    if (target_config->no_coroutines)
+    if (!target_config->stack_alloca)
         fatal_error("alloca is not supported on target %s", target_config->name);
     if (in_coro)
         fatal_error("alloca in a coroutine: its frame outlives the stack");

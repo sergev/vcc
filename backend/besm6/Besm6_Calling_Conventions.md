@@ -202,3 +202,31 @@ Example:
             ,sti, 13
          14 ,mtj, 15
          13 ,uj,
+
+## alloca
+
+`alloca(n)` (`<alloca.h>`, a call of `__builtin_alloca`) takes its memory from the top
+of the stack, which grows upward. `codegen_intrinsic` (`intrinsics.c`) expands it in
+place: the result is r15 made a `void *` fat pointer to byte #0 of its word, then r15 is
+raised by the words of `n` bytes:
+
+        ,ita, 15
+        ,aox, =:64          ; the fat marker, offset_enc 5
+      7 ,atx, p
+     15 ,utm, 2             ; a constant n: ceil(n/6) words
+
+A computed `n` takes `n/6 + 1` words, the count from `b/udiv`, then pushed and popped
+into C so that the `utm` adds it:
+
+      6 ,xta,               ; n
+        ,xts, =6
+        ,call, b/udiv
+        ,xts,               ; push the count
+     15 ,wtc,               ; pop it into C
+     15 ,utm, 1             ; r15 += C + 1
+
+Arguments pushed for a later call go above the memory. `b/ret` sets r15 back from r7
+(`7 ,mtj, 15`), so the function's return gives the memory back, with no change to the
+prologue or the epilogue. A parameterless `_Noreturn` function, which has no `b/ret`,
+never gives it back, and never needs to. BESM-6 has no coroutines, so `co_alloca` and
+the other two stack builtins never reach it.

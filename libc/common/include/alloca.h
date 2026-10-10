@@ -1,9 +1,8 @@
 /*
  * <alloca.h> — alloca(n): n bytes, aligned for any object, that live until the
- * calling function returns.  The compiler expands __builtin_alloca: on the stack
- * where the backend has the builtins, else on the runtime's arena (64 KiB, 1 KiB
- * with a 16-bit size_t), given back at each return.  Not in a coroutine, and not on
- * BESM-6 (docs/Plan.md).
+ * calling function returns.  The backend expands __builtin_alloca in place, on the
+ * stack, and the function's return gives the memory back.  Not in a coroutine
+ * (docs/Plan.md).
  */
 #ifndef _ALLOCA_H
 #define _ALLOCA_H

@@ -38,6 +38,7 @@ add_executable(besm-tests
     test/unix_tests.cpp
     test/unix_link_tests.cpp
     test/unix_run_tests.cpp
+    test/alloca_tests.cpp
     test/bemsh_tests.cpp
     test/bemsh_run_tests.cpp
     test/bemsh_printf_tests.cpp

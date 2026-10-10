@@ -7,6 +7,7 @@
 #include "frame.h"
 #include "internal.h"
 #include "tac.h"
+#include "xalloc.h"
 
 // Lowering of the <besm6.h> compiler intrinsics (backend/besm6/Besm6_Intrinsics.md).
 //
@@ -144,6 +145,74 @@ static Besm_Instr *emit_io_op(Besm_Block *block, Besm_Instr **tail, const Frame 
     return io;
 }
 
+// The value of an integer constant `c` as an unsigned count, or -1 when it is not one.
+static long long const_count(const Tac_Const *c)
+{
+    switch (c->kind) {
+    case TAC_CONST_INT:
+        return c->u.int_val;
+    case TAC_CONST_UINT:
+        return c->u.uint_val;
+    case TAC_CONST_LONG:
+        return c->u.long_val;
+    case TAC_CONST_ULONG:
+        return (long long)c->u.ulong_val;
+    case TAC_CONST_LONG_LONG:
+        return c->u.long_long_val;
+    case TAC_CONST_ULONG_LONG:
+        return (long long)c->u.ulong_long_val;
+    default:
+        return -1;
+    }
+}
+
+// alloca(n), a call of __builtin_alloca: the memory is the top of the stack, which grows
+// upward.  dst = r15 as a void * (a fat pointer to byte #0 of its word, as an array
+// decays to), then r15 += the words of n bytes.  b/ret sets r15 back from r7, so the
+// function's return gives the memory back.  A constant n takes exactly ceil(n/6) words;
+// a computed one n/6 + 1, through b/udiv, the count then pushed and popped into C so that
+// `15 ,utm,` adds it.
+static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block *block,
+                       Besm_Instr **tail)
+{
+    const Tac_Val *n = instr->u.fun_call.args;
+    if (!n || n->next)
+        fatal_error("__builtin_alloca takes exactly one argument");
+    const Tac_Val *dst = instr->u.fun_call.dst;
+    if (dst && dst->kind == TAC_VAL_VAR) {
+        Besm_Instr *ita = emit(block, tail, BESM_MEM_ITA);
+        ita->addr       = REG_SP;
+        Besm_Instr *aox = emit(block, tail, BESM_LOG_AOX);
+        aox->name       = xstrdup("=:64"); // bit 48 (marker) + offset_enc 5 (MSB)
+        emit_store_a(block, tail, f, dst->u.var_name);
+    }
+    if (n->kind == TAC_VAL_CONSTANT) {
+        long long bytes = const_count(n->u.constant);
+        if (bytes < 0)
+            fatal_error("__builtin_alloca: a size that is not an integer");
+        long long words = (bytes + BESM6_WORD_BYTES - 1) / BESM6_WORD_BYTES;
+        if (words > 077777) // the 15-bit address field of utm, the whole memory
+            fatal_error("__builtin_alloca: %lld bytes is more than the stack", bytes);
+        if (words > 0) {
+            Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
+            utm->reg        = REG_SP;
+            utm->addr       = (int)words;
+        }
+        return;
+    }
+    Tac_Const six = { .kind = TAC_CONST_ULONG, .u.ulong_val = BESM6_WORD_BYTES };
+    emit_xta_val(block, tail, f, n);
+    emit_xts_val(block, tail, f, &(Tac_Val){ .kind = TAC_VAL_CONSTANT, .u.constant = &six });
+    Besm_Instr *call = emit(block, tail, BESM_BRANCH_CALL);
+    call->name       = xstrdup("b$udiv");
+    emit(block, tail, BESM_MEM_XTS);          // push the count; A = 0
+    Besm_Instr *wtc = emit(block, tail, BESM_MOD_WTC);
+    wtc->reg        = REG_SP;                 // stack mode: pop it into C
+    Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
+    utm->reg        = REG_SP;
+    utm->addr       = 1;                      // r15 += C + 1
+}
+
 //
 // Lower one intrinsic call, or return false if `instr` is an ordinary call.
 //
@@ -154,6 +223,10 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
                        Besm_Instr **tail)
 {
     const char *name = instr->u.fun_call.fun_name;
+    if (strcmp(name, "__builtin_alloca") == 0) {
+        gen_alloca(instr, f, block, tail);
+        return true;
+    }
     if (strncmp(name, "__besm6_", 8) != 0)
         return false;
 

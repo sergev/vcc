@@ -315,7 +315,8 @@ static const Target targets[] = {
       1,    // no_loop_opt
       1,    // big-endian: chars are packed from the most significant end of the word,
             // and so are bit-fields
-      .no_coroutines = 1 },
+      .no_coroutines = 1,
+      .stack_alloca  = 1 }, // alloca on the stack (r15), released by b/ret
 
     // AArch64 on macOS: Apple's arm64 ABI.  As AArch64 but for a signed plain char and a
     // long double that is double; va_arg walks the stack, where every variadic argument is.

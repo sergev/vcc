@@ -722,12 +722,11 @@ coro(int) void g(int n)
                  "alloca in a coroutine");
 }
 
-TEST_F(PipelineTest, AllocaNotOnTarget_Neg)
+// BESM-6 has alloca, though no coroutines.
+TEST_F(PipelineTest, AllocaOnBesm6)
 {
-    EXPECT_DEATH(
-        {
-            target_config = target_lookup("besm6");
-            RunPipeline("void *__builtin_alloca(unsigned long); void *f(void) { return __builtin_alloca(6); }");
-        },
-        "alloca is not supported on target besm6");
+    const Target *was = target_config;
+    target_config     = target_lookup("besm6");
+    RunPipeline("void *__builtin_alloca(unsigned long); void *f(void) { return __builtin_alloca(6); }");
+    target_config = was;
 }

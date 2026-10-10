@@ -69,7 +69,8 @@ The lowering is in shared code, and every target but BESM-6 has it.
 `Target.no_coroutines`, set for BESM-6 alone, gates it: `lower -t besm6` of a program
 with `_Coro` says "coroutines are not supported on target besm6". Two more fields say
 what the backend can do: `jump_tables` (§5.2), wasm32's alone, and `stack_alloca`
-(§5.1), set on every target but BESM-6. `defer` has no target dependency and is not gated. BESM-6 output does not
+(§5.1), set on every target (on BESM-6, which has no coroutines, for `alloca` alone,
+expanded by its `intrinsics.c`). `defer` has no target dependency and is not gated. BESM-6 output does not
 change, since no BESM-6 program uses it and the shared cleanup (§4) is off there.
 
 ## 3. Front end

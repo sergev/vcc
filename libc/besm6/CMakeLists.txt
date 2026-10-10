@@ -146,7 +146,8 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libc.bin DESTINATION share/vcc/besm6/l
 endif() # BESM6_TOOLS_FOUND
 
 #
-# The compiler-owned headers: the C11 freestanding subset (C11 §4) plus besm6.h.
+# The compiler-owned headers: the C11 freestanding subset (C11 §4) plus besm6.h,
+# coro.h and alloca.h (its __builtin_alloca).
 # These describe the compiler's own data model, its <stdarg.h> ABI and its
 # intrinsics, so they ship with the compiler that defines them.  The hosted
 # headers (stdio.h, string.h, stdlib.h, ...) stay uninstalled -- v7besm's libc.a
@@ -154,6 +155,7 @@ endif() # BESM6_TOOLS_FOUND
 # appends to every compilation.
 #
 install(FILES
+    ${LIBC_COMMON_INCLUDE_DIR}/alloca.h
     include/besm6.h
     ${LIBC_COMMON_INCLUDE_DIR}/coro.h
     include/float.h

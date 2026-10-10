@@ -48,6 +48,13 @@ stack, release on `longjmp`, and no runtime call.
   for `co_alloca` already, on the shadow stack, rounding to 16 itself. On `wasm32-braam`
   `main` is a coroutine, where `alloca` is an error; a function it calls may use it
   (`BraamTest.AllocaInMain`, `AllocaInFunction`; [Braam.md](Braam.md) §4).
+- **BESM-6 is done** ([Besm6_Calling_Conventions.md](../backend/besm6/Besm6_Calling_Conventions.md#alloca)):
+  `__builtin_alloca` alone (no coroutines), expanded by `intrinsics.c`: r15 as a fat
+  `void *`, then r15 raised by ceil(n/6) words for a constant size, n/6 + 1 through
+  `b/udiv` for a computed one. `b/ret` gives it back; the prologue and epilogue are
+  unchanged. Run on all three paths (b6sim, and dubna for Madlen and Bemsh); no
+  `longjmp` case, the BESM-6 runtime having no `setjmp`. `<alloca.h>` is installed
+  with the compiler-owned headers.
 - **No target is left on the arena** (`libc/common/costack.c`): every coroutine target
   sets `stack_alloca`. The translator's arena branch is dead code until A11 removes it.
 - **Every backend assumes the stack pointer is fixed after the prologue:**
@@ -88,7 +95,7 @@ stack, release on `longjmp`, and no runtime call.
 
 ## Tasks
 
-Each task leaves `ctest -j8` green on every target, and BESM-6 output unchanged except in A10.
+Each task leaves `ctest -j8` green on every target, and BESM-6 output unchanged but for `alloca`, which A10 added.
 Commit after each.
 
 Every backend task has the tests x86-64 and AArch64 have: goldens of the frame and the
@@ -98,23 +105,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A10. BESM-6 (optional, last)
-
-- r15 grows upward, and `b/ret` restores it from r7. A plain function's epilogue therefore
-  already releases the stack.
-- Intercept `__builtin_alloca` in `codegen_intrinsic` (`backend/besm6/intrinsics.c:153`; widen
-  its prefix gate).
-- Selection:
-  - `dst` = the word address in r15, made a fat `void *` (`offset_enc 5`, as
-    `GET_ADDRESS_DECAY` does);
-  - then `15 ,utm,` by `ceil(n/6)` words, through a register when `n` is not constant.
-- Force the `b/save`/`b/ret` frame: never the `_Noreturn` or empty-function shortcuts
-  (`codegen.c:203`, `:369`).
-- Check that the peephole rules on `15 ,wtc,` / `xts` (`peephole.c:853-910`) do not move an
-  `xts` across it.
-- Lift the semantic error for BESM-6, set `stack_alloca`, and add to `besm-tests` the run suite on
-  the Unix (`b6sim`) path and goldens in all three dialects.
 
 ### A11. Retire the arena path
 
@@ -138,7 +128,6 @@ Once every target sets `stack_alloca`:
 
 ## Order and risk
 
-- A10 is optional.
 - The risks:
   - peephole passes that model sp as constant;
   - the outgoing-argument offset patched after layout;
