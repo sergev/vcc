@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -13,6 +14,11 @@
 // Usually it comes from semantic level, but let's define it here instead.
 //
 int scope_level;
+
+//
+// The location of an error in the command line rather than the source.
+//
+static const SrcLoc no_loc;
 
 //
 // Enum for output format
@@ -84,7 +90,7 @@ char *generate_output_filename(const char *input_file, OutputFormat format)
     // Allocate memory for new filename
     char *output_file = malloc(base_len + new_ext_len + 1);
     if (!output_file) {
-        fprintf(stderr, "Error: Memory allocation failed for output filename\n");
+        diag_error(diag_loc, "out of memory");
         return NULL;
     }
 
@@ -147,7 +153,7 @@ int parse_args(int argc, char *argv[], Args *args)
     if (optind < argc) {
         args->input_file = argv[optind++];
     } else {
-        fprintf(stderr, "Error: Input filename is required\n");
+        diag_error(diag_loc, "no input file");
         return -1;
     }
 
@@ -183,7 +189,7 @@ void process_file(const Args *args)
     }
     FILE *input_file = fopen(args->input_file, "r");
     if (!input_file) {
-        perror(args->input_file);
+        diag_error(no_loc, "cannot open '%s': %s", args->input_file, strerror(errno));
         exit(1);
     }
     scanner_set_input_name(args->input_file);
@@ -193,6 +199,10 @@ void process_file(const Args *args)
     FILE *output_file = stdout;
     if (args->output_file[0] != '-') {
         output_file = fopen(args->output_file, "w");
+        if (!output_file) {
+            diag_error(no_loc, "cannot create '%s': %s", args->output_file, strerror(errno));
+            exit(1);
+        }
     }
 
     switch (args->format) {

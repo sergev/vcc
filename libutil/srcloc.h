@@ -61,6 +61,7 @@ void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind);
 // style of docs/Technical_Reference.md, "Diagnostics".
 //
 void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap);
+void diag_error(SrcLoc loc, const char *fmt, ...);
 void diag_warning(SrcLoc loc, const char *fmt, ...);
 void diag_note(SrcLoc loc, const char *fmt, ...);
 

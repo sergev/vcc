@@ -73,6 +73,14 @@ void diag_vreport(SrcLoc loc, const char *kind, const char *fmt, va_list ap)
     fputc('\n', stderr);
 }
 
+void diag_error(SrcLoc loc, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_vreport(loc, "error", fmt, ap);
+    va_end(ap);
+}
+
 void diag_warning(SrcLoc loc, const char *fmt, ...)
 {
     va_list ap;

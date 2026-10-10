@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -131,7 +132,7 @@ static char *generate_output_filename(const char *input_file, OutputFormat forma
     // Allocate memory for new filename
     char *filename = malloc(base_len + new_ext_len + 1);
     if (!filename) {
-        fprintf(stderr, "Error: Memory allocation failed for output filename\n");
+        diag_error(diag_loc, "out of memory");
         return NULL;
     }
 
@@ -242,7 +243,7 @@ static int parse_args(int argc, char *argv[], Args *args)
     if (optind < argc) {
         args->input_file = argv[optind++];
     } else {
-        fprintf(stderr, "Error: Input filename is required\n");
+        diag_error(diag_loc, "no input file");
         return -1;
     }
 
@@ -277,12 +278,14 @@ static void open_input_output(const Args *args)
     }
     input_fd = open(args->input_file, O_RDONLY);
     if (input_fd < 0) {
-        perror(args->input_file);
-        exit(1);
+        fatal_error("cannot open '%s': %s", args->input_file, strerror(errno));
     }
     output_file = stdout;
     if (args->output_file[0] != '-') {
         output_file = fopen(args->output_file, "w");
+        if (!output_file) {
+            fatal_error("cannot create '%s': %s", args->output_file, strerror(errno));
+        }
     }
 }
 
@@ -320,7 +323,7 @@ void process_file(const Args *args)
 {
     target_config = target_lookup(args->target_name);
     if (!target_config) {
-        fprintf(stderr, "Unknown target '%s'. Known targets:\n", args->target_name);
+        diag_error(diag_loc, "unknown target '%s'; the targets are:", args->target_name);
         target_list();
         exit(1);
     }
@@ -365,8 +368,7 @@ void process_file(const Args *args)
     if (args->format == FORMAT_TAC) {
         if (wdopen(&tac_out, output_file == stdout ? STDOUT_FILENO : fileno(output_file), "w") <
             0) {
-            fprintf(stderr, "Cannot reopen output file\n");
-            exit(1);
+            fatal_error("cannot write the output: %s", strerror(errno));
         }
         tac_out_ready = 1;
         tac_export_begin_stream(&tac_out);

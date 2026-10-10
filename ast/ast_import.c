@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -31,15 +32,28 @@ DeclOrStmt *import_decl_or_stmt(WFILE *input);
 ForInit *import_for_init(WFILE *input);
 ExternalDecl *import_external_decl(WFILE *input);
 
+//
+// The input is not an AST this compiler wrote: another kind of file, or one cut short.
+//
+static _Noreturn void bad_input(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_print_prefix(stderr, diag_loc, "error");
+    fprintf(stderr, "the input is not an AST from this compiler: ");
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+    exit(1);
+}
+
 static void check_input(const WFILE *input, const char *context)
 {
     if (weof(input)) {
-        fprintf(stderr, "Error: Premature EOF while reading %s\n", context);
-        exit(1);
+        bad_input("it ends while reading the %s", context);
     }
     if (werror(input)) {
-        fprintf(stderr, "Error: Input error while reading %s\n", context);
-        exit(1);
+        bad_input("read error in the %s", context);
     }
 }
 
@@ -64,15 +78,13 @@ static SrcLoc import_loc(WFILE *input)
 void ast_import_open(WFILE *input, int fildes)
 {
     if (wdopen(input, fildes, "r") < 0) {
-        fprintf(stderr, "Error importing AST: cannot open file descriptor #%d\n", fildes);
-        exit(1);
+        bad_input("cannot open file descriptor %d", fildes);
     }
     lseek(fildes, 0L, SEEK_SET);
     size_t tag = wgetw(input);
     check_input(input, "program tag");
     if (tag != TAG_PROGRAM) {
-        fprintf(stderr, "Error: Expected TAG_PROGRAM, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_PROGRAM belongs", tag);
     }
     last_file = NULL;
 }
@@ -219,8 +231,7 @@ TypeQualifier *import_type_qualifier(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_TYPEQUALIFIER || tag > TAG_TYPEQUALIFIER + TYPE_QUALIFIER_ATOMIC) {
-        fprintf(stderr, "Error: Expected TAG_TYPEQUALIFIER, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_TYPEQUALIFIER belongs", tag);
     }
     TypeQualifierKind kind = (TypeQualifierKind)(tag - TAG_TYPEQUALIFIER);
     TypeQualifier *qual    = new_type_qualifier(kind);
@@ -252,8 +263,7 @@ Field *import_field(WFILE *input)
         check_input(input, "field static_assert message");
         return field;
     }
-    fprintf(stderr, "Error: Expected TAG_FIELD or TAG_STATIC_ASSERT, got 0x%zx\n", tag);
-    exit(1);
+    bad_input("tag 0x%zx where TAG_FIELD or TAG_STATIC_ASSERT belongs", tag);
 }
 
 Enumerator *import_enumerator(WFILE *input)
@@ -266,8 +276,7 @@ Enumerator *import_enumerator(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag != TAG_ENUMERATOR) {
-        fprintf(stderr, "Error: Expected TAG_ENUMERATOR, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_ENUMERATOR belongs", tag);
     }
     Ident name = wgetstr(input);
     check_input(input, "enumerator name");
@@ -286,8 +295,7 @@ Param *import_param(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag != TAG_PARAM) {
-        fprintf(stderr, "Error: Expected TAG_PARAM, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_PARAM belongs", tag);
     }
     Param *param = new_param();
     param->loc = import_loc(input);
@@ -308,8 +316,7 @@ Declaration *import_declaration(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_DECLARATION || tag > TAG_DECLARATION + DECL_EMPTY) {
-        fprintf(stderr, "Error: Expected TAG_DECLARATION, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_DECLARATION belongs", tag);
     }
     DeclarationKind kind = (DeclarationKind)(tag - TAG_DECLARATION);
     Declaration *decl    = new_declaration(kind);
@@ -348,8 +355,7 @@ DeclSpec *import_decl_spec(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag != TAG_DECLSPEC) {
-        fprintf(stderr, "Error: Expected TAG_DECLSPEC, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_DECLSPEC belongs", tag);
     }
     DeclSpec *spec            = new_decl_spec();
     TypeQualifier **next_qual = &spec->qualifiers;
@@ -381,8 +387,7 @@ FunctionSpec *import_function_spec(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_FUNCTIONSPEC || tag > TAG_FUNCTIONSPEC + FUNC_SPEC_CORO) {
-        fprintf(stderr, "Error: Expected TAG_FUNCTIONSPEC, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_FUNCTIONSPEC belongs", tag);
     }
     FunctionSpecKind kind = (FunctionSpecKind)(tag - TAG_FUNCTIONSPEC);
     FunctionSpec *fspec   = new_function_spec(kind);
@@ -423,8 +428,7 @@ InitDeclarator *import_init_declarator(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag != TAG_INITDECLARATOR) {
-        fprintf(stderr, "Error: Expected TAG_INITDECLARATOR, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_INITDECLARATOR belongs", tag);
     }
     InitDeclarator *idecl = new_init_declarator();
     idecl->loc = import_loc(input);
@@ -475,8 +479,7 @@ InitItem *import_init_item(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag != TAG_INITITEM) {
-        fprintf(stderr, "Error: Expected TAG_INITITEM, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_INITITEM belongs", tag);
     }
     Designator *designators = NULL;
     Designator **next_desg  = &designators;
@@ -501,8 +504,7 @@ Designator *import_designator(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_DESIGNATOR || tag > TAG_DESIGNATOR + DESIGNATOR_FIELD) {
-        fprintf(stderr, "Error: Expected TAG_DESIGNATOR, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_DESIGNATOR belongs", tag);
     }
     DesignatorKind kind = (DesignatorKind)(tag - TAG_DESIGNATOR);
     Designator *desg    = new_designator(kind);
@@ -528,8 +530,7 @@ Expr *import_expr(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_EXPR || tag > TAG_EXPR + EXPR_CO_OP) {
-        fprintf(stderr, "Error: Expected TAG_EXPR, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_EXPR belongs", tag);
     }
     ExprKind kind = (ExprKind)(tag - TAG_EXPR);
     Expr *expr    = new_expression(kind);
@@ -729,8 +730,7 @@ GenericAssoc *import_generic_assoc(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_GENERICASSOC || tag > TAG_GENERICASSOC + GENERIC_ASSOC_DEFAULT) {
-        fprintf(stderr, "Error: Expected TAG_STMT, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_STMT belongs", tag);
     }
     GenericAssocKind kind = (GenericAssocKind)(tag - TAG_GENERICASSOC);
     GenericAssoc *gasc    = new_generic_assoc(kind);
@@ -756,8 +756,7 @@ Stmt *import_stmt(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_STMT || tag > TAG_STMT + STMT_DEFER) {
-        fprintf(stderr, "Error: Expected TAG_STMT, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_STMT belongs", tag);
     }
     StmtKind kind = (StmtKind)(tag - TAG_STMT);
     Stmt *stmt    = new_stmt(kind);
@@ -838,8 +837,7 @@ DeclOrStmt *import_decl_or_stmt(WFILE *input)
     if (tag == TAG_EOL)
         return NULL;
     if (tag < TAG_DECLORSTMT || tag > TAG_DECLORSTMT + DECL_OR_STMT_STMT) {
-        fprintf(stderr, "Error: Expected TAG_DECLORSTMT, got 0x%zx\n", tag);
-        exit(1);
+        bad_input("tag 0x%zx where TAG_DECLORSTMT belongs", tag);
     }
     DeclOrStmtKind kind = (DeclOrStmtKind)(tag - TAG_DECLORSTMT);
     DeclOrStmt *dost    = new_decl_or_stmt(kind);

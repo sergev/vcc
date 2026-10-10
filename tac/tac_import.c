@@ -1,21 +1,36 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "srcloc.h"
 #include "tac.h"
 #include "tags.h"
 #include "wio.h"
 #include "xalloc.h"
 
+//
+// The input is not TAC this compiler wrote: another kind of file, or one cut short.
+//
+static _Noreturn void bad_input(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    diag_print_prefix(stderr, diag_loc, "error");
+    fprintf(stderr, "the input is not TAC from this compiler: ");
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+    exit(1);
+}
+
 static void check_input(const WFILE *in, const char *ctx)
 {
     if (weof(in)) {
-        fprintf(stderr, "Error: premature EOF reading %s\n", ctx);
-        exit(1);
+        bad_input("it ends while reading the %s", ctx);
     }
     if (werror(in)) {
-        fprintf(stderr, "Error: I/O error reading %s\n", ctx);
-        exit(1);
+        bad_input("read error in the %s", ctx);
     }
 }
 
@@ -435,8 +450,7 @@ Tac_TopLevel *tac_import_toplevel(WFILE *in)
         return NULL;
     }
     if (tag < TAG_TAC_TOPLEVEL || tag > TAG_TAC_TOPLEVEL + TAC_TOPLEVEL_EXTERN) {
-        fprintf(stderr, "Error: bad TAC tag 0x%zx (expected 0x%x)\n", tag, TAG_TAC_TOPLEVEL);
-        return NULL;
+        bad_input("tag 0x%zx where a top-level declaration belongs", tag);
     }
     Tac_TopLevel *tl = tac_new_toplevel((Tac_TopLevelKind)(tag - TAG_TAC_TOPLEVEL));
     switch (tl->kind) {
@@ -492,8 +506,7 @@ Tac_Program *tac_import_program(WFILE *in)
 {
     Tac_Program *prog = tac_new_program();
     if (!tac_import_begin_stream(in)) {
-        fprintf(stderr, "Error: not a TAC stream (expected magic 'TAC5')\n");
-        exit(1);
+        bad_input("no 'TAC5' magic word at the start");
     }
     for (Tac_TopLevel **p = &prog->decls;; p = &(*p)->next) {
         *p = tac_import_toplevel(in);

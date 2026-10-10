@@ -1,5 +1,6 @@
 #include "driver.h"
 
+#include <errno.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -71,7 +72,7 @@ static char *generate_output_filename(const char *input_file, const char *new_ex
     // Allocate memory for new filename
     char *filename = malloc(base_len + new_ext_len + 1);
     if (!filename) {
-        fprintf(stderr, "Error: Memory allocation failed for output filename\n");
+        diag_error(diag_loc, "out of memory");
         return NULL;
     }
 
@@ -89,7 +90,7 @@ static int parse_args(int argc, char *argv[], Args *args, const Backend *backend
     int nflags = num_flags(backend);
     struct option *long_options = calloc(nflags + 4, sizeof(struct option));
     if (!long_options) {
-        fprintf(stderr, "Error: Memory allocation failed for options\n");
+        diag_error(diag_loc, "out of memory");
         return -1;
     }
     long_options[0] = (struct option){ "verbose", no_argument, 0, 'v' };
@@ -133,7 +134,7 @@ static int parse_args(int argc, char *argv[], Args *args, const Backend *backend
     if (optind < argc) {
         args->input_file = argv[optind++];
     } else {
-        fprintf(stderr, "Error: Input filename is required\n");
+        diag_error(diag_loc, "no input file");
         status = -1;
         goto done;
     }
@@ -153,11 +154,16 @@ done:
     return status;
 }
 
+_Noreturn void fatal_error(const char *message, ...);
+
 static void open_output(const Args *args)
 {
     output_file = stdout;
     if (args->output_file[0] != '-') {
         output_file = fopen(args->output_file, "w");
+        if (!output_file) {
+            fatal_error("cannot create '%s': %s", args->output_file, strerror(errno));
+        }
     }
 }
 
@@ -183,12 +189,10 @@ static void process_file(const Args *args, const Backend *backend)
 
     WFILE input;
     if (wopen(&input, args->input_file, "r") < 0) {
-        perror(args->input_file);
-        exit(1);
+        fatal_error("cannot open '%s': %s", args->input_file, strerror(errno));
     }
     if (!tac_import_begin_stream(&input)) {
-        fprintf(stderr, "%s: not a TAC stream of this compiler version\n", args->input_file);
-        exit(1);
+        fatal_error("'%s' is not TAC from this version of the compiler", args->input_file);
     }
 
     // Phase 1: read all toplevels into a linked chain for global-name resolution.

@@ -21,6 +21,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#include "srcloc.h"
 #include "xalloc.h"
 
 #include <stddef.h>
@@ -64,8 +65,8 @@ void *xalloc(size_t size, const char *funcname, const char *filename, unsigned l
     /* Allocate memory using malloc */
     void *ptr = calloc(1, total_size);
     if (ptr == NULL) {
-        fprintf(stderr, "Out of memory allocating %zu bytes by %s() at file %s, line %u\n", size,
-                funcname, filename, lineno);
+        diag_error(diag_loc, "out of memory: %zu bytes for %s() at %s:%u", size, funcname,
+                   filename, lineno);
         exit(1);
     }
 
@@ -114,23 +115,20 @@ void xfree(void *ptr)
     /* Remove from the doubly linked list */
     if (h->prev != NULL) {
         if (h->prev->next != h) {
-            fprintf(stderr, "Damaged memory list in xfree()\n");
-            exit(1);
+            internal_error("xfree: the list of blocks is damaged before %p", ptr);
         }
         h->prev->next = h->next;
     } else {
         /* This is the head */
         if (head != h) {
-            fprintf(stderr, "Damaged memory head in xfree()\n");
-            exit(1);
+            internal_error("xfree: the head of the list of blocks is damaged at %p", ptr);
         }
         head = h->next;
     }
 
     if (h->next != NULL) {
         if (h->next->prev != h) {
-            fprintf(stderr, "Damaged memory list in xfree().\n");
-            exit(1);
+            internal_error("xfree: the list of blocks is damaged after %p", ptr);
         }
         h->next->prev = h->prev;
     }

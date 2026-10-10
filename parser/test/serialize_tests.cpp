@@ -109,7 +109,7 @@ TEST_F(ParserTest, ExportExpressionStmt)
 TEST_F(ParserTest, ImportPrematureEOF)
 {
     int fd = CreateAstFile();
-    EXPECT_DEATH(import_ast(fd), "Premature EOF");
+    EXPECT_DEATH(import_ast(fd), "is not an AST from this compiler: it ends while reading");
 }
 
 TEST_F(ParserTest, ImportInvalidTag)
@@ -117,7 +117,7 @@ TEST_F(ParserTest, ImportInvalidTag)
     int fd = CreateAstFile();
     size_t tag = -1;
     write(fd, &tag, sizeof(tag)); // Invalid tag
-    EXPECT_DEATH(import_ast(fd), "Expected TAG_PROGRAM");
+    EXPECT_DEATH(import_ast(fd), "is not an AST from this compiler: tag 0x[0-9a-f]+ where TAG_PROGRAM belongs");
     close(fd);
 }
 
@@ -129,6 +129,6 @@ TEST_F(ParserTest, ImportInputError)
     export_ast(fd, program);
 
     mock_error = true; // TODO
-    EXPECT_DEATH(import_ast(fd), "Input error");
+    EXPECT_DEATH(import_ast(fd), "is not an AST from this compiler: read error");
 }
 #endif
