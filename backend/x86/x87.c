@@ -116,7 +116,7 @@ void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("x86: %s: bad long double unary operator", gen_name(g));
+        internal_error("x86: %s: bad long double unary operator", gen_name(g));
     fld_val(g, in->u.unary.src);
     emit0(g, X86_FCHS, X86_Q);
     fstp_val(g, dst);
@@ -170,7 +170,7 @@ void gen_ld_binary(Gen *g, const Tac_Instruction *in)
         cond = X86_CC_AE;
         break;
     default:
-        fatal_error("x86: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
+        internal_error("x86: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
     }
     if (cond < 0) {
         fld_val(g, a);

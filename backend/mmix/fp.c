@@ -67,7 +67,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
         break;
     }
     default:
-        fatal_error("mmix: %s: binary operator %d on floating point", gen_name(g), op);
+        internal_error("mmix: %s: binary operator %d on floating point", gen_name(g), op);
     }
     def_done(g, REG_C, in->u.binary.dst, true);
 }
@@ -86,7 +86,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         emit3(g, MMIX_FSQRT, mmix_reg(d), mmix_imm(0), mmix_reg(s)); // rA's mode
         break;
     default:
-        fatal_error("mmix: %s: unary operator %d on floating point", gen_name(g),
+        internal_error("mmix: %s: unary operator %d on floating point", gen_name(g),
                     in->u.unary.op);
     }
     def_done(g, d, in->u.unary.dst, true);

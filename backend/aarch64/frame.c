@@ -220,7 +220,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("aarch64: %s: no type for %s", gen_name(g), name);
+    internal_error("aarch64: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -345,14 +345,14 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
     if (s && s->reg)
-        fatal_error("aarch64: %s: %s is in a register", gen_name(g), name);
+        internal_error("aarch64: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = A64_FP;
         *off  = s->offset;
         return;
     }
     if (name[0] == '%')
-        fatal_error("aarch64: %s: no slot for %s", gen_name(g), name);
+        internal_error("aarch64: %s: no slot for %s", gen_name(g), name);
     if (aarch64_darwin && !map_get(&g->defined, name, NULL)) {
         // Defined elsewhere, maybe in a shared library: its address from the GOT.
         emit2(g, A64_ADRP, a64_reg(scratch, A64_X), a64_gotpage(name));
@@ -368,7 +368,7 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
     if ((a64_is_ld(t) && !a64_is_fpreg(reg)) || a64_is_aggregate(t))
-        fatal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
+        internal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
     int size = a64_size(t);
     A64_Op op;
     A64_Width w = a64_width(t);
@@ -386,7 +386,7 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
     if ((a64_is_ld(t) && !a64_is_fpreg(reg)) || a64_is_aggregate(t))
-        fatal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
+        internal_error("aarch64: %s: a value of %d bytes in a register", gen_name(g), a64_size(t));
     int size  = a64_size(t);
     A64_Op op = A64_STR;
     if (!a64_is_fpreg(reg) && size == 1)
@@ -416,7 +416,7 @@ int64_t const_value(const Tac_Const *c)
     case TAC_CONST_ULONG_LONG:
         return (int64_t)c->u.ulong_long_val;
     default:
-        fatal_error("aarch64: floating-point constant %d as an integer", c->kind);
+        internal_error("aarch64: floating-point constant %d as an integer", c->kind);
     }
 }
 
@@ -462,7 +462,7 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
         emit2(g, A64_STR, a64_reg(IP1, A64_X), a64_mem(IP0, 8));
         emit2(g, A64_LDR, a64_reg(reg, A64_Q), a64_mem(IP0, 0));
     } else {
-        fatal_error("aarch64: integer constant in an FP register");
+        internal_error("aarch64: integer constant in an FP register");
     }
 }
 

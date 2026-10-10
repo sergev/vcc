@@ -124,7 +124,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
     }
     Msp_Op cond = gen_fp_compare(g, in);
     if (cond == MSP_NUM_OPS)
-        fatal_error("msp430: %s: FP operator %d is not implemented", gen_name(g), op);
+        internal_error("msp430: %s: FP operator %d is not implemented", gen_name(g), op);
     gen_set_on(g, cond, in->u.binary.dst);
 }
 
@@ -147,7 +147,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         gen_set_on(g, MSP_JEQ, dst);
         break;
     default:
-        fatal_error("msp430: %s: FP unary operator %d is not implemented", gen_name(g),
+        internal_error("msp430: %s: FP unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
 }

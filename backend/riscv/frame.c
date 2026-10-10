@@ -252,7 +252,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("riscv: %s: no type for %s", gen_name(g), name);
+    internal_error("riscv: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -324,14 +324,14 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
     if (s && s->reg)
-        fatal_error("riscv: %s: %s is in a register", gen_name(g), name);
+        internal_error("riscv: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = RV_S0;
         *off  = s->offset;
         return;
     }
     if (name[0] == '%')
-        fatal_error("riscv: %s: no slot for %s", gen_name(g), name);
+        internal_error("riscv: %s: no slot for %s", gen_name(g), name);
     emit2(g, RV_LA, rv_reg(scratch), rv_sym(name, 0));
     *base = scratch;
     *off  = 0;
@@ -342,7 +342,7 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
     if (rv_is_pair(t) || rv_is_ld(t))
-        fatal_error("riscv: %s: register pair value in a register", gen_name(g));
+        internal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
         op = rv_is_double(t) ? RV_FLD : RV_FLW;
@@ -368,7 +368,7 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 void store_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
 {
     if (rv_is_pair(t) || rv_is_ld(t))
-        fatal_error("riscv: %s: register pair value in a register", gen_name(g));
+        internal_error("riscv: %s: register pair value in a register", gen_name(g));
     Rv_Op op;
     if (is_freg(reg)) {
         op = rv_is_double(t) ? RV_FSD : RV_FSW;
@@ -413,7 +413,7 @@ static int64_t const_int(const Gen *g, const Tac_Const *c)
     case TAC_CONST_UCHAR:
         return c->u.uchar_val;
     default:
-        fatal_error("riscv: %s: constant kind %d in an integer register", gen_name(g), c->kind);
+        internal_error("riscv: %s: constant kind %d in an integer register", gen_name(g), c->kind);
     }
 }
 
@@ -441,7 +441,7 @@ static void load_fp_const(Gen *g, int reg, const Tac_Const *c)
             emit2(g, RV_FLD, rv_reg(reg), rv_mem(RV_T6, 0));
         }
     } else {
-        fatal_error("riscv: %s: integer constant in an FP register", gen_name(g));
+        internal_error("riscv: %s: integer constant in an FP register", gen_name(g));
     }
 }
 

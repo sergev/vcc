@@ -111,7 +111,7 @@ static size_t char_init_item_bytes(const Tac_StaticInit *init, Besm_Dialect dial
         return nb;
     }
     default:
-        fatal_error("unexpected static init kind %d in char array", (int)init->kind);
+        internal_error("besm6: static initializer of kind %d in a char array", (int)init->kind);
         return 0;
     }
 }
@@ -230,7 +230,7 @@ static uint64_t static_init_log_val(const Tac_StaticInit *init)
     case TAC_STATIC_INIT_U64:
         return init->u.ulong_val & 0xFFFFFFFFFFFF;
     default:
-        fatal_error("non-integer static init in log_val");
+        internal_error("besm6: a non-integer static initializer in a logical word");
     }
 }
 
@@ -254,7 +254,7 @@ static void append_word_item(const Tac_StaticInit *init, Besm_Instr ***tailp)
     case TAC_STATIC_INIT_POINTER: {
         int byte_offset = init->u.pointer.byte_offset;
         if (byte_offset % 6 != 0)
-            fatal_error("Pointer byte offset is not a multiple of word size");
+            internal_error("besm6: a pointer byte offset that is not a multiple of the word size");
         Besm_Instr *subp = besm_new_instr(BESM_STMT_SUBP);
         subp->name       = xstrdup(init->u.pointer.name);
         *tail            = subp;
@@ -303,7 +303,7 @@ static void append_word_item(const Tac_StaticInit *init, Besm_Instr ***tailp)
         break;
     default:
         // Unreachable: byte-packed kinds (I8/U8/STRING/ZERO) never reach here.
-        fatal_error("internal error: unhandled word static init kind %d", (int)init->kind);
+        internal_error("besm6: static initializer of kind %d in a word", (int)init->kind);
     }
     *tail  = item;
     *tailp = &item->next;
@@ -593,7 +593,7 @@ void besm_emit_static_locals(Besm_Module *module, const Tac_TopLevel *fn, Besm_D
             site->name = xstrdup(sl->name);
         else
             // Unreachable: static_data_items always yields a labelable or Z00 first item.
-            fatal_error("internal error: static local %s has no labelable init item", sl->name);
+            internal_error("besm6: static local %s has no initializer item to label", sl->name);
         insert_before_end(last, items);
     }
 }
@@ -606,7 +606,7 @@ Besm_Instr *besm_string_log_items(const Tac_StaticInit *init, const char *label,
                                   Besm_Dialect dialect)
 {
     if (init->kind != TAC_STATIC_INIT_STRING)
-        fatal_error("string constant init is not a string");
+        internal_error("besm6: a string constant initializer that is not a string");
 
     size_t raw_len, len;
     const char *raw = string_init_bytes(init, &raw_len);

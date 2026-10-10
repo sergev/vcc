@@ -50,7 +50,7 @@ static void emit_arith(Besm_Block *b, Besm_Instr **t, Besm_InstrKind kind, int r
 void lookup(const Frame *f, const char *name, int *reg, int *off)
 {
     if (!frame_lookup(f, name, reg, off))
-        fatal_error("variable '%s' not in frame", name);
+        internal_error("besm6: variable '%s' is not in the frame", name);
 }
 
 // Store the accumulator A into a variable, whether a frame slot or a module-level

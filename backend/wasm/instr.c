@@ -37,7 +37,7 @@ static int64_t const_int(const Tac_Const *c)
     case TAC_CONST_LONG_DOUBLE:
         break;
     }
-    fatal_error("wasm: a long double constant as an integer");
+    internal_error("wasm: a long double constant as an integer");
 }
 
 static double const_double(const Tac_Const *c)
@@ -48,7 +48,7 @@ static double const_double(const Tac_Const *c)
     case TAC_CONST_DOUBLE:
         return c->u.double_val;
     case TAC_CONST_LONG_DOUBLE:
-        fatal_error("wasm: a long double constant as a double");
+        internal_error("wasm: a long double constant as a double");
     case TAC_CONST_ULONG_LONG:
         return (double)c->u.ulong_long_val;
     case TAC_CONST_UINT:
@@ -121,7 +121,7 @@ static void push_const(Gen *g, const Tac_Const *c, Wasm_ValType t)
     case WASM_VOID:
         break;
     }
-    fatal_error("wasm: %s: a constant of no type", g->fn->name);
+    internal_error("wasm: %s: a constant of no type", g->fn->name);
 }
 
 //
@@ -134,7 +134,7 @@ const Tac_Type *type_of(const Gen *g, const char *name)
     if (!t)
         t = global_type(g, name);
     if (!t)
-        fatal_error("wasm: %s: %s has no type", g->fn->name, name);
+        internal_error("wasm: %s: %s has no type", g->fn->name, name);
     return t;
 }
 
@@ -227,7 +227,7 @@ const Tac_Type *any_type(const Gen *g, const Tac_Val *v)
 static void check_dst(const Gen *g, const Tac_Val *dst)
 {
     if (dst->kind != TAC_VAL_VAR)
-        fatal_error("wasm: %s: a constant destination", g->fn->name);
+        internal_error("wasm: %s: a constant destination", g->fn->name);
 }
 
 // Before the value of `dst` is computed: the address of a destination in memory.
@@ -425,7 +425,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
             break;
         }
         default:
-            fatal_error("wasm: %s: unary operator %d on floating point", g->fn->name,
+            internal_error("wasm: %s: unary operator %d on floating point", g->fn->name,
                         in->u.unary.op);
         }
         end_dst(g, dst);
@@ -449,7 +449,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         emit(g, i64 ? WASM_I64_EQZ : WASM_I32_EQZ);
         break;
     default:
-        fatal_error("wasm: %s: unary operator %d is not supported yet", g->fn->name,
+        internal_error("wasm: %s: unary operator %d is not implemented", g->fn->name,
                     in->u.unary.op);
     }
     narrow(g, type_of(g, dst->u.var_name));
@@ -541,7 +541,7 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, Wasm_ValType t)
     const Tac_Val *a = in->u.binary.src1, *b = in->u.binary.src2, *dst = in->u.binary.dst;
     Wasm_Op op32, op64;
     if (!fp_binop(in->u.binary.op, &op32, &op64))
-        fatal_error("wasm: %s: binary operator %d on floating point", g->fn->name, in->u.binary.op);
+        internal_error("wasm: %s: binary operator %d on floating point", g->fn->name, in->u.binary.op);
     begin_dst(g, dst);
     push_val(g, a, t);
     push_val(g, b, t);
@@ -560,7 +560,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
     }
     Wasm_Op op32, op64;
     if (!int_binop(op, &op32, &op64))
-        fatal_error("wasm: %s: binary operator %d is not supported yet", g->fn->name, op);
+        internal_error("wasm: %s: binary operator %d is not implemented", g->fn->name, op);
     begin_dst(g, dst);
     // The operands' type: the left one's, but the right one's when only it is a
     // variable; a shift's count has a type of its own.
@@ -598,7 +598,7 @@ static bool is_ld(const Tac_Type *t)
 static void check_ld_operand(const Gen *g, const Tac_Val *v)
 {
     if (v->kind == TAC_VAL_CONSTANT && v->u.constant->kind != TAC_CONST_LONG_DOUBLE)
-        fatal_error("wasm: %s: a long double operand of constant kind %d", g->fn->name,
+        internal_error("wasm: %s: a long double operand of constant kind %d", g->fn->name,
                     v->u.constant->kind);
 }
 
@@ -663,7 +663,7 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
         if (ops[i].op == op)
             name = ops[i].name;
     if (!name)
-        fatal_error("wasm: %s: long double operator %d", g->fn->name, op);
+        internal_error("wasm: %s: long double operator %d", g->fn->name, op);
     const Tac_Val *dst            = in->u.binary.dst;
     const Tac_Val *const args[2]  = { in->u.binary.src1, in->u.binary.src2 };
     const Tac_Type *const types[2] = { &ld_type, &ld_type };
@@ -711,7 +711,7 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     default:
-        fatal_error("wasm: %s: unary operator %d on long double", g->fn->name, in->u.unary.op);
+        internal_error("wasm: %s: unary operator %d on long double", g->fn->name, in->u.unary.op);
     }
 }
 
@@ -876,7 +876,7 @@ void push_addr(Gen *g, const char *name)
         return;
     }
     if (find_local(g, name) >= 0)
-        fatal_error("wasm: %s: the address of %s, which is not in memory", g->fn->name, name);
+        internal_error("wasm: %s: the address of %s, which is not in memory", g->fn->name, name);
     emit(g, WASM_I32_CONST)->sym = xstrdup(wasm_symbol(g->program, name));
 }
 
@@ -950,7 +950,7 @@ void store_value(Gen *g, const Place *dst, const Tac_Val *v, const Tac_Type *t)
     }
     if (v->kind == TAC_VAL_CONSTANT) {
         if (v->u.constant->kind != TAC_CONST_LONG_DOUBLE)
-            fatal_error("wasm: %s: a constant of an aggregate type", g->fn->name);
+            internal_error("wasm: %s: a constant of an aggregate type", g->fn->name);
         Float128 bits = v->u.constant->u.long_double_val;
         for (int half = 0; half < 2; half++) {
             place_base(g, dst, &sym, &off);
@@ -1235,7 +1235,7 @@ static void select_instr(Gen *g, const Tac_Instruction *in)
     default:
         break;
     }
-    fatal_error("wasm: %s: TAC %s is not supported yet", g->fn->name,
+    internal_error("wasm: %s: TAC %s is not implemented", g->fn->name,
                 tac_instruction_name(in->kind));
 }
 

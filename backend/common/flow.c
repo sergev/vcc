@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "srcloc.h"
 #include "xalloc.h"
 
 _Noreturn void fatal_error(const char *fmt, ...);
@@ -316,7 +317,7 @@ static void build_blocks(Flow *f)
                 const char *l = j < k - 1 ? in->u.jump_table.targets[j] : in->u.jump_table.default_target;
                 intptr_t t;
                 if (!map_get(&labels, l, &t))
-                    fatal_error("flow: %s: no label %s", f->fn->u.function.name, l);
+                    internal_error("flow: %s: no label %s", f->fn->u.function.name, l);
                 bool seen = false;
                 for (int m = 0; m < blk->nsucc; m++)
                     seen |= blk->succ[m] == (int)t;
@@ -344,7 +345,7 @@ static void build_blocks(Flow *f)
         intptr_t t;
         if (target) {
             if (!map_get(&labels, target, &t))
-                fatal_error("flow: %s: no label %s", f->fn->u.function.name, target);
+                internal_error("flow: %s: no label %s", f->fn->u.function.name, target);
             blk->succ[blk->nsucc++] = (int)t;
         }
         if (falls && b + 1 < n && !(blk->nsucc && blk->succ[0] == b + 1))

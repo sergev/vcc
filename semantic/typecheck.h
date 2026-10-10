@@ -79,6 +79,9 @@ bool has_storage(const DeclSpec *spec);
 void typecheck_local_decl(Declaration *d);
 void typecheck_global_decl(ExternalDecl *d);
 
+// The type of the function whose body is being checked, or NULL.
+extern const Type *typecheck_function;
+
 // Coroutines — coroutines.c
 struct Symbol;
 extern int coro_defer_depth;     // deferred statements around the expression checked

@@ -55,7 +55,7 @@ static void gen_stack_builtin(Gen *g, const Tac_Instruction *in, int kind)
     const Tac_Val *dst = in->u.fun_call.dst;
     if (kind == STACK_RESTORE || kind == STACK_ALLOCA) {
         if (!in->u.fun_call.args)
-            fatal_error("wasm: %s: %s takes one argument", g->fn->name, in->u.fun_call.fun_name);
+            internal_error("wasm: %s: %s takes one argument", g->fn->name, in->u.fun_call.fun_name);
         if (kind == STACK_ALLOCA) {
             global_sp(g, WASM_GLOBAL_GET);
             push_val(g, in->u.fun_call.args, WASM_I32);
@@ -238,9 +238,9 @@ static void push_arg(Gen *g, const Tac_Val *a, const Tac_Type *t, int copy)
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
     if (!g->tl->u.function.variadic)
-        fatal_error("wasm: %s: va_start in a function without ...", g->fn->name);
+        internal_error("wasm: %s: va_start in a function without ...", g->fn->name);
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
-        fatal_error("wasm: %s: __va_start takes one argument", g->fn->name);
+        internal_error("wasm: %s: __va_start takes one argument", g->fn->name);
     push_val(g, in->u.fun_call.args, WASM_I32);
     emit_imm(g, WASM_LOCAL_GET, g->va_param);
     emit(g, WASM_I32_STORE);
@@ -260,7 +260,7 @@ static void call_with(Gen *g, const Tac_Instruction *in, bool noreturn, bool kee
     const Tac_Val *dst = in->u.fun_call.dst;
     const Tac_Type *ft = in->u.fun_call.fun_type;
     if (!ft)
-        fatal_error("wasm: %s: call of %s with no type", g->fn->name, in->u.fun_call.fun_name);
+        internal_error("wasm: %s: call of %s with no type", g->fn->name, in->u.fun_call.fun_name);
     const Tac_Type *ret = ft->u.fun_type.ret_type, *rs;
     bool sret           = wasm_sret(ret);
     Wasm_Pass rpass     = wasm_pass(ret, &rs);
@@ -378,7 +378,8 @@ static void declare_helper(Gen *g, const char *name, const Tac_Type *ft)
         if (strcmp(g->helpers[i].name, name) == 0)
             return;
     if (g->nhelpers >= (int)(sizeof(g->helpers) / sizeof(g->helpers[0])))
-        fatal_error("wasm: %s: too many runtime routines", g->fn->name);
+        fatal_error("function '%s' needs more than %d runtime routines, the wasm32 limit", g->fn->name,
+                    (int)(sizeof(g->helpers) / sizeof(g->helpers[0])));
     Wasm_Sig sig;
     wasm_signature(ft, &sig);
     g->helpers[g->nhelpers].name  = name;

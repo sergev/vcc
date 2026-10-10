@@ -36,7 +36,7 @@ static void emit_reg(FILE *out, int reg, A32_Width width)
     else if (reg >= A32_VREG)
         fprintf(out, "%%%c%d", "rsd"[width], reg - A32_VREG);
     else
-        fatal_error("arm32: register %d at width %d", reg, width);
+        internal_error("arm32: register %d at width %d", reg, width);
 }
 
 static const char *const shifts[] = { "lsl", "lsr", "asr", "ror" };

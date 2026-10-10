@@ -203,9 +203,9 @@ static void save_varargs(Gen *g, const ArgState *s)
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
     if (!g->tl->u.function.variadic)
-        fatal_error("aarch64: %s: va_start in a function without ...", gen_name(g));
+        internal_error("aarch64: %s: va_start in a function without ...", gen_name(g));
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
-        fatal_error("aarch64: %s: __va_start takes one argument", gen_name(g));
+        internal_error("aarch64: %s: __va_start takes one argument", gen_name(g));
     load_val(g, T0, in->u.fun_call.args);
     if (aarch64_darwin) {
         gen_addr(g, T1, A64_FP, g->va.stack);
@@ -293,7 +293,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
-            fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
+            internal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t, false);
         int preg = assigned_reg(g, p->name);
         if (preg) {
@@ -559,7 +559,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing) {
         if (g->moves_sp)
-            fatal_error("aarch64: %s: a call's stack arguments past the area reserved", gen_name(g));
+            internal_error("aarch64: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
     }
     if (indirect_result(ret)) {

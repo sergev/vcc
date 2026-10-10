@@ -46,7 +46,7 @@ static void emit_reg(FILE *out, int reg, X86_Width width)
     else if (reg >= X86_VREG)
         fprintf(out, "%%v%d%c", reg - X86_VREG, "bwlq"[width]);
     else
-        fatal_error("x86: register %d at width %d", reg, width);
+        internal_error("x86: register %d at width %d", reg, width);
 }
 
 static void emit_mem(FILE *out, const X86_Operand *o)

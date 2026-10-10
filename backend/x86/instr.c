@@ -243,7 +243,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
     case TAC_UNARY_SQRT_DOUBLE:
-        fatal_error("x86: %s: a floating-point unary operator on an integer", gen_name(g));
+        internal_error("x86: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_val(g, reg, in->u.unary.dst);
 }
@@ -447,7 +447,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         xop = X86_XOR;
         break;
     default:
-        fatal_error("x86: %s: floating-point operator %d on integers", gen_name(g), op);
+        internal_error("x86: %s: floating-point operator %d on integers", gen_name(g), op);
     }
     emit2(g, xop, w, bo, r);
     store_val(g, rd, in->u.binary.dst);
@@ -584,7 +584,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 {
     const Tac_Type *t = val_type(g, dst);
     if (byte && x86_size(t) != 1)
-        fatal_error("x86: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+        internal_error("x86: %s: byte copy into %s", gen_name(g), dst->u.var_name);
     if (x86_is_aggregate(t) || x86_is_ld(t)) {
         gen_memcopy(g, name_mem(g, dst->u.var_name, 0), name_mem(g, src, offset), x86_size(t),
                     x86_is_ld(t) ? 8 : x86_align(t));
@@ -728,7 +728,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("x86: %s: %s is not implemented yet", gen_name(g),
+        internal_error("x86: %s: %s is not implemented", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }

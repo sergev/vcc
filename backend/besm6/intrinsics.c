@@ -177,7 +177,7 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
 {
     const Tac_Val *n = instr->u.fun_call.args;
     if (!n || n->next)
-        fatal_error("__builtin_alloca takes exactly one argument");
+        fatal_error("'__builtin_alloca' takes exactly one argument");
     const Tac_Val *dst = instr->u.fun_call.dst;
     if (dst && dst->kind == TAC_VAL_VAR) {
         Besm_Instr *ita = emit(block, tail, BESM_MEM_ITA);
@@ -189,10 +189,10 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     if (n->kind == TAC_VAL_CONSTANT) {
         long long bytes = const_count(n->u.constant);
         if (bytes < 0)
-            fatal_error("__builtin_alloca: a size that is not an integer");
+            fatal_error("the size given to '__builtin_alloca' is not an integer");
         long long words = (bytes + BESM6_WORD_BYTES - 1) / BESM6_WORD_BYTES;
         if (words > 077777) // the 15-bit address field of utm, the whole memory
-            fatal_error("__builtin_alloca: %lld bytes is more than the stack", bytes);
+            fatal_error("'__builtin_alloca' of %lld bytes is more than the stack", bytes);
         if (words > 0) {
             Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
             utm->reg        = REG_SP;
@@ -237,7 +237,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         const Tac_Val *a = instr->u.fun_call.args;
         const Tac_Val *x = a ? a->next : NULL;
         if (!x || x->next)
-            fatal_error("intrinsic %s takes exactly two arguments", name);
+            fatal_error("intrinsic '%s' takes exactly two arguments", name);
 
         // The inline binop shape: A = a; A op= x; dst = A.  A zero constant operand needs
         // no literal at all — the instruction is left with an empty address field and reads
@@ -259,7 +259,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         const Tac_Val *addr = instr->u.fun_call.args;
         const Tac_Val *acc  = addr ? addr->next : NULL;
         if (!acc || acc->next)
-            fatal_error("intrinsic %s takes exactly two arguments: an address and a word",
+            fatal_error("intrinsic '%s' takes exactly two arguments: an address and a word",
                         name);
 
         // A constant address becomes the instruction's own 12-bit offset field
@@ -285,7 +285,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     // РП and РЗ are write-only — which is what makes this intrinsic worth having.
     if (strcmp(name, "__besm6_getpsw") == 0) {
         if (instr->u.fun_call.args)
-            fatal_error("intrinsic %s takes no arguments", name);
+            fatal_error("intrinsic '%s' takes no arguments", name);
 
         Besm_Instr *ita = emit(block, tail, BESM_MEM_ITA);
         ita->addr       = BESM_PSW_MREG; // A = M[021]
@@ -302,7 +302,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     if (strcmp(name, "__besm6_setpsw") == 0) {
         const Tac_Val *psw = instr->u.fun_call.args;
         if (!psw || psw->next)
-            fatal_error("intrinsic %s takes exactly one argument: the mode word", name);
+            fatal_error("intrinsic '%s' takes exactly one argument: the mode word", name);
 
         emit_xta_val(block, tail, f, psw); // A = psw
         Besm_Instr *ati = emit(block, tail, BESM_MEM_ATI);
@@ -330,7 +330,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         if (mask && !mask->next && mask->kind == TAC_VAL_CONSTANT) {
             Besm_ConstWord w = besm_const_word(mask->u.constant);
             if (w.is_real || w.word > 077777)
-                fatal_error("intrinsic %s: mask %llo does not fit the 15-bit address field",
+                fatal_error("intrinsic '%s': mask %llo does not fit the 15-bit address field",
                             name, (unsigned long long)w.word);
 
             Besm_Instr *vtm = emit(block, tail, BESM_REG_VTM);
@@ -338,7 +338,7 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
             vtm->addr       = (int)w.word;
             return true;
         }
-        fatal_error("intrinsic %s takes one argument: a constant mask in 0..077777", name);
+        fatal_error("intrinsic '%s' takes one argument: a constant mask in 0..077777", name);
     }
 
     // __besm6_stop — the halt (033, Format 2).  It is *resumable*: the machine stops, the
@@ -358,14 +358,14 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         if (code && !code->next && code->kind == TAC_VAL_CONSTANT) {
             Besm_ConstWord w = besm_const_word(code->u.constant);
             if (w.is_real || w.word > 077777)
-                fatal_error("intrinsic %s: halt code %llo does not fit the 15-bit address field",
+                fatal_error("intrinsic '%s': halt code %llo does not fit the 15-bit address field",
                             name, (unsigned long long)w.word);
 
             Besm_Instr *stop = emit(block, tail, BESM_BRANCH_STOP);
             stop->addr       = (int)w.word;
             return true;
         }
-        fatal_error("intrinsic %s takes one argument: a constant halt code in 0..077777", name);
+        fatal_error("intrinsic '%s' takes one argument: a constant halt code in 0..077777", name);
     }
 
     // __besm6_extracode(op, ea, acc) — the user-mode trap into the operating system:
@@ -384,15 +384,15 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         const Tac_Val *ea  = op ? op->next : NULL;
         const Tac_Val *acc = ea ? ea->next : NULL;
         if (!acc || acc->next)
-            fatal_error("intrinsic %s takes exactly three arguments: an opcode, an effective "
+            fatal_error("intrinsic '%s' takes exactly three arguments: an opcode, an effective "
                         "address and a word",
                         name);
         if (op->kind != TAC_VAL_CONSTANT)
-            fatal_error("intrinsic %s: the opcode must be a compile-time constant", name);
+            fatal_error("intrinsic '%s': the opcode must be a compile-time constant", name);
 
         Besm_ConstWord w = besm_const_word(op->u.constant);
         if (w.is_real || w.word < 050 || w.word > 077)
-            fatal_error("intrinsic %s: opcode %llo is not an extracode (050..077)", name,
+            fatal_error("intrinsic '%s': opcode %llo is not an extracode (050..077)", name,
                         (unsigned long long)w.word);
         int opcode = (int)w.word;
 
@@ -410,5 +410,5 @@ bool codegen_intrinsic(const Tac_Instruction *instr, const Frame *f, Besm_Block 
         return true;
     }
 
-    fatal_error("%s is not a <besm6.h> intrinsic", name);
+    fatal_error("'%s' is not a <besm6.h> intrinsic", name);
 }

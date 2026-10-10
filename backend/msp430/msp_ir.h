@@ -185,6 +185,8 @@ void msp_emit_func(FILE *out, const Msp_Func *fn);
 void msp_emit_instr(FILE *out, const Msp_Instr *in);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

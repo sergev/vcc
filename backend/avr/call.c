@@ -101,7 +101,7 @@ static void param_pieces(const Gen *g, Pieces *v)
     int i                  = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         if (!p->type)
-            fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
+            internal_error("avr: %s: no type for %s", gen_name(g), p->name);
         types[i++] = p->type;
     }
     assign_args(types, n, g->tl->u.function.variadic, v);

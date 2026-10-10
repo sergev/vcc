@@ -270,7 +270,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 {
     const Tac_Type *t = val_type(g, dst);
     if (byte && a32_size(t) != 1)
-        fatal_error("arm32: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+        internal_error("arm32: %s: byte copy into %s", gen_name(g), dst->u.var_name);
     int base;
     int64_t off;
     name_addr(g, src, T0, &base, &off);
@@ -449,7 +449,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
     case TAC_UNARY_SQRT_DOUBLE:
-        fatal_error("arm32: %s: a floating-point unary operator on an integer", gen_name(g));
+        internal_error("arm32: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_val(g, d, in->u.unary.dst);
 }
@@ -537,7 +537,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         return;
     }
     default:
-        fatal_error("arm32: %s: bad integer operator %d", gen_name(g), op);
+        internal_error("arm32: %s: bad integer operator %d", gen_name(g), op);
     }
     A32_Operand ob = operand2(g, &o, b, t, T1);
     emit3(g, o, d, a, ob);
@@ -681,7 +681,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("arm32: %s: %s is not implemented yet", gen_name(g),
+        internal_error("arm32: %s: %s is not implemented", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }

@@ -309,7 +309,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("x86: %s: no type for %s", gen_name(g), name);
+    internal_error("x86: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -336,11 +336,11 @@ X86_Operand name_mem(const Gen *g, const char *name, int64_t off)
 {
     const Slot *s = find_slot(g, name);
     if (s && s->reg)
-        fatal_error("x86: %s: %s is in a register", gen_name(g), name);
+        internal_error("x86: %s: %s is in a register", gen_name(g), name);
     if (s)
         return x86_mem(X86_FRAME, s->offset + off);
     if (name[0] == '%')
-        fatal_error("x86: %s: no slot for %s", gen_name(g), name);
+        internal_error("x86: %s: no slot for %s", gen_name(g), name);
     return x86_rip(name, off);
 }
 
@@ -398,7 +398,7 @@ int64_t const_value(const Tac_Const *c)
     case TAC_CONST_ULONG_LONG:
         return (int64_t)c->u.ulong_long_val;
     default:
-        fatal_error("x86: floating-point constant %d as an integer", c->kind);
+        internal_error("x86: floating-point constant %d as an integer", c->kind);
     }
 }
 
@@ -424,7 +424,7 @@ void load_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
         return;
     }
     if (x86_is_ld(t) || x86_is_aggregate(t) || x86_is_fp(t))
-        fatal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
+        internal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
     bool u = x86_is_unsigned(t);
     switch (x86_size(t)) {
     case 1:
@@ -449,7 +449,7 @@ void store_mem(Gen *g, int reg, const Tac_Type *t, X86_Operand m)
         return;
     }
     if (x86_is_ld(t) || x86_is_aggregate(t) || x86_is_fp(t))
-        fatal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
+        internal_error("x86: %s: a value of type %d in a general register", gen_name(g), t->kind);
     X86_Width w = x86_width_of(x86_size(t));
     emit2(g, X86_MOV, w, x86_reg(reg, w), m);
 }

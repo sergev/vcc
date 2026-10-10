@@ -138,6 +138,8 @@ void rv_peephole(Rv_Func *fn);
 void rv_emit_func(FILE *out, const Rv_Func *fn);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

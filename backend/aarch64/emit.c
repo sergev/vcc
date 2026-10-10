@@ -73,7 +73,7 @@ static void emit_reg(FILE *out, int reg, A64_Width width)
     else if (reg >= A64_VREG)
         fprintf(out, "%%%c%d", "wxsdq"[width], reg - A64_VREG);
     else
-        fatal_error("aarch64: register %d at width %d", reg, width);
+        internal_error("aarch64: register %d at width %d", reg, width);
 }
 
 static void emit_operand(FILE *out, const A64_Operand *o)

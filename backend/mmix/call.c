@@ -291,9 +291,9 @@ static void load_arg(Gen *g, const Tac_Val *a, int reg, int tmp, const Tac_Type 
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
     if (!g->tl->u.function.variadic)
-        fatal_error("mmix: %s: va_start in a function without ...", gen_name(g));
+        internal_error("mmix: %s: va_start in a function without ...", gen_name(g));
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
-        fatal_error("mmix: %s: __va_start takes one argument", gen_name(g));
+        internal_error("mmix: %s: __va_start takes one argument", gen_name(g));
     load_val(g, in->u.fun_call.args, REG_A);
     add_offset(g, REG_B, frame_base(g), g->va_off);
     mem_op_at(g, MMIX_STO, REG_B, REG_A, 0);
@@ -346,7 +346,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     int cursor = g->copy_off, i = 0;
     for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next, i++) {
         if (i >= MAX_ARGS)
-            fatal_error("mmix: %s: more than %d arguments", gen_name(g), MAX_ARGS);
+            fatal_error("a call in function '%s' passes more than %d arguments, the MMIX limit", gen_name(g), MAX_ARGS);
         const Tac_Type *t = val_type(g, a);
         copy[i]           = 0;
         if (mmix_is_scalar(t) || struct_in_reg(t))

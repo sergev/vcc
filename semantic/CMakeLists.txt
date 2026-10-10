@@ -58,6 +58,7 @@ add_executable(semantic-tests
    test/chapter16_tests.cpp
    test/chapter17_tests.cpp
    test/chapter18_tests.cpp
+   test/diagnostic_tests.cpp
 )
 target_link_libraries(semantic-tests parser semantic GTest::gtest_main test_util)
 target_compile_definitions(semantic-tests PRIVATE

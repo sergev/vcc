@@ -102,7 +102,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
         op = fp_op(t, A32_VDIV_F32, A32_VDIV_F64);
         break;
     default:
-        fatal_error("arm32: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+        internal_error("arm32: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
     int d = def_reg(g, F0, dst);
     emit3(g, op, fp_reg(t, d), fp_reg(t, a), fp_reg(t, b));
@@ -123,7 +123,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
     }
     bool is_sqrt = in->u.unary.op == TAC_UNARY_SQRT_DOUBLE;
     if (!is_sqrt && in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("arm32: %s: bad floating-point unary operator", gen_name(g));
+        internal_error("arm32: %s: bad floating-point unary operator", gen_name(g));
     int a = use_val(g, F0, in->u.unary.src), d = def_reg(g, F0, dst);
     emit2(g, is_sqrt ? A32_VSQRT_F64 : fp_op(t, A32_VNEG_F32, A32_VNEG_F64), fp_reg(t, d), fp_reg(t, a));
     store_val(g, d, dst);

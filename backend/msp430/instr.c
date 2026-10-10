@@ -278,7 +278,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         gen_set_on(g, MSP_JEQ, dst);
         break;
     default:
-        fatal_error("msp430: %s: unary operator %d is not implemented", gen_name(g),
+        internal_error("msp430: %s: unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
 }
@@ -724,7 +724,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         break;
     }
     if (arith_row(op) < 0)
-        fatal_error("msp430: %s: binary operator %d is not implemented", gen_name(g), op);
+        internal_error("msp430: %s: binary operator %d is not implemented", gen_name(g), op);
     const Tac_Val *x;
     uint64_t k;
     if (inline_multiply(g, in, &x, &k)) {
@@ -1128,12 +1128,12 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
                       in->u.jump_if_zero.target);
         break;
     case TAC_INSTRUCTION_JUMP_TABLE:
-        fatal_error("msp430: a jump table, which only coroutines make (wasm32)");
+        internal_error("msp430: a jump table, which only coroutines make (wasm32)");
     case TAC_INSTRUCTION_GET_ADDRESS:
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
-            fatal_error("msp430: %s: the address of a constant", gen_name(g));
+            internal_error("msp430: %s: the address of a constant", gen_name(g));
         address_of(g, val_word(g, in->u.get_address.dst, 0), in->u.get_address.src->u.var_name,
                    0);
         break;

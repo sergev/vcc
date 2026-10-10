@@ -760,6 +760,10 @@ static Expr *typecheck_expr_at(Expr *e)
                 check_coroutine_name(sym);
             if (strcmp(func->u.var, "__builtin_alloca") == 0)
                 check_alloca_call();
+            // va_start expands to __va_start(&ap) on the targets that have it.
+            if (strcmp(func->u.var, "__va_start") == 0 &&
+                !(typecheck_function && typecheck_function->u.function.variadic))
+                fatal_error("'va_start' used in a function with fixed arguments");
             // Type the callee node from its symbol.  A bare name is not decayed here (the
             // call names it directly), but it must still carry its type: a function
             // designator's is a function type and a function-pointer variable's is a

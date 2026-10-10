@@ -218,7 +218,7 @@ void layout_frame(Gen *g)
     for (int cls = 0; cls < 3; cls++) {
         for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
             if (!p->type)
-                fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
+                internal_error("avr: %s: no type for %s", gen_name(g), p->name);
             if (find_slot(g, p->name) || map_get(&g->regs, p->name, &v) ||
                 slot_class(p->type, !avr_is_scalar(p->type)) != cls)
                 continue;
@@ -227,7 +227,7 @@ void layout_frame(Gen *g)
         }
         for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
             if (!p->type)
-                fatal_error("avr: %s: no type for %s", gen_name(g), p->name);
+                internal_error("avr: %s: no type for %s", gen_name(g), p->name);
             if (find_slot(g, p->name) || map_get(&g->regs, p->name, &v) ||
                 slot_class(p->type, is_aggregate_local(p, &allocs)) != cls)
                 continue;
@@ -283,7 +283,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
         return s->type;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("avr: %s: no type for %s", gen_name(g), name);
+    internal_error("avr: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -404,7 +404,7 @@ void address_of(Gen *g, int ptr, const char *name, int off)
         return;
     }
     if (name[0] == '%')
-        fatal_error("avr: %s: no slot for %s", gen_name(g), name);
+        internal_error("avr: %s: no slot for %s", gen_name(g), name);
     emit2(g, AVR_LDI, avr_reg(ptr), avr_sym(AVR_MOD_LO8, name, off));
     emit2(g, AVR_LDI, avr_reg(ptr + 1), avr_sym(AVR_MOD_HI8, name, off));
 }
@@ -474,7 +474,7 @@ void access_mem(Gen *g, bool store, const char *name, int off, const int *regs, 
     const Slot *s = find_slot(g, name);
     if (!s) {
         if (name[0] == '%')
-            fatal_error("avr: %s: no slot for %s", gen_name(g), name);
+            internal_error("avr: %s: no slot for %s", gen_name(g), name);
         for (int i = 0; i < n; i++) {
             if (store)
                 emit2(g, AVR_STS, avr_sym(AVR_MOD_NONE, name, off + i), avr_reg(regs[i]));
@@ -497,7 +497,7 @@ void access_mem(Gen *g, bool store, const char *name, int off, const int *regs, 
     bool z_taken = among(regs, n, AVR_Z) || among(regs, n, AVR_Z + 1) || (busy >> AVR_Z & 3);
     int ptr      = z_taken ? AVR_X : AVR_Z;
     if (ptr == AVR_X && (among(regs, n, AVR_X) || among(regs, n, AVR_X + 1) || (busy >> AVR_X & 3)))
-        fatal_error("avr: %s: no pointer register for %s", gen_name(g), name);
+        internal_error("avr: %s: no pointer register for %s", gen_name(g), name);
     address_slot(g, ptr, q);
     for (int i = 0; i < n; i++) {
         if (store)
@@ -555,7 +555,7 @@ void parallel_move(Gen *g, const int *dst, const int *src, int n)
         if (dst[i] == src[i])
             continue;
         if (m == 64)
-            fatal_error("avr: %s: too many moves", gen_name(g));
+            internal_error("avr: %s: too many moves", gen_name(g));
         d[m]   = dst[i];
         s[m++] = src[i];
     }
@@ -714,7 +714,7 @@ void load_vals(Gen *g, const Load *l, int n)
                 emit2(g, AVR_MOV, avr_reg(reg), avr_reg(AVR_ZERO));
             } else {
                 if (tmp < 0)
-                    fatal_error("avr: %s: no register for a constant", gen_name(g));
+                    internal_error("avr: %s: no register for a constant", gen_name(g));
                 emit2(g, AVR_LDI, avr_reg(tmp), avr_imm(b));
                 emit2(g, AVR_MOV, avr_reg(reg), avr_reg(tmp));
             }
@@ -752,7 +752,7 @@ void load_two(Gen *g, const Tac_Val *v1, int reg1, int n1, const Tac_Val *v2, in
 void store_regs(Gen *g, const Tac_Val *v, const int *regs, int n)
 {
     if (v->kind != TAC_VAL_VAR)
-        fatal_error("avr: %s: store to a constant", gen_name(g));
+        internal_error("avr: %s: store to a constant", gen_name(g));
     int size = avr_type_size(val_type(g, v));
     int m    = size < n ? size : n;
     Regs vr;

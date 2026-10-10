@@ -257,7 +257,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 {
     const Tac_Type *t = val_type(g, dst);
     if (byte && a64_size(t) != 1)
-        fatal_error("aarch64: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+        internal_error("aarch64: %s: byte copy into %s", gen_name(g), dst->u.var_name);
     int base;
     int64_t off;
     name_addr(g, src, T3, &base, &off);
@@ -323,7 +323,7 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
     }
     bool is_sqrt = in->u.unary.op == TAC_UNARY_SQRT_DOUBLE;
     if (!is_sqrt && in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("aarch64: %s: bad floating-point unary operator", gen_name(g));
+        internal_error("aarch64: %s: bad floating-point unary operator", gen_name(g));
     int d = def_reg(g, F0, dst);
     emit2(g, is_sqrt ? A64_FSQRT : A64_FNEG, a64_reg(d, w), a64_reg(s, w));
     store_val(g, d, dst);
@@ -341,7 +341,7 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("aarch64: %s: bad long double unary operator", gen_name(g));
+        internal_error("aarch64: %s: bad long double unary operator", gen_name(g));
     gen_copy(g, in->u.unary.src, dst);
     int base;
     int64_t off;
@@ -383,7 +383,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
     case TAC_UNARY_SQRT_DOUBLE:
-        fatal_error("aarch64: %s: a floating-point unary operator on an integer", gen_name(g));
+        internal_error("aarch64: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_int(g, d, in->u.unary.dst);
 }
@@ -485,7 +485,7 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool is_unsigned, A64_W
         emit3(g, is_unsigned ? A64_LSR : A64_ASR, rd, ra, rb);
         break;
     default:
-        fatal_error("aarch64: floating-point operator %d on integers", op);
+        internal_error("aarch64: floating-point operator %d on integers", op);
     }
 }
 
@@ -548,7 +548,7 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         op = A64_FDIV;
         break;
     default:
-        fatal_error("aarch64: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+        internal_error("aarch64: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
     int d = def_reg(g, F0, dst);
     emit3(g, op, a64_reg(d, w), fa, fb);
@@ -588,7 +588,7 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
     while (i < sizeof(ops) / sizeof(ops[0]) && ops[i].op != in->u.binary.op)
         i++;
     if (i == sizeof(ops) / sizeof(ops[0]))
-        fatal_error("aarch64: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
+        internal_error("aarch64: %s: bad long double operator %d", gen_name(g), in->u.binary.op);
     load_val(g, A64_V(0), in->u.binary.src1);
     load_val(g, A64_V(1), in->u.binary.src2);
     A64_Instr *call  = emit1(g, A64_BL, a64_sym(ops[i].name, 0));
@@ -892,7 +892,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("aarch64: %s: %s is not implemented yet", gen_name(g),
+        internal_error("aarch64: %s: %s is not implemented", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }

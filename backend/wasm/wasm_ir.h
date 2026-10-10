@@ -257,6 +257,8 @@ void wasm_move(Wasm_Func *fn, Wasm_Instr *first, Wasm_Instr *last, Wasm_Instr *a
 bool wasm_stack_effect(const Wasm_Instr *in, int *pops, int *pushes);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

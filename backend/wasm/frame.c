@@ -66,7 +66,7 @@ Wasm_ValType wasm_valtype(const Tac_Type *t)
     case TAC_TYPE_LONG_DOUBLE:
     case TAC_TYPE_ARRAY:
     case TAC_TYPE_STRUCTURE:
-        fatal_error("wasm: no value type for an aggregate or a long double");
+        internal_error("wasm: no value type for an aggregate or a long double");
     default:
         return WASM_I32;
     }
@@ -75,14 +75,15 @@ Wasm_ValType wasm_valtype(const Tac_Type *t)
 static void add_param(Wasm_Sig *sig, Wasm_ValType t)
 {
     if (sig->nparams >= (int)(sizeof(sig->params) / sizeof(sig->params[0])))
-        fatal_error("wasm: too many parameters");
+        fatal_error("a function with more than %d parameters is not supported on target 'wasm32'",
+                    (int)(sizeof(sig->params) / sizeof(sig->params[0])));
     sig->params[sig->nparams++] = t;
 }
 
 Wasm_Pass wasm_pass(const Tac_Type *t, const Tac_Type **scalar)
 {
     if (t->kind == TAC_TYPE_STRUCTURE && !t->u.structure.members && t->u.structure.size > 0)
-        fatal_error("wasm: structure %s passed with no members known",
+        internal_error("wasm: structure %s passed with no members known",
                     t->u.structure.tag ? t->u.structure.tag : "?");
     const Tac_Type *s = tac_wasm32_scalar(t);
     if (scalar)
@@ -178,7 +179,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     g->flow = flow_build(tl);
     Wasm_Func *fn = g->fn;
     if (!tl->u.function.type)
-        fatal_error("wasm: %s has no type", fn->name);
+        internal_error("wasm: %s has no type", fn->name);
 
     // The parameters are the first locals, as the signature has them: the result's
     // address first when it goes through one.  A parameter that lives in a slot is
@@ -194,7 +195,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
         g->sret = index++;
     for (const Tac_Param *p = tl->u.function.params; p; p = p->next) {
         if (!p->type)
-            fatal_error("wasm: %s: parameter %s has no type", fn->name, p->name);
+            internal_error("wasm: %s: parameter %s has no type", fn->name, p->name);
         map_insert(&g->types, p->name, (intptr_t)p->type, 0);
         map_insert(&g->pindex, p->name, index + 1, 0);
         switch (wasm_pass(p->type, NULL)) {
@@ -224,7 +225,7 @@ void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
     // Every other frame-resident name: an automatic local or a temporary.
     for (const Tac_Param *p = tl->u.function.locals; p; p = p->next) {
         if (!p->type)
-            fatal_error("wasm: %s: local %s has no type", fn->name, p->name);
+            internal_error("wasm: %s: local %s has no type", fn->name, p->name);
         map_insert(&g->types, p->name, (intptr_t)p->type, 0);
         if (in_slot(g, p->name, p->type))
             add_slot(g, p->name, wasm_type_size(p->type), wasm_type_align(p->type));
@@ -345,7 +346,7 @@ int var_local(const Gen *g, const char *name)
 {
     int local = find_local(g, name);
     if (local < 0)
-        fatal_error("wasm: %s: %s is not a local", g->fn->name, name);
+        internal_error("wasm: %s: %s is not a local", g->fn->name, name);
     return local;
 }
 
@@ -370,7 +371,7 @@ Wasm_Op wasm_load_op(const Tac_Type *t)
     case TAC_TYPE_LONG_DOUBLE:
     case TAC_TYPE_ARRAY:
     case TAC_TYPE_STRUCTURE:
-        fatal_error("wasm: no scalar load of an aggregate or a long double");
+        internal_error("wasm: no scalar load of an aggregate or a long double");
     default:
         return WASM_I32_LOAD;
     }
@@ -395,7 +396,7 @@ Wasm_Op wasm_store_op(const Tac_Type *t)
     case TAC_TYPE_LONG_DOUBLE:
     case TAC_TYPE_ARRAY:
     case TAC_TYPE_STRUCTURE:
-        fatal_error("wasm: no scalar store of an aggregate or a long double");
+        internal_error("wasm: no scalar store of an aggregate or a long double");
     default:
         return WASM_I32_STORE;
     }

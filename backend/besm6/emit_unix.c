@@ -37,7 +37,7 @@ static uint64_t unix_real_word(double v)
         E--;
     }
     if (E < 1 || E > 127)
-        fatal_error("floating constant %g out of BESM-6 exponent range", v);
+        fatal_error("floating constant %g is outside the BESM-6 exponent range", v);
 
     uint64_t mant = (uint64_t)T & ((UINT64_C(1) << 41) - 1); // bits 41-1
     return ((uint64_t)E << 41) | mant;
@@ -359,7 +359,7 @@ static const Besm_Instr *emit_unix_special(FILE *out, const Besm_Instr *instr, S
         return emit_unix_z00(out, instr, cur);
 
     default:
-        fatal_error("emit_unix_special: unhandled instruction kind %d", (int)instr->kind);
+        internal_error("besm6: instruction kind %d has no Unix assembler form", (int)instr->kind);
     }
     return instr;
 }

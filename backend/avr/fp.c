@@ -69,7 +69,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in)
     AVR_Op br;
     bool swap;
     if (!compare_helper(op, &name, &br, &swap))
-        fatal_error("avr: %s: FP operator %d is not implemented", gen_name(g), op);
+        internal_error("avr: %s: FP operator %d is not implemented", gen_name(g), op);
     emit1(g, AVR_CALL, avr_label(name));
     if (swap)
         emit2(g, AVR_CP, avr_reg(AVR_ZERO), avr_reg(24));
@@ -110,7 +110,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in)
         store_val(g, in->u.unary.dst, 24, 1);
         break;
     default:
-        fatal_error("avr: %s: FP unary operator %d is not implemented", gen_name(g),
+        internal_error("avr: %s: FP unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
 }

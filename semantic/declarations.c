@@ -13,6 +13,8 @@
 #include "typetab.h"
 #include "xalloc.h"
 
+const Type *typecheck_function;
+
 static bool is_extern(const DeclSpec *spec)
 {
     return spec && (spec->storage == STORAGE_CLASS_EXTERN);
@@ -1103,8 +1105,10 @@ static void typecheck_fn_decl(ExternalDecl *d)
         static_locals_set_function(d->u.function.name);
         coro_lint_function(d->u.function.name);
         coro_begin_body(yield);
+        typecheck_function = fun_type;
         d->u.function.body =
             typecheck_statement(fun_type->u.function.return_type, d->u.function.body);
+        typecheck_function = NULL;
         coro_end_body();
 
         // A non-void function whose body can fall off the end yields an

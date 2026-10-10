@@ -127,7 +127,7 @@ static bool operands_ok(const Mmix_Instr *in)
 void mmix_emit_instr(FILE *out, const Mmix_Instr *in)
 {
     if (!operands_ok(in))
-        fatal_error("mmix: wrong operands for %s", mmix_mnemonic[in->op]);
+        internal_error("mmix: wrong operands for %s", mmix_mnemonic[in->op]);
     if (in->opnd[0].kind == MMIX_OPND_NONE) {
         fprintf(out, "    %s\n", mmix_mnemonic[in->op]);
         return;

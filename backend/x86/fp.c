@@ -24,7 +24,7 @@ static uint64_t fp_bits(const Tac_Const *c, const Tac_Type *t)
         d = c->u.double_val;
         break;
     default:
-        fatal_error("x86: integer constant %d as floating point", c->kind);
+        internal_error("x86: integer constant %d as floating point", c->kind);
     }
     if (x86_is_double(t)) {
         uint64_t bits;
@@ -104,7 +104,7 @@ void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("x86: %s: bad floating-point unary operator", gen_name(g));
+        internal_error("x86: %s: bad floating-point unary operator", gen_name(g));
     // The sign bit flipped by xorps with a mask, 16 bytes in memory as xorps reads them.
     uint64_t sign = x86_is_double(t) ? (uint64_t)1 << 63 : (uint64_t)1 << 31;
     int r         = def_reg(g, F0, dst);
@@ -185,7 +185,7 @@ void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         op = d ? X86_DIVSD : X86_DIVSS;
         break;
     default:
-        fatal_error("x86: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+        internal_error("x86: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
     // Two-operand form, as for integers: in the destination's register unless that is
     // b's, when an add or multiply swaps the operands and the others go through xmm14.

@@ -227,6 +227,8 @@ const char *a64_local_prefix(void);
 void a64_emit_instr(FILE *out, const A64_Instr *in);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

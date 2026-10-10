@@ -249,7 +249,7 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
         store_val(g, T0, dst);
         return;
     default:
-        fatal_error("riscv: %s: bad long long operator %d", gen_name(g), op);
+        internal_error("riscv: %s: bad long long operator %d", gen_name(g), op);
     }
     store_pair(g, T0, T1, dst);
 }
@@ -277,7 +277,7 @@ void gen_ll_unary(Gen *g, const Tac_Instruction *in)
         store_val(g, T0, dst);
         return;
     default:
-        fatal_error("riscv: %s: bad long long unary operator", gen_name(g));
+        internal_error("riscv: %s: bad long long unary operator", gen_name(g));
     }
     store_pair(g, T0, T1, dst);
 }

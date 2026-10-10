@@ -298,7 +298,7 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
 {
     const Tac_Type *t = val_type(g, dst);
     if (byte && rv_size(t) != 1)
-        fatal_error("riscv: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+        internal_error("riscv: %s: byte copy into %s", gen_name(g), dst->u.var_name);
     int base;
     int64_t off;
     name_addr(g, src, RV_T3, &base, &off);
@@ -390,7 +390,7 @@ static void gen_fp_unary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("riscv: %s: bad floating-point unary operator", gen_name(g));
+        internal_error("riscv: %s: bad floating-point unary operator", gen_name(g));
     emit2(g, d ? RV_FNEGD : RV_FNEGS, rv_reg(r), rv_reg(s));
     store_val(g, r, in->u.unary.dst);
 }
@@ -420,7 +420,7 @@ static void gen_ld_unary(Gen *g, const Tac_Instruction *in)
         return;
     }
     if (in->u.unary.op != TAC_UNARY_NEGATE && in->u.unary.op != TAC_UNARY_NEGATE_DOUBLE)
-        fatal_error("riscv: %s: bad long double unary operator", gen_name(g));
+        internal_error("riscv: %s: bad long double unary operator", gen_name(g));
     int base;
     int64_t off;
     if (riscv_xlen == 4) {
@@ -475,7 +475,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     case TAC_UNARY_NEGATE_DOUBLE:
     case TAC_UNARY_SQRT_DOUBLE:
-        fatal_error("riscv: %s: a floating-point unary operator on an integer", gen_name(g));
+        internal_error("riscv: %s: a floating-point unary operator on an integer", gen_name(g));
     }
     store_int_result(g, d, in->u.unary.dst);
 }
@@ -558,7 +558,7 @@ static void gen_int_binop(Gen *g, Tac_BinaryOperator op, bool word, bool is_unsi
         emit3(g, RV_XORI, d, d, rv_imm(1));
         break;
     default:
-        fatal_error("riscv: %s: floating-point operator on integers", gen_name(g));
+        internal_error("riscv: %s: floating-point operator on integers", gen_name(g));
     }
 }
 
@@ -628,7 +628,7 @@ static void gen_fp_binary(Gen *g, const Tac_Instruction *in, const Tac_Type *t)
         emit3(g, d ? RV_FLED : RV_FLES, r, b, a);
         break;
     default:
-        fatal_error("riscv: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
+        internal_error("riscv: %s: bad floating-point operator %d", gen_name(g), in->u.binary.op);
     }
     store_val(g, dreg, dst);
 }
@@ -682,7 +682,7 @@ static void gen_ld_binary(Gen *g, const Tac_Instruction *in)
         if (ops[i].op == op)
             name = ops[i].name;
     if (!name)
-        fatal_error("riscv: %s: bad long double operator %d", gen_name(g), op);
+        internal_error("riscv: %s: bad long double operator %d", gen_name(g), op);
     const Tac_Val *dst = in->u.binary.dst;
     bool arith         = rv_is_ld(val_type(g, dst));
     if (riscv_xlen == 4) {
@@ -1013,6 +1013,6 @@ void gen_instr(Gen *g, const Tac_Instruction *in)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("riscv: %s: %s not implemented", gen_name(g), tac_instruction_name(in->kind));
+        internal_error("riscv: %s: %s is not implemented", gen_name(g), tac_instruction_name(in->kind));
     }
 }

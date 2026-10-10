@@ -225,9 +225,9 @@ static void save_varargs(Gen *g)
 static void gen_va_start(Gen *g, const Tac_Instruction *in)
 {
     if (!g->va.save)
-        fatal_error("x86: %s: va_start in a function without ...", gen_name(g));
+        internal_error("x86: %s: va_start in a function without ...", gen_name(g));
     if (!in->u.fun_call.args || in->u.fun_call.args->next)
-        fatal_error("x86: %s: __va_start takes one argument", gen_name(g));
+        internal_error("x86: %s: __va_start takes one argument", gen_name(g));
     load_val(g, T0, in->u.fun_call.args);
     emit2(g, X86_MOV, X86_L, x86_imm(g->va.gp), x86_mem(T0, 0));
     emit2(g, X86_MOV, X86_L, x86_imm(g->va.fp), x86_mem(T0, 4));
@@ -316,7 +316,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
-            fatal_error("x86: %s: no type for %s", gen_name(g), p->name);
+            internal_error("x86: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
         int preg = assigned_reg(g, p->name);
         if (preg) {
@@ -514,7 +514,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     }
     if (s.stack > g->outgoing) {
         if (g->moves_sp)
-            fatal_error("x86: %s: a call's stack arguments past the area reserved", gen_name(g));
+            internal_error("x86: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
     }
     if (in->u.fun_call.indirect) {
@@ -645,7 +645,7 @@ void gen_return(Gen *g, const Tac_Val *v)
                         x86_align(t));
             emit2(g, X86_MOV, X86_Q, x86_mem(X86_FRAME, g->ret_ptr), x86_reg(X86_RAX, X86_Q));
         } else if (struct_result(t)) {
-            fatal_error("x86: %s: a struct result without its address", gen_name(g));
+            internal_error("x86: %s: a struct result without its address", gen_name(g));
         } else if (x86_is_ld(t)) {
             gen_ld_load(g, v);
         } else if (x87_result(t)) {

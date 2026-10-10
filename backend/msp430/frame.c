@@ -202,7 +202,7 @@ void layout_frame(Gen *g)
 
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         if (!p->type)
-            fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
+            internal_error("msp430: %s: no type for %s", gen_name(g), p->name);
         if (find_slot(g, p->name) || var_reg(g, p->name, 0))
             continue;
         // A structure parameter's slot first holds its address (store_params); one
@@ -216,7 +216,7 @@ void layout_frame(Gen *g)
     }
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
-            fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
+            internal_error("msp430: %s: no type for %s", gen_name(g), p->name);
         if (find_slot(g, p->name) || var_reg(g, p->name, 0))
             continue;
         int size = msp_type_size(p->type), align = msp_type_align(p->type);
@@ -256,7 +256,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("msp430: %s: no type for %s", gen_name(g), name);
+    internal_error("msp430: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -383,7 +383,7 @@ Msp_Operand slot_at(const Gen *g, const char *name, int off)
         return o;
     }
     if (name[0] == '%')
-        fatal_error("msp430: %s: no slot for %s", gen_name(g), name);
+        internal_error("msp430: %s: no slot for %s", gen_name(g), name);
     return msp_abs(name, off);
 }
 
@@ -399,10 +399,10 @@ Msp_Operand mem_at(const Gen *g, const char *name, int off)
     int reg = var_reg(g, name, 0);
     if (reg) {
         if (off & 1)
-            fatal_error("msp430: %s: byte %d of register variable %s", gen_name(g), off, name);
+            internal_error("msp430: %s: byte %d of register variable %s", gen_name(g), off, name);
         reg = var_reg(g, name, off / 2);
         if (!reg)
-            fatal_error("msp430: %s: word %d of register variable %s", gen_name(g), off / 2,
+            internal_error("msp430: %s: word %d of register variable %s", gen_name(g), off / 2,
                         name);
         return msp_reg(reg);
     }
@@ -466,7 +466,7 @@ Msp_Operand high_byte(const Msp_Operand *o)
 {
     Msp_Operand h = *o;
     if (h.kind != MSP_OPND_INDEXED && h.kind != MSP_OPND_ABS)
-        fatal_error("msp430: the high byte of a register");
+        internal_error("msp430: the high byte of a register");
     h.sym = h.sym ? xstrdup(h.sym) : NULL;
     h.imm++;
     return h;
@@ -490,7 +490,7 @@ void address_of(Gen *g, Msp_Operand dst, const char *name, int off)
         return;
     }
     if (name[0] == '%' || var_reg(g, name, 0))
-        fatal_error("msp430: %s: no slot for %s", gen_name(g), name);
+        internal_error("msp430: %s: no slot for %s", gen_name(g), name);
     emit2(g, MSP_MOV, msp_imm_sym(name, off), dst);
 }
 
@@ -700,7 +700,7 @@ void load_val(Gen *g, const Tac_Val *v, int reg, int n, Ext ext)
 void store_val(Gen *g, const Tac_Val *v, int reg, int n)
 {
     if (v->kind != TAC_VAL_VAR)
-        fatal_error("msp430: %s: store to a constant", gen_name(g));
+        internal_error("msp430: %s: store to a constant", gen_name(g));
     int size = msp_type_size(val_type(g, v));
     if (size == 1) {
         emit2b(g, MSP_MOV, msp_reg(reg), mem_at(g, v->u.var_name, 0));

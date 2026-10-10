@@ -47,7 +47,7 @@ static void layout_frame(Gen *g)
 
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
-            fatal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
+            internal_error("aarch64: %s: no type for %s", gen_name(g), p->name);
         int reg = assigned_reg(g, p->name);
         if (reg) {
             place_reg(g, p->name, p->type, reg);

@@ -282,6 +282,8 @@ void mmix_emit_func(FILE *out, const Mmix_Func *fn);
 void mmix_emit_instr(FILE *out, const Mmix_Instr *in);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

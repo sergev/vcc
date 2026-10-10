@@ -219,7 +219,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("arm32: %s: no type for %s", gen_name(g), name);
+    internal_error("arm32: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -341,14 +341,14 @@ void name_addr(Gen *g, const char *name, int scratch, int *base, int64_t *off)
 {
     const Slot *s = find_slot(g, name);
     if (s && s->reg >= 0)
-        fatal_error("arm32: %s: %s is in a register", gen_name(g), name);
+        internal_error("arm32: %s: %s is in a register", gen_name(g), name);
     if (s) {
         *base = FB;
         *off  = s->offset;
         return;
     }
     if (name[0] == '%')
-        fatal_error("arm32: %s: no slot for %s", gen_name(g), name);
+        internal_error("arm32: %s: no slot for %s", gen_name(g), name);
     emit2(g, A32_MOVW, a32_reg(scratch), a32_lower16(name, 0));
     emit2(g, A32_MOVT, a32_reg(scratch), a32_upper16(name, 0));
     *base = scratch;
@@ -381,7 +381,7 @@ static A32_Operand reg_opnd(int reg, const Tac_Type *t)
 static void check_scalar(const Gen *g, int reg, const Tac_Type *t)
 {
     if (a32_is_aggregate(t) || (!a32_is_vfp(reg) && a32_size(t) > 4))
-        fatal_error("arm32: %s: a value of %d bytes in a register", gen_name(g), a32_size(t));
+        internal_error("arm32: %s: a value of %d bytes in a register", gen_name(g), a32_size(t));
 }
 
 void load_mem(Gen *g, int reg, const Tac_Type *t, int base, int64_t off)
@@ -412,13 +412,13 @@ uint64_t const_bits(const Tac_Const *c, const Tac_Type *t)
             return bits;
         }
         if (!a32_is_double(t))
-            fatal_error("arm32: floating-point constant as an integer");
+            internal_error("arm32: floating-point constant as an integer");
         uint64_t bits;
         memcpy(&bits, &d, 8);
         return bits;
     }
     if (a32_is_fp(t))
-        fatal_error("arm32: integer constant as floating point");
+        internal_error("arm32: integer constant as floating point");
     int64_t v;
     switch (c->kind) {
     case TAC_CONST_INT:
@@ -718,7 +718,7 @@ void parallel_move(Gen *g, Move *m, int n)
                 tmp = cand[c];
         }
         if (tmp < 0)
-            fatal_error("arm32: %s: no scratch register for a parallel move", gen_name(g));
+            internal_error("arm32: %s: no scratch register for a parallel move", gen_name(g));
         Move save = { tmp, m[i].src, vfp ? (d ? MOVE_D : MOVE_S) : MOVE_CORE };
         emit_move(g, &save);
         m[i].src = tmp;

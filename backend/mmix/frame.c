@@ -409,7 +409,7 @@ void layout_frame(Gen *g)
     int nparam = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next, nparam++) {
         if (!p->type)
-            fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
+            internal_error("mmix: %s: no type for %s", gen_name(g), p->name);
         if (param_byref(p->type)) // the callee's copy, 8-aligned for the address it holds first
             add_slot(g, p->name, p->type, mmix_type_size(p->type), 8);
         else if (nparam < MAX_REG_ARGS && var_reg(g, p->name) < 0)
@@ -423,7 +423,7 @@ void layout_frame(Gen *g)
         add_slot(g, FROUND_SLOT, NULL, 8, 8);
     for (const Tac_Param *p = g->tl->u.function.locals; p; p = p->next) {
         if (!p->type)
-            fatal_error("mmix: %s: no type for %s", gen_name(g), p->name);
+            internal_error("mmix: %s: no type for %s", gen_name(g), p->name);
         if (find_slot(g, p->name) || var_reg(g, p->name) >= 0)
             continue;
         int size = mmix_type_size(p->type), align = mmix_type_align(p->type);
@@ -494,7 +494,7 @@ const Tac_Type *name_type(const Gen *g, const char *name)
     intptr_t v;
     if (map_get(&g->globals, name, &v))
         return (const Tac_Type *)v;
-    fatal_error("mmix: %s: no type for %s", gen_name(g), name);
+    internal_error("mmix: %s: no type for %s", gen_name(g), name);
 }
 
 const Tac_Type *val_type(const Gen *g, const Tac_Val *v)
@@ -609,7 +609,7 @@ void mem_op(Gen *g, Mmix_Op op, int reg, const char *name, int64_t off)
         return;
     }
     if (name[0] == '%')
-        fatal_error("mmix: %s: no slot for %s", gen_name(g), name);
+        internal_error("mmix: %s: no slot for %s", gen_name(g), name);
     if (is_const_object(g, name)) {
         // .rodata is in the text segment, which geta reaches without a base register.
         emit2(g, MMIX_GETA, mmix_reg(MMIX_TMP), mmix_sym(name, 0));
@@ -671,7 +671,7 @@ void address_of(Gen *g, int reg, const char *name, int64_t off)
         return;
     }
     if (name[0] == '%')
-        fatal_error("mmix: %s: no slot for %s", gen_name(g), name);
+        internal_error("mmix: %s: no slot for %s", gen_name(g), name);
     if (is_const_object(g, name) || is_function(g, name)) {
         emit2(g, MMIX_GETA, mmix_reg(reg), mmix_sym(name, 0));
         if (off)
@@ -721,7 +721,7 @@ void load_val(Gen *g, const Tac_Val *v, int reg)
     }
     const Tac_Type *t = val_type(g, v);
     if (!mmix_is_scalar(t))
-        fatal_error("mmix: %s: %s is not a scalar", gen_name(g), v->u.var_name);
+        internal_error("mmix: %s: %s is not a scalar", gen_name(g), v->u.var_name);
     mem_op(g, load_op(t), reg, v->u.var_name, 0);
 }
 
@@ -796,7 +796,7 @@ int def_reg(const Gen *g, const Tac_Val *dst, int scratch)
 void def_done(Gen *g, int reg, const Tac_Val *dst, bool canonical)
 {
     if (dst->kind != TAC_VAL_VAR)
-        fatal_error("mmix: %s: store to a constant", gen_name(g));
+        internal_error("mmix: %s: store to a constant", gen_name(g));
     const Tac_Type *t = val_type(g, dst);
     int r             = var_reg(g, dst->u.var_name);
     if (r < 0) {

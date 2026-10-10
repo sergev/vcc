@@ -46,7 +46,7 @@ Besm_ConstWord besm_const_word(const Tac_Const *c)
                                                           : c->u.double_val;
         break;
     default:
-        fatal_error("unsupported constant kind %d", (int)c->kind);
+        internal_error("besm6: constant of kind %d", (int)c->kind);
     }
     return w;
 }

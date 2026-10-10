@@ -139,7 +139,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     }
     default:
-        fatal_error("mmix: %s: unary operator %d is not implemented", gen_name(g),
+        internal_error("mmix: %s: unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
     def_done(g, d, dst, canonical);
@@ -311,7 +311,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
         canonical = true;
         break;
     default:
-        fatal_error("mmix: %s: binary operator %d is not implemented", gen_name(g), op);
+        internal_error("mmix: %s: binary operator %d is not implemented", gen_name(g), op);
     }
     // A shift count has a type of its own.  A constant first operand of a commutative
     // operation goes second, where a byte is the immediate.
@@ -808,7 +808,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
-            fatal_error("mmix: %s: the address of a constant", gen_name(g));
+            internal_error("mmix: %s: the address of a constant", gen_name(g));
     {
         int d = def_reg(g, in->u.get_address.dst, REG_A);
         address_of(g, d, in->u.get_address.src->u.var_name, 0);
@@ -849,7 +849,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("mmix: %s: %s is not implemented yet", gen_name(g),
+        internal_error("mmix: %s: %s is not implemented", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }

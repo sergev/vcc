@@ -222,7 +222,7 @@ void gen_ll_binary(Gen *g, const Tac_Instruction *in)
         lo_op = hi_op = A32_EOR;
         break;
     default:
-        fatal_error("arm32: %s: bad long long operator %d", gen_name(g), op);
+        internal_error("arm32: %s: bad long long operator %d", gen_name(g), op);
     }
     if (var_reg(g, dst) < 0) {
         // Each word stored as it is computed: the flags carry over.
@@ -269,7 +269,7 @@ void gen_ll_unary(Gen *g, const Tac_Instruction *in)
         store_val(g, T0, dst);
         return;
     default:
-        fatal_error("arm32: %s: bad long long unary operator", gen_name(g));
+        internal_error("arm32: %s: bad long long unary operator", gen_name(g));
     }
     store_pair(g, dst, T0, T1);
 }

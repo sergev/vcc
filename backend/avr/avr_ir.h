@@ -210,6 +210,8 @@ void avr_emit_instr(FILE *out, const AVR_Instr *in);
 void avr_put_sym(FILE *out, const char *sym);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

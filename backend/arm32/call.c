@@ -270,7 +270,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
-            fatal_error("arm32: %s: no type for %s", gen_name(g), p->name);
+            internal_error("arm32: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t);
         int hi, reg = assigned_reg(g, p->name, &hi);
         if (reg >= 0) {
@@ -604,7 +604,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing) {
         if (g->moves_sp)
-            fatal_error("arm32: %s: a call's stack arguments past the area reserved", gen_name(g));
+            internal_error("arm32: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
     }
     if (indirect_result(ret, vfp)) {

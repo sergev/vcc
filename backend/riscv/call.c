@@ -231,7 +231,7 @@ static bool split_fp(const ArgLoc *a)
 static void check_fp_move(const Gen *g, const Tac_Type *t)
 {
     if (riscv_xlen == 4 && rv_is_double(t))
-        fatal_error("riscv: %s: fmv of a double on rv32", gen_name(g));
+        internal_error("riscv: %s: fmv of a double on rv32", gen_name(g));
 }
 
 // Move an FP value between an FP register and an integer register.
@@ -384,7 +384,7 @@ void gen_params(Gen *g)
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         const Tac_Type *t = p->type;
         if (!t)
-            fatal_error("riscv: %s: no type for %s", gen_name(g), p->name);
+            internal_error("riscv: %s: no type for %s", gen_name(g), p->name);
         ArgLoc a = classify(&s, t, false);
         int preg = assigned_reg(g, p->name);
         if (preg && map_get(&g->dead, p->name, NULL)) {
@@ -783,7 +783,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     xfree(args);
     if (s.stack > g->outgoing) {
         if (g->moves_sp)
-            fatal_error("riscv: %s: a call's stack arguments past the area reserved", gen_name(g));
+            internal_error("riscv: %s: a call's stack arguments past the area reserved", gen_name(g));
         g->outgoing = s.stack;
     }
     if (hidden) {
@@ -815,7 +815,7 @@ void gen_runtime_call(Gen *g, const char *name, const Tac_Type *ret, const Tac_V
     Tac_Val vals[4];
     Tac_Const consts[4];
     if (nargs > 4)
-        fatal_error("riscv: %s: runtime call with %d arguments", gen_name(g), nargs);
+        internal_error("riscv: %s: runtime call with %d arguments", gen_name(g), nargs);
     for (int i = 0; i < nargs; i++) {
         params[i]      = types ? *types[i] : *val_type(g, args[i]);
         params[i].next = i + 1 < nargs ? &params[i + 1] : NULL;

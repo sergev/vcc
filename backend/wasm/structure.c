@@ -57,7 +57,7 @@ static int target_block(const Gen *g, const char *target)
 {
     intptr_t b;
     if (!map_get(&g->labels, target, &b))
-        fatal_error("wasm: %s: no label %s", g->fn->name, target);
+        internal_error("wasm: %s: no label %s", g->fn->name, target);
     return (int)b;
 }
 
@@ -550,7 +550,7 @@ static int ctx_depth(const Structure *s, int kind, int block)
     for (int i = s->nctx - 1; i >= 0; i--)
         if (s->ctx[i].kind == kind && s->ctx[i].block == block)
             return s->nctx - 1 - i;
-    fatal_error("wasm: %s: no enclosing construct for block %d", s->g->fn->name, block);
+    internal_error("wasm: %s: no enclosing construct for block %d", s->g->fn->name, block);
 }
 
 static void do_tree(Structure *s, int x);
@@ -604,7 +604,7 @@ static int target_of(const Gen *g, const char *label)
 {
     intptr_t b;
     if (!map_get(&g->labels, label, &b))
-        fatal_error("wasm: %s: no label %s", g->fn->name, label);
+        internal_error("wasm: %s: no label %s", g->fn->name, label);
     return (int)b;
 }
 

@@ -467,7 +467,7 @@ static void gen_unary(Gen *g, const Tac_Instruction *in)
         break;
     }
     default:
-        fatal_error("avr: %s: unary operator %d is not implemented yet", gen_name(g),
+        internal_error("avr: %s: unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
 }
@@ -709,7 +709,7 @@ static void gen_binary(Gen *g, const Tac_Instruction *in)
                             op == TAC_BINARY_REMAINDER || op == TAC_BINARY_REMAINDER_UNSIGNED);
             break;
         default:
-            fatal_error("avr: %s: binary operator %d is not implemented yet", gen_name(g), op);
+            internal_error("avr: %s: binary operator %d is not implemented", gen_name(g), op);
         }
     }
     restore_var_regs(g, saved);
@@ -828,7 +828,7 @@ static void arith_const(Gen *g, Tac_BinaryOperator op, const Regs *w, uint64_t k
 {
     AVR_Op first, rest;
     if (!arith_ops(op, &first, &rest))
-        fatal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
+        internal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
     int tmp = free_upper(w);
     if (first == AVR_ADD || first == AVR_SUB) {
         bool sub   = first == AVR_SUB;
@@ -878,7 +878,7 @@ static void clean_arith(Gen *g, Tac_BinaryOperator op, const Tac_Val *s1, const 
 {
     AVR_Op first, rest;
     if (!arith_ops(op, &first, &rest))
-        fatal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
+        internal_error("avr: %s: bad arithmetic operator %d", gen_name(g), op);
     bool comm = first != AVR_SUB;
     if (comm && s1->kind == TAC_VAL_CONSTANT && s2->kind == TAC_VAL_VAR) {
         const Tac_Val *t = s1;
@@ -994,7 +994,7 @@ static void clean_unary(Gen *g, const Tac_Instruction *in)
         set_result(g, AVR_BREQ, dst);
         break;
     default:
-        fatal_error("avr: %s: unary operator %d is not implemented yet", gen_name(g),
+        internal_error("avr: %s: unary operator %d is not implemented", gen_name(g),
                     in->u.unary.op);
     }
 }
@@ -1267,7 +1267,7 @@ static void gen_clean(Gen *g, const Tac_Instruction *in)
                                in->u.copy_from_offset.dst, 1);
         break;
     default:
-        fatal_error("avr: %s: no scratch-free form of %s", gen_name(g),
+        internal_error("avr: %s: no scratch-free form of %s", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }
@@ -1399,7 +1399,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
     case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
         if (in->u.get_address.src->kind != TAC_VAL_VAR)
-            fatal_error("avr: %s: the address of a constant", gen_name(g));
+            internal_error("avr: %s: the address of a constant", gen_name(g));
         gen_get_address(g, in->u.get_address.src->u.var_name, in->u.get_address.dst);
         break;
     case TAC_INSTRUCTION_LOAD:
@@ -1447,7 +1447,7 @@ void gen_instr(Gen *g, const Tac_Instruction *in, bool last)
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
         break; // the slot is laid out with the frame
     default:
-        fatal_error("avr: %s: %s is not implemented yet", gen_name(g),
+        internal_error("avr: %s: %s is not implemented", gen_name(g),
                     tac_instruction_name(in->kind));
     }
 }

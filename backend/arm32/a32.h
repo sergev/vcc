@@ -184,6 +184,8 @@ void a32_emit_func(FILE *out, const A32_Func *fn);
 void a32_emit_instr(FILE *out, const A32_Instr *in);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

@@ -15,7 +15,7 @@
 static int member_word_offset(int byte_offset)
 {
     if (byte_offset % BESM6_WORD_BYTES != 0)
-        fatal_error("CopyTo/FromOffset: sub-word offset %d for a non-byte member", byte_offset);
+        internal_error("besm6: a copy at sub-word offset %d of a non-byte member", byte_offset);
     return byte_offset / BESM6_WORD_BYTES;
 }
 
@@ -134,7 +134,7 @@ static long tac_const_int(const Tac_Const *c)
     case TAC_CONST_UCHAR:
         return c->u.uchar_val;
     default:
-        fatal_error("non-integer constant kind %d as shift count", (int)c->kind);
+        internal_error("besm6: a constant of kind %d as a shift count", (int)c->kind);
     }
 }
 
@@ -431,7 +431,7 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
             break;
         }
         default:
-            fatal_error("TODO: unary op %d (Phase H)", (int)instr->u.unary.op);
+            internal_error("besm6: unary operator %d is not implemented", (int)instr->u.unary.op);
         }
         break;
     }
@@ -697,7 +697,7 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
             op_kind = BESM_LOG_AEX;
             break;
         default:
-            fatal_error("TODO: binary op %d (Phase B)", (int)instr->u.binary.op);
+            internal_error("besm6: binary operator %d is not implemented", (int)instr->u.binary.op);
         }
         emit_xta_val(block, tail, f, src1);
         emit_arith_val(block, tail, op_kind, f, src2);
@@ -1045,7 +1045,7 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
             break;
         }
         if (scale % 6 != 0)
-            fatal_error("ADD_PTR: unexpected sub-word scale %d", scale);
+            internal_error("besm6: pointer addition with sub-word scale %d", scale);
         int word_scale = scale / 6;
 
         // (a) scaled index in A.
@@ -1220,6 +1220,6 @@ void codegen_instr(const Tac_Instruction *instr, const Frame *f, Besm_Block *blo
         // prologue's stack extension covers it. No runtime instruction is emitted.
         break;
     default:
-        fatal_error("TODO: codegen for TAC instruction kind %d (Phase B)", (int)instr->kind);
+        internal_error("besm6: TAC instruction %d is not implemented", (int)instr->kind);
     }
 }

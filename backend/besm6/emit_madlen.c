@@ -267,7 +267,7 @@ static void emit_madlen_special(FILE *out, const Besm_Instr *instr)
         break;
 
     default:
-        fatal_error("emit_madlen_special: unhandled instruction kind %d", (int)instr->kind);
+        internal_error("besm6: instruction kind %d has no Madlen form", (int)instr->kind);
     }
 }
 

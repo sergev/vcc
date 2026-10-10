@@ -250,6 +250,8 @@ void x86_emit_func(FILE *out, const X86_Func *fn);
 void x86_emit_instr(FILE *out, const X86_Instr *in);
 
 #ifndef __cplusplus
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 #endif
 

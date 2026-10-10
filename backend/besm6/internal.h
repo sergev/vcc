@@ -13,6 +13,8 @@
 // (codegen.c, emit.c, static.c, instr.c).  Helpers used in only one
 // file stay `static` in that file and are not declared here.
 
+#include "srcloc.h"
+
 _Noreturn void fatal_error(const char *fmt, ...);
 
 // Dialect-independent value of a scalar constant operand.  Integer constants become a

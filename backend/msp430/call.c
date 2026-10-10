@@ -82,7 +82,7 @@ static ArgLoc *param_locs(const Gen *g, int *n)
     int i                  = 0;
     for (const Tac_Param *p = g->tl->u.function.params; p; p = p->next) {
         if (!p->type)
-            fatal_error("msp430: %s: no type for %s", gen_name(g), p->name);
+            internal_error("msp430: %s: no type for %s", gen_name(g), p->name);
         types[i++] = p->type;
     }
     // A variadic function's last named parameter starts the stack.
@@ -327,7 +327,7 @@ void gen_call(Gen *g, const Tac_Instruction *in)
     if (dst) {
         const Tac_Type *t = val_type(g, dst);
         if (!msp_is_scalar(t))
-            fatal_error("msp430: %s: a structure result not through a pointer", gen_name(g));
+            internal_error("msp430: %s: a structure result not through a pointer", gen_name(g));
         store_val(g, dst, 12, msp_words(t));
     }
     xfree(locs);
