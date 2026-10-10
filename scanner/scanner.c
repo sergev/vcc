@@ -1,5 +1,7 @@
 #include "scanner.h"
 
+#include "srcloc.h"
+
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -25,17 +27,34 @@ static int scan_char(void);
 static int scan_operator(void);
 static void scan_line_marker(void);
 
-// Current location in input file
+// Current location in input file: the file and line of the lookahead character,
+// as the last line marker gives them, and its column.
 int scanner_lineno;
-char scanner_filename[1024];
+const char *scanner_filename;
+static int scanner_col;
+
+// Where the last token returned by yylex() starts.
+SrcLoc scanner_token_loc;
+
+// The name of the input, until a line marker names another.
+static const char *input_name;
+
+void scanner_set_input_name(const char *name)
+{
+    input_name = srcloc_intern(name);
+}
 
 // Initialize scanner with input file
 void init_scanner(FILE *input)
 {
-    input_file = input;
-    yyleng     = 0;
-    yytext[0]  = '\0';
-    next_char  = input_file ? fgetc(input_file) : EOF;
+    input_file        = input;
+    yyleng            = 0;
+    yytext[0]         = '\0';
+    scanner_lineno    = 1;
+    scanner_col       = 1;
+    scanner_filename  = input_name;
+    scanner_token_loc = (SrcLoc){ input_name, 1, 1 };
+    next_char         = input_file ? fgetc(input_file) : EOF;
 
     if (next_char == '#') {
         consume_char();
@@ -43,30 +62,38 @@ void init_scanner(FILE *input)
     }
 }
 
-// Main lexer function
-// Report a lexical error and abort.  The scanner is the first phase of the
-// compiler, so a malformed token cannot be recovered from here.
+// The location of the lookahead character.
+static SrcLoc current_loc(void)
+{
+    return (SrcLoc){ scanner_filename, scanner_lineno, scanner_col };
+}
+
+// Report a lexical error at the start of the token being scanned and abort.
+// The scanner is the first phase of the compiler, so a malformed token cannot
+// be recovered from here.
 static _Noreturn void lex_error(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "%s:%d: lexical error: ", scanner_filename[0] ? scanner_filename : "<input>",
-            scanner_lineno);
+    diag_print_prefix(stderr, scanner_token_loc, "error");
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
     va_end(ap);
     exit(1);
 }
 
+// Main lexer function
 int yylex(void)
 {
 again:
     if (next_char == EOF) {
+        scanner_token_loc = current_loc();
         return TOKEN_EOF; // End of input
     }
     skip_whitespace();
-    yyleng    = 0;
-    yytext[0] = '\0';
+    yyleng            = 0;
+    yytext[0]         = '\0';
+    scanner_token_loc = current_loc();
     if (next_char == EOF) {
         return TOKEN_EOF;
     }
@@ -125,12 +152,20 @@ static void consume_char(void)
         yytext[yyleng++] = next_char;
         yytext[yyleng]   = '\0';
     }
+    if (next_char == '\n') {
+        scanner_lineno++;
+        scanner_col = 1;
+    } else if (next_char != EOF) {
+        scanner_col++;
+    }
     next_char = fgetc(input_file);
 }
 
-// Push back the current character
+// Push back the current character: the one consumed before it, never a newline,
+// becomes the lookahead again.
 static void unget_char(void)
 {
+    scanner_col--;
     if (next_char != EOF) {
         ungetc(next_char, input_file);
         if (yyleng > 0) {
@@ -258,8 +293,7 @@ static void skip_comment(void)
             consume_char();
         }
     }
-    fprintf(stderr, "Error: unterminated comment\n");
-    exit(1);
+    lex_error("unterminated comment");
 }
 
 //
@@ -307,25 +341,27 @@ static void scan_line_marker()
     // Skip whitespace
     while (isspace(next_char) && next_char != '\n') {
         consume_char();
-        if (next_char == '\n')
-            return; // No filename
     }
 
-    // Expect a quoted filename
+    // An optional quoted filename
     if (next_char == '"') {
         yyleng = 0;
         scan_string();
 
-        // Store in current_location
-        scanner_lineno = line_num;
-        strncpy(scanner_filename, yytext, sizeof(scanner_filename) - 1);
-        scanner_filename[sizeof(scanner_filename) - 1] = '\0';
+        // Strip the quotes
+        if (yyleng >= 2) {
+            yytext[yyleng - 1] = '\0';
+        }
+        scanner_filename = srcloc_intern(yytext + 1);
     }
 
     // Skip optional flags and rest of the line
     while (next_char != EOF && next_char != '\n') {
         consume_char();
     }
+
+    // The newline ending the marker steps the count to the line it names.
+    scanner_lineno = line_num - 1;
 }
 
 // Scan identifier or keyword
@@ -505,8 +541,7 @@ static int scan_string(void)
         consume_char(); // Consume prefix
     }
     if (next_char != '"') {
-        fprintf(stderr, "Error: expected string literal\n");
-        exit(1);
+        lex_error("expected string literal");
     }
     consume_char(); // Consume opening quote
     while (next_char != '"' && next_char != '\n' && next_char != EOF) {
@@ -544,8 +579,7 @@ static int scan_string(void)
     if (next_char == '"') {
         consume_char(); // Consume closing quote
     } else {
-        fprintf(stderr, "Error: unterminated string\n");
-        exit(1);
+        lex_error("unterminated string");
     }
     return TOKEN_STRING_LITERAL;
 }
@@ -557,8 +591,7 @@ static int scan_char(void)
         consume_char(); // Consume optional prefix
     }
     if (next_char != '\'') {
-        fprintf(stderr, "Error: expected character literal\n");
-        exit(1);
+        lex_error("expected character literal");
     }
     consume_char(); // Consume opening quote
     int has_content = 0;
@@ -594,12 +627,10 @@ static int scan_char(void)
     if (next_char == '\'') {
         consume_char(); // Consume closing quote
         if (!has_content) {
-            fprintf(stderr, "Error: empty character literal\n");
-            exit(1);
+            lex_error("empty character literal");
         }
     } else {
-        fprintf(stderr, "Error: unterminated character literal\n");
-        exit(1);
+        lex_error("unterminated character literal");
     }
     return TOKEN_I_CONSTANT;
 }
@@ -615,8 +646,7 @@ static int scan_operator(void)
     if (c == '.' && c2 == '.') {
         consume_char();
         if (next_char != '.') {
-            fprintf(stderr, "Error: bad ellipsis\n");
-            exit(1);
+            lex_error("bad ellipsis");
         }
         consume_char();
         return TOKEN_ELLIPSIS;

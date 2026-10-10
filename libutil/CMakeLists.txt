@@ -7,6 +7,7 @@ add_library(libutil STATIC
     xalloc.c
     wio.c
     float128.c
+    srcloc.c
 )
 target_include_directories(libutil PUBLIC .)
 target_link_libraries(libutil m)

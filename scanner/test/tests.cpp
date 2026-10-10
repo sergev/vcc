@@ -294,7 +294,7 @@ int main() {
     EXPECT_EQ(GetNextToken(), TOKEN_INT);
     EXPECT_EQ(GetLexeme(), "int");
     EXPECT_EQ(scanner_lineno, 1);
-    EXPECT_STREQ(scanner_filename, "\"main.c\"");
+    EXPECT_STREQ(scanner_filename, "main.c");
 
     EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
     EXPECT_EQ(GetLexeme(), "main");
@@ -307,7 +307,7 @@ int main() {
     EXPECT_EQ(GetNextToken(), TOKEN_RETURN);
     EXPECT_EQ(GetLexeme(), "return");
     EXPECT_EQ(scanner_lineno, 10);
-    EXPECT_STREQ(scanner_filename, "\"header.h\"");
+    EXPECT_STREQ(scanner_filename, "header.h");
 
     EXPECT_EQ(GetNextToken(), TOKEN_I_CONSTANT);
     EXPECT_EQ(GetLexeme(), "0");
@@ -316,7 +316,68 @@ int main() {
     EXPECT_EQ(GetNextToken(), TOKEN_RBRACE);
     EXPECT_EQ(GetLexeme(), "}");
     EXPECT_EQ(scanner_lineno, 3);
-    EXPECT_STREQ(scanner_filename, "\"main.c\"");
+    EXPECT_STREQ(scanner_filename, "main.c");
 
     EXPECT_EQ(GetNextToken(), TOKEN_EOF);
+}
+
+// Every token knows where it starts: lines counted from the last marker, columns from 1
+TEST_F(ScannerTest, TokenLocations)
+{
+    SetInput(R"(# 7 "a.c"
+int x;
+  /* two
+     lines */ x = 1;
+# 20 "b.h" 1
+ y
+)");
+    EXPECT_EQ(GetNextToken(), TOKEN_INT);
+    EXPECT_STREQ(scanner_token_loc.file, "a.c");
+    EXPECT_EQ(scanner_token_loc.line, 7);
+    EXPECT_EQ(scanner_token_loc.col, 1);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+    EXPECT_EQ(scanner_token_loc.line, 7);
+    EXPECT_EQ(scanner_token_loc.col, 5);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_SEMICOLON);
+    EXPECT_EQ(scanner_token_loc.col, 6);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+    EXPECT_EQ(scanner_token_loc.line, 9);
+    EXPECT_EQ(scanner_token_loc.col, 15);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_ASSIGN);
+    EXPECT_EQ(scanner_token_loc.col, 17);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_I_CONSTANT);
+    EXPECT_EQ(GetNextToken(), TOKEN_SEMICOLON);
+    EXPECT_EQ(scanner_token_loc.col, 20);
+
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+    EXPECT_STREQ(scanner_token_loc.file, "b.h");
+    EXPECT_EQ(scanner_token_loc.line, 20);
+    EXPECT_EQ(scanner_token_loc.col, 2);
+}
+
+// Without a marker, the location names the input
+TEST_F(ScannerTest, TokenLocationWithoutMarker)
+{
+    scanner_set_input_name("prog.c");
+    SetInput("\n\n   foo");
+    scanner_set_input_name(nullptr);
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+    EXPECT_STREQ(scanner_token_loc.file, "prog.c");
+    EXPECT_EQ(scanner_token_loc.line, 3);
+    EXPECT_EQ(scanner_token_loc.col, 4);
+}
+
+// A lexical error names the file, line and column of the bad token
+TEST_F(ScannerTest, LexErrorLocation)
+{
+    SetInput("# 4 \"t.c\"\nint a = 1x;\n");
+    EXPECT_EQ(GetNextToken(), TOKEN_INT);
+    EXPECT_EQ(GetNextToken(), TOKEN_IDENTIFIER);
+    EXPECT_EQ(GetNextToken(), TOKEN_ASSIGN);
+    EXPECT_DEATH(GetNextToken(), "t\\.c:4:9: error: ");
 }

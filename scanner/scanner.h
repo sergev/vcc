@@ -1,6 +1,8 @@
 #ifndef SCANNER_H
 #define SCANNER_H
 
+#include "srcloc.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -135,9 +137,16 @@ char *get_yytext(void);
 // Human-readable name for a token code (e.g. "';'", "'return'", "identifier").
 const char *token_name(int token);
 
-// Current location
+// Current location: the file and line of the lookahead character.
 extern int scanner_lineno;
-extern char scanner_filename[1024];
+extern const char *scanner_filename;
+
+// Where the last token returned by yylex() starts.
+extern SrcLoc scanner_token_loc;
+
+// Name the input for locations, until a line marker names another file.
+// Taken by every init_scanner() after it.
+void scanner_set_input_name(const char *name);
 
 #ifdef __cplusplus
 }

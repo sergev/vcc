@@ -5,6 +5,7 @@ add_library(scanner STATIC
     scanner.c
 )
 target_include_directories(scanner PUBLIC .)
+target_link_libraries(scanner PUBLIC libutil)
 
 #
 # Tests for scanner (including the textbook chapter tests)
