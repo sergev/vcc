@@ -90,6 +90,7 @@ static void print_usage(const char *prog_name)
     fprintf(stderr, "    --verify            Check the TAC types (always on in debug builds)\n");
     fprintf(stderr, "    --max-errors=N      Stop after N errors (0: no limit; default 20)\n");
     fprintf(stderr, "    --no-show-source    Don't show the source line under a diagnostic\n");
+    fprintf(stderr, "    --color=WHEN        Color diagnostics: always, never or auto (default)\n");
     fprintf(stderr, "    -t, --target NAME   Target architecture (default: riscv64)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug         Print debug information\n");
@@ -175,6 +176,7 @@ static int parse_args(int argc, char *argv[], Args *args)
         { "no-cond-jumps", no_argument, 0, 266 },      //
         { "max-errors", required_argument, 0, 267 },   //
         { "no-show-source", no_argument, 0, 268 },     //
+        { "color", required_argument, 0, 269 },        //
         {},                                            //
     };
 
@@ -248,6 +250,11 @@ static int parse_args(int argc, char *argv[], Args *args)
             break;
         case 268:
             diag_show_source = 0;
+            break;
+        case 269:
+            if (diag_set_color(optarg) < 0) {
+                return -1;
+            }
             break;
         case '?': // Unknown option
             return -1;

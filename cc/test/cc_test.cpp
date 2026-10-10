@@ -1061,6 +1061,41 @@ TEST_F(CcDriver, NoSourceLine)
     EXPECT_EQ(Stderr().find(" | "), std::string::npos) << Stderr();
 }
 
+// -fdiagnostics-color colors every pass's diagnostics, the driver's own too;
+// -fno-diagnostics-color and the default for a file leave them plain.
+TEST_F(CcDriver, DiagnosticsColor)
+{
+    WriteSource("t.c", "int x = ;\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fdiagnostics-color", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("\033[1mt.c:1:9:\033[0m \033[1;31merror:\033[0m "), std::string::npos)
+        << Stderr();
+    EXPECT_NE(Stderr().find("\033[1;32m^\033[0m"), std::string::npos) << Stderr();
+
+    WriteSource("e.c", "#error boom\n");
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fdiagnostics-color=always", "e.c" }), 0);
+    EXPECT_NE(Stderr().find("\033[1;31merror:\033[0m #error boom"), std::string::npos) << Stderr();
+
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "-fno-diagnostics-color", "t.c" }), 0);
+    EXPECT_EQ(Stderr().find('\033'), std::string::npos) << Stderr();
+    EXPECT_NE(Vcc({ "-t", "riscv64", "-S", "t.c" }), 0);
+    EXPECT_EQ(Stderr().find('\033'), std::string::npos) << Stderr();
+
+    EXPECT_NE(Vcc({ "-fdiagnostics-color=always", "-t", "nosuch", "t.c" }), 0);
+    EXPECT_NE(Stderr().find(":\033[0m \033[1;31merror:\033[0m unknown target"),
+              std::string::npos)
+        << Stderr();
+    EXPECT_NE(Stderr().find("\033[1;36mnote:\033[0m the targets are"), std::string::npos)
+        << Stderr();
+}
+
+TEST_F(CcDriver, DiagnosticsColorBadValue)
+{
+    WriteSource("t.c", "int x;\n");
+    EXPECT_NE(Vcc({ "-fdiagnostics-color=maybe", "t.c" }), 0);
+    EXPECT_NE(Stderr().find("invalid value in '-fdiagnostics-color=maybe'"), std::string::npos)
+        << Stderr();
+}
+
 // The column after a block comment and the line after a backslash-newline are
 // those of the source, so the caret points at the right place.
 TEST_F(CcDriver, SourceLineAfterCommentAndSplice)

@@ -11,6 +11,25 @@
 #include "intern.h"
 
 //
+// Whether to color diagnostics, as libutil's diag_use_color() decides for the other
+// passes: by --color, else when stderr is a terminal, NO_COLOR is unset or empty and
+// TERM is not "dumb".  The test is made once.
+//
+static int use_color(void)
+{
+    static int tty = -1;
+
+    if (cpp.opt_color)
+        return cpp.opt_color > 0;
+    if (tty < 0) {
+        const char *no_color = getenv("NO_COLOR");
+        const char *term     = getenv("TERM");
+        tty = isatty(2) && !(no_color && no_color[0]) && !(term && strcmp(term, "dumb") == 0);
+    }
+    return tty;
+}
+
+//
 // Print one diagnostic line "file:line: label: message" to stderr, as the other
 // passes do (docs/Technical_Reference.md, "Diagnostics"); with no line yet (a
 // command-line error), "progname: label: message".  `label` is "error" or
@@ -18,11 +37,19 @@
 //
 static void vreport_at(const char *file, int line, const char *label, const char *s, va_list ap)
 {
+    int color = use_color();
+
+    if (color)
+        fputs("\033[1m", stderr);
     if (line > 0)
-        fprintf(stderr, "%s:%d: ", (file && file[0]) ? file : "<stdin>", line);
+        fprintf(stderr, "%s:%d:", (file && file[0]) ? file : "<stdin>", line);
     else
-        fprintf(stderr, "%s: ", cpp.prog_name ? cpp.prog_name : "cpp");
-    fprintf(stderr, "%s: ", label);
+        fprintf(stderr, "%s:", cpp.prog_name ? cpp.prog_name : "cpp");
+    if (color)
+        fprintf(stderr, "\033[0m %s%s:\033[0m ",
+                strcmp(label, "warning") == 0 ? "\033[1;35m" : "\033[1;31m", label);
+    else
+        fprintf(stderr, " %s: ", label);
     vfprintf(stderr, s, ap);
     fprintf(stderr, "\n");
     ++cpp.exit_code;

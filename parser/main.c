@@ -58,6 +58,7 @@ void print_usage(const char *prog_name)
     fprintf(stderr, "    --dot            Emit Graphviz DOT script\n");
     fprintf(stderr, "    --max-errors=N   Stop after N errors (0: no limit; default 20)\n");
     fprintf(stderr, "    --no-show-source Don't show the source line under a diagnostic\n");
+    fprintf(stderr, "    --color=WHEN     Color diagnostics: always, never or auto (default)\n");
     fprintf(stderr, "    -v, --verbose    Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug      Print debug information\n");
     fprintf(stderr, "    -h, --help       Show this help message\n");
@@ -116,6 +117,7 @@ int parse_args(int argc, char *argv[], Args *args)
         { "dot", no_argument, 0, 'd' },     //
         { "max-errors", required_argument, 0, 256 },
         { "no-show-source", no_argument, 0, 257 },
+        { "color", required_argument, 0, 258 },
         {}, //
     };
 
@@ -153,6 +155,11 @@ int parse_args(int argc, char *argv[], Args *args)
             break;
         case 257:
             diag_show_source = 0;
+            break;
+        case 258:
+            if (diag_set_color(optarg) < 0) {
+                return -1;
+            }
             break;
         case '?': // Unknown option
             return -1;

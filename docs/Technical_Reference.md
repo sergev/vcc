@@ -288,6 +288,17 @@ columns the scanner counts: a dropped block comment becomes as many spaces as it
 on its last line, and a line joined by backslash-newline is followed by the newline it
 lost. A macro expansion still shifts the columns after it on its line.
 
+On a terminal, diagnostics are in color, with GCC's colors: the location is bold,
+`error:` and `internal compiler error:` are bold red, `warning:` is bold magenta,
+`note:` is bold cyan, and the caret is bold green. The message and the source line stay
+plain. Every pass makes the choice itself, so no pass needs to be told about the
+terminal: it colors only when its stderr is a terminal, `NO_COLOR` is unset or empty, and
+`TERM` is not `dumb` (`diag_use_color`, with `diag_color` at -1). `--color=always` and
+`--color=never` override that choice (`diag_set_color`). `vcc` takes GCC's
+`-fdiagnostics-color[=always|never|auto]` and `-fno-diagnostics-color`, colors its own
+messages to match, and passes the choice on to each pass as `--color=`. `vcpp` does the
+same in its own `diag.c`, since it does not link `libutil`.
+
 Each tool's `fatal_error` prints through `diag_vreport` (`diag_fatal_v`), then
 unwinds to the innermost recovery point, `diag_recover`, or exits with status 1 when
 none is set. So `parse` and `lower` go on after an error and report every error they

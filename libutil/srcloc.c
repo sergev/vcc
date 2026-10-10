@@ -5,12 +5,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 SrcLoc diag_loc;
 const char *diag_progname;
 int diag_errors;
 int diag_max_errors;
 int diag_show_source = 1;
+int diag_color       = -1;
 jmp_buf *diag_recover;
 
 SrcLoc diag_enter(SrcLoc loc)
@@ -55,19 +57,72 @@ const char *srcloc_intern(const char *name)
     return n->text;
 }
 
+int diag_use_color(FILE *f)
+{
+    static int tty = -1; // the auto decision, made once
+    if (diag_color >= 0) {
+        return diag_color;
+    }
+    if (tty < 0) {
+        const char *no_color = getenv("NO_COLOR");
+        const char *term     = getenv("TERM");
+        tty = isatty(fileno(f)) && !(no_color && no_color[0]) && !(term && strcmp(term, "dumb") == 0);
+    }
+    return tty;
+}
+
+int diag_set_color(const char *when)
+{
+    if (strcmp(when, "always") == 0) {
+        diag_color = 1;
+    } else if (strcmp(when, "never") == 0) {
+        diag_color = 0;
+    } else if (strcmp(when, "auto") == 0) {
+        diag_color = -1;
+    } else {
+        diag_error((SrcLoc){ 0 }, "invalid argument '%s' to '--color'", when);
+        return -1;
+    }
+    return 0;
+}
+
+//
+// The escape that starts the color of a kind, as GCC paints it.
+//
+static const char *kind_color(const char *kind)
+{
+    if (strcmp(kind, "warning") == 0) {
+        return "\033[1;35m";
+    }
+    if (strcmp(kind, "note") == 0) {
+        return "\033[1;36m";
+    }
+    return "\033[1;31m";
+}
+
 void diag_print_prefix(FILE *f, SrcLoc loc, const char *kind)
 {
-    if (loc.line > 0) {
-        fprintf(f, "%s:%d:", loc.file ? loc.file : "<input>", loc.line);
-        if (loc.col > 0) {
-            fprintf(f, "%d:", loc.col);
+    int color = diag_use_color(f);
+    if (loc.line > 0 || diag_progname) {
+        if (color) {
+            fputs("\033[1m", f);
         }
-        fputc(' ', f);
-    } else if (diag_progname) {
-        const char *slash = strrchr(diag_progname, '/');
-        fprintf(f, "%s: ", slash ? slash + 1 : diag_progname);
+        if (loc.line > 0) {
+            fprintf(f, "%s:%d:", loc.file ? loc.file : "<input>", loc.line);
+            if (loc.col > 0) {
+                fprintf(f, "%d:", loc.col);
+            }
+        } else {
+            const char *slash = strrchr(diag_progname, '/');
+            fprintf(f, "%s:", slash ? slash + 1 : diag_progname);
+        }
+        fputs(color ? "\033[0m " : " ", f);
     }
-    fprintf(f, "%s: ", kind);
+    if (color) {
+        fprintf(f, "%s%s:\033[0m ", kind_color(kind), kind);
+    } else {
+        fprintf(f, "%s: ", kind);
+    }
 }
 
 //
@@ -113,7 +168,7 @@ void diag_print_source(FILE *f, SrcLoc loc)
         for (int col = 1; col < loc.col; col++) {
             fputc(getc(src) == '\t' ? '\t' : ' ', f);
         }
-        fprintf(f, "^\n");
+        fputs(diag_use_color(f) ? "\033[1;32m^\033[0m\n" : "^\n", f);
     }
     fclose(src);
 }

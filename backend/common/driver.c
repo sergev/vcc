@@ -27,7 +27,7 @@ typedef struct {
 
 // Long-option values for the backend flags start here (outside the ASCII range so
 // they do not collide with the short options).
-enum { OPT_BACKEND = 1000 };
+enum { OPT_COLOR = 999, OPT_BACKEND = 1000 };
 
 static int num_flags(const Backend *backend)
 {
@@ -54,6 +54,7 @@ static void print_usage(const char *prog_name, const Backend *backend)
     for (int i = 0; i < num_flags(backend); i++) {
         fprintf(stderr, "        --%-14s%s\n", backend->flags[i].name, backend->flags[i].help);
     }
+    fprintf(stderr, "        --color=WHEN    Color diagnostics: always, never or auto (default)\n");
     fprintf(stderr, "    -v, --verbose       Enable verbose mode\n");
     fprintf(stderr, "    -D, --debug         Print debug information\n");
     fprintf(stderr, "    -h, --help          Show this help message\n");
@@ -88,7 +89,7 @@ static char *generate_output_filename(const char *input_file, const char *new_ex
 static int parse_args(int argc, char *argv[], Args *args, const Backend *backend)
 {
     int nflags                  = num_flags(backend);
-    struct option *long_options = calloc(nflags + 4, sizeof(struct option));
+    struct option *long_options = calloc(nflags + 5, sizeof(struct option));
     if (!long_options) {
         diag_error(diag_loc, "out of memory");
         return -1;
@@ -96,8 +97,9 @@ static int parse_args(int argc, char *argv[], Args *args, const Backend *backend
     long_options[0] = (struct option){ "verbose", no_argument, 0, 'v' };
     long_options[1] = (struct option){ "help", no_argument, 0, 'h' };
     long_options[2] = (struct option){ "debug", no_argument, 0, 'D' };
+    long_options[3] = (struct option){ "color", required_argument, 0, OPT_COLOR };
     for (int i = 0; i < nflags; i++) {
-        long_options[3 + i] =
+        long_options[4 + i] =
             (struct option){ backend->flags[i].name, no_argument, 0, OPT_BACKEND + i };
     }
 
@@ -120,6 +122,12 @@ static int parse_args(int argc, char *argv[], Args *args, const Backend *backend
             goto done;
         case 'D':
             args->debug = 1;
+            break;
+        case OPT_COLOR:
+            if (diag_set_color(optarg) < 0) {
+                status = -1;
+                goto done;
+            }
             break;
         case '?': // Unknown option
             status = -1;

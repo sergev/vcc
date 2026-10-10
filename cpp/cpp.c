@@ -153,6 +153,7 @@ void usage()
     printf("    -w                  Suppress warnings\n");
     printf("    -trigraphs          Translate trigraphs\n");
     printf("    -E                  Ignored for compatibility\n");
+    printf("    --color=WHEN        Color diagnostics: always, never or auto (default)\n");
 }
 
 //
@@ -277,6 +278,20 @@ static void parse_args(int argc, char *argv[])
                 }
                 if (strncmp(argv[i], "--target=", 9) == 0) {
                     select_target(argv[i] + 9);
+                    continue;
+                }
+                if (strncmp(argv[i], "--color=", 8) == 0) {
+                    const char *when = argv[i] + 8;
+                    if (strcmp(when, "always") == 0)
+                        cpp.opt_color = 1;
+                    else if (strcmp(when, "never") == 0)
+                        cpp.opt_color = -1;
+                    else if (strcmp(when, "auto") == 0)
+                        cpp.opt_color = 0;
+                    else {
+                        pperror("invalid argument '%s' to '--color'", when);
+                        exit(1);
+                    }
                     continue;
                 }
                 pperror("unknown option '%s'", argv[i]);

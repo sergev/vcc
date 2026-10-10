@@ -113,6 +113,18 @@ TEST_F(Diagnostic, ErrorNamesDirectiveLine)
     EXPECT_NE(r.err.find("input.c:2: error: #error boom"), std::string::npos) << r.err;
 }
 
+// --color=always paints the location bold and the label red, as GCC does.
+TEST_F(Diagnostic, Color)
+{
+    Result r = Preprocess("#error boom\n", { "--color=always" });
+    EXPECT_NE(r.exit_code, 0);
+    EXPECT_NE(r.err.find("input.c:1:\033[0m \033[1;31merror:\033[0m #error boom"),
+              std::string::npos)
+        << r.err;
+    r = Preprocess("#error boom\n", { "--color=never" });
+    EXPECT_NE(r.err.find("input.c:1: error: #error boom"), std::string::npos) << r.err;
+}
+
 TEST_F(Diagnostic, MissingIncludeNamesDirectiveLine)
 {
     Result r = Preprocess("#include <no_such_header.h>\n");

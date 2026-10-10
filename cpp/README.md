@@ -34,6 +34,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 | `-w` | Suppress warnings. |
 | `-trigraphs` | Enable translation-phase-1 trigraph replacement. |
 | `-E` | Accepted and ignored, for compatibility. |
+| `--color=WHEN` | Color diagnostics: `always`, `never`, or `auto` (the default: when stderr is a terminal, `NO_COLOR` is unset or empty, and `TERM` is not `dumb`). |
 
 `-I`, `-D` and `-U` take their argument in the same word (`-Ifoo`, not `-I foo`).
 

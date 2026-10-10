@@ -208,6 +208,7 @@ struct cppstate {
     int opt_recurse;       // -R: allow a macro to expand recursively
     int opt_trigraphs;     // -trigraphs: translate the nine C11 trigraph sequences (phase 1)
     int opt_no_warnings;   // -w: suppress warnings (e.g. the per-trigraph conversion notice)
+    int opt_color;         // --color: 1 always, -1 never, 0 auto (when stderr is a terminal)
 
     // -D / -U options staged on the command line, applied once input starts
     char *pre_defs[NPREDEF];   // -D definitions

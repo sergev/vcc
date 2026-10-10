@@ -51,6 +51,21 @@ const char *srcloc_intern(const char *name);
 extern const char *diag_progname;
 
 //
+// Color in diagnostics, as GCC paints them: the location bold, the kind red, magenta
+// or cyan, the caret green. diag_color is 1 for always, 0 for never, -1 (the default)
+// for when f is a terminal, NO_COLOR is unset or empty and TERM is not "dumb";
+// that test is made once. diag_use_color() says whether to color what goes to f.
+//
+extern int diag_color;
+int diag_use_color(FILE *f);
+
+//
+// Set diag_color from the value of --color: "always", "never" or "auto". Return 0,
+// or -1 for any other value, after reporting it.
+//
+int diag_set_color(const char *when);
+
+//
 // Print "file:line:col: kind: ", leaving out what is unknown. With no location at
 // all, print "program: kind: " instead.
 //

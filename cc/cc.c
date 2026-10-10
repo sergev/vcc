@@ -291,6 +291,8 @@ static const struct target targets[] = {
 
 static const struct target *target; // set by -t, else the default
 
+static void diag_prefix(const char *kind); // "vcc: kind: ", below
+
 //
 // A growable vector of C strings, used for argument lists and file lists.
 // The stored pointers are borrowed unless noted; the vector owns only its
@@ -308,7 +310,8 @@ static void vec_push(struct vec *v, char *s)
         v->cap  = v->cap ? v->cap * 2 : 8;
         v->data = realloc(v->data, v->cap * sizeof(*v->data));
         if (!v->data) {
-            fprintf(stderr, "%s: error: out of memory\n", progname);
+            diag_prefix("error");
+            fprintf(stderr, "out of memory\n");
             exit(1);
         }
     }
@@ -341,6 +344,8 @@ static char *outfile;                 // -o NAME: explicit output name
 static char *linkscript;      // -T FILE: linker script (not besm6), instead of the standard one
 static char *max_errors_flag; // --max-errors=N for parse and lower, from -fmax-errors=N
 static int no_show_source;    // -fno-diagnostics-show-caret: no source line in diagnostics
+static int color = -1;        // -fdiagnostics-color: 1 always, 0 never, -1 when stderr is a tty
+static char *color_flag;      // --color=always|never for every pass, or NULL for auto
 static char *codegen_dialect; // -Sbemsh/-Smadlen: dialect flag for the BESM-6 codegen, or NULL
 
 static struct vec sources;  // input .c/.s files to compile
@@ -376,11 +381,31 @@ static char *concat(const char *a, const char *b)
     size_t n = strlen(a) + strlen(b) + 1;
     char *s  = malloc(n);
     if (!s) {
-        fprintf(stderr, "%s: error: out of memory\n", progname);
+        diag_prefix("error");
+        fprintf(stderr, "out of memory\n");
         exit(1);
     }
     snprintf(s, n, "%s%s", a, b);
     return own(s);
+}
+
+//
+// Print "vcc: kind: " to stderr, colored as the passes color their diagnostics
+// (libutil/srcloc.c): when -fdiagnostics-color says so, or by default when stderr
+// is a terminal, NO_COLOR is unset or empty and TERM is not "dumb".
+//
+static void diag_prefix(const char *kind)
+{
+    if (color < 0) {
+        const char *no_color = getenv("NO_COLOR");
+        const char *term     = getenv("TERM");
+        color = isatty(2) && !(no_color && no_color[0]) && !(term && strcmp(term, "dumb") == 0);
+    }
+    if (color)
+        fprintf(stderr, "\033[1m%s:\033[0m %s%s:\033[0m ", progname,
+                strcmp(kind, "note") == 0 ? "\033[1;36m" : "\033[1;31m", kind);
+    else
+        fprintf(stderr, "%s: %s: ", progname, kind);
 }
 
 //
@@ -392,7 +417,7 @@ static void error(const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    fprintf(stderr, "%s: error: ", progname);
+    diag_prefix("error");
     vfprintf(stderr, fmt, ap);
     va_end(ap);
     fprintf(stderr, "\n");
@@ -744,7 +769,8 @@ static int run(const char *tool, char *const argv[])
         // Only reached if the exec failed.  _exit(), not exit(): this is a copy of
         // the parent, and letting it flush the parent's buffers or run the parent's
         // atexit() handlers would unlink the very temp files still in use.
-        fprintf(stderr, "%s: error: cannot run '%s': %s\n", progname, tool, strerror(errno));
+        diag_prefix("error");
+        fprintf(stderr, "cannot run '%s': %s\n", tool, strerror(errno));
         fflush(stderr);
         _exit(127);
     }
@@ -806,6 +832,8 @@ static int run_cpp(const char *in, const char *out, bool assembler)
     // The standard directory comes after every user -I.
     if (!opt_nostdinc)
         vec_push(&av, concat(concat("-I", share_dir), "/include"));
+    if (color_flag)
+        vec_push(&av, color_flag);
     vec_push(&av, (char *)in);
     if (out) // else vcpp writes to standard output
         vec_push(&av, (char *)out);
@@ -830,6 +858,8 @@ static int run_parse(const char *in, const char *out)
         vec_push(&av, max_errors_flag);
     if (no_show_source)
         vec_push(&av, "--no-show-source");
+    if (color_flag)
+        vec_push(&av, color_flag);
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -855,6 +885,8 @@ static int run_lower(const char *in, const char *out)
         vec_push(&av, max_errors_flag);
     if (no_show_source)
         vec_push(&av, "--no-show-source");
+    if (color_flag)
+        vec_push(&av, color_flag);
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -879,6 +911,8 @@ static int run_codegen(const char *in, const char *out)
         vec_push(&av, codegen_dialect);
     if (target->gen_flag)
         vec_push(&av, (char *)target->gen_flag);
+    if (color_flag)
+        vec_push(&av, color_flag);
     vec_push(&av, (char *)in);
     vec_push(&av, (char *)out);
     vec_push(&av, NULL);
@@ -1288,7 +1322,8 @@ static void select_target(const char *name)
     if (target)
         return;
     error("unknown target '%s'", name);
-    fprintf(stderr, "%s: note: the targets are", progname);
+    diag_prefix("note");
+    fprintf(stderr, "the targets are");
     for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++)
         fprintf(stderr, " %s", targets[i].name);
     fprintf(stderr, "\n");
@@ -1330,6 +1365,9 @@ static void usage(int status)
     printf("                    (default 4)\n");
     printf("    -fmax-errors=N  Stop after N errors (0: no limit; default 20)\n");
     printf("    -fno-diagnostics-show-caret  Don't show the source line under a diagnostic\n");
+    printf("    -fdiagnostics-color[=WHEN]  Color diagnostics: always (the default WHEN), never\n");
+    printf("                    or auto (when stderr is a terminal; the default)\n");
+    printf("    -fno-diagnostics-color  Same as -fdiagnostics-color=never\n");
     printf("    -W..., -f..., -std=..., -pedantic, -pipe, -arch A, -isysroot D\n");
     printf("                    Accepted and ignored, for build systems made for GCC\n");
     printf(
@@ -1437,6 +1475,27 @@ int main(int argc, char *argv[])
         if (strcmp(arg, "-fdiagnostics-show-caret") == 0) {
             no_show_source = 0;
             continue;
+        }
+        if (strcmp(arg, "-fdiagnostics-color") == 0 ||
+            strcmp(arg, "-fdiagnostics-color=always") == 0) {
+            color      = 1;
+            color_flag = "--color=always";
+            continue;
+        }
+        if (strcmp(arg, "-fno-diagnostics-color") == 0 ||
+            strcmp(arg, "-fdiagnostics-color=never") == 0) {
+            color      = 0;
+            color_flag = "--color=never";
+            continue;
+        }
+        if (strcmp(arg, "-fdiagnostics-color=auto") == 0) {
+            color      = -1;
+            color_flag = NULL;
+            continue;
+        }
+        if (strncmp(arg, "-fdiagnostics-color=", 20) == 0) {
+            error("invalid value in '%s'", arg);
+            exit(1);
         }
         if (arg[1] == 'W' || arg[1] == 'f' || arg[1] == 'w' || strncmp(arg, "-std=", 5) == 0 ||
             strncmp(arg, "-pedantic", 9) == 0 || strcmp(arg, "-pipe") == 0) {

@@ -23,9 +23,14 @@ protected:
         close(fd);
         path             = name;
         diag_show_source = 1;
+        diag_color       = 0;
     }
 
-    void TearDown() override { unlink(path.c_str()); }
+    void TearDown() override
+    {
+        unlink(path.c_str());
+        diag_color = -1;
+    }
 
     // What diag_print_source() prints for the line and column.
     std::string Excerpt(int line, int col, const char *file = nullptr)
@@ -79,4 +84,84 @@ TEST_F(SourceExcerpt, Nothing)
     EXPECT_EQ(Excerpt(1, 1, ""), "");
     diag_show_source = 0;
     EXPECT_EQ(Excerpt(1, 1), "");
+}
+
+// With color, the caret is bold green; the source line stays plain.
+TEST_F(SourceExcerpt, ColoredCaret)
+{
+    diag_color = 1;
+    EXPECT_EQ(Excerpt(1, 5), "    1 | int a;\n      |     \033[1;32m^\033[0m\n");
+}
+
+// What diag_print_prefix() prints for a location and kind.
+static std::string Prefix(SrcLoc loc, const char *kind)
+{
+    FILE *f = tmpfile();
+    if (!f) {
+        ADD_FAILURE() << "tmpfile";
+        return "";
+    }
+    diag_print_prefix(f, loc, kind);
+    std::string out;
+    rewind(f);
+    for (int c; (c = getc(f)) != EOF;) {
+        out += (char)c;
+    }
+    fclose(f);
+    return out;
+}
+
+class DiagPrefix : public ::testing::Test {
+protected:
+    void TearDown() override
+    {
+        diag_color    = -1;
+        diag_progname = nullptr;
+    }
+};
+
+TEST_F(DiagPrefix, Plain)
+{
+    diag_color = 0;
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 7 }, "error"), "t.c:3:7: error: ");
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 0 }, "warning"), "t.c:3: warning: ");
+    EXPECT_EQ(Prefix(SrcLoc{}, "note"), "note: ");
+    diag_progname = "/usr/bin/vlower";
+    EXPECT_EQ(Prefix(SrcLoc{}, "error"), "vlower: error: ");
+}
+
+// The location is bold; each kind has its own color.
+TEST_F(DiagPrefix, Colored)
+{
+    diag_color = 1;
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 7 }, "error"),
+              "\033[1mt.c:3:7:\033[0m \033[1;31merror:\033[0m ");
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 7 }, "warning"),
+              "\033[1mt.c:3:7:\033[0m \033[1;35mwarning:\033[0m ");
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 7 }, "note"),
+              "\033[1mt.c:3:7:\033[0m \033[1;36mnote:\033[0m ");
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 3, 7 }, "internal compiler error"),
+              "\033[1mt.c:3:7:\033[0m \033[1;31minternal compiler error:\033[0m ");
+    EXPECT_EQ(Prefix(SrcLoc{}, "error"), "\033[1;31merror:\033[0m ");
+    diag_progname = "vlower";
+    EXPECT_EQ(Prefix(SrcLoc{}, "error"), "\033[1mvlower:\033[0m \033[1;31merror:\033[0m ");
+}
+
+// By default, color only goes to a terminal; a temporary file is not one.
+TEST_F(DiagPrefix, AutoIsPlainForAFile)
+{
+    diag_color = -1;
+    EXPECT_EQ(Prefix(SrcLoc{ "t.c", 1, 1 }, "error"), "t.c:1:1: error: ");
+}
+
+TEST_F(DiagPrefix, SetColor)
+{
+    EXPECT_EQ(diag_set_color("always"), 0);
+    EXPECT_EQ(diag_color, 1);
+    EXPECT_EQ(diag_set_color("never"), 0);
+    EXPECT_EQ(diag_color, 0);
+    EXPECT_EQ(diag_set_color("auto"), 0);
+    EXPECT_EQ(diag_color, -1);
+    EXPECT_EQ(diag_set_color("maybe"), -1);
+    EXPECT_EQ(diag_color, -1);
 }
