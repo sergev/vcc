@@ -275,6 +275,49 @@ TEST_F(BraamTest, PlainMain)
     EXPECT_NE(std::string::npos, err.find("on Braam, main is coro(braam_call *)")) << err;
 }
 
+// alloca on Braam: refused in main, a coroutine whose frame outlives the stack, and
+// on the shadow stack in an ordinary function main calls.
+TEST_F(BraamTest, AllocaInMain)
+{
+    std::string err = Build(R"(
+#include <alloca.h>
+#include <braam.h>
+coro(braam_call *) int main(int argc, char **argv)
+{
+    char *p = alloca(16);
+    p[0]    = 0;
+    return p[0];
+}
+)");
+    EXPECT_NE(std::string::npos, err.find("alloca in a coroutine")) << err;
+}
+
+TEST_F(BraamTest, AllocaInFunction)
+{
+    EXPECT_EQ("sum 4950\n", BuildAndRun(R"(
+#include <alloca.h>
+#include <stdio.h>
+static int sum(int n)
+{
+    int *v = alloca(n * sizeof(int));
+    for (int i = 0; i < n; i++)
+        v[i] = i;
+    int s = 0;
+    for (int i = 0; i < n; i++)
+        s += v[i];
+    return s;
+}
+coro(braam_call *) int main(int argc, char **argv)
+{
+    for (int k = 0; k < 1000; k++)
+        sum(100);
+    printf("sum %d\n", sum(100));
+    return 0;
+}
+)"));
+    EXPECT_EQ(0, status) << log;
+}
+
 // The allocator gives freed blocks back: many rounds of blocks of mixed sizes, freed in
 // a mixed order and checked, leave the memory as large as one round did.
 TEST_F(BraamTest, Malloc)

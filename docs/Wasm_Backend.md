@@ -264,7 +264,7 @@ backend from it:
 - A loop that does not suspend at every turn is entered in the middle by the dispatch,
   and gets a dispatch node of its own (above).
 - `co_alloca` in a function uses three builtins that move `__stack_pointer` (the
-  stack frame, below).
+  stack frame, [below](#alloca)).
 - `co_resume` and the rest are calls of `libc/common/co.c`; `__coro_resume` calls the
   frame's `f$resume` through `call_indirect`, so `f$resume` is in the table.
 
@@ -351,13 +351,18 @@ call needs: the variable arguments' buffer at its start, then the copies of argu
 passed by reference, then a result slot for a call whose structure or `long double`
 result has nowhere of its own to go. Every call in the function shares it.
 
-The coroutines' `co_alloca` moves `__stack_pointer` in the middle of a function, through
-three builtins the translator calls and `call.c` expands in place (no call, no calls'
-area, no `.functype`): `__builtin_stack_save()` is `global.get __stack_pointer`,
+### alloca
+
+`alloca(n)` (`<alloca.h>`) and the coroutines' `co_alloca` move `__stack_pointer` in the
+middle of a function, through three builtins the translator calls and `call.c` expands
+in place (no call, no calls' area, no `.functype`): `__builtin_stack_save()` is `global.get __stack_pointer`,
 `__builtin_stack_restore(p)` is `global.set __stack_pointer`, and `__builtin_alloca(n)`
 lowers it by `n` rounded to 16 and yields it. A function that allocates always has a
 frame, 16 bytes when it has no slots, so that its epilogue puts `__stack_pointer` back
-from the frame pointer. The coroutines themselves need nothing of the backend: the
+from the frame pointer. The calls' area is addressed from the frame pointer too, so the
+memory needs no room left below it. On `wasm32-braam`, `main` is a coroutine and may not
+call `alloca` (a coroutine's frame outlives the stack); a function it calls may. The
+coroutines themselves need nothing of the backend: the
 translator makes each an ordinary function `f$resume(fp)` over a frame in memory
 ([Coroutines_Internals.md](Coroutines_Internals.md) §5).
 

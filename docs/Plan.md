@@ -44,10 +44,10 @@ stack, release on `longjmp`, and no runtime call.
 - **MMIX is done** ([Mmix_Backend.md](Mmix_Backend.md#alloca)): `--frame-pointer` (`$253`,
   saved in a slot of the frame; `VCC_MMIX_FRAME_POINTER` runs the whole MMIX suite so)
   and alloca on it. The interop `regcheck` harness now checks `$253` too.
-- **wasm32 already has the machinery.** `Target.stack_alloca` makes `co_alloca` call
-  `__builtin_stack_save`, `__builtin_alloca` and `__builtin_stack_restore`
-  (`stack_builtin()`, `translator/coro.c:527`). `backend/wasm/call.c:28-75` expands them
-  inline, and a function using them gets a frame (`backend/wasm/frame.c:251`).
+- **wasm32 is done** ([Wasm_Backend.md](Wasm_Backend.md#alloca)): it had the builtins
+  for `co_alloca` already, on the shadow stack, rounding to 16 itself. On `wasm32-braam`
+  `main` is a coroutine, where `alloca` is an error; a function it calls may use it
+  (`BraamTest.AllocaInMain`, `AllocaInFunction`; [Braam.md](Braam.md) §4).
 - **No target is left on the arena** (`libc/common/costack.c`): every coroutine target
   sets `stack_alloca`. The translator's arena branch is dead code until A11 removes it.
 - **Every backend assumes the stack pointer is fixed after the prologue:**
@@ -98,15 +98,6 @@ compiler both ways (`RunAllocaWithClang` in `interop_tests.cpp`); `AllocaOnStack
 `translator/test/coro_tests.cpp` where the translator tests have a fixture for the
 target; and the backend's doc gets an "alloca" section, the lists of targets on the stack
 (`docs/Coroutines_*.md`, `costack.c`, `semantic/target.h`, `CLAUDE.md`) the target's name.
-
-### A9. wasm32: switch to the final contract
-
-wasm already allocates on the shadow stack.
-- `gen_stack_builtin` (`backend/wasm/call.c:53`) already rounds sp down to 16, so the raw
-  size needs nothing more.
-- Confirm that `wasm32-braam` rejects alloca in coroutines, including `main`, which is one
-  there.
-- Note: `alloca` cannot be used in a Braam `main`, because `main` is a coroutine.
 
 ### A10. BESM-6 (optional, last)
 

@@ -260,7 +260,7 @@ what catch a misused frame.
   [Riscv_Backend.md](Riscv_Backend.md#alloca),
   [Arm32_Backend.md](Arm32_Backend.md#alloca), [Avr_Backend.md](Avr_Backend.md#alloca),
   [Msp430_Backend.md](Msp430_Backend.md#alloca),
-  [Mmix_Backend.md](Mmix_Backend.md#alloca)). The translator still has the fallback
+  [Mmix_Backend.md](Mmix_Backend.md#alloca), [Wasm_Backend.md](Wasm_Backend.md#alloca)). The translator still has the fallback
   for a target without `stack_alloca`, which none is now (docs/Plan.md, A11):
   `__coro_stack_save`, `__coro_alloca` and `__coro_stack_restore`, calls of
   `libc/common/costack.c`, a static arena (64 KiB, 1 KiB where `size_t` has 16 bits)

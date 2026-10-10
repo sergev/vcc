@@ -180,6 +180,8 @@ Then look for the things the compiler cannot tell you about:
   wait. Do the waiting before or after the call that takes it.
 - **Long computations** should `await braam_yield()` now and then, so that `^C`
   reaches them and other processes get a turn.
+- **`alloca`** is an error in a coroutine, `main` included, since its frame outlives
+  the stack. Move the code that allocates into an ordinary function, or use `malloc`.
 - **Deep recursion through `await`** needs a larger `__braam_task_bytes` (§2).
 - **Variadic functions** cannot be coroutines. One that waits becomes a coroutine
   taking a `va_list`, or formats into its stream with `vfprintf`, which does not wait,
