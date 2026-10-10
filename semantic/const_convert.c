@@ -397,7 +397,8 @@ Tac_StaticInit *new_static_init_from_literal(const Type *target_type, const Lite
         result->u.long_double_val = literal_to_long_double(lit);
         break;
     default:
-        fatal_error("Unsupported constant type for initializer");
+        fatal_error("cannot initialize an object of type '%s' with a constant",
+                    type_to_c(target_type));
     }
     return result;
 }

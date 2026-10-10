@@ -92,7 +92,7 @@ TEST_F(PipelineTest, Chapter10_OutOfScopeExternVar_Neg)
 
 int a = 1;
 )"),
-                 "not found");
+                 "use of undeclared identifier");
 }
 
 // An extern cannot redefine a parameter (same scope, no linkage) of the same name.
@@ -119,7 +119,7 @@ TEST_F(PipelineTest, Chapter10_UndeclaredGlobalVariable_Neg)
 
 int x = 0;
 )"),
-                 "Symbol 'x' not found");
+                 "use of undeclared identifier 'x'");
 }
 
 // --- invalid_labels / extra_credit -----------------------------------------
@@ -134,7 +134,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Undefined label 'x'");
+                 "use of undeclared label 'x'");
 }
 
 // --- invalid_types ----------------------------------------------------------
@@ -226,7 +226,7 @@ TEST_F(PipelineTest, Chapter10_ExternForLoopCounter_Neg)
     return x;
 }
 )"),
-                 "Storage class not permitted in for loop header");
+                 "a declaration in a 'for' loop cannot have a storage class");
 }
 
 // An extern variable cannot have an initializer.
@@ -333,7 +333,7 @@ TEST_F(PipelineTest, Chapter10_StaticForLoopCounter_Neg)
     return x;
 }
 )"),
-                 "Storage class not permitted in for loop header");
+                 "a declaration in a 'for' loop cannot have a storage class");
 }
 
 // A file-scope variable cannot be called as a function.
@@ -345,5 +345,5 @@ int main(void) {
     return foo();
 }
 )"),
-                 "Tried to use variable as function name");
+                 "is not a function or function pointer");
 }

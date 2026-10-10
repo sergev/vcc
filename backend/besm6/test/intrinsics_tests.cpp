@@ -227,7 +227,7 @@ TEST_F(CodegenTest, IntrinsicCyclicAddBranchOmega)
 //
 // popcount(0377) = 8; popcount(0) = 0.  anx numbers from the MSB — bit 48 is position 1 and
 // bit 1 is position 48 — so highbit(1) = 48 and highbit(2^47) = 1.  Zero has no highest set
-// bit and there is no distinguished "not found" value: the result is just x, here 0.
+// bit and there is no distinguished "use of undeclared identifier" value: the result is just x, here 0.
 //
 TEST_F(CodegenTest, IntrinsicPopcountRun)
 {

@@ -15,28 +15,28 @@
 TEST_F(PipelineTest, Chapter5_DeclaredAfterUse_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    a = 1 + 2;\n    int a;\n    return a;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // !a = 3; — the result of '!' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_InvalidLvalue2_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 2;\n    !a = 3;\n    return a;\n}\n"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // a + 3 = 4; — the result of '+' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_InvalidLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 2;\n    a + 3 = 4;\n    return a;\n}\n"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // a = 3 * b = a; — parses as a = ((3*b) = a); '3*b' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_MixedPrecedenceAssignment_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 1;\n    int b = 2;\n    a = 3 * b = a;\n}\n"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // int a declared twice in the same scope.
@@ -50,28 +50,28 @@ TEST_F(PipelineTest, Chapter5_Redefine_Neg)
 TEST_F(PipelineTest, Chapter5_UndeclaredVarAnd_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return 0 && a;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // return a < 5; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredVarCompare_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return a < 5;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // return -a; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredVarUnary_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return -a;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // return a; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredVar_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return a;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // int a declared again after a use (and a return).
@@ -87,75 +87,75 @@ TEST_F(PipelineTest, Chapter5_UseThenRedefine_Neg)
 TEST_F(PipelineTest, Chapter5_CompoundInvalidLvalue2_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 10;\n    (a += 1) -= 2;\n}\n"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // -a += 1; — the result of unary '-' is not an lvalue.
 TEST_F(PipelineTest, Chapter5_CompoundInvalidLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 0;\n    -a += 1;\n    return a;\n}\n"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // a++--; — the result of postfix '++' is not an lvalue for the following '--'.
 TEST_F(PipelineTest, Chapter5_PostfixDecrNonLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 10;\n    return a++--;\n}\n"),
-                 "Operand of post-decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // (a = 4)++; — the result of an assignment is not an lvalue.
 TEST_F(PipelineTest, Chapter5_PostfixIncrNonLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 0;\n    (a = 4)++;\n}\n"),
-                 "Operand of post-increment must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // --3; — a constant is not an lvalue for prefix '--'.
 TEST_F(PipelineTest, Chapter5_PrefixDecrNonLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return --3;\n}\n"),
-                 "Operand of pre-increment/decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // ++(a+1); — the result of '+' is not an lvalue for prefix '++'.
 TEST_F(PipelineTest, Chapter5_PrefixIncrNonLvalue_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int a = 1;\n    ++(a+1);\n    return 0;\n}\n"),
-                 "pre-increment/decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // return a >> 2; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredBitwiseOp_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void){\n    return a >> 2;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // b *= a; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredCompoundAssignmentUse_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    int b = 10;\n    b *= a;\n    return 0;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // a += 1; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredCompoundAssignment_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    a += 1;\n    return 0;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // a--; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredPostfixDecr_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    a--;\n    return 0;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // a++; — 'a' is undeclared.
 TEST_F(PipelineTest, Chapter5_UndeclaredPrefixIncr_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    a++;\n    return 0;\n}\n"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }

@@ -49,31 +49,31 @@ out:
 TEST_F(PipelineTest, DeferReturnInside_Neg)
 {
     EXPECT_DEATH(RunPipeline("int f(void) { _Defer { return 1; } return 0; }"),
-                 "return inside a deferred statement");
+                 "'return' inside a deferred statement");
 }
 
 TEST_F(PipelineTest, DeferBreakLeaves_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { for (;;) { _Defer break; } }"),
-                 "break statement not inside loop or switch");
+                 "'break' statement not in a loop or switch");
 }
 
 TEST_F(PipelineTest, DeferContinueLeaves_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { for (;;) { _Defer { switch (1) { default: continue; } } } }"),
-                 "continue statement not inside loop");
+                 "'continue' statement not in a loop");
 }
 
 TEST_F(PipelineTest, DeferGotoOut_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { _Defer { goto out; } out: ; }"),
-                 "goto out jumps into or out of a deferred statement");
+                 "'goto out' jumps into or out of a deferred statement");
 }
 
 TEST_F(PipelineTest, DeferGotoIn_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(void) { goto in; _Defer { in: ; } }"),
-                 "goto in jumps into or out of a deferred statement");
+                 "'goto in' jumps into or out of a deferred statement");
 }
 
 // --- jumping past a defer --------------------------------------------------
@@ -81,13 +81,13 @@ TEST_F(PipelineTest, DeferGotoIn_Neg)
 TEST_F(PipelineTest, DeferGotoForwardPast_Neg)
 {
     EXPECT_DEATH(RunPipeline("void g(void); void f(void) { goto l; _Defer g(); l: g(); }"),
-                 "goto l jumps forward past a defer");
+                 "'goto l' jumps forward past a defer");
 }
 
 TEST_F(PipelineTest, DeferGotoIntoBlockPast_Neg)
 {
     EXPECT_DEATH(RunPipeline("void g(void); void f(void) { goto l; { _Defer g(); l: g(); } }"),
-                 "goto l jumps into a block past a defer");
+                 "'goto l' jumps into a block past a defer");
 }
 
 TEST_F(PipelineTest, DeferCasePast_Neg)

@@ -144,12 +144,12 @@ TEST_F(LabelLoopsTest, ContinueInSwitchInsideLoop)
 TEST_F(LabelLoopsTest, BreakOutsideLoop)
 {
     ASSERT_EXIT(RunLabelLoops("int f(void) { break; }"), ::testing::ExitedWithCode(1),
-                "break statement not inside loop or switch");
+                "'break' statement not in a loop or switch");
 }
 
 // continue outside any loop is a fatal error.
 TEST_F(LabelLoopsTest, ContinueOutsideLoop)
 {
     ASSERT_EXIT(RunLabelLoops("int f(void) { continue; }"), ::testing::ExitedWithCode(1),
-                "continue statement not inside loop");
+                "'continue' statement not in a loop");
 }

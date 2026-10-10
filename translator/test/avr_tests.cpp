@@ -149,7 +149,7 @@ TEST_F(TranslateTestAvr, SwitchDuplicateAfterConversion)
     EXPECT_DEATH(CompileToYaml(R"(
         int f(int x) { switch (x) { case 0: return 1; case 65536: return 2; } return 0; }
     )"),
-                 "Duplicate case value");
+                 "duplicate case value");
 }
 
 // A multi-character constant has type int: two characters fit, three do not.

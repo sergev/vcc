@@ -497,7 +497,7 @@ TEST_F(TypecheckTest, InvalidAssignment)
         }
     )");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 // ---------------------------------------------------------------------------
@@ -508,28 +508,28 @@ TEST_F(TypecheckTest, InvalidAssignment)
 TEST_F(TypecheckTest, SwitchFloatExpr)
 {
     ParseProgram("double f(double x) { switch (x) {} return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "integer type");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "an integer");
 }
 
 // Pointer controlling expression is rejected.
 TEST_F(TypecheckTest, SwitchPointerExpr)
 {
     ParseProgram("int f(int *p) { switch (p) {} return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "integer type");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "an integer");
 }
 
 // Float case expression is rejected.
 TEST_F(TypecheckTest, CaseFloatValue)
 {
     ParseProgram("int f(int x) { switch (x) { case 1.5: break; } return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "integer type");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "an integer");
 }
 
 // Duplicate integer case values are rejected.
 TEST_F(TypecheckTest, CaseDuplicate)
 {
     ParseProgram("int f(int x) { switch (x) { case 1: break; case 1: break; } return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "Duplicate case value");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "duplicate case value");
 }
 
 // char 'a' and integer 97 should be the same value — duplicate.
@@ -538,14 +538,14 @@ TEST_F(TypecheckTest, CaseDuplicate)
 TEST_F(TypecheckTest, CaseDuplicateCharAndInt)
 {
     ParseProgram("int f(int x) { switch (x) { case 'a': break; case 97: break; } return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "Duplicate case value");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "duplicate case value");
 }
 
 // Two default labels in one switch are rejected.
 TEST_F(TypecheckTest, MultipleDefaultLabels)
 {
     ParseProgram("int f(int x) { switch (x) { default: break; default: break; } return 0; }");
-    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "Multiple default");
+    ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1), "multiple 'default'");
 }
 
 // Basic switch with distinct integer case values is accepted.

@@ -204,7 +204,8 @@ Tac_Type *ast_type_to_tac_type(const Type *t)
 int va_class_of(const Type *t)
 {
     if (!target_config->va_class)
-        fatal_error("__builtin_va_class is not supported on target %s", target_config->name);
+        fatal_error("'__builtin_va_class' is not supported on target '%s'",
+                    target_config->name);
     Tac_Type *tt = ast_type_to_tac_type(t);
     int c        = target_config->va_class(tt);
     tac_free_type(tt);

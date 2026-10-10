@@ -297,7 +297,7 @@ TEST_F(NormalizeTest, DesignatorAfterLastMemberDies)
 TEST_F(NormalizeTest, UnknownMemberDies)
 {
     EXPECT_DEATH(Normalize("struct s { int a; }; struct s g = { .z = 1 };"),
-                 "struct s has no member named z");
+                 "no member named 'z' in 'struct s'");
 }
 
 TEST_F(NormalizeTest, UnionExcessAfterDesignatorDies)

@@ -14,6 +14,94 @@
 #include "typetab.h"
 #include "xalloc.h"
 
+//
+// Messages name the types of the operands as C writes them (docs/Technical_Reference.md,
+// "Diagnostics"). The strings leak, but only on the way out: fatal_error() exits.
+//
+static const char *type_of(const Expr *e)
+{
+    return type_to_c(e->type);
+}
+
+static _Noreturn void invalid_operands(const char *op, const Expr *e1, const Expr *e2)
+{
+    fatal_error("invalid operands to '%s' ('%s' and '%s')", op, type_of(e1), type_of(e2));
+}
+
+static const char *binary_op_text(BinaryOp op)
+{
+    switch (op) {
+    case BINARY_MUL:
+        return "*";
+    case BINARY_DIV:
+        return "/";
+    case BINARY_MOD:
+        return "%";
+    case BINARY_ADD:
+        return "+";
+    case BINARY_SUB:
+        return "-";
+    case BINARY_LEFT_SHIFT:
+        return "<<";
+    case BINARY_RIGHT_SHIFT:
+        return ">>";
+    case BINARY_LT:
+        return "<";
+    case BINARY_GT:
+        return ">";
+    case BINARY_LE:
+        return "<=";
+    case BINARY_GE:
+        return ">=";
+    case BINARY_EQ:
+        return "==";
+    case BINARY_NE:
+        return "!=";
+    case BINARY_BIT_AND:
+        return "&";
+    case BINARY_BIT_XOR:
+        return "^";
+    case BINARY_BIT_OR:
+        return "|";
+    case BINARY_LOG_AND:
+        return "&&";
+    case BINARY_LOG_OR:
+        return "||";
+    case BINARY_COMMA:
+        return ",";
+    }
+    return "?";
+}
+
+static const char *assign_op_text(AssignOp op)
+{
+    switch (op) {
+    case ASSIGN_SIMPLE:
+        return "=";
+    case ASSIGN_MUL:
+        return "*=";
+    case ASSIGN_DIV:
+        return "/=";
+    case ASSIGN_MOD:
+        return "%=";
+    case ASSIGN_ADD:
+        return "+=";
+    case ASSIGN_SUB:
+        return "-=";
+    case ASSIGN_LEFT:
+        return "<<=";
+    case ASSIGN_RIGHT:
+        return ">>=";
+    case ASSIGN_AND:
+        return "&=";
+    case ASSIGN_XOR:
+        return "^=";
+    case ASSIGN_OR:
+        return "|=";
+    }
+    return "?";
+}
+
 // Parser represents f(void) as a single unnamed TYPE_VOID param; treat as no params.
 static const Param *params_for_call(const Type *fn_type)
 {
@@ -100,7 +188,7 @@ static Expr *typecheck_var(Expr *e)
     if (coroutine_value(e, sym))
         return e; // a coroutine's name as a value: its coro_ptr
     if (strcmp(e->u.var, "__builtin_alloca") == 0)
-        fatal_error("__builtin_alloca may only be called");
+        fatal_error("'__builtin_alloca' can only be called");
 
     // A block-scope static is keyed in the symtab by its source name but carries a distinct
     // backend name (so sibling-block repeats stay unique); rewrite the reference to it so the
@@ -245,9 +333,9 @@ static Expr *fold_immediate_arg0(Expr *args, const char *name)
 
     long val = 0;
     if (!try_eval_const_int(args, &val))
-        fatal_error("%s: the %s must be a compile-time constant", name, imm->what);
+        fatal_error("intrinsic '%s': the %s must be a constant", name, imm->what);
     if (val < imm->lo || val > imm->hi)
-        fatal_error("%s: %s %lo %s", name, imm->what, val, imm->range);
+        fatal_error("intrinsic '%s': %s 0%lo %s", name, imm->what, val, imm->range);
 
     Expr *lit                 = new_expression(EXPR_LITERAL);
     lit->u.literal            = new_literal(LITERAL_INT);
@@ -276,7 +364,7 @@ static Expr *promote_variadic_arg(Expr *e)
 // Check the arguments of a call against function type `fn_type` (C11 §6.5.2.2): their
 // number, then each converted as by assignment to its parameter's type, or promoted
 // past the last one of a variadic function.  Returns the new argument list.
-Expr *typecheck_call_args(const Type *fn_type, Expr *args)
+Expr *typecheck_call_args(const Type *fn_type, Expr *args, const char *name)
 {
     const Param *params = params_for_call(fn_type);
     const bool variadic = fn_type->u.function.variadic;
@@ -285,20 +373,30 @@ Expr *typecheck_call_args(const Type *fn_type, Expr *args)
         param_count++;
     for (const Expr *a = args; a; a = a->next)
         arg_count++;
-    if (variadic) {
-        if (arg_count < param_count)
-            fatal_error("Function called with wrong number of arguments");
-    } else if (param_count != arg_count) {
-        fatal_error("Function called with wrong number of arguments");
+    if (arg_count < param_count || (!variadic && arg_count > param_count)) {
+        char callee[256] = "";
+        if (name)
+            snprintf(callee, sizeof(callee), " '%s'", name);
+        fatal_error("too %s arguments to function%s (expected %s%d, have %d)",
+                    arg_count < param_count ? "few" : "many", callee,
+                    variadic ? "at least " : "", param_count, arg_count);
     }
+    int arg_number = 0;
     Expr *arg = args, *prev = NULL, *new_args = NULL;
     const Param *p = params;
     while (arg) {
         Expr *arg_next = arg->next;
         arg->next      = NULL;
         Expr *new_arg;
+        arg_number++;
         if (p) {
-            new_arg = coerce_for_assignment(typecheck_and_decay(arg), p->type);
+            char context[300];
+            if (name)
+                snprintf(context, sizeof(context), "passing argument %d of '%s'", arg_number,
+                         name);
+            else
+                snprintf(context, sizeof(context), "passing argument %d", arg_number);
+            new_arg = coerce_for_assignment(typecheck_and_decay(arg), p->type, context);
             p       = p->next;
         } else {
             new_arg = promote_variadic_arg(arg);
@@ -334,7 +432,7 @@ static Expr *typecheck_expr_at(Expr *e)
         const Type *inner_ty = unalias(inner->type);
         if ((cast_ty->kind == TYPE_DOUBLE && is_pointer(inner_ty)) ||
             (is_pointer(cast_ty) && inner_ty->kind == TYPE_DOUBLE)) {
-            fatal_error("Cannot cast between pointer and double");
+            fatal_error("cannot cast '%s' to '%s'", type_of(inner), type_to_c(e->u.cast.type));
         }
         if (cast_ty->kind == TYPE_VOID) {
             free_type(e->type);
@@ -343,7 +441,7 @@ static Expr *typecheck_expr_at(Expr *e)
             return e;
         }
         if (!is_scalar(e->u.cast.type) || !is_scalar(inner->type)) {
-            fatal_error("Can only cast scalar types");
+            fatal_error("cannot cast '%s' to '%s'", type_of(inner), type_to_c(e->u.cast.type));
         }
         free_type(e->type);
         e->type        = clone_type(e->u.cast.type, __func__, __FILE__, __LINE__);
@@ -362,7 +460,7 @@ static Expr *typecheck_expr_at(Expr *e)
         case UNARY_BIT_NOT: {
             Expr *inner = typecheck_and_decay(e->u.unary_op.expr);
             if (!is_integer(inner->type)) {
-                fatal_error("Bitwise complement only valid for integer types");
+                fatal_error("invalid argument type '%s' to unary '~'", type_of(inner));
             }
             const Type *it = unalias(inner->type);
             if (is_promotable_narrow(it))
@@ -376,7 +474,8 @@ static Expr *typecheck_expr_at(Expr *e)
         case UNARY_NEG: {
             Expr *inner = typecheck_and_decay(e->u.unary_op.expr);
             if (!is_arithmetic(inner->type)) {
-                fatal_error("Can only apply unary +/- to arithmetic types");
+                fatal_error("invalid argument type '%s' to unary '%s'", type_of(inner),
+                            e->u.unary_op.op == UNARY_NEG ? "-" : "+");
             }
             const Type *it = unalias(inner->type);
             if (is_promotable_narrow(it))
@@ -389,11 +488,11 @@ static Expr *typecheck_expr_at(Expr *e)
         case UNARY_DEREF: {
             Expr *inner = typecheck_and_decay(e->u.unary_op.expr);
             if (!is_pointer(inner->type)) {
-                fatal_error("Tried to dereference non-pointer");
+                fatal_error("invalid argument type '%s' to unary '*'", type_of(inner));
             }
             const Type *ptr_type = unalias(inner->type);
             if (unalias(ptr_type->u.pointer.target)->kind == TYPE_VOID) {
-                fatal_error("Can't dereference pointer to void");
+                fatal_error("cannot dereference '%s'", type_of(inner));
             }
             free_type(e->type);
             e->type = clone_type(ptr_type->u.pointer.target, __func__, __FILE__, __LINE__);
@@ -407,10 +506,10 @@ static Expr *typecheck_expr_at(Expr *e)
             bool is_string_literal = inner->kind == EXPR_LITERAL &&
                                      inner->u.literal->kind == LITERAL_STRING;
             if (!is_lvalue(inner) && !is_string_literal) {
-                fatal_error("Cannot take address of non-lvalue");
+                fatal_error("cannot take the address of an rvalue of type '%s'", type_of(inner));
             }
             if (access_bitfield(inner)) {
-                fatal_error("Cannot take address of bit-field");
+                fatal_error("cannot take the address of a bit-field");
             }
             Type *ptr             = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
             ptr->u.pointer.target = clone_type(inner->type, __func__, __FILE__, __LINE__);
@@ -421,22 +520,23 @@ static Expr *typecheck_expr_at(Expr *e)
         }
         case UNARY_PRE_INC:
         case UNARY_PRE_DEC: {
+            const char *what = e->u.unary_op.op == UNARY_PRE_INC ? "increment" : "decrement";
             if (is_function_designator(e->u.unary_op.expr)) {
-                fatal_error("Operand of pre-increment/decrement must be a modifiable lvalue");
+                fatal_error("expression is not assignable");
             }
             Expr *inner = typecheck_expr(e->u.unary_op.expr);
             if (is_array_lvalue_operand(inner)) {
-                fatal_error("Array is not a modifiable lvalue");
+                fatal_error("array type '%s' is not assignable", type_of(inner));
             }
             inner = decay_expr(inner);
             if (!is_lvalue(inner)) {
-                fatal_error("Operand of pre-increment/decrement must be a modifiable lvalue");
+                fatal_error("expression is not assignable");
             }
             if (!is_scalar(inner->type)) {
-                fatal_error("Operand of pre-increment/decrement must be a scalar type");
+                fatal_error("cannot %s value of type '%s'", what, type_of(inner));
             }
             if (is_pointer(inner->type) && !is_complete_pointer(inner->type)) {
-                fatal_error("Cannot increment/decrement pointer to incomplete type");
+                fatal_error("arithmetic on a pointer to an incomplete type '%s'", type_of(inner));
             }
             free_type(e->type);
             e->type            = clone_type(inner->type, __func__, __FILE__, __LINE__);
@@ -490,7 +590,7 @@ static Expr *typecheck_expr_at(Expr *e)
                 e1      = convert_to_kind(e1, ptrdiff_kind());
                 e->type = clone_type(e2->type, __func__, __FILE__, __LINE__);
             } else {
-                fatal_error("Invalid operands for addition");
+                invalid_operands("+", e1, e2);
             }
             e->u.binary_op.left  = e1;
             e->u.binary_op.right = e2;
@@ -511,10 +611,11 @@ static Expr *typecheck_expr_at(Expr *e)
             } else if (is_complete_pointer(e1->type) &&
                        unalias(e1->type)->kind == unalias(e2->type)->kind) {
                 if (!compatible_type(e1->type, e2->type))
-                    fatal_error("Incompatible pointer types");
+                    fatal_error("incompatible pointer types ('%s' and '%s')", type_of(e1),
+                                type_of(e2));
                 e->type = new_type(ptrdiff_kind(), __func__, __FILE__, __LINE__);
             } else {
-                fatal_error("Invalid operands for subtraction");
+                invalid_operands("-", e1, e2);
             }
             e->u.binary_op.left  = e1;
             e->u.binary_op.right = e2;
@@ -525,16 +626,14 @@ static Expr *typecheck_expr_at(Expr *e)
         case BINARY_MOD: {
             e1 = typecheck_and_decay(e1);
             e2 = typecheck_and_decay(e2);
-            if (!is_arithmetic(e1->type) || !is_arithmetic(e2->type)) {
-                fatal_error("Can only multiply arithmetic types");
+            if (!is_arithmetic(e1->type) || !is_arithmetic(e2->type) ||
+                (e->u.binary_op.op == BINARY_MOD &&
+                 (!is_integer(e1->type) || !is_integer(e2->type)))) {
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             const Type *common = get_common_type(e1->type, e2->type);
             e1                 = convert_to_type(e1, common);
             e2                 = convert_to_type(e2, common);
-            if (e->u.binary_op.op == BINARY_MOD &&
-                (common->kind == TYPE_DOUBLE || common->kind == TYPE_FLOAT)) {
-                fatal_error("Can't apply %% to floating-point type");
-            }
             free_type(e->type);
             e->type              = clone_type(common, __func__, __FILE__, __LINE__);
             e->u.binary_op.left  = e1;
@@ -546,10 +645,10 @@ static Expr *typecheck_expr_at(Expr *e)
             e1 = typecheck_and_decay(e1);
             e2 = typecheck_and_decay(e2);
             if (unalias(e1->type)->kind == TYPE_VOID || unalias(e2->type)->kind == TYPE_VOID) {
-                fatal_error("Invalid operands for comparison");
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             if (!is_scalar(e1->type) || !is_scalar(e2->type)) {
-                fatal_error("A scalar operand is required");
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             const Type *common = is_pointer(e1->type) || is_pointer(e2->type)
                                      ? common_pointer_type(e1, e2)
@@ -570,14 +669,14 @@ static Expr *typecheck_expr_at(Expr *e)
             e2 = typecheck_and_decay(e2);
             if (is_complete_pointer(e1->type) && is_complete_pointer(e2->type) &&
                 !compatible_type(e1->type, e2->type))
-                fatal_error("Incompatible pointer types");
+                fatal_error("incompatible pointer types ('%s' and '%s')", type_of(e1), type_of(e2));
             const Type *common =
                 is_arithmetic(e1->type) && is_arithmetic(e2->type)
                     ? get_common_type(e1->type, e2->type)
                     : (is_complete_pointer(e1->type) && is_complete_pointer(e2->type) ? e1->type
                                                                                       : NULL);
             if (!common) {
-                fatal_error("Invalid types for comparison");
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             e1 = convert_to_type(e1, common);
             e2 = convert_to_type(e2, common);
@@ -593,7 +692,7 @@ static Expr *typecheck_expr_at(Expr *e)
             e1 = typecheck_and_decay(e1);
             e2 = typecheck_and_decay(e2);
             if (!is_integer(e1->type) || !is_integer(e2->type)) {
-                fatal_error("Bitwise operators require integer operands");
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             const Type *common = get_common_type(e1->type, e2->type);
             e1                 = convert_to_type(e1, common);
@@ -609,7 +708,7 @@ static Expr *typecheck_expr_at(Expr *e)
             e1 = typecheck_and_decay(e1);
             e2 = typecheck_and_decay(e2);
             if (!is_integer(e1->type) || !is_integer(e2->type)) {
-                fatal_error("Shift operators require integer operands");
+                invalid_operands(binary_op_text(e->u.binary_op.op), e1, e2);
             }
             const Type *t1 = unalias(e1->type), *t2 = unalias(e2->type);
             if (is_promotable_narrow(t1)) {
@@ -630,19 +729,19 @@ static Expr *typecheck_expr_at(Expr *e)
     }
     case EXPR_ASSIGN: {
         if (is_function_designator(e->u.assign.target)) {
-            fatal_error("Operand of assignment must be a modifiable lvalue");
+            fatal_error("expression is not assignable");
         }
         Expr *lhs = typecheck_expr(e->u.assign.target);
         if (is_array_lvalue_operand(lhs)) {
-            fatal_error("Array is not a modifiable lvalue");
+            fatal_error("array type '%s' is not assignable", type_of(lhs));
         }
         lhs = decay_expr(lhs);
         if (!is_lvalue(lhs)) {
-            fatal_error("Left hand side of assignment is invalid lvalue");
+            fatal_error("expression is not assignable");
         }
         Expr *rhs = typecheck_and_decay(e->u.assign.value);
         if (e->u.assign.op == ASSIGN_SIMPLE) {
-            rhs = coerce_for_assignment(rhs, lhs->type);
+            rhs = coerce_for_assignment(rhs, lhs->type, "assigning");
             if (lhs->kind == EXPR_VAR)
                 coro_lint_bind(lhs->u.var, symtab_level(lhs->u.var), rhs);
             else
@@ -650,11 +749,11 @@ static Expr *typecheck_expr_at(Expr *e)
         } else if ((e->u.assign.op == ASSIGN_ADD || e->u.assign.op == ASSIGN_SUB) &&
                    is_complete_pointer(lhs->type)) {
             if (!is_integer(rhs->type))
-                fatal_error("Pointer arithmetic requires integer operand");
+                invalid_operands(assign_op_text(e->u.assign.op), lhs, rhs);
             rhs = convert_to_kind(rhs, ptrdiff_kind());
         } else {
             if (!is_arithmetic(lhs->type) || !is_arithmetic(rhs->type))
-                fatal_error("Invalid operands for compound assignment");
+                invalid_operands(assign_op_text(e->u.assign.op), lhs, rhs);
             // Bitwise, shift, and remainder compound assignments are integer-only.
             switch (e->u.assign.op) {
             case ASSIGN_MOD:
@@ -664,7 +763,7 @@ static Expr *typecheck_expr_at(Expr *e)
             case ASSIGN_XOR:
             case ASSIGN_OR:
                 if (!is_integer(lhs->type) || !is_integer(rhs->type))
-                    fatal_error("Compound bitwise/remainder assignment requires integer operands");
+                    invalid_operands(assign_op_text(e->u.assign.op), lhs, rhs);
                 break;
             default:
                 break;
@@ -738,11 +837,13 @@ static Expr *typecheck_expr_at(Expr *e)
             // For struct/union operands the tags must match, too.
             if ((then_ty->kind == TYPE_STRUCT || then_ty->kind == TYPE_UNION) &&
                 strcmp(then_ty->u.struct_t.name, else_ty->u.struct_t.name) != 0) {
-                fatal_error("Invalid operands for conditional");
+                fatal_error("incompatible operand types in '?:' ('%s' and '%s')", type_of(then_expr),
+                            type_of(else_expr));
             }
             result_type = then_expr->type;
         } else {
-            fatal_error("Invalid operands for conditional");
+            fatal_error("incompatible operand types in '?:' ('%s' and '%s')", type_of(then_expr),
+                            type_of(else_expr));
         }
         free_type(e->type);
         e->type             = clone_type(result_type, __func__, __FILE__, __LINE__);
@@ -782,7 +883,8 @@ static Expr *typecheck_expr_at(Expr *e)
             if (fn_type->kind == TYPE_POINTER)
                 fn_type = unalias(fn_type->u.pointer.target); // function pointer decay
             if (fn_type->kind != TYPE_FUNCTION)
-                fatal_error("Tried to use variable as function name");
+                fatal_error("called object type '%s' is not a function or function pointer",
+                            type_of(func));
         } else {
             func    = typecheck_and_decay(func);
             fn_type = unalias(func->type);
@@ -796,10 +898,15 @@ static Expr *typecheck_expr_at(Expr *e)
             if (fn_type->kind == TYPE_POINTER)
                 fn_type = unalias(fn_type->u.pointer.target);
             if (fn_type->kind != TYPE_FUNCTION)
-                fatal_error("Expression is not a function or function pointer");
+                fatal_error("called object type '%s' is not a function or function pointer",
+                            type_of(func));
             e->u.call.func = func;
         }
-        Expr *new_args = typecheck_call_args(fn_type, e->u.call.args);
+        // A function is named by its own name; a local pointer to one has a backend name.
+        const char *callee = func->kind == EXPR_VAR && unalias(func->type)->kind == TYPE_FUNCTION
+                                 ? func->u.var
+                                 : NULL;
+        Expr *new_args     = typecheck_call_args(fn_type, e->u.call.args, callee);
         // The intrinsics whose first argument the front end must constant-fold: an extracode's
         // opcode, a mode-word mask and a halt code are immediate fields of the instruction
         // word, not values.
@@ -822,7 +929,7 @@ static Expr *typecheck_expr_at(Expr *e)
             result_type = unalias(index->type)->u.pointer.target;
             ptr         = convert_to_kind(ptr, ptrdiff_kind());
         } else {
-            fatal_error("Invalid types for subscript operation");
+            invalid_operands("[]", ptr, index);
         }
         free_type(e->type);
         e->type              = clone_type(result_type, __func__, __FILE__, __LINE__);
@@ -833,13 +940,14 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_SIZEOF_EXPR: {
         Expr *inner = typecheck_expr(e->u.sizeof_expr);
         if (unalias(inner->type)->kind == TYPE_FUNCTION) {
-            fatal_error("Can't apply sizeof to a function type");
+            fatal_error("invalid application of 'sizeof' to a function type");
         }
         if (access_bitfield(inner)) {
-            fatal_error("Can't apply sizeof to a bit-field");
+            fatal_error("invalid application of 'sizeof' to a bit-field");
         }
         if (!is_complete(inner->type)) {
-            fatal_error("Can't apply sizeof to incomplete type");
+            fatal_error("invalid application of 'sizeof' to an incomplete type '%s'",
+                        type_of(inner));
         }
         free_type(e->type);
         e->type          = new_type(size_kind(), __func__, __FILE__, __LINE__);
@@ -849,7 +957,8 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_SIZEOF_TYPE: {
         e->u.sizeof_type = check_type_name(e->u.sizeof_type);
         if (!is_complete(e->u.sizeof_type)) {
-            fatal_error("Can't apply sizeof to incomplete type");
+            fatal_error("invalid application of 'sizeof' to an incomplete type '%s'",
+                        type_to_c(e->u.sizeof_type));
         }
         free_type(e->type);
         e->type = new_type(size_kind(), __func__, __FILE__, __LINE__);
@@ -858,7 +967,8 @@ static Expr *typecheck_expr_at(Expr *e)
     case EXPR_ALIGNOF: {
         e->u.align_of = check_type_name(e->u.align_of);
         if (!is_complete(e->u.align_of)) {
-            fatal_error("Can't apply _Alignof to incomplete type");
+            fatal_error("invalid application of '_Alignof' to an incomplete type '%s'",
+                        type_to_c(e->u.align_of));
         }
         free_type(e->type);
         e->type = new_type(size_kind(), __func__, __FILE__, __LINE__);
@@ -866,10 +976,12 @@ static Expr *typecheck_expr_at(Expr *e)
     }
     case EXPR_VA_CLASS: {
         if (!target_config->va_class)
-            fatal_error("__builtin_va_class is not supported on target %s", target_config->name);
+            fatal_error("'__builtin_va_class' is not supported on target '%s'",
+                        target_config->name);
         e->u.va_class = check_type_name(e->u.va_class);
         if (!is_complete(e->u.va_class)) {
-            fatal_error("Can't apply __builtin_va_class to incomplete type");
+            fatal_error("invalid application of '__builtin_va_class' to an incomplete type '%s'",
+                        type_to_c(e->u.va_class));
         }
         free_type(e->type);
         e->type = new_type(TYPE_INT, __func__, __FILE__, __LINE__);
@@ -885,7 +997,8 @@ static Expr *typecheck_expr_at(Expr *e)
         Expr *strct        = typecheck_and_decay(e->u.field_access.expr);
         const Type *strct_ty = unalias(strct->type);
         if (strct_ty->kind != TYPE_STRUCT && strct_ty->kind != TYPE_UNION) {
-            fatal_error("Dot operator requires structure or union type");
+            fatal_error("member reference base type '%s' is not a structure or union",
+                        type_of(strct));
         }
         const StructDef *entry = structtab_find(strct_ty->u.struct_t.name);
         const FieldDef *member = entry->members;
@@ -895,8 +1008,8 @@ static Expr *typecheck_expr_at(Expr *e)
             }
         }
         if (!member) {
-            fatal_error("Struct %s has no member %s", strct_ty->u.struct_t.name,
-                        e->u.field_access.field);
+            fatal_error("no member named '%s' in '%s'", e->u.field_access.field,
+                        type_to_c(strct_ty));
         }
         assert(member);
         free_type(e->type);
@@ -917,7 +1030,8 @@ static Expr *typecheck_expr_at(Expr *e)
         if (!is_pointer(ptr_type) ||
             (unalias(ptr_type->u.pointer.target)->kind != TYPE_STRUCT &&
              unalias(ptr_type->u.pointer.target)->kind != TYPE_UNION)) {
-            fatal_error("Arrow operator requires pointer to structure or union");
+            fatal_error("member reference type '%s' is not a pointer to a structure or union",
+                        type_of(strct_ptr));
         }
         const Type *target_type = unalias(ptr_type->u.pointer.target);
         const StructDef *entry  = structtab_find(target_type->u.struct_t.name);
@@ -928,8 +1042,8 @@ static Expr *typecheck_expr_at(Expr *e)
             }
         }
         if (!member) {
-            fatal_error("Struct %s has no member %s", target_type->u.struct_t.name,
-                        e->u.ptr_access.field);
+            fatal_error("no member named '%s' in '%s'", e->u.ptr_access.field,
+                        type_to_c(target_type));
         }
         assert(member);
         free_type(e->type);
@@ -944,21 +1058,21 @@ static Expr *typecheck_expr_at(Expr *e)
     }
     case EXPR_POST_INC: {
         if (is_function_designator(e->u.post_inc)) {
-            fatal_error("Operand of post-increment must be a modifiable lvalue");
+            fatal_error("expression is not assignable");
         }
         Expr *inner = typecheck_expr(e->u.post_inc);
         if (is_array_lvalue_operand(inner)) {
-            fatal_error("Array is not a modifiable lvalue");
+            fatal_error("array type '%s' is not assignable", type_of(inner));
         }
         inner = decay_expr(inner);
         if (!is_lvalue(inner)) {
-            fatal_error("Operand of post-increment must be a modifiable lvalue");
+            fatal_error("expression is not assignable");
         }
         if (!is_scalar(inner->type)) {
-            fatal_error("Operand of post-increment must be a scalar type");
+            fatal_error("cannot increment value of type '%s'", type_of(inner));
         }
         if (is_pointer(inner->type) && !is_complete_pointer(inner->type)) {
-            fatal_error("Cannot increment/decrement pointer to incomplete type");
+            fatal_error("arithmetic on a pointer to an incomplete type '%s'", type_of(inner));
         }
         free_type(e->type);
         e->type       = clone_type(inner->type, __func__, __FILE__, __LINE__);
@@ -967,21 +1081,21 @@ static Expr *typecheck_expr_at(Expr *e)
     }
     case EXPR_POST_DEC: {
         if (is_function_designator(e->u.post_dec)) {
-            fatal_error("Operand of post-decrement must be a modifiable lvalue");
+            fatal_error("expression is not assignable");
         }
         Expr *inner = typecheck_expr(e->u.post_dec);
         if (is_array_lvalue_operand(inner)) {
-            fatal_error("Array is not a modifiable lvalue");
+            fatal_error("array type '%s' is not assignable", type_of(inner));
         }
         inner = decay_expr(inner);
         if (!is_lvalue(inner)) {
-            fatal_error("Operand of post-decrement must be a modifiable lvalue");
+            fatal_error("expression is not assignable");
         }
         if (!is_scalar(inner->type)) {
-            fatal_error("Operand of post-decrement must be a scalar type");
+            fatal_error("cannot decrement value of type '%s'", type_of(inner));
         }
         if (is_pointer(inner->type) && !is_complete_pointer(inner->type)) {
-            fatal_error("Cannot increment/decrement pointer to incomplete type");
+            fatal_error("arithmetic on a pointer to an incomplete type '%s'", type_of(inner));
         }
         free_type(e->type);
         e->type       = clone_type(inner->type, __func__, __FILE__, __LINE__);
@@ -1005,7 +1119,7 @@ static Expr *typecheck_expr_at(Expr *e)
                 }
             } else {
                 if (default_assoc)
-                    fatal_error("Multiple default associations in _Generic");
+                    fatal_error("duplicate 'default' association in '_Generic'");
                 ga->u.default_assoc = typecheck_and_decay(ga->u.default_assoc);
                 default_assoc       = ga;
             }
@@ -1013,7 +1127,7 @@ static Expr *typecheck_expr_at(Expr *e)
 
         GenericAssoc *match = selected ? selected : default_assoc;
         if (!match)
-            fatal_error("No matching association in _Generic expression");
+            fatal_error("no association in '_Generic' matches type '%s'", type_to_c(ctrl_type));
         assert(match);
 
         const Expr *match_expr =
@@ -1045,7 +1159,7 @@ static Expr *typecheck_expr_at(Expr *e)
         e->u.compound_literal.type = check_type_name(e->u.compound_literal.type);
         Type *lit_type             = e->u.compound_literal.type;
         if (!is_complete(lit_type)) {
-            fatal_error("Compound literal must have a complete type");
+            fatal_error("compound literal has incomplete type '%s'", type_to_c(lit_type));
         }
         TypeKind kind = unalias(lit_type)->kind;
         if (kind == TYPE_ARRAY || kind == TYPE_STRUCT || kind == TYPE_UNION) {
@@ -1066,7 +1180,7 @@ static Expr *typecheck_expr_at(Expr *e)
             // Scalar: C11 allows {expr} for a scalar type; typecheck the single item.
             InitItem *item = e->u.compound_literal.init;
             if (!item || item->next) {
-                fatal_error("Scalar compound literal must have exactly one initializer");
+                fatal_error("a scalar compound literal takes exactly one initializer");
             }
             assert(item);
             item->init = typecheck_init(lit_type, item->init);
@@ -1099,7 +1213,7 @@ static Expr *decay_expr(Expr *typed)
 {
     const Type *vt = unalias(typed->type);
     if ((vt->kind == TYPE_STRUCT || vt->kind == TYPE_UNION) && !is_complete(typed->type)) {
-        fatal_error("Incomplete structure type not permitted");
+        fatal_error("incomplete type '%s' where a complete type is required", type_of(typed));
     }
     if (vt->kind == TYPE_ARRAY) {
         // A typedef'd array decays through its resolved element type.
@@ -1158,7 +1272,7 @@ Expr *typecheck_scalar(Expr *e)
     }
     Expr *typed = typecheck_and_decay(e);
     if (!is_scalar(typed->type)) {
-        fatal_error("A scalar operand is required");
+        fatal_error("a value of scalar type is required, not '%s'", type_of(typed));
     }
     return typed;
 }

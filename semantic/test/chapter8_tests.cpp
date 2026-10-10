@@ -25,7 +25,7 @@ TEST_F(PipelineTest, Chapter8_BreakNotInLoop_Neg)
         break;
 }
 )"),
-                 "break statement not inside loop or switch");
+                 "'break' statement not in a loop or switch");
 }
 
 // 'continue' in a bare block, with no enclosing loop.
@@ -39,7 +39,7 @@ TEST_F(PipelineTest, Chapter8_ContinueNotInLoop_Neg)
     return 0;
 }
 )"),
-                 "continue statement not inside loop");
+                 "'continue' statement not in a loop");
 }
 
 // A variable declared in the do-body is out of scope in the controlling expr.
@@ -51,7 +51,7 @@ TEST_F(PipelineTest, Chapter8_OutOfScopeDoLoop_Neg)
     } while (a < 100);
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // The for header uses 'i' in its init without ever declaring it.
@@ -65,7 +65,7 @@ TEST_F(PipelineTest, Chapter8_OutOfScopeLoopVariable_Neg)
     }
 }
 )"),
-                 "Symbol 'i' not found");
+                 "use of undeclared identifier 'i'");
 }
 
 // --- invalid_semantics / extra_credit ---------------------------------------
@@ -83,7 +83,7 @@ TEST_F(PipelineTest, Chapter8_CaseContinue_Neg)
     return a;
 }
 )"),
-                 "continue statement not inside loop");
+                 "'continue' statement not in a loop");
 }
 
 // A case label outside any switch (inside a for loop).
@@ -96,7 +96,7 @@ TEST_F(PipelineTest, Chapter8_CaseOutsideSwitch_Neg)
     return 9;
 }
 )"),
-                 "Case label outside switch statement");
+                 "'case' label not in a switch statement");
 }
 
 // 'continue' under a default label, switch is not a loop.
@@ -112,7 +112,7 @@ TEST_F(PipelineTest, Chapter8_DefaultContinue_Neg)
     return a;
 }
 )"),
-                 "continue statement not inside loop");
+                 "'continue' statement not in a loop");
 }
 
 // A default label outside any switch.
@@ -124,7 +124,7 @@ TEST_F(PipelineTest, Chapter8_DefaultOutsideSwitch_Neg)
     }
 }
 )"),
-                 "Default label outside switch statement");
+                 "'default' label not in a switch statement");
 }
 
 // Two case statements share the same scope, so 'int b' collides.
@@ -164,7 +164,7 @@ label:
     return 0;
 }
 )"),
-                 "Duplicate case value");
+                 "duplicate case value");
 }
 
 // Duplicate 'case 1' in a nested if is still the same enclosing switch.
@@ -183,7 +183,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateCaseInNestedStatement_Neg)
     return 0;
 }
 )"),
-                 "Duplicate case value");
+                 "duplicate case value");
 }
 
 // Two 'case 5' in the same switch.
@@ -198,7 +198,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateCase_Neg)
     }
 }
 )"),
-                 "Duplicate case value");
+                 "duplicate case value");
 }
 
 // Two default labels reached through a nested loop/while.
@@ -220,7 +220,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateDefaultInNestedStatement_Neg)
     return 0;
 }
 )"),
-                 "Multiple default labels in one switch");
+                 "multiple 'default' labels in one switch");
 }
 
 // Two default labels in the same switch.
@@ -236,7 +236,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateDefault_Neg)
     }
 }
 )"),
-                 "Multiple default labels in one switch");
+                 "multiple 'default' labels in one switch");
 }
 
 // Duplicate 'label:' — one at function scope, one under a default label.
@@ -256,7 +256,7 @@ label:
     return 0;
 }
 )"),
-                 "Duplicate label");
+                 "redefinition of label");
 }
 
 // Duplicate 'lbl:' inside a do-while body.
@@ -272,7 +272,7 @@ TEST_F(PipelineTest, Chapter8_DuplicateLabelInLoop_Neg)
     return 0;
 }
 )"),
-                 "Duplicate label");
+                 "redefinition of label");
 }
 
 // 'int b' redeclared in the same switch-body scope (one is unreachable).
@@ -300,7 +300,7 @@ TEST_F(PipelineTest, Chapter8_LabeledBreakOutsideLoop_Neg)
     return 0;
 }
 )"),
-                 "break statement not inside loop or switch");
+                 "'break' statement not in a loop or switch");
 }
 
 // 'continue' inside a switch that is not inside a loop.
@@ -317,7 +317,7 @@ TEST_F(PipelineTest, Chapter8_SwitchContinue_Neg)
     return a;
 }
 )"),
-                 "continue statement not inside loop");
+                 "'continue' statement not in a loop");
 }
 
 // The switch controlling expression references an undeclared 'a'.
@@ -331,7 +331,7 @@ TEST_F(PipelineTest, Chapter8_UndeclaredVarSwitchExpression_Neg)
     return 0;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // A case body references an undeclared 'b'.
@@ -350,7 +350,7 @@ TEST_F(PipelineTest, Chapter8_UndeclaredVariableInCase_Neg)
     return 0;
 }
 )"),
-                 "Symbol 'b' not found");
+                 "use of undeclared identifier 'b'");
 }
 
 // A default body references an undeclared 'b'.
@@ -369,7 +369,7 @@ TEST_F(PipelineTest, Chapter8_UndeclaredVariableInDefault_Neg)
     return 0;
 }
 )"),
-                 "Symbol 'b' not found");
+                 "use of undeclared identifier 'b'");
 }
 
 // 'goto foo' inside a case targets a label that does not exist.
@@ -384,7 +384,7 @@ TEST_F(PipelineTest, Chapter8_UndefinedLabelInCase_Neg)
     return 0;
 }
 )"),
-                 "Undefined label");
+                 "use of undeclared label");
 }
 
 // --- shadowing rejected by design (book lists these as valid) ---------------

@@ -40,7 +40,9 @@ bool is_zero_int(const Literal *c);
 bool is_null_pointer_constant(const Expr *e);
 Type *common_pointer_type(const Expr *e1, const Expr *e2);
 bool compatible_type(const Type *target, const Type *src);
-Expr *coerce_for_assignment(Expr *e, const Type *target_type);
+// Convert e as by assignment to target_type; the context ("assigning", "returning",
+// "passing argument 2 of 'f'", ...) completes the message when it cannot be converted.
+Expr *coerce_for_assignment(Expr *e, const Type *target_type, const char *context);
 
 // Const evaluation — typecheck.c
 bool try_eval_const_int(const Expr *e, long *out);
@@ -53,7 +55,7 @@ bool try_eval_const_ld(const Expr *e, Float128 *out);
 
 // Expression type-checking — expressions.c
 Expr *typecheck_string(Expr *e);
-Expr *typecheck_call_args(const Type *fn_type, Expr *args);
+Expr *typecheck_call_args(const Type *fn_type, Expr *args, const char *name);
 Expr *typecheck_and_decay(Expr *e);
 Expr *typecheck_scalar(Expr *e);
 

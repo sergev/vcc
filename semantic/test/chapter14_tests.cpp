@@ -25,7 +25,7 @@ TEST_F(PipelineTest, Chapter14_AbstractFunctionDeclarator_Neg)
     return 0;
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // int (foo(void))(void); — a function cannot return a function.
@@ -37,7 +37,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Function cannot return a function");
+                 "function cannot return function type");
 }
 
 // --- invalid_declarations/extra_credit (label used as a value) --------------
@@ -56,7 +56,7 @@ TEST_F(PipelineTest, Chapter14_AddrOfLabel_Neg)
     return 0;
 }
 )"),
-                 "not found");
+                 "use of undeclared identifier");
 }
 
 // *lbl — it's illegal to dereference a label.
@@ -68,7 +68,7 @@ TEST_F(PipelineTest, Chapter14_DerefLabel_Neg)
     return 0;
 }
 )"),
-                 "not found");
+                 "use of undeclared identifier");
 }
 
 // --- invalid_types: address-of a non-lvalue ---------------------------------
@@ -83,7 +83,7 @@ TEST_F(PipelineTest, Chapter14_AddressOfAddress_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &(x = y) — the result of an assignment is not an lvalue.
@@ -96,7 +96,7 @@ TEST_F(PipelineTest, Chapter14_AddressOfAssignment_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &10 — a constant is not an lvalue.
@@ -107,7 +107,7 @@ TEST_F(PipelineTest, Chapter14_AddressOfConstant_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &(x ? y : z) — the result of a ternary is not an lvalue.
@@ -121,7 +121,7 @@ TEST_F(PipelineTest, Chapter14_AddressOfTernary_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &x = 10; — an address-of expression is not an assignable lvalue.
@@ -133,7 +133,7 @@ TEST_F(PipelineTest, Chapter14_AssignToAddress_Neg)
     &x = 10;
 }
 )"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // --- invalid_types: bad integer/pointer conversions -------------------------
@@ -147,7 +147,7 @@ TEST_F(PipelineTest, Chapter14_AssignIntToPointer_Neg)
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // int *ptr = x; — a non-constant int is not a null pointer constant.
@@ -159,7 +159,7 @@ TEST_F(PipelineTest, Chapter14_AssignIntVarToPointer_Neg)
     int *ptr = x;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // l = d; where l is long *, d is double * — incompatible pointer types.
@@ -173,7 +173,7 @@ TEST_F(PipelineTest, Chapter14_AssignWrongPointerType_Neg)
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // int *x = 0.0; — a double is not a null pointer constant.
@@ -185,7 +185,7 @@ TEST_F(PipelineTest, Chapter14_BadNullPointerConstant_Neg)
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // int *ptr = 140732898195768ul; — a non-zero integer is not a null pointer constant.
@@ -197,7 +197,7 @@ TEST_F(PipelineTest, Chapter14_InvalidPointerInitializer_Neg)
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // static int *x = 10; — a non-zero integer is not a valid static pointer initializer.
@@ -224,7 +224,7 @@ int main(void) {
     return f(&x);
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // return &i; from a long *-returning function where i is int — wrong pointer type.
@@ -241,7 +241,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // --- invalid_types: bad pointer/double casts --------------------------------
@@ -255,7 +255,7 @@ TEST_F(PipelineTest, Chapter14_CastDoubleToPointer_Neg)
     return 0;
 }
 )"),
-                 "Cannot cast between pointer and double");
+                 "cannot cast '");
 }
 
 // (double) x where x is int * — cannot cast a pointer to a double.
@@ -267,7 +267,7 @@ TEST_F(PipelineTest, Chapter14_CastPointerToDouble_Neg)
     return 0;
 }
 )"),
-                 "Cannot cast between pointer and double");
+                 "cannot cast '");
 }
 
 // --- invalid_types: incompatible pointer comparisons / ternary --------------
@@ -281,7 +281,7 @@ TEST_F(PipelineTest, Chapter14_CompareMixedPointerTypes_Neg)
     return x == y;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // ptr == ul comparing a pointer to an unsigned long — incompatible types.
@@ -293,7 +293,7 @@ TEST_F(PipelineTest, Chapter14_ComparePointerToUlong_Neg)
     return ptr == ul;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // 1 ? x : y with long * and int * operands — incompatible pointer types.
@@ -306,7 +306,7 @@ TEST_F(PipelineTest, Chapter14_TernaryMixedPointerTypes_Neg)
     return 0;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // --- invalid_types: arithmetic/unary operators on pointers ------------------
@@ -319,7 +319,7 @@ TEST_F(PipelineTest, Chapter14_ComplementPointer_Neg)
     return (int) ~x;
 }
 )"),
-                 "Bitwise complement only valid for integer types");
+                 "to unary '~'");
 }
 
 // *l where l is unsigned long — cannot dereference a non-pointer.
@@ -330,7 +330,7 @@ TEST_F(PipelineTest, Chapter14_DereferenceNonPointer_Neg)
     return *l;
 }
 )"),
-                 "Tried to dereference non-pointer");
+                 "to unary '\\*'");
 }
 
 // y / 8 where y is a pointer — cannot divide a pointer.
@@ -344,7 +344,7 @@ TEST_F(PipelineTest, Chapter14_DividePointer_Neg)
     return 0;
 }
 )"),
-                 "Can only multiply arithmetic types");
+                 "invalid operands to '[*/%]'");
 }
 
 // x * y where both are pointers — cannot multiply pointers.
@@ -357,7 +357,7 @@ TEST_F(PipelineTest, Chapter14_MultiplyPointers_Neg)
     return 0;
 }
 )"),
-                 "Can only multiply arithmetic types");
+                 "invalid operands to '[*/%]'");
 }
 
 // 0 * x where x is a pointer — cannot multiply by a pointer.
@@ -370,7 +370,7 @@ TEST_F(PipelineTest, Chapter14_MultiplyPointers2_Neg)
     return 0;
 }
 )"),
-                 "Can only multiply arithmetic types");
+                 "invalid operands to '[*/%]'");
 }
 
 // -x where x is a pointer — cannot negate a pointer.
@@ -382,7 +382,7 @@ TEST_F(PipelineTest, Chapter14_NegatePointer_Neg)
     return 0;
 }
 )"),
-                 "Can only apply unary");
+                 "invalid argument type '.*' to unary");
 }
 
 // --- invalid_types/extra_credit: bitwise operators on pointers --------------
@@ -396,7 +396,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseAndPointer_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // x | y where both are pointers — bitwise OR rejects pointers.
@@ -409,7 +409,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseOrPointer_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // ptr ^ l where ptr is a pointer — bitwise XOR rejects a pointer operand.
@@ -422,7 +422,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseXorPointer_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // i >> ptr — a pointer cannot be a shift operand.
@@ -435,7 +435,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseLshiftPointer_Neg)
     return 0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // x >> 10 where x is a pointer — a pointer cannot be shifted.
@@ -446,7 +446,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseRshiftPointer_Neg)
     return (int) (x >> 10);
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // --- invalid_types/extra_credit: compound assignment on pointers ------------
@@ -461,7 +461,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseCompoundAssignToPointer_Neg)
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // x |= null where null is a pointer — no bitwise compound assignment with a pointer.
@@ -474,7 +474,7 @@ TEST_F(PipelineTest, Chapter14_BitwiseCompoundAssignWithPointer_Neg)
     return 1;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // x /= y where both are pointers — no /= on a pointer.
@@ -487,7 +487,7 @@ TEST_F(PipelineTest, Chapter14_CompoundDividePointer_Neg)
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // i %= ptr where ptr is a pointer — no %= with a pointer.
@@ -500,7 +500,7 @@ TEST_F(PipelineTest, Chapter14_CompoundModPointer_Neg)
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // x *= 2 where x is a pointer — no *= on a pointer.
@@ -512,7 +512,7 @@ TEST_F(PipelineTest, Chapter14_CompoundMultiplyPointer_Neg)
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // --- invalid_types/extra_credit: address-of a non-lvalue --------------------
@@ -527,7 +527,7 @@ TEST_F(PipelineTest, Chapter14_CompoundAssignThruPtrNotLval_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &(i += 200) — the result of a compound assignment is not an lvalue.
@@ -539,7 +539,7 @@ TEST_F(PipelineTest, Chapter14_CompoundAssignmentNotLval_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &i-- — the result of a postfix -- is not an lvalue.
@@ -551,7 +551,7 @@ TEST_F(PipelineTest, Chapter14_PostfixDecrNotLvalue_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // &++i — the result of a prefix ++ is not an lvalue.
@@ -563,7 +563,7 @@ TEST_F(PipelineTest, Chapter14_PrefixIncrNotLvalue_Neg)
     return 0;
 }
 )"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // --- invalid_types/extra_credit: switch on a pointer ------------------------
@@ -579,5 +579,5 @@ TEST_F(PipelineTest, Chapter14_SwitchOnPointer_Neg)
     }
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }

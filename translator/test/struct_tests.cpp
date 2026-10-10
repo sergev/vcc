@@ -567,7 +567,7 @@ TEST_F(TranslateTest, StoreToFieldAsValue)
 // ---------------------------------------------------------------------------
 
 // An array of an *anonymous* struct at block scope, subscripted.  Used to abort
-// lower with "Struct or union '__anon_1' not found": the ADD_PTR scale comes from
+// lower with "use of undeclared tag '__anon_1'": the ADD_PTR scale comes from
 // get_size() of the decayed pointer's target, a clone that had lost the cache.
 TEST_F(TranslateTest, BlockLocalAnonStructArray)
 {
@@ -588,7 +588,7 @@ TEST_F(TranslateTest, BlockLocalAnonStructArray)
 }
 
 // The same array with a *named* block-scope tag -- the failure was never about
-// anonymity, and this one reported "Struct or union 'S' not found".
+// anonymity, and this one reported "use of undeclared tag 'S'".
 TEST_F(TranslateTest, BlockLocalStructCharMemberArray)
 {
     std::string yaml = CompileToYaml(R"(

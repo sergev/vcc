@@ -162,17 +162,17 @@ static void check_goto(const Walk *w, const char *name)
         return; // undefined: resolve_labels reports it
     const DeferPos *to = (const DeferPos *)v;
     if (to->defer != w->defer) {
-        fatal_error("goto %s jumps into or out of a deferred statement", name);
+        fatal_error("'goto %s' jumps into or out of a deferred statement", name);
     }
     int k = 0;
     while (k < w->depth && k < to->depth && w->stack[k].key == to->scopes[k].key)
         k++;
     for (int i = k; i < to->depth; i++) {
         if (to->scopes[i].count > 0)
-            fatal_error("goto %s jumps into a block past a defer or co_alloca", name);
+            fatal_error("'goto %s' jumps into a block past a defer or co_alloca", name);
     }
     if (k > 0 && to->scopes[k - 1].count > w->stack[k - 1].count) {
-        fatal_error("goto %s jumps forward past a defer or co_alloca", name);
+        fatal_error("'goto %s' jumps forward past a defer or co_alloca", name);
     }
 }
 
@@ -259,7 +259,7 @@ static void walk_stmt_at(Walk *w, const Stmt *s)
         break;
     case STMT_RETURN:
         if (w->defer)
-            fatal_error("return inside a deferred statement");
+            fatal_error("'return' inside a deferred statement");
         break;
     case STMT_DEFER: {
         // The deferred statement is walked as a root of its own: nothing leaves it.

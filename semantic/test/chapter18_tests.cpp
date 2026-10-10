@@ -35,7 +35,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsCastUndeclared_Neg)
@@ -49,7 +49,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsDerefUndeclared_Neg)
@@ -65,7 +65,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 
@@ -86,7 +86,7 @@ union c {
     int x;
 };
 )SRC"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 TEST_F(PipelineTest, Chapter18_ExtraCreditVarUndeclaredUnionType_Neg)
@@ -165,7 +165,7 @@ int main(void) {
     }
 }
 )SRC"),
-                 "Struct or union 's' not found");
+                 "use of undeclared tag 's'");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsMemberTypeUndeclared_Neg)
@@ -226,7 +226,7 @@ struct c {
     int x;
 };
 )SRC"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 TEST_F(PipelineTest, Chapter18_StructTagsVarTypeUndeclared_Neg)
@@ -265,7 +265,7 @@ int main(void) {
     return my_union.a;
 }
 )SRC"),
-                 "Struct u has no member a");
+                 "no member named 'a' in '(struct|union) u'");
 }
 
 TEST_F(PipelineTest, Chapter18_BadUnionMemberAccessUnionBadMember_Neg)
@@ -286,7 +286,7 @@ int main(void) {
     return foo.blah; // "union s" has no member "blah"
 }
 )SRC"),
-                 "Struct s has no member blah");
+                 "no member named 'blah' in '(struct|union) s'");
 }
 
 TEST_F(PipelineTest, Chapter18_BadUnionMemberAccessUnionBadPointerMember_Neg)
@@ -310,7 +310,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Struct a has no member m");
+                 "no member named 'm' in '(struct|union) a'");
 }
 
 
@@ -331,7 +331,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTypesAssignScalarToUnion_Neg)
@@ -347,7 +347,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTypesReturnTypeMismatch_Neg)
@@ -390,7 +390,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Invalid operands for conditional");
+                 "incompatible operand types in '\\?:'");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionTypesUnionPointerBranchMismatch_Neg)
@@ -407,7 +407,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 
@@ -433,7 +433,7 @@ int main(void) {
     return sizeof(union u);  // invalid - union u type is incomplete
 }
 )SRC"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 
@@ -489,7 +489,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 
@@ -507,7 +507,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesCompoundAssignStructRval_Neg)
@@ -522,7 +522,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesCompoundAssignToNestedStruct_Neg)
@@ -545,7 +545,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesCompoundAssignToStruct_Neg)
@@ -559,7 +559,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesDuplicateStructTypesAfterLabel_Neg)
@@ -596,7 +596,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Operand of post-decrement must be a scalar type");
+                 "cannot decrement value of type");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesPostfixIncrStruct_Neg)
@@ -613,7 +613,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Operand of post-increment must be a scalar type");
+                 "cannot increment value of type");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesPrefixDecrStruct_Neg)
@@ -630,7 +630,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Operand of pre-increment/decrement must be a scalar type");
+                 "cannot (in|de)crement value of type");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesPrefixIncrNestedStruct_Neg)
@@ -649,7 +649,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Operand of pre-increment/decrement must be a scalar type");
+                 "cannot (in|de)crement value of type");
 }
 
 TEST_F(PipelineTest, Chapter18_OtherFeaturesSwitchOnStruct_Neg)
@@ -670,7 +670,7 @@ int main(void) {
     }
 }
 )SRC"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 
@@ -692,7 +692,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCastUnionToInt_Neg)
@@ -708,7 +708,7 @@ int main(void) {
     return (int)x;
 }
 )SRC"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCompareUnions_Neg)
@@ -724,7 +724,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredSwitchOnUnion_Neg)
@@ -745,7 +745,7 @@ int main(void) {
     }
 }
 )SRC"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredUnionAsControllingExpression_Neg)
@@ -763,7 +763,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 
@@ -815,7 +815,7 @@ int main(void) {
     struct s my_struct = {&x, {{1.0}, {2.0}, {&x}}};
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersNestedUnionInitTooLong_Neg)
@@ -847,7 +847,7 @@ int main(void){
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_UnionInitializersStaticAggregateInitWrongType_Neg)
@@ -1017,7 +1017,7 @@ int main(void) {
     union u my_union = {1.0};
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 
@@ -1400,7 +1400,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesAssignDifferentStructType_Neg)
@@ -1423,7 +1423,7 @@ int main(void) {
     return b.field;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesBranchMismatch_Neg)
@@ -1443,7 +1443,7 @@ int main(void) {
   1 ? x : y; // can't have conditional branches with different struct types
 }
 )SRC"),
-                 "Invalid operands for conditional");
+                 "incompatible operand types in '\\?:'");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesBranchMismatch2_Neg)
@@ -1459,7 +1459,7 @@ int main(void) {
     1 ? x : (void) 2;
 }
 )SRC"),
-                 "Invalid operands for conditional");
+                 "incompatible operand types in '\\?:'");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesCompareDifferentStructPointers_Neg)
@@ -1478,7 +1478,7 @@ int main(void) {
   return s1_ptr == s2_ptr;
 }
 )SRC"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesReturnWrongStructType_Neg)
@@ -1503,7 +1503,7 @@ int main(void) {
     return return_struct().x;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesStructParamMismatch_Neg)
@@ -1528,7 +1528,7 @@ int main(void) {
     return take_struct_param(arg); // can't convert argument of type "struct two" to parameter of type "struct one"
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_TypesStructPointerParamMismatch_Neg)
@@ -1552,7 +1552,7 @@ int main(void) {
     return get_a(&arg);
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 
@@ -1594,7 +1594,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializeNestedStaticStructMemberWrongType_Neg)
@@ -1639,7 +1639,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersStructWithScalar_Neg)
@@ -1655,7 +1655,7 @@ int main(void) {
     struct pair p = 1;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersStructWrongType_Neg)
@@ -1677,7 +1677,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersNestedCompoundInitializerTooLong_Neg)
@@ -1735,7 +1735,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_InitializersNonConstantStaticElemInit_Neg)
@@ -1825,7 +1825,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsCastIncompleteStruct_Neg)
@@ -1841,7 +1841,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsDerefIncompleteStructPointer_Neg)
@@ -1858,7 +1858,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteArgFuncall_Neg)
@@ -1875,7 +1875,7 @@ int main(void) {
   f(extern_var);
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteArrayElement_Neg)
@@ -1896,7 +1896,7 @@ int main(void) {
     return 0;
 }
 )SRC"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteLocalVar_Neg)
@@ -1937,7 +1937,7 @@ int main(void) {
   return ptr + 0 == ptr;
 }
 )SRC"),
-                 "Invalid operands for addition");
+                 "invalid operands to '\\+'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompletePtrSubtraction_Neg)
@@ -1952,7 +1952,7 @@ int main(void) {
   return (ptr - ptr) == 0;
 }
 )SRC"),
-                 "Invalid operands for subtraction");
+                 "invalid operands to '-'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteReturnTypeFunDef_Neg)
@@ -1985,7 +1985,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteStructConditional_Neg)
@@ -2001,7 +2001,7 @@ int main(void) {
   1 ? v1 : v2;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteStructFullExpr_Neg)
@@ -2018,7 +2018,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteStructMember_Neg)
@@ -2032,7 +2032,7 @@ int main(void) {
   return foo.a; // can't get member of incomplete structure type
 }
 )SRC"),
-                 "Incomplete structure type not permitted");
+                 "where a complete type is required");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteSubscript_Neg)
@@ -2045,7 +2045,7 @@ extern struct s *ptr;
 // this is equivalent to dereferencing a pointer to an incomplete type
 int main(void) { ptr[0]; }
 )SRC"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsIncompleteTentativeDef_Neg)
@@ -2092,7 +2092,7 @@ int main(void) {
   return sizeof(struct s); // can't take size of incomplete type
 }
 )SRC"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 TEST_F(PipelineTest, Chapter18_IncompleteStructsSizeofIncompleteExpr_Neg)
@@ -2108,7 +2108,7 @@ int main(void) {
     return sizeof(*struct_ptr);
 }
 )SRC"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 
@@ -2131,7 +2131,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot take address of non-lvalue");
+                 "cannot take the address of an rvalue");
 }
 
 // `return_struct()` is an rvalue, so the nested member `.b.x` is a non-lvalue: reject the assignment.
@@ -2159,7 +2159,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // DISABLED: assignment to an array-typed lvalue (array member) is not rejected
@@ -2199,7 +2199,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 
@@ -2218,7 +2218,7 @@ int main(void) {
     return ptr->l;  // can't apply -> operator to pointer to non-struct
 }
 )SRC"),
-                 "Arrow operator requires pointer to structure or union");
+                 "member reference type '.*' is not a pointer to a structure or union");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsBadMember_Neg)
@@ -2239,7 +2239,7 @@ int main(void) {
     return foo.blah; // "struct s" has no member "blah"
 }
 )SRC"),
-                 "Struct s has no member blah");
+                 "no member named 'blah' in '(struct|union) s'");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsBadPointerMember_Neg)
@@ -2263,7 +2263,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Struct a has no member m");
+                 "no member named 'm' in '(struct|union) a'");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsMemberOfNonStruct_Neg)
@@ -2281,7 +2281,7 @@ int main(void) {
   ptr.x = 10; // can't apply . operator to struct pointer
 }
 )SRC"),
-                 "Dot operator requires structure or union type");
+                 "member reference base type '.*' is not a structure or union");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsMemberPointerNonStructPointer_Neg)
@@ -2298,7 +2298,7 @@ int main(void) {
   return my_struct->x;
 }
 )SRC"),
-                 "Arrow operator requires pointer to structure or union");
+                 "member reference type '.*' is not a pointer to a structure or union");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsNestedArrowPointerToNonStruct_Neg)
@@ -2318,7 +2318,7 @@ int main(void) {
     return p_struct.ptr->l;  // can't apply -> operator to pointer to non-struct
 }
 )SRC"),
-                 "Arrow operator requires pointer to structure or union");
+                 "member reference type '.*' is not a pointer to a structure or union");
 }
 
 TEST_F(PipelineTest, Chapter18_MemberOperatorsPostfixPrecedence_Neg)
@@ -2336,7 +2336,7 @@ int main(void) {
     return &x->a;
 }
 )SRC"),
-                 "Arrow operator requires pointer to structure or union");
+                 "member reference type '.*' is not a pointer to a structure or union");
 }
 
 
@@ -2396,7 +2396,7 @@ struct s {
   struct incomplete (*array_pointer)[3];
 };
 )SRC"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 TEST_F(PipelineTest, Chapter18_StructDeclarationInvalidSelfReference_Neg)
@@ -2443,7 +2443,7 @@ int main(void) {
     return 0 && x;  // can't apply boolean operators to structs
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredAssignNullPtrToStruct_Neg)
@@ -2462,7 +2462,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredAssignScalarToStruct_Neg)
@@ -2480,7 +2480,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCastStructToScalar_Neg)
@@ -2497,7 +2497,7 @@ int main(void) {
   return y;
 }
 )SRC"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCastToStruct_Neg)
@@ -2515,7 +2515,7 @@ struct s x;
 // (Clang/GCC only complain about this with -pedantic option)
 int main(void) { (struct s) x; }
 )SRC"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredCompareStructs_Neg)
@@ -2531,7 +2531,7 @@ int main(void) {
     return x == y; // can only apply == operator to scalars, not structures
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredNotStruct_Neg)
@@ -2546,7 +2546,7 @@ int main(void) {
     return !x;  // can only apply boolean operators to scalars, not structs
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredPassStructAsScalarParam_Neg)
@@ -2563,7 +2563,7 @@ int main(void) {
   return foo(x);
 }
 )SRC"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredStructAsInt_Neg)
@@ -2580,7 +2580,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "Bitwise complement only valid for integer types");
+                 "to unary '~'");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredStructControllingExpression_Neg)
@@ -2598,7 +2598,7 @@ int main(void) {
   return 0;
 }
 )SRC"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 TEST_F(PipelineTest, Chapter18_ScalarRequiredSubscriptStruct_Neg)
@@ -2613,7 +2613,7 @@ int main(void) {
   return x[0]; // can only subscript pointers, not structures
 }
 )SRC"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 

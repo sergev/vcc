@@ -12,7 +12,7 @@
 //     not a constraint we reject; the case is kept as a positive test that `&"..."`
 //     typechecks.
 //   * implicit_conversion_between_char_pointers / string_literal_is_plain_char_
-//     pointer — caught by the generic "Cannot convert type for assignment".
+//     pointer — caught by the generic "cannot convert '.*' to '.*' when".
 //
 #include "typecheck_fixture.h"
 
@@ -26,7 +26,7 @@ TEST_F(PipelineTest, Chapter16_AssignToStringLiteral_Neg)
     return 0;
 }
 )"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // char c; extern signed char c; — char and signed char are different types.
@@ -76,7 +76,7 @@ TEST_F(PipelineTest, Chapter16_ImplicitConversionBetweenCharPointers_Neg)
     return (int) s;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // char(*sp)[2] = &"x"; — &"x" has type char(*)[2].  We now accept the address of a
@@ -98,7 +98,7 @@ TEST_F(PipelineTest, Chapter16_NegateCharPointer_Neg)
     return -x;
 }
 )"),
-                 "Can only apply unary");
+                 "invalid argument type '.*' to unary");
 }
 
 // char arr[3][3] = "hello"; — a string cannot initialize a multi-dimensional array.
@@ -201,7 +201,7 @@ TEST_F(PipelineTest, Chapter16_StringLiteralIsPlainCharPointer_Neg)
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // static signed char *ptr = "foo"; — same mismatch, static initializer.
@@ -225,7 +225,7 @@ TEST_F(PipelineTest, Chapter16_BitShiftString_Neg)
     return 0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // "My string" & 100; — bitwise operands must be integers.
@@ -236,7 +236,7 @@ TEST_F(PipelineTest, Chapter16_BitwiseOperationOnString_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // case "foo": — a case expression must be an integer.
@@ -251,7 +251,7 @@ TEST_F(PipelineTest, Chapter16_CaseStatementString_Neg)
     }
 }
 )"),
-                 "Case expression must be of integer type");
+                 "'case' value must be an integer");
 }
 
 // s += "another str"; — pointer arithmetic needs an integer operand.
@@ -263,7 +263,7 @@ TEST_F(PipelineTest, Chapter16_CompoundAssignFromString_Neg)
     return 0;
 }
 )"),
-                 "Pointer arithmetic requires integer operand");
+                 "invalid operands to '");
 }
 
 // "My string" += 1; — a string literal is not a modifiable lvalue.
@@ -274,7 +274,7 @@ TEST_F(PipelineTest, Chapter16_CompoundAssignToString_Neg)
     return 0;
 }
 )"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // "foo"++; — a string literal is not a modifiable lvalue.
@@ -285,7 +285,7 @@ TEST_F(PipelineTest, Chapter16_PostfixIncrString_Neg)
     return 0;
 }
 )"),
-                 "Operand of post-increment must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // ++"foo"; — a string literal is not a modifiable lvalue.
@@ -296,7 +296,7 @@ TEST_F(PipelineTest, Chapter16_PrefixIncrString_Neg)
     return 0;
 }
 )"),
-                 "Operand of pre-increment/decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // switch ("foo") — the controlling expression must be an integer.
@@ -309,7 +309,7 @@ TEST_F(PipelineTest, Chapter16_SwitchOnString_Neg)
     }
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 // --- invalid_labels/extra_credit --------------------------------------------
@@ -329,5 +329,5 @@ TEST_F(PipelineTest, Chapter16_DuplicateCaseCharConst_Neg)
     }
 }
 )"),
-                 "Duplicate case value 120 in switch");
+                 "duplicate case value 120");
 }

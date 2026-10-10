@@ -445,7 +445,7 @@ TEST_F(CodegenTest, AutoLocalBlockStructPartialCompoundInit)
 // v7 preprocessor's buffer.c.  The ADD_PTR element stride comes from get_size() of the
 // decayed pointer's target, a *clone* of the declarator's element type, and clone_type
 // used to drop the size/alignment cache that validate_type had left there, so this aborted
-// with "Struct or union '__anon_1' not found".
+// with "use of undeclared tag '__anon_1'".
 TEST_F(CodegenTest, LocalBlockStructCharArrayIndexed)
 {
     std::string result = CompileAndRun(R"(

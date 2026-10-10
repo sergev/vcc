@@ -44,7 +44,7 @@ TEST_F(PipelineTest, Chapter11_CastLvalue_Neg)
     return 0;
 }
 )"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // A function may not be declared with conflicting parameter types.
@@ -106,5 +106,5 @@ int main(void) {
     return switch_statement(100);
 }
 )"),
-                 "Duplicate case value");
+                 "duplicate case value");
 }

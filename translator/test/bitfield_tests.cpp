@@ -95,13 +95,13 @@ TEST_F(TranslateTestRiscv, BitfieldNonIntegerType)
 TEST_F(TranslateTestRiscv, BitfieldAddress)
 {
     EXPECT_DEATH(CompileUnit("struct S { int x : 3; } s; int *f(void) { return &s.x; }"),
-                 "address of bit-field");
+                 "address of a bit-field");
 }
 
 TEST_F(TranslateTestRiscv, BitfieldSizeof)
 {
     EXPECT_DEATH(CompileUnit("struct S { int x : 3; } s; int f(void) { return sizeof s.x; }"),
-                 "sizeof to a bit-field");
+                 "'sizeof' to a bit-field");
 }
 
 // Unnamed bit-fields are not members: a designator and a positional initializer pass

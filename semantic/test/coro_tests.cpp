@@ -262,7 +262,7 @@ TEST_F(CoroTest, SizeofExpression_Neg)
 TEST_F(CoroTest, AllocaArguments_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { co_alloca(range, 0, 1); }").c_str()),
-                 "wrong number of arguments");
+                 "too (many|few) arguments");
 }
 
 // --- the operations ---------------------------------------------------------
@@ -288,7 +288,7 @@ TEST_F(CoroTest, ResultOfVoid_Neg)
 TEST_F(CoroTest, FrameTypes_Neg)
 {
     EXPECT_DEATH(RunPipeline(With("void f(void) { co_frame(long, void) *p = co_alloca(range, 0, 0, 1); }").c_str()),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // --- yield and await --------------------------------------------------------
@@ -366,7 +366,7 @@ l:
     x++;
 }
 )").c_str()),
-                 "goto l jumps forward past a defer or co_alloca");
+                 "'goto l' jumps forward past a defer or co_alloca");
 }
 
 TEST_F(CoroTest, GotoIntoIfPastAlloca_Neg)
@@ -381,7 +381,7 @@ void f(int x)
     }
 }
 )").c_str()),
-                 "goto l jumps forward past a defer or co_alloca");
+                 "'goto l' jumps forward past a defer or co_alloca");
 }
 
 TEST_F(CoroTest, CasePastAlloca_Neg)
@@ -736,7 +736,7 @@ TEST_F(CoroTest, AllocaAsValue_Neg)
 #include <alloca.h>
 void *(*get(void))(unsigned long) { return __builtin_alloca; }
 )"),
-                 "__builtin_alloca may only be called");
+                 "'__builtin_alloca' can only be called");
 }
 
 TEST_F(CoroTest, AllocaInCoroutine_Neg)

@@ -64,7 +64,8 @@ static void collect_labels_at(const Stmt *stmt, StringMap *labels)
         break;
     case STMT_LABELED:
         if (map_get(labels, stmt->u.labeled.label, NULL)) {
-            fatal_error("Duplicate label '%s'", stmt->u.labeled.label);
+            diag_enter(stmt->loc);
+            fatal_error("redefinition of label '%s'", stmt->u.labeled.label);
         }
         map_insert(labels, stmt->u.labeled.label, 1, 0);
         collect_labels(stmt->u.labeled.stmt, labels);
@@ -137,7 +138,8 @@ static void validate_gotos(const Stmt *stmt, const StringMap *labels)
         break;
     case STMT_GOTO:
         if (!map_get(labels, stmt->u.goto_label, NULL)) {
-            fatal_error("Undefined label '%s'", stmt->u.goto_label);
+            diag_enter(stmt->loc); // the goto, not the function
+            fatal_error("use of undeclared label '%s'", stmt->u.goto_label);
         }
         break;
     default: // leaf statements: nothing to validate

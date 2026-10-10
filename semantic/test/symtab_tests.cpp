@@ -196,7 +196,7 @@ TEST_F(SymtabTest, AddStringLiteral)
 // Test symtab_get
 TEST_F(SymtabTest, GetNonExistentSymbol)
 {
-    ASSERT_EXIT(symtab_get("x"), ::testing::ExitedWithCode(1), "Symbol 'x' not found");
+    ASSERT_EXIT(symtab_get("x"), ::testing::ExitedWithCode(1), "use of undeclared identifier 'x'");
 }
 
 // Test symtab_get_opt

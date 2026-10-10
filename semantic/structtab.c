@@ -133,7 +133,7 @@ StructDef *structtab_find(const char *tag)
 {
     intptr_t value = 0;
     if (!map_get(&structtab, tag, &value)) {
-        fatal_error("Struct or union '%s' not found", tag);
+        fatal_error("use of undeclared tag '%s'", tag);
     }
     return (StructDef *)value;
 }

@@ -69,14 +69,14 @@ static void label_statement_at(Stmt *stmt, LabelFrame *stack, int *depth)
             i--;
         }
         if (i < 0) {
-            fatal_error("continue statement not inside loop");
+            fatal_error("'continue' statement not in a loop");
         }
         set_label(&stmt->branch_target_label, xstrdup(stack[i].cont_lbl));
         break;
     }
     case STMT_BREAK: {
         if (*depth <= 0) {
-            fatal_error("break statement not inside loop or switch");
+            fatal_error("'break' statement not in a loop or switch");
         }
         set_label(&stmt->branch_target_label, xstrdup(stack[*depth - 1].break_lbl));
         break;

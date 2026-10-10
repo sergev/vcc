@@ -52,7 +52,7 @@ TEST_F(PipelineTest, Chapter7_OutOfScope_Neg)
     return a;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // 'b' used before it is declared (in an enclosing scope).
@@ -67,7 +67,7 @@ TEST_F(PipelineTest, Chapter7_UseBeforeDeclare_Neg)
     return b;
 }
 )"),
-                 "Symbol 'b' not found");
+                 "use of undeclared identifier 'b'");
 }
 
 // --- invalid_semantics / extra_credit ---------------------------------------
@@ -105,7 +105,7 @@ TEST_F(PipelineTest, Chapter7_DuplicateLabelsDifferentScopes_Neg)
     }
 }
 )"),
-                 "Duplicate label");
+                 "redefinition of label");
 }
 
 // goto target's labeled statement uses 'y' before it is declared.
@@ -121,7 +121,7 @@ TEST_F(PipelineTest, Chapter7_GotoUseBeforeDeclare_Neg)
     goto return_y;
 }
 )"),
-                 "Symbol 'y' not found");
+                 "use of undeclared identifier 'y'");
 }
 
 // --- shadowing rejected by design (book lists these as valid) ---------------

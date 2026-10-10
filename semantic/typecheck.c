@@ -96,10 +96,10 @@ void validate_type(const Type *t)
     switch (t->kind) {
     case TYPE_ARRAY:
         if (!is_complete(t->u.array.element)) {
-            fatal_error("Array of incomplete type");
+            fatal_error("array has incomplete element type '%s'", type_to_c(t->u.array.element));
         }
         if (unalias(t->u.array.element)->kind == TYPE_FUNCTION) {
-            fatal_error("Cannot declare an array of functions");
+            fatal_error("array of functions '%s' is not allowed", type_to_c(t));
         }
         validate_type(t->u.array.element);
         break;
@@ -108,15 +108,17 @@ void validate_type(const Type *t)
         break;
     case TYPE_FUNCTION:
         if (t->u.function.return_type->kind == TYPE_FUNCTION) {
-            fatal_error("Function cannot return a function");
+            fatal_error("function cannot return function type '%s'",
+                        type_to_c(t->u.function.return_type));
         }
         if (t->u.function.return_type->kind == TYPE_ARRAY) {
-            fatal_error("Function cannot return an array");
+            fatal_error("function cannot return array type '%s'",
+                        type_to_c(t->u.function.return_type));
         }
         validate_type(t->u.function.return_type);
         for (const Param *p = t->u.function.params; p; p = p->next) {
             if (p->type->kind == TYPE_VOID && p->name) {
-                fatal_error("Void parameter not allowed");
+                fatal_error("parameter '%s' has type 'void'", p->name);
             }
             validate_type(p->type);
         }
@@ -164,7 +166,7 @@ void validate_type(const Type *t)
     case TYPE_TYPEDEF_NAME:
         // Global typedef names survive resolve_typedef_names as references.
         if (!typetab_exists(t->u.typedef_name.name)) {
-            fatal_error("Unknown typedef name '%s'", t->u.typedef_name.name);
+            fatal_error("unknown type name '%s'", t->u.typedef_name.name);
         }
         validate_type(typetab_resolve(t->u.typedef_name.name));
         break;
@@ -292,7 +294,8 @@ Type *common_pointer_type(const Expr *e1, const Expr *e2)
         if ((t1->kind == TYPE_STRUCT || t1->kind == TYPE_UNION) &&
             (strcmp(t1->u.struct_t.name, t2->u.struct_t.name) != 0 ||
              (is_coro_struct(t1) && !same_frame_type(t1, t2))))
-            fatal_error("Incompatible pointer types");
+            fatal_error("incompatible pointer types ('%s' and '%s')", type_to_c(e1->type),
+                        type_to_c(e2->type));
         return e1->type;
     }
     if (is_null_pointer_constant(e1))
@@ -308,7 +311,8 @@ Type *common_pointer_type(const Expr *e1, const Expr *e2)
         return e1->type; // already void* — return it borrowed (no allocation)
     if (e2_void_ptr && p1->kind == TYPE_POINTER)
         return e2->type;
-    fatal_error("Incompatible pointer types");
+    fatal_error("incompatible pointer types ('%s' and '%s')", type_to_c(e1->type),
+                        type_to_c(e2->type));
 }
 
 // Parser represents f(void) as a single unnamed TYPE_VOID param; treat as no params.
@@ -388,7 +392,7 @@ bool compatible_type(const Type *target, const Type *src)
 }
 
 // Convert an expression for assignment to target_type.
-Expr *coerce_for_assignment(Expr *e, const Type *target_type)
+Expr *coerce_for_assignment(Expr *e, const Type *target_type, const char *context)
 {
     if (semantic_debug) {
         printf("--- %s()\n", __func__);
@@ -411,7 +415,8 @@ Expr *coerce_for_assignment(Expr *e, const Type *target_type)
     if (e_type->kind == TYPE_POINTER && target_type->kind == TYPE_ARRAY &&
         e_type->u.pointer.target->kind == target_type->u.array.element->kind)
         return e;
-    fatal_error("Cannot convert type for assignment");
+    fatal_error("cannot convert '%s' to '%s' when %s", type_to_c(e->type),
+                type_to_c(target_type), context);
 }
 
 //

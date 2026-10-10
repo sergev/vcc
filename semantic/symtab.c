@@ -298,7 +298,7 @@ Symbol *symtab_get(const char *name)
 {
     Symbol *sym = symtab_get_opt(name);
     if (!sym) {
-        fatal_error("Symbol '%s' not found", name);
+        fatal_error("use of undeclared identifier '%s'", name);
     }
     return sym;
 }

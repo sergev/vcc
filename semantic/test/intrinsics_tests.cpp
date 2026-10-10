@@ -162,7 +162,7 @@ unsigned f(unsigned a)
 {
     return __besm6_acx(a);
 })"),
-                 "wrong number of arguments");
+                 "too (many|few) arguments");
 }
 
 // __besm6_extracode's opcode *is* the instruction's opcode, so it must be a compile-time
@@ -175,7 +175,7 @@ unsigned trap(int op, unsigned ea)
 {
     return __besm6_extracode(op, ea, 0);
 })"),
-                 "compile-time constant");
+                 "must be a constant");
 }
 
 // Only 050..077 are extracodes; anything else names a different instruction entirely.
@@ -244,7 +244,7 @@ void spl(int mask)
 {
     __besm6_maskpsw(mask);
 })"),
-                 "compile-time constant");
+                 "must be a constant");
 }
 
 // ... and so does the 15-bit range of the address field it rides in.
@@ -265,7 +265,7 @@ void die(int code)
 {
     __besm6_stop(code);
 })"),
-                 "compile-time constant");
+                 "must be a constant");
 }
 
 // Another target has no immediate-argument intrinsics: the same call is an ordinary one.

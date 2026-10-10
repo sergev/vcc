@@ -28,7 +28,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "Can't dereference pointer to void");
+                 "cannot dereference '");
 }
 
 // extern void v1; v1 = (void)0; — can't declare a void variable.
@@ -53,7 +53,7 @@ TEST_F(PipelineTest, Chapter17_AssignVoidRval_Neg)
   return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // void x; — can't define (allocate) a void object.
@@ -91,7 +91,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for conditional");
+                 "incompatible operand types in '\\?:'");
 }
 
 // -(void)10; — can't negate a void expression.
@@ -102,7 +102,7 @@ TEST_F(PipelineTest, Chapter17_NegateVoid_Neg)
   return 0;
 }
 )"),
-                 "Can only apply unary");
+                 "invalid argument type '.*' to unary");
 }
 
 // int foo(void) { return; } — a non-void function must return a value.
@@ -117,7 +117,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "Non-void function must return a value");
+                 "must return a value");
 }
 
 // void x(void) { return 1; } — a void function can't return a value.
@@ -132,7 +132,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "Void function cannot return a value");
+                 "void function cannot return a value");
 }
 
 // void *x(void) { return (void)0; } — can't convert void to a pointer.
@@ -142,7 +142,7 @@ TEST_F(PipelineTest, Chapter17_ReturnVoidAsPointer_Neg)
   return (void)0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // arr[(void)1] — a subscript index must be an integer, not void.
@@ -153,7 +153,7 @@ TEST_F(PipelineTest, Chapter17_SubscriptVoid_Neg)
   return arr[(void)1];
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // (void)1 < (void)2 — can't compare void expressions.
@@ -165,7 +165,7 @@ TEST_F(PipelineTest, Chapter17_VoidCompare_Neg)
   return 0;
 }
 )"),
-                 "Invalid types for comparison");
+                 "invalid operands to '");
 }
 
 // x() == (void)10 — can't compare void expressions for equality.
@@ -176,7 +176,7 @@ int main(void) {
     return x() == (void)10;
 }
 )"),
-                 "Invalid operands for comparison");
+                 "invalid operands to '");
 }
 
 // void foo(void x); — a named void parameter is not allowed.
@@ -188,7 +188,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Void parameter not allowed");
+                 "has type 'void'");
 }
 
 // --- invalid_types/scalar_expressions ---------------------------------------
@@ -200,7 +200,7 @@ TEST_F(PipelineTest, Chapter17_AndVoid_Neg)
     return (void)1 && 2;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // (int)(void)3 — can only cast scalar values.
@@ -211,7 +211,7 @@ TEST_F(PipelineTest, Chapter17_CastVoid_Neg)
     return y;
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // !(1 ? f() : g()) — a void operand isn't scalar.
@@ -221,7 +221,7 @@ TEST_F(PipelineTest, Chapter17_NotVoid_Neg)
 void g(void);
 int main(void) { return !(1 ? f() : g()); }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // 1 || (void)2 — a void operand isn't scalar.
@@ -229,7 +229,7 @@ TEST_F(PipelineTest, Chapter17_OrVoid_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(int main(void) { return 1 || (void)2; }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // do { ... } while (f()); (f returns void) — controlling expr must be scalar.
@@ -244,7 +244,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // for (; foo(); ) (foo returns void) — controlling expr must be scalar.
@@ -260,7 +260,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // while ((void)10) — controlling expr must be scalar.
@@ -275,7 +275,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // if ((void)x) — controlling expr must be scalar.
@@ -288,7 +288,7 @@ TEST_F(PipelineTest, Chapter17_VoidIfCondition_Neg)
   return 1;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // f() ? 1 : 2 (f returns void) — ternary condition must be scalar.
@@ -300,7 +300,7 @@ int main(void) {
     return f() ? 1 : 2;
 }
 )"),
-                 "A scalar operand is required");
+                 "(invalid operands to|a value of scalar type is required)");
 }
 
 // --- invalid_types/pointer_conversions --------------------------------------
@@ -312,7 +312,7 @@ TEST_F(PipelineTest, Chapter17_CompareVoidPtrToInt_Neg)
     return (void *)0 == 20ul;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // ptr < arr + 1 (void * vs int *) — can't relationally compare to void *.
@@ -324,7 +324,7 @@ TEST_F(PipelineTest, Chapter17_CompareVoidToOtherPointer_Neg)
   return ptr < arr + 1;
 }
 )"),
-                 "Invalid types for comparison");
+                 "invalid operands to '");
 }
 
 // void *v = x; (x is unsigned long) — can't convert a non-pointer to a pointer.
@@ -335,7 +335,7 @@ TEST_F(PipelineTest, Chapter17_ConvertUlongToVoidPtr_Neg)
   void *v = x;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // return x; (x is void *) — can't convert void * to int by assignment.
@@ -346,7 +346,7 @@ TEST_F(PipelineTest, Chapter17_ConvertVoidPtrToInt_Neg)
   return x;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // 10 * (void *)0 — usual arithmetic conversions can't apply to void *.
@@ -356,7 +356,7 @@ TEST_F(PipelineTest, Chapter17_UsualArithmeticConversionsPtr_Neg)
   int i = 10 * (void *)0;
 }
 )"),
-                 "Can only multiply arithmetic types");
+                 "invalid operands to '[*/%]'");
 }
 
 // --- invalid_types/incomplete_types -----------------------------------------
@@ -372,7 +372,7 @@ int main(void) {
   return 0;
 }
 )"),
-                 "Invalid operands for addition");
+                 "invalid operands to '\\+'");
 }
 
 // sizeof x (x is a function) — can't apply sizeof to a function.
@@ -382,7 +382,7 @@ TEST_F(PipelineTest, Chapter17_SizeofFunction_Neg)
 
 int main(void) { return sizeof x; }
 )"),
-                 "Can't apply sizeof to a function type");
+                 "invalid application of 'sizeof' to a function type");
 }
 
 // sizeof(void[3]) — an array element type must be complete.
@@ -392,7 +392,7 @@ TEST_F(PipelineTest, Chapter17_SizeofVoidArray_Neg)
     return sizeof(void[3]);
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // sizeof((void)x) — can't apply sizeof to an incomplete-type expression.
@@ -403,7 +403,7 @@ TEST_F(PipelineTest, Chapter17_SizeofVoidExpression_Neg)
   return sizeof((void)x);
 }
 )"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 // sizeof (void) — can only apply sizeof to complete types.
@@ -413,7 +413,7 @@ TEST_F(PipelineTest, Chapter17_SizeofVoid_Neg)
     return sizeof (void);
 }
 )"),
-                 "Can't apply sizeof to incomplete type");
+                 "invalid application of 'sizeof' to an incomplete type");
 }
 
 // x - null; (both void *) — no pointer arithmetic on incomplete types.
@@ -426,7 +426,7 @@ TEST_F(PipelineTest, Chapter17_SubVoidPointer_Neg)
   return x - null;
 }
 )"),
-                 "Invalid operands for subtraction");
+                 "invalid operands to '-'");
 }
 
 // (1 ? int_ptr : void_ptr)[1] — can't subscript a pointer to incomplete type.
@@ -439,7 +439,7 @@ TEST_F(PipelineTest, Chapter17_SubscriptVoidPointerConditional_Neg)
   return (1 ? int_ptr : void_ptr)[1];
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // v[0] (v is void *) — can't subscript a pointer to incomplete type.
@@ -452,7 +452,7 @@ TEST_F(PipelineTest, Chapter17_IncompleteSubscriptVoid_Neg)
   return 0;
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // (void(*)[3]) 4 — an array element type must be complete.
@@ -463,7 +463,7 @@ TEST_F(PipelineTest, Chapter17_VoidArrayInCast_Neg)
     return 0;
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // int arr(void foo[3]) — an array element type must be complete.
@@ -473,7 +473,7 @@ TEST_F(PipelineTest, Chapter17_VoidArrayInParamType_Neg)
 
 int main(void) { return 0; }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // extern void (*ptr)[3][4]; — nested incomplete array element type.
@@ -485,7 +485,7 @@ void *foo(void) {
     return ptr;
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // void (*ptr)[3] = malloc(3); — incomplete array element type.
@@ -498,7 +498,7 @@ int main(void) {
     return ptr == 0;
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // int foo(void (*bad_array)[3]) — incomplete array element type.
@@ -512,7 +512,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // void arr[3]; — an array element type must be complete.
@@ -523,7 +523,7 @@ TEST_F(PipelineTest, Chapter17_VoidArray_Neg)
     return 0;
 }
 )"),
-                 "Array of incomplete type");
+                 "array has incomplete element type");
 }
 
 // --- invalid_types/extra_credit ---------------------------------------------
@@ -541,7 +541,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // x & (void)y; — bitwise operands must be integers.
@@ -554,7 +554,7 @@ TEST_F(PipelineTest, Chapter17_BitwiseVoid_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // buff += 3; (buff is void *) — no compound arithmetic on void *.
@@ -568,7 +568,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // buff -= 0; (buff is void *) — no compound arithmetic on void *.
@@ -582,7 +582,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // x += f(); (f returns void) — compound rval can't be void.
@@ -598,7 +598,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Pointer arithmetic requires integer operand");
+                 "invalid operands to '");
 }
 
 // x >>= f(); (f returns void) — compound rval can't be void.
@@ -614,7 +614,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // x *= f(); (f returns void) — compound rval can't be void.
@@ -630,7 +630,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // buff--; (buff is void *) — can't decrement a pointer to void.
@@ -644,7 +644,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot increment/decrement pointer to incomplete type");
+                 "arithmetic on a pointer to an incomplete type");
 }
 
 // (*x)-- (x is void *) — can't dereference a pointer to void.
@@ -657,7 +657,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Can't dereference pointer to void");
+                 "cannot dereference '");
 }
 
 // buff++; (buff is void *) — can't increment a pointer to void.
@@ -671,7 +671,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot increment/decrement pointer to incomplete type");
+                 "arithmetic on a pointer to an incomplete type");
 }
 
 // --buff; (buff is void *) — can't decrement a pointer to void.
@@ -685,7 +685,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot increment/decrement pointer to incomplete type");
+                 "arithmetic on a pointer to an incomplete type");
 }
 
 // ++buff; (buff is void *) — can't increment a pointer to void.
@@ -699,7 +699,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot increment/decrement pointer to incomplete type");
+                 "arithmetic on a pointer to an incomplete type");
 }
 
 // ++(*x); (x is void *) — can't dereference a pointer to void.
@@ -712,7 +712,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Can't dereference pointer to void");
+                 "cannot dereference '");
 }
 
 // switch(f()) (f returns void) — switch controlling expr must be an integer.
@@ -728,5 +728,5 @@ int main(void) {
     }
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }

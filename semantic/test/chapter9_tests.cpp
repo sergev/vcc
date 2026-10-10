@@ -31,7 +31,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Left hand side of assignment is invalid lvalue");
+                 "expression is not assignable");
 }
 
 // Duplicate parameter names in a function prototype.
@@ -111,7 +111,7 @@ int foo(int a) {
     return 1;
 }
 )"),
-                 "Symbol 'foo' not found");
+                 "use of undeclared identifier 'foo'");
 }
 
 // Parameter names from an earlier declaration of foo are not in scope in the
@@ -128,7 +128,7 @@ int foo(int x) {
     return a;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // --- invalid_declarations / extra_credit ------------------------------------
@@ -144,7 +144,7 @@ TEST_F(PipelineTest, Chapter9_CallLabelAsFunction_Neg)
     return x;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // A function call is not an lvalue, so it cannot be a compound-assignment target.
@@ -157,7 +157,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Left hand side of assignment is invalid lvalue");
+                 "expression is not assignable");
 }
 
 // A function call is not an lvalue, so it cannot be decremented.
@@ -169,7 +169,7 @@ int main(void) {
     x()--;
 }
 )"),
-                 "Operand of post-decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // A function call is not an lvalue, so it cannot be incremented.
@@ -181,7 +181,7 @@ int main(void) {
     ++x();
 }
 )"),
-                 "Operand of pre-increment/decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // --- invalid_labels / extra_credit ------------------------------------------
@@ -199,7 +199,7 @@ int main(void) {
     return 1;
 }
 )"),
-                 "Undefined label 'label'");
+                 "use of undeclared label 'label'");
 }
 
 // A function name cannot be used as a goto target.
@@ -214,7 +214,7 @@ int main(void) {
     return 3;
 }
 )"),
-                 "Undefined label 'foo'");
+                 "use of undeclared label 'foo'");
 }
 
 // --- invalid_types ----------------------------------------------------------
@@ -229,7 +229,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // A function is not a modifiable lvalue, so it cannot be assigned to.
@@ -241,7 +241,7 @@ TEST_F(PipelineTest, Chapter9_AssignValueToFunction_Neg)
     return 0;
 }
 )"),
-                 "modifiable lvalue");
+                 "is not assignable");
 }
 
 // A variable named like a function cannot shadow it (no-shadowing / linkage).
@@ -301,7 +301,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Can only multiply arithmetic types");
+                 "invalid operands to '[*/%]'");
 }
 
 // A function defined twice.
@@ -431,7 +431,7 @@ int main(void) {
     return foo(1);
 }
 )"),
-                 "Function called with wrong number of arguments");
+                 "too (many|few) arguments to function");
 }
 
 // foo takes one parameter but is called with two.
@@ -445,7 +445,7 @@ int main(void) {
     return foo(1, 2);
 }
 )"),
-                 "Function called with wrong number of arguments");
+                 "too (many|few) arguments to function");
 }
 
 // --- invalid_types / extra_credit -------------------------------------------
@@ -460,7 +460,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // A function is not a modifiable lvalue for a compound assignment.
@@ -473,7 +473,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "modifiable lvalue");
+                 "is not assignable");
 }
 
 // A function designator is not a valid compound-assignment operand on the rhs.
@@ -487,7 +487,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // A function name cannot be post-incremented.
@@ -500,7 +500,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Operand of post-increment must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // A function name cannot be pre-decremented.
@@ -513,7 +513,7 @@ int main(void){
     return 0;
 }
 )"),
-                 "Operand of pre-increment/decrement must be a modifiable lvalue");
+                 "expression is not assignable");
 }
 
 // A function cannot be the controlling expression of a switch.
@@ -525,7 +525,7 @@ TEST_F(PipelineTest, Chapter9_SwitchOnFunction_Neg)
         return 0;
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 // --- reclassified from invalid_parse (grammar permits; type checker rejects) -
@@ -549,7 +549,7 @@ int main(void) {
     return 0;
 }
 )"),
-                 "Function cannot return a function");
+                 "function cannot return function type");
 }
 
 // A function declaration cannot have an initializer.
@@ -573,5 +573,5 @@ TEST_F(PipelineTest, Chapter9_FunDeclForLoop_Neg)
     }
 }
 )"),
-                 "not permitted in for loop header");
+                 "'for' loop cannot");
 }

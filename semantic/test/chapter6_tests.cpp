@@ -20,7 +20,7 @@ TEST_F(PipelineTest, Chapter6_InvalidVarInIf_Neg)
     int c = 0;
 }
 )"),
-                 "Symbol 'c' not found");
+                 "use of undeclared identifier 'c'");
 }
 
 // a > b ? a = 1 : a = 0; — parses as (a>b ? a=1 : a) = 0; the conditional is
@@ -34,7 +34,7 @@ TEST_F(PipelineTest, Chapter6_TernaryAssign_Neg)
     return a;
 }
 )"),
-                 "invalid lvalue");
+                 "expression is not assignable");
 }
 
 // return a > 0 ? 1 : 2; before 'a' is declared.
@@ -45,7 +45,7 @@ TEST_F(PipelineTest, Chapter6_UndeclaredVarInTernary_Neg)
     int a = 5;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // --- invalid_semantics/extra_credit -----------------------------------------
@@ -61,7 +61,7 @@ label:
     return 2;
 }
 )"),
-                 "Duplicate label");
+                 "redefinition of label");
 }
 
 // goto label; with no such label defined.
@@ -72,7 +72,7 @@ TEST_F(PipelineTest, Chapter6_GotoMissingLabel_Neg)
     return 0;
 }
 )"),
-                 "Undefined label");
+                 "use of undeclared label");
 }
 
 // goto a; where 'a' is a variable, not a label (separate namespaces).
@@ -84,7 +84,7 @@ TEST_F(PipelineTest, Chapter6_GotoVariable_Neg)
     return 0;
 }
 )"),
-                 "Undefined label");
+                 "use of undeclared label");
 }
 
 // lbl: return a; — 'a' is never declared.
@@ -96,7 +96,7 @@ lbl:
     return 0;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }
 
 // a: x = a; — 'a' is a label, not a value; using it as a variable is undeclared.
@@ -109,5 +109,5 @@ TEST_F(PipelineTest, Chapter6_UseLabelAsVariable_Neg)
     return 0;
 }
 )"),
-                 "Symbol 'a' not found");
+                 "use of undeclared identifier 'a'");
 }

@@ -17,7 +17,7 @@ TEST_F(PipelineTest, Chapter13_ComplementDouble_Neg)
     return 0;
 }
 )"),
-                 "Bitwise complement only valid for integer types");
+                 "to unary '~'");
 }
 
 // d % 3 — the remainder operator rejects a floating left operand.
@@ -29,7 +29,7 @@ TEST_F(PipelineTest, Chapter13_ModDouble_Neg)
     return 0;
 }
 )"),
-                 "Can't apply % to floating-point type");
+                 "invalid operands to '%'");
 }
 
 // 3.0 % 5 — same, with a floating constant left operand.
@@ -40,7 +40,7 @@ TEST_F(PipelineTest, Chapter13_ModDouble2_Neg)
     return 0;
 }
 )"),
-                 "Can't apply % to floating-point type");
+                 "invalid operands to '%'");
 }
 
 // --- invalid_types/extra_credit --------------------------------------------
@@ -53,7 +53,7 @@ TEST_F(PipelineTest, Chapter13_BitwiseAnd_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // 0.0 | -0.0 — bitwise OR is integer-only.
@@ -64,7 +64,7 @@ TEST_F(PipelineTest, Chapter13_BitwiseOr_Neg)
     return 0;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // 1e10 ^ -1e10 — bitwise XOR is integer-only.
@@ -74,7 +74,7 @@ TEST_F(PipelineTest, Chapter13_BitwiseXor_Neg)
     return 1e10 ^ -1e10;
 }
 )"),
-                 "Bitwise operators require integer operands");
+                 "invalid operands to '");
 }
 
 // 5.0 << 3 — the left operand of a shift must be an integer.
@@ -85,7 +85,7 @@ TEST_F(PipelineTest, Chapter13_BitwiseShiftDouble_Neg)
     return 0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // 1 << 2.0 — the right operand of a shift must be an integer.
@@ -95,7 +95,7 @@ TEST_F(PipelineTest, Chapter13_BitwiseShiftDouble2_Neg)
     return 1 << 2.0;
 }
 )"),
-                 "Shift operators require integer operands");
+                 "invalid operands to '");
 }
 
 // d &= 0 — compound bitwise AND on a double.
@@ -107,7 +107,7 @@ TEST_F(PipelineTest, Chapter13_CompoundBitwiseAnd_Neg)
     return (int) d;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // i |= 2.0 — compound bitwise OR with a double right operand.
@@ -119,7 +119,7 @@ TEST_F(PipelineTest, Chapter13_CompoundBitwiseXor_Neg)
     return (int) i;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // d <<= 1 — compound left shift on a double.
@@ -131,7 +131,7 @@ TEST_F(PipelineTest, Chapter13_CompoundLeftBitshift_Neg)
     return d;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // i >>= 2.0 — compound right shift with a double right operand.
@@ -143,7 +143,7 @@ TEST_F(PipelineTest, Chapter13_CompoundRightBitshift_Neg)
     return i;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // d %= 2 — compound remainder on a double.
@@ -155,7 +155,7 @@ TEST_F(PipelineTest, Chapter13_CompoundMod_Neg)
     return (int) d;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // i %= 1.0 — compound remainder with a double right operand.
@@ -167,7 +167,7 @@ TEST_F(PipelineTest, Chapter13_CompoundMod2_Neg)
     return i;
 }
 )"),
-                 "requires integer operands");
+                 "invalid operands to '");
 }
 
 // switch (d) where d is a double — the controlling expression must be integer.
@@ -181,7 +181,7 @@ TEST_F(PipelineTest, Chapter13_SwitchOnDouble_Neg)
     return 1;
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 // case 1.0 — a case label must be an integer constant.
@@ -195,5 +195,5 @@ TEST_F(PipelineTest, Chapter13_SwitchDoubleCase_Neg)
     }
 }
 )"),
-                 "Case expression must be of integer type");
+                 "'case' value must be an integer");
 }

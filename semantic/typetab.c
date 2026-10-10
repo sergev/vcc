@@ -80,7 +80,7 @@ TypeDef *typetab_find(const char *name)
 {
     intptr_t value = 0;
     if (!map_get(&typetab, name, &value)) {
-        fatal_error("Typedef '%s' not found", name);
+        fatal_error("unknown type name '%s'", name);
     }
     return (TypeDef *)value;
 }

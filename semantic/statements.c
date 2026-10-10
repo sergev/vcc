@@ -51,12 +51,13 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
     case STMT_RETURN:
         if (s->u.expr) {
             if (unalias(ret_type)->kind == TYPE_VOID) {
-                fatal_error("Void function cannot return a value");
+                fatal_error("void function cannot return a value");
             }
-            s->u.expr = coerce_for_assignment(typecheck_and_decay(s->u.expr), ret_type);
+            s->u.expr =
+                coerce_for_assignment(typecheck_and_decay(s->u.expr), ret_type, "returning");
             coro_lint_bind(NULL, -1, s->u.expr); // a frame returned outlives its storage
         } else if (unalias(ret_type)->kind != TYPE_VOID) {
-            fatal_error("Non-void function must return a value");
+            fatal_error("function returning '%s' must return a value", type_to_c(ret_type));
         }
         return s;
     case STMT_EXPR: {
@@ -98,13 +99,13 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
         if (s->u.for_stmt.init->kind == FOR_INIT_DECL) {
             const Declaration *init_decl = s->u.for_stmt.init->u.decl;
             if (has_storage(init_decl->u.var.specifiers)) {
-                fatal_error("Storage class not permitted in for loop header");
+                fatal_error("a declaration in a 'for' loop cannot have a storage class");
             }
             for (const InitDeclarator *id =
                      init_decl->kind == DECL_VAR ? init_decl->u.var.declarators : NULL;
                  id; id = id->next) {
                 if (id->type && unalias(id->type)->kind == TYPE_FUNCTION) {
-                    fatal_error("Function declaration not permitted in for loop header");
+                    fatal_error("a 'for' loop cannot declare a function");
                 }
             }
             typecheck_local_decl(s->u.for_stmt.init->u.decl);
@@ -129,7 +130,7 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
         /* C11 §6.8.4.2 p1: controlling expression must be integer type. */
         Expr *ctrl = typecheck_and_decay(s->u.switch_stmt.expr);
         if (!is_integer(ctrl->type)) {
-            fatal_error("Switch controlling expression must be of integer type");
+            fatal_error("'switch' requires an integer value, not '%s'", type_to_c(ctrl->type));
         }
         /* Integer promotion: types narrower than int → int (or unsigned int). */
         if (is_promotable_narrow(ctrl->type)) {
@@ -147,16 +148,16 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
     }
     case STMT_CASE: {
         if (!current_switch) {
-            fatal_error("Case label outside switch statement");
+            fatal_error("'case' label not in a switch statement");
         }
         /* C11 §6.8.4.2 p3: case expression must be integer constant. */
         Expr *ce = typecheck_and_decay(s->u.case_stmt.expr);
         if (!is_integer(ce->type)) {
-            fatal_error("Case expression must be of integer type");
+            fatal_error("'case' value must be an integer, not '%s'", type_to_c(ce->type));
         }
         long val;
         if (!try_eval_const_int(ce, &val)) {
-            fatal_error("Case expression is not a constant integer");
+            fatal_error("'case' value is not a constant expression");
         }
         /* C11 §6.8.4.2p5: compared after conversion to the promoted controlling type,
            so 0 and 65536 are duplicates where int has 16 bits. */
@@ -164,7 +165,7 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
         char key[32];
         snprintf(key, sizeof(key), "%ld", val);
         if (map_get(&current_switch->seen_cases, key, NULL)) {
-            fatal_error("Duplicate case value %ld in switch", val);
+            fatal_error("duplicate case value %ld", val);
         }
         map_insert(&current_switch->seen_cases, key, 0, 0);
         s->u.case_stmt.expr = ce;
@@ -173,10 +174,10 @@ static Stmt *typecheck_statement_at(const Type *ret_type, Stmt *s)
     }
     case STMT_DEFAULT: {
         if (!current_switch) {
-            fatal_error("Default label outside switch statement");
+            fatal_error("'default' label not in a switch statement");
         }
         if (current_switch->seen_default) {
-            fatal_error("Multiple default labels in one switch");
+            fatal_error("multiple 'default' labels in one switch");
         }
         current_switch->seen_default = true;
         s->u.default_stmt            = typecheck_statement(ret_type, s->u.default_stmt);

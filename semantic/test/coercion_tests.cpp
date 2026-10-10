@@ -479,42 +479,42 @@ TEST_F(CoercionTest, Error_IntToIntPtr)
 {
     ParseProgram("int *f(int x) { return x; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_IntPtrToInt)
 {
     ParseProgram("int f(int *p) { return p; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_IncompatiblePtrs)
 {
     ParseProgram("double *f(int *p) { return p; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_CharPtrToIntPtr)
 {
     ParseProgram("int *f(char *p) { return p; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_FloatToPtr)
 {
     ParseProgram("int *f(float x) { return x; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_StructToInt)
 {
     ParseProgram("struct S { int x; }; int f(struct S s) { return s; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, Error_FuncArgIncompat)
@@ -524,7 +524,7 @@ TEST_F(CoercionTest, Error_FuncArgIncompat)
         void f(double *q) { g(q); }
     )");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 // ─── H. get_common_type() — usual arithmetic conversions ─────────────────────
@@ -670,7 +670,7 @@ TEST_F(CoercionTest, DiffStructError)
         struct A f(struct B b) { return b; }
     )");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 TEST_F(CoercionTest, SameUnionAssign)
@@ -691,7 +691,7 @@ TEST_F(CoercionTest, DiffUnionError)
         union A f(union B b) { return b; }
     )");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Cannot convert type for assignment");
+                "cannot convert '.*' to '.*' when");
 }
 
 // ─── H additions — get_common_type() with short and float ────────────────────
@@ -1038,7 +1038,7 @@ TEST_F(CoercionTest, Error_PlusAssign_Ptr_FloatRhs)
     // float is not an integer type — pointer += float must be rejected.
     ParseProgram("void f(int *p, float n) { p += n; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Pointer arithmetic requires integer operand");
+                "invalid operands to '");
 }
 
 TEST_F(CoercionTest, Error_PlusAssign_Ptr_PtrRhs)
@@ -1046,7 +1046,7 @@ TEST_F(CoercionTest, Error_PlusAssign_Ptr_PtrRhs)
     // pointer rhs for pointer += is also rejected.
     ParseProgram("void f(int *p, int *q) { p += q; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Pointer arithmetic requires integer operand");
+                "invalid operands to '");
 }
 
 TEST_F(CoercionTest, Error_MulAssign_PtrLhs)
@@ -1054,7 +1054,7 @@ TEST_F(CoercionTest, Error_MulAssign_PtrLhs)
     // *= on a pointer lhs is not pointer arithmetic — both sides must be arithmetic.
     ParseProgram("void f(int *p, int n) { p *= n; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Invalid operands for compound assignment");
+                "invalid operands to '");
 }
 
 TEST_F(CoercionTest, Error_DivAssign_PtrRhs)
@@ -1062,7 +1062,7 @@ TEST_F(CoercionTest, Error_DivAssign_PtrRhs)
     // pointer rhs for integer /= is not arithmetic.
     ParseProgram("void f(int x, int *p) { x /= p; }");
     ASSERT_EXIT(typecheck_program(program), ::testing::ExitedWithCode(1),
-                "Invalid operands for compound assignment");
+                "invalid operands to '");
 }
 
 // Plain `char` signedness is target-defined (C11 §6.2.5p15): it is signed on x86_64 and

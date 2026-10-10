@@ -632,7 +632,7 @@ TEST_F(PipelineTest, DistinctAnonStructsStayIncompatible_Neg)
 {
     EXPECT_DEATH(RunPipeline("struct { int x; } a;  struct { int x; } b;"
                              " int f(void) { a = b; return 0; }"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 //
@@ -658,7 +658,7 @@ int f(void)
 TEST_F(PipelineTest, ArrayCompoundLiteralNotAssignable_Neg)
 {
     EXPECT_DEATH(RunPipeline("void f(int *p) { (int[2]){ 1, 2 } = p; }"),
-                 "Array is not a modifiable lvalue");
+                 "array type '.*' is not assignable");
 }
 
 //

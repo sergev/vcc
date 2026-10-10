@@ -20,5 +20,5 @@
 TEST_F(PipelineTest, Chapter3_MalformedParen_Neg)
 {
     EXPECT_DEATH(RunPipeline("int main(void) {\n    return 2 (- 3);\n}\n"),
-                 "Expression is not a function or function pointer");
+                 "is not a function or function pointer");
 }

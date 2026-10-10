@@ -812,7 +812,7 @@ static Initializer *check_init_at(Type *target_type, Initializer *init)
 
     // Handle a single (already typechecked) expression.
     if (init->kind == INITIALIZER_SINGLE) {
-        init->u.expr = coerce_for_assignment(init->u.expr, target_type);
+        init->u.expr = coerce_for_assignment(init->u.expr, target_type, "initializing");
         return init;
     }
 

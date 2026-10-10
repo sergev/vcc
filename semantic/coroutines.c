@@ -286,7 +286,7 @@ static Expr *coro_ptr_args(Expr *args, const char *what)
     static const Type void_type = { .kind = TYPE_VOID };
     Type *void_ptr              = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
     void_ptr->u.pointer.target  = clone_type(&void_type, __func__, __FILE__, __LINE__);
-    Expr *a                     = coerce_for_assignment(typecheck_and_decay(args), void_ptr);
+    Expr *a = coerce_for_assignment(typecheck_and_decay(args), void_ptr, "passing the argument");
     free_type(void_ptr);
     return a;
 }
@@ -341,7 +341,8 @@ Expr *typecheck_yield(Expr *e)
     if (e->u.yield_expr) {
         if (is_void)
             fatal_error("yield with a value in a coroutine that yields void");
-        e->u.yield_expr = coerce_for_assignment(typecheck_and_decay(e->u.yield_expr), coro_yield);
+        e->u.yield_expr =
+            coerce_for_assignment(typecheck_and_decay(e->u.yield_expr), coro_yield, "yielding");
     } else if (!is_void) {
         fatal_error("yield without a value in a coroutine that yields a value");
     }
@@ -425,7 +426,8 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
         static const Type void_type = { .kind = TYPE_VOID };
         Type *void_ptr              = new_type(TYPE_POINTER, __func__, __FILE__, __LINE__);
         void_ptr->u.pointer.target  = clone_type(&void_type, __func__, __FILE__, __LINE__);
-        storage                     = coerce_for_assignment(typecheck_and_decay(storage), void_ptr);
+        storage = coerce_for_assignment(typecheck_and_decay(storage), void_ptr,
+                                        "passing the storage");
         free_type(void_ptr);
         bytes         = size_argument(bytes, "co_init: the size");
         storage->next = bytes;
@@ -460,7 +462,7 @@ static void typecheck_start(Expr *e, const Type **yield, const Type **result)
         *result    = desc->u.struct_t.frame_result;
     } else {
         const Symbol *sym = symtab_get(name->u.var);
-        tail->next        = typecheck_call_args(unalias(sym->type), rest);
+        tail->next        = typecheck_call_args(unalias(sym->type), rest, name->u.var);
         *yield            = sym->u.func.yield_type;
         *result           = result_of(sym);
     }

@@ -149,8 +149,7 @@ static void designate(const Type *t, Initializer *node, InitItem *item, InitItem
                 s = &(*s)->next;
         }
         if (!f)
-            fatal_error("%s %s has no member named %s", aggregate_name(t),
-                        t->u.struct_t.name, d->u.name);
+            fatal_error("no member named '%s' in '%s'", d->u.name, type_to_c(t));
         if (t->kind == TYPE_UNION) {
             // Another member's value does not survive a switch of member.
             const char *old = (*s)->designators ? (*s)->designators->u.name : members->name;

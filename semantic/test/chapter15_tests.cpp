@@ -38,7 +38,7 @@ TEST_F(PipelineTest, Chapter15_MalformedAbstractArrayDeclarator2_Neg)
     return (int[3](*))0;
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // (long(([2])[3]))arr — the nested parenthesized array abstract declarator parses
@@ -51,7 +51,7 @@ TEST_F(PipelineTest, Chapter15_CastToArrayType3_Neg)
     return ((long(([2])[3]))arr);
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // int foo(void)[3]; — a function cannot return an array.
@@ -59,7 +59,7 @@ TEST_F(PipelineTest, Chapter15_ReturnArray_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(int foo(void)[3];
 )"),
-                 "Function cannot return an array");
+                 "function cannot return array type");
 }
 
 // int(foo(void))[3][4]; — a function cannot return an array.
@@ -67,7 +67,7 @@ TEST_F(PipelineTest, Chapter15_FunctionReturnsArray_Neg)
 {
     EXPECT_DEATH(RunPipeline(R"(int(foo(void))[3][4];
 )"),
-                 "Function cannot return an array");
+                 "function cannot return array type");
 }
 
 // --- pointer arithmetic -----------------------------------------------------
@@ -82,7 +82,7 @@ TEST_F(PipelineTest, Chapter15_AddTwoPointers_Neg)
     return (x + y == 0);
 }
 )"),
-                 "Invalid operands for addition");
+                 "invalid operands to '\\+'");
 }
 
 // y - 0.0 — you can't subtract a double from a pointer.
@@ -94,7 +94,7 @@ TEST_F(PipelineTest, Chapter15_SubDoubleFromPtr_Neg)
     return (y - 0.0 == 0.0);
 }
 )"),
-                 "Invalid operands for subtraction");
+                 "invalid operands to '-'");
 }
 
 // 0 - x — you can't subtract a pointer from an integer.
@@ -106,7 +106,7 @@ TEST_F(PipelineTest, Chapter15_SubPtrFromInt_Neg)
     return 0 - x == 0;
 }
 )"),
-                 "Invalid operands for subtraction");
+                 "invalid operands to '-'");
 }
 
 // --- comparisons ------------------------------------------------------------
@@ -120,7 +120,7 @@ TEST_F(PipelineTest, Chapter15_CompareExplicitAndImplicitAddr_Neg)
     return arr == &arr;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // l <= 100ul — you can't compare a pointer to an integer.
@@ -132,7 +132,7 @@ TEST_F(PipelineTest, Chapter15_ComparePointerToInt_Neg)
     return l <= 100ul;
 }
 )"),
-                 "Invalid types for comparison");
+                 "invalid operands to '");
 }
 
 // x > 0 — 0 is not converted to a null pointer in a relational comparison.
@@ -144,7 +144,7 @@ TEST_F(PipelineTest, Chapter15_ComparePointerToZero_Neg)
     return x > 0;
 }
 )"),
-                 "Invalid types for comparison");
+                 "invalid operands to '");
 }
 
 // --- subscripting -----------------------------------------------------------
@@ -157,7 +157,7 @@ TEST_F(PipelineTest, Chapter15_SubscriptNonPtr_Neg)
     return a[4];
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // ptr[subscript] where both are pointers — a subscript needs exactly one integer.
@@ -171,7 +171,7 @@ TEST_F(PipelineTest, Chapter15_SubscriptBothPointers_Neg)
     return ptr[subscript];
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // arr[2.0] — a subscript index must be an integer.
@@ -182,7 +182,7 @@ TEST_F(PipelineTest, Chapter15_DoubleSubscript_Neg)
     return arr[2.0];
 }
 )"),
-                 "Invalid types for subscript operation");
+                 "invalid operands to '\\[\\]'");
 }
 
 // --- casts ------------------------------------------------------------------
@@ -196,7 +196,7 @@ TEST_F(PipelineTest, Chapter15_CastToArrayType_Neg)
     return (int[10])arr;
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // (int *[10])arr — a cast to array-of-pointers type is illegal.
@@ -208,7 +208,7 @@ TEST_F(PipelineTest, Chapter15_CastToArrayType2_Neg)
     return (int *[10])arr;
 }
 )"),
-                 "Can only cast scalar types");
+                 "cannot cast '");
 }
 
 // --- argument / function typing ---------------------------------------------
@@ -225,7 +225,7 @@ int main(void) {
     return foo(&arr);
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // --- initializers -----------------------------------------------------------
@@ -239,7 +239,7 @@ TEST_F(PipelineTest, Chapter15_ScalarInitializerForArray_Neg)
     return arr[0];
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // int arr[1] = 0; — not even a null pointer constant initializes an array.
@@ -251,7 +251,7 @@ TEST_F(PipelineTest, Chapter15_NullPtrArrayInitializer_Neg)
     return arr[0];
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // double arr[3] = 1.0; — you can't initialize a static array with a scalar.
@@ -321,7 +321,7 @@ TEST_F(PipelineTest, Chapter15_IncompatibleElemTypeCompoundInit_Neg)
     int *arr[3] = {0, 0, 1.0};
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // int *arr[3] = {0, 0, 1.0}; at file scope — a double can't convert to int *.
@@ -364,7 +364,7 @@ TEST_F(PipelineTest, Chapter15_CompoundAddDoubleToPointer_Neg)
     return 0;
 }
 )"),
-                 "Pointer arithmetic requires integer operand");
+                 "invalid operands to '");
 }
 
 // elem0 += elem1; — pointer compound add requires an integer RHS, not a pointer.
@@ -378,7 +378,7 @@ TEST_F(PipelineTest, Chapter15_CompoundAddTwoPointers_Neg)
     return 0;
 }
 )"),
-                 "Pointer arithmetic requires integer operand");
+                 "invalid operands to '");
 }
 
 // i -= elem; — a pointer can't be the RHS of a compound subtract from an integer.
@@ -392,7 +392,7 @@ TEST_F(PipelineTest, Chapter15_CompoundSubPointerFromInt_Neg)
     return 0;
 }
 )"),
-                 "Invalid operands for compound assignment");
+                 "invalid operands to '");
 }
 
 // switch (arr) — you can't switch on an array.
@@ -407,7 +407,7 @@ TEST_F(PipelineTest, Chapter15_SwitchOnArray_Neg)
     return 1;
 }
 )"),
-                 "Switch controlling expression must be of integer type");
+                 "'switch' requires an integer value");
 }
 
 // --- invalid array element types --------------------------------------------
@@ -448,7 +448,7 @@ TEST_F(PipelineTest, Chapter15_AssignToArray_Neg)
     return arr[0];
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // dim2[0] = dim; — a nested array is not a modifiable lvalue (gap).
@@ -462,7 +462,7 @@ TEST_F(PipelineTest, Chapter15_AssignToArray2_Neg)
     return dim[0];
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // *ptr_to_array = arr; — *(int(*)[3]) has array type, not a modifiable lvalue (gap).
@@ -474,7 +474,7 @@ TEST_F(PipelineTest, Chapter15_AssignToArray3_Neg)
     *ptr_to_array = arr;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // int (*arr)[3] = &four_element_array; — int(*)[4] is incompatible with int(*)[3].
@@ -487,7 +487,7 @@ TEST_F(PipelineTest, Chapter15_AssignIncompatiblePointerTypes_Neg)
     int (*arr)[3] = &four_element_array;
 }
 )"),
-                 "Cannot convert type for assignment");
+                 "cannot convert '.*' to '.*' when");
 }
 
 // array_ptr < ptr — comparing two different pointer types is illegal.
@@ -501,7 +501,7 @@ TEST_F(PipelineTest, Chapter15_CompareDifferentPointerTypes_Neg)
     return array_ptr < ptr;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // ptr - ptr2 — subtracting pointers to different types is illegal.
@@ -515,7 +515,7 @@ TEST_F(PipelineTest, Chapter15_SubDifferentPointerTypes_Neg)
     return ptr - ptr2;
 }
 )"),
-                 "Incompatible pointer types");
+                 "incompatible pointer types");
 }
 
 // int arr[6]; ... int arr[5]; — a conflicting redeclaration is accepted today (gap).
@@ -564,7 +564,7 @@ TEST_F(PipelineTest, Chapter15_CompoundAssignToArray_Neg)
     0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // arr[1] += 1; — a nested array is not a modifiable lvalue for compound assignment (gap).
@@ -576,7 +576,7 @@ TEST_F(PipelineTest, Chapter15_CompoundAssignToNestedArray_Neg)
     return 0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // arr++; — an array is not a modifiable lvalue for ++ (gap).
@@ -588,7 +588,7 @@ TEST_F(PipelineTest, Chapter15_PostfixIncrArray_Neg)
     return 0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // arr[2]++; — a nested array is not a modifiable lvalue for ++ (gap).
@@ -600,7 +600,7 @@ TEST_F(PipelineTest, Chapter15_PostfixIncrNestedArray_Neg)
     return 0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // --arr; — an array is not a modifiable lvalue for -- (gap).
@@ -612,7 +612,7 @@ TEST_F(PipelineTest, Chapter15_PrefixDecrArray_Neg)
     return 0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
 
 // --arr[2]; — a nested array is not a modifiable lvalue for -- (gap).
@@ -624,5 +624,5 @@ TEST_F(PipelineTest, Chapter15_PrefixDecrNestedArray_Neg)
     return 0;
 }
 )"),
-                 "lvalue");
+                 "is not assignable");
 }
