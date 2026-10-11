@@ -722,3 +722,35 @@ TEST_F(TranslateTest, StoreThroughPointerAsValue)
           value: 0
 )");
 }
+
+// char* < char*: on a byte-addressed target the pointers themselves are compared,
+// unsigned, so constants fold right too; a difference compared against 0 could
+// overflow, as on rv32 with pointers 2 GB apart.  The BESM-6 compares its fat pointers' positions.
+TEST_F(TranslateTestX86, CharPtrRelationalCompare)
+{
+    std::string yaml = CompileToYaml("int f(char *p, char *q) { return p > q; }");
+    EXPECT_EQ(std::string::npos, yaml.find("ptr_diff")) << yaml;
+    EXPECT_NE(std::string::npos, yaml.find(R"(op: greater_than_unsigned
+      src1:
+        kind: var
+        name: %p
+      src2:
+        kind: var
+        name: %q
+)")) << yaml;
+}
+
+TEST_F(TranslateTest, CharPtrRelationalCompareBesm6)
+{
+    std::string yaml = CompileToYaml("int f(char *p, char *q) { return p > q; }");
+    EXPECT_NE(std::string::npos, yaml.find("kind: ptr_diff")) << yaml;
+}
+
+// A pointer compare is unsigned, so constant pointers fold right: 0x8100 is above
+// 0x7f00 on a 16-bit target, where a signed view would put it below.
+TEST_F(TranslateTestMsp430, PointerCompareUnsigned)
+{
+    std::string yaml = CompileToYaml(
+        "int f(void) { int *hi = (int *)0x8100, *lo = (int *)0x7f00; return hi > lo; }");
+    EXPECT_NE(std::string::npos, yaml.find("op: greater_than_unsigned")) << yaml;
+}

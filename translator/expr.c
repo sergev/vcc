@@ -186,6 +186,11 @@ static Tac_BinaryOperator map_binary_op(BinaryOp op, const Type *operand_type)
 {
     bool is_unsigned = is_unsigned_type(operand_type);
     bool is_float    = is_floating_type(operand_type);
+    // Addresses are ordered unsigned, so a pointer compare folds as one too; the BESM-6
+    // word pointers keep the plain operators.
+    if ((op == BINARY_LT || op == BINARY_GT || op == BINARY_LE || op == BINARY_GE) &&
+        unalias(operand_type)->kind == TYPE_POINTER && !target_word_addressed())
+        is_unsigned = true;
     switch (op) {
     case BINARY_ADD:
         return is_float      ? TAC_BINARY_ADD_DOUBLE
@@ -931,8 +936,10 @@ static Tac_Val *gen_binary(TacCtx *ctx, BinaryOp op, Expr *l, Expr *r, const Typ
     // a >= b  iff  bytepos(a) - bytepos(b) >= 0, and likewise for <, >, <=.  (==/!=
     // between two real pointers fall through to a full-word compare — identical positions
     // have identical words — but ==/!= against a null constant is handled just below.)
+    // Only a word-addressed target has fat pointers: elsewhere the difference could
+    // overflow (rv32 pointers 2 GB apart), so the pointers are compared themselves.
     if ((op == BINARY_LT || op == BINARY_GT || op == BINARY_LE || op == BINARY_GE) &&
-        is_byte_pointer(l->type) && is_byte_pointer(r->type)) {
+        target_word_addressed() && is_byte_pointer(l->type) && is_byte_pointer(r->type)) {
         Tac_Val *vl          = gen_expr(ctx, l);
         Tac_Val *vr          = gen_expr(ctx, r);
         Tac_Val *vdiff       = new_var_val(ctx, tac_type_ptrdiff());

@@ -117,6 +117,26 @@ int main(void)
     EXPECT_EQ(0, exit_status);
 }
 
+// char* compares by address, unsigned: pointers 2 GB apart are not compared by their
+// difference, which would overflow.
+TEST_F(Rv32Test, CharPointersFarApart)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    std::string src = kPutd + R"(
+int main(void)
+{
+    volatile unsigned lo = 0x10, hi = 0x90000000u;
+    char *a = (char *)lo, *b = (char *)hi;
+    putd(a < b);
+    putd(a > b);
+    putd(b >= a);
+    putd(b <= a);
+    return 0;
+}
+)";
+    EXPECT_EQ("1 0 1 0 ", CompileAndRunRiscv(src));
+}
+
 TEST_F(Rv32Test, Calls)
 {
     SKIP_IF_NO_RISCV_TOOLS();
