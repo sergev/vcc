@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -914,6 +915,98 @@ bool runtime_call(const Tac_Instruction *in, TypeOf *type_of, const void *arg, c
     default:
         return false;
     }
+}
+
+// The branch taken when integer relation `op` holds of (a, b), operands swapped when
+// *swap; RV_J for no relation.
+static Rv_Op compare_branch_op(Tac_BinaryOperator op, bool is_unsigned, bool *swap)
+{
+    *swap = false;
+    switch (op) {
+    case TAC_BINARY_EQUAL:
+        return RV_BEQ;
+    case TAC_BINARY_NOT_EQUAL:
+        return RV_BNE;
+    case TAC_BINARY_GREATER_THAN:
+    case TAC_BINARY_GREATER_THAN_UNSIGNED:
+        *swap = true;
+        // fall through
+    case TAC_BINARY_LESS_THAN:
+    case TAC_BINARY_LESS_THAN_UNSIGNED:
+        return is_unsigned ? RV_BLTU : RV_BLT;
+    case TAC_BINARY_LESS_OR_EQUAL:
+    case TAC_BINARY_LESS_OR_EQUAL_UNSIGNED:
+        *swap = true;
+        // fall through
+    case TAC_BINARY_GREATER_OR_EQUAL:
+    case TAC_BINARY_GREATER_OR_EQUAL_UNSIGNED:
+        return is_unsigned ? RV_BGEU : RV_BGE;
+    default:
+        return RV_J;
+    }
+}
+
+// An integer type held whole in one register.
+static bool in_one_reg(const Tac_Type *t)
+{
+    return t && !rv_is_ll(t) && !rv_is_ld(t) && !rv_is_fp(t);
+}
+
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next)
+{
+    if (!g->uses || !next ||
+        (next->kind != TAC_INSTRUCTION_JUMP_IF_ZERO &&
+         next->kind != TAC_INSTRUCTION_JUMP_IF_NOT_ZERO))
+        return false;
+    const Tac_Val *dst;
+    if (in->kind == TAC_INSTRUCTION_BINARY)
+        dst = in->u.binary.dst;
+    else if (in->kind == TAC_INSTRUCTION_UNARY && in->u.unary.op == TAC_UNARY_NOT)
+        dst = in->u.unary.dst;
+    else
+        return false;
+    const Tac_Val *c = next->u.jump_if_zero.condition;
+    if (c->kind != TAC_VAL_VAR || dst->kind != TAC_VAL_VAR ||
+        strcmp(c->u.var_name, dst->u.var_name) != 0)
+        return false;
+    int v = flow_var(g->flow, dst->u.var_name);
+    if (v < 0 || g->uses[v] != 1 || flow_has(g->flow->in_memory, v))
+        return false;
+    bool if_zero = next->kind == TAC_INSTRUCTION_JUMP_IF_ZERO;
+    char *l      = label_name(next->u.jump_if_zero.target);
+    if (in->kind == TAC_INSTRUCTION_UNARY) {
+        // Jump if !x is zero: if x is not.
+        if (!in_one_reg(val_type(g, in->u.unary.src))) {
+            xfree(l);
+            return false;
+        }
+        int s        = use_val(g, RV_T0, in->u.unary.src);
+        Rv_Instr *br = rv_append(g->fn, if_zero ? RV_BNEZ : RV_BEQZ);
+        br->opnd[0]  = rv_reg(s);
+        br->opnd[1]  = rv_sym(l, 0);
+        xfree(l);
+        return true;
+    }
+    const Tac_Type *t = val_type(g, in->u.binary.src1);
+    bool swap;
+    Rv_Op op = compare_branch_op(in->u.binary.op,
+                                 t && (t->kind == TAC_TYPE_POINTER ||
+                                       rv_unsigned_op(in->u.binary.op)),
+                                 &swap);
+    if (op == RV_J || !in_one_reg(t) || !in_one_reg(val_type(g, in->u.binary.src2))) {
+        xfree(l);
+        return false;
+    }
+    if (if_zero)
+        op = rv_inverse_branch(op);
+    int a        = use_val(g, RV_T0, in->u.binary.src1);
+    int b        = use_val(g, RV_T1, in->u.binary.src2);
+    Rv_Instr *br = rv_append(g->fn, op);
+    br->opnd[0]  = rv_reg(swap ? b : a);
+    br->opnd[1]  = rv_reg(swap ? a : b);
+    br->opnd[2]  = rv_sym(l, 0);
+    xfree(l);
+    return true;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)

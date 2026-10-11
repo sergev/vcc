@@ -55,6 +55,8 @@ typedef struct {
     int max_align;     // of any slot
     int outgoing;      // bytes of the outgoing argument area
     bool moves_sp;     // calls a stack builtin (alloca): sp moves in the body
+    struct Flow *flow; // with the peephole pass: the body's variables,
+    int *uses;         // and how many times each is read
     StringMap regs;    // name → allocated register
     StringMap regs_hi; // name → register of a long long's high word
     StringMap dead;    // allocated parameters dead on entry (regalloc.c)
@@ -196,6 +198,9 @@ void gen_return(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// An integer compare (or `!`) whose result only `next`, a conditional jump, tests, as
+// one branch; false when it is not one.
+bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);
 // Whether `in` calls a runtime routine (long double arithmetic and conversions, and
 // on rv32 long long division and conversions); `type_of(arg, v)` gives the type of
 // operand `v`.  Sets *dst to its result.

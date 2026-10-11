@@ -122,11 +122,18 @@ typedef struct {
                                                                                         BEQZ,               \
                                                                                         "beqz") X(BNEZ,     \
                                                                                                   "bnez")   \
+                                                                                        X(BEQ, "beq")       \
+                                                                                        X(BNE, "bne")       \
+                                                                                        X(BLT, "blt")       \
+                                                                                        X(BGE, "bge")       \
+                                                                                        X(BLTU, "bltu")     \
+                                                                                        X(BGEU, "bgeu")     \
                                                                                         X(                  \
                                                                                             CALL,           \
                                                                                             "cal"           \
                                                                                             "l") X(JALR,    \
                                                                                                    "jalr")  \
+                                                                                            X(TAIL, "tail") \
                                                                                             X(RET,          \
                                                                                               "re"          \
                                                                                               "t")          \
@@ -158,6 +165,8 @@ typedef struct {
     bool global;
     Rv_Block *blocks, *tail;
     int num_vregs;
+    int num_labels;       // labels the peephole pass made: .Lrt.<name>.<n>
+    bool no_tail_calls;   // a call passes arguments on the stack, or sp moves
     bool volatile_access; // the TAC instruction being selected is a volatile access
 } Rv_Func;
 
@@ -166,6 +175,8 @@ extern const char *const rv_mnemonic[RV_NUM_OPS];
 Rv_Func *rv_new_func(const char *name, bool global);
 // Append a block, labelled `label` (copied; NULL for none), and make it current.
 Rv_Block *rv_new_block(Rv_Func *fn, const char *label);
+// Insert an empty block after `b`, labelled `label` (copied).
+Rv_Block *rv_insert_block_after(Rv_Func *fn, Rv_Block *b, const char *label);
 // Append an instruction to block `b`, or to the current (last) block.
 Rv_Instr *rv_append_to(Rv_Block *b, Rv_Op op);
 Rv_Instr *rv_append(Rv_Func *fn, Rv_Op op);
@@ -177,6 +188,11 @@ Rv_Operand rv_sym(const char *sym, int64_t offset);
 Rv_Operand rv_mem(int base, int64_t offset);
 const char *rv_reg_name(int reg);
 bool rv_is_freg(int reg); // f0-f31
+
+// Conditional branches: beqz/bnez r, label and beq..bgeu r1, r2, label.
+bool rv_is_cond_branch(Rv_Op op);
+int rv_branch_label(Rv_Op op); // the operand that is the label
+Rv_Op rv_inverse_branch(Rv_Op op);
 
 // Peephole optimization (peephole.c).
 void rv_peephole(Rv_Func *fn);

@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <cstring>
 #include <initializer_list>
 #include <string>
 
@@ -280,4 +281,146 @@ mv a0, s1
 ret
 )",
               Run());
+}
+
+// A constant put through an immediate operation is one li, which the use then takes as
+// its immediate: a constant pointer step is an addi.
+TEST_F(PeepholeTest, ConstantChain)
+{
+    I(RV_LI, { R(T1), rv_imm(1) });
+    I(RV_SLLI, { R(T1), R(T1), rv_imm(2) });
+    I(RV_ADD, { R(S1), R(S1), R(T1) });
+    I(RV_LI, { R(T1), rv_imm(2147483647) });
+    I(RV_ADDIW, { R(T1), R(T1), rv_imm(1) });
+    I(RV_SD, { R(T1), rv_mem(S2, 0) });
+    I(RV_LI, { R(T1), rv_imm(1000) });
+    I(RV_SLLI, { R(T1), R(T1), rv_imm(2) });
+    I(RV_ADD, { R(S1), R(S1), R(T1) });
+    EXPECT_EQ(R"(addi s1, s1, 4
+li t1, -2147483648
+sd t1, 0(s2)
+li t1, 4000
+add s1, s1, t1
+)",
+              Run());
+}
+
+// Two-register branches: a zero operand is the zero register, a test against zero is
+// beqz/bnez, and a branch over a jump turns around.
+TEST_F(PeepholeTest, CompareBranches)
+{
+    I(RV_LI, { R(T1), rv_imm(0) });
+    I(RV_BLT, { R(S1), R(T1), rv_sym(".L1", 0) });
+    Label(nullptr);
+    I(RV_LI, { R(T1), rv_imm(0) });
+    I(RV_BNE, { R(T1), R(S2), rv_sym(".L1", 0) });
+    Label(nullptr);
+    I(RV_BLTU, { R(S1), R(S2), rv_sym(".L1", 0) });
+    I(RV_J, { rv_sym(".L2", 0) });
+    Label(".L1");
+    I(RV_MV, { R(A0), R(S1) });
+    Label(".L2");
+    I(RV_RET, {});
+    EXPECT_EQ(R"(blt s1, zero, .L1
+bnez s2, .L1
+bgeu s1, s2, .L2
+.L1:
+mv a0, s1
+.L2:
+ret
+)",
+              Run());
+}
+
+// Returns ending alike share the last one's tail under a new label; a tail of one
+// instruction is not worth a jump.
+TEST_F(PeepholeTest, SharedReturnTail)
+{
+    I(RV_BEQZ, { R(S1), rv_sym(".L1", 0) });
+    Label(nullptr);
+    I(RV_LI, { R(A0), rv_imm(1) });
+    I(RV_LD, { R(S1), rv_mem(RV_SP, 0) });
+    I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(16) });
+    I(RV_RET, {});
+    Label(".L1");
+    I(RV_LI, { R(A0), rv_imm(2) });
+    I(RV_LD, { R(S1), rv_mem(RV_SP, 0) });
+    I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(16) });
+    I(RV_RET, {});
+    EXPECT_EQ(R"(beqz s1, .L1
+li a0, 1
+j .Lrt.f.0
+.L1:
+li a0, 2
+.Lrt.f.0:
+ld s1, 0(sp)
+addi sp, sp, 16
+ret
+)",
+              Run());
+
+    rv_free_func(fn);
+    fn = rv_new_func("f", false);
+    I(RV_BEQZ, { R(S1), rv_sym(".L1", 0) });
+    Label(nullptr);
+    I(RV_LI, { R(A0), rv_imm(1) });
+    I(RV_RET, {});
+    Label(".L1");
+    I(RV_LI, { R(A0), rv_imm(2) });
+    I(RV_RET, {});
+    EXPECT_EQ(R"(beqz s1, .L1
+li a0, 1
+ret
+.L1:
+li a0, 2
+ret
+)",
+              Run());
+}
+
+// A call the frame teardown and a return follow is a tail call, after the teardown;
+// not where the frame's address is taken, nor where a call passes stack arguments.
+TEST_F(PeepholeTest, TailCall)
+{
+    I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(-16) });
+    I(RV_SD, { R(RV_RA), rv_mem(RV_SP, 8) });
+    I(RV_CALL, { rv_sym("h", 0) });
+    I(RV_CALL, { rv_sym("g", 0) });
+    I(RV_LD, { R(RV_RA), rv_mem(RV_SP, 8) });
+    I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(16) });
+    I(RV_RET, {});
+    EXPECT_EQ(R"(addi sp, sp, -16
+sd ra, 8(sp)
+call h
+ld ra, 8(sp)
+addi sp, sp, 16
+tail g
+)",
+              Run());
+
+    const char *kept = R"(addi sp, sp, -16
+sd ra, 8(sp)
+addi a0, sp, 8
+call g
+ld ra, 8(sp)
+addi sp, sp, 16
+ret
+)";
+    for (int stack_args = 0; stack_args < 2; stack_args++) {
+        rv_free_func(fn);
+        fn                = rv_new_func("f", false);
+        fn->no_tail_calls = stack_args;
+        I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(-16) });
+        I(RV_SD, { R(RV_RA), rv_mem(RV_SP, 8) });
+        if (!stack_args)
+            I(RV_ADDI, { R(A0), R(RV_SP), rv_imm(8) });
+        I(RV_CALL, { rv_sym("g", 0) });
+        I(RV_LD, { R(RV_RA), rv_mem(RV_SP, 8) });
+        I(RV_ADDI, { R(RV_SP), R(RV_SP), rv_imm(16) });
+        I(RV_RET, {});
+        std::string want = kept;
+        if (stack_args)
+            want.erase(want.find("addi a0"), strlen("addi a0, sp, 8\n"));
+        EXPECT_EQ(want, Run()) << stack_args;
+    }
 }

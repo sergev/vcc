@@ -1,9 +1,12 @@
 //
-// Peephole pass over the RISC-V IR, after register allocation: an operation on a
-// just-loaded constant takes the immediate form (or the zero register), a move folds
-// into its uses within the block and a result is computed where it is moved, a move
-// back goes, identities and a store's reload go, and so do a jump to the
-// next label, a branch over a jump, and code after a jump.  Code selection never
+// Peephole pass over the RISC-V IR, after register allocation: a constant put through
+// an immediate operation is one li, an operation on a just-loaded constant takes the
+// immediate form (or the zero register), a move folds into its uses within the block
+// and a result is computed where it is moved, a move back goes, identities and a
+// store's reload go, and so do a jump to the next label, a branch over a jump, and
+// code after a jump.  A call the frame teardown and a return follow is a tail call
+// where the frame never escapes, and blocks ending alike in a return share their
+// tail.  Code selection never
 // carries a scratch register (t0-t6, ft0-ft11) past its block, so whether a scratch
 // value is read again is decided by looking to the end of the block.
 //
@@ -15,12 +18,12 @@
 
 static bool is_branch(Rv_Op op)
 {
-    return op == RV_BEQZ || op == RV_BNEZ;
+    return rv_is_cond_branch(op);
 }
 
 static bool is_call(Rv_Op op)
 {
-    return op == RV_CALL || op == RV_JALR;
+    return op == RV_CALL || op == RV_JALR || op == RV_TAIL;
 }
 
 // Operand 0 is read, not written.
@@ -35,9 +38,16 @@ static bool no_dest(Rv_Op op)
     case RV_FSD:
     case RV_BEQZ:
     case RV_BNEZ:
+    case RV_BEQ:
+    case RV_BNE:
+    case RV_BLT:
+    case RV_BGE:
+    case RV_BLTU:
+    case RV_BGEU:
     case RV_J:
     case RV_CALL:
     case RV_JALR:
+    case RV_TAIL:
     case RV_RET:
         return true;
     default:
@@ -257,6 +267,74 @@ static bool fold_li(Rv_Instr **link)
     return false;
 }
 
+// A value of the register width, as li leaves it: on rv32, sign-extended from 32 bits.
+static int64_t xlen_value(uint64_t v)
+{
+    return riscv_xlen == 4 ? (int64_t)(int32_t)(uint32_t)v : (int64_t)v;
+}
+
+// `li r, c` then `op r, r[, imm]`: one li of the result.  False for an op not folded.
+static bool fold_li_chain(Rv_Instr *li)
+{
+    Rv_Instr *n = li->next;
+    int r       = li->opnd[0].reg;
+    if (!n || n->opnd[0].kind != RV_OPND_REG || n->opnd[0].reg != r ||
+        n->opnd[1].kind != RV_OPND_REG || n->opnd[1].reg != r)
+        return false;
+    uint64_t c   = (uint64_t)li->opnd[1].imm;
+    uint64_t imm = (uint64_t)n->opnd[2].imm;
+    int64_t v;
+    switch (n->op) {
+    case RV_ADDI:
+        v = xlen_value(c + imm);
+        break;
+    case RV_ANDI:
+        v = xlen_value(c & imm);
+        break;
+    case RV_ORI:
+        v = xlen_value(c | imm);
+        break;
+    case RV_XORI:
+        v = xlen_value(c ^ imm);
+        break;
+    case RV_SLLI:
+        v = xlen_value(c << (imm & (8 * riscv_xlen - 1)));
+        break;
+    case RV_SRLI:
+        v = xlen_value(riscv_xlen == 4 ? (uint32_t)c >> (imm & 31) : c >> (imm & 63));
+        break;
+    case RV_SRAI:
+        v = riscv_xlen == 4 ? (int32_t)c >> (imm & 31) : (int64_t)c >> (imm & 63);
+        break;
+    case RV_ADDIW:
+        v = (int32_t)(uint32_t)(c + imm);
+        break;
+    case RV_SLLIW:
+        v = (int32_t)(uint32_t)(c << (imm & 31));
+        break;
+    case RV_SRLIW:
+        v = (int32_t)((uint32_t)c >> (imm & 31));
+        break;
+    case RV_SRAIW:
+        v = (int32_t)(uint32_t)c >> (imm & 31);
+        break;
+    case RV_NEG:
+        v = xlen_value(0 - c);
+        break;
+    case RV_NEGW:
+        v = (int32_t)(uint32_t)(0 - c);
+        break;
+    case RV_NOT:
+        v = xlen_value(~c);
+        break;
+    default:
+        return false;
+    }
+    li->opnd[1].imm = v;
+    delete_at(&li->next);
+    return true;
+}
+
 static bool is_move(Rv_Op op)
 {
     return op == RV_MV || op == RV_FMVD || op == RV_FMVS;
@@ -326,7 +404,8 @@ static bool forward_move(Rv_Instr **link)
         // epilogue is already in place.
         if (n->op == RV_RET && is_arg(t) && !reads(n, t))
             break;
-        if (!is_scratch(t) && (is_branch(n->op) || n->op == RV_J || n->op == RV_RET))
+        if (!is_scratch(t) &&
+            (is_branch(n->op) || n->op == RV_J || n->op == RV_RET || n->op == RV_TAIL))
             return false;
         if (writes(n, r))
             clobbered = true;
@@ -389,6 +468,8 @@ static bool rewrite(Rv_Instr **link)
     const Rv_Instr *next = in->next;
     const Rv_Operand *o  = in->opnd;
 
+    if (in->op == RV_LI && fold_li_chain(in))
+        return true;
     if (in->op == RV_LI && is_scratch(o[0].reg) && fold_li(link))
         return true;
 
@@ -408,6 +489,14 @@ static bool rewrite(Rv_Instr **link)
         o[2].kind == RV_OPND_REG && o[2].reg == RV_ZERO) {
         in->op      = RV_MV;
         in->opnd[2] = (Rv_Operand){ 0 };
+        return true;
+    }
+    // A test against zero.
+    if ((in->op == RV_BEQ || in->op == RV_BNE) && (o[0].reg == RV_ZERO || o[1].reg == RV_ZERO)) {
+        in->op          = in->op == RV_BEQ ? RV_BEQZ : RV_BNEZ;
+        in->opnd[0].reg = o[0].reg == RV_ZERO ? o[1].reg : o[0].reg;
+        in->opnd[1]     = in->opnd[2];
+        in->opnd[2]     = (Rv_Operand){ 0 };
         return true;
     }
     if (!next)
@@ -472,7 +561,7 @@ static bool rewrite_block_end(Rv_Block *b)
 {
     // Nothing runs after a jump or return.
     for (Rv_Instr *in = b->head; in; in = in->next) {
-        if ((in->op == RV_J || in->op == RV_RET) && in->next) {
+        if ((in->op == RV_J || in->op == RV_RET || in->op == RV_TAIL) && in->next) {
             while (in->next)
                 delete_at(&in->next);
             return true;
@@ -483,11 +572,13 @@ static bool rewrite_block_end(Rv_Block *b)
         return false;
     // A branch over a jump: branch the other way to the jump's target.
     Rv_Instr **bl = last_link(b, 1);
-    if (bl && is_branch((*bl)->op) && falls_to(b->next, (*bl)->opnd[1].sym)) {
+    if (bl && is_branch((*bl)->op) &&
+        falls_to(b->next, (*bl)->opnd[rv_branch_label((*bl)->op)].sym)) {
         Rv_Instr *br = *bl;
-        br->op       = br->op == RV_BEQZ ? RV_BNEZ : RV_BEQZ;
-        xfree(br->opnd[1].sym);
-        br->opnd[1]    = (*jl)->opnd[0];
+        int k        = rv_branch_label(br->op);
+        br->op       = rv_inverse_branch(br->op);
+        xfree(br->opnd[k].sym);
+        br->opnd[k]    = (*jl)->opnd[0];
         (*jl)->opnd[0] = (Rv_Operand){ 0 };
         delete_at(&br->next);
         return true;
@@ -498,6 +589,196 @@ static bool rewrite_block_end(Rv_Block *b)
         return true;
     }
     return false;
+}
+
+static void set_tail(Rv_Block *b)
+{
+    b->tail = b->head;
+    while (b->tail && b->tail->next)
+        b->tail = b->tail->next;
+}
+
+static bool same_operand(const Rv_Operand *x, const Rv_Operand *y)
+{
+    if (x->kind != y->kind || x->reg != y->reg || x->imm != y->imm)
+        return false;
+    if (!x->sym || !y->sym)
+        return x->sym == y->sym;
+    return strcmp(x->sym, y->sym) == 0;
+}
+
+static bool same_instr(const Rv_Instr *x, const Rv_Instr *y)
+{
+    if (x->op != y->op || x->is_volatile != y->is_volatile)
+        return false;
+    for (int i = 0; i < 3; i++)
+        if (!same_operand(&x->opnd[i], &y->opnd[i]))
+            return false;
+    return true;
+}
+
+// The instructions of `b` in order, *n of them; the caller frees the array.
+static Rv_Instr **instrs_of(const Rv_Block *b, int *n)
+{
+    *n = 0;
+    for (const Rv_Instr *in = b->head; in; in = in->next)
+        (*n)++;
+    Rv_Instr **v = xalloc((*n ? *n : 1) * sizeof(Rv_Instr *), __func__, __FILE__, __LINE__);
+    int i        = 0;
+    for (Rv_Instr *in = b->head; in; in = in->next)
+        v[i++] = in;
+    return v;
+}
+
+static bool ends_in_return(const Rv_Block *b)
+{
+    return b->tail && (b->tail->op == RV_RET || b->tail->op == RV_TAIL);
+}
+
+// Whether code from `in` on reads a scratch register before writing it: one that
+// would live into a new block.
+static bool reads_scratch_on_entry(const Rv_Instr *in)
+{
+    for (int r = 0; r < RV_VREG; r++) {
+        if (!is_scratch(r))
+            continue;
+        for (const Rv_Instr *n = in; n; n = n->next) {
+            if (reads(n, r))
+                return true;
+            if (writes(n, r))
+                break;
+        }
+    }
+    return false;
+}
+
+// Blocks ending alike in a return (or the same tail call) share their tail: the last
+// such block keeps it, under a label of its own, and the others jump there.  True when
+// something changed.
+static bool share_return_tails(Rv_Func *fn)
+{
+    bool changed = false;
+    for (Rv_Block *b = fn->blocks; b; b = b->next) {
+        if (!ends_in_return(b))
+            continue;
+        Rv_Block *keep = NULL;
+        for (Rv_Block *k = b->next; k; k = k->next)
+            if (ends_in_return(k) && same_instr(k->tail, b->tail))
+                keep = k;
+        if (!keep)
+            continue;
+        int nb, nk;
+        Rv_Instr **vb = instrs_of(b, &nb), **vk = instrs_of(keep, &nk);
+        int k = 0;
+        while (k < nb && k < nk && same_instr(vb[nb - 1 - k], vk[nk - 1 - k]))
+            k++;
+        // A jump replaces k instructions; the shared code starts no scratch value.
+        if (k >= 2 && !reads_scratch_on_entry(vk[nk - k])) {
+            if (k < nk || !keep->label) {
+                char name[64];
+                snprintf(name, sizeof name, ".Lrt.%.40s.%d", fn->name, fn->num_labels++);
+                if (k < nk) {
+                    Rv_Block *n    = rv_insert_block_after(fn, keep, name);
+                    n->head        = vk[nk - k];
+                    vk[nk - k - 1]->next = NULL;
+                    set_tail(keep);
+                    set_tail(n);
+                    keep = n;
+                } else {
+                    keep->label = xstrdup(name);
+                }
+            }
+            if (k == nb) {
+                b->head = b->tail = NULL;
+            } else {
+                b->tail       = vb[nb - k - 1];
+                b->tail->next = NULL;
+            }
+            for (int i = nb - k; i < nb; i++)
+                free_instr(vb[i]);
+            Rv_Instr *j = rv_append_to(b, RV_J);
+            j->opnd[0]  = rv_sym(keep->label, 0);
+            changed     = true;
+        }
+        xfree(vb);
+        xfree(vk);
+    }
+    return changed;
+}
+
+// Whether the function's frame stays its own: sp and s0 serve only as a base, and to
+// set up and tear down the frame.  Then a callee may run on what is left of it.
+static bool frame_private(const Rv_Func *fn)
+{
+    for (const Rv_Block *b = fn->blocks; b; b = b->next) {
+        for (const Rv_Instr *in = b->head; in; in = in->next) {
+            const Rv_Operand *o = in->opnd;
+            bool frame_op = in->op == RV_ADDI && o[0].kind == RV_OPND_REG &&
+                            (o[0].reg == RV_SP || o[0].reg == RV_S0) &&
+                            (o[1].reg == RV_SP || o[1].reg == RV_S0);
+            if (frame_op)
+                continue;
+            for (int i = 0; i < 3; i++)
+                if (o[i].kind == RV_OPND_REG && (o[i].reg == RV_SP || o[i].reg == RV_S0))
+                    return false;
+        }
+    }
+    return true;
+}
+
+// Part of a frame teardown: a register the callee keeps, or ra, loaded from the frame,
+// or sp put back.
+static bool teardown(const Rv_Instr *in)
+{
+    const Rv_Operand *o = in->opnd;
+    if (in->op == RV_ADDI)
+        return o[0].reg == RV_SP && (o[1].reg == RV_SP || o[1].reg == RV_S0);
+    if (in->op != RV_LD && in->op != RV_LW && in->op != RV_FLD)
+        return false;
+    if (o[1].reg != RV_SP && o[1].reg != RV_S0)
+        return false;
+    int r = o[0].reg;
+    return r == RV_RA || r == RV_S0 || r == RV_S1 || (r >= RV_S2 && r <= RV_S11) ||
+           (r >= RV_F0 + 8 && r <= RV_F0 + 9) || (r >= RV_F0 + 18 && r <= RV_F0 + 27);
+}
+
+// `call f`, the frame torn down, `ret`: tear down first, then `tail f`.
+static bool make_tail_calls(Rv_Func *fn)
+{
+    if (fn->no_tail_calls || !frame_private(fn))
+        return false;
+    bool changed = false;
+    for (Rv_Block *b = fn->blocks; b; b = b->next) {
+        for (Rv_Instr **link = &b->head; *link; link = &(*link)->next) {
+            Rv_Instr *call = *link;
+            if (call->op != RV_CALL)
+                continue;
+            Rv_Instr *last = call->next;
+            while (last && teardown(last))
+                last = last->next;
+            if (!last || last->op != RV_RET || last->next)
+                continue;
+            // call, teardown..., ret  =>  teardown..., tail
+            Rv_Instr *first = call->next;
+            if (first == last) {
+                call->op = RV_TAIL;
+                call->next = NULL;
+            } else {
+                Rv_Instr *end = first;
+                while (end->next != last)
+                    end = end->next;
+                *link      = first;
+                end->next  = call;
+                call->op   = RV_TAIL;
+                call->next = NULL;
+            }
+            free_instr(last);
+            set_tail(b);
+            changed = true;
+            break;
+        }
+    }
+    return changed;
 }
 
 void rv_peephole(Rv_Func *fn)
@@ -514,9 +795,9 @@ void rv_peephole(Rv_Func *fn)
             }
             while (rewrite_block_end(b))
                 changed = true;
-            b->tail = b->head;
-            while (b->tail && b->tail->next)
-                b->tail = b->tail->next;
+            set_tail(b);
         }
+        if (!changed)
+            changed = make_tail_calls(fn) || share_return_tails(fn);
     }
 }

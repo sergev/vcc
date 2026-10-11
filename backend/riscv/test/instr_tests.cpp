@@ -248,3 +248,24 @@ li a2, 5
 call f
 )")) << s;
 }
+
+// A compare only a conditional jump tests is one branch: the inverse relation to skip
+// the then-part, operands swapped for > and <=, unsigned for unsigned and pointers; a
+// test of zero or of `!` is beqz/bnez.  A compare whose value is used again stays.
+TEST_F(RiscvTest, CompareBranch)
+{
+    std::string s = Code(CompileToRiscv(R"(
+int g(int);
+int lt(int a, int b) { if (a < b) return g(1); return 2; }
+int le(unsigned a, unsigned b) { if (a <= b) return g(1); return 2; }
+int eq(long a, long b) { if (a == b) return g(1); return 2; }
+int z(int a) { if (a == 0) return g(1); return 2; }
+int nz(int a) { if (!a) return g(1); return 2; }
+int twice(int a, int b) { int c = a < b; if (c) return g(c); return 2; }
+)"));
+    for (const char *want : { "bge a0, a1, .L", "bltu a1, a0, .L", "bne a0, a1, .L",
+                              "bnez a0, .L", "slt a0, a0, a1\nbeqz a0, .L" })
+        EXPECT_NE(std::string::npos, s.find(want)) << want << "\n" << s;
+    EXPECT_EQ(std::string::npos, s.find("xor")) << s;
+    EXPECT_EQ(std::string::npos, s.find("seqz")) << s;
+}

@@ -458,7 +458,7 @@ long long sum(long long *p, int n)
     return s;
 }
 )"));
-    size_t loop = s.find("beqz"), end = s.find("bnez", loop);
+    size_t loop = s.find("bge "), end = s.find("bltu", loop);
     ASSERT_NE(std::string::npos, end) << s;
     EXPECT_EQ(std::string::npos, s.substr(loop, end - loop).find("mv ")) << s;
 }

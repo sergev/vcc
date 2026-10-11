@@ -102,21 +102,21 @@ TEST_F(RiscvTest, FrameVariadicFromSp)
 {
     std::string s = Code(CompileToRiscv("long f(long n, ...) { return *(&n + 2); }"));
     EXPECT_EQ(0u, s.find("addi sp, sp, -64\nsd a0, 0(sp)\n")) << s;
-    EXPECT_NE(std::string::npos, s.find("add a0, sp, t1\n")) << s; // &n + 2
+    EXPECT_NE(std::string::npos, s.find("addi a0, sp, 16\n")) << s; // &n + 2
     EXPECT_NE(std::string::npos, s.find("addi sp, sp, 64\nret\n")) << s;
 }
 
-// A function that makes calls but keeps nothing in its frame saves only ra.
+// A function that makes calls but keeps nothing in its frame saves only ra; its last
+// call is a tail call.
 TEST_F(RiscvTest, FrameOnlyRa)
 {
     EXPECT_EQ(R"(addi sp, sp, -16
 sd ra, 8(sp)
 call g
 addi a0, a0, 1
-call g
 ld ra, 8(sp)
 addi sp, sp, 16
-ret
+tail g
 )",
               Code(CompileToRiscv("long g(long);\nlong f(long a) { return g(g(a) + 1); }")));
 }

@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -88,6 +89,11 @@ static void layout_frame(Gen *g)
     map_destroy(&allocs);
 }
 
+static void count_use(int var, void *arg)
+{
+    ((int *)arg)[var]++;
+}
+
 static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
     Gen g;
@@ -100,16 +106,33 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     layout_frame(&g);
     if (g.moves_sp)
         reserve_outgoing(&g);
+    if (riscv_peephole) {
+        g.flow = flow_build(tl);
+        g.uses = xalloc((g.flow->nvars + 1) * sizeof(int), __func__, __FILE__, __LINE__);
+        memset(g.uses, 0, (g.flow->nvars + 1) * sizeof(int));
+        for (int i = 0; i < g.flow->ninstrs; i++)
+            flow_uses(g.flow, g.flow->instrs[i], count_use, g.uses);
+    }
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
         g.fn->volatile_access = in->is_volatile;
-        gen_instr(&g, in);
+        if (gen_compare_branch(&g, in, in->next))
+            in = in->next;
+        else
+            gen_instr(&g, in);
         last = in;
+    }
+    if (g.flow) {
+        flow_free(g.flow);
+        xfree(g.uses);
+        g.flow = NULL;
+        g.uses = NULL;
     }
     g.fn->volatile_access = false;
     if (!last || (last->kind != TAC_INSTRUCTION_RETURN && last->kind != TAC_INSTRUCTION_JUMP))
         gen_epilogue(&g); // falling off the end
     gen_prologue(&g);
+    g.fn->no_tail_calls = g.outgoing > 0 || g.moves_sp;
     if (riscv_peephole)
         rv_peephole(g.fn);
     rv_emit_func(out, g.fn);

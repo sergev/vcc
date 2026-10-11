@@ -13,6 +13,50 @@ const char *const rv_mnemonic[RV_NUM_OPS] = {
 #undef RV_MNEM
 };
 
+bool rv_is_cond_branch(Rv_Op op)
+{
+    switch (op) {
+    case RV_BEQZ:
+    case RV_BNEZ:
+    case RV_BEQ:
+    case RV_BNE:
+    case RV_BLT:
+    case RV_BGE:
+    case RV_BLTU:
+    case RV_BGEU:
+        return true;
+    default:
+        return false;
+    }
+}
+
+int rv_branch_label(Rv_Op op)
+{
+    return op == RV_BEQZ || op == RV_BNEZ ? 1 : 2;
+}
+
+Rv_Op rv_inverse_branch(Rv_Op op)
+{
+    switch (op) {
+    case RV_BEQZ:
+        return RV_BNEZ;
+    case RV_BNEZ:
+        return RV_BEQZ;
+    case RV_BEQ:
+        return RV_BNE;
+    case RV_BNE:
+        return RV_BEQ;
+    case RV_BLT:
+        return RV_BGE;
+    case RV_BGE:
+        return RV_BLT;
+    case RV_BLTU:
+        return RV_BGEU;
+    default:
+        return RV_BLTU; // RV_BGEU
+    }
+}
+
 Rv_Func *rv_new_func(const char *name, bool global)
 {
     Rv_Func *fn = xalloc(sizeof(Rv_Func), __func__, __FILE__, __LINE__);
@@ -32,6 +76,17 @@ Rv_Block *rv_new_block(Rv_Func *fn, const char *label)
         fn->blocks = b;
     fn->tail = b;
     return b;
+}
+
+Rv_Block *rv_insert_block_after(Rv_Func *fn, Rv_Block *b, const char *label)
+{
+    Rv_Block *n = xalloc(sizeof(Rv_Block), __func__, __FILE__, __LINE__);
+    n->label    = label ? xstrdup(label) : NULL;
+    n->next     = b->next;
+    b->next     = n;
+    if (fn->tail == b)
+        fn->tail = n;
+    return n;
 }
 
 Rv_Instr *rv_append_to(Rv_Block *b, Rv_Op op)
