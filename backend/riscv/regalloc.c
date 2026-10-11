@@ -4,10 +4,15 @@
 // keep clear of the scratch registers.  A value not live across a call may also take
 // the argument registers a0-a7 and fa0-fa7, first: selection never uses them as
 // scratch, and only a call (or a long double operation, a runtime call) writes them.
-// A long long on rv32 is a pair.
+// A long long on rv32 is a pair, and so is a struct of two integer words whose address
+// is never taken and that is only read and written by member, copied whole, passed,
+// returned or a call's result (aggregate_ok).
 //
 #include "regalloc.h"
 
+#include <string.h>
+
+#include "codegen.h"
 #include "internal.h"
 
 // Argument registers, then callee-saved; a value live across a call starts at NARG.
@@ -33,6 +38,8 @@ typedef struct {
 static RegAlloc_Class classify(void *arg, const Tac_Type *t)
 {
     (void)arg;
+    if (rv_is_word_pair(t))
+        return REGALLOC_PAIR;
     if (rv_is_aggregate(t) || (rv_is_pair(t) && !rv_is_ll(t)) || t->kind == TAC_TYPE_LONG_DOUBLE ||
         t->kind == TAC_TYPE_VOID || t->kind == TAC_TYPE_FUN_TYPE)
         return REGALLOC_NONE;
@@ -47,6 +54,72 @@ static const Tac_Type *operand_type(const void *arg, const Tac_Val *v)
     const Target *t = arg;
     int var         = v->kind == TAC_VAL_VAR ? flow_var(t->flow, v->u.var_name) : -1;
     return var >= 0 ? t->flow->types[var] : val_type(t->g, v);
+}
+
+typedef struct {
+    int v;
+    bool found;
+} Mention;
+
+static void mentions(int var, void *arg)
+{
+    Mention *m = arg;
+    if (var == m->v)
+        m->found = true;
+}
+
+// A member access of a word pair in registers: a whole word, at either offset.
+static bool word_access(const Target *t, int offset, const Tac_Val *v)
+{
+    if (offset != 0 && offset != riscv_xlen)
+        return false;
+    if (v->kind == TAC_VAL_CONSTANT)
+        return true;
+    const Tac_Type *vt = operand_type(t, v);
+    return vt && !rv_is_fp(vt) && !rv_is_aggregate(vt) && !rv_is_pair(vt) &&
+           rv_size(vt) == riscv_xlen;
+}
+
+static bool aggregate_ok(void *arg, const Flow *f, int v)
+{
+    Target *t        = arg;
+    t->flow          = f;
+    const char *name = f->names[v];
+    for (int i = 0; i < f->ninstrs; i++) {
+        const Tac_Instruction *in = f->instrs[i];
+        Mention m                 = { v, false };
+        flow_uses(f, in, mentions, &m);
+        flow_defs(f, in, mentions, &m);
+        if (!m.found)
+            continue;
+        if (in->is_volatile)
+            return false;
+        switch (in->kind) {
+        case TAC_INSTRUCTION_ALLOCATE_LOCAL:
+        case TAC_INSTRUCTION_COPY:
+        case TAC_INSTRUCTION_RETURN:
+            break;
+        case TAC_INSTRUCTION_FUN_CALL:
+        case TAC_INSTRUCTION_FUN_CALL_NORETURN:
+            if (rv_stack_builtin(in))
+                return false;
+            break;
+        case TAC_INSTRUCTION_COPY_FROM_OFFSET:
+            // A word of it, or it from a member of another aggregate.
+            if (strcmp(in->u.copy_from_offset.src, name) == 0 &&
+                !word_access(t, in->u.copy_from_offset.offset, in->u.copy_from_offset.dst))
+                return false;
+            break;
+        case TAC_INSTRUCTION_COPY_TO_OFFSET:
+            if (strcmp(in->u.copy_to_offset.dst, name) == 0 &&
+                !word_access(t, in->u.copy_to_offset.offset, in->u.copy_to_offset.src))
+                return false;
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
 }
 
 static bool makes_runtime_call(void *arg, const Flow *f, const Tac_Instruction *in,
@@ -112,6 +185,7 @@ void gen_regalloc(Gen *g)
         .assign       = assign,
         .dead_param   = dead_param,
         .inline_call  = inline_call,
+        .aggregate_ok = aggregate_ok,
     };
     regalloc(&desc, g->tl);
 

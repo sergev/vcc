@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "codegen.h"
+#include "flow.h"
 #include "internal.h"
 #include "xalloc.h"
 
@@ -98,6 +99,23 @@ bool rv_is_aggregate(const Tac_Type *t)
     return t->kind == TAC_TYPE_ARRAY || t->kind == TAC_TYPE_STRUCTURE;
 }
 
+// An integer word: an integer or pointer as wide as a register.
+static bool int_word(const Tac_Type *t)
+{
+    return t && !rv_is_fp(t) && !rv_is_aggregate(t) && t->kind != TAC_TYPE_LONG_DOUBLE &&
+           t->kind != TAC_TYPE_VOID && t->kind != TAC_TYPE_FUN_TYPE && rv_size(t) == riscv_xlen;
+}
+
+bool rv_is_word_pair(const Tac_Type *t)
+{
+    if (t->kind != TAC_TYPE_STRUCTURE || t->u.structure.is_union ||
+        t->u.structure.size != 2 * riscv_xlen || t->u.structure.alignment != riscv_xlen)
+        return false;
+    const Tac_Member *m = t->u.structure.members;
+    return m && m->offset == 0 && int_word(m->type) && m->next &&
+           m->next->offset == riscv_xlen && int_word(m->next->type) && !m->next->next;
+}
+
 Rv_Op xlen_load(void)
 {
     return riscv_xlen == 8 ? RV_LD : RV_LW;
@@ -112,6 +130,26 @@ static void add_global(Gen *g, const char *name, const Tac_Type *type)
 {
     if (name && type)
         map_insert(&g->globals, name, (intptr_t)type, 0);
+}
+
+bool dead_after(const Gen *g, const Tac_Instruction *in, int var)
+{
+    const Flow *f = g->flow;
+    int i         = 0;
+    while (i < f->ninstrs && f->instrs[i] != in)
+        i++;
+    if (i == f->ninstrs)
+        return false; // not in the body: a call made up for the runtime
+    int b = 0;
+    while (b < f->nblocks && f->blocks[b].last < i)
+        b++;
+    Flow_Set *live = flow_set_new(f);
+    memcpy(live, f->blocks[b].live_out, f->words * sizeof(Flow_Set));
+    for (int j = f->blocks[b].last; j > i; j--)
+        flow_step(f, f->instrs[j], live);
+    bool dead = !flow_has(live, var);
+    xfree(live);
+    return dead;
 }
 
 void gen_init(Gen *g, const Tac_TopLevel *program, const Tac_TopLevel *tl)
@@ -578,7 +616,7 @@ void pair_half(Gen *g, int reg, const Tac_Val *v, int half)
         move_reg(g, reg, half ? var_reg_hi(g, v) : var_reg(g, v), t);
         return;
     }
-    if (!rv_is_pair(t)) {
+    if (!rv_is_pair(t) && !rv_is_aggregate(t)) {
         // A narrower integer converted to long long: extended by its type.
         load_val(g, reg, v);
         if (half && rv_is_unsigned(t))

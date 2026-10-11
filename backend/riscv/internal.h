@@ -85,6 +85,9 @@ bool rv_is_ll(const Tac_Type *t);
 bool rv_is_pair(const Tac_Type *t);
 bool rv_is_unsigned(const Tac_Type *t);
 bool rv_is_aggregate(const Tac_Type *t);
+// A struct of two integer words: may be held in a pair of registers, like a long long
+// on rv32, and is passed and returned in two integer registers.
+bool rv_is_word_pair(const Tac_Type *t);
 bool rv_is_double(const Tac_Type *t);
 bool gen_variadic(const Gen *g);
 // Load and store of a register-width integer: ld/sd, or lw/sw on rv32.
@@ -198,6 +201,13 @@ void gen_return(Gen *g, const Tac_Val *v);
 // Instruction selection (instr.c)
 //
 void gen_instr(Gen *g, const Tac_Instruction *in);
+// A struct result written through a hidden pointer to a temporary, then copied into a
+// variable: written into the variable instead.  `in` takes the temporary's address;
+// returns the last instruction done, or NULL when this is not the case.
+const Tac_Instruction *gen_result_in_place(Gen *g, const Tac_Instruction *in);
+// Whether tracked variable `var` is dead after body instruction `in` (with the
+// peephole pass on: g->flow).
+bool dead_after(const Gen *g, const Tac_Instruction *in, int var);
 // An integer compare (or `!`) whose result only `next`, a conditional jump, tests, as
 // one branch; false when it is not one.
 bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction *next);

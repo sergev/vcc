@@ -60,3 +60,31 @@ TEST_F(RiscvTest, VolatileReadsEachLoad)
     ASSERT_NE(std::string::npos, first) << code;
     EXPECT_NE(std::string::npos, code.find("lw ", first + 1)) << code;
 }
+
+// A struct of two words lives in registers: no frame for this one, as for two longs.
+// One whose address is taken stays in memory (below).
+TEST_F(RiscvTest, WordPairInRegisters)
+{
+    std::string s = Code(CompileToRiscv(R"(
+typedef struct { unsigned long hi, lo; } U;
+U add(U a, U b)
+{
+    U r;
+    r.lo = a.lo + b.lo;
+    r.hi = a.hi + b.hi + (r.lo < a.lo);
+    return r;
+}
+)"));
+    EXPECT_EQ(std::string::npos, s.find("sp")) << s;
+    EXPECT_EQ(std::string::npos, s.find("ld ")) << s;
+}
+
+TEST_F(RiscvTest, WordPairAddressTaken)
+{
+    std::string s = Code(CompileToRiscv(R"(
+typedef struct { unsigned long hi, lo; } U;
+void g(unsigned long *);
+unsigned long f(U a) { g(&a.lo); return a.hi; }
+)"));
+    EXPECT_NE(std::string::npos, s.find("sd a1, ")) << s;
+}

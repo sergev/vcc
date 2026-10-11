@@ -122,6 +122,10 @@ static void operands(const Flow *f, const Tac_Instruction *in, bool defs, NameVi
         }
         break;
     case TAC_INSTRUCTION_ALLOCATE_LOCAL:
+        // The declaration: the object's earlier value is gone.
+        if (defs)
+            fn(f, in->u.allocate_local.name, arg);
+        break;
     case TAC_INSTRUCTION_JUMP:
     case TAC_INSTRUCTION_LABEL:
         break;
@@ -193,6 +197,16 @@ static void mark_in_memory(const Flow *f, const char *name)
         flow_add(f->in_memory, v);
 }
 
+// In memory for a reason other than its declaration.
+static void mark_addressed(const Flow *f, const char *name)
+{
+    int v = flow_var(f, name);
+    if (v >= 0) {
+        flow_add(f->in_memory, v);
+        flow_add(f->addressed, v);
+    }
+}
+
 // Whether `v` is a temporary (`%` and a digit), not a named variable.
 static bool is_temporary(const Tac_Val *v)
 {
@@ -207,7 +221,7 @@ static void mark_volatile_copy(const Flow *f, const Tac_Instruction *in)
 {
     const Tac_Val *obj = is_temporary(in->u.copy.dst) ? in->u.copy.src : in->u.copy.dst;
     if (obj->kind == TAC_VAL_VAR && !is_temporary(obj))
-        mark_in_memory(f, obj->u.var_name);
+        mark_addressed(f, obj->u.var_name);
 }
 
 static bool ends_block(const Tac_Instruction *in)
@@ -246,6 +260,7 @@ static void build_vars(Flow *f)
     f->nvars     = n;
     f->words     = (n + 63) / 64;
     f->in_memory = flow_set_new(f);
+    f->addressed = flow_set_new(f);
     for (int i = 0; i < f->ninstrs; i++) {
         const Tac_Instruction *in = f->instrs[i];
         switch (in->kind) {
@@ -253,7 +268,7 @@ static void build_vars(Flow *f)
         case TAC_INSTRUCTION_GET_ADDRESS_BYTE:
         case TAC_INSTRUCTION_GET_ADDRESS_DECAY:
             if (in->u.get_address.src->kind == TAC_VAL_VAR)
-                mark_in_memory(f, in->u.get_address.src->u.var_name);
+                mark_addressed(f, in->u.get_address.src->u.var_name);
             break;
         case TAC_INSTRUCTION_ALLOCATE_LOCAL:
             mark_in_memory(f, in->u.allocate_local.name);
@@ -265,12 +280,12 @@ static void build_vars(Flow *f)
         case TAC_INSTRUCTION_COPY_TO_OFFSET:
         case TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET:
             if (in->is_volatile)
-                mark_in_memory(f, in->u.copy_to_offset.dst);
+                mark_addressed(f, in->u.copy_to_offset.dst);
             break;
         case TAC_INSTRUCTION_COPY_FROM_OFFSET:
         case TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET:
             if (in->is_volatile)
-                mark_in_memory(f, in->u.copy_from_offset.src);
+                mark_addressed(f, in->u.copy_from_offset.src);
             break;
         default:
             break;
@@ -416,6 +431,7 @@ void flow_free(Flow *f)
     }
     xfree(f->blocks);
     xfree(f->in_memory);
+    xfree(f->addressed);
     map_destroy(&f->index);
     xfree(f->names);
     xfree(f->types);

@@ -23,6 +23,9 @@ extern "C" {
 // register.  A parameter dead on entry (unused, or written before it is read) takes
 // no register from the others then.  A spilled candidate stays in its frame slot.
 //
+// An aggregate is a candidate only where the target says so (aggregate_ok): a struct
+// of two words, say, held in a pair of registers.
+//
 // A value two integer registers wide (long long on a 32-bit target) has its high word
 // as a node of its own (flow variable v + n), interfering with all the low word does
 // and with the low word.  A copy of one is coalesced as a pair, low word with low and
@@ -62,6 +65,10 @@ typedef struct {
     // Optional: whether FUN_CALL `in` is expanded in place (a stack builtin), so it
     // clobbers nothing and takes no argument registers.
     bool (*inline_call)(void *arg, const Tac_Instruction *in);
+    // Optional: whether aggregate variable `v`, of class REGALLOC_PAIR, may be a
+    // candidate: then neither its declaration nor its member accesses keep it in
+    // memory, only its address taken.  Without this hook no aggregate is a candidate.
+    bool (*aggregate_ok)(void *arg, const Flow *f, int v);
     // Optional: parameter `name`, just assigned, is dead on entry.  Its register may
     // then hold another parameter on entry, so its incoming value must not be moved or
     // loaded there.  Without this hook every parameter interferes with what is live on

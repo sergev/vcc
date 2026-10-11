@@ -43,6 +43,7 @@ typedef struct Flow {
     StringMap index;        // name → variable index
     int words;              // words per set
     Flow_Set *in_memory;    // address taken, ALLOCATE_LOCAL or volatile
+    Flow_Set *addressed;    // in memory but for ALLOCATE_LOCAL: address taken or volatile
     int nblocks;
     Flow_Block *blocks; // [0] is the entry
 } Flow;

@@ -116,8 +116,11 @@ static void gen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl, FI
     const Tac_Instruction *last = NULL;
     for (const Tac_Instruction *in = tl->u.function.body; in; in = in->next) {
         g.fn->volatile_access = in->is_volatile;
+        const Tac_Instruction *done;
         if (gen_compare_branch(&g, in, in->next))
             in = in->next;
+        else if ((done = gen_result_in_place(&g, in)) != NULL)
+            in = done;
         else
             gen_instr(&g, in);
         last = in;

@@ -445,3 +445,59 @@ int main(void) {
 })"));
     EXPECT_EQ(0, exit_status);
 }
+
+// A struct of two words in a pair of registers: built by member, passed (the ninth
+// argument split between a7 and the stack), returned, copied, read back.
+TEST_F(RiscvTest, RunWordPairs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("3 4 1 0 30 31 9 -9\n", CompileAndRunRiscv(R"(
+#include <stdio.h>
+typedef struct { unsigned long hi, lo; } U;
+static U add(U a, U b)
+{
+    U r;
+    r.lo = a.lo + b.lo;
+    r.hi = a.hi + b.hi + (r.lo < a.lo);
+    return r;
+}
+static U make(unsigned long hi, unsigned long lo) { U u; u.hi = hi; u.lo = lo; return u; }
+static long last(long a, long b, long c, long d, long e, long f, long g, U u) { return u.hi - u.lo + a + b + c + d + e + f + g; }
+int main(void)
+{
+    U a = make(1, 2), b = make(2, 2), c = add(a, b), d = c;
+    U m = add(make(0, ~0ul), make(0, 1));
+    d.lo += 26;
+    printf("%lu %lu %lu %lu %lu %lu %ld %ld\n", c.hi, c.lo, m.hi, m.lo, d.lo, d.lo + (a.lo > 1),
+           last(1, 1, 1, 1, 1, 1, 1, make(4, 2)), last(-1, -1, -1, -1, -1, -1, -1, make(2, 4)));
+    return 0;
+}
+)"));
+}
+
+// A struct result written through the hidden pointer straight into its variable, and
+// a big struct passed by value: the copy is the callee's to change, so a variable read
+// after the call keeps its value; one dead after it is passed itself.
+TEST_F(RiscvTest, RunBigStructInPlace)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("6 1 5 2 9 11 13\n", CompileAndRunRiscv(R"(
+#include <stdio.h>
+typedef struct { long a, b, c, d; } Big;
+static Big mk(long v) { Big b = { v, v + 1, v + 2, v + 3 }; return b; }
+static long bump(Big b) { b.a += 5; return b.a; }
+static Big next(Big b) { b.a++; b.b++; return b; }
+int main(void)
+{
+    Big x = mk(1);
+    long r = bump(x);   // x read after: copied
+    Big y = next(x);
+    y = next(y);
+    Big z = mk(10);
+    Big w = next(z);    // z dead after: passed itself
+    printf("%ld %ld %ld %ld %ld %ld %ld\n", r, x.a, y.c + y.d - 2, y.a - 1, bump(mk(4)), w.a,
+           w.d);
+    return 0;
+}
+)"));
+}

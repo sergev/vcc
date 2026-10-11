@@ -86,21 +86,32 @@ static void find_candidates(Alloc *a)
     const Flow *f = a->flow;
     RegAlloc_Class *cls =
         xalloc((a->n ? a->n : 1) * sizeof(RegAlloc_Class), __func__, __FILE__, __LINE__);
+    bool *agg = xalloc((a->n ? a->n : 1) * sizeof(bool), __func__, __FILE__, __LINE__);
     for (int v = 0; v < a->n; v++) {
         const Tac_Type *t = f->types[v];
         cls[v]            = t ? a->t->classify(a->t->arg, t) : REGALLOC_NONE;
-        a->cand[v]        = cls[v] != REGALLOC_NONE && !flow_has(f->in_memory, v);
-        a->fp[v]          = a->cand[v] && cls[v] == REGALLOC_FP;
+        agg[v]            = t && (t->kind == TAC_TYPE_STRUCTURE || t->kind == TAC_TYPE_ARRAY);
+        if (agg[v])
+            a->cand[v] = cls[v] == REGALLOC_PAIR && a->t->aggregate_ok &&
+                         !flow_has(f->addressed, v) && a->t->aggregate_ok(a->t->arg, f, v);
+        else
+            a->cand[v] = cls[v] != REGALLOC_NONE && !flow_has(f->in_memory, v);
+        a->fp[v] = a->cand[v] && cls[v] == REGALLOC_FP;
     }
     for (int i = 0; i < f->ninstrs; i++) {
         const Tac_Instruction *in = f->instrs[i];
+        const char *name          = NULL;
         if (in->kind == TAC_INSTRUCTION_COPY_TO_OFFSET ||
             in->kind == TAC_INSTRUCTION_COPY_BYTE_TO_OFFSET)
-            exclude_name(a, in->u.copy_to_offset.dst);
+            name = in->u.copy_to_offset.dst;
         if (in->kind == TAC_INSTRUCTION_COPY_FROM_OFFSET ||
             in->kind == TAC_INSTRUCTION_COPY_BYTE_FROM_OFFSET)
-            exclude_name(a, in->u.copy_from_offset.src);
+            name = in->u.copy_from_offset.src;
+        int v = name ? flow_var(f, name) : -1;
+        if (name && (v < 0 || !agg[v]))
+            exclude_name(a, name);
     }
+    xfree(agg);
     for (int v = 0; v < a->n; v++)
         a->cand[v + a->n] = a->cand[v] && cls[v] == REGALLOC_PAIR;
     xfree(cls);

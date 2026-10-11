@@ -44,13 +44,19 @@ For each function, in this order:
 
 1. **Register allocation** (`regalloc.c`, on the shared `backend/common/regalloc.c`). Local variables and temporaries are put in
    CPU registers where possible. A variable whose address is taken (`&x`), an array or a
-   struct stays in memory. A value still needed after a function call goes in a register
-   that calls preserve (s1–s11, fs0–fs11).
+   struct stays in memory, but for a struct of two integer words (`struct { u64 hi, lo; }`,
+   on rv32 two ints): it lives in a pair of registers, like a `long long` on rv32, when it
+   is only read and written by member, copied whole, passed, returned or a call's result,
+   and goes in and out of calls in two integer registers. A value still needed after a
+   function call goes in a register that calls preserve (s1–s11, fs0–fs11).
 2. **Instruction selection** (`instr.c`, `call.c`). Each TAC instruction becomes one or
    a few RISC-V instructions. Registers t0–t6 and ft0–ft11 are scratch space. With the
    peephole pass on, an integer compare (or `!`) whose only use is the conditional
    jump after it is one branch: `beq`/`bne`/`blt`/`bge`/`bltu`/`bgeu`, or
-   `beqz`/`bnez` against zero (`gen_compare_branch`).
+   `beqz`/`bnez` against zero (`gen_compare_branch`). A struct result the callee writes
+   through the hidden pointer goes straight into the variable it is copied to
+   (`gen_result_in_place`), and a struct passed by reference is passed itself, not a
+   copy, when nothing reads it after the call; neither when its address is taken.
 3. **Prologue and epilogue** (`frame.c`). The code that sets up and tears down the
    function's stack space.
 4. **Peephole** (`peephole.c`). Small cleanups: `addi` instead of `li` + `add` (also
@@ -70,10 +76,7 @@ For each function, in this order:
    | | ours | no peephole | `gcc -Os -fno-inline` | `gcc -O2` |
    |---|---|---|---|---|
    | `bench/msp430` (4 files) | 596 | 812 | 548 | 640 |
-   | `libc/common` (29 files) | 15748 | 20460 | 10822 | 11812 |
-
-   Most of what is left against GCC on `libc/common` is `float128.c`: its structs go
-   through temporaries in the frame, copied a doubleword at a time.
+   | `libc/common` (29 files) | 14648 | 19940 | 10822 | 11812 |
 
 A call of `sqrt` is the `fsqrt.d` instruction: the translator lowers a call of the
 library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose

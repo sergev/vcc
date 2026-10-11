@@ -3,6 +3,7 @@
 //
 #include <cstdarg>
 #include <cstdlib>
+#include <cstring>
 
 #include "backend_test.h"
 
@@ -126,13 +127,28 @@ TEST_F(FlowTest, AddressTaken)
     EXPECT_FALSE(Has(flow->in_memory, "%p"));
 }
 
-// A member store keeps the aggregate live: the other members survive it.
+// A member store keeps the aggregate live: the other members survive it.  Its
+// declaration writes it: the value before is gone.
 TEST_F(FlowTest, MemberStoreIsUse)
 {
     Build(
         "struct S { int a, b; };\n"
         "int f(int x) { struct S s; s.a = 1; s.b = x; return s.a; }");
-    EXPECT_TRUE(Has(flow->blocks[0].live_in, "%s"));
+    EXPECT_FALSE(Has(flow->blocks[0].live_in, "%s"));
+    // Live between the two member stores, walking back from the block's end.
+    Flow_Set *live = flow_set_new(flow);
+    const Flow_Block *b = &flow->blocks[0];
+    memcpy(live, b->live_out, flow->words * sizeof(Flow_Set));
+    int stores = 0, i = b->last;
+    for (; i >= b->first; i--) {
+        const Tac_Instruction *in = flow->instrs[i];
+        flow_step(flow, in, live);
+        if (in->kind == TAC_INSTRUCTION_COPY_TO_OFFSET && ++stores == 2)
+            break;
+    }
+    ASSERT_EQ(2, stores);
+    EXPECT_TRUE(Has(live, "%s"));
+    xfree(live);
 }
 
 // Code after a call to a _Noreturn function starts a new block, not reached by fall-through.

@@ -297,12 +297,19 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
     return fun_type && fun_type->kind == TAC_TYPE_FUN_TYPE ? fun_type->u.fun_type.ret_type : NULL;
 }
 
+// A value that may be held in two integer registers: a long long on rv32, a struct of
+// two words.
+static bool reg_pair(const Tac_Type *t)
+{
+    return (rv_is_ll(t) && rv_is_pair(t)) || rv_is_word_pair(t);
+}
+
 void param_hints(const Gen *g, StringMap *hints, StringMap *hints_hi)
 {
     ArgState s = first_arg(ret_type(g->tl->u.function.type));
     for (const Tac_Param *p = g->tl->u.function.params; p && p->type; p = p->next) {
         ArgLoc a = classify(&s, p->type, false);
-        if (rv_is_ll(p->type) && rv_is_pair(p->type)) {
+        if (reg_pair(p->type)) {
             for (int i = 0; i < 2; i++)
                 if (a.piece[i].reg >= 0)
                     map_insert(i ? hints_hi : hints, p->name, a.piece[i].reg, 0);
@@ -466,7 +473,7 @@ void gen_params(Gen *g)
         if (preg && hi) {
             for (int i = 0; i < 2; i++)
                 if (a.piece[i].reg < 0)
-                    emit2(g, RV_LW, rv_reg(i ? hi : preg), mem(g, RV_S0, a.piece[i].stack));
+                    emit2(g, xlen_load(), rv_reg(i ? hi : preg), mem(g, RV_S0, a.piece[i].stack));
         } else if (preg && a.piece[0].reg < 0) {
             load_mem(g, preg, p->type, RV_S0, a.piece[0].stack);
         }
@@ -479,8 +486,9 @@ typedef struct {
     const Tac_Val *v;
     const Tac_Type *type, *want;
     ArgLoc loc;
-    int copy;     // frame offset of the copy passed by reference, or of a spilled double
-    bool spilled; // a double in integer registers, from an FP register: at `copy`
+    int copy;      // frame offset of the copy passed by reference, or of a spilled double
+    bool spilled;  // a double in integer registers, from an FP register: at `copy`
+    bool in_place; // by reference without a copy: the variable itself, dead after
 } Arg;
 
 // Half `i` of a double going in integer registers (rv32) into `reg`.
@@ -504,7 +512,9 @@ static void double_half(Gen *g, int reg, const Arg *a, int i)
 static void arg_to_stack(Gen *g, Arg *a)
 {
     const Tac_Type *t = a->type;
-    if (a->loc.by_ref) {
+    if (a->loc.by_ref && a->in_place) {
+        a->copy = find_slot(g, a->v->u.var_name)->offset;
+    } else if (a->loc.by_ref) {
         int size = rv_size(t);
         a->copy  = alloc_slot(g, NULL, NULL, size, rv_align(t) > 8 ? rv_align(t) : 8);
         if (rv_is_ld(t)) {
@@ -515,6 +525,8 @@ static void arg_to_stack(Gen *g, Arg *a)
             name_addr(g, a->v->u.var_name, RV_T3, &base, &off);
             gen_memcopy(g, RV_S0, a->copy, base, off, size, rv_align(t));
         }
+    }
+    if (a->loc.by_ref) {
         const Piece *pc = &a->loc.piece[0];
         if (pc->reg < 0) {
             gen_addr(g, RV_T0, RV_S0, a->copy);
@@ -532,7 +544,7 @@ static void arg_to_stack(Gen *g, Arg *a)
         const Piece *pc = &a->loc.piece[i];
         if (pc->reg >= 0)
             continue;
-        if (rv_is_pair(t)) {
+        if (rv_is_pair(t) || var_reg_hi(g, a->v)) {
             pair_half(g, RV_T0, a->v, i);
         } else if (split_fp(&a->loc)) {
             double_half(g, RV_T0, a, i);
@@ -554,7 +566,7 @@ static void arg_to_stack(Gen *g, Arg *a)
 static int arg_moves(const Gen *g, const Arg *a, Move *m)
 {
     int src = var_reg(g, a->v), hi = var_reg_hi(g, a->v);
-    if (!src || a->loc.by_ref || rv_is_aggregate(a->type))
+    if (!src || a->loc.by_ref || (rv_is_aggregate(a->type) && !hi))
         return 0;
     if (hi) {
         int n = 0;
@@ -614,7 +626,7 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
         if (!t)
             return;
         ArgLoc a = classify(&s, t, ft && ft->u.fun_type.variadic && i >= nfixed);
-        if (var >= 0 && rv_is_ll(t) && rv_is_pair(t)) {
+        if (var >= 0 && reg_pair(t)) {
             for (int k = 0; k < 2; k++)
                 if (!hint[var + k * f->nvars] && a.piece[k].reg >= 0)
                     hint[var + k * f->nvars] = a.piece[k].reg;
@@ -624,7 +636,7 @@ void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hin
     }
     const Tac_Val *dst = in->u.fun_call.dst;
     int var            = dst ? flow_var(f, dst->u.var_name) : -1;
-    if (var >= 0 && f->types[var] && rv_is_ll(f->types[var]) && rv_is_pair(f->types[var])) {
+    if (var >= 0 && f->types[var] && reg_pair(f->types[var])) {
         if (!hint[var])
             hint[var] = RV_A0;
         if (!hint[var + f->nvars])
@@ -654,6 +666,22 @@ static void store_result(Gen *g, const Tac_Val *dst, const Tac_Type *ret)
     name_addr(g, dst->u.var_name, RV_T5, &base, &off);
     for (int i = 0; i < a.npieces; i++)
         store_piece(g, a.piece[i].reg, base, off, &a.piece[i]);
+}
+
+// Whether aggregate argument `v` of call `in`, passed by reference, may be passed
+// without a copy: a variable of the frame whose address is never taken, read by
+// nothing after the call, and passed once.  The callee may then change it freely.
+static bool pass_in_place(const Gen *g, const Tac_Instruction *in, const Tac_Val *v)
+{
+    if (!g->flow || v->kind != TAC_VAL_VAR || !find_slot(g, v->u.var_name))
+        return false;
+    int var = flow_var(g->flow, v->u.var_name);
+    if (var < 0 || flow_has(g->flow->addressed, var) || !dead_after(g, in, var))
+        return false;
+    int n = 0;
+    for (const Tac_Val *a = in->u.fun_call.args; a; a = a->next)
+        n += a->kind == TAC_VAL_VAR && strcmp(a->u.var_name, v->u.var_name) == 0;
+    return n == 1;
 }
 
 bool rv_stack_builtin(const Tac_Instruction *in)
@@ -768,8 +796,9 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         a->type    = val_type(g, v);
         a->want    = want;
         a->loc     = classify(&s, a->type, variadic && i >= nfixed);
-        a->copy    = 0;
-        a->spilled = false;
+        a->copy     = 0;
+        a->spilled  = false;
+        a->in_place = a->loc.by_ref && rv_is_aggregate(a->type) && pass_in_place(g, in, v);
         if (want)
             want = want->next;
         arg_to_stack(g, a);

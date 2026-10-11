@@ -104,7 +104,7 @@ static void gen_copy(Gen *g, const Tac_Val *src, const Tac_Val *dst)
         set_pair(g, dst, RV_T0, RV_T1);
         return;
     }
-    if (rv_is_pair(t) || rv_is_ld(t)) {
+    if (rv_is_pair(t) || rv_is_ld(t) || var_reg_hi(g, src)) {
         int base;
         int64_t off;
         name_addr(g, dst->u.var_name, RV_T4, &base, &off);
@@ -267,6 +267,16 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
 {
     static const Tac_Type uchar = { .kind = TAC_TYPE_UCHAR };
     const Tac_Type *t           = val_type(g, src);
+    Tac_Val whole               = { .kind = TAC_VAL_VAR, .u.var_name = (char *)dst };
+    if (var_reg_hi(g, &whole)) {
+        // A word of a pair in registers.
+        int r = offset ? var_reg_hi(g, &whole) : var_reg(g, &whole);
+        if (src->kind == TAC_VAL_CONSTANT)
+            load_const_as(g, r, src->u.constant, scalar_at(name_type(g, dst), offset, riscv_xlen));
+        else
+            load_val(g, r, src);
+        return;
+    }
     if (byte) {
         t = &uchar;
     } else if (src->kind == TAC_VAL_CONSTANT) {
@@ -278,7 +288,7 @@ static void gen_copy_to_offset(Gen *g, const Tac_Val *src, const char *dst, int 
     int64_t off;
     name_addr(g, dst, RV_T4, &base, &off);
     off += offset;
-    if (rv_is_pair(t) || rv_is_ld(t)) {
+    if (rv_is_pair(t) || rv_is_ld(t) || var_reg_hi(g, src)) {
         copy_pair(g, src, base, off);
         return;
     }
@@ -298,13 +308,22 @@ static void gen_copy_from_offset(Gen *g, const char *src, int offset, const Tac_
     const Tac_Type *t = val_type(g, dst);
     if (byte && rv_size(t) != 1)
         internal_error("riscv: %s: byte copy into %s", gen_name(g), dst->u.var_name);
+    Tac_Val whole = { .kind = TAC_VAL_VAR, .u.var_name = (char *)src };
+    if (var_reg_hi(g, &whole)) {
+        // A word of a pair in registers.
+        int r = offset ? var_reg_hi(g, &whole) : var_reg(g, &whole);
+        int d = def_reg(g, RV_T0, dst);
+        move_reg(g, d, r, t);
+        store_val(g, d, dst);
+        return;
+    }
     int base;
     int64_t off;
     name_addr(g, src, RV_T3, &base, &off);
     off += offset;
     if (var_reg_hi(g, dst)) {
-        emit2(g, RV_LW, rv_reg(RV_T0), mem(g, base, off));
-        emit2(g, RV_LW, rv_reg(RV_T1), mem(g, base, off + 4));
+        emit2(g, xlen_load(), rv_reg(RV_T0), mem(g, base, off));
+        emit2(g, xlen_load(), rv_reg(RV_T1), mem(g, base, off + riscv_xlen));
         set_pair(g, dst, RV_T0, RV_T1);
         return;
     }
@@ -1007,6 +1026,67 @@ bool gen_compare_branch(Gen *g, const Tac_Instruction *in, const Tac_Instruction
     br->opnd[2]  = rv_sym(l, 0);
     xfree(l);
     return true;
+}
+
+// Uses of tracked variable `name`, or -1 when it is not one.
+static int uses_of(const Gen *g, const char *name)
+{
+    int v = flow_var(g->flow, name);
+    return v < 0 ? -1 : g->uses[v];
+}
+
+const Tac_Instruction *gen_result_in_place(Gen *g, const Tac_Instruction *in)
+{
+    // &T, a call with it first, then T copied word by word into X.
+    if (!g->uses || in->kind != TAC_INSTRUCTION_GET_ADDRESS ||
+        in->u.get_address.src->kind != TAC_VAL_VAR || in->u.get_address.dst->kind != TAC_VAL_VAR)
+        return NULL;
+    const Tac_Instruction *call = in->next;
+    const char *t = in->u.get_address.src->u.var_name, *p = in->u.get_address.dst->u.var_name;
+    if (!call || call->kind != TAC_INSTRUCTION_FUN_CALL || call->u.fun_call.dst ||
+        !call->u.fun_call.args || call->u.fun_call.args->kind != TAC_VAL_VAR ||
+        strcmp(call->u.fun_call.args->u.var_name, p) != 0 || uses_of(g, p) != 1)
+        return NULL;
+    const Tac_Type *tt = name_type(g, t);
+    int nt             = flow_var(g->flow, t);
+    if (!tt || tt->kind != TAC_TYPE_STRUCTURE || nt < 0 || var_reg_hi(g, in->u.get_address.src))
+        return NULL;
+    const char *x               = NULL;
+    const Tac_Instruction *last = call;
+    int covered = 0, size = rv_size(tt);
+    while (covered < size) {
+        const Tac_Instruction *ld = last->next, *st = ld ? ld->next : NULL;
+        if (!st || ld->kind != TAC_INSTRUCTION_COPY_FROM_OFFSET ||
+            st->kind != TAC_INSTRUCTION_COPY_TO_OFFSET || ld->is_volatile || st->is_volatile ||
+            strcmp(ld->u.copy_from_offset.src, t) != 0 || ld->u.copy_from_offset.offset != covered ||
+            st->u.copy_to_offset.offset != covered || st->u.copy_to_offset.src->kind != TAC_VAL_VAR ||
+            strcmp(st->u.copy_to_offset.src->u.var_name, ld->u.copy_from_offset.dst->u.var_name) != 0 ||
+            uses_of(g, st->u.copy_to_offset.src->u.var_name) != 1 ||
+            (x && strcmp(st->u.copy_to_offset.dst, x) != 0))
+            return NULL;
+        x = st->u.copy_to_offset.dst;
+        covered += rv_size(val_type(g, ld->u.copy_from_offset.dst));
+        last = st;
+    }
+    // T read only by those copies; X a struct of T's type in the frame, its address never
+    // taken (no one sees it change early), not an argument.
+    int nx = x ? flow_var(g->flow, x) : -1;
+    if (covered != size || nx < 0 || flow_has(g->flow->addressed, nx) ||
+        rv_size(name_type(g, x)) != size || assigned_reg(g, x))
+        return NULL;
+    int reads = 0;
+    for (const Tac_Instruction *c = call->next; c != last->next; c = c->next)
+        reads += c->kind == TAC_INSTRUCTION_COPY_FROM_OFFSET;
+    if (g->uses[nt] != reads)
+        return NULL;
+    for (const Tac_Val *a = call->u.fun_call.args; a; a = a->next)
+        if (a->kind == TAC_VAL_VAR && strcmp(a->u.var_name, x) == 0)
+            return NULL;
+    Tac_Val xv = { .kind = TAC_VAL_VAR, .u.var_name = (char *)x };
+    gen_get_address(g, &xv, in->u.get_address.dst);
+    g->fn->volatile_access = call->is_volatile;
+    gen_call(g, call);
+    return last;
 }
 
 void gen_instr(Gen *g, const Tac_Instruction *in)
