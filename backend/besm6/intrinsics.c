@@ -130,7 +130,7 @@ static Besm_Instr *emit_io_op(Besm_Block *block, Besm_Instr **tail, const Frame 
         emit_xta_val(block, tail, f, addr); // A = the effective address
         emit_xts_val(block, tail, f, acc);  // push it; A = the accumulator operand
         Besm_Instr *wtc = emit(block, tail, BESM_MOD_WTC);
-        wtc->reg        = REG_SP; // stack mode: pop the address back into C
+        wtc->reg        = REG_STACK; // stack mode: pop the address back into C
     } else {
         emit_xta_val(block, tail, f, acc);
         if (mode == IO_ADDR_UTC) {
@@ -181,7 +181,7 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     const Tac_Val *dst = instr->u.fun_call.dst;
     if (dst && dst->kind == TAC_VAL_VAR) {
         Besm_Instr *ita = emit(block, tail, BESM_MEM_ITA);
-        ita->addr       = REG_SP;
+        ita->addr       = REG_STACK;
         Besm_Instr *aox = emit(block, tail, BESM_LOG_AOX);
         aox->name       = xstrdup("=:64"); // bit 48 (marker) + offset_enc 5 (MSB)
         emit_store_a(block, tail, f, dst->u.var_name);
@@ -195,7 +195,7 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
             fatal_error("'__builtin_alloca' of %lld bytes is more than the stack", bytes);
         if (words > 0) {
             Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
-            utm->reg        = REG_SP;
+            utm->reg        = REG_STACK;
             utm->addr       = (int)words;
         }
         return;
@@ -207,9 +207,9 @@ static void gen_alloca(const Tac_Instruction *instr, const Frame *f, Besm_Block 
     call->name       = xstrdup("b$udiv");
     emit(block, tail, BESM_MEM_XTS); // push the count; A = 0
     Besm_Instr *wtc = emit(block, tail, BESM_MOD_WTC);
-    wtc->reg        = REG_SP; // stack mode: pop it into C
+    wtc->reg        = REG_STACK; // stack mode: pop it into C
     Besm_Instr *utm = emit(block, tail, BESM_REG_UTM);
-    utm->reg        = REG_SP;
+    utm->reg        = REG_STACK;
     utm->addr       = 1; // r15 += C + 1
 }
 

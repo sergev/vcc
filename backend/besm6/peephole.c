@@ -853,7 +853,7 @@ static Besm_Instr *io_stack_trailer(Besm_Instr *i, Besm_Instr **out_xts, Besm_In
     if (i == NULL || i->kind != BESM_MEM_XTS)
         return NULL;
     Besm_Instr *wtc = i->next;
-    if (wtc == NULL || wtc->kind != BESM_MOD_WTC || (int)wtc->reg != REG_SP || wtc->addr != 0 ||
+    if (wtc == NULL || wtc->kind != BESM_MOD_WTC || (int)wtc->reg != REG_STACK || wtc->addr != 0 ||
         has_operand_symbol(wtc))
         return NULL;
     Besm_Instr *io = wtc->next;

@@ -28,8 +28,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # GCC 16 takes an unbraced `if` around a GoogleTest EXPECT_* for a dangling else, and
 # the destructor of a vector<string> inlined into a constant-false branch (ClangRunBook,
 # with no clang for the target) for a bad free.
-set(CMAKE_CXX_FLAGS "-Wall -Werror -Wshadow -Wno-dangling-else -Wno-free-nonheap-object")
-set(CMAKE_C_FLAGS   "-Wall -Werror -Wshadow")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wshadow -Wno-dangling-else -Wno-free-nonheap-object")
+set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -Wall -Werror -Wshadow")
 
 #
 # Enable cppcheck by default

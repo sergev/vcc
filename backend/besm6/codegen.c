@@ -207,7 +207,7 @@ static void codegen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl
             utc14->addr       = 1;
             // 15 ,utm,
             Besm_Instr *utm15 = emit(block, &tail, BESM_REG_UTM);
-            utm15->reg        = REG_SP;
+            utm15->reg        = REG_STACK;
         }
         // 13 ,uj,
         Besm_Instr *uj13 = emit(block, &tail, BESM_BRANCH_UJ);
@@ -374,7 +374,7 @@ static void codegen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl
 
             if (num_autos > 0) {
                 Besm_Instr *mtj7 = emit(block, &tail, BESM_MEM_MTJ);
-                mtj7->reg        = REG_SP;
+                mtj7->reg        = REG_STACK;
                 mtj7->addr       = REG_AUTO;
             }
         } else {
@@ -387,7 +387,7 @@ static void codegen_function(const Tac_TopLevel *program, const Tac_TopLevel *tl
 
         if (num_autos > 0) {
             utm_sp       = emit(block, &tail, BESM_REG_UTM);
-            utm_sp->reg  = REG_SP;
+            utm_sp->reg  = REG_STACK;
             utm_sp->addr = num_autos;
         }
 

@@ -501,3 +501,27 @@ int main(void)
 }
 )"));
 }
+
+// With the result pointer first, each argument still takes the extension of its own
+// parameter: a pointer before a _Bool is not cut to a byte.
+TEST_F(RiscvTest, RunBigStructNarrowArgs)
+{
+    SKIP_IF_NO_RISCV_TOOLS();
+    EXPECT_EQ("77 1 300 -2\n", CompileAndRunRiscv(R"(
+#include <stdio.h>
+typedef struct { long a, b, c, d; } Big;
+Big f(const char *p, _Bool v, short s, int i)
+{
+    Big r = { p[1], v, s, i };
+    return r;
+}
+int main(void)
+{
+    static const char str[] = "xMy";
+    long p = (long)str, v = 2, s = 0x10000 + 300, i = -2;
+    Big r = f((const char *)p, v, s, i);
+    printf("%ld %ld %ld %ld\n", r.a, r.b, r.c, r.d);
+    return 0;
+}
+)"));
+}

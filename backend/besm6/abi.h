@@ -33,11 +33,11 @@ extern "C" {
 // b/save and b/ret are external Madlen routines; the backend declares them
 // with ",CALL, b/save" and ",CALL, b/ret" — it does not emit their bodies.
 //
-#define REG_AUTO 7  // auto-variable pointer (set by b/save)
-#define REG_PAR  6  // parameter pointer (set by b/save)
-#define REG_CNT  14 // negative argument count (set by caller)
-#define REG_RET  13 // return address (set by caller via VJM)
-#define REG_SP   15 // stack pointer (grows toward higher addresses)
+#define REG_AUTO  7  // auto-variable pointer (set by b/save)
+#define REG_PAR   6  // parameter pointer (set by b/save)
+#define REG_CNT   14 // negative argument count (set by caller)
+#define REG_RET   13 // return address (set by caller via VJM)
+#define REG_STACK 15 // stack pointer (grows toward higher addresses)
 
 // Scratch index register, free for a value live across a couple of instructions.  r14 is the
 // argument count (REG_CNT), but only across a call: the caller loads it immediately before the

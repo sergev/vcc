@@ -297,6 +297,25 @@ static const Tac_Type *ret_type(const Tac_Type *fun_type)
     return fun_type && fun_type->kind == TAC_TYPE_FUN_TYPE ? fun_type->u.fun_type.ret_type : NULL;
 }
 
+// Whether a call through `ft` passes first the result pointer, which the front end does
+// for a struct wider than 16 bytes, and which `ft` doesn't list.
+static bool result_arg(const Tac_Type *ft)
+{
+    const Tac_Type *ret = ret_type(ft);
+    return ret && rv_is_aggregate(ret) && rv_size(ret) > 16;
+}
+
+// The fixed arguments of a call through `ft`, the result pointer included.
+static int fixed_args(const Tac_Type *ft)
+{
+    if (!ft)
+        return 0;
+    int n = result_arg(ft);
+    for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
+        n++;
+    return n;
+}
+
 // A value that may be held in two integer registers: a long long on rv32, a struct of
 // two words.
 static bool reg_pair(const Tac_Type *t)
@@ -614,11 +633,8 @@ static void arg_to_regs(Gen *g, const Arg *a)
 void call_hints(const Gen *g, const Flow *f, const Tac_Instruction *in, int *hint)
 {
     const Tac_Type *ft = in->u.fun_call.fun_type;
-    int nfixed         = 0;
-    if (ft)
-        for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
-            nfixed++;
-    ArgState s = first_arg(ret_type(ft));
+    int nfixed         = fixed_args(ft);
+    ArgState s         = first_arg(ret_type(ft));
     int i      = 0;
     for (const Tac_Val *v = in->u.fun_call.args; v; v = v->next, i++) {
         int var           = v->kind == TAC_VAL_VAR ? flow_var(f, v->u.var_name) : -1;
@@ -695,12 +711,9 @@ bool rv_stack_builtin(const Tac_Instruction *in)
 // The bytes call `in` stores into the outgoing area, as gen_call places them.
 static int stack_bytes(const Gen *g, const Tac_Instruction *in)
 {
-    const Tac_Type *ft = in->u.fun_call.fun_type;
-    int nfixed         = 0;
-    bool variadic      = ft && ft->u.fun_type.variadic;
-    if (ft)
-        for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
-            nfixed++;
+    const Tac_Type *ft  = in->u.fun_call.fun_type;
+    int nfixed          = fixed_args(ft);
+    bool variadic       = ft && ft->u.fun_type.variadic;
     const Tac_Type *ret = ret_type(ft);
     if (!ret && in->u.fun_call.dst)
         ret = val_type(g, in->u.fun_call.dst);
@@ -758,11 +771,8 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         return;
     }
     const Tac_Type *ft = in->u.fun_call.fun_type;
-    int nfixed         = 0;
+    int nfixed         = fixed_args(ft);
     bool variadic      = ft && ft->u.fun_type.variadic;
-    if (ft)
-        for (const Tac_Type *p = ft->u.fun_type.param_types; p; p = p->next)
-            nfixed++;
 
     // The callee's address first: an argument register holding it may be overwritten.
     int fpreg = 0;
@@ -794,12 +804,12 @@ void gen_call(Gen *g, const Tac_Instruction *in)
         Arg *a     = &args[i];
         a->v       = v;
         a->type    = val_type(g, v);
-        a->want    = want;
+        a->want    = i == 0 && result_arg(ft) ? NULL : want;
         a->loc     = classify(&s, a->type, variadic && i >= nfixed);
         a->copy     = 0;
         a->spilled  = false;
         a->in_place = a->loc.by_ref && rv_is_aggregate(a->type) && pass_in_place(g, in, v);
-        if (want)
+        if (want && a->want)
             want = want->next;
         arg_to_stack(g, a);
     }
