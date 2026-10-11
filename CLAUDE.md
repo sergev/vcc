@@ -53,7 +53,7 @@ make debug / make clean
   a chapter source.
 - Runs need the external tools (qemu, mspsim, mmix, node, dubna, b6sim…); tests skip
   without them. Cross tools are found by `scripts/CrossTools.cmake`.
-- Benchmarks: `scripts/bench_{msp430,mmix,wasm,aarch64}.sh`.
+- Benchmarks: `scripts/bench_{msp430,mmix,wasm,aarch64,riscv64}.sh`.
 
 Try the passes by hand:
 ```sh

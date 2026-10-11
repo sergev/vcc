@@ -54,6 +54,19 @@ For each function, in this order:
    reload of a value just stored, no jump to the next line.  A copy is followed to its
    uses within a block, so the copies around an RV32 `long long` pair mostly go.
 
+   The size against GCC is measured by `scripts/bench_riscv64.sh` (text bytes of
+   `bench/msp430/*.c` and `libc/common/*.c` for `riscv64-linux`, ours with and without
+   this pass, against `riscv64-linux-gnu-gcc -Os -fno-inline` and `-O2`, all assembled
+   for rv64gc, so ours is compressed too). GCC 16.2, October 2026:
+
+   | | ours | no peephole | `gcc -Os -fno-inline` | `gcc -O2` |
+   |---|---|---|---|---|
+   | `bench/msp430` (4 files) | 684 | 812 | 548 | 640 |
+   | `libc/common` (29 files) | 18040 | 20460 | 10822 | 11812 |
+
+   Not yet folded: `li` + `slli` + `add` of a constant pointer step (`addi`), and a
+   `slt`/`sltu` feeding `beqz`/`bnez` (one `blt`/`bge`/`bltu`/`bgeu`).
+
 A call of `sqrt` is the `fsqrt.d` instruction: the translator lowers a call of the
 library's `sqrt(double)` to the TAC operator `sqrt_double` on every target whose
 descriptor has `hw_sqrt`, so it is not a call at all, and a constant operand is folded.
