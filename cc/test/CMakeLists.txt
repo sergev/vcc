@@ -43,10 +43,15 @@ target_compile_definitions(cc-tests PRIVATE
     LINUX_INCLUDE_DIR="${LINUX_INCLUDE_DIR}"
     LINUX_X86_64_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/libc/linux/x86_64/include"
     LINUX_AARCH64_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/libc/linux/aarch64/include"
+    LINUX_RISCV64_INCLUDE_DIR="${CMAKE_SOURCE_DIR}/libc/linux/riscv64/include"
     X86_64_LINUX_CC="${X86_64_LINUX_CC}"
     X86_64_LINUX_LIB_DIR="${X86_64_LINUX_LIB_DIR}"
     AARCH64_LINUX_CC="${AARCH64_LINUX_CC}"
     AARCH64_LINUX_LIB_DIR="${AARCH64_LINUX_LIB_DIR}"
+    RISCV64_LINUX_CC="${RISCV64_LINUX_CC}"
+    RISCV64_LINUX_LIB_DIR="${RISCV64_LINUX_LIB_DIR}"
+    RISCV64_LINUX_QEMU="${RISCV64_LINUX_QEMU}"
+    RISCV64_LINUX_SYSROOT="${RISCV64_LINUX_SYSROOT}"
     DARWIN_INCLUDE_DIR="${DARWIN_INCLUDE_DIR}"
     AARCH64_DARWIN_CC="${AARCH64_DARWIN_CC}"
     AARCH64_DARWIN_LIB_DIR="${AARCH64_DARWIN_LIB_DIR}"
@@ -140,7 +145,7 @@ endif()
 if(WASM32_TOOLS_FOUND)
     add_dependencies(cc-tests wasm32-libc)
 endif()
-foreach(t x86_64-linux aarch64-linux)
+foreach(t x86_64-linux aarch64-linux riscv64-linux)
     if(TARGET ${t}-libc)
         add_dependencies(cc-tests ${t}-libc)
     endif()

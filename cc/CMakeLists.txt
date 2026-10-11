@@ -36,7 +36,7 @@ if(WASM32_TOOLS_FOUND)
         WASM32_FEATURES="${features}")
 endif()
 # The C compilers that assemble and link for the hosted targets (libc/linux).
-foreach(var X86_64 AARCH64)
+foreach(var X86_64 AARCH64 RISCV64)
     if(${var}_LINUX_CC)
         target_compile_definitions(cc PRIVATE ${var}_LINUX_CC="${${var}_LINUX_CC}")
     endif()

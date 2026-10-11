@@ -142,6 +142,8 @@ bool HaveMmixRun()
 #define HOST_TARGET "x86_64-linux"
 #elif defined(__linux__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-linux"
+#elif defined(__linux__) && defined(__riscv) && __riscv_xlen == 64
+#define HOST_TARGET "riscv64-linux"
 #elif defined(__APPLE__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-darwin"
 #else
@@ -159,33 +161,51 @@ std::string DefaultTarget()
     return *HOST_TARGET ? HOST_TARGET : "riscv64";
 }
 
-// The C compiler that assembles and links for the host target, and the build's libvcc.a.
-std::string HostCc()
+// The C compiler that assembles and links for a hosted target, and the build's libvcc.a.
+std::string HostedCc(const std::string &target)
 {
-    if (HostIsDarwin())
-        return AARCH64_DARWIN_CC;
-    return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_CC : X86_64_LINUX_CC;
+    return target == "aarch64-darwin"  ? AARCH64_DARWIN_CC
+           : target == "aarch64-linux" ? AARCH64_LINUX_CC
+           : target == "riscv64-linux" ? RISCV64_LINUX_CC
+                                       : X86_64_LINUX_CC;
 }
 
-std::string HostLibDir()
+std::string HostedLibDir(const std::string &target)
 {
-    if (HostIsDarwin())
-        return AARCH64_DARWIN_LIB_DIR;
-    return std::string(HOST_TARGET) == "aarch64-linux" ? AARCH64_LINUX_LIB_DIR
-                                                       : X86_64_LINUX_LIB_DIR;
+    return target == "aarch64-darwin"  ? AARCH64_DARWIN_LIB_DIR
+           : target == "aarch64-linux" ? AARCH64_LINUX_LIB_DIR
+           : target == "riscv64-linux" ? RISCV64_LINUX_LIB_DIR
+                                       : X86_64_LINUX_LIB_DIR;
+}
+
+bool HaveHostedLink(const std::string &target)
+{
+    return HaveTool(HostedCc(target)) &&
+           access((HostedLibDir(target) + "/libvcc.a").c_str(), R_OK) == 0;
 }
 
 bool HaveHostedRun()
 {
-    return *HOST_TARGET && HaveTool(HostCc()) &&
-           access((HostLibDir() + "/libvcc.a").c_str(), R_OK) == 0;
+    return *HOST_TARGET && HaveHostedLink(HOST_TARGET);
 }
 
-// Link the build's libvcc.a into a staged installation for the host.
-void StageLibvcc(const std::string &prefix)
+// riscv64-linux on another host: qemu user mode, glibc from the cross sysroot.
+std::vector<std::string> Riscv64LinuxRunner()
 {
-    fs::create_symlink(HostLibDir() + "/libvcc.a",
-                       prefix + "/share/vcc/" + HOST_TARGET + "/lib/libvcc.a");
+    return { RISCV64_LINUX_QEMU, "-L", RISCV64_LINUX_SYSROOT };
+}
+
+bool HaveRiscv64LinuxCrossRun()
+{
+    return std::string(HOST_TARGET) != "riscv64-linux" && HaveTool(RISCV64_LINUX_QEMU) &&
+           HaveHostedLink("riscv64-linux");
+}
+
+// Link the build's libvcc.a into a staged installation for a hosted target.
+void StageLibvcc(const std::string &prefix, const std::string &target)
+{
+    fs::create_symlink(HostedLibDir(target) + "/libvcc.a",
+                       prefix + "/share/vcc/" + target + "/lib/libvcc.a");
 }
 
 // Run argv and return its exit code; -1 on spawn failure or a signal, -2 on a
@@ -297,6 +317,9 @@ protected:
                      COMMON_INCLUDE_DIR };
         if (target == "aarch64-linux")
             return { LINUX_AARCH64_INCLUDE_DIR, LINUX_INCLUDE_DIR, AARCH64_INCLUDE_DIR,
+                     LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
+        if (target == "riscv64-linux")
+            return { LINUX_RISCV64_INCLUDE_DIR, LINUX_INCLUDE_DIR, RISCV_INCLUDE_DIR,
                      LP64_INCLUDE_DIR, COMMON_INCLUDE_DIR };
         if (target == "aarch64-darwin")
             return { DARWIN_INCLUDE_DIR, AARCH64_INCLUDE_DIR, LP64_INCLUDE_DIR,
@@ -497,6 +520,11 @@ protected:
         *status         = RunProcess({ MMIX_SIM, "-q", mmo }, out, Path("mmix.err"), 10);
         return ReadFile(out);
     }
+
+    // The hosted run checks, for `target` (-t unless it is the host's), the programs run
+    // under `runner` (nothing: natively).  Defined with the tests that use them.
+    void CheckStagedHosted(const std::string &target, const std::vector<std::string> &runner);
+    void CheckHeadersAgree(const std::string &target, const std::vector<std::string> &runner);
 };
 
 const char kHello[] =
@@ -543,16 +571,19 @@ TEST_F(CcDriver, PreprocessDefaultTarget)
         EXPECT_NE(text.find("RISCV 64"), std::string::npos) << text;
         EXPECT_EQ(text.find("LINUX"), std::string::npos) << text;
     } else {
-        EXPECT_NE(text.find(host == "x86_64-linux" ? "X86_64" : "AARCH64"), std::string::npos)
+        bool riscv = host == "riscv64-linux";
+        EXPECT_NE(text.find(host == "x86_64-linux" ? "X86_64" : riscv ? "RISCV 64" : "AARCH64"),
+                  std::string::npos)
             << text;
         bool darwin = HostIsDarwin();
         EXPECT_NE(text.find(darwin ? "APPLE" : "LINUX"), std::string::npos) << text;
         EXPECT_EQ(text.find(darwin ? "LINUX" : "APPLE"), std::string::npos) << text;
-        EXPECT_EQ(text.find("RISCV"), std::string::npos) << text;
+        if (!riscv)
+            EXPECT_EQ(text.find("RISCV"), std::string::npos) << text;
     }
 }
 
-// The bare-metal x86_64 is not Linux; x86_64-linux is.
+// The bare-metal x86_64 and riscv64 are not Linux; x86_64-linux and riscv64-linux are.
 TEST_F(CcDriver, PreprocessHostedTargets)
 {
     WriteSource("t.c", kTargetProbe);
@@ -565,6 +596,12 @@ TEST_F(CcDriver, PreprocessHostedTargets)
     ASSERT_EQ(Vcc({ "-t", "aarch64-linux", "-E", "-o", "a.i", "t.c" }), 0) << Stderr();
     text = ReadFile(Path("a.i"));
     EXPECT_NE(text.find("AARCH64"), std::string::npos) << text;
+    EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-E", "-o", "bare-rv.i", "t.c" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("bare-rv.i")).find("LINUX"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "riscv64-linux", "-E", "-o", "r.i", "t.c" }), 0) << Stderr();
+    text = ReadFile(Path("r.i"));
+    EXPECT_NE(text.find("RISCV 64"), std::string::npos) << text;
     EXPECT_NE(text.find("LINUX"), std::string::npos) << text;
     ASSERT_EQ(Vcc({ "-t", "aarch64-darwin", "-E", "-o", "d.i", "t.c" }), 0) << Stderr();
     text = ReadFile(Path("d.i"));
@@ -1788,8 +1825,12 @@ TEST_F(CcDriver, CompileToAssemblyHosted)
     EXPECT_NE(ReadFile(Path("x.s")).find(".note.GNU-stack"), std::string::npos);
     ASSERT_EQ(Vcc({ "-t", "aarch64-linux", "-S", "-o", "a.s", "t.c" }), 0) << Stderr();
     EXPECT_NE(ReadFile(Path("a.s")).find(".note.GNU-stack"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "riscv64-linux", "-S", "-o", "r.s", "t.c" }), 0) << Stderr();
+    EXPECT_NE(ReadFile(Path("r.s")).find(".note.GNU-stack"), std::string::npos);
     ASSERT_EQ(Vcc({ "-t", "x86_64", "-S", "-o", "bare.s", "t.c" }), 0) << Stderr();
     EXPECT_EQ(ReadFile(Path("bare.s")).find(".note.GNU-stack"), std::string::npos);
+    ASSERT_EQ(Vcc({ "-t", "riscv64", "-S", "-o", "bare-rv.s", "t.c" }), 0) << Stderr();
+    EXPECT_EQ(ReadFile(Path("bare-rv.s")).find(".note.GNU-stack"), std::string::npos);
 }
 
 // macOS: Mach-O, its C names with a `_`, no ELF directives.
@@ -1848,16 +1889,22 @@ TEST_F(CcDriver, HostedLinkWithoutLibvcc)
     EXPECT_NE(Stderr().find("libvcc.a' not found"), std::string::npos) << Stderr();
 }
 
-// A staged installation for the host, with no -t: a program built by the default
-// target runs natively, calling glibc through every corner of the ABI.
-TEST_F(CcDriver, StagedPrefixHost)
+// A staged installation for a hosted target: a program built for it runs, calling glibc
+// through every corner of the ABI.
+void CcDriver::CheckStagedHosted(const std::string &target, const std::vector<std::string> &runner)
 {
-    if (!HaveHostedRun())
-        GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
-    std::string target = HOST_TARGET;
     std::string prefix = StagePrefix(target);
     std::string lib    = prefix + "/share/vcc/" + target + "/lib";
-    StageLibvcc(prefix);
+    StageLibvcc(prefix, target);
+    std::vector<std::string> t;
+    if (target != HOST_TARGET)
+        t = { "-t", target };
+    auto with_t = [&t](std::vector<std::string> args) {
+        args.insert(args.begin(), t.begin(), t.end());
+        return args;
+    };
+    std::vector<std::string> run = runner;
+    run.push_back(Path("t"));
 
     WriteSource("main.c",
                 "#include <alloca.h>\n"
@@ -1903,9 +1950,9 @@ TEST_F(CcDriver, StagedPrefixHost)
                 "    return 3;\n"
                 "}\n");
     WriteSource("twice.c", "int twice(int x) { return 2 * x; }\n");
-    ASSERT_EQ(StagedVcc(prefix, { "-c", "twice.c" }), 0) << Stderr();
-    ASSERT_EQ(StagedVcc(prefix, { "-v", "-o", "t", "main.c", "twice.o", "-lm" }), 0) << Stderr();
-    EXPECT_EQ(RunProcess({ Path("t") }, Path("t.out"), Path("t.err")), 3);
+    ASSERT_EQ(StagedVcc(prefix, with_t({ "-c", "twice.c" })), 0) << Stderr();
+    ASSERT_EQ(StagedVcc(prefix, with_t({ "-v", "-o", "t", "main.c", "twice.o", "-lm" })), 0) << Stderr();
+    EXPECT_EQ(RunProcess(run, Path("t.out"), Path("t.err")), 3);
     EXPECT_EQ(ReadFile(Path("t.out")),
               "42 str 2.50 1099511627776\n"
               "1\n"
@@ -1919,7 +1966,7 @@ TEST_F(CcDriver, StagedPrefixHost)
                         "/share/vcc/" + target + "/include "),
               std::string::npos)
         << echo;
-    if (HostIsDarwin()) {
+    if (target == "aarch64-darwin") {
         EXPECT_NE(echo.find(" --darwin "), std::string::npos) << echo;
         EXPECT_EQ(echo.find(" -no-pie "), std::string::npos) << echo;
     } else {
@@ -1929,16 +1976,28 @@ TEST_F(CcDriver, StagedPrefixHost)
     EXPECT_NE(echo.find(" twice.o -lm -L" + lib + " -lvcc \n"), std::string::npos) << echo;
 }
 
-// The hosted headers agree with the system's on what the ABI fixes: the layouts and the
-// values a program hands to glibc.  The same probe is built by vcc and by the system
-// compiler, and run.
-TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
+// With no -t, the default target is the host's, run natively.
+TEST_F(CcDriver, StagedPrefixHost)
 {
     if (!HaveHostedRun())
         GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
-    std::string target = HOST_TARGET;
+    CheckStagedHosted(HOST_TARGET, {});
+}
+
+TEST_F(CcDriver, StagedPrefixRiscv64Linux)
+{
+    if (!HaveRiscv64LinuxCrossRun())
+        GTEST_SKIP() << "no riscv64-linux-gnu-gcc, libvcc.a or qemu-riscv64";
+    CheckStagedHosted("riscv64-linux", Riscv64LinuxRunner());
+}
+
+// The hosted headers agree with the system's on what the ABI fixes: the layouts and the
+// values a program hands to glibc.  The same probe is built by vcc and by the system
+// compiler, and run.
+void CcDriver::CheckHeadersAgree(const std::string &target, const std::vector<std::string> &runner)
+{
     std::string prefix = StagePrefix(target);
-    StageLibvcc(prefix);
+    StageLibvcc(prefix, target);
     WriteSource("probe.c",
                 "#include <errno.h>\n"
                 "#include <fenv.h>\n"
@@ -1986,16 +2045,33 @@ TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
                 "    P(CHAR_MIN); P(WCHAR_MIN); P(WCHAR_MAX); P(MB_LEN_MAX);\n"
                 "    return 0;\n"
                 "}\n");
-    ASSERT_EQ(StagedVcc(prefix, { "-o", "ours", "probe.c", "-lm" }), 0) << Stderr();
-    ASSERT_EQ(RunProcess({ HostCc(), "-std=c11", "-o", Path("theirs"), Path("probe.c"), "-lm" },
+    ASSERT_EQ(StagedVcc(prefix, { "-t", target, "-o", "ours", "probe.c", "-lm" }), 0) << Stderr();
+    ASSERT_EQ(RunProcess({ HostedCc(target), "-std=c11", "-o", Path("theirs"), Path("probe.c"), "-lm" },
                          Path("cc.out"), Path("cc.err")),
               0)
         << ReadFile(Path("cc.err"));
-    ASSERT_EQ(RunProcess({ Path("ours") }, Path("ours.out")), 0);
-    ASSERT_EQ(RunProcess({ Path("theirs") }, Path("theirs.out")), 0);
+    std::vector<std::string> ours_run = runner, theirs_run = runner;
+    ours_run.push_back(Path("ours"));
+    theirs_run.push_back(Path("theirs"));
+    ASSERT_EQ(RunProcess(ours_run, Path("ours.out")), 0);
+    ASSERT_EQ(RunProcess(theirs_run, Path("theirs.out")), 0);
     std::string ours = ReadFile(Path("ours.out"));
     EXPECT_FALSE(ours.empty());
     EXPECT_EQ(ours, ReadFile(Path("theirs.out")));
+}
+
+TEST_F(CcDriver, HostedHeadersAgreeWithSystem)
+{
+    if (!HaveHostedRun())
+        GTEST_SKIP() << "no hosted target for this machine, or no C compiler for it";
+    CheckHeadersAgree(HOST_TARGET, {});
+}
+
+TEST_F(CcDriver, HostedHeadersAgreeRiscv64Linux)
+{
+    if (!HaveRiscv64LinuxCrossRun())
+        GTEST_SKIP() << "no riscv64-linux-gnu-gcc, libvcc.a or qemu-riscv64";
+    CheckHeadersAgree("riscv64-linux", Riscv64LinuxRunner());
 }
 
 //

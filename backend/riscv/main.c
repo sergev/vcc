@@ -11,6 +11,7 @@ static const BackendFlag flags[] = {
     { "no-peephole", "skip the peephole pass" },
     { "frame-pointer", "keep the frame pointer s0" },
     { "rv32", "RV32IMFD/ILP32D (TAC lowered with -t riscv32)" },
+    { "linux", "hosted Linux: mark the stack non-executable" },
     { NULL, NULL },
 };
 
@@ -22,8 +23,10 @@ static void flag(int index)
         riscv_peephole = false;
     else if (index == 2)
         riscv_frame_pointer = true;
-    else
+    else if (index == 3)
         riscv_xlen = 4;
+    else
+        riscv_linux = true;
 }
 
 static const char *output_ext(void)

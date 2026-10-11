@@ -1,9 +1,10 @@
 #
-# Hosted Linux targets, x86_64-linux and aarch64-linux: programs assembled and linked by
-# the system C compiler against glibc, which supplies the C library and the startup.
-# Ours are the headers, glibc-compatible, and libvcc.a: the helpers our code generators
-# call that glibc lacks (__va_arg) and the coroutine runtime (co).  The data model and the code are those of the
-# bare-metal x86_64 and aarch64; the code generator only adds .note.GNU-stack (--linux).
+# Hosted Linux targets, x86_64-linux, aarch64-linux and riscv64-linux: programs assembled
+# and linked by the system C compiler against glibc, which supplies the C library and the
+# startup.  Ours are the headers, glibc-compatible, and libvcc.a: the helpers our code
+# generators call that glibc lacks (__va_arg, where the helper directory has va_arg.c) and
+# the coroutine runtime (co).  The data model and the code are those of the bare-metal
+# x86_64, aarch64 and riscv64; the code generator only adds .note.GNU-stack (--linux).
 #
 # The C compiler is the host's, VCC_HOST_CC (the one building vcc, but the system cc
 # when that is vcc), when the host is that target, else <triple>-gcc on PATH.  It is <T>_LINUX_CC, cached for vcc and the tests.
@@ -73,8 +74,12 @@ function(vcc_linux_target name var arch triple gen helper_dir cpu_regex)
         file(GLOB files ${dir}/*.h)
         list(APPEND deps ${files})
     endforeach()
+    set(srcs co)
+    if(EXISTS ${helper_dir}/va_arg.c)
+        list(PREPEND srcs va_arg)
+    endif()
     set(objs "")
-    foreach(src va_arg co)
+    foreach(src ${srcs})
         set(dir ${helper_dir})
         if(NOT src STREQUAL "va_arg")
             set(dir ${LIBC_COMMON_DIR})
@@ -105,3 +110,11 @@ vcc_linux_target(x86_64-linux X86_64 x86_64 x86_64-linux-gnu genx86
 vcc_linux_target(aarch64-linux AARCH64 aarch64 aarch64-linux-gnu genaarch64
     ${CMAKE_SOURCE_DIR}/libc/aarch64 "^(aarch64|arm64|ARM64)$"
     ${AARCH64_INCLUDE_DIR} ${LP64_INCLUDE_DIR})
+vcc_linux_target(riscv64-linux RISCV64 riscv64 riscv64-linux-gnu genriscv
+    ${CMAKE_SOURCE_DIR}/libc/riscv64 "^riscv64$"
+    ${RISCV_INCLUDE_DIR} ${LP64_INCLUDE_DIR})
+
+# Runs riscv64-linux programs on another host, with glibc from the cross sysroot.
+find_program(RISCV64_LINUX_QEMU NAMES qemu-riscv64 qemu-riscv64-static)
+set(RISCV64_LINUX_SYSROOT /usr/riscv64-linux-gnu CACHE PATH
+    "Sysroot of riscv64-linux glibc, for qemu-riscv64 -L")

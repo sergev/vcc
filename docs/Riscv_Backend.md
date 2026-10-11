@@ -3,7 +3,8 @@
 `genriscv` turns the compiler's intermediate code (TAC) into assembly for 64-bit
 or 32-bit RISC-V. The code follows the standard RISC-V calling rules, so it can call, and be
 called by, code compiled with clang. Programs run under the `qemu` emulator, with no
-operating system.
+operating system, or under Linux against glibc (the `riscv64-linux` target, see
+[Hosted Linux](#hosted-linux)).
 
 ## The target
 
@@ -168,6 +169,29 @@ To read the intermediate code, run `lower` with `--yaml`.
 For 32 bits, add `-t riscv32` to `vcc` and run `qemu-system-riscv32`; by hand, the
 headers and library are under `share/vcc/riscv32`, `vgenriscv32` is the code generator,
 the assembler takes `-march=rv32imfd -mabi=ilp32d` and the linker `-m elf32lriscv`.
+
+## Hosted Linux
+
+The `riscv64-linux` target, `vcc`'s default on an RV64 Linux machine, builds an ordinary
+Linux executable with the bare-metal target's code: the `riscv64` descriptor (which
+`lower -t riscv64-linux` aliases) is glibc's data model, binary128 `long double` and
+unsigned `char` included, and the calling rules are the LP64D psABI glibc is built for.
+`genriscv --linux` adds a `.note.GNU-stack` section in each unit; nothing else changes.
+The code never touches `gp` and takes addresses with `la`, which the system's assembler
+turns into a GOT load, so it links into any executable.
+
+It links with the system's C compiler (`riscv64-linux-gnu-gcc` when cross compiling),
+`cc -no-pie … -lvcc`: glibc brings the startup files and the C library, libgcc the
+binary128 arithmetic (`__addtf3`, …), and `libvcc.a` only the coroutine runtime, since
+`va_arg` is a macro. The headers are `libc/linux/riscv64/include` and `libc/linux/include`
+ahead of the bare-metal ones, with glibc's 344-byte `jmp_buf`, RISC-V's `fenv.h` (`fenv_t`
+is `fcsr`) and the generic `struct stat`. Off a RISC-V machine the tests run the programs
+under `qemu-riscv64 -L /usr/riscv64-linux-gnu` (Debian: `gcc-riscv64-linux-gnu`,
+`libc6-dev-riscv64-cross`, `qemu-user`); without those, only the headers are installed
+and checked.
+
+Not yet: `va_start` assumes the last named parameter came in an integer register, as
+on bare metal; there are no `.cfi` directives, so no unwinding through our frames.
 
 ## Tests
 

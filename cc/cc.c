@@ -12,8 +12,8 @@
 //     ld         link            .o   -> a.out  (b6ld | ld.lld | wasm-ld | msp430-elf-ld |
 //                                               mmix-...-ld)
 //
-// The target is chosen with -t: x86_64-linux and aarch64-linux are hosted, linked by the
-// system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64,
+// The target is chosen with -t: x86_64-linux, aarch64-linux and riscv64-linux are hosted,
+// linked by the system C compiler against glibc, and aarch64-darwin against macOS's libSystem; riscv64,
 // riscv32, aarch64, arm32, x86_64, avr, msp430, mmix and besm6 are bare metal, wasm32
 // a WebAssembly module, run under node, and wasm32-braam a process of Braam.  By default it is the
 // host, where that is one of the hosted targets, else riscv64. Input files are dispatched by
@@ -147,6 +147,9 @@
 #ifndef AARCH64_LINUX_CC
 #define AARCH64_LINUX_CC ""
 #endif
+#ifndef RISCV64_LINUX_CC
+#define RISCV64_LINUX_CC ""
+#endif
 #ifndef AARCH64_DARWIN_CC
 #define AARCH64_DARWIN_CC ""
 #endif
@@ -157,6 +160,8 @@
 #define HOST_TARGET "x86_64-linux"
 #elif defined(__linux__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-linux"
+#elif defined(__linux__) && defined(__riscv) && __riscv_xlen == 64
+#define HOST_TARGET "riscv64-linux"
 #elif defined(__APPLE__) && defined(__aarch64__)
 #define HOST_TARGET "aarch64-darwin"
 #else
@@ -277,6 +282,14 @@ static const struct target targets[] = {
       .ld_default = AARCH64_LINUX_CC,
       .prefixes   = "aarch64-linux-gnu",
       .triple     = "aarch64-linux-gnu",
+      .gen_flag   = "--linux" },
+    { .name       = "riscv64-linux",
+      .arch       = ARCH_HOSTED,
+      .codegen    = "vgenriscv64",
+      .as_default = RISCV64_LINUX_CC,
+      .ld_default = RISCV64_LINUX_CC,
+      .prefixes   = "riscv64-linux-gnu",
+      .triple     = "riscv64-linux-gnu",
       .gen_flag   = "--linux" },
     { .name       = "aarch64-darwin",
       .arch       = ARCH_HOSTED,
@@ -1335,8 +1348,8 @@ static void usage(int status)
     printf("Usage:\n");
     printf("    %s [options] file...\n", progname);
     printf("Options:\n");
-    printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux, aarch64-darwin\n");
-    printf("                       (hosted), riscv64, riscv32, aarch64, arm32, x86_64, avr,\n");
+    printf("    -t, --target NAME  Target: x86_64-linux, aarch64-linux, riscv64-linux,\n");
+    printf("                       aarch64-darwin (hosted), riscv64, riscv32, aarch64, arm32, x86_64, avr,\n");
     printf("                       msp430, mmix, besm6 (bare metal), wasm32 or wasm32-braam\n");
     printf("                       (a process of Braam); default %s\n",
            *HOST_TARGET ? HOST_TARGET : "riscv64");

@@ -250,6 +250,16 @@ TEST_F(Predefined, Aarch64LinuxTarget)
                   "TARGET", { "-t", "aarch64-linux" }));
 }
 
+TEST_F(Predefined, Riscv64LinuxTarget)
+{
+    EXPECT_TRUE(
+        TokensAre("#if __riscv && __riscv_xlen == 64 && __riscv_flen == 64 && __LP64__ && "
+                  "__riscv_float_abi_double && __CHAR_UNSIGNED__ && __ELF__ && __linux__ && "
+                  "__gnu_linux__ && __unix__ && !defined(__aarch64__)\n"
+                  "TARGET\n#endif\n",
+                  "TARGET", { "-t", "riscv64-linux" }));
+}
+
 // macOS on Apple silicon: Apple's signed plain char, no ELF and no Linux.
 TEST_F(Predefined, Aarch64DarwinTarget)
 {
@@ -333,7 +343,7 @@ TEST_F(Predefined, CoroutinesTargets)
 {
     for (const char *t :
          { "riscv64", "riscv32", "aarch64", "arm32", "x86_64", "x86_64-linux", "aarch64-linux",
-           "aarch64-darwin", "avr", "msp430", "mmix", "wasm32", "wasm32-braam" })
+           "riscv64-linux", "aarch64-darwin", "avr", "msp430", "mmix", "wasm32", "wasm32-braam" })
         EXPECT_TRUE(TokensAre("#ifdef __vcc_coroutines__\nTARGET\n#endif\n", "TARGET", { "-t", t }))
             << t;
 }

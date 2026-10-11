@@ -88,8 +88,8 @@ Linking with `crt0.o`, `libc.a` and `link.ld` and running under qemu is describe
 ### `cc` (driver)
 
 Runs `vcpp` → `vparse` → `vlower` → `vgen<T>` → assembler → linker for the target given
-with `-t`, stopping early with `-E`, `-S` or `-c`. The default is the host: `x86_64-linux`
-or `aarch64-linux`, assembled and linked by the system's C compiler against glibc, or
+with `-t`, stopping early with `-E`, `-S` or `-c`. The default is the host: `x86_64-linux`,
+`aarch64-linux` or `riscv64-linux`, assembled and linked by the system's C compiler against glibc, or
 `aarch64-darwin` on a Mac with Apple silicon, against libSystem, else `riscv64`. Our passes are taken from the directory `vcc` is in, and headers and libraries from
 `../share/vcc/<target>/`, so an installation can be moved. The bare-metal targets'
 assemblers and linkers are their GNU binutils, else clang and `ld.lld`, the BESM-6 ones

@@ -23,7 +23,7 @@ standard stream). **The exit status is the number of errors reported** (0 on suc
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `wasm32-braam` (wasm32's macros and `__braam__`), `besm6`, or the hosted `x86_64-linux` and `aarch64-linux` (the architecture's macros plus `__linux__`, `__linux`, `__gnu_linux__`, `__unix__` and `__unix`) and `aarch64-darwin` (AArch64's, `__arm64__`, `__APPLE__` and `__MACH__`, without `__CHAR_UNSIGNED__` and `__ELF__`). Selects the predefined macros and the standard include directory. |
+| `-t NAME`, `-tNAME`, `--target NAME` | Target: `riscv64` (default, like `lower`), `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `wasm32-braam` (wasm32's macros and `__braam__`), `besm6`, or the hosted `x86_64-linux`, `aarch64-linux` and `riscv64-linux` (the architecture's macros, for RISC-V also `__riscv_flen=64`, `__CHAR_UNSIGNED__` and `__ELF__`, plus `__linux__`, `__linux`, `__gnu_linux__`, `__unix__` and `__unix`) and `aarch64-darwin` (AArch64's, `__arm64__`, `__APPLE__` and `__MACH__`, without `__CHAR_UNSIGNED__` and `__ELF__`). Selects the predefined macros and the standard include directory. |
 | `-Ipath` | Add a directory to the header search list (up to 64; 8 in the BESM-6 build). |
 | `-nostdinc` | Do not search the target's standard include directory. |
 | `-Dname[=value]` | Predefine a macro; bare `-Dname` defines it as `1`. Up to 20. |

@@ -12,6 +12,7 @@ optimizer stay as they are.
 | ---------------- | ------------------------------------------------------------------------ | --------------- |
 | `x86_64-linux`   | hosted, x86-64 Linux against glibc                                       | the system's    |
 | `aarch64-linux`  | hosted, AArch64 Linux against glibc                                      | the system's    |
+| `riscv64-linux`  | hosted, RV64 Linux against glibc                                         | the system's    |
 | `aarch64-darwin` | hosted, macOS on Apple silicon against libSystem, Mach-O                 | the system's    |
 | `riscv64`        | RV64IMFD, LP64D                                                          | clang's objects |
 | `riscv32`        | RV32IMFD, ILP32D; the same code generator                                | clang's objects |

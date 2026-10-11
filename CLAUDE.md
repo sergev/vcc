@@ -19,7 +19,7 @@ relevant one before working on a component.
 | wasm32, wasm32-braam | `backend/wasm/` `genwasm` | [docs/Wasm_Backend.md](docs/Wasm_Backend.md), [docs/Braam.md](docs/Braam.md) |
 | BESM-6 (Unix `b6as`, Madlen, Bemsh dialects) | `backend/besm6/` `genbesm` | [backend/besm6/](backend/besm6/) `*.md` |
 
-Hosted targets `x86_64-linux`, `aarch64-linux`, `aarch64-darwin` reuse those generators
+Hosted targets `x86_64-linux`, `aarch64-linux`, `riscv64-linux`, `aarch64-darwin` reuse those generators
 and link with the system `cc` (headers in `libc/linux/`, `libc/darwin/`). `vcc`'s default
 target is the host (`HOST_TARGET` in `cc/cc.c`); `cpp` and `lower` default to `riscv64`.
 

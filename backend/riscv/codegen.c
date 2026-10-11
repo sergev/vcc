@@ -12,6 +12,7 @@ bool riscv_regalloc      = true;
 bool riscv_peephole      = true;
 bool riscv_frame_pointer = false;
 int riscv_xlen           = 8;
+bool riscv_linux         = false;
 
 // Numbers the double literals of a translation unit: .LC0, .LC1, ...
 static int const_seq;
@@ -131,8 +132,11 @@ static int declared_alignment(const Tac_TopLevel *program, const char *name)
 
 void riscv_codegen(const Tac_TopLevel *program, const Tac_TopLevel *tl, FILE *out)
 {
-    if (tl == program)
+    if (tl == program) {
         const_seq = 0; // a new translation unit
+        if (riscv_linux)
+            fprintf(out, "    .section .note.GNU-stack,\"\",@progbits\n");
+    }
     switch (tl->kind) {
     case TAC_TOPLEVEL_FUNCTION:
         gen_function(program, tl, out);

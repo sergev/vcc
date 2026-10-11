@@ -390,6 +390,7 @@ static const struct {
 } aliases[] = {
     { "x86_64-linux", "x86_64", 0 },
     { "aarch64-linux", "aarch64", 0 },
+    { "riscv64-linux", "riscv64", 0 },
     { "wasm32-braam", "wasm32", 1 },
 };
 

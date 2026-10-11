@@ -28,6 +28,7 @@ linker       link          .o   -> a.out
 | --- | --- | --- | --- | --- |
 | Linux on x86-64, against glibc | `x86_64-linux` | `vgenx86 --linux` | `cc -c` | `cc -no-pie … -lvcc` |
 | Linux on AArch64, against glibc | `aarch64-linux` | `vgenaarch64 --linux` | `cc -c` | `cc -no-pie … -lvcc` |
+| Linux on RISC-V RV64, against glibc | `riscv64-linux` | `vgenriscv64 --linux` | `cc -c` | `cc -no-pie … -lvcc` |
 | macOS on Apple silicon, against libSystem | `aarch64-darwin` | `vgenaarch64 --darwin` | `cc -c` | `cc …` |
 | RISC-V RV64IMFD/LP64D | `riscv64` | `vgenriscv64` | `riscv64-unknown-elf-as -march=rv64imfd -mabi=lp64d` | `riscv64-unknown-elf-ld -T link.ld` |
 | RISC-V RV32IMFD/ILP32D | `riscv32` | `vgenriscv32` | `riscv64-unknown-elf-as -march=rv32imfd -mabi=ilp32d` | `riscv64-unknown-elf-ld -m elf32lriscv -T link.ld` |
@@ -41,17 +42,18 @@ linker       link          .o   -> a.out
 | MMIX (MMIXware ABI) | `mmix` | `vgenmmix` | `mmix-knuth-mmixware-as -x -no-predefined-syms` | `mmix-knuth-mmixware-ld --defsym=__.MMIX.start..text=0x100` |
 | BESM-6 | `besm6` | `vgenbesm6` | `b6as -X` | `b6ld -X -e _start` |
 
-The first three are **hosted**: the program runs under Linux, linked against glibc, or
+The first four are **hosted**: the program runs under Linux, linked against glibc, or
 under macOS, linked against libSystem, either of which supplies the startup files and the
 C library. The rest are bare metal, run on qemu or a simulator, or for WebAssembly under
 node. **The default target is
 the host**: `x86_64-linux` on x86-64 Linux, `aarch64-linux` on AArch64 Linux,
-`aarch64-darwin` on a Mac with Apple silicon, and `riscv64` on any other machine. It is
+`riscv64-linux` on RV64 Linux, `aarch64-darwin` on a Mac with Apple silicon, and `riscv64` on any other machine. It is
 decided when `vcc` is compiled.
 
 A hosted target assembles and links with a C compiler: the one that built `vcc`, when
-the host is that target; else `x86_64-linux-gnu-gcc` or `aarch64-linux-gnu-gcc` on `PATH`;
-else the host's `cc`; else `clang --target=x86_64-linux-gnu` (or `aarch64-linux-gnu`,
+the host is that target; else `x86_64-linux-gnu-gcc`, `aarch64-linux-gnu-gcc` or
+`riscv64-linux-gnu-gcc` on `PATH`; else the host's `cc`; else `clang
+--target=x86_64-linux-gnu` (or `aarch64-linux-gnu`, `riscv64-linux-gnu`,
 `arm64-apple-macos`).
 
 For the bare-metal targets, the binutils prefix is the first one found of several: `riscv64-unknown-elf`, `riscv64-elf`
@@ -88,7 +90,7 @@ and removed on exit.
 
 | Option | Meaning |
 | --- | --- |
-| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `wasm32-braam` or `besm6`; by default the host (see above) |
+| `-t NAME`, `-tNAME`, `--target NAME`, `--target=NAME` | Target: `x86_64-linux`, `aarch64-linux`, `riscv64-linux`, `aarch64-darwin`, `riscv64`, `riscv32`, `aarch64`, `arm32`, `x86_64`, `avr`, `msp430`, `mmix`, `wasm32`, `wasm32-braam` or `besm6`; by default the host (see above) |
 | `-c` | Compile and assemble, but do not link |
 | `-S` | Compile only; emit assembly (`.s`) |
 | `-Smadlen`, `-Sbemsh` | Like `-S`, but emit the BESM-6 Madlen (`.mad`) or Bemsh (`.bemsh`) dialect (`besm6` only) |
@@ -149,20 +151,22 @@ driver against the build tree:
 
 ## Linking
 
-The hosted Linux targets, `x86_64-linux` and `aarch64-linux`:
+The hosted Linux targets, `x86_64-linux`, `aarch64-linux` and `riscv64-linux`:
 
 ```text
 cc -no-pie -o a.out objects... -L/-l flags... -L<lib> -lvcc
 ```
 
 The C compiler adds glibc's startup files, `-lc` and libgcc; `libvcc.a` holds the few
-helpers our code generator calls and glibc lacks (`__va_arg`), and the coroutine runtime. The math library is not
+helpers our code generator calls and glibc lacks (`__va_arg`, but on RISC-V, whose
+`va_list` is a pointer walked in `<stdarg.h>`), and the coroutine runtime. The math library is not
 implicit, as with GCC: add `-lm`. The executable is not position independent, because our
 code takes the address of a function PC-relative, which a PIE cannot do for one in a
 shared library. The headers are ours, not glibc's (which `vparse` cannot read), and agree
 with glibc's on every layout and value a program hands to the C library: `errno`,
 `jmp_buf`, `struct tm`, `struct lconv`, `fenv_t`, the `LC_*`, `E*`, `FE_*` and `<stdio.h>`
-constants, `MB_LEN_MAX` (see `libc/linux/`). The run is plain `./a.out`.
+constants, `MB_LEN_MAX` (see `libc/linux/`). The run is plain `./a.out`; a `riscv64-linux`
+program built on another machine runs under `qemu-riscv64 -L /usr/riscv64-linux-gnu`.
 
 The hosted macOS target, `aarch64-darwin`:
 
